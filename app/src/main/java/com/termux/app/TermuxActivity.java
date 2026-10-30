@@ -1504,24 +1504,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
-    /** One row of the long-press action dialog. */
-    private static final class TerminalActionItem {
-        final int id;
-        final CharSequence title;
-
-        TerminalActionItem(int id, CharSequence title) {
-            this.id = id;
-            this.title = title;
-        }
-
-        @NonNull
-        @Override
-        public String toString() {
-            return title.toString();
-        }
-    }
-
-    @Nullable private AlertDialog mTerminalActionDialog;
+    /** The terminal's More sheet, built on first use and laid over everything. */
+    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mTerminalActionsSheet;
 
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
@@ -2002,6 +1986,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalOverlayInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
             if (mHomeActionsSheet != null) mHomeActionsSheet.applyInsets(insetsCompat);
+            if (mTerminalActionsSheet != null) mTerminalActionsSheet.applyInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mAppDrawerController != null) {
@@ -11455,10 +11440,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void resetUiForInPlaceSessionRecovery(@NonNull String reason) {
         Logger.logWarn(LOG_TAG, "Resetting launcher UI before in-place empty-session recovery from " + reason);
-        if (mTerminalActionDialog != null) {
-            mTerminalActionDialog.dismiss();
-            mTerminalActionDialog = null;
-        }
+        if (mTerminalActionsSheet != null) mTerminalActionsSheet.closeImmediately();
         if (mTerminalSheet != null) mTerminalSheet.dismissImmediately();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
@@ -19060,66 +19042,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * @param anchor accepted for the callers that pass one, but the dialog centres itself: this is
-     *               the pre-sheet menu, restored at the owner's request.
+     * @param anchor accepted for the callers that pass one; the sheet always rises from the bottom.
      */
     boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
         TerminalSession currentSession = getCurrentSession();
         if (currentSession == null) {
             return false;
         }
-        if (mTerminalActionDialog != null && mTerminalActionDialog.isShowing()) {
+        if (mTerminalActionsSheet != null && mTerminalActionsSheet.isOpen()) {
             return true;
         }
-        List<TerminalActionItem> items = new ArrayList<>();
-        items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return false;
+        if (mTerminalActionsSheet == null) {
+            mTerminalActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
+                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
+                    @Override public void onHomeAction(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
+                    @Override public void onNavBandCovered(float covered) {
+                        setHomeSheetDecorNavStripAlpha(1f - covered);
+                    }
+                    @Override public void onSheetClosed() {
+                        if (mTerminalView != null) mTerminalView.onContextMenuClosed(null);
+                    }
+                });
+            content.addView(mTerminalActionsSheet, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
-        items.add(new TerminalActionItem(CONTEXT_MENU_APPEARANCE_ID, getString(R.string.action_wallpaper_style)));
-        items.add(new TerminalActionItem(
-            CONTEXT_MENU_REMOVE_WALLPAPER_ID,
-            getString(shouldUseWallpaperPassthroughMode()
-                ? R.string.action_disable_background_image
-                : R.string.action_enable_background_image)
-        ));
-        // Only when the companion is installed: a row that opens the Appearance settings under the
-        // name of a plugin the device does not have is a broken promise, not a shortcut.
-        if (isTerminalStylingAvailable()) {
-            items.add(new TerminalActionItem(CONTEXT_MENU_STYLE_ID, getString(R.string.action_style_terminal)));
-        }
-        // Appearance and Apps & Access are reachable from the Settings page; keep this sheet lean.
-        items.add(new TerminalActionItem(CONTEXT_MENU_SETTINGS_ID, getString(R.string.action_open_settings)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_RESET_TERMINAL_ID, getString(R.string.action_reset_terminal)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_KILL_PROCESS_ID,
-            getString(R.string.action_kill_process, currentSession.getPid())));
-
-        ArrayAdapter<TerminalActionItem> adapter = new ArrayAdapter<>(this,
-            android.R.layout.simple_list_item_1, items);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-            .setAdapter(adapter, (dialogInterface, which) -> handleTerminalAction(items.get(which).id))
-            .setOnDismissListener(dialogInterface -> {
-                if (mTerminalView != null) {
-                    mTerminalView.onContextMenuClosed(null);
-                }
-                if (mTerminalActionDialog == dialogInterface) {
-                    mTerminalActionDialog = null;
-                }
-            })
-            .create();
-        mTerminalActionDialog = dialog;
-        // A dialog is its own window; in full screen it has to hide the system bars too, or they
-        // come back while it is open and the activity lays out again for insets it then loses.
-        android.view.Window dialogWindow = dialog.getWindow();
-        if (dialogWindow != null && mProperties != null && mProperties.isUsingFullScreen()) {
-            WindowInsetsControllerCompat dialogInsets = WindowCompat.getInsetsController(
-                dialogWindow, dialogWindow.getDecorView());
-            dialogInsets.setSystemBarsBehavior(
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            dialogInsets.hide(Type.systemBars());
-        }
-        dialog.show();
+        // Style stands only when the companion is installed: a row that opens the Appearance
+        // settings under the name of a plugin the device does not have is a broken promise.
+        mTerminalActionsSheet.openRows(getString(R.string.terminal_actions_title),
+            com.termux.app.launcher.home.TerminalActionsSheet.rows(this,
+                shouldUseWallpaperPassthroughMode(), isTerminalStylingAvailable(),
+                currentSession.getPid()),
+            row -> handleTerminalAction(terminalActionId(
+                (com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token)));
         return true;
+    }
+
+    private static int terminalActionId(
+            @NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action) {
+        switch (action) {
+            case COMMAND_PALETTE: return CONTEXT_MENU_COMMAND_PALETTE_ID;
+            case SELECT_URL: return CONTEXT_MENU_SELECT_URL_ID;
+            case SHARE_TRANSCRIPT: return CONTEXT_MENU_SHARE_TRANSCRIPT_ID;
+            case RESET: return CONTEXT_MENU_RESET_TERMINAL_ID;
+            case KILL_PROCESS: return CONTEXT_MENU_KILL_PROCESS_ID;
+            case APPEARANCE: return CONTEXT_MENU_APPEARANCE_ID;
+            case WALLPAPER: return CONTEXT_MENU_REMOVE_WALLPAPER_ID;
+            case STYLE: return CONTEXT_MENU_STYLE_ID;
+            case SETTINGS: default: return CONTEXT_MENU_SETTINGS_ID;
+        }
     }
 
     /**
@@ -19813,6 +19787,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 if (mHomeActionsSheet != null) mHomeActionsSheet.closeImmediately();
+            }
+        });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            // The terminal's More sheet, the Home sheet's twin.
+            @Override public boolean onBack() {
+                if (mTerminalActionsSheet == null || !mTerminalActionsSheet.isOpen()) return false;
+                mTerminalActionsSheet.close();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mTerminalActionsSheet != null && mTerminalActionsSheet.isOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mTerminalActionsSheet != null) mTerminalActionsSheet.closeImmediately();
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());

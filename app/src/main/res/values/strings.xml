@@ -14,6 +14,7 @@
     <string name="home_actions_title">Termux Launcher</string>
     <string name="home_actions_close">Close</string>
     <string name="home_actions_terminal">Terminal</string>
+    <string name="terminal_actions_title">Terminal</string>
     <string name="home_actions_add_widget">Add a widget</string>
     <string name="home_actions_add_app">Add an app</string>
     <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
