@@ -2950,9 +2950,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     public synchronized void migrateLookGrid(@NonNull java.util.Collection<Integer> pageIds) {
         adoptShippedSurfaceDefaults();
-        migrateLayoutStyle();
         if (mSharedPreferences != null)
             LookGridMigration.run(new LookGrid.PrefsStore(mSharedPreferences), pageIds);
+        migrateLayoutStyle();
     }
 
     /**

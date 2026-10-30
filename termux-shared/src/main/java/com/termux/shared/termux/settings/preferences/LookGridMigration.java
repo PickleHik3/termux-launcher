@@ -228,6 +228,12 @@ public final class LookGridMigration {
                 store.putBoolean(flagKey(slot, property), matches);
             }
         }
+        // Corners and the edge gap were one value each, read from Base, which took the dock's.
+        store.putInt("surface_base_corner_radius", store.getInt(
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS));
+        store.putInt("surface_base_side_gap", store.getInt(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET,
+            TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
         store.putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
     }
 
