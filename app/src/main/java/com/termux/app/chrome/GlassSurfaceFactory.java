@@ -35,15 +35,19 @@ public final class GlassSurfaceFactory {
     }
 
     GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink) {
-        this(surfaces, ink, null);
+        this(surfaces, ink, null, null);
     }
 
     private GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink,
-                                @Nullable GlassLook lookOverride) {
+                                @Nullable GlassLook lookOverride, @Nullable ElementGlass element) {
         mSurfaces = surfaces;
         mInk = ink;
         mLookOverride = lookOverride;
+        mElement = element;
     }
+
+    /** The element whose own tint colour and rim this factory draws in; null for the wall's. */
+    @Nullable private final ElementGlass mElement;
 
     /** A preset's tint and rim standing in for the live preferences'; null reads the preferences. */
     @Nullable private final GlassLook mLookOverride;
@@ -51,7 +55,18 @@ public final class GlassSurfaceFactory {
     /** This factory's material, drawn in {@code look} instead of the preferences' (the preset tiles). */
     @NonNull
     public GlassSurfaceFactory withLook(@NonNull GlassLook look) {
-        return new GlassSurfaceFactory(mSurfaces, mInk, look);
+        return new GlassSurfaceFactory(mSurfaces, mInk, look, mElement);
+    }
+
+    /**
+     * This factory's material as {@code element} wears it: its own tint colour and rim where it
+     * holds them (ADR 0017), the wall's otherwise. Build {@code element} where the surface is
+     * built ({@link ElementGlass#of}); this keeps it, it does not read the store again.
+     */
+    @NonNull
+    public GlassSurfaceFactory forElement(@Nullable ElementGlass element) {
+        if (element == mElement) return this;
+        return new GlassSurfaceFactory(mSurfaces, mInk, mLookOverride, element);
     }
 
     /**
@@ -61,7 +76,9 @@ public final class GlassSurfaceFactory {
      */
     @NonNull
     public GlassLook look() {
-        return mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
+        GlassLook base = mLookOverride != null ? mLookOverride
+            : GlassLook.of(mSurfaces.preferences());
+        return mElement != null ? mElement.look(base) : base;
     }
 
     /**
