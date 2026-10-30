@@ -152,8 +152,11 @@ final class LookKeys {
                        @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
         LookGrid grid = new LookGrid(gridStore(store));
         LookGrid.Element element = property.grid.perElement ? slot.element : null;
+        // A page holds its own glass numbers only; the canvas's only on the Terminal page.
+        boolean pageHolds = pageId >= 0 && isLookProperty(property)
+            && (slot != SurfaceSlot.CANVAS || kind == PageKind.TERMINAL);
         return fromCell(property.grid, grid.value(property.grid, element,
-            pageId >= 0 ? pageId : LookGrid.NO_PAGE));
+            pageHolds ? pageId : LookGrid.NO_PAGE));
     }
 
     /** A value in the old unit of the cell's property: a Frost stop as its blur in dp. */
