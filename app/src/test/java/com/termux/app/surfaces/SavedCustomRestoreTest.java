@@ -128,7 +128,7 @@ public class SavedCustomRestoreTest {
         assertFalse("a forgotten position is not saved", blob.containsKey(
             TermuxAppSharedPreferences.surfaceGlassPositionKey(SurfaceSlot.DOCK)));
         assertEquals(KEYS, blob.get(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY));
-        assertEquals(TINT, blob.get(TermuxAppSharedPreferences.surfaceOverrideKey(
+        assertEquals(TINT, blob.get(SurfacePresets.cellKey(
             SurfaceSlot.CANVAS, SurfaceProperty.TINT)));
         assertTrue("positions never decide a match",
             SurfacePresets.matches(prefs, SurfacePresets.custom(prefs)));

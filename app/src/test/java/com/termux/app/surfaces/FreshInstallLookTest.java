@@ -62,11 +62,11 @@ public class FreshInstallLookTest {
     public void aFirstRunStoresClearsValues() {
         launch();
 
-        assertEquals(stored(TERMUX_APP.KEY_SURFACE_BASE_BLUR),
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(stored(SurfacePresets.cellKey(null, SurfaceProperty.BLUR))),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(stored(TERMUX_APP.KEY_SURFACE_BASE_OPACITY),
+        assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(stored(TERMUX_APP.KEY_SURFACE_BASE_GRAIN),
+        assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)),
             preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND), preferences.getFancierGlassBendDp());
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH),
