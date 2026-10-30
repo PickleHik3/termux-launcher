@@ -140,7 +140,7 @@ public class SurfaceEditorHomeGlassTest {
 
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
             preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
