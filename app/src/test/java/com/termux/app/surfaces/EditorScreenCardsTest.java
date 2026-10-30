@@ -27,9 +27,11 @@ public class EditorScreenCardsTest {
 
     @Test
     public void theWorkspaceCardHoldsItsLookItsGlassAndGlobal() {
-        assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST,
-            Row.OPACITY, Row.TINT), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
-        assertEquals(Arrays.asList(Row.ELEMENTS, Row.SECTION_MORE,
+        // ADR 0017 (fb44e0fb2): the card wears the shared glass rows without a Glass heading,
+        // Colour and Corners beside Tint, Grain and Rim under More before its Elements list.
+        assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT,
+            Row.TINT_HUE, Row.CORNERS), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
+        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.ELEMENTS,
             Row.LINK_GLOBAL), EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
     }
 

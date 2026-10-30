@@ -2010,6 +2010,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     // ------------------------------------------------------------------ teardown
 
+    /** A close that is not a Home press; the drawer's own tests reach this form by reflection. */
+    private void onClosed(boolean userDriven) {
+        onClosed(userDriven, false);
+    }
+
     /**
      * Settled shut: hand every transformed view back exactly as it was found, drop the full-screen
      * frost bitmap, and replay the accessory geometry the freeze suppressed.
