@@ -350,8 +350,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The chip's page: the page the editor was opened from, -1 where none is known. */
     private int mScopePageId = -1;
-    /** Whether the chip stands on the page side. The editor writes Global (Base) by default. */
-    private boolean mScopeOnPage;
+    /**
+     * The card's two chips, Where it applies and What it applies to (ADR 0017): the grid cell its
+     * rows read and write. Every card sets them where it opens ({@link EditorChips#openFor}).
+     */
+    @NonNull private EditorChips mChips = new EditorChips(com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE, null);
     /**
      * The pages the Look slider was put on Custom this visit while their values still match a
      * Look, as {@link #mHeldCustom} holds it for the wall.
@@ -409,20 +412,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return out;
     }
 
-    /** Whether a page's dress shows an element: its own page layout's, else its kind's. */
-    @NonNull
-    private ScopeChip.Shows scopeShows() {
-        com.termux.app.place.PlaceLayoutStore places = scopePlaces();
-        return (page, element) -> {
-            if (places == null)
-                return com.termux.app.place.PlaceLayoutStore.kindShowsByDefault(page.kind, element);
-            if (places.hasPageLayout(page.id))
-                return places.forVariant(com.termux.app.place.LayoutVariant.page(page.id,
-                    page.kind)).showsAny(element);
-            return places.kindShowsAny(page.kind, element);
-        };
-    }
-
     /** The chip's page, or null where the editor knows of none on the wall. */
     @Nullable
     private com.termux.app.wall.WallPages.Page scopePage() {
@@ -434,26 +423,39 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return null;
     }
 
-    /** Whether {@code card} carries the chip: its surface shows on 2+ pages, this one among them. */
-    private boolean cardOffersScope(@Nullable EditorCard card) {
-        if (card == null || (card.slot == null && card != EditorCard.APPEARANCE))
-            return false;
-        com.termux.app.wall.WallPages.Page page = scopePage();
-        if (page == null)
-            return false;
-        ScopeChip.Shows shows = scopeShows();
-        if (card.slot != null && ScopeChip.pagesShowing(java.util.Collections.singletonList(page),
-                card.slot, shows) == 0)
-            return false;
-        return ScopeChip.offers(scopePages(), card.slot, shows);
-    }
-
-    /** Where {@code card}'s look rows read and write: the chip's side, Global without a chip. */
+    /** Where {@code card}'s look rows read and write: the Where chip's page, else the wall. */
     @NonNull
     private com.termux.app.look.PageLook.Scope scopeFor(@Nullable EditorCard card) {
-        return mScopeOnPage && cardOffersScope(card)
-            ? com.termux.app.look.PageLook.Scope.page(mScopePageId)
+        return card != null && mChips.onPage()
+            ? com.termux.app.look.PageLook.Scope.page(mChips.page)
             : com.termux.app.look.PageLook.Scope.GLOBAL;
+    }
+
+    /**
+     * Whether the chips stand where {@code card} opens, on Everywhere: the card's rows then read and
+     * write as they always have (an element's own value, or Base on the Appearance card).
+     */
+    private boolean chipsPlain(@Nullable EditorCard card) {
+        return !mChips.onPage() && mChips.isOpening(card);
+    }
+
+    /** The value of a surface property the chips' cell shows, in the property's old unit. */
+    private int chipsValue(@NonNull TermuxAppSharedPreferences prefs,
+                           @NonNull SurfaceProperty property) {
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
+        int value = prefs.lookGrid().value(cell.property, cell.element, cell.page);
+        return property.grid == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST
+            ? com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(value) : value;
+    }
+
+    /** Writes a surface property, in its old unit, into the chips' cell. */
+    private void writeChipsCell(@NonNull TermuxAppSharedPreferences prefs,
+                                @NonNull SurfaceProperty property, int value) {
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
+        int stored = property.grid == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST
+            ? com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(value)
+            : value;
+        prefs.lookGrid().write(cell.property, cell.element, cell.page, stored);
     }
 
     /** The key a page may hold its own value of for a surface's property, or null. */
@@ -468,11 +470,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int scopedSurfaceValue(@NonNull TermuxAppSharedPreferences prefs,
                                    @NonNull EditorCard card, @NonNull SurfaceSlot slot,
                                    @NonNull SurfaceProperty property) {
-        int wall = prefs.getSurfaceValue(slot, property, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        String key = detachableKey(slot, property);
-        com.termux.app.look.PageLook look = scope.isGlobal() || key == null ? null : pageLook();
-        return look == null ? wall : look.read(scope, key, wall);
+        if (!chipsPlain(card))
+            return chipsValue(prefs, property);
+        return prefs.getSurfaceValue(slot, property, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
     }
 
     /**
@@ -481,38 +481,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean writeOnPage(@NonNull EditorCard card, @NonNull SurfaceSlot slot,
                                 @NonNull SurfaceProperty property, int value) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        String key = detachableKey(slot, property);
-        com.termux.app.look.PageLook look = scope.isGlobal() || key == null ? null : pageLook();
-        return look != null && look.write(scope, key, value);
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || chipsPlain(card))
+            return false;
+        writeChipsCell(prefs, property, value);
+        return true;
     }
 
     /** The Appearance card on a page: one property of every surface that page shows, as its own. */
     private boolean writeAllOnPage(@NonNull EditorCard card, @NonNull SurfaceProperty property,
                                    int value) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        if (scope.isGlobal())
+        // The chips name one cell (the page's all glass, or one element on it): one write.
+        if (!mChips.onPage())
             return false;
-        com.termux.app.wall.WallPages.Page page = scopePage();
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (slot == SurfaceSlot.CANVAS && (page == null
-                    || page.kind != com.termux.app.wall.WallPages.PageKind.TERMINAL))
-                continue;
-            writeOnPage(card, slot, property, value);
-        }
-        return true;
+        return writeOnPage(card, SurfaceSlot.STATUS, property, value);
     }
 
     /** Whether the level {@code card}'s scope edits holds its own value of a surface's property. */
     private boolean scopedOwnValue(@NonNull TermuxAppSharedPreferences prefs,
                                    @NonNull EditorCard card, @NonNull SurfaceSlot slot,
                                    @NonNull SurfaceProperty property) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        if (scope.isGlobal())
+        if (chipsPlain(card))
             return !prefs.isSurfaceInheriting(slot, property, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
-        String key = detachableKey(slot, property);
-        com.termux.app.look.PageLook look = key == null ? null : pageLook();
-        return look != null && look.has(scope, key);
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
+        return prefs.lookGrid().has(cell.property, cell.element, cell.page);
     }
 
     /**
@@ -539,12 +531,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
     private void resetOnPage(@NonNull EditorCard card) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs != null)
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
+                prefs.lookGrid().clear(cell.property, cell.element, cell.page);
+            }
         com.termux.app.look.PageLook.Scope scope = scopeFor(card);
         com.termux.app.look.PageLook look = pageLook();
         if (look == null || scope.isGlobal())
             return;
-        for (String key : pageResetKeys(card.slot))
-            look.reset(scope, key);
+        // All glass on a page also drops what a Look put on that page's elements.
+        if (mChips.element == null)
+            for (String key : pageResetKeys(card.slot))
+                look.reset(scope, key);
         mHeldCustomPages.remove(scope.pageId());
         mPageCustoms.remove(scope.pageId());
     }
@@ -783,7 +783,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
         mScopePageId = hostPageId >= 0 ? hostPageId
             : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
-        mScopeOnPage = false;
+        mChips = EditorChips.openFor(null, mScopePageId);
         mHeldCustomPages.clear();
         mPageCustoms.clear();
         mCard = null;
@@ -871,6 +871,31 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mScreen;
     }
 
+    /** The elements a page card's What chip offers: those the page the editor shows wears. */
+    @NonNull
+    private java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Element> pageElements() {
+        return java.util.Arrays.asList(com.termux.shared.termux.settings.preferences.LookGrid.Element.STATUS,
+            mScreen == PaneWallPage.WIDGETS ? com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS : com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, com.termux.shared.termux.settings.preferences.LookGrid.Element.KEYBOARD);
+    }
+
+    /** The What chip's word for an element, All glass for none. */
+    @NonNull
+    private CharSequence elementName(@Nullable com.termux.shared.termux.settings.preferences.LookGrid.Element element) {
+        if (element == null)
+            return getString(R.string.editor_chip_all_glass);
+        switch (element) {
+            case STATUS: return getString(R.string.appearance_card_status);
+            case DOCK: return getString(R.string.appearance_card_dock);
+            case KEYBOARD: return getString(R.string.appearance_card_keyboard);
+            case TERMINAL: return getString(R.string.appearance_card_terminal);
+            case WIDGETS: return getString(R.string.editor_element_widgets);
+            case SHEETS:
+            default:
+                return getString(R.string.editor_element_sheets);
+        }
+    }
+
     /** The name of the page the editor shows, for the line over the frame. */
     @NonNull
     private CharSequence pageName() {
@@ -908,7 +933,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mScreen = screen;
         if (pageId >= 0 && pageId != mScopePageId) {
             mScopePageId = pageId;
-            mScopeOnPage = false;
+            mChips = EditorChips.openFor(mCard, pageId);
         }
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
@@ -1021,6 +1046,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (sheet == null || cardRefusal(card) != null)
             return;
+        if (mCard != card)
+            mChips = EditorChips.openFor(card, mScopePageId);
         mCard = card;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
@@ -1212,8 +1239,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         if (prefs == null || card == null)
             return;
-        if (!scopeFor(card).isGlobal()) {
-            // Under the page, Reset returns the page to Base and leaves the wall as it is.
+        if (!chipsPlain(card)) {
+            // Away from the card's own cell, Reset clears the chips' cell and leaves the rest.
             resetOnPage(card);
             requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
                 | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -2485,29 +2512,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return scopedOwnValue(prefs, card, card.slot, property);
         }
 
-        @Nullable @Override public CharSequence[] scopeLabels() {
-            if (!cardOffersScope(mCard))
+        @Nullable @Override public EditorCardSheet.Chip whereChip() {
+            if (mCard == null)
                 return null;
-            com.termux.app.wall.WallPages.Page page = scopePage();
-            String name = page == null ? null : page.name;
-            if (name == null) {
-                com.termux.app.place.PlaceLayoutStore places = scopePlaces();
-                name = places == null ? null : places.pageName(mScopePageId);
+            java.util.List<Integer> options = EditorChips.whereOptions(mScopePageId);
+            CharSequence[] labels = new CharSequence[options.size()];
+            int selected = 0;
+            for (int i = 0; i < labels.length; i++) {
+                int page = options.get(i);
+                labels[i] = page < 0 ? getString(R.string.editor_chip_everywhere) : pageName();
+                if (page == mChips.page) selected = i;
             }
-            return name == null ? null : new CharSequence[] {
-                mHost.context().getString(R.string.editor_scope_global), name};
+            return new EditorCardSheet.Chip(getString(R.string.editor_chip_where), labels, selected);
+        }
+
+        @Nullable @Override public EditorCardSheet.Chip whatChip() {
+            java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Element> options = EditorChips.whatOptions(mCard, pageElements());
+            if (options.isEmpty())
+                return null;
+            CharSequence[] labels = new CharSequence[options.size()];
+            int selected = 0;
+            for (int i = 0; i < labels.length; i++) {
+                labels[i] = elementName(options.get(i));
+                if (options.get(i) == mChips.element) selected = i;
+            }
+            return new EditorCardSheet.Chip(getString(R.string.editor_chip_what), labels, selected);
+        }
+
+        @Override public void pickWhere(int index) {
+            java.util.List<Integer> options = EditorChips.whereOptions(mScopePageId);
+            if (index >= 0 && index < options.size())
+                mChips = mChips.withPage(options.get(index));
+        }
+
+        @Override public void pickWhat(int index) {
+            java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Element> options = EditorChips.whatOptions(mCard, pageElements());
+            if (index >= 0 && index < options.size())
+                mChips = mChips.withElement(options.get(index));
         }
 
         @Override public boolean scopeOnPage() {
-            return !scopeFor(mCard).isGlobal();
+            return mChips.onPage();
         }
 
         @Override public void setScopeOnPage(boolean onPage) {
-            if (mScopeOnPage == onPage)
-                return;
-            // Nothing is written here: the page shows Base until a value is set on it, so
-            // detaching never jumps the look, and the first edit seeds the page's own value.
-            mScopeOnPage = onPage;
+            // Nothing is written here: the cell shows what it follows until a value is set on it.
+            mChips = mChips.withPage(onPage ? mScopePageId : -1);
         }
 
         @Override public boolean enabled(@NonNull Row row) {

@@ -66,7 +66,8 @@ public class EditorScreenLookTest {
     @Test
     public void aLookUnderGlobalReachesEveryPage() {
         SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        assertFalse("the editor opens on Global", model(editor).scopeOnPage());
+        model(editor).setScopeOnPage(false);
+        assertFalse("Where stands on Everywhere", model(editor).scopeOnPage());
         assertEquals(FROST, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
 

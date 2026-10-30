@@ -124,17 +124,24 @@ final class EditorCardSheet {
         /** Reads a {@link #rowView} again from the values, as {@link #restate()} does any row. */
         default void restateRowView(@NonNull Row row, @NonNull View view) {}
 
-        /**
-         * The scope chip's two words for the card up, "Global" then the page's name (ADR 0015
-         * §6); null where the card carries no chip (its surface shows on one page only).
-         */
+        /** The Where it applies chip for the card up, or null where the card has none. */
         @Nullable
-        default CharSequence[] scopeLabels() { return null; }
+        default Chip whereChip() { return null; }
 
-        /** Whether the chip stands on the page side: the card's rows read and write the page. */
+        /** The What it applies to chip for the card up, or null (the Appearance card). */
+        @Nullable
+        default Chip whatChip() { return null; }
+
+        /** The Where chip's menu picked option {@code index}. */
+        default void pickWhere(int index) {}
+
+        /** The What chip's menu picked option {@code index}. */
+        default void pickWhat(int index) {}
+
+        /** Whether the Where chip stands on a page: the card's rows read and write the page. */
         default boolean scopeOnPage() { return false; }
 
-        /** A touch on the chip picked a side. */
+        /** Puts the Where chip on the page (true) or Everywhere. */
         default void setScopeOnPage(boolean onPage) {}
     }
 
@@ -187,16 +194,41 @@ final class EditorCardSheet {
     @NonNull private final FrameLayout mGrab;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
+    /**
+     * One of a card's two chips: its question (the menu's caption), its options and the one
+     * picked. The first option is the wide one (Everywhere, All glass); any other reads narrowed.
+     */
+    public static final class Chip {
+        @NonNull public final CharSequence question;
+        @NonNull public final CharSequence[] labels;
+        public final int selected;
+
+        public Chip(@NonNull CharSequence question, @NonNull CharSequence[] labels, int selected) {
+            this.question = question;
+            this.labels = labels;
+            this.selected = selected;
+        }
+
+        /** Whether the chip stands on something narrower than its first option. */
+        public boolean narrowed() {
+            return selected > 0;
+        }
+
+        @NonNull public CharSequence label() {
+            return labels[Math.max(0, Math.min(labels.length - 1, selected))];
+        }
+    }
+
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
     @NonNull private final MaterialButton mEye;
     @NonNull private final MaterialButton mReset;
     /** The glyph the eye shows now: open or struck through. */
     private int mEyeIcon = R.drawable.ic_ms_visibility;
     @NonNull private final ScrollView mScroll;
-    /** The scope chip under the header ({@link Model#scopeLabels}), and the words it was built with. */
-    @NonNull private final FrameLayout mScopeSlot;
-    @Nullable private com.termux.app.surfaces.rows.SegmentRow mScopeChip;
-    @Nullable private CharSequence[] mScopeLabels;
+    /** The chips row under the header: Where it applies, then What it applies to. */
+    @NonNull private final LinearLayout mScopeSlot;
+    @NonNull private final MaterialButton mWhereChip;
+    @NonNull private final MaterialButton mWhatChip;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
     @Nullable private EditorCard mCard;
@@ -306,8 +338,18 @@ final class EditorCardSheet {
         headerRow.addView(mEye, headerButtonParams(1));
         bindHeaderDrag();
 
-        mScopeSlot = new FrameLayout(context);
+        mScopeSlot = new LinearLayout(context);
+        mScopeSlot.setOrientation(LinearLayout.HORIZONTAL);
+        // Two halves: a chip never takes more than half the row, its twin there or not.
+        mScopeSlot.setWeightSum(2f);
         mScopeSlot.setVisibility(View.GONE);
+        float dp = context.getResources().getDisplayMetrics().density;
+        mScopeSlot.setPadding(Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_TOP_DP * dp),
+            Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_BOTTOM_DP * dp));
+        mWhereChip = buildChip(context, true);
+        mWhatChip = buildChip(context, false);
+        mScopeSlot.addView(mWhereChip);
+        mScopeSlot.addView(mWhatChip);
         mColumn.addView(mScopeSlot, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -1540,39 +1582,97 @@ final class EditorCardSheet {
         restateScope();
     }
 
-    /**
-     * The scope chip read again: built anew only when its words change (another page), else only
-     * its side set. A card segment row, as the Elements card's "Applies to" chip is.
-     */
-    private void restateScope() {
-        CharSequence[] labels = mModel.scopeLabels();
-        if (labels == null || labels.length != 2) {
-            if (mScopeChip != null) {
-                mScopeSlot.removeAllViews();
-                mScopeChip = null;
-                mScopeLabels = null;
-            }
-            EditorViews.setVisible(mScopeSlot, false);
+    /** The chips row: 4 dp over, 12 under, 16 at the sides; chips 40 high, 8 apart. */
+    static final int CHIP_ROW_TOP_DP = 4;
+    static final int CHIP_ROW_BOTTOM_DP = 12;
+    static final int CHIP_ROW_SIDE_DP = 16;
+    static final int CHIP_HEIGHT_DP = 40;
+    static final int CHIP_GAP_DP = 8;
+
+    /** A chip: a capsule that names its option on one line and opens its menu on a tap. */
+    @NonNull
+    private MaterialButton buildChip(@NonNull Context context, boolean where) {
+        MaterialButton chip = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        float dp = context.getResources().getDisplayMetrics().density;
+        chip.setSingleLine(true);
+        chip.setEllipsize(TextUtils.TruncateAt.END);
+        chip.setAllCaps(false);
+        chip.setMinWidth(0);
+        chip.setMinimumWidth(0);
+        chip.setInsetTop(0);
+        chip.setInsetBottom(0);
+        chip.setCornerRadius(Math.round(CHIP_HEIGHT_DP * dp / 2f));
+        chip.setPadding(Math.round(8 * dp), 0, Math.round(12 * dp), 0);
+        chip.setIconResource(R.drawable.ic_editor_expand_more);
+        chip.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_END);
+        chip.setIconSize(Math.round(18 * dp));
+        chip.setIconPadding(Math.round(8 * dp));
+        chip.setOnClickListener(v -> openChipMenu(chip, where));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            Math.round(CHIP_HEIGHT_DP * dp), 1f);
+        if (!where) params.setMarginStart(Math.round(CHIP_GAP_DP * dp));
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
+    /** A chip's menu: its question as the caption, its options as radio items. */
+    private void openChipMenu(@NonNull MaterialButton anchor, boolean where) {
+        Chip chip = where ? mModel.whereChip() : mModel.whatChip();
+        if (chip == null || chip.labels.length < 2)
+            return;
+        android.widget.PopupMenu menu = new android.widget.PopupMenu(mContext, anchor);
+        menu.getMenu().add(0, -1, 0, chip.question).setEnabled(false);
+        for (int i = 0; i < chip.labels.length; i++)
+            menu.getMenu().add(1, i, i + 1, chip.labels[i]).setChecked(i == chip.selected);
+        menu.getMenu().setGroupCheckable(1, true, true);
+        menu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() < 0)
+                return false;
+            if (where)
+                mModel.pickWhere(item.getItemId());
+            else
+                mModel.pickWhat(item.getItemId());
+            restate();
+            return true;
+        });
+        menu.show();
+    }
+
+    /** One chip read again: its words, its narrowed fill, its chevron where it has a choice. */
+    private void restateChip(@NonNull MaterialButton view, @Nullable Chip chip) {
+        if (chip == null) {
+            EditorViews.setVisible(view, false);
             return;
         }
-        if (mScopeChip == null || !java.util.Arrays.equals(labels, mScopeLabels)) {
-            mScopeSlot.removeAllViews();
-            mScopeChip = com.termux.app.surfaces.rows.SegmentRow.build(mContext,
-                R.drawable.ic_ms_layers, mContext.getString(R.string.editor_scope_for),
-                java.util.Arrays.asList(
-                    com.termux.app.surfaces.rows.SegmentRow.Segment.word(labels[0]),
-                    com.termux.app.surfaces.rows.SegmentRow.Segment.word(labels[1])),
-                mModel.scopeOnPage() ? 1 : 0,
-                mContext.getResources().getDisplayMetrics().widthPixels,
-                index -> {
-                    mModel.setScopeOnPage(index == 1);
-                    restate();
-                });
-            mScopeLabels = labels.clone();
-            mScopeSlot.addView(mScopeChip.root);
-        }
-        mScopeChip.select(mModel.scopeOnPage() ? 1 : 0);
-        EditorViews.setVisible(mScopeSlot, true);
+        CharSequence label = chip.label();
+        if (!TextUtils.equals(view.getText(), label))
+            view.setText(label);
+        view.setContentDescription(chip.question + ": " + label);
+        boolean choice = chip.labels.length > 1;
+        view.setEnabled(choice);
+        view.setIconResource(choice ? R.drawable.ic_editor_expand_more : 0);
+        int fill = com.google.android.material.color.MaterialColors.getColor(view,
+            chip.narrowed() ? com.google.android.material.R.attr.colorPrimaryContainer
+                : android.R.attr.colorBackground, 0);
+        int ink = com.google.android.material.color.MaterialColors.getColor(view,
+            chip.narrowed() ? com.google.android.material.R.attr.colorOnPrimaryContainer
+                : com.google.android.material.R.attr.colorOnSurface, 0);
+        view.setBackgroundTintList(ColorStateList.valueOf(chip.narrowed() ? fill : 0));
+        view.setTextColor(ink);
+        view.setIconTint(ColorStateList.valueOf(ink));
+        view.setStrokeWidth(chip.narrowed() ? 0
+            : Math.round(mContext.getResources().getDisplayMetrics().density));
+        EditorViews.setVisible(view, true);
+    }
+
+    /** The chips read again; the row hides when the card has neither. */
+    private void restateScope() {
+        Chip where = mModel.whereChip();
+        Chip what = mModel.whatChip();
+        restateChip(mWhereChip, where);
+        restateChip(mWhatChip, what);
+        EditorViews.setVisible(mScopeSlot, where != null || what != null);
     }
 
     /**
