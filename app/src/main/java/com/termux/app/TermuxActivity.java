@@ -4825,7 +4825,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mGroundCanvasTint = Color.TRANSPARENT;
     private int mGroundInkKey;
 
-    @Nullable
     /**
      * The page kinds the ground strip reads, one per cell in cell order, through the wall's
      * controller (ADR 0016); the page in view alone before it is built.
@@ -4843,6 +4842,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(0, Math.min(mGroundScratch.length - 1, at));
     }
 
+    @Nullable
     private com.termux.app.wall.PaneWallLayout groundWall() {
         if (mGroundWall == null) {
             View wall = findViewById(R.id.terminal_pane_wall);
