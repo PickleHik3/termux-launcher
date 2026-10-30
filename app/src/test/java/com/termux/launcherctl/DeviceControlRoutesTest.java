@@ -36,6 +36,8 @@ public class DeviceControlRoutesTest {
         assertFalse(DeviceControlRoutes.handles("POST", "/v1/notify"));
         assertTrue(DeviceControlRoutes.handles("GET", "/v1/motion-log"));
         assertTrue(DeviceControlRoutes.handles("POST", "/v1/motion-log/clear"));
+        assertTrue(DeviceControlRoutes.handles("POST", "/v1/look"));
+        assertFalse(DeviceControlRoutes.handles("GET", "/v1/look"));
         assertFalse(DeviceControlRoutes.handles("POST", "/v1/motion-log"));
         assertFalse(DeviceControlRoutes.handles("GET", "/v1/motion-log/clear"));
     }

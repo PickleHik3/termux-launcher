@@ -42,7 +42,7 @@ import static org.junit.Assert.assertTrue;
 public class LauncherCtlCliScriptTest {
 
     private static final String[] GROUPS = {"launch", "pane", "window", "agent", "notify", "progress",
-        "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "volume", "toast",
+        "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "motion-log", "look", "volume", "toast",
         "wallpaper", "x11", "media"};
 
     @Rule public final TemporaryFolder folder = new TemporaryFolder();
