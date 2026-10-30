@@ -108,7 +108,7 @@ public final class GlassSurfaceFactory {
     /** The dock's tint strength, percent: what every dock-material surface wears. */
     private int dockTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookHalf())
+        return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
@@ -165,7 +165,7 @@ public final class GlassSurfaceFactory {
                                 int tintStrengthPercent) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getDockGlassGrain(mSurfaces.stackLookHalf())
+            ? preferences.getDockGlassGrain(mSurfaces.stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
     }
@@ -173,7 +173,7 @@ public final class GlassSurfaceFactory {
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookHalf())
+        return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
@@ -233,7 +233,7 @@ public final class GlassSurfaceFactory {
                                      boolean glassDrawsEdge) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain(mSurfaces.statusLookHalf())
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         // Height-clamped like the outline clip (min(configured, height/2)): the compact pill's
         // baked stroke must curve exactly with the clip, or the corners double up.
@@ -313,7 +313,7 @@ public final class GlassSurfaceFactory {
                                               @Nullable GlassBackdropCache.Band veilOf) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain(mSurfaces.statusLookHalf())
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, ChromeEdgeRule.NONE, null,
             veilOf, statusTintStrength());
@@ -398,11 +398,29 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The even-out matrix {@code band}'s frame is drawn through ahead of its frost
+     * ({@link ChromeInk#bandEvenOutMatrix}, measured on the rect the band's content last asked
+     * about), or null: no band, no even-out for it, or the identity.
+     */
+    @Nullable
+    android.graphics.ColorMatrix bandEvenOut(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandEvenOutMatrix(band, null) : null;
+    }
+
+    /**
      * Tells the ink the blur {@code band}'s glass is drawn at ({@link ChromeInk#noteBandBlur}), so
      * its rows are measured on the frame it really shows. Nothing for no band or no ink.
      */
     void noteBandBlur(@Nullable GlassBackdropCache.Band band, int blurRadiusDp) {
         if (band != null && mInk != null) mInk.noteBandBlur(band, blurRadiusDp);
+    }
+
+    /**
+     * Tells the ink whether {@code band}'s own frame is up ({@link ChromeInk#noteBandFrame}): a
+     * frame covers the page's dim. Nothing for no band or no ink.
+     */
+    void noteBandFrame(@Nullable GlassBackdropCache.Band band, boolean framed) {
+        if (band != null && mInk != null) mInk.noteBandFrame(band, framed);
     }
 
     /**
@@ -425,6 +443,8 @@ public final class GlassSurfaceFactory {
         mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd, base);
         // The glass under it is the dock's, blurred at the dock's radius.
         mInk.noteBandBlur(band, mSurfaces.effectiveDockBlurRadiusDp());
+        // And it stands on the dock's frame where that is up, which covers the page's dim.
+        mInk.noteBandFrame(band, mInk.bandFramed(GlassBackdropCache.Band.DOCK));
         int veil = mInk.bandVeil(band);
         if (Color.alpha(veil) <= 0) return null;
         GradientDrawable layer = new GradientDrawable();

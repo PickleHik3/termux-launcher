@@ -70,11 +70,11 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void aJumpAlongTheRowBringsThePageInFromTheSideItSitsOn() {
-        // Home, the Workspace and the Display page are a line (ADR 0008). From Display, Home is
-        // two pages to the left, so a jump straight to it starts with the wall two widths to the
-        // left of its rest - the pages slide in from the left; from Home, Display is two pages to
-        // the right. The same sides a swipe reaches them from.
+    public void aFarJumpArrivesOneWidthOffOnTheSideItsCellLies() {
+        // Home, the Terminal page and the Display page are a line. From Display, Home is two
+        // cells to the left: a jump straight to it stands one width to the left and slides in
+        // from there (ADR 0016 §4, W3), never the real distance; from Home, Display arrives one
+        // width from the right. The same sides a swipe reaches them from.
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
         wall.goTo(PaneWallPage.DISPLAY, false);
@@ -82,15 +82,15 @@ public class PaneWallLayoutTest {
 
         wall.goTo(PaneWallPage.WIDGETS, true);
         assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
-        assertEquals("Home starts two widths to the left and slides in from there",
-            -2 * WIDTH, wall.offsetPx(), EPS);
+        assertEquals("Home stands one width to the left and slides in from there",
+            -WIDTH, wall.offsetPx(), EPS);
         wall.goTo(PaneWallPage.DISPLAY, false);
         assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
 
         wall.goTo(PaneWallPage.WIDGETS, false);
         wall.goTo(PaneWallPage.DISPLAY, true);
-        assertEquals("Display starts two widths to the right and slides in from there",
-            2 * WIDTH, wall.offsetPx(), EPS);
+        assertEquals("Display stands one width to the right and slides in from there",
+            WIDTH, wall.offsetPx(), EPS);
 
         // Between neighbours the side is the plain one: from the terminal, Widgets is to the left
         // and Display to the right.
@@ -347,18 +347,45 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void aPageChangeAlongTheRowSlidesThroughThePagesBetween() {
+    public void realCellsReplacingAKindOnlyListOfTheSameKindsAnnounceNothing() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        final int[] changes = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallPageChanged(PaneWallPage page) { changes[0]++; }
+        });
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PaneWallPage.WIDGETS, "Home"),
+            new PaneWallLayout.Cell(2, PaneWallPage.TERMINAL, "Terminal"),
+            new PaneWallLayout.Cell(3, PaneWallPage.DISPLAY, "Display")));
+        assertEquals("the kind is unchanged, so nothing is announced", 0, changes[0]);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(2, wall.currentPageId());
+
+        // A list without the current kind hands the wall over, and says so once.
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PaneWallPage.WIDGETS, "Home"),
+            new PaneWallLayout.Cell(3, PaneWallPage.DISPLAY, "Display")));
+        assertEquals(1, changes[0]);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+    }
+
+    @Test
+    public void aFarJumpSlidesOnlyThePageLeftAndThePageArriving() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
         wall.goTo(PaneWallPage.WIDGETS, false);
         assertEquals(0f, widgets.getTranslationX(), EPS);
 
-        // Home -> Display: two steps to the right on the line, so the Display page starts two
-        // widths to the right and Home slides off to the left, past the Workspace.
+        // Home -> Display: two cells to the right, but the Display page stands one width to the
+        // right of Home and the two slide as neighbours; the Terminal page between is out of the
+        // slide (ADR 0016 §4, W3).
         wall.goTo(PaneWallPage.DISPLAY, true);
         assertTrue(wall.isMoving());
-        assertEquals(2 * WIDTH, display.getTranslationX(), EPS);
+        assertEquals(WIDTH, display.getTranslationX(), EPS);
         assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertTrue("the page between is never on screen",
+            terminal.getAlpha() == 0f || Math.abs(terminal.getTranslationX()) >= WIDTH);
     }
 
     @Test
@@ -509,6 +536,50 @@ public class PaneWallLayoutTest {
         assertEquals(0, ended[0]);
 
         wall.beginDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
+    /** A gate that only opens when the test says: on a view in a window, never drawn here. */
+    private static FirstDrawGate heldGate() {
+        Activity other = Robolectric.buildActivity(Activity.class).setup().get();
+        View content = new View(other);
+        other.setContentView(content);
+        FirstDrawGate gate = FirstDrawGate.afterNextDraw(content);
+        assertFalse(gate.isOpen());
+        return gate;
+    }
+
+    @Test
+    public void aHeldNudgeStandsAtItsStartUntilTheArrivingPageHasDrawn() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        assertEquals(300f, terminal.getTranslationX(), EPS);
+        assertEquals(0, ended[0]);
+        // The clock starts when the gate opens, and runs its whole course from there.
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
+    @Test
+    public void aHeldNudgeCutShortEndsOnceAndItsGateDoesNotStartIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        wall.beginDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
         assertEquals(0f, terminal.getTranslationX(), EPS);
         assertEquals(1, ended[0]);
     }
@@ -736,9 +807,10 @@ public class PaneWallLayoutTest {
         wall.setGesturesEnabled(true);
         assertEquals(expected, wall.getSystemGestureExclusionRects());
 
-        // The stretches follow the page that is up. With the terminal's own frame air on, the
-        // other places stand that much nearer the wall, so Display's zone is MARGIN - AIR wide;
-        // and a page change re-lays nothing, so the change itself has to republish.
+        // The stretches follow the page that is up. A Display page owns its picture to its rim
+        // since A3b (BorderReach.ownsContent), so its borders keep to the air beside it and its
+        // stretch is narrower than the terminal's; and a page change re-lays nothing, so the
+        // change itself has to republish.
         final int air = 4;
         wall.setTerminalFrameAirPx(air);
         relayout();
@@ -746,9 +818,8 @@ public class PaneWallLayoutTest {
         wall.goTo(PaneWallPage.DISPLAY, false);
         relayout();
         List<android.graphics.Rect> onDisplay = Arrays.asList(
-            new android.graphics.Rect(0, centre - 72, MARGIN - air + SIDE_REACH, centre + 72),
-            new android.graphics.Rect(WIDTH - MARGIN + air - SIDE_REACH, centre - 72, WIDTH,
-                centre + 72));
+            new android.graphics.Rect(0, centre - 72, MARGIN - air, centre + 72),
+            new android.graphics.Rect(WIDTH - MARGIN + air, centre - 72, WIDTH, centre + 72));
         assertEquals(onDisplay, wall.getSystemGestureExclusionRects());
         // Back to the terminal: no layout runs, and the stretches still come back to its zone.
         wall.goTo(PaneWallPage.TERMINAL, false);

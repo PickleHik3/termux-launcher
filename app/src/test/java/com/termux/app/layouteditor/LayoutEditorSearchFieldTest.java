@@ -50,7 +50,7 @@ public class LayoutEditorSearchFieldTest {
     @Test
     public void theToggleIsOfferedWithThePickerOnEitherHalf() {
         for (boolean homeLayout : new boolean[] {false, true}) {
-            places.setHomeLayout(homeLayout);
+            com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, homeLayout);
             for (PaneWallPage page : PaneWallPage.values()) {
                 LayoutEditorPlan plan = LayoutEditorPlan.enter(places, page, PORTRAIT);
                 assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
@@ -79,10 +79,10 @@ public class LayoutEditorSearchFieldTest {
 
     @Test
     public void onAHomeLayoutTheToggleIsHomesOwn() {
-        places.setHomeLayout(true);
+        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         plan.setSearchField(true);
-        assertTrue(places.forVariant(LayoutVariant.HOME).searchField());
+        assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).searchField());
         assertFalse("the Workspace keeps its own",
             places.forVariant(LayoutVariant.NORMAL).searchField());
     }

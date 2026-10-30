@@ -56,16 +56,18 @@ public class PlaceLayoutLinkedKeysTest {
         return new PlaceLayoutStore(launcher);
     }
 
-    /** A store with Home's own layout on, the normal layout being the root store's view. */
+    /**
+     * A store whose Home page holds a page layout of its own (where the Home layout stood before
+     * version 16), the normal layout being the root store's view.
+     */
     private PlaceLayoutStore withHomesOwn() {
-        PlaceLayoutStore store = store();
-        store.setHomeLayout(true);
-        assertTrue(store.hasHomeLayout());
+        PlaceLayoutStore store = KindFixtures.withHomePageLayout(store());
+        assertTrue(store.hasPageLayout(KindFixtures.HOME_ID));
         return store;
     }
 
     private static PlaceLayoutStore home(PlaceLayoutStore store) {
-        return store.forVariant(LayoutVariant.HOME);
+        return store.forVariant(KindFixtures.HOME_PAGE);
     }
 
     private static PlaceLayoutStore normal(PlaceLayoutStore store) {
@@ -134,7 +136,7 @@ public class PlaceLayoutLinkedKeysTest {
         launcher.setLayoutCornersDp(true, 30);
         launcher.setLayoutMarginDp(true, 20);
         assertEquals("set from Home, the window's follows",
-            WallHalfShape.of(LayoutStyle.FLOATING, 30, 20), WallHalfShape.read(launcher, false));
+            WallShape.of(LayoutStyle.FLOATING, 30, 20), WallShape.read(launcher));
         launcher.setLayoutCornersDp(false, 6);
         assertEquals("set from the window, Home's follows", 6, launcher.getLayoutCornersDp(true));
         assertFalse("Home keeps no copy", prefs.contains(TERMUX_APP.KEY_HOME_LAYOUT_STYLE)
@@ -145,7 +147,7 @@ public class PlaceLayoutLinkedKeysTest {
         assertEquals("Home's dress wears the Workspace's shape",
             dresses.dressOf(PaneWallPage.TERMINAL).shape(),
             dresses.dressOf(PaneWallPage.WIDGETS).shape());
-        assertEquals(LayoutVariant.HOME, dresses.dressOf(PaneWallPage.WIDGETS).layout());
+        assertEquals(KindFixtures.HOME_PAGE, dresses.dressOf(PaneWallPage.WIDGETS).layout());
     }
 
     @Test
@@ -233,10 +235,11 @@ public class PlaceLayoutLinkedKeysTest {
             .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, 30)
             .putString(TERMUX_APP.KEY_HOME_LAYOUT_STYLE, "floating")
             .commit();
-        PlaceLayoutStore store = store();
-        // Version 9 put Home on the shared layout; version 14 gave it a copy of that layout.
-        assertTrue(store.hasHomeLayout());
-        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        PlaceLayoutStore store = KindFixtures.onHomePage(store());
+        // Version 9 put Home on the shared layout; version 14 gave it a copy of that layout;
+        // version 16 finds the copy equal and puts Home back on the shared one.
+        assertFalse(store.hasHomeLayout());
+        assertFalse(store.hasPageLayout(KindFixtures.HOME_ID));
         assertEquals(1.1f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
             0.001f);
         assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
@@ -251,8 +254,12 @@ public class PlaceLayoutLinkedKeysTest {
             .putFloat("layout.home.portrait.dock_height", 0.7f)
             .putInt(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS, 40)
             .commit();
-        PlaceLayoutStore store = store();
-        assertTrue("the rows still differ", store.hasHomeLayout());
+        PlaceLayoutStore store = KindFixtures.onHomePage(store());
+        // The apps row put away is visibility, the Home kind's since version 15, not an
+        // arrangement: version 16 leaves Home on the shared layout, and nothing moves.
+        assertFalse(store.hasHomeLayout());
+        assertFalse(store.hasPageLayout(KindFixtures.HOME_ID));
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
         assertEquals(1.1f, store.forVariant(LayoutVariant.HOME).dockHeightScale(PORTRAIT),
             0.001f);
         assertFalse(prefs.contains("layout.home.portrait.dock_height"));
@@ -280,7 +287,8 @@ public class PlaceLayoutLinkedKeysTest {
         editor.commit();
         PlaceLayoutStore store = store();
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION, prefs.getInt("place.migrated", 0));
-        assertTrue("the switch is the user's", store.hasHomeLayout());
+        assertTrue("Home's rows live on as the Home page's own layout",
+            KindFixtures.onHomePage(store).hasPageLayout(KindFixtures.HOME_ID));
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             String o = orientation.storageValue();
             for (String key : new String[] {"dock_height", "keyboard_height", "keyboard_chin",

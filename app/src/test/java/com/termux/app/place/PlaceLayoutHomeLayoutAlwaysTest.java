@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -73,10 +74,13 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         seed.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
             Slot.on(Edge.RIGHT, 0));
 
-        PlaceLayoutStore upgraded = upgradedFrom13(false);
+        PlaceLayoutStore upgraded = KindFixtures.onHomePage(upgradedFrom13(false));
 
-        assertTrue(upgraded.hasHomeLayout());
-        assertEquals(LayoutVariant.HOME,
+        // Version 14 copies the shared layout into Home's; version 16 finds the copy equal, so
+        // Home goes back on the shared layout with no page layout: nothing moves either way.
+        assertFalse(upgraded.hasHomeLayout());
+        assertFalse(upgraded.hasPageLayout(KindFixtures.HOME_ID));
+        assertEquals(LayoutVariant.NORMAL,
             DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
         PlaceLayoutStore from = upgraded.forVariant(LayoutVariant.NORMAL);
         PlaceLayoutStore home = upgraded.forVariant(LayoutVariant.HOME);
@@ -103,10 +107,14 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         seed.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
             Slot.on(Edge.BOTTOM, 0));
 
-        PlaceLayoutStore upgraded = upgradedFrom13(true);
+        PlaceLayoutStore upgraded = KindFixtures.onHomePage(upgradedFrom13(true));
 
-        assertTrue(upgraded.hasHomeLayout());
-        assertEquals(Edge.BOTTOM, upgraded.forVariant(LayoutVariant.HOME)
+        // A Home layout that differs lives on as the Home page's own (version 16).
+        assertFalse(upgraded.hasHomeLayout());
+        assertTrue(upgraded.hasPageLayout(KindFixtures.HOME_ID));
+        assertEquals(KindFixtures.HOME_PAGE,
+            DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(Edge.BOTTOM, upgraded.forVariant(KindFixtures.HOME_PAGE)
             .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
     }
 
@@ -126,11 +134,12 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
     }
 
     @Test
-    public void aNewInstallHoldsAHomeLayoutFromTheStart() {
-        PlaceLayoutStore fresh = new PlaceLayoutStore(launcher);
-        assertTrue(fresh.hasHomeLayout());
+    public void aNewInstallStartsWithHomeOnTheSharedLayout() {
+        PlaceLayoutStore fresh = KindFixtures.onHomePage(new PlaceLayoutStore(launcher));
+        assertFalse(fresh.hasHomeLayout());
+        assertFalse(fresh.hasPageLayout(KindFixtures.HOME_ID));
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
-        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.NORMAL, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
     }
 }

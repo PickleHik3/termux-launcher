@@ -98,12 +98,39 @@ public class TermuxApplication extends Application {
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
         if (surfacePreferences != null) {
+            // An install from before the wall rework takes Start in from its usage mode, once.
+            WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
+            // The wall's pages are seeded from Start in, the default Home page, Use as and the
+            // widget repository's page count, once; the count is read before anything changes it.
+            com.termux.app.wall.WallPagesMigration.migrateIfNeeded(
+                surfacePreferences.getSharedPreferences(),
+                () -> com.termux.app.launcher.widget.LauncherWidgetRepository.create(context)
+                    .pageCount(),
+                com.termux.app.wall.WallPagesStore.open(context));
+            // The look's halves became pages (ADR 0015 §6): tell the preferences which page the
+            // Workspace is, then fold the old half keys into wall values and Terminal-page
+            // overrides, once, before any look migration or activity reads a look.
+            com.termux.app.wall.WallPages.Page terminalPage =
+                com.termux.app.wall.WallPagesStore.open(context).current().terminal();
+            int terminalId = terminalPage == null ? -1 : terminalPage.id;
+            surfacePreferences.getSharedPreferences().edit().putInt(
+                com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
+                terminalId).apply();
+            TermuxAppSharedPreferences.setTerminalPageId(terminalId);
+            // With no Terminal page the Workspace's differing values have nowhere to go; the
+            // upgrade still runs and records its version.
+            com.termux.app.look.HalfLookUpgrade.run(
+                new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
+                terminalId, -1);
+            // The Display page the wall upgrade created starts with the Terminal page's look.
+            com.termux.app.wall.WallPagesMigration.copyLookToUpgradedDisplay(
+                surfacePreferences.getSharedPreferences(),
+                new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
+                terminalId);
             surfacePreferences.migrateSurfaceInheritance();
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
-            // An install from before the wall rework takes Start in from its usage mode, once.
-            WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);

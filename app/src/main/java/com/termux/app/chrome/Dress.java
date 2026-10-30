@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.WallHalfShape;
+import com.termux.app.place.WallShape;
 
 import java.util.Collections;
 import java.util.EnumSet;
@@ -28,11 +28,11 @@ public final class Dress {
     @NonNull private final DockStyle mDockDesign;
     private final boolean mSearchField;
     private final boolean mDrawerTile;
-    @NonNull private final WallHalfShape mShape;
+    @NonNull private final WallShape mShape;
 
     Dress(@NonNull LayoutVariant layout, @NonNull Set<Element> leftOut,
           @NonNull DockStyle dockDesign, boolean searchField, boolean drawerTile,
-          @NonNull WallHalfShape shape) {
+          @NonNull WallShape shape) {
         mLayout = layout;
         mLeftOut = leftOut.isEmpty() ? Collections.emptySet()
             : Collections.unmodifiableSet(EnumSet.copyOf(leftOut));
@@ -85,7 +85,7 @@ public final class Dress {
 
     /** The Style, Corners and Margin the page's chrome is shaped by. */
     @NonNull
-    public WallHalfShape shape() {
+    public WallShape shape() {
         return mShape;
     }
 

@@ -183,6 +183,12 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Nullable private StandInView mStandIn;
     /** The one copy kept, standing in or not; null once it is dropped. */
     @Nullable private android.graphics.Bitmap mStillBitmap;
+    /**
+     * The Display page's own still (ADR 0015 A3c2, stories 28/29): the bound page's last picture,
+     * or its card, while the display is not live there. Above the slide's stand-in and the empty
+     * state, below the corner mask; null where the frame has no display view.
+     */
+    @Nullable private PageStillView mPageStill;
     /** What the wall asked to be told once the copy on its way is up. */
     @Nullable private Runnable mOnStill;
     /** The copies land, and the swap's timers run, on the main thread. */
@@ -237,6 +243,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mStandIn = new StandInView(getContext());
             mStandIn.setVisibility(INVISIBLE);
             addView(mStandIn, indexOfChild(mDisplay) + 1,
+                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            mPageStill = new PageStillView(getContext());
+            mPageStill.setVisibility(INVISIBLE);
+            int mask = mCornerMask == null ? -1 : indexOfChild(mCornerMask);
+            addView(mPageStill, mask >= 0 ? mask : indexOfChild(mStandIn) + 1,
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
             // After the display's own callback, which hands the surface to X first.
             mDisplay.getHolder().addCallback(mStillSurfaceCallback);
@@ -1054,6 +1065,86 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
     }
 
+    // ---- The Display page's own still (A3c2) --------------------------------------------------
+
+    /**
+     * Stand the bound Display page's picture in front of the display, or its card when it has
+     * none ({@code picture} null: {@code icon} and {@code name}). The bitmap stays the caller's:
+     * it is drawn, never recycled here; call {@link #forgetPagePicture} before recycling it.
+     */
+    public void showPageStill(@Nullable android.graphics.Bitmap picture,
+                              @Nullable android.graphics.drawable.Drawable icon,
+                              @NonNull String name) {
+        if (mPageStill == null) return;
+        mPageStill.set(picture, icon, name);
+        mPageStill.setVisibility(VISIBLE);
+    }
+
+    /** The display is live on the bound page: its still goes. */
+    public void hidePageStill() {
+        if (mPageStill == null) return;
+        mPageStill.setVisibility(INVISIBLE);
+        mPageStill.set(null, null, "");
+    }
+
+    public boolean isPageStillShown() {
+        return mPageStill != null && mPageStill.getVisibility() == VISIBLE;
+    }
+
+    /** {@code bitmap} is about to be recycled: a still drawing it goes first. */
+    public void forgetPagePicture(@Nullable android.graphics.Bitmap bitmap) {
+        if (mPageStill != null && bitmap != null && mPageStill.picture() == bitmap) hidePageStill();
+    }
+
+    /**
+     * A picture of what the display shows now, for the page the frame is leaving: a fresh bitmap
+     * handed to {@code onCopied} (the caller's to keep and recycle), or null when there is nothing
+     * to copy. While the slide's stand-in covers the surface, its copy is the picture.
+     */
+    public void copyPagePicture(@NonNull androidx.core.util.Consumer<android.graphics.Bitmap> onCopied) {
+        android.graphics.Bitmap kept = mStillBitmap;
+        if (!isSurfaceLive()) {
+            android.graphics.Bitmap copy = null;
+            if (mRunning && kept != null && !kept.isRecycled()) {
+                try {
+                    copy = kept.copy(android.graphics.Bitmap.Config.ARGB_8888, false);
+                } catch (OutOfMemoryError e) {
+                    copy = null;
+                }
+            }
+            onCopied.accept(copy);
+            return;
+        }
+        LorieView display = mDisplay;
+        int width = display.getWidth();
+        int height = display.getHeight();
+        if (width <= 0 || height <= 0) {
+            onCopied.accept(null);
+            return;
+        }
+        final android.graphics.Bitmap destination;
+        try {
+            destination = android.graphics.Bitmap.createBitmap(width, height,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            onCopied.accept(null);
+            return;
+        }
+        try {
+            android.view.PixelCopy.request(display, destination, result -> {
+                if (result == android.view.PixelCopy.SUCCESS) {
+                    onCopied.accept(destination);
+                } else {
+                    destination.recycle();
+                    onCopied.accept(null);
+                }
+            }, mStillHandler);
+        } catch (RuntimeException e) {
+            destination.recycle();
+            onCopied.accept(null);
+        }
+    }
+
     // ---- The still copy (SurfacePage) ---------------------------------------------------------
 
     @Override
@@ -1306,6 +1397,78 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     /**
+     * A Display page's still: its last picture filling the frame, or, without one, a card with
+     * the bound app's icon and name ("Display" unbound) on a plain ground. Opaque, so neither the
+     * display beneath nor the empty state shows through; it takes no touch.
+     */
+    private static final class PageStillView extends View {
+        @Nullable private android.graphics.Bitmap mPicture;
+        @Nullable private android.graphics.drawable.Drawable mIcon;
+        @NonNull private String mName = "";
+        private final android.graphics.Paint mPaint =
+            new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+        private final android.graphics.Paint mText =
+            new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Rect mBounds = new android.graphics.Rect();
+        private final int mGround;
+
+        PageStillView(@NonNull Context context) {
+            super(context);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            float density = context.getResources().getDisplayMetrics().scaledDensity;
+            mText.setTextSize(16f * density);
+            mText.setTextAlign(android.graphics.Paint.Align.CENTER);
+            // The theme's tokens, as the frame's empty state wears them.
+            mText.setColor(themeColor(context,
+                com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFE8EAED));
+            mGround = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase,
+                0xFF15171A);
+        }
+
+        private static int themeColor(@NonNull Context context, int attr, int fallback) {
+            android.util.TypedValue value = new android.util.TypedValue();
+            if (!context.getTheme().resolveAttribute(attr, value, true)) return fallback;
+            if (value.resourceId != 0) {
+                return androidx.core.content.ContextCompat.getColor(context, value.resourceId);
+            }
+            return value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT ? value.data : fallback;
+        }
+
+        void set(@Nullable android.graphics.Bitmap picture,
+                 @Nullable android.graphics.drawable.Drawable icon, @NonNull String name) {
+            mPicture = picture;
+            mIcon = icon;
+            mName = name;
+            invalidate();
+        }
+
+        @Nullable android.graphics.Bitmap picture() {
+            return mPicture;
+        }
+
+        @Override
+        protected void onDraw(@NonNull android.graphics.Canvas canvas) {
+            android.graphics.Bitmap picture = mPicture;
+            mBounds.set(0, 0, getWidth(), getHeight());
+            if (picture != null && !picture.isRecycled()) {
+                canvas.drawBitmap(picture, null, mBounds, mPaint);
+                return;
+            }
+            canvas.drawColor(mGround);
+            float density = getResources().getDisplayMetrics().density;
+            int size = Math.round(56f * density);
+            int cx = getWidth() / 2;
+            int cy = getHeight() / 2;
+            if (mIcon != null) {
+                mIcon.setBounds(cx - size / 2, cy - size, cx + size / 2, cy);
+                mIcon.draw(canvas);
+            }
+            canvas.drawText(mName, cx, cy + 16f * density - mText.ascent(), mText);
+        }
+    }
+
+    /**
      * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
      * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
      */
@@ -1345,7 +1508,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mControls.setPaneBorder(radiusPx, glass
                 ? com.termux.app.GlassRimRenderer.strokePx(density)
                 : border ? PaneRim.stockStrokePx(density) : 0f);
-            PaneGlass.dressTab(style, mControls);
+            PaneGlass.dressTab(style, mControls, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,

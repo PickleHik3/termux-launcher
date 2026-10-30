@@ -6,12 +6,14 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
 import com.termux.R;
@@ -20,6 +22,7 @@ import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.GlyphNames;
 import com.termux.app.surfaces.rows.RowKit;
 import com.termux.app.surfaces.rows.SectionHeader;
+import com.termux.app.surfaces.rows.SegmentRow;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -42,12 +45,28 @@ public final class ElementsList {
         void setShown(@NonNull Item item, boolean shown);
         /** The sliders glyph, or a tap on the row: the element's card. */
         void open(@NonNull Item item);
+
+        /**
+         * The chip's two words, the kind side then the page ("Home pages", "Home 2"); null hides
+         * the chip (minimal mode, or no page known).
+         */
+        @Nullable
+        default CharSequence[] chipLabels() { return null; }
+
+        /** Whether the chip stands on the page side: the page wears a layout of its own. */
+        default boolean pageSide() { return false; }
+
+        default void setPageSide(boolean pageSide) {}
     }
 
     @NonNull public final LinearLayout root;
     @NonNull private final Context mContext;
     @NonNull private final Host mHost;
     @NonNull private final Map<Item, Views> mRows = new EnumMap<>(Item.class);
+    /** Where the chip stands, under the header; the chip itself, and the words it was built with. */
+    @NonNull private final FrameLayout mChipSlot;
+    @Nullable private SegmentRow mChip;
+    @Nullable private CharSequence[] mChipLabels;
 
     /** One element's row. */
     private static final class Views {
@@ -78,6 +97,9 @@ public final class ElementsList {
         root.setPadding(0, 0, 0, RowKit.dp(context, 8));
         root.addView(SectionHeader.build(context,
             context.getString(R.string.editor_section_elements), null, divider).root);
+        mChipSlot = new FrameLayout(context);
+        root.addView(mChipSlot, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout list = new LinearLayout(context);
         list.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
@@ -110,8 +132,41 @@ public final class ElementsList {
 
     /** Every row read again: which stand, which are hidden. Compares before it sets. */
     public void restate() {
+        restateChip();
         for (Map.Entry<Item, Views> entry : mRows.entrySet())
             restate(entry.getKey(), entry.getValue());
+    }
+
+    /**
+     * The chip read again: built anew only when its words change (another page), else only its
+     * side set. A card segment row, as the Dock card's toggles are.
+     */
+    private void restateChip() {
+        CharSequence[] labels = mHost.chipLabels();
+        if (labels == null || labels.length != 2) {
+            if (mChip != null) {
+                mChipSlot.removeAllViews();
+                mChip = null;
+                mChipLabels = null;
+            }
+            setVisible(mChipSlot, false);
+            return;
+        }
+        if (mChip == null || !java.util.Arrays.equals(labels, mChipLabels)) {
+            mChipSlot.removeAllViews();
+            mChip = SegmentRow.build(mContext, R.drawable.ic_ms_layers,
+                mContext.getString(R.string.editor_elements_dress_for), java.util.Arrays.asList(
+                    SegmentRow.Segment.word(labels[0]), SegmentRow.Segment.word(labels[1])),
+                mHost.pageSide() ? 1 : 0, mContext.getResources().getDisplayMetrics().widthPixels,
+                index -> {
+                    mHost.setPageSide(index == 1);
+                    restate();
+                });
+            mChipLabels = labels.clone();
+            mChipSlot.addView(mChip.root);
+        }
+        mChip.select(mHost.pageSide() ? 1 : 0);
+        setVisible(mChipSlot, true);
     }
 
     private void restate(@NonNull Item item, @NonNull Views views) {

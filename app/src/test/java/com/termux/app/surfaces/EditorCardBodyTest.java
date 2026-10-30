@@ -328,7 +328,7 @@ public class EditorCardBodyTest {
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
             if (row.kind == Kind.ACTION)
-                return mContext.getString(R.string.appearance_match_copy);
+                return "Copy";
             return stepper(row) ? String.valueOf(value)
                 : mContext.getString(R.string.appearance_readout_percent, value);
         }

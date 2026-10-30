@@ -31,7 +31,9 @@ public final class StatusBarLensPolicy {
     /** Bar widths between {@code page} and the place on screen, with the wall's offset folded in. */
     public static float distance(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
                                  @NonNull PaneWallPage page, float offsetPx, int widthPx) {
-        int rel = page == current ? 0 : PaneWallPolicy.relativePosition(pages, current, page);
+        int from = pages.indexOf(current);
+        int to = pages.indexOf(page);
+        int rel = page == current || from < 0 || to < 0 ? 0 : to - from;
         float offset = widthPx <= 0 ? 0f : offsetPx / (float) widthPx;
         return rel + offset;
     }

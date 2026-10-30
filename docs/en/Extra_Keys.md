@@ -28,8 +28,9 @@ In **Appearance → Layout** the row can be moved to any edge, dropped into the 
 keyboard, or hidden by dragging it onto the eye-off button. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-The row follows you from place to place, but a key that cannot act where you are goes faint and
-stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
+The wall is the list of pages in the order Edit pages arranged them. Two Display pages may sit next
+to each other. The row shows a go-to key for each page kind the wall has: Widgets, Terminal and
+Display. A key that cannot act on the page you are on goes faint and stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
 typing keys, the modifiers, **PASTE** and **SCROLL** are dimmed.
 
 ## Edit the row

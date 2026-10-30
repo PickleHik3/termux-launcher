@@ -58,17 +58,17 @@ public class LayoutEditorHomeLayoutTest {
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
         // Home holds a Home layout of its own here; the shared layout is LayoutEditorSharedLayoutTest.
-        places.setHomeLayout(true);
+        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
     }
 
     @Test
     public void openedOnAHomePageItEditsTheHomeLayout() {
-        assertEquals(LayoutVariant.HOME,
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE,
             LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT).variant());
         assertEquals(LayoutVariant.NORMAL,
             LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT).variant());
         places.setMinimal(true);
-        assertEquals("minimal mode is the Workspace's", LayoutVariant.HOME,
+        assertEquals("minimal mode is the Workspace's", com.termux.app.place.KindFixtures.HOME_PAGE,
             LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT).variant());
         assertEquals(LayoutVariant.MINIMAL,
             LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT).variant());
@@ -117,7 +117,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void theExtraKeysStandNowhereOnTheHomeLayout_theBarWhereItIsPlaced() {
-        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         assertTrue(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.STATUS_BAR, Edge.BOTTOM));
         assertEquals(Edge.BOTTOM, home.resolve(PORTRAIT).slot(Element.STATUS).edge);
         assertFalse(LayoutChooserModel.applyDrop(home, PORTRAIT, Bar.EXTRA_KEYS, Edge.BOTTOM));
@@ -176,12 +176,12 @@ public class LayoutEditorHomeLayoutTest {
     /** An install that never picked one, or holds an id this build cannot read, is the glass tray. */
     @Test
     public void anAbsentOrUnknownDockStyleReadsAsTheGlassTray() {
-        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
-        prefs().edit().putString("layout.home.dock_design", "ask_bar").commit();
+        prefs().edit().putString("layout.page2.dock_design", "ask_bar").commit();
         assertEquals(DockStyle.GLASS_TRAY, home.dockStyle());
         assertEquals(DockStyle.GLASS_TRAY,
-            places.resolve(PORTRAIT, LayoutVariant.HOME).dockStyle);
+            places.resolve(PORTRAIT, com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle);
     }
 
     @Test
@@ -190,8 +190,8 @@ public class LayoutEditorHomeLayoutTest {
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
             plan.setDockStyle(DockStyle.WALL_STRIP));
-        assertEquals("wall_strip", prefs().getString("layout.home.dock_design", null));
-        assertEquals(DockStyle.WALL_STRIP, places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals("wall_strip", prefs().getString("layout.page2.dock_design", null));
+        assertEquals(DockStyle.WALL_STRIP, places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
         assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
             places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.WALL_STRIP));
@@ -200,11 +200,11 @@ public class LayoutEditorHomeLayoutTest {
     /** The Drawer tile starts at the row's start, and where it is dropped is each layout's own. */
     @Test
     public void theHomeLayoutsDrawerTileStandsWhereItWasDropped() {
-        PlaceLayoutStore home = places.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
             home.drawerTilePosition());
         home.setDrawerTilePosition(com.termux.app.dock.DrawerTilePolicy.Position.END);
-        assertEquals("end", prefs().getString("layout.home.drawer_tile_position", null));
+        assertEquals("end", prefs().getString("layout.page2.drawer_tile_position", null));
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
             home.drawerTilePosition());
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
@@ -217,10 +217,10 @@ public class LayoutEditorHomeLayoutTest {
      */
     @Test
     public void theHomeLayoutCarriesTheStyleTheDockDraws() {
-        places.forVariant(LayoutVariant.HOME).setDockStyle(DockStyle.WALL_STRIP);
+        places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).setDockStyle(DockStyle.WALL_STRIP);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
-                places.resolve(orientation, LayoutVariant.HOME).dockStyle);
+                places.resolve(orientation, com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle);
             assertEquals("the Workspace's layout keeps its own design", DockStyle.GLASS_TRAY,
                 places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
         }
@@ -232,7 +232,7 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals("the Home layout keeps its own", DockStyle.GLASS_TRAY,
-            places.forVariant(LayoutVariant.HOME).dockStyle());
+            places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
         assertTrue(plan.isDirty());
     }
 
@@ -243,7 +243,7 @@ public class LayoutEditorHomeLayoutTest {
         assertTrue(plan.isDirty());
 
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
         assertFalse(plan.isDirty());
     }
 
@@ -255,7 +255,7 @@ public class LayoutEditorHomeLayoutTest {
         plan.showHome(false);
         assertTrue("the Home layout's pick is still unsaved", plan.isDirty());
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
     }
 
     private SharedPreferences prefs() {

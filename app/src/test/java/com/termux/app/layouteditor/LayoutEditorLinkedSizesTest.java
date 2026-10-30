@@ -47,7 +47,7 @@ public class LayoutEditorLinkedSizesTest {
         prefs.edit().clear().commit();
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
         places.setDockHeightScale(PORTRAIT, 1.0f);
-        places.setHomeLayout(true);
+        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
     }
 
     private LayoutEditorPlan open(PaneWallPage place) {
@@ -61,7 +61,7 @@ public class LayoutEditorLinkedSizesTest {
     @Test
     public void theHeightHandlesOnHomeEditTheSharedValues() {
         LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
-        assertEquals(LayoutVariant.HOME, plan.variant());
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
         plan.setDockHeightScale(1.4f);
         plan.setWallStripHeightDp(60);
         plan.setKeyboardHeightScale(1.2f);
@@ -77,7 +77,7 @@ public class LayoutEditorLinkedSizesTest {
         LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
         plan.setDockHeightScale(1.3f);
         plan.showHome(true);
-        assertEquals(LayoutVariant.HOME, plan.variant());
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
         plan.setDockHeightScale(1.5f);
         plan.revert();
         assertEquals(1.0f, normal().dockHeightScale(PORTRAIT), 0.001f);

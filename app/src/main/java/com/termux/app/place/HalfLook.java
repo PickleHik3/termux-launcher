@@ -6,7 +6,6 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Arrays;
 
@@ -46,18 +45,18 @@ public final class HalfLook {
     /** The half's look as the preferences hold it now; {@link #NONE} without them. */
     @NonNull
     public static HalfLook read(@Nullable TermuxAppSharedPreferences preferences,
-                                @NonNull WallHalf half) {
+                                int pageId) {
         if (preferences == null) return NONE;
         int[] cells = new int[CELLS];
         int i = 0;
         for (SurfaceSlot slot : SLOTS) {
             for (SurfaceProperty property : PROPERTIES) {
-                cells[i++] = preferences.getSurfaceValue(slot, property, half);
-                cells[i++] = preferences.isSurfaceInheriting(slot, property, half) ? 1 : 0;
+                cells[i++] = preferences.getSurfaceValue(slot, property, pageId);
+                cells[i++] = preferences.isSurfaceInheriting(slot, property, pageId) ? 1 : 0;
             }
             // The keyboard's whole-stack fade, its Opacity once detached, sits with the stack.
             if (slot == SurfaceSlot.KEYBOARD)
-                cells[i++] = preferences.getInAppKeyboardBackdropOpacity(half);
+                cells[i++] = preferences.getInAppKeyboardBackdropOpacity(pageId);
         }
         return new HalfLook(cells);
     }

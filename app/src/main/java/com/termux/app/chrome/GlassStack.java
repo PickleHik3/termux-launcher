@@ -165,24 +165,24 @@ public final class GlassStack {
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
-        return keyboard(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE, dockAlpha,
+        return keyboard(preferences, TermuxAppSharedPreferences.terminalPageId(), dockAlpha,
             cornerRadiusPx, fancierLook);
     }
 
     /** The keyboard's glass on one half of the wall, which may hold its own values (ADR 0013). */
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences,
-                                @NonNull TermuxAppSharedPreferences.WallHalf half, float dockAlpha,
+                                int pageId, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
         float tint = linked ? dockAlpha
-            : preferences.getInAppKeyboardBackgroundOpacity(half) / 100f;
-        return Spec.of(preferences.getInAppKeyboardBlurRadius(half), tint,
-            preferences.getInAppKeyboardGrain(half), cornerRadiusPx, fancierLook)
-            .withTintStrength(preferences.getInAppKeyboardTintStrength(half))
-            .withStackAlpha(keyboardStackAlphaPercent(preferences, half));
+            : preferences.getInAppKeyboardBackgroundOpacity(pageId) / 100f;
+        return Spec.of(preferences.getInAppKeyboardBlurRadius(pageId), tint,
+            preferences.getInAppKeyboardGrain(pageId), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength(pageId))
+            .withStackAlpha(keyboardStackAlphaPercent(preferences, pageId));
     }
 
     /**
@@ -194,16 +194,16 @@ public final class GlassStack {
      */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences) {
         return keyboardStackAlphaPercent(preferences,
-            TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId());
     }
 
     /** {@link #keyboardStackAlphaPercent(TermuxAppSharedPreferences)} on one half of the wall. */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences,
-                                                @NonNull TermuxAppSharedPreferences.WallHalf half) {
+                                                int pageId) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
-        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
+        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(pageId);
     }
 
     /**
@@ -245,6 +245,9 @@ public final class GlassStack {
             && spec.tintColor == null;
         if (bare) backdrop = null;
         glass.noteBandBlur(spec.band, backdrop != null ? spec.blurRadiusDp : 0);
+        // The frame, when there is one, is drawn over the page's dim: the band's content stands
+        // on no dim then, and its ink and even-out are measured so.
+        glass.noteBandFrame(spec.band, backdrop != null);
         if (bare) {
             Drawable rimOnly = spec.rim ? glass.rimDrawable(spec.cornerRadiusPx)
                 : new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
@@ -254,7 +257,10 @@ public final class GlassStack {
         }
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
-            backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
+            // Even-out first where the band has one (ADR 0014, wave 2c): the keyboard's frame is
+            // evened on its own rect, then frosted as before. Null for every other stack.
+            backdrop.setColorFilter(GlassFilters.withEvenOut(glass.bandEvenOut(spec.band),
+                GlassFilters.frost(Math.round(spec.tintAlpha * 100f))));
             // The gathered light is drawn under the tint, so it is raised by what the tint covers
             // and every surface shows a like outline.
             backdrop.setRefraction(spec.look.withCover(spec.tintColor != null

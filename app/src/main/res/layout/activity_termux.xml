@@ -34,6 +34,17 @@
             android:importantForAccessibility="no"
             android:visibility="invisible" />
 
+        <!-- The ground strip: each wall page's own ground (wallpaper dim; on the Terminal page the
+             canvas tint when it is not glass), with a soft seam that travels with the page edge.
+             Painted over the window's rect, above the wallpaper and below every page. Shown only
+             in wallpaper mode; opaque mode keeps the terminal's own background. -->
+        <com.termux.app.chrome.GroundStripView
+            android:id="@+id/ground_strip"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <!-- The joined Docked frame's glass: one sheet behind the status bar, the canvas band, the
              dock rows and the keyboard, so there is no seam between them. Dressed (and shown) by
              applyFrameGutterGlass only while the shape model has a joined frame card. -->

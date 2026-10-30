@@ -197,12 +197,13 @@ public final class PaneGlass {
      * frost refresh or a new look reaches the tab in the same pass as the slab.
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
-                                @Nullable com.termux.app.wall.PaneControlsView tab) {
+                                @Nullable com.termux.app.wall.PaneControlsView tab,
+                                int pageId) {
         if (tab == null) return;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain());
+        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain(pageId));
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;

@@ -2,6 +2,7 @@ package com.termux.app.launcher.widget;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -57,7 +58,6 @@ public class HomeItemUndoTest {
             new HomeItemUndo.Snapshot(clock, false));
 
         assertNotNull(result);
-        assertNull(result.renumbered);
         LauncherWidgetRecord back = repository.get(-2);
         assertNotNull(back);
         assertEquals(cell(1, 0), back.cell);
@@ -121,7 +121,7 @@ public class HomeItemUndoTest {
         assertNotNull(repository.addAppAt(MAIL, 2, cell(0, 0), label("Mail")));
         LauncherWidgetRecord clock = repository.get(-2);
         assertTrue(repository.removeRecord(-2));
-        assertNotNull(repository.trimEmptyPagesRenumbering());
+        assertFalse(repository.trimEmptyPageIds().isEmpty());
         assertEquals(2, repository.pageCount());
         assertEquals(1, repository.get(-3).page);
 
@@ -135,7 +135,8 @@ public class HomeItemUndoTest {
         assertEquals(cell(2, 3), back.cell);
         assertEquals(2, repository.get(-3).page);
         assertEquals(0, repository.get(-1).page);
-        assertArrayEquals(new int[]{0, 2, 1}, result.renumbered);
+        // The page came back in the middle under a new id (the owner does not reuse 2).
+        assertEquals(java.util.Arrays.asList(1, 4, 3), repository.pageIds());
     }
 
     /** The last page went with it: it is added again after the others, and nothing renumbers. */
@@ -148,14 +149,13 @@ public class HomeItemUndoTest {
         assertNotNull(repository.addAppAt(CLOCK, 1, cell(3, 4), label("Clock")));
         LauncherWidgetRecord clock = repository.get(-2);
         assertTrue(repository.removeRecord(-2));
-        assertNotNull(repository.trimEmptyPagesRenumbering());
+        assertFalse(repository.trimEmptyPageIds().isEmpty());
         assertEquals(1, repository.pageCount());
 
         HomeItemUndo.Result result = HomeItemUndo.restore(repository,
             new HomeItemUndo.Snapshot(clock, true));
 
         assertNotNull(result);
-        assertNull(result.renumbered);
         assertEquals(2, repository.pageCount());
         assertEquals(1, repository.get(-2).page);
         assertEquals(cell(3, 4), repository.get(-2).cell);

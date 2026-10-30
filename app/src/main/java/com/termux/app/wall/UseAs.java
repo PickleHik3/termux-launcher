@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.surfaces.EditorCard;
-import com.termux.app.surfaces.EditorRows;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,13 +60,13 @@ public enum UseAs {
     }
 
     /**
-     * The wall's row ({@link PaneWallPolicy#rowPages}): under Terminal only the Workspace alone,
-     * held on the row even before its first window arrives, so the wall never falls back to a
+     * The page kinds the wall shows before it has the page list ({@link PaneWallPolicy#rowPages}
+     * with a window): under Terminal only the Workspace alone, so the wall never falls back to a
      * Home page it does not have.
      */
     @NonNull
-    public List<PaneWallPage> rowPages(boolean hasWindow) {
-        if (this == HOME) return PaneWallPolicy.rowPages(hasWindow);
+    public List<PaneWallPage> rowPages() {
+        if (this == HOME) return PaneWallPolicy.rowPages(true);
         return Collections.singletonList(PaneWallPage.TERMINAL);
     }
 
@@ -108,15 +107,6 @@ public enum UseAs {
     /** Whether {@code card} can be opened: the Home card is gone under Terminal only. */
     public boolean reaches(@Nullable EditorCard card) {
         return card == null || this == HOME || card != EditorCard.HOME;
-    }
-
-    /**
-     * Whether a card shows {@code row}: both Match rows copy from or to Home, so they go under
-     * Terminal only. The Workspace card itself stays.
-     */
-    public boolean shows(@NonNull EditorRows.Row row) {
-        return this == HOME
-            || (row != EditorRows.Row.MATCH_HOME && row != EditorRows.Row.MATCH_WORKSPACE);
     }
 
     /** The card a door opens under this mode: the editor at rest (null) for a card it took away. */

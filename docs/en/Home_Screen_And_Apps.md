@@ -8,7 +8,7 @@ Most of these settings are on **Settings → Dock** and **Settings → Home**.
 
 ## Home and the Workspace
 
-The launcher is one row of pages. **Home** comes first: your widget pages, which you swipe through
+The launcher is one row of pages. That row is the wall, and **Edit pages** sets its order. Two Display pages may be neighbours. The extra keys row shows a go-to key for each page kind the wall has. **Home** comes first: your widget pages, which you swipe through
 anywhere on the page, as on any home screen. The **Workspace** follows: your terminal windows, then
 any [Linux display](X11_Display.md). Swiping left past the last Home page reaches the first window;
 dragging right from the first window's border comes back. The home button always lands on the
@@ -92,6 +92,8 @@ nothing on your Home pages can be moved by accident. While it is on:
   lets it through and the new icon goes on the page with room.
 
 ### Edit pages
+
+The page list is the wall. A swipe or a key moves to the next page in this list, whatever its kind.
 
 **Edit pages** (Home's long-press menu, or Settings › Home) lists your Home pages: move each up
 or down, choose the one Home opens on (the house, which also stands on the first terminal window

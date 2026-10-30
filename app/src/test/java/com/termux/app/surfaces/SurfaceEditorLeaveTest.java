@@ -27,7 +27,6 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -70,7 +69,7 @@ public class SurfaceEditorLeaveTest {
     @Test
     public void backTakesTheCardToPeekThenAWorkspaceChangeAsks() {
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        assertEquals(PaneWallPage.TERMINAL, editor.screen());
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
 
@@ -98,7 +97,7 @@ public class SurfaceEditorLeaveTest {
         model(editor).onReleased(Row.TINT);
         editor.present(EditorCard.DOCK, PaneWallPage.WIDGETS, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(PaneWallPage.WIDGETS, editor.screen());
         model(editor).onValue(Row.OPACITY, 73, false);
         model(editor).onReleased(Row.OPACITY);
         assertNotEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));
@@ -146,7 +145,7 @@ public class SurfaceEditorLeaveTest {
         assertTrue(done[0]);
         assertNull(unsavedDialog());
         assertEquals(21, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.WORKSPACE));
+            TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test

@@ -26,7 +26,6 @@ public final class WorkspaceCard {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY,
                 Row.TINT);
-        if (offers.homeShown) rows.tier(3, Row.MATCH_HOME);
         return rows.tier(3, Row.ELEMENTS, Row.SECTION_MORE, Row.LINK_GLOBAL).build();
     }
 }
