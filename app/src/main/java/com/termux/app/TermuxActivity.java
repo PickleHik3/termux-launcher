@@ -3027,7 +3027,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 // No Workspace window beside Home: no seam to cross, no border to drag back.
                 @Override public boolean hasOnePlace() {
-                    return !hasHome() || !mPaneWallController.pageKindsShim()
+                    return !hasHome() || !availableWallPages()
                         .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
                 }
 
@@ -3074,7 +3074,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController.widgetsPage() != null)
             mPaneWallController.widgetsPage().dismissControls();
         if (side == com.termux.app.tour.TourStep.Side.ANYWHERE) return;
-        boolean hasWorkspace = mPaneWallController.pageKindsShim()
+        boolean hasWorkspace = availableWallPages()
             .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
         boolean hasHome = mPaneWallController.hasWidgetsPage();
         boolean toWorkspace = side == com.termux.app.tour.TourStep.Side.WORKSPACE
@@ -4828,12 +4828,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     /**
      * The page kinds the ground strip reads, in the wall's order: through the wall's controller
-     * (a shim until #185 reads the page list); the page in view alone before it is built.
+     * (the arranged page list's kinds); the page in view alone before it is built.
      */
     @NonNull
     private java.util.List<com.termux.app.wall.PaneWallPage> groundKinds(
             @NonNull com.termux.app.wall.PaneWallLayout wall) {
-        return mPaneWallController != null ? mPaneWallController.pageKindsShim()
+        return mPaneWallController != null ? availableWallPages()
             : java.util.Collections.singletonList(wall.currentPage());
     }
 
@@ -12338,18 +12338,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The places the key row's switches can go to: the wall's pages — from the wall once it is
-     * built, and from the same preferences before then, so a key row built ahead of the wall drops
-     * the same switches — and the display window's place while a display is up.
+     * The page kinds the arranged page list holds, in the order of their first page: the key
+     * row's wall keys are on the row iff their kind is here (ADR 0016 section 7), whatever page
+     * the wall is on and whether or not the display has ever run.
      */
     @NonNull
     public java.util.List<com.termux.app.wall.PaneWallPage> availableWallPages() {
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController != null
-            ? mPaneWallController.pageKindsShim() : com.termux.app.wall.PaneWallPolicy.rowPages(true);
-        if (!isDisplayUp()) return pages;
-        java.util.List<com.termux.app.wall.PaneWallPage> places = new java.util.ArrayList<>(pages);
-        places.add(com.termux.app.wall.PaneWallPage.DISPLAY);
-        return places;
+        return com.termux.app.wall.WallKeys.kinds(wallPages(), useAs());
+    }
+
+    /** The kinds the key row was last built for ({@link #wallKindsForRow}). */
+    @Nullable
+    private java.util.List<com.termux.app.wall.PaneWallPage> mRowKinds;
+
+    /** {@link #availableWallPages} as the key row's build reads it, remembered so a page-list edit can tell whether the row is stale. */
+    @NonNull
+    public java.util.List<com.termux.app.wall.PaneWallPage> wallKindsForRow() {
+        java.util.List<com.termux.app.wall.PaneWallPage> kinds = availableWallPages();
+        mRowKinds = kinds;
+        return kinds;
     }
 
     /**
@@ -24155,7 +24162,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || appliedContentReservationPx() < 0) return;
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pageKindsShim());
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(availableWallPages());
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
@@ -26788,7 +26795,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
         if (mPaneWallController == null) return;
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pageKindsShim();
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = availableWallPages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
         // The marks are the row's pages: the display is a window of the Workspace, not a mark.
@@ -28383,6 +28390,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneController != null) mPaneController.onHomePagesChanged();
                 // The wall lays out in the pages' order: a moved page moves on the wall.
                 if (mPaneWallController != null) mPaneWallController.refreshPages();
+                // A Display or Home page added or removed puts its key on the row or takes it off.
+                if (!com.termux.app.wall.WallKeys.kinds(pages, useAs()).equals(mRowKinds)) onWallPlacesChanged();
                 // A removed Display page's picture goes with it (A3c2).
                 retainDisplayPictures(pages);
                 applyDisplayPageStill();

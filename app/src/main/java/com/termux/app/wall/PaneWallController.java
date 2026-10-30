@@ -681,15 +681,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mDisplayWindow != null) mDisplayWindow.applyStyle(style);
     }
 
-    /**
-     * The page kinds the wall holds, in the order of their first cell. A shim for the extra
-     * keys' row and the strip until #185 has them read the page list.
-     */
-    @NonNull
-    public java.util.List<PaneWallPage> pageKindsShim() {
-        return mWall.pages();
-    }
-
     @NonNull
     public PaneWallPage currentPage() {
         return mWall.currentPage();
