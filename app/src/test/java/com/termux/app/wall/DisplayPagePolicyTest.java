@@ -55,7 +55,8 @@ public class DisplayPagePolicyTest {
         // Added right after the Display page, the second stands beside it.
         WallPages.Result beside = oneDisplay().add(PageKind.DISPLAY, 4, "firefox");
         assertTrue(beside.ok());
-        assertTrue(beside.pages.hasAdjacentDisplays());
+        List<WallPages.Page> v = beside.pages.pages();
+        assertEquals(PageKind.DISPLAY, v.get(v.indexOf(beside.page) - 1).kind);
     }
 
     // ---- what a Display page shows ------------------------------------------------------------

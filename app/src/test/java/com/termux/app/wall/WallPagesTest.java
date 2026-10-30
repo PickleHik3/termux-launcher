@@ -536,14 +536,23 @@ public class WallPagesTest {
         // A second Display page with one page between it and the first, the last.
         WallPages two = ok(d.add(PageKind.DISPLAY, v.get(v.size() - 3).id, null));
         List<WallPages.Page> w = two.pages();
-        assertFalse(two.hasAdjacentDisplays());
+        assertFalse(adjacentDisplays(two));
         int between = w.get(w.size() - 2).id;
         Result moved = two.move(between, 0);
         assertTrue(moved.ok());
         assertEquals(WallPages.ChangeType.MOVED, moved.change);
-        assertTrue(moved.pages.hasAdjacentDisplays());
+        assertTrue(adjacentDisplays(moved.pages));
         int other = w.get(w.size() - 1).id;
         assertEquals(PageKind.DISPLAY, moved.pages.leftOf(other).kind);
+    }
+
+    /** Whether two Display pages stand side by side among the pages on the wall. */
+    private static boolean adjacentDisplays(WallPages p) {
+        List<WallPages.Page> v = p.pages();
+        for (int i = 1; i < v.size(); i++) {
+            if (v.get(i).kind == PageKind.DISPLAY && v.get(i - 1).kind == PageKind.DISPLAY) return true;
+        }
+        return false;
     }
 
     /** A wall of these kinds, ids 1.. in order, home = the first page. */
@@ -565,7 +574,7 @@ public class WallPagesTest {
         assertTrue(added.ok());
         assertEquals(java.util.Arrays.asList(1, 2, 5, 3, 4), ids(added.pages));
         assertEquals(2, added.toIndex);
-        assertTrue(added.pages.hasAdjacentDisplays());
+        assertTrue(adjacentDisplays(added.pages));
         // At the end beside a last Display page: still last.
         WallPages end = wall(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
         assertEquals(java.util.Arrays.asList(1, 2, 3, 4), ids(ok(end.add(PageKind.DISPLAY, WallPages.END, null))));
@@ -578,16 +587,9 @@ public class WallPagesTest {
             PageKind.HOME);
         WallPages gone = ok(p.remove(3));
         assertEquals(java.util.Arrays.asList(1, 2, 4, 5), ids(gone));
-        assertTrue(gone.hasAdjacentDisplays());
+        assertTrue(adjacentDisplays(gone));
         WallPages back = ok(gone.undo(3));
         assertEquals(java.util.Arrays.asList(1, 2, 3, 4, 5), ids(back));
-        // Stored side by side (an older build): separated on request, the later one moved.
-        WallPages stored = wall(PageKind.HOME, PageKind.DISPLAY, PageKind.DISPLAY,
-            PageKind.TERMINAL);
-        assertTrue(stored.hasAdjacentDisplays());
-        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(stored.separateDisplays()));
-        WallPages fine = three();
-        assertSame(fine, fine.separateDisplays());
     }
 
     @Test
