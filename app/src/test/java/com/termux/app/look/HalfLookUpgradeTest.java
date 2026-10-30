@@ -128,8 +128,8 @@ public class HalfLookUpgradeTest {
         assertTrue(upgrade());
         assertEquals(31, snapshot(1, PageKind.HOME).extraKeysBlurRadius());
         assertEquals(12, snapshot(TERMINAL_ID, PageKind.TERMINAL).extraKeysBlurRadius());
-        // The status bar follows Base on both: Home shows 4, the Workspace 12.
-        assertEquals(4, snapshot(1, PageKind.HOME).statusBarBlurRadius());
+        // The status bar follows Base on both: Home shows 4 (worn at the stop for 5), the Workspace 12.
+        assertEquals(5, snapshot(1, PageKind.HOME).statusBarBlurRadius());
         assertEquals(12, snapshot(TERMINAL_ID, PageKind.TERMINAL).statusBarBlurRadius());
     }
 

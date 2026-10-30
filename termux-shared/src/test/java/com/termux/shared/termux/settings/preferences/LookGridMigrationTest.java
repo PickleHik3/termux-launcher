@@ -161,6 +161,23 @@ public class LookGridMigrationTest {
         assertEquals(FrostStops.TINT, grid.value(Property.FROST, Element.STATUS, NO_PAGE));
     }
 
+    /**
+     * The half upgrade's output for a Workspace that followed its own Base of 12 while Home's
+     * dock was detached at 30: the dock's own 30 and the Terminal page's own 12.
+     */
+    @Test
+    public void aWorkspaceThatFollowedItsOwnBaseKeepsItOnTheTerminalPage() {
+        LookGrid.MemoryStore store = store();
+        store.putInt("surface_base_blur", 4);
+        store.putBoolean("surface_inherit_dock_blur", false);
+        store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 30);
+        store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS + "@3", 12);
+        LookGrid grid = migrate(store);
+        assertEquals(FrostStops.nearestStopByBlur(12), store.getInt("look.frost.dock@3", -1));
+        assertEquals(12, FrostStops.blurDpFor(grid.value(Property.FROST, Element.DOCK, 3)));
+        assertEquals(31, FrostStops.blurDpFor(grid.value(Property.FROST, Element.DOCK, 0)));
+    }
+
     @Test
     public void widgetsOffGlassBecomeSolidWidgets() {
         LookGrid.MemoryStore store = store();
