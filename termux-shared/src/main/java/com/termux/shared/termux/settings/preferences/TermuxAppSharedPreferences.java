@@ -3534,8 +3534,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         LookGrid grid = lookGrid();
         int page = gridPage(pageId);
         if (inherit) {
+            // The wall (PAGE_WALL) clears the everywhere-cell; PAGE_ALL every page's as well.
             grid.clear(property.grid, element, page);
-            if (page == LookGrid.NO_PAGE)
+            if (pageId == PAGE_ALL)
                 clearElementPages(grid, property.grid, element);
         } else if (!grid.has(property.grid, element, page)) {
             grid.write(property.grid, element, page, grid.value(property.grid, element, page));
