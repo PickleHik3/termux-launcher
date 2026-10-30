@@ -413,6 +413,46 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * The page kind of the cell {@code steps} cells from the current one (0: the current cell),
+     * in cell order; null past either end of the wall. What the chrome dresses for during a
+     * slide: the arriving cell's kind, live or still (ADR 0016 section 3).
+     */
+    @Nullable
+    public PaneWallPage kindAt(int steps) {
+        syncHomeCell();
+        int id = steps == 0 ? mWall.currentPageId() : mWall.neighbourId(steps);
+        return id == PaneWallLayout.NO_PAGE ? null : mWall.kindOf(id);
+    }
+
+    /** The cells {@link #mCellKinds} was read from. */
+    @Nullable private java.util.List<PaneWallLayout.Cell> mCellKindsOf;
+    @NonNull private java.util.List<PaneWallPage> mCellKinds = java.util.Collections.emptyList();
+
+    /**
+     * The page kinds of the wall's cells, one entry per cell in cell order: what the chrome
+     * travel, the ground strip and the status lens read the cells around the current one from,
+     * with {@link #currentCellIndex}. Read on every frame of a slide; it allocates only when the
+     * cells change.
+     */
+    @NonNull
+    public java.util.List<PaneWallPage> cellKinds() {
+        java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
+        if (cells != mCellKindsOf) {
+            java.util.List<PaneWallPage> kinds = new java.util.ArrayList<>(cells.size());
+            for (PaneWallLayout.Cell cell : cells) kinds.add(cell.kind);
+            mCellKinds = java.util.Collections.unmodifiableList(kinds);
+            mCellKindsOf = cells;
+        }
+        return mCellKinds;
+    }
+
+    /** The index of the current page's cell in {@link #cellKinds}. */
+    public int currentCellIndex() {
+        syncHomeCell();
+        return Math.max(0, mWall.indexOfCell(mWall.currentPageId()));
+    }
+
+    /**
      * Go to page {@code pageId}'s cell. Its kind's view is bound to it first, so the page arrives
      * live: the Home frame turned to that page, the display view on that Display page. A Home
      * page of the run the wall is on is shown by the frame where it stands.

@@ -209,8 +209,19 @@ public final class PaneWallPolicy {
     @NonNull
     public static PaneWallPage neighbour(@NonNull List<PaneWallPage> pages,
                                          @NonNull PaneWallPage page, int steps) {
-        int index = pages.indexOf(page);
-        if (index < 0) return page;
+        return neighbourAt(pages, pages.indexOf(page), steps, page);
+    }
+
+    /**
+     * The page kind {@code steps} entries from entry {@code index} of {@code pages}, counted as
+     * {@link #neighbour} counts: a line stops at the outer entry. {@code fallback} when
+     * {@code index} is not in the list. For a list with one entry per cell, where a kind can
+     * stand in several cells and only the index says which one the wall is on.
+     */
+    @NonNull
+    public static PaneWallPage neighbourAt(@NonNull List<PaneWallPage> pages, int index,
+                                           int steps, @NonNull PaneWallPage fallback) {
+        if (index < 0 || index >= pages.size()) return fallback;
         int count = pages.size();
         int target = isRing(pages)
             ? (((index + steps) % count) + count) % count

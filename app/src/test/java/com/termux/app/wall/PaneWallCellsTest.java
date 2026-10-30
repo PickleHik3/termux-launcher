@@ -482,4 +482,54 @@ public class PaneWallCellsTest {
         assertTrue(wall.isLive(2));
         assertEquals(View.GONE, wall.cardOf(2).getVisibility());
     }
+
+    // ---- the dress reads the cells -----------------------------------------------------------
+
+    /** Every kind at its own rest: only the Terminal page's keyboard is up. */
+    private static final com.termux.app.place.PlaceChromeTravel.States STATES = place ->
+        new com.termux.app.place.PlaceChromeTravel.Rest(place == PaneWallPage.TERMINAL, false);
+
+    /** The chrome's frame for where the wall stands now, read off the cells. */
+    private com.termux.app.place.PlaceChromeTravel.Frame dress() {
+        return com.termux.app.place.PlaceChromeTravel.at(controller.cellKinds(),
+            controller.currentCellIndex(), wall.offsetPx(), WIDTH, STATES, null, null);
+    }
+
+    @Test public void aDragFromTheSecondHomeRunTowardTheTerminalDressesForTheTerminal() {
+        // [Home 1][Terminal][Home 2]: ids 1, 3, 2.
+        start(WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages);
+        host.homePress = 1;
+        controller.goHome(false);
+        assertEquals(2, on());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
+            PaneWallPage.WIDGETS), controller.cellKinds());
+        assertEquals(2, controller.currentCellIndex());
+        assertEquals(PaneWallPage.TERMINAL, controller.kindAt(-1));
+        assertEquals(null, controller.kindAt(1));
+        wall.beginPlainDrag();
+        wall.dragTo(300f);
+        assertEquals("the arriving kind", PaneWallPage.TERMINAL, controller.kindAt(-1));
+        com.termux.app.place.PlaceChromeTravel.Frame frame = dress();
+        assertEquals("the dress heads for the Terminal page", PaneWallPage.TERMINAL, frame.from);
+        assertEquals(PaneWallPage.WIDGETS, frame.toward);
+        wall.cancelDrag();
+        idle();
+    }
+
+    @Test public void aDragFromTheSecondDisplayPageTowardTheTerminalDressesForTheTerminal() {
+        // [Home 1][Display 3][Terminal 2][Display 4].
+        start(homeTerminalDisplay().move(3, 1).pages.add(WallPages.PageKind.DISPLAY, 2, null)
+            .pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(Arrays.asList(1, 3, 2, 4), cellIds());
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertEquals(4, on());
+        assertEquals(3, controller.currentCellIndex());
+        wall.beginPlainDrag();
+        wall.dragTo(300f);
+        assertEquals(PaneWallPage.TERMINAL, controller.kindAt(-1));
+        assertEquals(PaneWallPage.TERMINAL, dress().from);
+        wall.cancelDrag();
+        idle();
+    }
 }
