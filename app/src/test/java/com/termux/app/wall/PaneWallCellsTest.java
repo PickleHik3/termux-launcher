@@ -483,6 +483,130 @@ public class PaneWallCellsTest {
         assertEquals(View.GONE, wall.cardOf(2).getVisibility());
     }
 
+    // ---- named targets ---------------------------------------------------------------------
+
+    @Test public void theDisplayKeyGoesToTheLastUsedDisplayPageElseTheNearest() {
+        // [Display 3][Home 1][Terminal 2][Display 4].
+        start(homeTerminalDisplay().move(3, 0).pages.add(WallPages.PageKind.DISPLAY, 2, null)
+            .pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(Arrays.asList(3, 1, 2, 4), cellIds());
+        assertTrue(controller.goTo("terminal"));
+        assertEquals(2, on());
+        assertTrue("none used yet: the nearest", controller.goTo("display"));
+        assertEquals(4, on());
+        assertTrue(controller.goToDisplayPage(3, false));
+        assertEquals(3, on());
+        controller.goTo("terminal");
+        assertTrue(controller.goTo("display"));
+        assertEquals("the last used", 3, on());
+    }
+
+    /** [Home 1][Terminal 3][Home 2][Display 4]: two Home runs, home page 1. */
+    private static WallPages twoHomeRuns() {
+        return WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages
+            .add(WallPages.PageKind.DISPLAY, 2, null).pages;
+    }
+
+    @Test public void theHomeKeyAndWallWidgetsGoWhereTheHomePressGoes() {
+        start(twoHomeRuns());
+        // Start in sends the home press to the second Home page; the home page is still page 1.
+        host.homePress = 1;
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertTrue(controller.goTo("widgets"));
+        assertEquals(2, on());
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertTrue(controller.goTo("home"));
+        assertEquals(2, on());
+    }
+
+    @Test public void wallWidgetsWithTwoHomeRunsPicksTheHomePageThenTheNearest() {
+        start(twoHomeRuns());
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertTrue(controller.goTo("widgets"));
+        assertEquals("the home page", 1, on());
+        // The Terminal page made home: the Home page nearest by cells.
+        host.pages = host.pages.setHome(3).pages;
+        controller.refreshPages();
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertTrue(controller.goTo("widgets"));
+        assertEquals("the nearest Home page", 2, on());
+    }
+
+    @Test public void addingAPageLeavesTheWallOnThePageItIsOn() {
+        start(twoHomeRuns());
+        host.homePress = 1;
+        controller.goHome(false);
+        assertEquals(2, on());
+        host.changes.clear();
+        host.pages = host.pages.add(WallPages.PageKind.HOME, 1, null).pages;
+        controller.refreshPages();
+        assertEquals(Arrays.asList(1, 5, 3, 2, 4), cellIds());
+        assertEquals(2, on());
+        assertTrue(host.changes.isEmpty());
+    }
+
+    // ---- removing the page the wall is on ----------------------------------------------------
+
+    @Test public void removingTheSecondHomeRunWhileOnItHandsTheWallToItsLeft() {
+        // [Home 1][Terminal 3][Home 2], on Home 2.
+        start(WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages);
+        host.homePress = 1;
+        controller.goHome(false);
+        assertEquals(2, on());
+        host.pages = host.pages.remove(2).pages;
+        controller.refreshPages();
+        assertEquals("the page on its left, not the far Home page", 3, on());
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test public void removingTheOnlyDisplayPageWhileOnItHandsTheWallToItsLeft() {
+        // [Home 1][Display 3][Terminal 2], on Display.
+        start(homeTerminalDisplay().move(3, 1).pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(controller.goToDisplayPage(3, false));
+        host.pages = host.pages.remove(3).pages;
+        controller.refreshPages();
+        assertEquals(1, on());
+    }
+
+    // ---- binding is the landing's ----------------------------------------------------------
+
+    @Test public void aNamedJumpToTheSecondHomeRunBindsTheFrameOnlyOnLanding() {
+        // [Home 1][Terminal 3][Home 2], on the Terminal page.
+        start(WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(controller.goTo("terminal"));
+        host.reduced = false;
+        controller.refreshPages();
+        assertTrue(controller.goTo("right"));
+        assertTrue(wall.isMoving());
+        assertEquals("the frame stays on the run it was on", 1,
+            wall.boundPageId(PaneWallPage.WIDGETS));
+        assertEquals(0, host.homePage);
+        assertFalse("the second run shows its still", wall.isLive(2));
+        assertNotNull(wall.cardOf(2));
+        idle();
+        assertEquals(2, on());
+        assertTrue(wall.isLive(2));
+        assertEquals(1, host.homePage);
+    }
+
+    @Test public void aJumpCaughtByADragThatRestsOnThePageItLeftLeavesTheBindings() {
+        start(WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(controller.goTo("terminal"));
+        host.reduced = false;
+        controller.refreshPages();
+        assertTrue(controller.goTo("right"));
+        assertTrue(wall.isMoving());
+        swipe(600f);
+        assertEquals(3, on());
+        assertEquals(1, wall.boundPageId(PaneWallPage.WIDGETS));
+        assertEquals(0, host.homePage);
+        assertTrue(wall.isLive(1));
+    }
+
     // ---- the dress reads the cells -----------------------------------------------------------
 
     /** Every kind at its own rest: only the Terminal page's keyboard is up. */

@@ -236,6 +236,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private int mDisplayPageId = -1;
     /** The Display page last handed to the host ({@link Host#bindDisplayPage}). */
     private int mBoundDisplayPageId = -1;
+    /**
+     * The last used Display page: the one the wall last came to rest on, or was sent to by its
+     * id. Not the display's first binding, which a new list makes on its own; -1 before any.
+     */
+    private int mLastDisplayPageId = -1;
     /** The cells hold a Display page: the wallpaper's pan reads the pages' order. */
     private boolean mHasDisplaySlot;
 
@@ -385,9 +390,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Go to Display page {@code pageId} (-1: the bound one, else the nearest): the display view
-     * is bound to it and the wall slides there, a far one from a stand-off (W3). False when the
-     * wall has no such Display page.
+     * Go to Display page {@code pageId} (-1: the last used one, else the nearest): the wall slides
+     * there, a far one from a stand-off (W3), and the landing binds the display view to it. False
+     * when the wall has no such Display page.
      */
     public boolean goToDisplayPage(int pageId, boolean animate) {
         WallPages pages = mKnownPages;
@@ -397,8 +402,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             return mWall.goTo(PaneWallPage.DISPLAY, animate);
         }
         int id = pageId;
-        if (mWall.kindOf(id) != PaneWallPage.DISPLAY) {
-            WallPages.Page target = pages.displayTarget(currentPageId(), mBoundDisplayPageId);
+        if (mWall.kindOf(id) == PaneWallPage.DISPLAY) {
+            mLastDisplayPageId = id;
+        } else {
+            WallPages.Page target = pages.displayTarget(currentPageId(), mLastDisplayPageId);
             id = target == null ? PaneWallLayout.NO_PAGE : target.id;
         }
         if (mWall.kindOf(id) != PaneWallPage.DISPLAY) return false;
@@ -909,7 +916,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 break;
             }
             case "widgets": target = pages.homeTarget(current); break;
-            case "display": target = pages.displayTarget(current, mBoundDisplayPageId); break;
+            case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
             case "terminal": target = pages.terminalTarget(); break;
             default: return false;
@@ -1121,6 +1128,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
         if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
+        if (page == PaneWallPage.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
         bindCell(pageId);
         mHost.onWallPageSettled(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
