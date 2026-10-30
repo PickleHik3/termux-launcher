@@ -563,7 +563,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setSeam(seam);
     }
     public boolean onBackPressed() {
-        if (pane.widgetEditActive()) { exitEditMode(); return true; }
+        // Back keeps the edit, like Done; the cross is the only discard.
+        if (pane.widgetEditActive()) { commitEditSession(); return true; }
         return pane.onBackPressed();
     }
     public void destroy() {

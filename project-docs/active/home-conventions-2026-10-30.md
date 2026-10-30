@@ -29,8 +29,9 @@ the widget editor and the wallpaper page.
 4. ✔ **App menu: four shortcuts.** The App menu shows at most four of an app's shortcuts, then
    More shortcuts (`AppMenuPlan.MAX_SHORTCUT_ROWS` is 4). This
    replaces "collapse past 6" in `launcher-idiom-2026-10-23.md` §1.
-5. *audit* **Every editor exits by Done or Back**, and leaving returns you to the page and card you
-   came from. The wallpaper page's Done follows it since 418a2d7ef; the others are unchecked.
+5. ✔ **Every editor exits by Done or Back**, and leaving returns you to the page and card you
+   came from. The wallpaper page's Done follows it since 418a2d7ef. In the widget editor Back keeps the edit, like
+   Done; the cross is the only discard.
 6. *audit* **An outside tap closes a layer.** The App menu, Home's long-press sheet, folders, a
    widget in resize and the app drawer each close on a tap outside them. The Appearance editor is
    exempt: a tap there picks a surface ("tap the thing").
@@ -68,7 +69,7 @@ One change at a time, each with its own test and pong check:
 
 | Rule | Change |
 |---|---|
-| 5 | Audit Edit pages, the widget editor and the Appearance editor for Done/Back and the return place |
+| 5 | Edit pages: Back; widget editor: Back keeps (decided); Appearance: ✔ |
 | 6, 7, 8 | Audit outside tap, widget tap/long press/resize exit, folder dissolve at one app |
 | 11 | See the inventory (`reference/launcher/gesture-inventory-2026-10-31.md`); gaps are tickets |
 
