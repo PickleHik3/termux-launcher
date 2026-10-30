@@ -17060,16 +17060,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // that the capture then reads back, and the row would stay collapsed for the session.
         if (mTerminalToolbarDefaultHeight <= 0)
             return false;
-        int matrix = 0;
-        if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
-            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
-        }
-
-        int measuredToolbarHeightPx = AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
-            Math.round(mTerminalToolbarDefaultHeight),
-            matrix,
-            mProperties.getTerminalToolbarHeightScaleFactor()
-        );
+        int measuredToolbarHeightPx = measuredExtraKeysRowPx();
         ChromeSpec state = buildChromeSpec();
         // The Linux display is floated over rather than squeezed: the keyboard's height is given
         // straight back to the content root as a negative bottom margin, so the display keeps the
@@ -24364,39 +24355,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int travelRoomChangePx(@NonNull com.termux.app.wall.PaneWallPage arriving) {
         if (mCrossing.knowsRoomToward(arriving)) return mCrossing.roomChangePx();
-        boolean toolbarShown = buildChromeSpec().toolbarShown;
-        mCrossing.roomChange(arriving, travelRestReservationPx(mLastWallPage, toolbarShown)
-            - travelRestReservationPx(arriving, toolbarShown));
+        mCrossing.roomChange(arriving, travelRestReservationPx(mLastWallPage)
+            - travelRestReservationPx(arriving));
         return mCrossing.roomChangePx();
     }
 
     /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
-    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
-                                        boolean toolbarShown) {
+    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
-        return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f);
+        return travelRestReservationPx(place, rest.keyboardReveal() > 0f);
     }
 
     /**
      * The same, for the place with its keyboard up or down as {@code keyboardShown} says. Stack
-     * layout answers it from the place's own rest: its own rows, Search field and Wall strip,
-     * whichever half is committed.
+     * layout answers it from the place's own rest: its own rows (its dock and extra-keys row, at
+     * the height the geometry pass gives that row), Search field and Wall strip, whichever half is
+     * committed. Read off the half on screen, the Terminal's rest from Home came out an extra-keys
+     * row short, and its landing resized the grid a second time.
      */
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
-                                        boolean toolbarShown, boolean keyboardShown) {
-        ChromeSpec spec = buildChromeSpec();
+                                        boolean keyboardShown) {
         com.termux.app.wall.PageRef side = arrangedPageOf(place);
         com.termux.app.dock.DockGeometry.Snapshot snapshot =
             dockSnapshot(arrangement().layout(), stackDressPage());
         com.termux.app.place.StackLayout.RestInput in =
-            new com.termux.app.place.StackLayout.RestInput(snapshot, side);
-        in.toolbarShown = toolbarShown;
-        in.extraKeysRowEnabled = spec.extraKeysRowEnabled;
-        in.toolbarHeightPx = appliedToolbarHeightPx();
+            new com.termux.app.place.StackLayout.RestInput(snapshot, side)
+                .ownRows(measuredExtraKeysRowPx());
         in.statusBand = this::bottomStatusBandAtRestPx;
         in.imeLiftPx = mImeLiftPx;
         in.keyboardShown = keyboardShown;
-        in.keyboardHeightPx = Math.max(0, mKeyboardGeometry.desiredHeightPx());
+        // The keyboard's height as the pass measures it while one shows (ChromeSpec), else the
+        // last one measured.
+        in.keyboardHeightPx = Math.max(0, isInAppKeyboardShown()
+            ? mKeyboardGeometry.measureHeightPx() : mKeyboardGeometry.desiredHeightPx());
         // The place's own arrangement decides it, like its Style: the one on screen when it is the
         // committed place, else its half's stored layout.
         in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, place == mLastWallPage
@@ -24405,6 +24396,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && place == mLastWallPage && !keyboardShown && mAppliedStack != null
             ? mAppliedStack.flushPaddingPx : 0;
         return com.termux.app.place.StackLayout.restReservationPx(in);
+    }
+
+    /**
+     * The extra-keys row's height for the device's key rows and scale, whether or not the place on
+     * screen stands the row: the height the geometry pass gives it on a place that does
+     * (StackLayout#extraKeysRowPx). Before the pager's XML height is read, the applied one.
+     */
+    private int measuredExtraKeysRowPx() {
+        if (mTerminalToolbarDefaultHeight <= 0 || mProperties == null)
+            return appliedToolbarHeightPx();
+        int matrix = 0;
+        if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
+            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
+        }
+        return AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
+            Math.round(mTerminalToolbarDefaultHeight), matrix,
+            mProperties.getTerminalToolbarHeightScaleFactor());
     }
 
     /** The extra-keys row's height as the last pass set it, 0 while the row is off. */
@@ -25523,7 +25531,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
     private int keyboardSwipeReservationPx(boolean keyboardUp) {
-        return travelRestReservationPx(mLastWallPage, buildChromeSpec().toolbarShown, keyboardUp);
+        return travelRestReservationPx(mLastWallPage, keyboardUp);
     }
 
     /**
