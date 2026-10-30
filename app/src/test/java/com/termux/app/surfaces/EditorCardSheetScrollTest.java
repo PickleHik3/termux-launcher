@@ -80,9 +80,13 @@ public class EditorCardSheetScrollTest {
 
     /** A quick flick on the content: {@code dy} pixels (negative is up) in 50 ms. */
     private void flick(float dy) {
+        flick(mHeight * 0.7f, dy);
+    }
+
+    /** A quick flick on the content from {@code y} in its own coordinates. */
+    private void flick(float y, float dy) {
         View scroll = mSheet.scroll();
         float x = mWidth / 2f;
-        float y = mHeight * 0.7f;
         send(scroll, MotionEvent.ACTION_DOWN, x, y);
         for (int i = 1; i <= 5; i++) {
             mTime += 10;
@@ -173,7 +177,15 @@ public class EditorCardSheetScrollTest {
         mSheet.scroll().scrollTo(0, 400);
         int before = mSheet.scroll().getScrollY();
         assertTrue(before > 0);
-        flick(150f);
+        // A glass column's slider is vertical and owns a vertical drag, so flick on a text row.
+        View scroll = mSheet.scroll();
+        float y = -1f;
+        for (int i = 0; i < 24 && y < 0; i++) {
+            float at = scroll.getHeight() * (i + 0.5f) / 24f;
+            if (deepest(scroll, mWidth / 2f, at).endsWith("TextView")) y = at;
+        }
+        assertTrue("a text row is under the finger somewhere", y >= 0);
+        flick(y, 150f);
         assertEquals(EditorCardSheet.DETENT_FULL, mSheet.detent());
         assertTrue("the content scrolled back", mSheet.scroll().getScrollY() < before);
     }
