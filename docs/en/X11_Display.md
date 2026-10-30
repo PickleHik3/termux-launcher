@@ -249,7 +249,8 @@ Audio** control it, both on by default.
   local cover art. Play/pause, previous, next and seeking work when the player offers them. While
   anything plays through the server, the launcher holds Android's audio focus: when another app
   starts playing, Linux players pause (and resume after a short interruption such as a navigation
-  prompt), and sound from apps without MPRIS is muted, or lowered where Android allows it.
+  prompt), and sound from apps without MPRIS is muted, or lowered where Android allows it. A short
+  sound lowers other apps' music instead of pausing it; a longer one takes over as before.
 
 How apps find the server: every terminal session and Linux app gets `PULSE_SERVER`; anything
 else in Termux (ssh, Termux:Widget, services) reads

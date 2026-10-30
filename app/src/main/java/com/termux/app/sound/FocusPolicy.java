@@ -14,6 +14,13 @@ import java.util.Set;
  * <ul>
  *   <li>Focus is asked for while anything plays — a stream through the server, MPRIS or not, or
  *       a player that says it is playing — and given back when nothing does.</li>
+ *   <li>Focus comes in two steps. Something starting from nothing first asks for a transient,
+ *       duckable focus, so another app's media is lowered, not paused: a terminal tool's alert is
+ *       over before it matters. If anything still plays when {@link #GRACE_MS} has passed
+ *       ({@link #onGraceElapsed()}, fired by the caller), the full focus is asked for and other
+ *       apps pause as below. If everything stops within the grace, the transient request is
+ *       abandoned and the other app's media comes back by itself. A player reporting Playing
+ *       counts as activity like a stream, so music reaches the full request.</li>
  *   <li>A lasting loss pauses the MPRIS players; nothing is resumed afterwards.</li>
  *   <li>A short loss pauses them too, and when focus comes back resumes exactly the ones this
  *       paused — never one the user paused themselves.</li>
@@ -27,12 +34,18 @@ import java.util.Set;
  */
 final class FocusPolicy {
 
+    /** How long something may play on the transient focus before the full one is asked for. */
+    static final long GRACE_MS = 3000;
+
     /** What Android said about focus. */
     enum Change { GAIN, LOSS, LOSS_TRANSIENT, LOSS_TRANSIENT_CAN_DUCK }
 
     enum State {
         /** Nothing plays, or focus was asked for and refused. */
         IDLE,
+        /** The transient, duckable focus is held and the grace has not run out. */
+        PROBATION,
+        /** The full focus is held. */
         HELD,
         DUCKED,
         /** A short loss: what this paused is waiting for focus to come back. */
@@ -41,9 +54,18 @@ final class FocusPolicy {
         LOST
     }
 
+    /** Which focus a request is for. */
+    enum Kind { TRANSIENT_DUCK, FULL }
+
     /** What the caller must do, in this order: abandon, request, unduck, duck, unmute, mute, pause, play. */
     static final class Actions {
         boolean request;
+        /** Which focus to ask for; meaningful when {@link #request} is set. */
+        @NonNull Kind kind = Kind.FULL;
+        /** Post {@link #onGraceElapsed()} after {@link #GRACE_MS}, replacing any earlier post. */
+        boolean startGrace;
+        /** Drop the pending {@link #onGraceElapsed()}. */
+        boolean cancelGrace;
         boolean abandon;
         boolean duck;
         boolean unduck;
@@ -55,7 +77,7 @@ final class FocusPolicy {
         final List<String> play = new ArrayList<>();
 
         boolean isEmpty() {
-            return !request && !abandon && !duck && !unduck && !mute && !unmute
+            return !request && !startGrace && !cancelGrace && !abandon && !duck && !unduck && !mute && !unmute
                 && pause.isEmpty() && play.isEmpty();
         }
     }
@@ -66,6 +88,10 @@ final class FocusPolicy {
     private final Set<String> pausedByUs = new LinkedHashSet<>();
     private boolean ducked;
     private boolean muted;
+    /** The full focus is held (or being asked for), not just the transient one. */
+    private boolean full;
+    /** What the request in flight is for. */
+    @NonNull private Kind pending = Kind.TRANSIENT_DUCK;
 
     @NonNull
     State state() {
@@ -86,13 +112,19 @@ final class FocusPolicy {
         Actions actions = new Actions();
         switch (state) {
             case IDLE:
-                if (active()) actions.request = true;
+                if (active()) {
+                    ask(actions, Kind.TRANSIENT_DUCK);
+                    actions.startGrace = true;
+                }
                 break;
+            case PROBATION:
             case HELD:
             case DUCKED:
                 if (!active()) {
                     actions.abandon = true;
+                    actions.cancelGrace = true;
                     restore(actions);
+                    full = false;
                     state = State.IDLE;
                 }
                 break;
@@ -104,21 +136,54 @@ final class FocusPolicy {
                     restore(actions);
                     state = State.IDLE;
                 } else if (streams > previousStreams || !previousPlaying.containsAll(playing)) {
-                    actions.request = true;
+                    // The user choosing this sound: the full focus, as before.
+                    ask(actions, Kind.FULL);
                 }
                 break;
         }
         return actions;
     }
 
+    /**
+     * The grace ran out. Still playing on the transient focus: ask for the full one. If a short
+     * loss is under way nothing is asked; {@link Change#GAIN} starts the grace again. A refused
+     * full request stays on the transient focus and tries once more after another grace.
+     */
+    @NonNull
+    Actions onGraceElapsed() {
+        Actions actions = new Actions();
+        if ((state == State.PROBATION || state == State.DUCKED) && !full && active()) {
+            ask(actions, Kind.FULL);
+        }
+        return actions;
+    }
+
+    private void ask(@NonNull Actions actions, @NonNull Kind kind) {
+        actions.request = true;
+        actions.kind = kind;
+        pending = kind;
+        if (kind == Kind.FULL) full = true;
+    }
+
     /** What {@link Actions#request} got back. A refusal changes nothing: the next event asks again. */
     @NonNull
     Actions onRequestResult(boolean granted) {
         Actions actions = new Actions();
+        if (pending == Kind.FULL) {
+            if (!granted) {
+                full = false;
+                if (state == State.PROBATION || state == State.DUCKED) actions.startGrace = true;
+                return actions;
+            }
+            restore(actions);
+            pausedByUs.clear();
+            state = State.HELD;
+            return actions;
+        }
         if (!granted) return actions;
         restore(actions);
         pausedByUs.clear();
-        state = State.HELD;
+        state = State.PROBATION;
         return actions;
     }
 
@@ -128,19 +193,25 @@ final class FocusPolicy {
         switch (change) {
             case GAIN:
                 if (state == State.IDLE) break;
+                boolean resumed = state == State.PAUSED_SHORT;
                 restore(actions);
                 actions.play.addAll(pausedByUs);
                 pausedByUs.clear();
-                state = State.HELD;
+                if (full || !active()) {
+                    state = State.HELD;
+                } else {
+                    state = State.PROBATION;
+                    if (resumed) actions.startGrace = true;
+                }
                 break;
             case LOSS_TRANSIENT_CAN_DUCK:
-                if (state != State.HELD) break;
+                if (state != State.HELD && state != State.PROBATION) break;
                 actions.duck = true;
                 ducked = true;
                 state = State.DUCKED;
                 break;
             case LOSS_TRANSIENT:
-                if (state != State.HELD && state != State.DUCKED) break;
+                if (state != State.HELD && state != State.DUCKED && state != State.PROBATION) break;
                 unduck(actions);
                 actions.pause.addAll(playing);
                 pausedByUs.addAll(playing);
@@ -155,6 +226,8 @@ final class FocusPolicy {
                 pausedByUs.clear();
                 muteIfStreams(actions);
                 actions.abandon = true;
+                actions.cancelGrace = true;
+                full = false;
                 state = State.LOST;
                 break;
         }
@@ -165,7 +238,11 @@ final class FocusPolicy {
     @NonNull
     Actions release() {
         Actions actions = new Actions();
-        if (state != State.IDLE) actions.abandon = true;
+        if (state != State.IDLE) {
+            actions.abandon = true;
+            actions.cancelGrace = true;
+        }
+        full = false;
         restore(actions);
         pausedByUs.clear();
         streams = 0;

@@ -78,6 +78,13 @@ launcher-owned server for everything, and adds Android media integration on top.
     - Short loss: pause, and resume afterwards only what the launcher paused.
     - Duck allowed: lower the server's volume and restore it after.
     - Apps without MPRIS cannot be paused: they are ducked or muted instead.
+    - **Two steps, 3-second grace.** Sound starting from nothing first asks for a transient,
+      duckable focus (notification-event usage), so another app's media is lowered, not paused: a
+      terminal tool's alert is over before it matters. If anything (a stream, or an MPRIS player
+      reporting Playing) is still playing after 3 s, the full focus is asked for and the rules above
+      apply as before. If everything stops within the grace, the request is abandoned and the other
+      app's media comes back by itself. A short loss during the grace resumes the grace when focus
+      returns; a lasting loss ends it.
 
 ### Settings
 

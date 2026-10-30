@@ -80,7 +80,17 @@ final class MediaBridge {
 
     private boolean started;
     @Nullable private MediaSession session;
+    /** The full focus: other apps pause. */
     @Nullable private AudioFocusRequest focusRequest;
+    /** The short-sound focus: other apps duck. */
+    @Nullable private AudioFocusRequest transientRequest;
+    /** Whichever of the two is held, to abandon. */
+    @Nullable private AudioFocusRequest heldRequest;
+    private final AudioManager.OnAudioFocusChangeListener focusListener = this::onFocusChange;
+    /** Fired {@link FocusPolicy#GRACE_MS} after sound began; one post at a time. */
+    private final Runnable graceElapsed = () -> {
+        if (started) apply(focus.onGraceElapsed());
+    };
     private int streams;
     /** The art the shown player names, and its picture once the worker has decoded it. */
     @Nullable private String artFor;
@@ -415,12 +425,21 @@ final class MediaBridge {
     private void apply(@NonNull FocusPolicy.Actions actions) {
         if (actions.isEmpty()) return;
         AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        if (actions.abandon && audio != null && focusRequest != null) {
-            audio.abandonAudioFocusRequest(focusRequest);
+        if (actions.cancelGrace) main.removeCallbacks(graceElapsed);
+        if (actions.abandon && audio != null && heldRequest != null) {
+            audio.abandonAudioFocusRequest(heldRequest);
+            heldRequest = null;
+        }
+        if (actions.startGrace) {
+            main.removeCallbacks(graceElapsed);
+            main.postDelayed(graceElapsed, FocusPolicy.GRACE_MS);
         }
         if (actions.request && audio != null) {
-            int result = audio.requestAudioFocus(focusRequest());
-            apply(focus.onRequestResult(result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED));
+            AudioFocusRequest wanted = focusRequest(actions.kind);
+            int result = audio.requestAudioFocus(wanted);
+            boolean granted = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            if (granted) heldRequest = wanted;
+            apply(focus.onRequestResult(granted));
         }
         if (actions.unduck) shell.execute(this::unduck);
         if (actions.duck) shell.execute(this::duck);
@@ -431,7 +450,21 @@ final class MediaBridge {
     }
 
     @NonNull
-    private AudioFocusRequest focusRequest() {
+    private AudioFocusRequest focusRequest(@NonNull FocusPolicy.Kind kind) {
+        if (kind == FocusPolicy.Kind.TRANSIENT_DUCK) {
+            if (transientRequest == null) {
+                // A short sound: other apps duck, as for any notification sound.
+                transientRequest = new AudioFocusRequest.Builder(
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build())
+                    .setOnAudioFocusChangeListener(focusListener, main)
+                    .build();
+            }
+            return transientRequest;
+        }
         if (focusRequest == null) {
             focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(new AudioAttributes.Builder()
@@ -441,7 +474,7 @@ final class MediaBridge {
                 // The launcher ducks the server itself (decision 12), so the system must tell it
                 // rather than duck on its own.
                 .setWillPauseWhenDucked(true)
-                .setOnAudioFocusChangeListener(this::onFocusChange, main)
+                .setOnAudioFocusChangeListener(focusListener, main)
                 .build();
         }
         return focusRequest;
