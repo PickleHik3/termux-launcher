@@ -3650,8 +3650,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The test is for the glass this method built, not for any background: the body-surface
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
+        // The dock's material, with the dock's own Depth and Edge where it holds them (ADR 0017).
+        com.termux.app.chrome.GlassRefraction.Look gutterLook = com.termux.app.chrome.ElementGlass.refraction(mPreferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, restingPage(), mFancierGlassLook);
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()),
-            mPreferences.getDockGlassGrain(restingPage()), mFancierGlassLook, mPreferences.getDockTintStrength(restingPage()));
+            mPreferences.getDockGlassGrain(restingPage()), gutterLook, mPreferences.getDockTintStrength(restingPage()));
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3666,7 +3669,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()) / 100f,
-            mPreferences.getDockGlassGrain(restingPage()), 0f, mFancierGlassLook).withRim(false)
+            mPreferences.getDockGlassGrain(restingPage()), 0f, gutterLook).withRim(false)
             .withTintStrength(mPreferences.getDockTintStrength(restingPage()))
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
@@ -3816,7 +3819,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mFancierGlassLook != null && frameStandsDown())
                     return new com.termux.app.chrome.GlassRefraction.Look(0,
                         mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
-                return mFancierGlassLook;
+                // The Terminal element's own Depth and Edge where it holds them (ADR 0017).
+                return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL, terminalLookPageId(), mFancierGlassLook);
             }
 
             @Override @Nullable public Bitmap paneGlassClearFrame() {
@@ -3978,8 +3982,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean wallpaperBlurs() { return wallpaperPicture().blurs(); }
                     @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
                     @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
-                        return mFancierGlassLook;
+                        // The Widgets element's own Depth and Edge where it holds them (ADR 0017).
+                        return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
+                            pageId(), mFancierGlassLook);
                     }
+                    // The Home page at rest: the one whose widgets the chrome pass dresses.
+                    @Override public int pageId() { return restingPage(); }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
                     }
@@ -6412,7 +6420,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
                     ? mPreferences.getDockGlassGrain(stackLookPage())
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
-                radiusPx, mFancierGlassLook)
+                radiusPx, com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, stackLookPage(), mFancierGlassLook))
             .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
@@ -12661,7 +12669,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The row's sizes are the dock's to hand over (applyDockLayout), not the styling's.
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity(stackLookPage()));
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
+        // Whether the wallpaper blurs here; the menus' own radius is the Sheets element's.
+        mSuggestionBarView.setBlurConfig(wallpaperPicture().blurs(), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         int maxButtons = dockSlotCount(getResources().getDisplayMetrics());
         if (mLastStyledDockButtonCount != Integer.MIN_VALUE
@@ -19210,14 +19219,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildTerminalSheetSurface() {
-        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
-        int grain = mPreferences != null
-            ? mPreferences.getDockGlassGrain(restingPage())
+        // The Sheets element's glass (ADR 0017), no longer the dock's.
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
+        float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
+        int grain = mPreferences != null ? sheets.grainPercent
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Floored well above the dock's opacity: a sheet has body text over a live blur, and at the
-        // dock's own tint the terminal behind it reads straight through the words.
-        return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
-            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), true);
+        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
+        // and at a bar's tint the terminal behind it reads straight through the words.
+        return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
+            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
+            null, sheets.tintPercent);
     }
 
     /**
@@ -20195,14 +20206,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull
         @Override
         public Drawable chipBackground() {
-            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
-            int grain = mPreferences != null
-                ? mPreferences.getDockGlassGrain(restingPage())
+            // The rename chip is a popup: the Sheets element's glass (ADR 0017).
+            com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
+            float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
+            int grain = mPreferences != null ? sheets.grainPercent
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-            // Half the chip's 40dp height: a full pill, with the same containing rim the other
-            // floating glass surfaces carry.
-            return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
-                dpToPx(20f), true);
+            // Modifiers: floored above the Sheets opacity, and half the chip's 40dp height for a
+            // full pill, with the same containing rim the other floating glass surfaces carry.
+            return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
+                dpToPx(20f), !sheets.rimOff(), null, sheets.tintPercent);
         }
 
         @NonNull
