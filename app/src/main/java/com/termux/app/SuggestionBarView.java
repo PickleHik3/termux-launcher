@@ -381,18 +381,38 @@ public final class SuggestionBarView extends GridLayout
         lookPageSupplier = supplier;
     }
 
-    /** The launcher's look-and-feel, read live by the popup module. */
+    /**
+     * The launcher's look-and-feel, read live by the popup module. Menus and folders are sheets:
+     * their opacity, blur and grain are the Sheets element's (ADR 0017), not the dock's; whether
+     * blur runs at all stays the host's call ({@link #setBlurConfig}).
+     */
     private final AnchoredMenuTheme menuTheme = new AnchoredMenuTheme() {
         @Override public int textColor() { return resolveLauncherTextColor(); }
         @Override public int selectedTextColor() { return resolveLauncherSelectedTextColor(); }
-        @Override public int opacityPercent() { return appBarOpacity; }
+        @Override public int opacityPercent() {
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            return sheets == null ? appBarOpacity : sheets.opacityPercent;
+        }
         @Override public boolean blurEnabled() { return blurEnabled; }
-        @Override public int blurRadiusDp() { return blurRadiusDp; }
+        @Override public int blurRadiusDp() {
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            // The host's 0 means the wallpaper does not blur here; it stays 0.
+            return sheets == null || blurRadiusDp <= 0 ? blurRadiusDp : sheets.blurDp;
+        }
         @Override public int grainPercent() {
-            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
-            return preferences == null ? 0 : preferences.getDockGlassGrain(lookPageSupplier.get());
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            return sheets == null ? 0 : sheets.grainPercent;
         }
     };
+
+    /** The Sheets element on the page the menus open over; null without a store. */
+    @androidx.annotation.Nullable
+    private com.termux.app.chrome.ElementGlass sheetsGlass() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+        return preferences == null ? null : com.termux.app.chrome.ElementGlass.of(preferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
+            lookPageSupplier.get());
+    }
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
 
     /** The dock's menu look, lent to the popup a folder on Home opens so the two match. */

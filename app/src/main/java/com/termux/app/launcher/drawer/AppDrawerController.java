@@ -1627,13 +1627,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // Capped below the user's dock opacity so the drawer glass always stays see-through:
-        // the terminal keeps running visibly behind the open drawer.
-        float opacity = Math.min(0.45f,
-            preferences == null ? 0.5f : preferences.getAppBarOpacity(mHost.restingPage()) / 100f);
+        // The Sheets element's glass (ADR 0017): a detached dock no longer drags the drawer.
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(
+            preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
+            mHost.restingPage());
+        // Modifier: capped at 0.45 so the drawer glass always stays see-through: the terminal
+        // keeps running visibly behind the open drawer.
+        float opacity = Math.min(0.45f, preferences == null ? 0.5f : sheets.tintAlpha());
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
-            : preferences.getDockGlassGrain(mHost.restingPage());
+            : sheets.grainPercent;
         plane.applyGlassMaterial(
             InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
             MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary,

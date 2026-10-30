@@ -19210,14 +19210,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildTerminalSheetSurface() {
-        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
-        int grain = mPreferences != null
-            ? mPreferences.getDockGlassGrain(restingPage())
+        // The Sheets element's glass (ADR 0017), no longer the dock's.
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
+        float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
+        int grain = mPreferences != null ? sheets.grainPercent
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Floored well above the dock's opacity: a sheet has body text over a live blur, and at the
-        // dock's own tint the terminal behind it reads straight through the words.
-        return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
-            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), true);
+        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
+        // and at a bar's tint the terminal behind it reads straight through the words.
+        return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
+            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
+            null, sheets.tintPercent);
     }
 
     /**
@@ -20195,14 +20197,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull
         @Override
         public Drawable chipBackground() {
-            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
-            int grain = mPreferences != null
-                ? mPreferences.getDockGlassGrain(restingPage())
+            // The rename chip is a popup: the Sheets element's glass (ADR 0017).
+            com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
+            float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
+            int grain = mPreferences != null ? sheets.grainPercent
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-            // Half the chip's 40dp height: a full pill, with the same containing rim the other
-            // floating glass surfaces carry.
-            return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
-                dpToPx(20f), true);
+            // Modifiers: floored above the Sheets opacity, and half the chip's 40dp height for a
+            // full pill, with the same containing rim the other floating glass surfaces carry.
+            return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
+                dpToPx(20f), !sheets.rimOff(), null, sheets.tintPercent);
         }
 
         @NonNull
