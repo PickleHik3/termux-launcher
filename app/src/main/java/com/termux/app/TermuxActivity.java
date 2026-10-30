@@ -12345,18 +12345,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.wall.WallKeys.kinds(wallPages(), useAs());
     }
 
-    /** The kinds the key row was last built for ({@link #wallKindsForRow}). */
-    @Nullable
-    private java.util.List<com.termux.app.wall.PaneWallPage> mRowKinds;
-
-    /** {@link #availableWallPages} as the key row's build reads it, remembered so a page-list edit can tell whether the row is stale. */
-    @NonNull
-    public java.util.List<com.termux.app.wall.PaneWallPage> wallKindsForRow() {
-        java.util.List<com.termux.app.wall.PaneWallPage> kinds = availableWallPages();
-        mRowKinds = kinds;
-        return kinds;
-    }
-
     /**
      * The letters are the place's, not the launcher's: one choice per arrangement. True for the
      * index in either form — a band of its own, or minimised to its pull tab — since both scrub
@@ -28421,6 +28409,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         store.registerOnSharedPreferenceChangeListener(mStartInListener);
         // Home moved (Settings, Edit pages, another holder of the store): the marker follows.
         mWallPagesListener = new com.termux.app.wall.WallPagesStore.Listener() {
+            /** The page kinds of the last page list this listener saw: the wall keys it put on the row. */
+            private java.util.List<com.termux.app.wall.PaneWallPage> mKeyKinds = availableWallPages();
+
             @Override public void onChanged(@NonNull com.termux.app.wall.WallPages pages) {
                 if (mPageOverview != null) mPageOverview.refresh();
                 // The widget repository lines its pages up with the Home pages by id.
@@ -28429,7 +28420,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The wall lays out in the pages' order: a moved page moves on the wall.
                 if (mPaneWallController != null) mPaneWallController.refreshPages();
                 // A Display or Home page added or removed puts its key on the row or takes it off.
-                if (!com.termux.app.wall.WallKeys.kinds(pages, useAs()).equals(mRowKinds)) onWallPlacesChanged();
+                java.util.List<com.termux.app.wall.PaneWallPage> kinds =
+                    com.termux.app.wall.WallKeys.kinds(pages, useAs());
+                if (!kinds.equals(mKeyKinds)) {
+                    mKeyKinds = kinds;
+                    onWallPlacesChanged();
+                }
                 // A removed Display page's picture goes with it (A3c2).
                 retainDisplayPictures(pages);
                 applyDisplayPageStill();
