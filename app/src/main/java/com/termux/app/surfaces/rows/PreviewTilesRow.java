@@ -41,7 +41,8 @@ public final class PreviewTilesRow {
         }
     }
 
-    static final int TILE_MIN_DP = 64;
+    /** An option is 80 dp wide at least (the editor-cards spec's picker row). */
+    static final int TILE_MIN_DP = 80;
     static final int PREVIEW_DP = 32;
     static final int GAP_DP = 8;
     static final int CORNER_DP = 14;
@@ -57,6 +58,33 @@ public final class PreviewTilesRow {
         this.root = root;
         this.tiles = Collections.unmodifiableList(tiles);
         this.names = Collections.unmodifiableList(names);
+    }
+
+    /** A tile's width: its caption's with the padding and slack, never under {@code minPx}. */
+    public static int tileWidth(int minPx, int captionPx, int padPx, int slackPx) {
+        return Math.max(minPx, captionPx + 2 * padPx + slackPx);
+    }
+
+    /**
+     * The picker row: the row's name on one line (ellipsized), over this rail of options. The
+     * Dock's style and design, the clock faces, the cursor trails and the effects wear it.
+     */
+    @NonNull
+    public LinearLayout picker(@NonNull Context context, @NonNull CharSequence name) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        TextView title = RowKit.title(context, name);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        int edge = RowKit.dp(context, RowKit.EDGE_DP);
+        title.setPadding(edge, RowKit.dp(context, 8), edge, 0);
+        column.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (root.getParent() instanceof ViewGroup)
+            ((ViewGroup) root.getParent()).removeView(root);
+        column.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        return column;
     }
 
     /** Builds the row with {@code selected} chosen. */
@@ -103,9 +131,9 @@ public final class PreviewTilesRow {
             nameParams.topMargin = RowKit.dp(context, 4);
             box.addView(name, nameParams);
             // As wide as its name needs, never under the tile's least width.
-            int width = Math.max(RowKit.dp(context, TILE_MIN_DP),
-                (int) Math.ceil(name.getPaint().measureText(tile.name.toString())) + 2 * pad
-                    + RowKit.dp(context, 4));
+            int width = tileWidth(RowKit.dp(context, TILE_MIN_DP),
+                (int) Math.ceil(name.getPaint().measureText(tile.name.toString())), pad,
+                RowKit.dp(context, 4));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(width,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
             if (i > 0)

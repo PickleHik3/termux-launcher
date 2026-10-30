@@ -2308,6 +2308,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             Context context = mHost.context();
             if (prefs == null || card == null)
                 return 0;
+            Integer cellValue = cellRowValue(prefs, card, row);
+            if (cellValue != null)
+                return cellValue;
             switch (row) {
                 case FROST: return frostValue(prefs, card);
                 case OPACITY:
@@ -2422,6 +2425,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
                 case LOOK: return 0;
+                case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.min;
+                case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.min;
                 case VIBRANCY: return Control.VIBRANCY.min;
                 case GLASS_EDGE: return Control.EDGE.min;
                 default: return cardRowFrom(row);
@@ -2449,6 +2454,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
                 case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
                 case LOOK: return AppearanceLooks.CUSTOM_STOP;
+                case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.max;
+                case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.max;
                 case VIBRANCY: return Control.VIBRANCY.max;
                 case GLASS_EDGE: return Control.EDGE.max;
                 default: return cardRowTo(row);
@@ -2473,6 +2480,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_OPACITY:
                 case GLASS_EDGE:
                 case REFLECTION:
+                case GRAIN:
                     return getString(R.string.appearance_readout_percent, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
@@ -2620,6 +2628,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case THEME:
                     return strings(R.string.appearance_theme_system, R.string.appearance_theme_light,
                         R.string.appearance_theme_dark);
+                case RIM:
+                    return strings(R.string.appearance_rim_none, R.string.appearance_rim_hairline,
+                        R.string.appearance_rim_bright);
                 case LOOK: {
                     String[] out = new String[AppearanceLooks.STOP_COUNT];
                     for (int i = 0; i < out.length; i++)
@@ -2751,6 +2762,90 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return entries.length > 0 ? entries[0] : id;
     }
 
+    /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
+    @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
+
+    /**
+     * Whether {@code row} of {@code card} reads and writes the chips' grid cell itself: Grain and
+     * Rim everywhere; an element's Look; Corners, Depth and Edge on element and page cards, and
+     * on the Appearance card (Vibrancy too) once Where stands on a page.
+     */
+    private boolean cellRow(@NonNull EditorCard card, @NonNull Row row) {
+        if (row == Row.LOOK)
+            return card.slot != null;
+        if (GlassRows.cellProperty(row) == null)
+            return false;
+        if (row == Row.GRAIN || row == Row.RIM)
+            return true;
+        if (card == EditorCard.APPEARANCE)
+            return !chipsPlain(card);
+        return row != Row.VIBRANCY;
+    }
+
+    /** The value a cell row shows, or null for a row that is not one ({@link #cellRow}). */
+    @Nullable
+    private Integer cellRowValue(@NonNull TermuxAppSharedPreferences prefs,
+                                 @NonNull EditorCard card, @NonNull Row row) {
+        if (!cellRow(card, row))
+            return null;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        if (row == Row.LOOK) {
+            if (mHeldCustomCells.contains(mChips))
+                return AppearanceLooks.CUSTOM_STOP;
+            return GlassRows.lookStopFor(cellValue(grid, com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST),
+                cellValue(grid, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY), cellValue(grid, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT));
+        }
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.cellProperty(row);
+        return property == null ? null : GlassRows.toRow(row, cellValue(grid, property));
+    }
+
+    /** The value the chips' cell shows for {@code property}: its own, else what it follows. */
+    private int cellValue(@NonNull com.termux.shared.termux.settings.preferences.LookGrid grid, @NonNull com.termux.shared.termux.settings.preferences.LookGrid.Property property) {
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+        return grid.value(cell.property, cell.element, cell.page);
+    }
+
+    /**
+     * A cell row moved ({@link #cellRow}): the value lands in the chips' cell; a Look writes its
+     * Frost, Opacity and Tint there, Custom writes nothing and holds the slider. False for any
+     * other row.
+     */
+    private boolean writeCellRow(@NonNull TermuxAppSharedPreferences prefs,
+                                 @NonNull EditorCard card, @NonNull Row row, int value) {
+        if (!cellRow(card, row))
+            return false;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        if (row == Row.LOOK) {
+            int[] look = GlassRows.lookCell(value);
+            if (look == null) {
+                mHeldCustomCells.add(mChips);
+            } else {
+                mHeldCustomCells.remove(mChips);
+                com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties = {com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
+                for (int i = 0; i < properties.length; i++) {
+                    com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(properties[i]);
+                    grid.write(cell.property, cell.element, cell.page, look[i]);
+                }
+            }
+        } else {
+            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.cellProperty(row);
+            if (property == null)
+                return false;
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+            grid.write(cell.property, cell.element, cell.page, GlassRows.toCell(row, value));
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive) {
+            if (row == Row.LOOK)
+                sheet.restate();
+            else
+                sheet.restate(row);
+        }
+        return true;
+    }
+
     /** One row moved: the write it stands for, on the half or the wall. */
     private void writeRow(@NonNull Row row, int value, boolean dragging) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -2758,6 +2853,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         Context context = mHost.context();
         if (prefs == null || card == null)
+            return;
+        if (writeCellRow(prefs, card, row, value))
             return;
         switch (row) {
             case FROST:

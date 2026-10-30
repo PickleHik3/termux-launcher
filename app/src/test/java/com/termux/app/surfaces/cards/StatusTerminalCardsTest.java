@@ -65,9 +65,10 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.GLASS_SECTION, Row.FROST, Row.OPACITY,
-            Row.TINT, Row.CORNERS, Row.MARGIN, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-            Row.STATUS_OPTIONS, Row.STATUS_INDICATORS), rows(StatusBarCard.rows(ALL)));
+        assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE,
+            Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.STATUS_POSITION,
+            Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.MARGIN, Row.STATUS_OPTIONS,
+            Row.STATUS_INDICATORS), rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12-hour is an Options tile", rows.contains(Row.CLOCK_12H));
@@ -75,9 +76,10 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.GLASS_SECTION, Row.FROST, Row.OPACITY, Row.TINT,
-            Row.TEXT_SIZE, Row.CORNERS, Row.MARGIN, Row.SPLIT_GAP, Row.CONTRAST, Row.CURSOR_TRAIL,
-            Row.EFFECT, Row.LINK_FONT), rows(TerminalCard.rows(ALL)));
+        assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE,
+            Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.TEXT_SIZE,
+            Row.SPLIT_GAP, Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT, Row.MARGIN, Row.LINK_FONT),
+            rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));
         assertTrue("the Terminal card owns Text size",

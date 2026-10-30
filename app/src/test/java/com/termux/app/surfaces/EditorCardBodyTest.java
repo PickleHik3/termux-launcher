@@ -125,8 +125,9 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
+        // Home's glass rows follow its Look with no Glass header of their own (the row set).
         for (int res : new int[] {R.string.editor_section_grid, R.string.editor_section_look,
-            R.string.editor_section_glass, R.string.editor_section_labels_folders,
+            R.string.editor_section_labels_folders,
             R.string.editor_section_options, R.string.editor_section_more})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
@@ -158,11 +159,10 @@ public class EditorCardBodyTest {
             if (name.equals(f.themed.getString(R.string.appearance_row_key_opacity)))
                 keys = slider;
         }
-        assertNotNull(background);
+        // Background opacity is the glass row set's Opacity now, over More; the link stands
+        // beside Key opacity under More.
         assertNotNull(keys);
-        assertTrue("the link after Background opacity", f.left(link) >= f.left(background));
-        assertTrue("the link before Key opacity", f.left(link) + link.getWidth()
-            <= f.left(keys) + 1);
+        assertTrue("the link after Key opacity", f.left(link) >= f.left(keys));
         assertFalse(link.isChecked());
         link.performClick();
         assertEquals(Integer.valueOf(1), f.model.values.get(Row.OPACITY_LINK));

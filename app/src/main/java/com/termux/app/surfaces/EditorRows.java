@@ -85,6 +85,10 @@ public final class EditorRows {
          */
         FROST(Kind.STRIP, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         CORNERS(Kind.STRIP, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
+        /** The glass's grain at the chips' cell, 0 to 100%. */
+        GRAIN(Kind.STRIP, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
+        /** The glass's rim at the chips' cell: None, Hairline or Bright. */
+        RIM(Kind.SEGMENTS, R.string.appearance_row_rim, R.drawable.ic_editor_corners),
         MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
         DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         /**
