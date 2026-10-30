@@ -40,8 +40,9 @@ public class TermuxAppSharedPreferencesPageLookTest {
         store = context.getSharedPreferences("page-look-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         prefs = TerminalPageIdFixture.give(new TermuxAppSharedPreferences(context, store, null));
-        dockOpacity = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.DOCK,
-            SurfaceProperty.OPACITY);
+        // The dock's opacity cell; <cell>@<page> is its value on a page.
+        dockOpacity = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
+            LookGrid.NO_PAGE);
     }
 
     /** L5: a write on every page drops every page's own value, a Display page's included. */
@@ -71,8 +72,8 @@ public class TermuxAppSharedPreferencesPageLookTest {
     /** L3: the terminal's ground reads the Terminal page's own value, as PageLook does. */
     @Test
     public void theCanvasHonoursTheTerminalPagesOverride() {
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.CANVAS,
-            SurfaceProperty.OPACITY);
+        String key = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.TERMINAL,
+            LookGrid.NO_PAGE);
         store.edit().putInt(key, 80).putInt(PageLookKeys.pageKey(key, T), 30).commit();
         assertEquals(30, prefs.getTerminalBackgroundOpacity());
         assertEquals(30, prefs.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, T));

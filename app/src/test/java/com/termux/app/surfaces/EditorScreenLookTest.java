@@ -152,11 +152,11 @@ public class EditorScreenLookTest {
     // ------------------------------------------------------------------------------- the checks
 
     private int pageValue(SurfaceSlot slot, SurfaceProperty property, int pageId) {
-        String key = PageLookKeys.pageKey(
-            TermuxAppSharedPreferences.surfaceOverrideKey(slot, property), pageId);
+        // A page's own value is the element's cell on that page.
+        String key = com.termux.shared.termux.settings.preferences.LookGrid.key(property.grid, slot.element, pageId);
         SharedPreferences store = preferences.getSharedPreferences();
         assertTrue(key + " is the page's own", store.contains(key));
-        return store.getInt(key, -1);
+        return preferences.getSurfaceValue(slot, property, pageId);
     }
 
     private SurfacePresets.Preset preset(String id) {

@@ -169,7 +169,8 @@ public class LayoutStyleMigrationTest {
         preferences.setSurfaceValueExact(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS, 3);
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
+        // Corners joined the look values (ADR 0017): the status bar's own corner is a cell now.
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
             SurfaceProperty.CORNER_RADIUS));
         assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
             preferences.getDockHorizontalInset());

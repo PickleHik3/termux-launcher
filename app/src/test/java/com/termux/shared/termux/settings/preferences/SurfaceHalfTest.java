@@ -50,7 +50,8 @@ public class SurfaceHalfTest {
         for (int half : new int[] {TermuxAppSharedPreferences.PAGE_WALL, TermuxAppSharedPreferences.terminalPageId()}) {
             assertEquals(40, preferences.getAppBarOpacity(half));
             assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, half));
-            assertEquals(22, preferences.getStatusBarBlurRadius(half));
+            // Blur 22 wears the nearest Frost stop's 25.
+            assertEquals(25, preferences.getStatusBarBlurRadius(half));
             assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
                 half));
         }
@@ -117,8 +118,8 @@ public class SurfaceHalfTest {
     public void canvas_holdsOneValue() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 70);
-        String canvasKey = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.CANVAS,
-            SurfaceProperty.OPACITY);
+        String canvasKey = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.TERMINAL,
+            LookGrid.NO_PAGE);
         // One wall value under the plain key, never a page override.
         assertTrue(store.contains(canvasKey));
         assertFalse(store.contains(canvasKey + "@" + TerminalPageIdFixture.TERMINAL_PAGE_ID));
