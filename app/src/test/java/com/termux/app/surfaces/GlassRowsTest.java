@@ -72,13 +72,20 @@ public class GlassRowsTest {
 
     @Test
     public void aLookWritesItsFrostOpacityAndTintAndIsReadBack() {
-        for (int stop = 0; stop < GlassRows.LOOK_CELLS.length; stop++) {
+        // The shipped Looks on dark glass (SurfacePresets.PRESETS): switch to
+        // SurfacePresets.shippedLook(stop) once it is on this branch.
+        int[][] shipped = {{2, 10, 0}, {5, 60, 0}, {3, 46, 35}, {0, 92, 0}};
+        assertEquals("a cell per Look", AppearanceLooks.CUSTOM_STOP, shipped.length);
+        for (int stop = 0; stop < shipped.length; stop++) {
             int[] cell = GlassRows.lookCell(stop);
+            assertEquals(stop + ": its Frost stop", shipped[stop][0], cell[0]);
+            assertEquals(stop + ": its opacity", shipped[stop][1], cell[1]);
+            assertEquals(stop + ": its tint", shipped[stop][2], cell[2]);
             assertEquals(stop, GlassRows.lookStopFor(cell[0], cell[1], cell[2]));
         }
-        assertEquals(FrostStops.nearestStopByBlur(8), GlassRows.lookCell(1)[0]);
         assertNull("Custom writes nothing", GlassRows.lookCell(AppearanceLooks.CUSTOM_STOP));
-        assertEquals(AppearanceLooks.CUSTOM_STOP, GlassRows.lookStopFor(0, 50, 50));
+        assertEquals("a cell off every Look reads Custom", AppearanceLooks.CUSTOM_STOP,
+            GlassRows.lookStopFor(5, 61, 0));
     }
 
     @Test

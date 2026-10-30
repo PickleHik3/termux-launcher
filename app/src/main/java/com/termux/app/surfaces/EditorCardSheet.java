@@ -524,6 +524,11 @@ final class EditorCardSheet {
     void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
               @NonNull String resetLabel, boolean animate, int raiseTo) {
         boolean sameCard = mShown && card == mCard;
+        // Rule a: another card at a sheet that is up swaps in place, its labels and body fading.
+        boolean swap = mShown && !sameCard && animate && !mParked && mSheet.isLaidOut()
+            && mSheet.getVisibility() == View.VISIBLE;
+        if (swap)
+            fadeOutForSwap();
         // A restatement with another row list (a chip offered or withdrawn) rebuilds in place.
         boolean sameRows = sameCard && rows.equals(mBuilt);
         mCard = card;
@@ -566,6 +571,104 @@ final class EditorCardSheet {
             mSheet.setVisibility(View.VISIBLE);
         }
         settle(mDetent, animate);
+        if (swap)
+            fadeInAfterSwap();
+    }
+
+    /** The rise the new body fades in from on a card swap. */
+    static final int SWAP_RISE_DP = 8;
+
+    /**
+     * Rule a's out half: the header's title, glyph and chips and the body as they stand now are
+     * lifted into the overlays (the body's own row views, the labels as their last frame) and fade
+     * on the fast effects spring while the new card is built underneath.
+     */
+    private void fadeOutForSwap() {
+        boolean reduced = ReducedMotion.isEnabled(mContext);
+        long labelsOut = EditorMotion.Use.LABEL_OUT.durationMs(reduced);
+        ghost(mTitle, labelsOut);
+        ghost(mHeaderIcon, labelsOut);
+        ghost(mScopeSlot, labelsOut);
+        int count = mRows.getChildCount();
+        if (count == 0)
+            return;
+        List<View> old = new ArrayList<>(count);
+        for (int i = 0; i < count; i++)
+            old.add(mRows.getChildAt(i));
+        android.view.ViewGroupOverlay overlay = mScroll.getOverlay();
+        for (View row : old) {
+            mRows.removeView(row);
+            row.offsetLeftAndRight(mRows.getLeft());
+            row.offsetTopAndBottom(mRows.getTop());
+            overlay.add(row);
+        }
+        android.animation.ValueAnimator out = android.animation.ValueAnimator.ofFloat(1f, 0f);
+        out.setDuration(EditorMotion.Use.BODY_OUT.durationMs(reduced));
+        out.setInterpolator(EditorMotion.Use.BODY_OUT.curve(reduced));
+        out.addUpdateListener(a -> {
+            float alpha = (float) a.getAnimatedValue();
+            for (View row : old) row.setAlpha(alpha);
+        });
+        out.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                for (View row : old) overlay.remove(row);
+            }
+        });
+        out.start();
+    }
+
+    /** Rule a's in half: the relabelled header and the new body fade in, the body rising 8dp. */
+    private void fadeInAfterSwap() {
+        boolean reduced = ReducedMotion.isEnabled(mContext);
+        long labelsAfter = EditorMotion.Use.LABEL_OUT.durationMs(reduced);
+        for (View label : new View[] {mTitle, mHeaderIcon, mScopeSlot}) {
+            label.animate().cancel();
+            label.setAlpha(0f);
+            label.animate().alpha(1f).setStartDelay(labelsAfter)
+                .setDuration(EditorMotion.Use.LABEL_IN.durationMs(reduced))
+                .setInterpolator(EditorMotion.Use.LABEL_IN.curve(reduced)).start();
+        }
+        long bodyAfter = EditorMotion.Use.BODY_OUT.durationMs(reduced);
+        mRows.animate().cancel();
+        mRows.setAlpha(0f);
+        mRows.setTranslationY(reduced ? 0f : dp(SWAP_RISE_DP));
+        // The fade and the rise run on their own springs: the fade as an animator of its own.
+        android.animation.ObjectAnimator in = android.animation.ObjectAnimator.ofFloat(mRows,
+            View.ALPHA, 0f, 1f);
+        in.setStartDelay(bodyAfter);
+        in.setDuration(EditorMotion.Token.EFFECTS_DEFAULT.settleMs());
+        in.setInterpolator(EditorMotion.Use.LABEL_IN.curve(reduced));
+        in.start();
+        if (!reduced)
+            mRows.animate().translationY(0f).setStartDelay(bodyAfter)
+                .setDuration(EditorMotion.Use.BODY_SETTLE.durationMs(false))
+                .setInterpolator(EditorMotion.Use.BODY_SETTLE.curve(false)).start();
+    }
+
+    /** {@code view}'s last frame drawn over it, fading out in {@code durationMs}. */
+    private void ghost(@NonNull View view, long durationMs) {
+        if (view.getWidth() <= 0 || view.getHeight() <= 0 || view.getVisibility() != View.VISIBLE
+            || !(view.getParent() instanceof ViewGroup))
+            return;
+        android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(view.getWidth(),
+            view.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        view.draw(new android.graphics.Canvas(frame));
+        android.graphics.drawable.BitmapDrawable last =
+            new android.graphics.drawable.BitmapDrawable(mContext.getResources(), frame);
+        last.setBounds(view.getLeft(), view.getTop(), view.getRight(), view.getBottom());
+        android.view.ViewGroupOverlay overlay = ((ViewGroup) view.getParent()).getOverlay();
+        overlay.add(last);
+        android.animation.ValueAnimator out = android.animation.ValueAnimator.ofInt(255, 0);
+        out.setDuration(durationMs);
+        out.setInterpolator(EditorMotion.Use.LABEL_OUT.curve(false));
+        out.addUpdateListener(a -> last.setAlpha((int) a.getAnimatedValue()));
+        out.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                overlay.remove(last);
+                frame.recycle();
+            }
+        });
+        out.start();
     }
 
     /** Takes the sheet down; {@code done} runs once it is off screen. */
@@ -643,6 +746,14 @@ final class EditorCardSheet {
     }
 
     private void settle(int detent, boolean animate) {
+        settle(detent, animate, 0f);
+    }
+
+    /**
+     * {@link #settle(int, boolean)} for a release moving at {@code velocityPxPerS} (down is
+     * positive): the detent spring starts at that speed (rule e).
+     */
+    private void settle(int detent, boolean animate, float velocityPxPerS) {
         mDetent = detent;
         float target = translationFor(detent);
         applyFootPadding(detent);
@@ -655,7 +766,8 @@ final class EditorCardSheet {
             return;
         }
         mSheet.animate().translationY(target).setDuration(MOVE_MS)
-            .setInterpolator(EditorMotion.Use.SHEET_DETENT.curve(false))
+            .setInterpolator(EditorMotion.Use.SHEET_DETENT.curve(false,
+                releaseShare(mSheet.getTranslationY(), target, velocityPxPerS)))
             .setUpdateListener(a -> mListener.onSheetMoved(detent, sheetTopPx()))
             .withEndAction(() -> {
                 mSheet.animate().setUpdateListener(null);
@@ -663,6 +775,20 @@ final class EditorCardSheet {
                 mListener.onSheetSettled(detent, sheetTopPx());
             }).start();
     }
+
+    /**
+     * A release velocity as the share of the distance left it covers per second, toward the
+     * target positive; 0 when there is no distance. Capped so a hard fling cannot overshoot far.
+     */
+    static double releaseShare(float fromPx, float toPx, float velocityPxPerS) {
+        float distance = toPx - fromPx;
+        if (Math.abs(distance) < 1f)
+            return 0.0;
+        return Math.max(-RELEASE_SHARE_MAX, Math.min(RELEASE_SHARE_MAX, velocityPxPerS / distance));
+    }
+
+    /** The largest release share a detent spring starts with. */
+    static final double RELEASE_SHARE_MAX = 30.0;
 
     private float translationFor(int detent) {
         return Math.max(0, mFullPx - heightAt(detent));
@@ -755,7 +881,7 @@ final class EditorCardSheet {
                         return true;
                     }
                     settle(releaseDetent(mSheet.getTranslationY(), translationFor(DETENT_HALF),
-                        translationFor(DETENT_PEEK), velocity, flingPxPerS), true);
+                        translationFor(DETENT_PEEK), velocity, flingPxPerS), true, velocity);
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
@@ -933,7 +1059,7 @@ final class EditorCardSheet {
                     }
                     end();
                     settle(releaseDetent(mSheet.getTranslationY(), translationFor(DETENT_HALF),
-                        translationFor(DETENT_PEEK), velocity, mFlingPxPerS), true);
+                        translationFor(DETENT_PEEK), velocity, mFlingPxPerS), true, velocity);
                     break;
                 }
                 case MotionEvent.ACTION_CANCEL:

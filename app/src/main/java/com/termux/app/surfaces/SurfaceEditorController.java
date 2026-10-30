@@ -180,6 +180,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean isGlassRefractionActive();
         /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
+        /**
+         * The Card-form widget (one wearing glass) under the screen point {@code rawX, rawY}, as
+         * {left, top, right, bottom} in the root container's unscaled space; null where none is.
+         */
+        @Nullable default int[] cardWidgetAt(float rawX, float rawY) { return null; }
         /** The corner that frame actually draws with. */
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
@@ -1049,13 +1054,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mCard != card)
             mChips = EditorChips.openFor(card, mScopePageId);
         mCard = card;
+        mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
+        mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
         restateBar(animate);
         layoutSheet();
         applyPose(animate);
-        positionOutline();
+        positionOutline(animate);
     }
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
@@ -1459,7 +1466,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Where the frame stands now: at rest, or with the card that is up at its detent. The card
-     * moves on the same clock and curve ({@link #POSE_MS}, {@link Motion#settle()}), so the frame
+     * moves on the same clock and spring ({@link #POSE_MS}, {@link EditorMotion.Use#FRAME_POSE}), so the frame
      * and the card's top edge keep their gap all the way.
      */
     private void applyPose(boolean animate) {
@@ -1532,7 +1539,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         final float fromTy = root.getTranslationY();
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(durationMs);
-        animator.setInterpolator(Motion.settle());
+        animator.setInterpolator(EditorMotion.Use.FRAME_POSE.curve(false));
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
             float nowScale = fromScale + (scale - fromScale) * f;
@@ -2748,12 +2755,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.RIM) {
                 // Rim's three words beside its name, as the cards' own segment rows stand.
                 Context context = mHost.context();
-                java.util.List<com.termux.app.surfaces.rows.SegmentRow.Segment> words =
-                    new java.util.ArrayList<>();
-                for (String choice : choices(row))
-                    words.add(com.termux.app.surfaces.rows.SegmentRow.Segment.word(choice));
-                mRimRow = com.termux.app.surfaces.rows.SegmentRow.build(context, row.iconRes,
-                    context.getString(row.labelRes), words, value(row), widthPx,
+                mRimRow = com.termux.app.surfaces.rows.SegmentRow.words(context, row.iconRes,
+                    context.getString(row.labelRes), choices(row), value(row), widthPx,
                     index -> onValue(Row.RIM, index, false));
                 return mRimRow.root;
             }
@@ -4020,6 +4023,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 continue;
             final int index = i;
             group.setOnClickListener(view -> {
+                if (openWidgetsAt(index))
+                    return;
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
@@ -4059,6 +4064,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
+    /** The tapped Card-form widget's rect, for the next {@link #openCard} of the Widgets card. */
+    @Nullable private int[] mTappedWidget;
+    /** The widget the Widgets card's ring stands around while that card is up. */
+    @Nullable private int[] mWidgetRing;
+
+    /**
+     * A tap on the bare frame or the canvas that lands on a Card-form widget raises the Widgets
+     * card, ringed around that widget. False when no such widget is under the finger.
+     */
+    private boolean openWidgetsAt(int groupIndex) {
+        EditorCard groupCard = GROUP_CARDS[groupIndex];
+        if (groupCard != null && groupCard != EditorCard.TERMINAL)
+            return false;
+        if (cardRefusal(EditorCard.WIDGETS) != null)
+            return false;
+        int[] widget = mHost.cardWidgetAt(mDownRawX, mDownRawY);
+        if (widget == null)
+            return false;
+        EditorDoor.EDITOR_OUTLINE.log(EditorCard.WIDGETS);
+        mTappedWidget = widget;
+        openCard(EditorCard.WIDGETS, true);
+        return true;
+    }
+
     private void setOverlayVisible(boolean visible) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         if (overlay == null)
@@ -4071,7 +4100,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         overlay.animate().alpha(0f)
             .setDuration(SurfaceEditorMotion.overlayFadeMs(GlassMotion.of(prefs()), false))
-            .setInterpolator(Motion.settle())
+            .setInterpolator(EditorMotion.Use.OVERLAY_OUT.curve(false))
             .withEndAction(() -> {
                 overlay.setVisibility(View.GONE);
                 overlay.setAlpha(1f);
@@ -4099,6 +4128,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return null;
         if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
+        int[] widget = mWidgetRing;
+        if (card == EditorCard.WIDGETS && widget != null)
+            return new int[] {widget[0] - overlayOffset[0], widget[1] - overlayOffset[1],
+                widget[2] - overlayOffset[0], widget[3] - overlayOffset[1]};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
             if (frame == null || frame[2] - frame[0] < dp(24) || frame[3] - frame[1] < dp(24))
@@ -4232,10 +4265,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * outside its edge, inside the frame for Home. Nothing else glows.
      */
     private void positionOutline() {
+        positionOutline(false);
+    }
+
+    /**
+     * Places the ring on the card's surface; with {@code move}, a ring already on screen springs
+     * from where it stood (rule a, RING_MOVE): one view, its layout set once, the flight drawn by
+     * its translation and scale.
+     */
+    private void positionOutline(boolean move) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
         if (overlay == null || outline == null)
             return;
+        boolean wasOn = outline.getVisibility() == View.VISIBLE && outline.getWidth() > 0
+            && outline.getHeight() > 0;
+        float fromLeft = outline.getLeft() + outline.getTranslationX();
+        float fromTop = outline.getTop() + outline.getTranslationY();
+        float fromWidth = outline.getWidth() * outline.getScaleX();
+        float fromHeight = outline.getHeight() * outline.getScaleY();
         EditorCard card = mOpen ? mCard : null;
         int[] rect = card == null || card == EditorCard.APPEARANCE ? null
             : targetRect(card, overlay);
@@ -4256,6 +4304,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
         EditorViews.setVisible(outline, true);
+        outline.animate().cancel();
+        int width = Math.max(1, grown[2] - grown[0]);
+        int height = Math.max(1, grown[3] - grown[1]);
+        boolean reduced = com.termux.app.ReducedMotion.isEnabled(mHost.context());
+        if (!move || !wasOn || reduced || (fromLeft == grown[0] && fromTop == grown[1]
+                && fromWidth == width && fromHeight == height)) {
+            outline.setTranslationX(0f);
+            outline.setTranslationY(0f);
+            outline.setScaleX(1f);
+            outline.setScaleY(1f);
+            return;
+        }
+        outline.setPivotX(0f);
+        outline.setPivotY(0f);
+        outline.setTranslationX(fromLeft - grown[0]);
+        outline.setTranslationY(fromTop - grown[1]);
+        outline.setScaleX(fromWidth / width);
+        outline.setScaleY(fromHeight / height);
+        outline.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(EditorMotion.Use.RING_MOVE.durationMs(false))
+            .setInterpolator(EditorMotion.Use.RING_MOVE.curve(false)).start();
     }
 
     /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
