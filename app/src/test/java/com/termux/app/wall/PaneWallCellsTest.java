@@ -428,4 +428,58 @@ public class PaneWallCellsTest {
         assertTrue(wall.goToCell(1, true));
         assertRestingAtDistances();
     }
+
+    // ---- the empty Terminal page shows its card (ADR 0016 section 6, #186) -----------------
+
+    @Test public void theEmptyTerminalPageShowsItsCardBeforeAndDuringTheSlideFromHome() {
+        host.hasWindow = false;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        PageCardView card = wall.cardOf(2);
+        assertNotNull(card);
+        assertFalse(wall.isLive(2));
+        // On top of the terminal host, which has nothing to draw.
+        assertTrue(wall.indexOfChild(card) > wall.indexOfChild(terminal));
+        assertEquals(WIDTH, card.getTranslationX(), 0.5f);
+        wall.setReducedMotion(false);
+        wall.beginPlainDrag();
+        wall.dragTo(-600f);
+        assertEquals(View.VISIBLE, card.getVisibility());
+        assertEquals(WIDTH - 600f, card.getTranslationX(), 0.5f);
+        assertEquals(terminal.getTranslationX(), card.getTranslationX(), 0.5f);
+        wall.endDrag(-3000f);
+        idle();
+        assertEquals(2, on());
+        // No shell could start here: the page keeps its card.
+        assertFalse(wall.isLive(2));
+        assertEquals(View.VISIBLE, card.getVisibility());
+        assertEquals(0f, card.getTranslationX(), 0.5f);
+    }
+
+    @Test public void theTerminalCardGivesWayWhenTheWindowArrives() {
+        host.hasWindow = false;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(wall.goToCell(2, false));
+        PageCardView card = wall.cardOf(2);
+        assertNotNull(card);
+        assertEquals(View.VISIBLE, card.getVisibility());
+        host.hasWindow = true;
+        controller.refreshPages();
+        assertTrue(wall.isLive(2));
+        assertEquals(View.GONE, card.getVisibility());
+    }
+
+    @Test public void landingOnTheEmptyTerminalPageStartsOneShellAndTheCardGivesWay() {
+        host.hasWindow = false;
+        host.canStart = true;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertNotNull(wall.cardOf(2));
+        swipe(-600f);
+        assertEquals(2, on());
+        assertEquals(1, host.shellsStarted);
+        assertTrue(wall.isLive(2));
+        assertEquals(View.GONE, wall.cardOf(2).getVisibility());
+    }
 }
