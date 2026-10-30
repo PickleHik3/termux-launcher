@@ -111,21 +111,6 @@ public class PaneWallPolicyTest {
     }
 
     @Test
-    public void relativePositionIsTheDistanceAlongTheLine() {
-        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.WIDGETS));
-        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
-        // From Home the Display page is two steps to the right: the row does not wrap.
-        assertEquals(2, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.DISPLAY));
-        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
-        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
-        assertEquals(-2, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.WIDGETS));
-        assertEquals(0, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.DISPLAY));
-        // On a line the distance is what it is.
-        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, false, true);
-        assertEquals(-1, PaneWallPolicy.relativePosition(twoPages, PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
-    }
-
-    @Test
     public void theTilesAreTheNeighboursLeftFirst() {
         assertEquals(java.util.Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY),
             PaneWallPolicy.tiles(all(), PaneWallPage.TERMINAL));

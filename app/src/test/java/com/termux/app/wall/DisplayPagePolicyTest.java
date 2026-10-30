@@ -46,101 +46,9 @@ public class DisplayPagePolicyTest {
 
     // ---- slots ----------------------------------------------------------------------------
 
-    @Test
-    public void wallSlotsLeaveDisplayPagesOutUnlessAsked() {
-        WallPages pages = oneDisplay();
-        assertEquals(2, PaneWallPolicy.wallSlots(pages, true).size());
-        assertEquals(2, PaneWallPolicy.wallSlots(pages, true, false).size());
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(pages, true, true);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY), PaneWallPolicy.kindsOf(slots));
-        assertEquals(Collections.singletonList(4), slots.get(2).pageIds);
-    }
-
-    @Test
-    public void displayPagesAreOneSlotEach() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        assertEquals(4, slots.size());
-        assertEquals(5, slots.get(1).id());
-        assertEquals(4, slots.get(3).id());
-    }
-
-    @Test
-    public void displaySlotsStayWithoutAWindow() {
-        // The Terminal slot goes with the row's last window; the Display slots do not.
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), false, true);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY,
-            PaneWallPage.DISPLAY), PaneWallPolicy.kindsOf(slots));
-    }
-
     // ---- the bound Display slot -------------------------------------------------------------
 
-    @Test
-    public void boundDisplaySlotIsTheCurrentDisplayPage() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 1, 3));
-        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 3, 1));
-    }
-
-    @Test
-    public void boundDisplaySlotFromTheTerminalIsTheOneNextDoor() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        // From the Terminal, a Display page on each side: the left one, unless the right is bound.
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 2, -1));
-        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 2, 3));
-        // From Home, the Display page next door takes the view, whichever was bound.
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 0, 3));
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 0, -1));
-    }
-
-    @Test
-    public void boundDisplaySlotKeepsTheBoundNeighbourOnEitherSide() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(displayBetweenHomes(), true, true);
-        // [Home 1][Display 4][Home 2][Terminal 3]
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 0, -1));
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 2, -1));
-        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 3, -1));
-    }
-
-    @Test
-    public void noDisplaySlotBindsNothing() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(oneDisplay(), true);
-        assertEquals(-1, PaneWallPolicy.boundDisplaySlot(slots, 1, -1));
-    }
-
-    @Test
-    public void boundHomeSlotReadsAsBefore() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(displayBetweenHomes(), true, true);
-        assertEquals(0, PaneWallPolicy.boundHomeSlot(slots, 0, 2));
-        assertEquals(2, PaneWallPolicy.boundHomeSlot(slots, 1, 2));
-        assertEquals(0, PaneWallPolicy.boundHomeSlot(slots, 1, -1));
-        assertEquals(2, PaneWallPolicy.boundHomeSlot(slots, 3, 0));
-    }
-
     // ---- the built window ---------------------------------------------------------------------
-
-    @Test
-    public void builtWindowHasTheDisplayPageBesideTheTerminal() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(oneDisplay(), true, true);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY), PaneWallPolicy.builtWindow(slots, 1, 0, 2));
-        assertEquals(Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
-            PaneWallPolicy.builtWindow(slots, 2, 0, 2));
-    }
-
-    @Test
-    public void builtWindowHoldsOnlyTheBoundDisplaySlot() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(displayBetweenHomes(), true, true);
-        // [Home 1][Display 4][Home 2][Terminal 3], on Display 4: both Home runs are its
-        // neighbours, and only the bound one stands.
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY),
-            PaneWallPolicy.builtWindow(slots, 1, 0, 1));
-        assertEquals(Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.WIDGETS),
-            PaneWallPolicy.builtWindow(slots, 1, 2, 1));
-        // On Home 1 with the view bound elsewhere, the Display page is left out.
-        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS),
-            PaneWallPolicy.builtWindow(slots, 0, 0, -1));
-    }
 
     @Test
     public void twoDisplayPagesMayStandSideBySide() {
@@ -148,21 +56,6 @@ public class DisplayPagePolicyTest {
         WallPages.Result beside = oneDisplay().add(PageKind.DISPLAY, 4, "firefox");
         assertTrue(beside.ok());
         assertTrue(beside.pages.hasAdjacentDisplays());
-    }
-
-    @Test
-    public void onlyTheBoundDisplayPageStandsBesideTheTerminal() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        // On the Terminal between them, only the bound Display page stands beside it.
-        assertEquals(Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.TERMINAL),
-            PaneWallPolicy.builtWindow(slots, 2, 0, 1));
-    }
-
-    @Test
-    public void threeArgBuiltWindowIsUnchangedWithoutDisplaySlots() {
-        List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(oneDisplay(), true);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL),
-            PaneWallPolicy.builtWindow(slots, 1, 0));
     }
 
     // ---- what a Display page shows ------------------------------------------------------------
