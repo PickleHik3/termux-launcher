@@ -18,6 +18,8 @@ public class SetupWizardGateTest {
     public void tourOrUseAsMakesAnUpdater() {
         assertTrue(SetupWizardGate.decide(0, true, false).updater);
         assertTrue(SetupWizardGate.decide(0, false, true).updater);
+        assertTrue(SetupWizardGate.decide(0, false, false, true).updater);
+        assertFalse(SetupWizardGate.decide(0, false, false, false).updater);
     }
 
     @Test

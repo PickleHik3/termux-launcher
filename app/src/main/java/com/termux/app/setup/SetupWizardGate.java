@@ -41,6 +41,15 @@ public final class SetupWizardGate {
      * @param useAsWritten  whether Use as was ever stored
      */
     public static Decision decide(int storedVersion, boolean tourCompleted, boolean useAsWritten) {
-        return new Decision(storedVersion < CURRENT, tourCompleted || useAsWritten);
+        return decide(storedVersion, tourCompleted, useAsWritten, false);
+    }
+
+    /**
+     * @param firstRunSeen whether an older build's first-run card was ever answered (the wallpaper
+     *                     prompt flag): an updater who never finished the old tour nor touched Use as
+     */
+    public static Decision decide(int storedVersion, boolean tourCompleted, boolean useAsWritten,
+                                  boolean firstRunSeen) {
+        return new Decision(storedVersion < CURRENT, tourCompleted || useAsWritten || firstRunSeen);
     }
 }

@@ -2766,7 +2766,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.setup.SetupWizardGate.Decision decision =
             com.termux.app.setup.SetupWizardGate.decide(mPreferences.getSetupWizardVersion(),
                 mPreferences.getFirstBootTourCompletedVersion() >= 1,
-                mPreferences.isUseAsStored());
+                mPreferences.isUseAsStored(),
+                mPreferences.isWallpaperReadPermissionPrompted());
         if (!decision.show) return false;
         setupWizard().migrateFromOldTourIfDue(decision);
         setupWizard().open(decision.updater);
