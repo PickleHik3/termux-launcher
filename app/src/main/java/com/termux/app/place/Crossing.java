@@ -74,6 +74,12 @@ public final class Crossing {
 
         /** The picture goes, and what it held with it. */
         default void dropPicture() {}
+
+        /**
+         * The stack drawn {@code widths} of the wall's width across from its rest, riding with
+         * the arriving page ({@link SeamCrossing.Answers#stackSlide}); 0 puts it back.
+         */
+        default void slide(float widths) {}
     }
 
     /** The status bar, riding with the Workspace's page. */
@@ -117,7 +123,6 @@ public final class Crossing {
         boolean contentPreRolled;
         boolean beadsMelted;
         boolean storeMoved;
-        boolean rises;
         int terminalPreSizePx;
         @Nullable GeometryScheduler.Transition gridHold;
         @NonNull SeamCrossing.Landing seam;
@@ -144,12 +149,6 @@ public final class Crossing {
          * store again from here, and the landing lays it out whole.
          */
         public boolean storeMoved() { return storeMoved; }
-        /**
-         * Whether the stack stands below the screen after the landing and rises into its place
-         * now ({@link Crossing#rise}): it waited for the page to land
-         * ({@link SeamDress#stackRisesAfterLanding}).
-         */
-        public boolean rises() { return rises; }
         /** The grid's paused resize, for the settle to end after its layout; null if none. */
         @Nullable public GeometryScheduler.Transition gridHold() { return gridHold; }
         /** What the seam's crossing has left to do; nothing for a hold let go on its own. */
@@ -190,22 +189,15 @@ public final class Crossing {
     private int mCoverPx;
     /** How much shorter the terminal's page is laid out for the slide; 0 while it is not. */
     private int mTerminalPreSizePx;
+    /**
+     * How much shorter the terminal's page is laid out while the wall rests away from the
+     * Terminal ({@link #restTerminalAway}); 0 on the Terminal. Not a crossing's: it outlives them.
+     */
+    private int mTerminalAwayPx;
 
     // ---- What the frames ease ----
     private float mFoldShare = Float.NaN;
     private float mBeadShare = Float.NaN;
-    /** The stack's translation the last frame drew, all of it and the keyboard's part. */
-    private float mStackPx;
-    private float mStackKeyboardPx;
-
-    // ---- After the landing ----
-    /**
-     * Where the stack stood below the screen as the wall landed, for a stack that rises after it
-     * ({@link SeamDress#stackRisesAfterLanding}): all of it and the keyboard's part; 0 while none
-     * rises.
-     */
-    private float mRiseFromPx;
-    private float mRiseKeyboardFromPx;
 
     private final Landing mLanding = new Landing(new SeamCrossing.Landing());
     /** What a hold let go on its own hands back for the seam: nothing to do. Never written. */
@@ -240,8 +232,6 @@ public final class Crossing {
         boolean begins = !crossing();
         if (begins && (here.arrangement == null || there.arrangement == null))
             throw new IllegalArgumentException("a crossing's ends carry their arrangements");
-        // A rise still under way hands the stack to the crossing's frames.
-        stopRise();
         mSeam.begin(here, there, stage);
         if (!begins) return;
         if (MotionLog.enabled) MotionLog.log("crossing-begin", "revision=" + revision);
@@ -303,8 +293,6 @@ public final class Crossing {
      */
     public float stack(@NonNull SeamCrossing.Answers seam, float dockReveal, int keyboardPx,
                        int dockPx, int rowsPx) {
-        // A travel frame draws the stack where it answers: a rise under way ends.
-        stopRise();
         float keyboardReveal = seam.keyboardReveal();
         boolean rowsSink = seam.rowsSink(keyboardPx);
         if (seam.folds()) {
@@ -318,15 +306,16 @@ public final class Crossing {
         }
         float translation = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
             rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
-        mStackPx = translation;
-        mStackKeyboardPx = keyboardPx * (1f - clamp01(keyboardReveal));
-        mStack.translate(translation, mStackKeyboardPx);
+        mStack.translate(translation, keyboardPx * (1f - clamp01(keyboardReveal)));
         // The committed half's stack, pictured, goes as the other half's comes: sinking, or
         // riding out with its page while the other half's waits for the landing.
         float picture = seam.pictureReveal();
         if (!Float.isNaN(picture)) mStack.pictureAt(clamp01(picture));
         float slide = seam.pictureSlide();
         if (!Float.isNaN(slide)) mStack.pictureSlide(slide);
+        // And the stack dressed for the other half rides in with its page, or stands at its own.
+        float stackSlide = seam.stackSlide();
+        mStack.slide(Float.isNaN(stackSlide) ? 0f : stackSlide);
         return translation;
     }
 
@@ -353,7 +342,6 @@ public final class Crossing {
      * cover for it under the hold.
      */
     public void keyboardSwipe(float translationPx) {
-        stopRise();
         mStack.translate(translationPx, translationPx);
         coverAt(translationPx);
     }
@@ -503,7 +491,18 @@ public final class Crossing {
         hold(reservationPx);
         mContentPreRolled = true;
         mHeldReservationPx = Math.max(0, mHeldReservationPx - roomGivenBackPx);
+        // Leaving the Terminal for Home, the terminal's page keeps the Terminal's rest (D11): it is
+        // laid out short of the room given back, so its grid does not change, and it stays so for
+        // as long as the wall rests on Home (land).
+        if (leavesTerminalForHome()) preSizeTerminal(roomGivenBackPx, reservationPx);
         return mGridHold == null;
+    }
+
+    /** Whether this crossing runs from the Terminal toward Home. */
+    private boolean leavesTerminalForHome() {
+        SeamCrossing.Endpoint there = mThere;
+        return mCommitted == PaneWallPage.TERMINAL && there != null
+            && there.page.kind == PaneWallPage.WIDGETS;
     }
 
     public boolean contentPreRolled() {
@@ -547,8 +546,11 @@ public final class Crossing {
      */
     public void coverAt(float stackTranslationPx, int pictureCoverPx) {
         if (!mHoldsContent) return;
-        int px = coverPx(PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx),
-            pictureCoverPx, mTerminalPreSizePx);
+        // Stacks that ride stand on their own pages, never over the window in front: the
+        // terminal's page is laid out at the Terminal's rest, its own stack under it.
+        int px = mSeam.stacksRide() ? 0
+            : coverPx(PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx),
+                pictureCoverPx, mTerminalPreSizePx);
         mCoverPx = px;
         mCover.cover(px);
     }
@@ -575,6 +577,26 @@ public final class Crossing {
     /** How much shorter the terminal's page is laid out for the slide; 0 while it is not. */
     public int terminalPreSizePx() {
         return mTerminalPreSizePx;
+    }
+
+    /**
+     * The terminal's page laid out {@code px} shorter than the content's room while the wall rests
+     * away from the Terminal (0 on it): the room the Terminal's rest takes beyond the room the page
+     * on screen leaves, so the terminal's grid is the Terminal's rest wherever the wall stands
+     * (D11) and a crossing back has nothing to resize. A crossing that left the Terminal for Home
+     * lands with it already set ({@link #land}); between crossings only.
+     */
+    public void restTerminalAway(int px) {
+        if (crossing()) return;
+        int inset = Math.max(0, px);
+        if (inset == mTerminalAwayPx) return;
+        mTerminalAwayPx = inset;
+        mCover.preSize(inset);
+    }
+
+    /** How much shorter the terminal's page is laid out at rest away from the Terminal. */
+    public int terminalAwayPx() {
+        return mTerminalAwayPx;
     }
 
     // ---- What the frames ease ----
@@ -608,20 +630,9 @@ public final class Crossing {
         if (MotionLog.enabled) MotionLog.log("land", "landed=" + landed + " revision=" + revision);
         // The picture goes in the frame the stack is put back at its rest, whichever half that is.
         if (mSeam.pictured()) mStack.dropPicture();
-        // A stack that waited below the screen for the landing stays there, to rise from it
-        // (rise); its room is already the landed rest's, so nothing but the stack moves.
-        PaneWallPage other = mSeam.other();
-        boolean rises = mSeam.stackRisesAfterLanding() && other != null
-            && !SeamTravel.crosses(other, landed.kind);
-        float heldPx = mStackPx;
-        float heldKeyboardPx = mStackKeyboardPx;
-        Landing landing = releaseInto(mLanding);
-        landing.rises = rises && heldPx > 0f;
-        if (landing.rises) {
-            mRiseFromPx = heldPx;
-            mRiseKeyboardFromPx = heldKeyboardPx;
-            mStack.translate(mRiseFromPx, mRiseKeyboardFromPx);
-        }
+        // Landed on Home, the terminal's page keeps the size it crossed at (restTerminalAway).
+        Landing landing = releaseInto(mLanding, landed.kind == PaneWallPage.WIDGETS
+            ? appliedTerminalInsetPx() : 0);
         landing.beadsMelted = !Float.isNaN(mBeadShare);
         landing.storeMoved = mCommitted != null && revision != mRevision;
         landing.seam = mSeam.land();
@@ -652,16 +663,21 @@ public final class Crossing {
      */
     @NonNull
     public Landing releaseHold() {
-        Landing landing = releaseInto(mLanding);
+        Landing landing = releaseInto(mLanding, appliedTerminalInsetPx());
         landing.beadsMelted = false;
         landing.storeMoved = false;
-        landing.rises = false;
         landing.seam = mNoSeam;
         return landing;
     }
 
+    /** The inset the terminal's page is laid out with now: the slide's pre-size, else the rest's. */
+    private int appliedTerminalInsetPx() {
+        return mTerminalPreSizePx > 0 ? mTerminalPreSizePx : mTerminalAwayPx;
+    }
+
+    /** @param terminalInsetPx the inset the terminal's page keeps after the hold */
     @NonNull
-    private Landing releaseInto(@NonNull Landing landing) {
+    private Landing releaseInto(@NonNull Landing landing, int terminalInsetPx) {
         landing.held = mHoldsContent;
         landing.keyboardPreRolled = mKeyboardPreRolled;
         landing.contentPreRolled = mContentPreRolled;
@@ -681,54 +697,23 @@ public final class Crossing {
         mRoomChangePx = 0;
         // The grid's hold is handed to the settle, which ends it after its layout.
         mGridHold = null;
-        mStackPx = 0f;
-        mStackKeyboardPx = 0f;
-        mRiseFromPx = 0f;
-        mRiseKeyboardFromPx = 0f;
         mStack.translate(0f, 0f);
+        mStack.slide(0f);
         mCoverPx = 0;
         if (covered) mCover.cover(0);
         // The page takes the content's room back in the landing's pass, which gives the content
-        // the room it was laid out short of: the panes keep their size.
-        if (mTerminalPreSizePx != 0) {
-            mTerminalPreSizePx = 0;
-            mCover.preSize(0);
-        }
+        // the room it was laid out short of: the panes keep their size. Resting away from the
+        // Terminal, it keeps what the Terminal's rest takes beyond that room instead.
+        int applied = appliedTerminalInsetPx();
+        mTerminalPreSizePx = 0;
+        mTerminalAwayPx = Math.max(0, terminalInsetPx);
+        if (applied != mTerminalAwayPx) mCover.preSize(mTerminalAwayPx);
         return landing;
     }
 
     /** After the page's commit, the stack's dress the seam kept through it lets go. */
     public void end() {
         mSeam.end();
-    }
-
-    // ---- After the landing ----
-
-    /**
-     * The stack that waited for the landing ({@link Landing#rises}) drawn with {@code reveal} of
-     * its way up done: from where it stood below the screen at 0 to its place at 1, which ends
-     * the rise. A translation only: the room was the landed rest's already, so the content and
-     * the terminal's rows do not move. Nothing while none rises.
-     */
-    public void rise(float reveal) {
-        if (!rising()) return;
-        float rest = 1f - clamp01(reveal);
-        mStack.translate(mRiseFromPx * rest, mRiseKeyboardFromPx * rest);
-        if (rest == 0f) {
-            mRiseFromPx = 0f;
-            mRiseKeyboardFromPx = 0f;
-        }
-    }
-
-    /** A rise under way ends where it stands: what moves the stack next owns it. */
-    private void stopRise() {
-        mRiseFromPx = 0f;
-        mRiseKeyboardFromPx = 0f;
-    }
-
-    /** Whether a stack is rising after a landing ({@link #rise}). */
-    public boolean rising() {
-        return mRiseFromPx != 0f || mRiseKeyboardFromPx != 0f;
     }
 
     /**

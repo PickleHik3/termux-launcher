@@ -130,7 +130,7 @@ public class CrossingTest {
         // The picture of the committed half's stack, and the terminal page's pre-size.
         boolean pictureTaken = true;
         int pictures, pictureDrops;
-        float pictureReveal = Float.NaN, pictureSlide = Float.NaN;
+        float pictureReveal = Float.NaN, pictureSlide = Float.NaN, slide = Float.NaN;
         int preSizePx = -1;
         int covers, preSizes;
         final List<PaneWallPage> preRolls = new ArrayList<>();
@@ -165,6 +165,7 @@ public class CrossingTest {
         }
         @Override public void pictureAt(float reveal) { pictureReveal = reveal; }
         @Override public void pictureSlide(float widths) { pictureSlide = widths; }
+        @Override public void slide(float widths) { slide = widths; }
         @Override public void dropPicture() { pictureDrops++; }
         @Override public void preRoll(@NonNull PaneWallPage target) { preRolls.add(target); }
         @Override public void beginMorph(@NonNull DockLayout from, @NonNull DockLayout to) {
@@ -548,97 +549,65 @@ public class CrossingTest {
     }
 
     /**
-     * Halves dressed apart, both standing a stack, from the Terminal: the leaving stack is
-     * pictured once, before the row hears of the crossing, the picture sinks as the stack rises,
-     * the row wears the arriving rest from the first frame, and the landing takes the picture
-     * away.
+     * Halves dressed apart, both standing a stack, either way: the leaving stack is pictured
+     * once, before the row hears of the crossing, and each stack rides with its own page
+     * (SeamDress#stacksRide): the picture out with the committed page, whole, the stack dressed
+     * for the other half in with the arriving page, at its rest, the row wearing the arriving
+     * rest from the first frame. Neither covers the window in front, so the terminal's page,
+     * laid out at the Terminal's rest, has its own stack under it all the way. The landing takes
+     * the picture away and puts the stack back at its place.
      */
     @Test
-    public void aWholeStackDipPicturesTheLeavingStackAndCrossesBothOverTheWholeWay() {
-        PaneWallPage from = PaneWallPage.TERMINAL;
-        Drive drive = new Drive(from, true, false, true);
-        for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
-            float fraction = Math.min(1f, f);
-            SeamCrossing.Answers answers = drive.step(fraction);
-            assertTrue(from + " pictured", drive.crossing.seam().pictured());
-            assertEquals(from + " picture at " + fraction, 1f - fraction,
-                drive.moves.pictureReveal, 1e-4f);
-            assertEquals(from + " stack at " + fraction, fraction, answers.dockReveal(), 1e-4f);
-            assertEquals(from + " the stack's translation at " + fraction,
-                200f * (1f - fraction), drive.moves.dockPx, 0.05f);
-            assertArrayEquals(from + " the arriving rest throughout",
-                dressOf(restOf(across(from))), drive.dress());
+    public void aWholeStackDipRidesEachStackWithItsPage() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false, true);
+            drive.crossing.hold(500);
+            for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
+                float fraction = Math.min(1f, f);
+                SeamCrossing.Answers answers = drive.step(fraction);
+                drive.crossing.coverAt(drive.moves.dockPx, 300);
+                assertTrue(from + " pictured", drive.crossing.seam().pictured());
+                assertTrue(from + " rides", drive.crossing.seam().stacksRide());
+                assertEquals(from + " picture whole at " + fraction, 1f,
+                    drive.moves.pictureReveal, 1e-4f);
+                float committedShare = from == PaneWallPage.WIDGETS ? -fraction : fraction;
+                assertEquals(from + " picture with its page at " + fraction, committedShare,
+                    drive.moves.pictureSlide, 1e-4f);
+                assertEquals(from + " stack with the arriving page at " + fraction,
+                    committedShare + (from == PaneWallPage.WIDGETS ? 1f : -1f),
+                    drive.moves.slide, 1e-4f);
+                assertEquals(1f, answers.dockReveal(), 1e-4f);
+                assertEquals(from + " the stack at its rest at " + fraction, 0f,
+                    drive.moves.dockPx, 0.05f);
+                assertEquals(from + " nothing covered at " + fraction, 0, drive.moves.coverPx);
+                assertArrayEquals(from + " the arriving rest throughout",
+                    dressOf(restOf(across(from))), drive.dress());
+            }
+            assertEquals(1, drive.moves.pictures);
+            assertEquals(0, drive.moves.pictureDrops);
+            drive.crossing.land(PageRef.of(across(from)), REVISION);
+            assertEquals(1, drive.moves.pictureDrops);
+            assertEquals(from + " the stack back at its place", 0f, drive.moves.slide, 0f);
+            assertEquals(0f, drive.moves.dockPx, 0f);
+            drive.crossing.end();
+            assertTrue(drive.crossing.idle());
         }
-        assertTrue(Float.isNaN(drive.moves.pictureSlide));
-        assertEquals(1, drive.moves.pictures);
-        assertEquals(0, drive.moves.pictureDrops);
-        assertFalse(drive.crossing.land(PageRef.of(across(from)), REVISION).rises());
-        assertEquals(1, drive.moves.pictureDrops);
-        drive.crossing.end();
-        assertTrue(drive.crossing.idle());
     }
 
-    /**
-     * The same from Home (the developer's decision, 2026-10-31): Home's dock, pictured whole,
-     * rides out with the Home page while the Terminal's stack stands below the screen; once the
-     * page has landed the stack rises from there into its place, and nothing of the rise touches
-     * the room the terminal holds: no cover, no pre-size, so the terminal's rows stay as the
-     * slide sized them (one resize per crossing).
-     */
+    /** Turned back, both stacks ride back with their pages to where they stood. */
     @Test
-    public void fromHomeTheStackWaitsBelowTheScreenAndRisesAfterTheLanding() {
-        Drive drive = new Drive(PaneWallPage.WIDGETS, false, true, true);
-        for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
-            float fraction = Math.min(1f, f);
-            SeamCrossing.Answers answers = drive.step(fraction);
-            assertTrue(drive.crossing.seam().pictured());
-            assertEquals("Home's dock whole at " + fraction, 1f, drive.moves.pictureReveal, 1e-4f);
-            assertEquals("Home's dock with its page at " + fraction, -fraction,
-                drive.moves.pictureSlide, 1e-4f);
-            assertEquals(0f, answers.dockReveal(), 1e-4f);
-            assertEquals("the stack below the screen at " + fraction, 200f, drive.moves.dockPx,
-                0.05f);
-            assertArrayEquals(dressOf(restOf(PaneWallPage.TERMINAL)), drive.dress());
-        }
-        Crossing.Landing landing = drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL),
-            REVISION);
-        assertTrue("it rises", landing.rises());
-        assertEquals(1, drive.moves.pictureDrops);
-        assertEquals("still below the screen as the page lands", 200f, drive.moves.dockPx, 0.05f);
-        drive.crossing.end();
-        int covers = drive.moves.covers;
-        int preSizes = drive.moves.preSizes;
-        assertTrue(drive.crossing.rising());
-        drive.crossing.rise(0.5f);
-        assertEquals(100f, drive.moves.dockPx, 0.05f);
-        drive.crossing.rise(1f);
-        assertEquals("in its place", 0f, drive.moves.dockPx, 0f);
-        assertFalse(drive.crossing.rising());
-        assertEquals("the rise covers nothing", covers, drive.moves.covers);
-        assertEquals("the rise pre-sizes nothing", preSizes, drive.moves.preSizes);
-        assertTrue(drive.crossing.idle());
-    }
-
-    /** Back on Home nothing rises; and a rise yields to the next crossing's frames. */
-    @Test
-    public void aRiseYieldsAndNothingRisesBackOnHome() {
+    public void aRideTurnedBackPutsBothStacksBackWithTheirPages() {
         Drive back = new Drive(PaneWallPage.WIDGETS, false, true, true);
         back.step(0.4f);
+        assertEquals(-0.4f, back.moves.pictureSlide, 1e-4f);
+        assertEquals(0.6f, back.moves.slide, 1e-4f);
         back.step(0f);
-        assertEquals(0f, back.moves.pictureSlide, 1e-4f);
-        assertFalse(back.crossing.land(PageRef.of(PaneWallPage.WIDGETS), REVISION).rises());
+        assertEquals("Home's dock back with its page", 0f, back.moves.pictureSlide, 1e-4f);
+        assertEquals("the Terminal's stack off with its page", 1f, back.moves.slide, 1e-4f);
+        back.crossing.land(PageRef.of(PaneWallPage.WIDGETS), REVISION);
+        assertEquals(0f, back.moves.slide, 0f);
         back.crossing.end();
-        assertFalse(back.crossing.rising());
-
-        Drive drive = new Drive(PaneWallPage.WIDGETS, false, true, true);
-        drive.step(1f);
-        assertTrue(drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION).rises());
-        drive.crossing.end();
-        drive.crossing.rise(0.25f);
-        drive.crossing.keyboardSwipe(40f);
-        assertFalse("the swipe owns the stack", drive.crossing.rising());
-        drive.crossing.rise(1f);
-        assertEquals(40f, drive.moves.dockPx, 0f);
+        assertTrue(back.crossing.idle());
     }
 
     @Test

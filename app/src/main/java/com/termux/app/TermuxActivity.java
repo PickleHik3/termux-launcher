@@ -24556,9 +24556,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setTravelDisplacement(0, 0f);
             return;
         }
-        // A pre-sized page has its room already; what is left of the change is the settle's.
-        int preSized = arriving == com.termux.app.wall.PaneWallPage.TERMINAL
-            ? mCrossing.terminalPreSizePx() : 0;
+        // A pre-sized page has its room already; what is left of the change is the settle's. Toward
+        // the terminal the pre-size is room taken ahead of it; away from it, toward Home, it is
+        // room given back that the page does not take (Crossing#giveRoomBack).
+        int preSized = mCrossing.terminalPreSizePx();
+        if (arriving != com.termux.app.wall.PaneWallPage.TERMINAL) preSized = -preSized;
         view.setTravelDisplacement(travelRoomChangePx(arriving) + preSized,
             com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
     }
@@ -24891,6 +24893,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void slide(float widths) {
+            View stack = hotView(R.id.accessory_stack_container);
+            if (stack == null) return;
+            int width = mPaneWallController != null && mPaneWallController.wall().getWidth() > 0
+                ? mPaneWallController.wall().getWidth() : stack.getWidth();
+            float x = widths * width;
+            if (stack.getTranslationX() == x) return;
+            stack.setTranslationX(x);
+            // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
+            View backdrop = hotView(R.id.accessory_blur_backdrop);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+        }
+
+        @Override
         public void dropPicture() {
             if (mStackPicture == null) return;
             // Back at its rest the picture is the stack, under it: it goes once a keyboard
@@ -24989,45 +25005,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         settlePlaceChrome(page, null);
     }
 
-    /** The stack's rise after a landing (Crossing#rise); null while none runs. */
-    @Nullable private android.animation.ValueAnimator mStackRise;
-
-    /**
-     * The stack a crossing kept below the screen until its page landed rises into its place, on
-     * its own short clock (SeamDress#landingRiseReveal). A translation only: the room is the
-     * landed rest's already. A crossing or a keyboard swipe that takes the stack first ends it
-     * (Crossing#rise does nothing once they have), and reduced motion or animations off put it
-     * at its place at once.
-     */
-    private void startStackRiseAfterLanding() {
-        android.animation.ValueAnimator running = mStackRise;
-        mStackRise = null;
-        if (running != null) running.cancel();
-        long durationMs = com.termux.app.AnimationSpeed.scale(this,
-            com.termux.app.place.SeamDress.LANDING_RISE_MS);
-        if (isReducedMotionEnabled() || durationMs <= 0L) {
-            mCrossing.rise(1f);
-            return;
-        }
-        android.animation.ValueAnimator rise = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        rise.setDuration(durationMs);
-        rise.setInterpolator(new android.view.animation.LinearInterpolator());
-        rise.addUpdateListener(animation -> {
-            if (mStackRise != animation) return;
-            mCrossing.rise(com.termux.app.place.SeamDress.landingRiseReveal(
-                animation.getAnimatedFraction()));
-        });
-        rise.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator animation) {
-                if (mStackRise != animation) return;
-                mStackRise = null;
-                mCrossing.rise(1f);
-            }
-        });
-        mStackRise = rise;
-        rise.start();
-    }
-
     /**
      * The same, with the page the crossing lands on named ({@code landed}): a crossing between two
      * Home pages lands on the Home page Home's pager settled on, by its id, while the wall stays on
@@ -25082,9 +25059,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
-            // A stack that waited below the screen for the page to land rises into its place
-            // now, into the room the terminal already holds for it (SeamDress#stackRisesAfterLanding).
-            if (crossingLanding.rises()) startStackRiseAfterLanding();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();
@@ -25126,6 +25100,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            syncTerminalAway(page);
             if (beadsMelted) applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
@@ -25180,6 +25155,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Resting on Home, the terminal's page is laid out at the Terminal's rest, not at Home's room
+     * (Crossing#restTerminalAway, D11): it is not seen there, and a crossing back then finds
+     * nothing to resize. A crossing that left the Terminal landed with it already set, to the
+     * room the Terminal stood in, which is kept; a landing on Home with no crossing behind it
+     * (reduced motion, a jump) sets it here, in the settle's batch, before the pass that gives
+     * the content Home's room. Anywhere else it is 0.
+     */
+    private void syncTerminalAway(@NonNull com.termux.app.wall.PaneWallPage page) {
+        boolean home = page == com.termux.app.wall.PaneWallPage.WIDGETS && mLastWallPage == page;
+        if (!home) {
+            mCrossing.restTerminalAway(0);
+        } else if (mCrossing.terminalAwayPx() == 0) {
+            mCrossing.restTerminalAway(
+                travelRestReservationPx(com.termux.app.wall.PaneWallPage.TERMINAL)
+                    - travelRestReservationPx(com.termux.app.wall.PaneWallPage.WIDGETS));
+        }
     }
 
     /**
