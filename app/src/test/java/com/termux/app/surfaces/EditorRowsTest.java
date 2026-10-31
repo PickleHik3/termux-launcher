@@ -179,7 +179,7 @@ public class EditorRowsTest {
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
             Row.VIBRANCY, Row.GLASS_EDGE})
-            assertEquals(row + " is vertical", Kind.STRIP, row.kind);
+            assertEquals(row + " is vertical", Kind.SLIDER, row.kind);
         for (Row row : Row.values()) {
             if (row != Row.LOOK)
                 assertTrue(row + " is no second horizontal slider", row.kind != Kind.LOOK);
@@ -199,8 +199,8 @@ public class EditorRowsTest {
                     inRun = false;
                     continue;
                 }
-                boolean strip = row.kind == Kind.STRIP
-                    || CardBody.shape(row) == CardBody.Shape.STRIP_LINK;
+                boolean strip = row.kind == Kind.SLIDER
+                    || CardBody.shape(row) == CardBody.Shape.SLIDER_LINK;
                 if (strip && !inRun)
                     runs++;
                 inRun = strip;
@@ -209,11 +209,11 @@ public class EditorRowsTest {
             // Grain under More, so a card may hold several runs; it holds one at least.
             assertTrue(card + " has a slider", runs >= 1);
             for (int i = 0; i < rows.size(); i++) {
-                if (CardBody.shape(rows.get(i)) != CardBody.Shape.STRIP_LINK)
+                if (CardBody.shape(rows.get(i)) != CardBody.Shape.SLIDER_LINK)
                     continue;
                 assertTrue(card + ": a link stands between two strips", i > 0
-                    && i < rows.size() - 1 && rows.get(i - 1).kind == Kind.STRIP
-                    && rows.get(i + 1).kind == Kind.STRIP);
+                    && i < rows.size() - 1 && rows.get(i - 1).kind == Kind.SLIDER
+                    && rows.get(i + 1).kind == Kind.SLIDER);
             }
         }
     }

@@ -292,7 +292,7 @@ public class EditorCardBodyTest {
             if (held != null)
                 return held;
             switch (CardBody.shape(row)) {
-                case STRIP: return 50;
+                case SLIDER: return 50;
                 case STEPPER: return 4;
                 case TILES: return 1;
                 default: return row == Row.LOOK ? AppearanceLooks.CUSTOM_STOP : 0;

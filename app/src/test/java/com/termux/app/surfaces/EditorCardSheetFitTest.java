@@ -305,35 +305,6 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void everyStripStandsOnOneLineWhenItsColumnsFit() {
-        for (float scale : new float[] {1f, 1.3f}) {
-            for (EditorCard card : EditorCard.values()) {
-                if (CardBody.redesigned(card))
-                    continue;
-                Fixture fixture = new Fixture(card, scale);
-                fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
-                fixture.layOut();
-                List<LegendSlider> legends = legends(fixture.sheet.rows());
-                java.util.Set<Object> lines = new java.util.HashSet<>();
-                for (LegendSlider legend : legends)
-                    lines.add(legend.getParent());
-                int min = legends.get(0).minColumnWidthPx();
-                int room = fixture.parent.getWidth() - 2 * fixture.dp(16);
-                boolean fits = legends.size() * min <= room;
-                System.out.println("strip " + card + " at " + scale + ": " + legends.size()
-                    + " columns, " + lines.size() + " lines, column " + legends.get(0).getWidth()
-                    + "px, min " + min + "px");
-                // The row set splits the sliders into runs (Frost to Tint, Corners to Edge, then
-                // Grain and the card's own under More): each run that fits is one line.
-                int runs = stripRuns(card);
-                if (fits)
-                    assertTrue(card + " at " + scale + ": a line per run, " + lines.size() + " for "
-                        + runs, lines.size() <= runs);
-            }
-        }
-    }
-
-    @Test
     public void rendersOfTheCardsAtDefaultAndLargeText() throws java.io.IOException {
         for (float scale : new float[] {1f, 1.3f}) {
             for (EditorCard card : EditorCard.values()) {
@@ -359,33 +330,6 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void everyGlassStripsLegendsStandWholeInTheirColumnsAtAnyTextSize() {
-        for (float scale : new float[] {1f, 1.3f, 2f}) {
-            for (EditorCard card : EditorCard.values()) {
-                if (CardBody.redesigned(card))
-                    continue;
-                Fixture fixture = new Fixture(card, scale);
-                fixture.layOut();
-                List<LegendSlider> legends = legends(fixture.sheet.rows());
-                assertFalse(card + " has a strip", legends.isEmpty());
-                for (LegendSlider slider : legends) {
-                    assertTrue(card + ": a strip column is laid out", slider.getWidth() > 0
-                        && slider.getHeight() > 0);
-                    android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
-                        slider.getWidth(), slider.getHeight(),
-                        android.graphics.Bitmap.Config.ARGB_8888);
-                    slider.draw(new android.graphics.Canvas(bitmap));
-                    String at = card + " at " + scale + ", \"" + slider.legendText() + "\"";
-                    assertTrue(at + " overruns its track", slider.legendFits());
-                    assertTrue(at + " leaves its column", slider.legendInsideColumn());
-                    assertEquals(at + " is cut", slider.legendText().toString(),
-                        slider.shownLegend().toString());
-                }
-            }
-        }
-    }
-
-    @Test
     public void everySliderButTheLooksIsAStripColumnAndEveryRowIsThere() {
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))
@@ -395,7 +339,7 @@ public class EditorCardSheetFitTest {
             fixture.layOut();
             int strips = 0;
             for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
-                if (spec.row.kind == EditorRows.Kind.STRIP)
+                if (spec.row.kind == EditorRows.Kind.SLIDER)
                     strips++;
             }
             List<LegendSlider> legends = legends(fixture.sheet.rows());
@@ -413,40 +357,6 @@ public class EditorCardSheetFitTest {
                 sliders.size());
             // The row set has a More header by the spec (§3), so the old "no More" rule is gone.
         }
-    }
-
-    @Test
-    public void aStripWrapsOntoBalancedLinesAndKeepsItsColumnsInOneGrid() {
-        assertArrayEquals(new int[] {5, 4}, EditorCardSheet.stripLines(9, 7));
-        assertArrayEquals(new int[] {4, 3, 3}, EditorCardSheet.stripLines(10, 4));
-        assertArrayEquals(new int[] {3}, EditorCardSheet.stripLines(3, 7));
-        assertArrayEquals(new int[0], EditorCardSheet.stripLines(0, 7));
-        assertEquals(7, EditorCardSheet.stripCapacity(379, 42, 12));
-        assertEquals(1, EditorCardSheet.stripCapacity(30, 42, 12));
-        for (float scale : new float[] {1f, 1.3f, 2f}) {
-            for (EditorCard card : EditorCard.values()) {
-                Fixture fixture = new Fixture(card, scale);
-                fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
-                fixture.layOut();
-                List<LegendSlider> legends = legends(fixture.sheet.rows());
-                int width = legends.get(0).getWidth();
-                for (LegendSlider legend : legends) {
-                    String at = card + " at " + scale + ", " + legend.getContentDescription();
-                    assertTrue(at + " is narrower than its legend needs: " + legend.getWidth()
-                        + " < " + legend.minColumnWidthPx(),
-                        legend.getWidth() >= legend.minColumnWidthPx() - 1);
-                    if (legend.getParent() == legends.get(0).getParent()
-                        || isStripOf(legend, legends.get(0)))
-                        assertEquals(at + " leaves the grid", width, legend.getWidth(), 2);
-                }
-            }
-        }
-    }
-
-    /** Whether two columns stand in the same strip (lines under one root). */
-    private static boolean isStripOf(@NonNull View a, @NonNull View b) {
-        return a.getParent() != null && b.getParent() != null
-            && ((View) a.getParent()).getParent() == ((View) b.getParent()).getParent();
     }
 
     @NonNull
@@ -632,7 +542,7 @@ public class EditorCardSheetFitTest {
         }
 
         @Override public int value(@NonNull Row row) {
-            return row.kind == EditorRows.Kind.STRIP ? 50 : 0;
+            return row.kind == EditorRows.Kind.SLIDER ? 50 : 0;
         }
 
         @Override public int from(@NonNull Row row) {
@@ -772,8 +682,8 @@ public class EditorCardSheetFitTest {
         int runs = 0;
         boolean inRun = false;
         for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
-            boolean strip = spec.row.kind == EditorRows.Kind.STRIP
-                || CardBody.shape(spec.row) == CardBody.Shape.STRIP_LINK;
+            boolean strip = spec.row.kind == EditorRows.Kind.SLIDER
+                || CardBody.shape(spec.row) == CardBody.Shape.SLIDER_LINK;
             if (strip && !inRun) runs++;
             inRun = strip;
         }

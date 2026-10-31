@@ -33,13 +33,13 @@ public final class StepperRow {
     private final int mFrom;
     private final int mTo;
     private final int mStep;
-    @NonNull private final StripRow.Readout mReadout;
+    @NonNull private final SliderRow.Readout mReadout;
     private int mValue;
 
     private StepperRow(@NonNull LinearLayout root, @NonNull TextView title,
                        @NonNull MaterialButton minus, @NonNull MaterialButton plus,
                        @NonNull TextView value, int from, int to, int step,
-                       @NonNull StripRow.Readout readout) {
+                       @NonNull SliderRow.Readout readout) {
         this.root = root;
         this.title = title;
         this.minus = minus;
@@ -55,7 +55,7 @@ public final class StepperRow {
     @NonNull
     public static StepperRow build(@NonNull Context context, @DrawableRes int glyph,
                                    @NonNull CharSequence title, int from, int to, int step,
-                                   int value, @NonNull StripRow.Readout readout,
+                                   int value, @NonNull SliderRow.Readout readout,
                                    @NonNull OnValue onValue) {
         LinearLayout root = RowKit.line(context);
         root.addView(RowKit.glyph(context, glyph, title), RowKit.glyphParams(context));

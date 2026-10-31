@@ -47,6 +47,12 @@ import java.util.List;
  * 28dp. A legend that would overrun the column's height shrinks to 0.8x of LabelMedium first, then
  * gives up its name's tail.</p>
  *
+ * <p><b>Horizontal</b> ({@link #setHorizontal}, the editor's slider rows since 2026-10-31): the
+ * same paints, handle and stop indicator turned on their side, a 16dp track with full outer
+ * corners centred in a 48dp hit area, the minimum at the start edge. It draws no legend: its row
+ * prints the name and the value. A horizontal drag takes it at once, a vertical one is the card's
+ * ({@link StripTouchPolicy#decideAcross}), and a tap moves the handle where it lands.</p>
+ *
  * <p>The API is the subset of Material's {@code Slider} the panel used: value, range, step,
  * listeners of the same shape, and a {@link LabelFormatter} as the legend's source. Accessibility
  * presents it as a SeekBar with range info; the legend is its content description's value.</p>
@@ -89,6 +95,9 @@ public final class LegendSlider extends View {
     /** The handle's touch target along the track: M3's 48dp minimum, centred on the handle. */
     private static final float HANDLE_TOUCH_DP = 48f;
     private static final int DISABLED_ALPHA = 97;
+    /** A horizontal slider's track height (the M3 Expressive XS track) and its hit area. */
+    static final int ACROSS_TRACK_DP = 16;
+    static final int ACROSS_HIT_DP = 48;
     private static final int DISABLED_TRACK_ALPHA = 31;
 
     private float mValueFrom = 0f;
@@ -105,6 +114,8 @@ public final class LegendSlider extends View {
     private final Paint mTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
+    /** The track pieces' path, reused on every draw: a drag draws per frame. */
+    private final android.graphics.Path mPiecePath = new android.graphics.Path();
 
     private int mActiveColor;
     private int mInactiveColor;
@@ -148,6 +159,10 @@ public final class LegendSlider extends View {
     private float mLastY;
     private final float mTouchSlopPx;
     private final float mHandleTouchHalfPx;
+    /** Lies along the row ({@link #setHorizontal}) rather than standing in a column. */
+    private boolean mHorizontal;
+    private final float mAcrossTrackPx;
+    private final float mAcrossHitPx;
     /** A touch on the handle drags at once ({@link #setHandleGrabs}). */
     private boolean mHandleGrabs = true;
     /** A touch anywhere on the track's band drags at once ({@link #setTrackGrabs}). */
@@ -201,7 +216,7 @@ public final class LegendSlider extends View {
     /**
      * Whether a touch on the handle drags at once (true, today's glass strips) or waits for the
      * hold like the rest of the column, so a swipe that starts on it scrolls the card
-     * ({@link com.termux.app.surfaces.rows.StripRow}).
+     * (the vertical strip rows before 2026-10-31).
      */
     public void setHandleGrabs(boolean grabs) {
         mHandleGrabs = grabs;
@@ -255,6 +270,8 @@ public final class LegendSlider extends View {
         mDotGapPx = 6f * density;
         mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
         mHandleTouchHalfPx = HANDLE_TOUCH_DP * density / 2f;
+        mAcrossTrackPx = ACROSS_TRACK_DP * density;
+        mAcrossHitPx = ACROSS_HIT_DP * density;
         setClickable(true);
         setFocusable(true);
         resolvePaint();
@@ -325,9 +342,26 @@ public final class LegendSlider extends View {
         mTouchListeners.add(listener);
     }
 
-    /** Always vertical: the question the layout test asks a column. */
+    /**
+     * Lays the slider along its row: the track across the view's width, centred in its height,
+     * the minimum at the start edge; no legend is drawn. Set once, before the first layout.
+     */
+    public void setHorizontal(boolean horizontal) {
+        if (mHorizontal == horizontal)
+            return;
+        mHorizontal = horizontal;
+        requestLayout();
+        invalidate();
+    }
+
+    /** Whether the track stands upright: the question the layout test asks. */
     public boolean isVertical() {
-        return true;
+        return !mHorizontal;
+    }
+
+    /** Whether the finger holds the slider now. */
+    public boolean isDragging() {
+        return mDragging;
     }
 
     // ------------------------------------------------------------------------------ the legend
@@ -450,6 +484,32 @@ public final class LegendSlider extends View {
 
     // ----------------------------------------------------------------------------- the geometry
 
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int width = getDefaultSize(getSuggestedMinimumWidth(), widthMeasureSpec);
+        int height = mHorizontal
+            ? resolveSize(Math.max(getSuggestedMinimumHeight(), Math.round(mAcrossHitPx)),
+                heightMeasureSpec)
+            : getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec);
+        setMeasuredDimension(width, height);
+    }
+
+    /** A horizontal track's height in this view: 16dp, less where the view is shorter. */
+    float acrossTrackPx() {
+        return Math.max(1f, Math.min(mAcrossTrackPx, getHeight() - 2f * mHandleOverhangPx));
+    }
+
+    /** A horizontal handle's centre along the track, from the start edge: there at the minimum. */
+    float handleCentreX() {
+        float half = mHandleWidthPx / 2f;
+        return half + fraction() * (getWidth() - mHandleWidthPx);
+    }
+
+    /** Whether the minimum stands at the right edge (a right-to-left layout). */
+    private boolean mirrored() {
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+    }
+
     /** The legend's line height: the room the text takes beside the track. */
     private float legendBandPx() {
         Paint.FontMetrics metrics = mTextPaint.getFontMetrics();
@@ -513,6 +573,10 @@ public final class LegendSlider extends View {
         if (width <= 0f || height <= 0f)
             return;
         boolean enabled = isEnabled();
+        if (mHorizontal) {
+            drawAcross(canvas, width, height, enabled);
+            return;
+        }
         // The legend is sized first: the track takes the width its band leaves.
         fitLegend(width, height);
         float trackWidth = trackWidthPx();
@@ -556,6 +620,66 @@ public final class LegendSlider extends View {
     }
 
     /**
+     * The horizontal slider: the vertical one's pieces turned on their side, start to end (end to
+     * start in a right-to-left layout), centred in the view's height.
+     */
+    private void drawAcross(@NonNull Canvas canvas, float width, float height, boolean enabled) {
+        float track = acrossTrackPx();
+        float top = (height - track) / 2f;
+        float bottom = top + track;
+        float outer = track / 2f;
+        float handleX = handleCentreX();
+        float half = mHandleWidthPx / 2f;
+        int active = enabled ? mActiveColor
+            : MaterialColors.compositeARGBWithAlpha(mOnSurface, DISABLED_TRACK_ALPHA + 66);
+        int inactive = enabled ? mInactiveColor
+            : MaterialColors.compositeARGBWithAlpha(mOnSurface, DISABLED_TRACK_ALPHA);
+        canvas.save();
+        if (mirrored())
+            canvas.scale(-1f, 1f, width / 2f, height / 2f);
+        // Active track: from the start edge to the gap before the handle.
+        float activeEnd = handleX - half - mGapPx;
+        if (activeEnd > 0f) {
+            mRect.set(0f, top, activeEnd, bottom);
+            mTrackPaint.setColor(active);
+            drawAcrossPiece(canvas, mRect, outer, mInsideCornerPx);
+        }
+        // Inactive track: from the gap after the handle to the end edge, its stop at the end.
+        float inactiveStart = handleX + half + mGapPx;
+        if (inactiveStart < width) {
+            mRect.set(inactiveStart, top, width, bottom);
+            mTrackPaint.setColor(inactive);
+            drawAcrossPiece(canvas, mRect, mInsideCornerPx, outer);
+            mTrackPaint.setColor(active);
+            float stopX = Math.max(width - outer, inactiveStart + mStopPx);
+            if (stopX < width - mStopPx)
+                canvas.drawCircle(stopX, height / 2f, mStopPx / 2f, mTrackPaint);
+        }
+        // The handle: a 4dp bar standing 2dp past the track above and below.
+        mRect.set(handleX - half, top - mHandleOverhangPx, handleX + half,
+            bottom + mHandleOverhangPx);
+        mTrackPaint.setColor(active);
+        canvas.drawRoundRect(mRect, half, half, mTrackPaint);
+        canvas.restore();
+    }
+
+    /** One horizontal track piece, its left and right ends rounded by {@code left}, {@code right}. */
+    private void drawAcrossPiece(@NonNull Canvas canvas, @NonNull RectF rect, float left,
+                                 float right) {
+        float w = rect.width();
+        if (w <= 0f)
+            return;
+        float h = rect.height();
+        float l = Math.min(Math.min(left, w / 2f), h / 2f);
+        float r = Math.min(Math.min(right, w / 2f), h / 2f);
+        android.graphics.Path path = mPiecePath;
+        path.rewind();
+        float[] radii = {l, l, r, r, r, r, l, l};
+        path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
+        canvas.drawPath(path, mTrackPaint);
+    }
+
+    /**
      * One track piece with the outer end fully rounded and the end facing the handle at the
      * inside corner (M3's "inset" shape): {@code outerAtTop} says which end is which.
      */
@@ -569,7 +693,8 @@ public final class LegendSlider extends View {
         float w = rect.width();
         top = Math.min(top, w / 2f);
         bottom = Math.min(bottom, w / 2f);
-        android.graphics.Path path = new android.graphics.Path();
+        android.graphics.Path path = mPiecePath;
+        path.rewind();
         float[] radii = {top, top, top, top, bottom, bottom, bottom, bottom};
         path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
         canvas.drawPath(path, mTrackPaint);
@@ -674,6 +799,17 @@ public final class LegendSlider extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 abandonPendingClaim();
+                if (mHorizontal) {
+                    mDownX = event.getX();
+                    mDownY = event.getY();
+                    // Outside a scroll it is the slider's at once; inside one, the first move
+                    // past the slop says whose (StripTouchPolicy.decideAcross).
+                    if (!isInScrollingContainer())
+                        claimGesture(mDownX);
+                    else
+                        mClaimPending = true;
+                    return true;
+                }
                 mDownX = event.getX();
                 mDownY = event.getY();
                 mLastY = mDownY;
@@ -696,11 +832,22 @@ public final class LegendSlider extends View {
             }
             case MotionEvent.ACTION_MOVE:
                 if (mDragging) {
-                    setValueInternal(valueAt(event.getY()), true);
+                    setValueInternal(valueAt(along(event)), true);
                     return true;
                 }
                 if (!mClaimPending)
                     return false;
+                if (mHorizontal) {
+                    StripTouchPolicy.Decision across = StripTouchPolicy.decideAcross(
+                        event.getX() - mDownX, event.getY() - mDownY, mTouchSlopPx, true);
+                    if (across == StripTouchPolicy.Decision.SCROLL) {
+                        abandonPendingClaim();
+                        return false;
+                    }
+                    if (across == StripTouchPolicy.Decision.CLAIM)
+                        claimGesture(event.getX());
+                    return true;
+                }
                 mLastY = event.getY();
                 Claim decision = claim(false, true,
                     (float) Math.hypot(event.getX() - mDownX, event.getY() - mDownY),
@@ -716,10 +863,10 @@ public final class LegendSlider extends View {
                 // A tap off the handle, inside the slop and the hold: the value jumps there, as a
                 // horizontal slider's tap does.
                 if (mClaimPending)
-                    claimGesture(event.getY());
+                    claimGesture(along(event));
                 if (!mDragging)
                     return false;
-                setValueInternal(valueAt(event.getY()), true);
+                setValueInternal(valueAt(along(event)), true);
                 endGesture();
                 performClick();
                 return true;
@@ -732,6 +879,11 @@ public final class LegendSlider extends View {
             default:
                 return super.onTouchEvent(event);
         }
+    }
+
+    /** Where a touch stands along the track: across for a horizontal slider, up for a vertical. */
+    private float along(@NonNull MotionEvent event) {
+        return mHorizontal ? event.getX() : event.getY();
     }
 
     /** The slider takes the gesture: the scroll is held off from here, and the value follows. */
@@ -782,6 +934,13 @@ public final class LegendSlider extends View {
 
     /** The value a touch at {@code y} asks for: the bottom edge is the minimum, the top the maximum. */
     private float valueAt(float y) {
+        if (mHorizontal) {
+            float width = getWidth();
+            float x = mirrored() ? width - y : y;
+            float along = Math.max(0f, Math.min(1f,
+                (x - mHandleWidthPx / 2f) / Math.max(1f, width - mHandleWidthPx)));
+            return mValueFrom + along * (mValueTo - mValueFrom);
+        }
         float height = getHeight();
         float travel = Math.max(1f, height - mHandleWidthPx);
         float fraction = 1f - (y - mHandleWidthPx / 2f) / travel;
