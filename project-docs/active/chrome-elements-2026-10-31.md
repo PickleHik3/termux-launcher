@@ -171,6 +171,14 @@ point of the round trip.
   keyboard state as inputs and answers Home's design compacted, never the Workspace's tray. The
   same holds for every (kind × keyboard up/down × style × design × orientation) combination.
 
+Two more sightings from pong (2026-10-31 night) belong to this rule: on every page change, Home 1
+↔ Home 2 included, the widgets move a few dp down and back (a recording shows the arriving page's
+widget cards about 5 px off their rest mid-slide, the status bar still: `~/reports/device-checks-2026-10-31/`,
+`tl-h12.mp4` in the session scratchpad); and a Home page with no layout keys of its own wore the
+shipped tray instead of Home's Peek (a page variant's absent key fell to the default, not to the
+Home kind's layout; fixed as its own commit). A crossing between two Home pages moves nothing
+vertically: that is a fixture pair too.
+
 **How it is kept true.** `LayoutFixtures` (wave M) grows a matrix over page kind × keyboard
 up/down × keyboard form × dock style × design × status state × orientation; for each cell the
 parity tests assert that the rest is the only source of the stack's height, that every crossing
