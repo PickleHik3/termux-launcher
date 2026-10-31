@@ -87,4 +87,57 @@ public class LookCommandTest {
         assertEquals(400, run("{\"op\":\"zap\"}").getInt("_statusCode"));
         assertTrue(grid.gridKeys().isEmpty());
     }
+
+    /** Page 4 is Home, 6 Display; the keyboard ships its kinds' Looks. */
+    private static LookGrid kindGrid() {
+        java.util.Map<Integer, LookGrid.Kind> kinds = new java.util.HashMap<>();
+        kinds.put(4, LookGrid.Kind.HOME);
+        kinds.put(6, LookGrid.Kind.DISPLAY);
+        return new LookGrid(new LookGrid.MemoryStore(), kinds::get,
+            com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+    }
+
+    @Test
+    public void aKindIsSetReadAndResetByItsName() throws Exception {
+        LookGrid grid = kindGrid();
+        JSONObject set = LookCommand.handle(grid, new JSONObject(
+            "{\"op\":\"set\",\"property\":\"opacity\",\"value\":\"0\",\"element\":\"keyboard\",\"kind\":\"home\"}"));
+        assertTrue(set.getBoolean("ok"));
+        assertEquals("keyboard on Home pages", set.getString("at"));
+        assertTrue(grid.store().contains("look.opacity.keyboard@kind:home"));
+
+        JSONObject home = LookCommand.handle(grid, new JSONObject(
+            "{\"op\":\"get\",\"property\":\"opacity\",\"element\":\"keyboard\",\"kind\":\"home\"}"));
+        assertEquals("0", home.getString("value"));
+        assertEquals("keyboard on Home pages", home.getString("from"));
+
+        // A Home page reads the kind's cell and says so.
+        JSONObject page = LookCommand.handle(grid, new JSONObject(
+            "{\"op\":\"get\",\"property\":\"opacity\",\"element\":\"keyboard\",\"page\":4}"));
+        assertEquals("keyboard on Home pages", page.getString("from"));
+
+        JSONObject display = LookCommand.handle(grid, new JSONObject(
+            "{\"op\":\"get\",\"property\":\"opacity\",\"element\":\"keyboard\",\"kind\":\"display\"}"));
+        assertEquals("10", display.getString("value"));
+        assertEquals("shipped", display.getString("from"));
+
+        JSONObject reset = LookCommand.handle(grid, new JSONObject(
+            "{\"op\":\"reset\",\"element\":\"keyboard\",\"kind\":\"home\"}"));
+        assertEquals(1, reset.getInt("reset"));
+        assertEquals("keyboard on Home pages", reset.getString("at"));
+        assertTrue(grid.gridKeys().isEmpty());
+    }
+
+    @Test
+    public void aKindIsExclusiveWithAPageAndKnown() throws Exception {
+        assertEquals(400, run("{\"op\":\"get\",\"property\":\"opacity\",\"kind\":\"home\",\"page\":4}")
+            .getInt("_statusCode"));
+        assertEquals(400, run("{\"op\":\"get\",\"property\":\"opacity\",\"kind\":\"sofa\"}")
+            .getInt("_statusCode"));
+        assertEquals(400, run("{\"op\":\"set\",\"property\":\"margin\",\"value\":\"4\",\"kind\":\"home\"}")
+            .getInt("_statusCode"));
+        assertEquals("all glass on Display pages",
+            LookCommand.describeCell(null, LookGrid.Kind.DISPLAY));
+        assertTrue(grid.gridKeys().isEmpty());
+    }
 }

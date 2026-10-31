@@ -19,7 +19,8 @@ import java.util.Locale;
  * re-dresses the live chrome from there.
  *
  * <p>Request: {@code {"op":"get|set|reset","property":"opacity","value":"60","element":"dock",
- * "page":2}}; property, element and page are optional where the CLI makes them so.</p>
+ * "page":2}}, or {@code "kind":"home|terminal|display"} in place of the page (ADR 0018 §3);
+ * property, element and page or kind are optional where the CLI makes them so.</p>
  */
 final class LookCommand {
 
@@ -33,12 +34,42 @@ final class LookCommand {
         return page >= 0 ? name + " on page " + page : name + ", everywhere";
     }
 
+    /** A kind's cell, in the CLI's words: "keyboard on Home pages". */
+    @NonNull
+    static String describeCell(@Nullable LookGrid.Element element, @Nullable LookGrid.Kind kind) {
+        if (kind == null) return describeCell(element, LookGrid.NO_PAGE);
+        return (element == null ? "all glass" : element.key) + " on " + kindName(kind);
+    }
+
+    @NonNull
+    static String kindName(@NonNull LookGrid.Kind kind) {
+        switch (kind) {
+            case HOME: return "Home pages";
+            case DISPLAY: return "Display pages";
+            case TERMINAL:
+            default:
+                return "the Terminal page";
+        }
+    }
+
     /** Where a resolved value came from, for the element and page the read asked about. */
     @NonNull
     static String describe(@NonNull LookGrid.Cell cell, @Nullable LookGrid.Element element, int page) {
+        return describe(cell, element, page, null);
+    }
+
+    /**
+     * Where a resolved value came from, for the element and the page or kind the read asked
+     * about; {@code kind} is the kind read at, or the page's.
+     */
+    @NonNull
+    static String describe(@NonNull LookGrid.Cell cell, @Nullable LookGrid.Element element, int page,
+                           @Nullable LookGrid.Kind kind) {
         switch (cell) {
             case ELEMENT_ON_PAGE: return describeCell(element, page);
             case PAGE: return describeCell(null, page);
+            case ELEMENT_ON_KIND: return describeCell(element, kind);
+            case KIND: return describeCell(null, kind);
             case ELEMENT: return describeCell(element, LookGrid.NO_PAGE);
             case BASE: return describeCell(null, LookGrid.NO_PAGE);
             default: return "shipped";
@@ -73,6 +104,13 @@ final class LookCommand {
                 return error("'page' must be a page number");
             page = ((Number) raw).intValue();
         }
+        LookGrid.Kind kind = null;
+        String kindName = request.optString("kind", "").trim().toLowerCase(Locale.ROOT);
+        if (!kindName.isEmpty()) {
+            kind = LookGrid.Kind.forKey(kindName);
+            if (kind == null) return error("'kind' must be one of home, terminal, display");
+            if (page >= 0) return error("give 'page' or 'kind', not both");
+        }
         LookGrid.Property property = null;
         if (!propertyName.isEmpty()) {
             property = LookGrid.Property.forKey(propertyName.equals("colour") ? "tint_hue" : propertyName);
@@ -81,60 +119,79 @@ final class LookCommand {
                     + " grain, rim, vibrancy, margin");
             if (element != null && !property.perElement)
                 return error(propertyName + " is set for all glass, not for one element");
+            if (kind != null && !property.perElement)
+                return error(propertyName + " is set everywhere, not for one kind of page");
         }
         switch (op) {
             case "get":
                 if (property == null) return error("'property' is required");
-                return get(grid, property, element, page);
+                return get(grid, cell(property, element, page, kind));
             case "set":
                 if (property == null) return error("'property' is required");
-                return set(grid, property, element, page, request.optString("value", ""), onChanged);
+                return set(grid, cell(property, element, page, kind), request.optString("value", ""),
+                    onChanged);
             case "reset":
-                return reset(grid, property, element, page, onChanged);
+                return reset(grid, property, element, page, kind, onChanged);
             default:
                 return error("'op' must be get, set or reset");
         }
     }
 
+    /** The cell a request names: a kind's, or a page's (everywhere for none). */
     @NonNull
-    private static JSONObject get(LookGrid grid, LookGrid.Property property,
-                                  @Nullable LookGrid.Element element, int page) throws JSONException {
-        LookGrid.Resolved resolved = grid.resolve(property, element, page);
-        return new JSONObject().put("ok", true).put("property", name(property))
-            .put("value", render(property, resolved.value))
-            .put("from", describe(resolved.cell, element, page));
+    private static LookGrid.Key cell(@NonNull LookGrid.Property property,
+                                     @Nullable LookGrid.Element element, int page,
+                                     @Nullable LookGrid.Kind kind) {
+        return kind != null ? new LookGrid.Key(property, element, kind)
+            : new LookGrid.Key(property, element, page);
     }
 
     @NonNull
-    private static JSONObject set(LookGrid grid, LookGrid.Property property,
-                                  @Nullable LookGrid.Element element, int page, String text,
+    private static String describeCell(@NonNull LookGrid.Key cell) {
+        return cell.kind != null ? describeCell(cell.element, cell.kind)
+            : describeCell(cell.element, cell.page);
+    }
+
+    @NonNull
+    private static JSONObject get(LookGrid grid, LookGrid.Key cell) throws JSONException {
+        LookGrid.Resolved resolved = grid.resolve(cell);
+        LookGrid.Kind kind = cell.kind != null ? cell.kind : grid.kindOf(cell.page);
+        return new JSONObject().put("ok", true).put("property", name(cell.property))
+            .put("value", render(cell.property, resolved.value))
+            .put("from", describe(resolved.cell, cell.element, cell.page, kind));
+    }
+
+    @NonNull
+    private static JSONObject set(LookGrid grid, LookGrid.Key cell, String text,
                                   @NonNull Runnable onChanged) throws JSONException {
-        Integer value = parse(property, text.trim().toLowerCase(Locale.ROOT));
-        if (value == null) return error(hint(property));
-        grid.write(property, element, page, value);
+        Integer value = parse(cell.property, text.trim().toLowerCase(Locale.ROOT));
+        if (value == null) return error(hint(cell.property));
+        grid.write(cell, value);
         onChanged.run();
-        return new JSONObject().put("ok", true).put("property", name(property))
-            .put("value", render(property, grid.value(property, element, page)))
-            .put("at", describeCell(element, page));
+        return new JSONObject().put("ok", true).put("property", name(cell.property))
+            .put("value", render(cell.property, grid.value(cell)))
+            .put("at", describeCell(cell));
     }
 
     /** Resets one cell of one property, or of every property the cell holds. */
     @NonNull
     private static JSONObject reset(LookGrid grid, @Nullable LookGrid.Property property,
                                     @Nullable LookGrid.Element element, int page,
+                                    @Nullable LookGrid.Kind kind,
                                     @NonNull Runnable onChanged) throws JSONException {
         int cleared = 0;
         for (LookGrid.Property each : LookGrid.Property.values()) {
             if (property != null && each != property) continue;
-            if (element != null && !each.perElement) continue;
-            if (grid.has(each, element, page)) {
-                grid.clear(each, element, page);
+            if ((element != null || kind != null) && !each.perElement) continue;
+            LookGrid.Key cell = cell(each, element, page, kind);
+            if (grid.has(cell)) {
+                grid.clear(cell);
                 cleared++;
             }
         }
         if (cleared > 0) onChanged.run();
         return new JSONObject().put("ok", true).put("reset", cleared)
-            .put("at", describeCell(element, page));
+            .put("at", kind != null ? describeCell(element, kind) : describeCell(element, page));
     }
 
     @NonNull
