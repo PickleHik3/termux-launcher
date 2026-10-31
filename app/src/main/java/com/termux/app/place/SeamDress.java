@@ -232,6 +232,37 @@ public final class SeamDress {
     }
 
     /**
+     * Whether a pictured whole-stack crossing from {@code committed} to {@code other} leaves the
+     * arriving stack below the screen until the wall has landed (the developer's decision,
+     * 2026-10-31): from Home toward a window. Home's dock, pictured as it stood, then keeps Home's
+     * dress and slides out with the Home page, whole; the window's stack, its rows and its
+     * keyboard, stands below the screen through the slide and rises into its place once the page
+     * has landed ({@link #landingRiseReveal}). Its room is the window's rest from the slide's
+     * first frame (the terminal is pre-sized to it), so the rise moves nothing but the stack.
+     * The other way, and between two Home pages, the stacks keep crossing in step with the wall.
+     */
+    public static boolean stackRisesAfterLanding(@Nullable PaneWallPage committed,
+                                                 @Nullable PaneWallPage other,
+                                                 boolean pictured) {
+        return pictured && committed == PaneWallPage.WIDGETS && other != null
+            && other != PaneWallPage.WIDGETS;
+    }
+
+    /** How long the stack's rise after the landing takes at the normal animation speed. */
+    public static final long LANDING_RISE_MS = 240L;
+
+    /**
+     * How much of the stack shows {@code t} (0 to 1) into its rise after the landing
+     * ({@link #stackRisesAfterLanding}): it leaves fast and settles slowly into its place, as a
+     * sheet coming up does.
+     */
+    public static float landingRiseReveal(float t) {
+        float q = t < 0f ? 0f : t > 1f ? 1f : t;
+        float rest = 1f - q;
+        return 1f - rest * rest * rest;
+    }
+
+    /**
      * How much of the keyboard shows in a whole-stack dip at {@code progress} into the other
      * half: the committed half's keyboard goes down with the rows before the swap, the other
      * half's comes up with them after it, and a half without one shows none. Both read 0 at the
