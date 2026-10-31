@@ -125,7 +125,7 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dockOverlays);
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.isHome());
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
