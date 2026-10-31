@@ -4,6 +4,29 @@ import java.io.UnsupportedEncodingException;
 
 public class TerminalTest extends TerminalTestCase {
 
+	private static TerminalSessionClient cursorStyleClient(final int cursorStyle) {
+		return new TerminalSessionClient() {
+			@Override public void onTextChanged(TerminalSession session) {}
+			@Override public void onTitleChanged(TerminalSession session) {}
+			@Override public void onSessionFinished(TerminalSession session) {}
+			@Override public void onCopyTextToClipboard(TerminalSession session, String text) {}
+			@Override public void onPasteTextFromClipboard(TerminalSession session) {}
+			@Override public void onBell(TerminalSession session) {}
+			@Override public void onMediaOverlayRequest(TerminalSession session, String source) {}
+			@Override public void onColorsChanged(TerminalSession session) {}
+			@Override public void onTerminalCursorStateChange(boolean state) {}
+			@Override public void setTerminalShellPid(TerminalSession session, int pid) {}
+			@Override public Integer getTerminalCursorStyle() { return cursorStyle; }
+			@Override public void logError(String tag, String message) {}
+			@Override public void logWarn(String tag, String message) {}
+			@Override public void logInfo(String tag, String message) {}
+			@Override public void logDebug(String tag, String message) {}
+			@Override public void logVerbose(String tag, String message) {}
+			@Override public void logStackTraceWithMessage(String tag, String message, Exception e) {}
+			@Override public void logStackTrace(String tag, Exception e) {}
+		};
+	}
+
 	public void testCursorPositioning() throws Exception {
 		withTerminalSized(10, 10).placeCursorAndAssert(1, 2).placeCursorAndAssert(3, 5).placeCursorAndAssert(2, 2).enterString("A")
 				.assertCursorAt(2, 3);
@@ -120,6 +143,19 @@ public class TerminalTest extends TerminalTestCase {
 		assertEquals(TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE, mTerminal.getCursorStyle());
 		enterString("\033[2 q");
 		assertEquals(TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK, mTerminal.getCursorStyle());
+	}
+
+	public void testResetCursorStyleRestoresConfiguredDefault() throws Exception {
+		mTerminal = new TerminalEmulator(mOutput, false, 5, 5, INITIAL_CELL_WIDTH_PIXELS,
+			INITIAL_CELL_HEIGHT_PIXELS, 10, cursorStyleClient(TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR));
+		assertEquals(TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR, mTerminal.getCursorStyle());
+
+		// A full-screen editor may use a block cursor while it is active, then send DECSCUSR 0
+		// while leaving. Zero means the terminal's configured default, not an unconditional block.
+		enterString("\033[2 q");
+		assertEquals(TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK, mTerminal.getCursorStyle());
+		enterString("\033[ q");
+		assertEquals(TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR, mTerminal.getCursorStyle());
 	}
 
 	public void testPaste() {

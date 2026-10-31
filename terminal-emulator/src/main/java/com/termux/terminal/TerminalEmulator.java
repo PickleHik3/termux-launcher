@@ -285,6 +285,9 @@ public final class TerminalEmulator {
      */
     private int mCursorStyle = DEFAULT_TERMINAL_CURSOR_STYLE;
 
+    /** The configured cursor shape, restored when a program requests the terminal default. */
+    private int mDefaultCursorStyle = DEFAULT_TERMINAL_CURSOR_STYLE;
+
     /** One kitty-protocol cursor. Coordinates are fixed screen cells, zero based. */
     public static final class ExtraCursor {
         public final int row;
@@ -809,9 +812,10 @@ public final class TerminalEmulator {
         if (mClient != null)
             cursorStyle = mClient.getTerminalCursorStyle();
         if (cursorStyle == null || !Arrays.asList(TERMINAL_CURSOR_STYLES_LIST).contains(cursorStyle))
-            mCursorStyle = DEFAULT_TERMINAL_CURSOR_STYLE;
+            mDefaultCursorStyle = DEFAULT_TERMINAL_CURSOR_STYLE;
         else
-            mCursorStyle = cursorStyle;
+            mDefaultCursorStyle = cursorStyle;
+        mCursorStyle = mDefaultCursorStyle;
     }
 
     public boolean isReverseVideo() {
@@ -1330,8 +1334,11 @@ public final class TerminalEmulator {
                             case // "${CSI}${STYLE} q" - set cursor style (http://www.vt100.net/docs/vt510-rm/DECSCUSR).
                             'q':
                                 switch(arg) {
-                                    // Blinking block.
                                     case 0:
+                                        // DECSCUSR 0 restores the terminal's configured default shape.
+                                        mCursorStyle = mDefaultCursorStyle;
+                                        setCursorBlinkingEnabled(true);
+                                        break;
                                     // Blinking block.
                                     case 1:
                                     case // Steady block.
