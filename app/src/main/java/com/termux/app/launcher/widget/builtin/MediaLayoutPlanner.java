@@ -75,11 +75,112 @@ final class MediaLayoutPlanner {
             float side = Math.min(CONTROL_DP, Math.min(inner.width, inner.height));
             parts.add(Part.touch("play", new Box(inner.centerX() - side / 2f,
                 inner.centerY() - side / 2f, side, side)));
+        } else if (span.rows == 2) {
+            twoRow(inner, fontScale, content, parts);
         } else {
             tall(span, inner, fontScale, content, parts);
         }
         return new WidgetLayoutPlan(BuiltinWidgetKind.MEDIA, span, MAX_SPAN, fontScale, card, inner,
             parts);
+    }
+
+    /** The art beside the text needs at least this much, or it stacks above the text instead. */
+    private static final float ART_BESIDE_MIN_DP = 56f;
+    /** The text column beside the art is never narrower than this. */
+    private static final float TEXT_BESIDE_MIN_DP = 80f;
+    /** The clock labels sit under the bar only where the card is this wide. */
+    private static final float CLOCKS_MIN_WIDTH_DP = 300f;
+
+    /**
+     * The two-row cards: the art and the track's words above, then progress, then a controls row
+     * centred along the foot. The art is square and inside the inset, beside the words where the
+     * width allows and above them where it does not. Where the room is short the clocks, the
+     * source, the progress and the artist go, in that order, before the art is shrunk below its floor.
+     */
+    private static void twoRow(@NonNull Box inner, float fontScale, @NonNull Content content,
+                               @NonNull List<Part> parts) {
+        boolean resume = content.mode == Mode.RESUME;
+        boolean playing = content.mode == Mode.PLAYING;
+        float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
+        float labelSp = WidgetTokens.sizeDp(Role.LABEL, fontScale);
+        float titleH = WidgetTokens.lineDp(titleSp);
+        float labelH = WidgetTokens.lineDp(labelSp);
+        boolean wide = inner.width >= CLOCKS_MIN_WIDTH_DP;
+        boolean progress = playing && content.hasProgress;
+        boolean clocks = progress && wide;
+        boolean source = playing && wide && !content.source.isEmpty();
+        boolean artist = playing && !content.artist.isEmpty();
+        float control = Math.min(CONTROL_DP, inner.height);
+
+        float footer = 0f;
+        float textH = 0f;
+        float header = 0f;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            footer = control + (progress ? GAP_M + BAR_DP + (clocks ? GAP_S + labelH : 0f) : 0f);
+            textH = titleH + (artist ? GAP_S + labelH : 0f) + (source ? GAP_M + labelH : 0f);
+            header = inner.height - footer - GAP_M;
+            if (textH <= header + 0.01f) break;
+            if (clocks) clocks = false;
+            else if (source) source = false;
+            else if (progress) progress = false;
+            else if (artist) artist = false;
+        }
+
+        float top = inner.top;
+        float textLeft = inner.left;
+        float textWidth = inner.width;
+        float textTop;
+        float beside = Math.min(header, inner.width - GAP_L - TEXT_BESIDE_MIN_DP);
+        if (beside >= ART_BESIDE_MIN_DP) {
+            parts.add(Part.touch("art",
+                new Box(inner.left, top + (header - beside) / 2f, beside, beside)));
+            textLeft = inner.left + beside + GAP_L;
+            textWidth = inner.width - beside - GAP_L;
+            textTop = top + Math.max(0f, (header - textH) / 2f);
+        } else {
+            float stacked = Math.min(inner.width, header - textH - GAP_M);
+            if (stacked >= ART_MIN_DP) {
+                parts.add(Part.touch("art", new Box(inner.left, top, stacked, stacked)));
+                textTop = top + header - textH;
+            } else {
+                textTop = top + Math.max(0f, (header - textH) / 2f);
+            }
+        }
+
+        float y = textTop;
+        if (source) {
+            parts.add(Part.text("source", new Box(textLeft, y, textWidth, labelH), content.source,
+                Role.LABEL, false, labelSp, Ink.SOFT));
+            y += labelH + GAP_M;
+        }
+        parts.add(Part.text("title", new Box(textLeft, y, textWidth, titleH), content.title,
+            Role.TITLE, false, titleSp, Ink.STRONG));
+        y += titleH;
+        if (artist) {
+            parts.add(Part.text("artist", new Box(textLeft, y + GAP_S, textWidth, labelH),
+                content.artist, Role.LABEL, false, labelSp, Ink.SOFT));
+        }
+
+        float footTop = inner.bottom() - footer;
+        if (progress) {
+            parts.add(Part.touch("bar", new Box(inner.left, footTop, inner.width, BAR_DP)));
+            if (clocks) {
+                float clockTop = footTop + BAR_DP + GAP_S;
+                float half = inner.width / 2f;
+                parts.add(Part.touch("elapsed", new Box(inner.left, clockTop, half, labelH)));
+                parts.add(Part.touch("total", new Box(inner.left + half, clockTop, half, labelH)));
+            }
+        }
+        float rowTop = inner.bottom() - control;
+        if (resume) {
+            parts.add(Part.touch("play", new Box(inner.centerX() - control / 2f, rowTop, control,
+                control)));
+        } else {
+            float x = inner.centerX() - 1.5f * control;
+            parts.add(Part.touch("prev", new Box(x, rowTop, control, control)));
+            parts.add(Part.touch("play", new Box(x + control, rowTop, control, control)));
+            parts.add(Part.touch("next", new Box(x + 2f * control, rowTop, control, control)));
+        }
     }
 
     /** One row of the text-and-controls column. */

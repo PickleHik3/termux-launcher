@@ -132,4 +132,31 @@ public class MediaLayoutPlanTest {
         assertTrue(plan.has("title") && plan.has("play"));
         assertFalse(plan.has("artist"));
     }
+
+    @Test public void twoRowCardsKeepTheArtSquareAboveTheProgressAndTheControls() {
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {
+            BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.FOUR_BY_TWO }) {
+            for (float fs : new float[] { 1.0f, 1.3f }) {
+                WidgetLayoutPlan plan = plan(span, span.widthDp, span.heightDp, fs, playing());
+                Part art = plan.part("art"), bar = plan.part("bar"), play = plan.part("play");
+                String what = span + " " + fs;
+                assertNotNull(what, art);
+                assertEquals(what + " square", art.box.width, art.box.height, 0.01f);
+                assertTrue(what + " art above bar", art.box.bottom() <= bar.box.top + 0.01f);
+                assertTrue(what + " bar above controls", bar.box.bottom() <= play.box.top + 0.01f);
+                assertEquals(what + " play centred", plan.inset.centerX(), play.box.centerX(), 0.01f);
+                assertTrue(what + " title", plan.has("title") && plan.has("prev") && plan.has("next"));
+            }
+        }
+    }
+
+    @Test public void twoRowResumeAndIdleStillOfferPlay() {
+        for (MediaLayoutPlanner.Content content : new MediaLayoutPlanner.Content[] { resume(), idle() }) {
+            for (float fs : FONT_SCALES) {
+                WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.TWO_BY_TWO, 184f, 192f, fs, content);
+                assertTrue(content.mode + " " + fs, plan.has("play") && plan.has("title"));
+                assertFalse(plan.has("bar"));
+            }
+        }
+    }
 }
