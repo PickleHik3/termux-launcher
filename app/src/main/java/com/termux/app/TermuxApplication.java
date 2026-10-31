@@ -146,6 +146,12 @@ public class TermuxApplication extends Application {
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
+            // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
+            // installs alike (ADR 0018 §3); after every freshness check above.
+            com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()),
+                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);

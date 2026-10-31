@@ -139,6 +139,7 @@ public class GlassRowsTest {
         assertTrue("grain on", grid.value(LookGrid.Property.GRAIN, keyboard, 1) > 0);
         assertEquals(LookGrid.Cell.SHIPPED, grid.resolve(LookGrid.Property.OPACITY, keyboard, 1).cell);
 
+        assertEquals(FrostStops.CLEAR, clear.frostStop);
         assertEquals(clear.frostStop, grid.value(LookGrid.Property.FROST, keyboard, 3));
         assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, 3));
         assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY));
@@ -159,5 +160,24 @@ public class GlassRowsTest {
                         grid.value(property, element, page));
             }
         }
+    }
+
+    /** The seed writes the app's own kind looks as cells: Mist on Home, Clear on Display. */
+    @Test
+    public void theSeedWritesTheShippedKindLooks() {
+        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
+        assertEquals(6, com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(store,
+            SurfacePresets.SHIPPED_BY_KIND));
+        LookGrid grid = new LookGrid(store, null, null);
+        LookGrid.Element keyboard = LookGrid.Element.KEYBOARD;
+        assertEquals(FrostStops.MIST, grid.value(LookGrid.Property.FROST, keyboard, LookGrid.Kind.HOME));
+        assertEquals(60, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.HOME));
+        assertEquals(0, grid.value(LookGrid.Property.TINT, keyboard, LookGrid.Kind.HOME));
+        assertEquals(FrostStops.CLEAR,
+            grid.value(LookGrid.Property.FROST, keyboard, LookGrid.Kind.DISPLAY));
+        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY));
+        assertEquals(0, grid.value(LookGrid.Property.TINT, keyboard, LookGrid.Kind.DISPLAY));
+        assertEquals(LookGrid.Cell.ELEMENT_ON_KIND,
+            grid.resolve(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY).cell);
     }
 }
