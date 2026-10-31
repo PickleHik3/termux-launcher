@@ -21,14 +21,6 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
-- 2026-10-31 · Terminal's stack after the landing (9e2438344..) · pong, Home's dock and the
-  Terminal's dressed apart (Peek on Home), Terminal keyboard up: screenrecord a Home → Terminal
-  swipe; every frame before the Terminal page lands shows Home's dock whole, sliding out with the
-  Home page, no strip row and no keys, the band under the arriving terminal empty (wallpaper);
-  then the strip row and keyboard rise together in about a quarter second. `adb logcat -s
-  TermGeom` shows one pty-resize for the crossing; `project-docs/verification/motion-invariants.sh`
-  exits 0. Also: the swipe turned back before landing brings Home's dock back with its page and
-  nothing rises; Terminal → Home looks as before; Remove animations on puts the stack up at once.
 - 2026-10-31 · W3 fix round (732a34e39..) · emulator at 1.0× and 1.3× font scale, light and
   dark: the Rim row reads None · Thin · Bright and (once fixed) stands beside its name on the
   Status and Dock cards; Margin and Vibrancy are never greyed, say "Applies to all glass", and on a
