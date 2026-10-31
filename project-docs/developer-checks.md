@@ -299,3 +299,11 @@ cut the developer works this list or accepts what is left (recorded as in
 ## Fix batch (2026-10-26 night)
 - 2026-10-26 · f8b7497f9 · The slimmer A–Z Pull tab (about 15 dp) is still easy to grab with a thumb · pong.
 - 2026-10-26 · 898eaa163 · Holding Backspace or a key's edge no longer repeats; is the 4 dp band the right size in the hand? · pong.
+
+## Look grid, editor redesign, landing and sound (2026-10-30/31)
+- 2026-10-31 · 7ad038290 · Home → Terminal with the keyboard up: no soft frame at the landing. The log shows one resize per crossing on pong; the frames at `~/reports/device-checks-2026-10-31/05-frames-h2t/sheet.png` look clean, but the eye decides · pong.
+- 2026-10-31 · c579644da · Launcher vibration off (Settings › General): no tick from the page overview, the strip row, the bars list or the window bar · pong; `dumpsys vibrator_manager` cannot tell which touch vibrated.
+- 2026-10-31 · 2760842ad.. · the editor's springs: the card swap Dock → Status bar (fade out and back, rows rising a little), the sheet's detent moves, the editor's enter and exit, Reset this row's overshoot, Reset card's rows one after another, the wallpaper page's rise and fall (watch for a flash at the end of the fall) · pong; frames at `~/reports/device-checks-2026-10-31/09-swap/sheet.png` and `17-open-editor-frames/sheet.png`.
+- 2026-10-31 · 2760842ad.. · "Reset this row" is reached by a long-press on a row's name; on pong the checker's long-press on the name moved the slider instead, and a hold higher up opened the What chip's popup. Is the name a big enough target with a thumb? · pong.
+- 2026-10-31 · a04acf498 · the terminal More sheet and Home's long-press card both wrap long labels onto two lines at pong's width ("Command palette", "Share transcript", "Kill process (8944)", "Launcher settings"): keep, shorten the labels, or drop to one column · pong, taste; shots `02-terminal-more-sheet.png`, `20-home-longpress-card.png`.
+- 2026-10-31 · 0f2cf4a04 · a sound longer than the 3 s grace (the checker's 5 s clip) ducks the music for 3 s and then pauses it, and VLC does not resume afterwards (its own choice on a permanent loss). Is 3 s the right grace, and should a short-sound stream ever be promoted? · pong, policy.
