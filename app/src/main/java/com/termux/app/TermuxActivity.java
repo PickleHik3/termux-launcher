@@ -24893,6 +24893,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void slide(float widths) {
+            View stack = hotView(R.id.accessory_stack_container);
+            if (stack == null) return;
+            int width = mPaneWallController != null && mPaneWallController.wall().getWidth() > 0
+                ? mPaneWallController.wall().getWidth() : stack.getWidth();
+            float x = widths * width;
+            if (stack.getTranslationX() == x) return;
+            stack.setTranslationX(x);
+            // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
+            View backdrop = hotView(R.id.accessory_blur_backdrop);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+        }
+
+        @Override
         public void dropPicture() {
             if (mStackPicture == null) return;
             // Back at its rest the picture is the stack, under it: it goes once a keyboard
@@ -24991,45 +25005,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         settlePlaceChrome(page, null);
     }
 
-    /** The stack's rise after a landing (Crossing#rise); null while none runs. */
-    @Nullable private android.animation.ValueAnimator mStackRise;
-
-    /**
-     * The stack a crossing kept below the screen until its page landed rises into its place, on
-     * its own short clock (SeamDress#landingRiseReveal). A translation only: the room is the
-     * landed rest's already. A crossing or a keyboard swipe that takes the stack first ends it
-     * (Crossing#rise does nothing once they have), and reduced motion or animations off put it
-     * at its place at once.
-     */
-    private void startStackRiseAfterLanding() {
-        android.animation.ValueAnimator running = mStackRise;
-        mStackRise = null;
-        if (running != null) running.cancel();
-        long durationMs = com.termux.app.AnimationSpeed.scale(this,
-            com.termux.app.place.SeamDress.LANDING_RISE_MS);
-        if (isReducedMotionEnabled() || durationMs <= 0L) {
-            mCrossing.rise(1f);
-            return;
-        }
-        android.animation.ValueAnimator rise = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        rise.setDuration(durationMs);
-        rise.setInterpolator(new android.view.animation.LinearInterpolator());
-        rise.addUpdateListener(animation -> {
-            if (mStackRise != animation) return;
-            mCrossing.rise(com.termux.app.place.SeamDress.landingRiseReveal(
-                animation.getAnimatedFraction()));
-        });
-        rise.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator animation) {
-                if (mStackRise != animation) return;
-                mStackRise = null;
-                mCrossing.rise(1f);
-            }
-        });
-        mStackRise = rise;
-        rise.start();
-    }
-
     /**
      * The same, with the page the crossing lands on named ({@code landed}): a crossing between two
      * Home pages lands on the Home page Home's pager settled on, by its id, while the wall stays on
@@ -25084,9 +25059,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
-            // A stack that waited below the screen for the page to land rises into its place
-            // now, into the room the terminal already holds for it (SeamDress#stackRisesAfterLanding).
-            if (crossingLanding.rises()) startStackRiseAfterLanding();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();

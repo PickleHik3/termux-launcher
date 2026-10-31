@@ -232,34 +232,20 @@ public final class SeamDress {
     }
 
     /**
-     * Whether a pictured whole-stack crossing from {@code committed} to {@code other} leaves the
-     * arriving stack below the screen until the wall has landed (the developer's decision,
-     * 2026-10-31): from Home toward a window. Home's dock, pictured as it stood, then keeps Home's
-     * dress and slides out with the Home page, whole; the window's stack, its rows and its
-     * keyboard, stands below the screen through the slide and rises into its place once the page
-     * has landed ({@link #landingRiseReveal}). Its room is the window's rest from the slide's
-     * first frame (the terminal is pre-sized to it), so the rise moves nothing but the stack.
-     * The other way, and between two Home pages, the stacks keep crossing in step with the wall.
+     * Whether a pictured whole-stack crossing between Home and the Workspace has each half's
+     * stack ride with its own page (D11, 2026-11-01): the committed half's, pictured as it stood,
+     * rides out with the page it stood on, and the other half's, dressed for it from the first
+     * frame, rides in with the arriving page at its rest. Nothing of either stack rises, sinks or
+     * waits, so the arriving page brings its chrome where it rests, and the terminal's page, laid
+     * out at the Terminal's rest both ways (Crossing#restTerminalAway), never shows a band of
+     * wallpaper under it. It replaced the stack that waited below the screen for the landing
+     * (2026-10-31), which showed that band through the whole slide. Between two Home pages the
+     * stacks keep crossing in step with the wall.
      */
-    public static boolean stackRisesAfterLanding(@Nullable PaneWallPage committed,
-                                                 @Nullable PaneWallPage other,
-                                                 boolean pictured) {
-        return pictured && committed == PaneWallPage.WIDGETS && other != null
-            && other != PaneWallPage.WIDGETS;
-    }
-
-    /** How long the stack's rise after the landing takes at the normal animation speed. */
-    public static final long LANDING_RISE_MS = 240L;
-
-    /**
-     * How much of the stack shows {@code t} (0 to 1) into its rise after the landing
-     * ({@link #stackRisesAfterLanding}): it leaves fast and settles slowly into its place, as a
-     * sheet coming up does.
-     */
-    public static float landingRiseReveal(float t) {
-        float q = t < 0f ? 0f : t > 1f ? 1f : t;
-        float rest = 1f - q;
-        return 1f - rest * rest * rest;
+    public static boolean stacksRide(@Nullable PaneWallPage committed,
+                                     @Nullable PaneWallPage other, boolean pictured) {
+        return pictured && committed != null && other != null
+            && SeamTravel.crosses(committed, other);
     }
 
     /**
