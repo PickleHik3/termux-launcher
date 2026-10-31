@@ -133,19 +133,40 @@ public class MediaLayoutPlanTest {
         assertFalse(plan.has("artist"));
     }
 
-    @Test public void twoRowCardsKeepTheArtSquareAboveTheProgressAndTheControls() {
-        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] { BuiltinWidgetSpan.TWO_BY_TWO }) {
-            for (float fs : new float[] { 1.0f, 1.3f }) {
-                WidgetLayoutPlan plan = plan(span, span.widthDp, span.heightDp, fs, playing());
-                Part art = plan.part("art"), bar = plan.part("bar"), play = plan.part("play");
-                String what = span + " " + fs;
-                assertNotNull(what, art);
-                assertEquals(what + " square", art.box.width, art.box.height, 0.01f);
-                assertTrue(what + " art above bar", art.box.bottom() <= bar.box.top + 0.01f);
-                assertTrue(what + " bar above controls", bar.box.bottom() <= play.box.top + 0.01f);
-                assertEquals(what + " play centred", plan.inset.centerX(), play.box.centerX(), 0.01f);
-                assertTrue(what + " title", plan.has("title") && plan.has("prev") && plan.has("next"));
+    @Test public void theTwoByTwoIsAPolaroid() {
+        for (float fs : new float[] { 1.0f, 1.3f }) {
+            WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.TWO_BY_TWO, 184f, 280f, fs, playing());
+            String what = "2x2 " + fs;
+            check(plan, what);
+            assertEquals(what + " thin inset", MediaLayoutPlanner.POLAROID_INSET_DP, plan.inset.left,
+                0.01f);
+            Part art = plan.part("art"), title = plan.part("title"), artist = plan.part("artist");
+            Part bar = plan.part("bar"), play = plan.part("play");
+            assertNotNull(what, art);
+            assertEquals(what + " square", art.box.width, art.box.height, 0.01f);
+            assertEquals(what + " centred", plan.inset.centerX(), art.box.centerX(), 0.01f);
+            assertEquals(what + " at the top", plan.inset.top, art.box.top, 0.01f);
+            assertTrue(what + " title below art", title.box.top >= art.box.bottom() - 0.01f);
+            assertTrue(what + " artist below title", artist.box.top >= title.box.bottom() - 0.01f);
+            assertTrue(what + " bar below artist", bar.box.top >= artist.box.bottom() - 0.01f);
+            assertEquals(what + " bar held in", plan.inset.width - 12f, bar.box.width, 0.01f);
+            assertTrue(what + " controls below bar", play.box.top >= bar.box.bottom() - 0.01f);
+            assertEquals(what + " controls at the foot", plan.inset.bottom(), play.box.bottom(), 0.01f);
+            assertEquals(what + " play centred", plan.inset.centerX(), play.box.centerX(), 0.01f);
+            assertTrue(what, plan.has("prev") && plan.has("next"));
+            System.out.println("POLAROID " + what + " inset=" + plan.inset + " " + plan.parts);
+        }
+        for (float[] size : new float[][] { { 109f, 115f }, { 184f, 150f } }) {
+            WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.TWO_BY_TWO, size[0], size[1], 1f, playing());
+            check(plan, "2x2 " + size[0] + "x" + size[1]);
+            if (plan.has("art")) {
+                assertEquals(plan.part("art").box.width, plan.part("art").box.height, 0.01f);
             }
+            System.out.println("POLAROID " + size[0] + "x" + size[1] + " " + plan.parts);
+        }
+        for (float fs : new float[] { 1.0f, 1.3f }) {
+            System.out.println("POLAROID min 1.3 " + fs + " "
+                + plan(BuiltinWidgetSpan.TWO_BY_TWO, 109f, 115f, fs, playing()).parts);
         }
     }
 

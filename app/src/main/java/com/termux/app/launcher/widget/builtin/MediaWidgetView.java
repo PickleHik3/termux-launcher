@@ -383,7 +383,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
                                     float fontScale) {
         switch (part.id) {
             case "art":
-                return artFrame(ui, WidgetTokens.insetDp(span), 6);
+                return artFrame(ui, MediaLayoutPlanner.insetDp(span), 6);
             case "bar":
                 bar = ui.bar(0f, style().primary, 4);
                 bar.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
