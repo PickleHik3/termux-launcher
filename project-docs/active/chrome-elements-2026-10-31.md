@@ -109,10 +109,20 @@ element@page → all@page → element@kind → all@kind → element → Base →
 the Terminal kind, which is today's shipped look). A Display page with no bound window is a
 Display-kind page.
 
-Shipped per kind (`SurfacePresets.shippedLook(stop, kind)`): the keyboard on Home pages is Mist
-(frost stop 5, opacity 60, grain on); on Display pages Clear (opacity 10, frost 0); on the
-Terminal page unchanged. Every other element and every other property ships the same for every
-kind. Vibrancy and Margin stay wall-wide (no kind cell).
+Shipped per kind (`SurfacePresets.shippedLook(element, kind)`, the Mist and Clear presets as
+they ship, one owner): the keyboard on Home pages is Mist (frost stop 5, opacity 60, grain
+follows); on Display pages Clear (frost stop 2, opacity 10); on the Terminal page unchanged.
+Every other element and every other property ships the same for every kind. Vibrancy and Margin
+stay wall-wide (no kind cell).
+
+A Base cell beats the shipped step, and every install that ever picked a Look holds Base cells,
+so a kind's shipped look would never show through (found building wave K). The per-kind looks
+are therefore **seeded as real kind cells** (`LookGridKindSeed`, flag `look_grid_kind_seeded`,
+the last step of the startup chain, fresh and upgraded installs alike): where the keyboard's
+`@kind:home` or `@kind:display` holds no Frost, Opacity or Tint cell, the seed writes the kind's
+shipped values; a cell the user holds is never overwritten. The seeded cells show in the editor
+with the kind's dot and reset like any other; `Reset` makes the row follow the element and Base
+again. The grid's shipped step keeps the same numbers as the last fallback.
 
 The editor's Where chip: Everywhere · Home pages / Terminal / Display pages (the kind of the page
 in front) · This page. The row's source dot gains a colour for a kind cell. `Reset this row` at a
@@ -158,7 +168,8 @@ is a later wave).
 ## 6. Open points settled on 2026-10-31
 
 - D1 the kind tier, over seeding page cells at creation: a kind-wide change is one write.
-- D2 keyboard Home lifted / Display Clear; other elements one look per kind for now.
+- D2 keyboard Home lifted (Mist) / Display Clear (the Clear preset, frost stop 2); other elements one look per kind for now.
+- D10 per-kind shipped looks are seeded as kind cells (a Base cell would otherwise hide them).
 - D3 one glass to the bottom; the Floating no-foot rule withdrawn.
 - D4 sheets on the shared frame; the live window is no longer seen through a sheet.
 - D5 re-home: everywhere cells that equal the saved `_home` values move to the Home kind.
