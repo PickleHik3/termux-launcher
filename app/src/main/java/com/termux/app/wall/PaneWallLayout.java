@@ -2639,9 +2639,14 @@ public final class PaneWallLayout extends ViewGroup {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
             }
-            if (top) {
+            if (top && place == PaneWallPage.WIDGETS) {
                 float topY = pivotY - page.getPivotY() * page.getScaleY();
                 mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), visibility);
+            } else if (top) {
+                // Over a window it hangs from the status bar's bottom border, which stays put as
+                // the page sinks.
+                mStatusGrabber.drawUnderBorder(canvas, centreX, statusBorderY(page),
+                    page.getScaleY(), visibility);
             }
         }
     }
@@ -3475,6 +3480,17 @@ public final class PaneWallLayout extends ViewGroup {
     /** How far {@code child} ends above the wall's bottom, beyond its frame. */
     private int pageBottomInsetPx(@NonNull View child) {
         return child == mTerminalHost ? mTerminalBottomInsetPx : 0;
+    }
+
+    /**
+     * The status bar's bottom border above a window {@code page}, in the wall's coordinates: where
+     * the page's frame starts. The frame's top margin is the opening's air from the bar
+     * ({@code LiveChromeShape.terminalOpeningInsetPx}), measured from the bar's capsule under
+     * Floating and from the bar itself under Docked, so its top is the bar's edge by construction;
+     * the border swipe's air above the page ({@link #loadBorderZone}) starts at the same line.
+     */
+    float statusBorderY(@NonNull View page) {
+        return getPaddingTop() + pageTopInsetPx(page);
     }
 
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
