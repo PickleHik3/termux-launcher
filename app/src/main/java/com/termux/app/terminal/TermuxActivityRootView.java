@@ -484,9 +484,16 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             // The same fold on top: with the status bar hidden (fullscreen) the legacy padding
             // fell back to the cutout and left an empty band the height of the camera's row.
             int top = topRootInset(compat);
+            // The navigation inset is no longer the root's: the content container keeps it clear
+            // for everything but the stack, whose dock reaches under it (BottomInsets). With the
+            // system keyboard visible the root fits the window as it always has.
+            int bottom = com.termux.app.place.BottomInsets.rootPaddingPx(
+                compat.isVisible(WindowInsetsCompat.Type.ime()), v.getPaddingBottom(),
+                compat.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout()).bottom);
             if (v.getPaddingLeft() != sides.left || v.getPaddingRight() != sides.right
-                || v.getPaddingTop() != top) {
-                v.setPadding(sides.left, top, sides.right, v.getPaddingBottom());
+                || v.getPaddingTop() != top || v.getPaddingBottom() != bottom) {
+                v.setPadding(sides.left, top, sides.right, bottom);
             }
             return result;
         }

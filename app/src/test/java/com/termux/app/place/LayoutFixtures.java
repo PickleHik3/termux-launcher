@@ -79,6 +79,8 @@ public final class LayoutFixtures {
         @NonNull public final PlaceLayout home;
         /** The terminal's tiled panes. */
         public final int paneCount;
+        /** Home's Dock design; the Terminal's is the tray. */
+        @NonNull public final DockStyle homeDesign;
 
         Fixture(@NonNull String name, int widthPx, int heightPx, @NonNull PlaceLayout window,
                 int paneCount) {
@@ -92,6 +94,27 @@ public final class LayoutFixtures {
             this.window = window;
             this.home = HOME;
             this.paneCount = paneCount;
+            this.homeDesign = DockStyle.GLASS_TRAY;
+        }
+
+        private Fixture(@NonNull Fixture of, @NonNull DockStyle homeDesign) {
+            this.name = of.name + " (Home " + homeDesign + ")";
+            this.widthPx = of.widthPx;
+            this.heightPx = of.heightPx;
+            this.density = of.density;
+            this.keyboardPx = of.keyboardPx;
+            this.extraKeysRowPx = of.extraKeysRowPx;
+            this.textRowPx = of.textRowPx;
+            this.window = of.window;
+            this.home = of.home;
+            this.paneCount = of.paneCount;
+            this.homeDesign = homeDesign;
+        }
+
+        /** This fixture with Home's dock in {@code design}. */
+        @NonNull
+        public Fixture withHomeDesign(@NonNull DockStyle design) {
+            return new Fixture(this, design);
         }
 
         public boolean floatingKeyboard() {
@@ -119,7 +142,7 @@ public final class LayoutFixtures {
 
         private Half half(@NonNull PlaceLayout layout, boolean dockFloating) {
             return Half.builder(layout).floating(dockFloating).dockHeightScale(1.95f)
-                .design(DockStyle.GLASS_TRAY).build();
+                .design(layout == home ? homeDesign : DockStyle.GLASS_TRAY).build();
         }
 
         /** The device's dock snapshot with {@code rows}' rows standing, on {@code arrangement}. */

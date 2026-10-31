@@ -15,7 +15,7 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
-        <FrameLayout
+        <com.termux.app.place.BottomInsetFrameLayout
             android:id="@+id/terminal_root_container"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -1306,7 +1306,7 @@
             android:elevation="20dp"
             android:visibility="gone" />
 
-    </FrameLayout>
+    </com.termux.app.place.BottomInsetFrameLayout>
 
     <FrameLayout
         android:id="@+id/activity_termux_bottom_space_view"

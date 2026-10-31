@@ -436,7 +436,20 @@ public class StackLayoutTest {
         Snapshot peek = homeIn(DockStyle.PEEK_GLASS, true, false);
         StackLayout.Result tray = run(home(homeIn(DockStyle.GLASS_TRAY, true, false), false, 0));
         int gap = tray.stackEdgeGapPx;
-        assertEquals("the keyboard up", gap, run(home(peek, true, 0)).stackEdgeGapPx);
+        // D11 (ADR 0018 §4): on Home the keyboard no longer refuses the card; it stands on the
+        // keyboard, flush, and Floating's gap goes. The Workspace's tray keeps it (below).
+        assertEquals("the keyboard up on Home: the card stands on it", 0,
+            run(home(peek, true, 0)).stackEdgeGapPx);
+        // The Workspace in Peek, Floating, keyboard up: the card does not stand, the gap stays.
+        Half workspacePeek = Half.builder(WINDOW).floating(true).dockHeightScale(1.95f)
+            .design(DockStyle.PEEK_GLASS).build();
+        StackLayout.Input workspace = new StackLayout.Input(device(half(HOME, false),
+            workspacePeek).rows(PageRef.TERMINAL).arrangement(WINDOW).build());
+        workspace.toolbarShown = true;
+        workspace.keyboardShown = true;
+        workspace.keyboardHeightPx = KEYBOARD;
+        assertTrue("the keyboard up on the Workspace keeps Floating's gap",
+            run(workspace).stackEdgeGapPx > 0);
         StackLayout.Result lifted = run(home(peek, false, LIFT));
         assertEquals("lifted over the system keyboard", gap, lifted.stackEdgeGapPx);
         assertEquals(gap + LIFT, lifted.bottomMarginPx);

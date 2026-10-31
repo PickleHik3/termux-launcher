@@ -1313,6 +1313,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mImeLiftPx;
     /** The root's bottom fit inset now and with no keyboard ({@link #noteRootFitBottom}). */
     private int mRootFitBottomPx, mRootRestFitBottomPx;
+    /** The navigation band the content keeps clear below itself ({@link #applyBottomKept}). */
+    private int mBottomKeptPx;
     /** The system keyboard's take the content's bottom margin reaches past on Home; 0 elsewhere. */
     private int mHomeContentImeReachPx;
     /** Set only after this activity explicitly requests a system IME in its current visible run. */
@@ -1984,6 +1986,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
             noteRootFitBottom(insetsCompat);
+            applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             applyDockImeOffset(0);
@@ -3694,7 +3697,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
         View root = findViewById(R.id.activity_termux_root_view);
         int top = Math.max(mLastStatusBarInsetTop, root == null ? 0 : root.getPaddingTop());
-        int bottom = root == null ? 0 : root.getPaddingBottom();
+        int bottom = (root == null ? 0 : root.getPaddingBottom()) + mBottomKeptPx;
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
         if (margins.topMargin == -top && margins.bottomMargin == -bottom) return;
         margins.topMargin = -top;
@@ -4910,11 +4913,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The Dock design's own glass (the Tray's soft rim and shelf); the strip under the
-            // pill wears none of it, but for the Peek card's soft rim on its sides while it is
-            // the card's foot (underPillStripSoftRimDp).
+            // The Dock design's own glass (the Tray's soft rim and shelf); the keyboard's strip
+            // under the pill wears none of it.
             if (navStrip) {
-                program.setDockSurface(underPillStripSoftRimDp(), 0f);
+                program.setDockSurface(0f, 0f);
             } else {
                 applyDockSurfaceGlass(program);
             }
@@ -5529,7 +5531,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return false;
         return com.termux.app.dock.DockPlacement.peekCardStands(shownDockSurfaceSpec().peek,
                 dockShown, arrangement().layout(), false, keyboardShown, mImeLiftPx > 0,
-                mAppliedPromptFieldBandPx > 0)
+                mAppliedPromptFieldBandPx > 0,
+                mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
             && (arrangement().floating() || !stackStandsDownOnFrame());
     }
 
@@ -5626,23 +5629,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.dock.PeekRimDrawable.forCard(rim, card, hostWidth);
     }
 
-    /** The strip under the pill's inset from each side: the card's, while the card stands. */
-    private int peekStripSideInsetPx() {
-        if (mPeekCard == null || getWindow() == null) return 0;
-        View decor = getWindow().getDecorView();
-        return decor == null ? 0
-            : com.termux.app.dock.PeekGlassGeometry.sideInsetPx(decor.getWidth());
-    }
 
-    /**
-     * The soft rim the strip under the pill wears on its sides, dp: the card's while the card
-     * stands, so the card's sides and the strip's are one edge across the seam
-     * ({@link com.termux.app.dock.DockSurfaceSpec#underPillSoftRimDp}); 0 otherwise.
-     */
-    private float underPillStripSoftRimDp() {
-        if (mPreferences == null || peekStripSideInsetPx() <= 0) return 0f;
-        return shownDockSurfaceSpec().underPillSoftRimDp(true);
-    }
 
     /**
      * Watches the host and the row for layout while the dock wears Peek glass, and lets go of
@@ -5757,25 +5744,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.dock.PeekGlassReflection reflection = mPeekReflection;
         reflection.attachHost((ViewGroup) host, findViewById(R.id.extrakeys_background));
-        // The card's foot under the pill: the strip, where it shows, at its place on screen. Its
-        // own layout (its first one included) re-aims the reflection on it.
-        FrameLayout strip = mDecorNavBarSurfaceOverlay;
-        if (mPeekWatchedStrip != strip) {
-            if (mPeekWatchedStrip != null)
-                mPeekWatchedStrip.removeOnLayoutChangeListener(mPeekLayoutListener);
-            mPeekWatchedStrip = strip;
-            if (strip != null) strip.addOnLayoutChangeListener(mPeekLayoutListener);
+        // The card's foot under the pill is the host's own glass now (DockSpec): nothing to attach.
+        if (mPeekWatchedStrip != null) {
+            mPeekWatchedStrip.removeOnLayoutChangeListener(mPeekLayoutListener);
+            mPeekWatchedStrip = null;
         }
-        if (strip != null && strip.getVisibility() == View.VISIBLE && strip.getHeight() > 0) {
-            int[] stripAt = new int[2];
-            int[] hostOnScreen = new int[2];
-            strip.getLocationOnScreen(stripAt);
-            host.getLocationOnScreen(hostOnScreen);
-            reflection.attachStrip(strip, stripAt[0] - hostOnScreen[0],
-                stripAt[1] - hostOnScreen[1]);
-        } else {
-            reflection.attachStrip(null, 0f, 0f);
-        }
+        reflection.attachStrip(null, 0f, 0f);
         boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && mFancierGlassLook != null;
         reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], rowAt[1] - hostAt[1],
@@ -7706,9 +7680,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                 boolean keyboardCapsule) {
         if (navBarHeight <= 0 || imeVisible)
             return false;
-        if (keyboardShown)
-            return !keyboardCapsule;
-        return toolbarShown && !roundedDockStyle;
+        // With the keyboard down the dock's own surface reaches under the pill (DockSpec, D8);
+        // the strip is the keyboard's foot alone until the keyboard's view owns it (wave S).
+        return keyboardShown && !keyboardCapsule;
     }
 
     private boolean shouldUseDockDecorNavBarSurface(@NonNull ChromeSpec state) {
@@ -7907,8 +7881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
         int targetHeight = visible ? resolveDecorNavBarSurfaceHeightPx() : 0;
-        // Under the Peek glass card the strip is the card's foot: inset as the card is.
-        int targetHorizontalMargin = visible ? peekStripSideInsetPx() : 0;
+        int targetHorizontalMargin = 0;
         int targetBottomMargin = 0;
         applyDockSurfaceShape(overlay, false, targetHeight, false, false);
         if (params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
@@ -7994,8 +7967,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Drawable buildDecorNavBarTint(@NonNull ChromeSpec state) {
         float foot = defaultDockGlassFootFraction();
-        if (!state.keyboardShown)
-            return mChrome.glass().dockSurface(state.barAlpha, foot, 1f, false);
         // A keyboard overlaying its place is an opaque panel that answers to neither the slider
         // nor the scheme colour, so the strip takes the same fill: at the glass alpha it would
         // leave the material stopping at the keyboard's bottom edge, which is the very seam
@@ -8049,7 +8020,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         decorView.getLocationOnScreen(mTmpParentLocation);
-        int horizontalMargin = peekStripSideInsetPx();
+        int horizontalMargin = 0;
         int bottomMargin = 0;
         int surfaceHeight = Math.min(Math.max(1, resolveDecorNavBarSurfaceHeightPx()), decorHeight);
         int bottom = mTmpParentLocation[1] + decorHeight - bottomMargin;
@@ -8068,11 +8039,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int resolveDecorNavBarSurfaceHeightPx() {
         if (mNavBarHeight <= 0) {
             return 0;
-        }
-        if (dockFloats()) {
-            View accessoryContainer = findViewById(R.id.accessory_stack_container);
-            int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
-            return dockHeight + mNavBarHeight + appliedDockLayout().capsuleBottomGapPx;
         }
         // Default dock renders its body in-content; the decor overlay is the under-pill nav strip
         // only. Size it from the in-content surface's actual bottom edge down to the screen bottom
@@ -8875,7 +8841,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        int seamOverscanPx = !dockFloats() && shouldShowDecorNavBarSurface(state)
+        int seamOverscanPx = mDockFootPx > 0
             ? horizontalOverscanPx : 0;
         Rect currentTarget = buildAccessoryBackdropTargetRect(
             surfaceHost, horizontalOverscanPx, seamOverscanPx);
@@ -9001,17 +8967,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int stripSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleOverlay,
                 com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
                 capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
-            // The Peek glass card's foot: its sides are the card's sides, rimmed as they are;
-            // its top runs on into the card and its bottom off the screen.
-            if (peekStripSideInsetPx() > 0) {
-                stripSeams = com.termux.app.chrome.ChromeEdgeRule.TOP
-                    | com.termux.app.chrome.ChromeEdgeRule.BOTTOM;
-            }
-            // Its seams pushed past the soft band too, where it wears the card's.
             float density = getResources().getDisplayMetrics().density;
             float reachPx = com.termux.app.chrome.GlassRefraction.seamReachPx(
-                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook), density, 0f,
-                underPillStripSoftRimDp() * density);
+                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook), density, 0f, 0f);
             float[] rect = new float[4];
             com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,
@@ -9587,7 +9545,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
         // the view downward past that seam so the refraction edge band lands below it — the strip
         // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
-        int seamOverscanPx = !dockFloats() && shouldShowDecorNavBarSurface(state)
+        int seamOverscanPx = mDockFootPx > 0
             ? horizontalOverscanPx : 0;
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // The dock's own overscan is what the ImageView is sized to. The drawable inside samples
@@ -9824,7 +9782,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Under a joined Docked frame the frame's glass is this sheet.
             extraKeysBackground.setBackground(stackStandsDownOnFrame() ? null
                 : mChrome.glass().dockSurface(state.barAlpha,
-                    0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
+                    0f, 1f, false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }
@@ -10612,6 +10570,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         params.bottomMargin -= delta;
         content.setLayoutParams(params);
         mHomeContentImeReachPx = reach;
+    }
+
+    /**
+     * The band at the screen's bottom the content keeps clear now that the root no longer pads by
+     * it ({@link com.termux.app.place.BottomInsets}): the content container pads by it for every
+     * child but the stack's layout, which reaches the screen's bottom edge, and the stack's
+     * full-height layers that stand on the bottom keep clear of it by their margin.
+     */
+    @SuppressWarnings("deprecation")
+    private void applyBottomKept(@NonNull WindowInsetsCompat insets) {
+        int kept = com.termux.app.place.BottomInsets.keptPx(insets.isVisible(Type.ime()),
+            insets.getSystemWindowInsetBottom(),
+            insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom);
+        boolean changed = mBottomKeptPx != kept;
+        mBottomKeptPx = kept;
+        View container = findViewById(R.id.terminal_root_container);
+        if (container instanceof com.termux.app.place.BottomInsetFrameLayout) {
+            ((com.termux.app.place.BottomInsetFrameLayout) container).setReachingChild(
+                findViewById(R.id.activity_termux_root_relative_layout));
+            if (container.getPaddingBottom() != kept)
+                container.setPadding(container.getPaddingLeft(), container.getPaddingTop(),
+                    container.getPaddingRight(), kept);
+        }
+        for (int id : new int[] {R.id.place_az_tab_layer, R.id.floating_keyboard_host,
+                R.id.surface_tuning_gesture_overlay}) {
+            View layer = findViewById(id);
+            if (layer == null || !(layer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
+                continue;
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layer.getLayoutParams();
+            if (params.bottomMargin == kept) continue;
+            params.bottomMargin = kept;
+            layer.setLayoutParams(params);
+        }
+        // The stack's margin and the dock's foot are written from this number by the stack pass.
+        if (changed && mTermuxActivityRootView != null) mTermuxActivityRootView.requestLayout();
     }
 
     /** How much shorter the system keyboard leaves the root ({@link KeyboardOverlayPolicy#systemImeTakePx}). */
@@ -12567,7 +12560,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * against, so a pass that moves the margin reads the room it is about to give.
      */
     private int rootRelativeLayoutHeightPx(@NonNull View root) {
-        int height = root.getHeight();
+        // The layout reaches under the band the content keeps clear; that band is not room.
+        int height = com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(root);
         if (height <= 0 || mTermuxActivityRootView == null) return height;
         return Math.max(0, height + mTermuxActivityRootView.unlaidBottomMarginGivebackPx());
     }
@@ -17156,11 +17150,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean dockMoved = applyDockLayout(stack.dock, stackIn.dock.arrangement);
         dockMoved |= applyUnderKeyboardBandAir(stack.underKeyboardTopMarginPx,
             stack.underKeyboardBottomMarginPx);
-        int accessoryBottomMarginPx = stack.bottomMarginPx;
-        int combinedHeight = stack.stackHeightPx;
+        // The dock's surface reaches the screen's bottom edge while it owns the foot (DockSpec,
+        // D8); the rows and the keyboard stand where they did (BottomInsets).
+        boolean dockFoot = com.termux.app.dock.DockSpec.footExists(mDockRows.surfaceShown(),
+            dockFloats(), state.keyboardShown, isImeVisible(), mBottomKeptPx);
+        com.termux.app.place.BottomInsets bottomInsets = com.termux.app.place.BottomInsets.forKept(
+            0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx);
+        mDockFootPx = bottomInsets.dockFootPx;
+        applyDockFootLayout(accessoryStackContainer, bottomInsets);
+        int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
+        int combinedHeight = stack.stackHeightPx + bottomInsets.stackExtraHeightPx;
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
-        int flushBottomInsetPx = stack.flushBottomInsetPx;
+        int flushBottomInsetPx = bottomInsets.stackPaddingPx;
         boolean flushInsetChanged = accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx;
         if (flushInsetChanged) {
             accessoryStackContainer.setPadding(
@@ -17337,6 +17339,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTerminalView == null)
             return;
         mGeometry.request(GeometryScheduler.Reason.METRICS, GeometryScheduler.ResizePolicy.NONE);
+    }
+
+    /** How far the dock's surface runs below its rows to the screen's edge; 0 without a foot. */
+    private int mDockFootPx;
+
+    /**
+     * The keyboard column stands above the foot by its margin, so the rows above it stay put, and
+     * the dock's glass host leaves the column for the container's bottom edge while it owns the
+     * foot: the one surface from the row's top to the screen's bottom (ADR 0018 §1).
+     */
+    private void applyDockFootLayout(@NonNull View container,
+                                     @NonNull com.termux.app.place.BottomInsets insets) {
+        View column = container.findViewById(R.id.accessory_keyboard_column);
+        if (column != null && column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) column.getLayoutParams();
+            if (params.bottomMargin != insets.keyboardColumnMarginPx) {
+                params.bottomMargin = insets.keyboardColumnMarginPx;
+                column.setLayoutParams(params);
+            }
+        }
+        View host = container.findViewById(R.id.accessory_surface_host);
+        if (host == null || !(host.getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) host.getLayoutParams();
+        boolean reaches = insets.dockFootPx > 0;
+        boolean reachesNow = params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != 0;
+        if (reaches == reachesNow) return;
+        if (reaches) {
+            params.removeRule(RelativeLayout.ABOVE);
+            params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        } else {
+            params.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
+        }
+        host.setLayoutParams(params);
     }
 
     private boolean updateAccessoryStackContainerHeight(View view, int height) {
