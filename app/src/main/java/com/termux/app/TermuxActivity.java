@@ -24556,9 +24556,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setTravelDisplacement(0, 0f);
             return;
         }
-        // A pre-sized page has its room already; what is left of the change is the settle's.
-        int preSized = arriving == com.termux.app.wall.PaneWallPage.TERMINAL
-            ? mCrossing.terminalPreSizePx() : 0;
+        // A pre-sized page has its room already; what is left of the change is the settle's. Toward
+        // the terminal the pre-size is room taken ahead of it; away from it, toward Home, it is
+        // room given back that the page does not take (Crossing#giveRoomBack).
+        int preSized = mCrossing.terminalPreSizePx();
+        if (arriving != com.termux.app.wall.PaneWallPage.TERMINAL) preSized = -preSized;
         view.setTravelDisplacement(travelRoomChangePx(arriving) + preSized,
             com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
     }
@@ -25126,6 +25128,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            syncTerminalAway(page);
             if (beadsMelted) applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
@@ -25180,6 +25183,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Resting on Home, the terminal's page is laid out at the Terminal's rest, not at Home's room
+     * (Crossing#restTerminalAway, D11): it is not seen there, and a crossing back then finds
+     * nothing to resize. A crossing that left the Terminal landed with it already set, to the
+     * room the Terminal stood in, which is kept; a landing on Home with no crossing behind it
+     * (reduced motion, a jump) sets it here, in the settle's batch, before the pass that gives
+     * the content Home's room. Anywhere else it is 0.
+     */
+    private void syncTerminalAway(@NonNull com.termux.app.wall.PaneWallPage page) {
+        boolean home = page == com.termux.app.wall.PaneWallPage.WIDGETS && mLastWallPage == page;
+        if (!home) {
+            mCrossing.restTerminalAway(0);
+        } else if (mCrossing.terminalAwayPx() == 0) {
+            mCrossing.restTerminalAway(
+                travelRestReservationPx(com.termux.app.wall.PaneWallPage.TERMINAL)
+                    - travelRestReservationPx(com.termux.app.wall.PaneWallPage.WIDGETS));
+        }
     }
 
     /**

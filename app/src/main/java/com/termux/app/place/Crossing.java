@@ -190,6 +190,11 @@ public final class Crossing {
     private int mCoverPx;
     /** How much shorter the terminal's page is laid out for the slide; 0 while it is not. */
     private int mTerminalPreSizePx;
+    /**
+     * How much shorter the terminal's page is laid out while the wall rests away from the
+     * Terminal ({@link #restTerminalAway}); 0 on the Terminal. Not a crossing's: it outlives them.
+     */
+    private int mTerminalAwayPx;
 
     // ---- What the frames ease ----
     private float mFoldShare = Float.NaN;
@@ -503,7 +508,18 @@ public final class Crossing {
         hold(reservationPx);
         mContentPreRolled = true;
         mHeldReservationPx = Math.max(0, mHeldReservationPx - roomGivenBackPx);
+        // Leaving the Terminal for Home, the terminal's page keeps the Terminal's rest (D11): it is
+        // laid out short of the room given back, so its grid does not change, and it stays so for
+        // as long as the wall rests on Home (land).
+        if (leavesTerminalForHome()) preSizeTerminal(roomGivenBackPx, reservationPx);
         return mGridHold == null;
+    }
+
+    /** Whether this crossing runs from the Terminal toward Home. */
+    private boolean leavesTerminalForHome() {
+        SeamCrossing.Endpoint there = mThere;
+        return mCommitted == PaneWallPage.TERMINAL && there != null
+            && there.page.kind == PaneWallPage.WIDGETS;
     }
 
     public boolean contentPreRolled() {
@@ -577,6 +593,26 @@ public final class Crossing {
         return mTerminalPreSizePx;
     }
 
+    /**
+     * The terminal's page laid out {@code px} shorter than the content's room while the wall rests
+     * away from the Terminal (0 on it): the room the Terminal's rest takes beyond the room the page
+     * on screen leaves, so the terminal's grid is the Terminal's rest wherever the wall stands
+     * (D11) and a crossing back has nothing to resize. A crossing that left the Terminal for Home
+     * lands with it already set ({@link #land}); between crossings only.
+     */
+    public void restTerminalAway(int px) {
+        if (crossing()) return;
+        int inset = Math.max(0, px);
+        if (inset == mTerminalAwayPx) return;
+        mTerminalAwayPx = inset;
+        mCover.preSize(inset);
+    }
+
+    /** How much shorter the terminal's page is laid out at rest away from the Terminal. */
+    public int terminalAwayPx() {
+        return mTerminalAwayPx;
+    }
+
     // ---- What the frames ease ----
 
     /** How much of the extra keys a fold shows ({@link #stack}); NaN while none runs. */
@@ -615,7 +651,9 @@ public final class Crossing {
             && !SeamTravel.crosses(other, landed.kind);
         float heldPx = mStackPx;
         float heldKeyboardPx = mStackKeyboardPx;
-        Landing landing = releaseInto(mLanding);
+        // Landed on Home, the terminal's page keeps the size it crossed at (restTerminalAway).
+        Landing landing = releaseInto(mLanding, landed.kind == PaneWallPage.WIDGETS
+            ? appliedTerminalInsetPx() : 0);
         landing.rises = rises && heldPx > 0f;
         if (landing.rises) {
             mRiseFromPx = heldPx;
@@ -652,7 +690,7 @@ public final class Crossing {
      */
     @NonNull
     public Landing releaseHold() {
-        Landing landing = releaseInto(mLanding);
+        Landing landing = releaseInto(mLanding, appliedTerminalInsetPx());
         landing.beadsMelted = false;
         landing.storeMoved = false;
         landing.rises = false;
@@ -660,8 +698,14 @@ public final class Crossing {
         return landing;
     }
 
+    /** The inset the terminal's page is laid out with now: the slide's pre-size, else the rest's. */
+    private int appliedTerminalInsetPx() {
+        return mTerminalPreSizePx > 0 ? mTerminalPreSizePx : mTerminalAwayPx;
+    }
+
+    /** @param terminalInsetPx the inset the terminal's page keeps after the hold */
     @NonNull
-    private Landing releaseInto(@NonNull Landing landing) {
+    private Landing releaseInto(@NonNull Landing landing, int terminalInsetPx) {
         landing.held = mHoldsContent;
         landing.keyboardPreRolled = mKeyboardPreRolled;
         landing.contentPreRolled = mContentPreRolled;
@@ -689,11 +733,12 @@ public final class Crossing {
         mCoverPx = 0;
         if (covered) mCover.cover(0);
         // The page takes the content's room back in the landing's pass, which gives the content
-        // the room it was laid out short of: the panes keep their size.
-        if (mTerminalPreSizePx != 0) {
-            mTerminalPreSizePx = 0;
-            mCover.preSize(0);
-        }
+        // the room it was laid out short of: the panes keep their size. Resting away from the
+        // Terminal, it keeps what the Terminal's rest takes beyond that room instead.
+        int applied = appliedTerminalInsetPx();
+        mTerminalPreSizePx = 0;
+        mTerminalAwayPx = Math.max(0, terminalInsetPx);
+        if (applied != mTerminalAwayPx) mCover.preSize(mTerminalAwayPx);
         return landing;
     }
 
