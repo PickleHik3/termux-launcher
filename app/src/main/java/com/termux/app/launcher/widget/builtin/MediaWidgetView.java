@@ -364,11 +364,16 @@ public class MediaWidgetView extends BuiltinWidgetView {
             context.getString(R.string.bw_feeds_media_nothing_playing), "", "", false);
     }
 
+    /** The inset of the plan last made, which the art frame's clip follows. */
+    private int plannedInsetDp = WidgetTokens.INSET_DP;
+
     @NonNull private View buildPlayer(@NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui) {
         MediaLayoutPlanner.Content content = planContent();
         float fontScale = WidgetTokens.typeScale(getResources());
-        return new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) ->
-            MediaLayoutPlanner.plan(span, widthDp, heightDp, fontScale, content, measure),
+        return new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) -> {
+            plannedInsetDp = MediaLayoutPlanner.insetDp(span, widthDp, heightDp);
+            return MediaLayoutPlanner.plan(span, widthDp, heightDp, fontScale, content, measure);
+        },
             new WidgetPlanHost.ViewSource() {
                 @Nullable @Override public View view(@NonNull WidgetLayoutPlan.Part part) {
                     return partView(part, span, ui, fontScale);
@@ -383,7 +388,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
                                     float fontScale) {
         switch (part.id) {
             case "art":
-                return artFrame(ui, WidgetTokens.insetDp(span), 6);
+                return artFrame(ui, plannedInsetDp, 6);
             case "bar":
                 bar = ui.bar(0f, style().primary, 4);
                 bar.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,

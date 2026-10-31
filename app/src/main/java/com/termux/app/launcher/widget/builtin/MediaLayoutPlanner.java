@@ -68,7 +68,7 @@ final class MediaLayoutPlanner {
                                           float heightDp, float fontScale,
                                           @NonNull Content content, @NonNull Measure measure) {
         Box card = new Box(0f, 0f, widthDp, heightDp);
-        Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
+        Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, insetDp(span, widthDp, heightDp));
         List<Part> parts = new ArrayList<>();
         if (span == BuiltinWidgetSpan.ONE_BY_ONE) {
             parts.add(Part.touch("art", inner));
@@ -76,7 +76,11 @@ final class MediaLayoutPlanner {
             parts.add(Part.touch("play", new Box(inner.centerX() - side / 2f,
                 inner.centerY() - side / 2f, side, side)));
         } else if (span.rows == 2) {
-            twoRow(span, inner, fontScale, content, parts);
+            if (isPolaroid(span, widthDp, heightDp)) {
+                polaroid(inner, fontScale, content, measure, parts);
+            } else {
+                artAndColumn(inner, fontScale, content, span == BuiltinWidgetSpan.TWO_BY_TWO, parts);
+            }
         } else {
             tall(span, inner, fontScale, content, parts);
         }
@@ -84,103 +88,104 @@ final class MediaLayoutPlanner {
             parts);
     }
 
-    /** The art beside the text needs at least this much, or it stacks above the text instead. */
-    private static final float ART_BESIDE_MIN_DP = 56f;
     /** The text column beside the art is never narrower than this. */
     private static final float TEXT_BESIDE_MIN_DP = 80f;
     /** The clock labels sit under the bar only where the card is this wide. */
     private static final float CLOCKS_MIN_WIDTH_DP = 300f;
+    /** The 2x2's thin frame: the polaroid's border around the art. */
+    static final int POLAROID_INSET_DP = 8;
+    /** The polaroid's progress bar is held in from the frame by this much on each side. */
+    private static final float POLAROID_BAR_INSET_DP = 6f;
+    /** Slack added to a measured line so rounding never ellipsizes it. */
+    private static final float MEASURE_SLACK_DP = 1f;
+
+    /** A 2x2-span card is a polaroid while its inner height is at least this share of its inner width. */
+    static final float POLAROID_MIN_ASPECT = 0.85f;
 
     /**
-     * The two-row cards: the art and the track's words above, then progress, then a controls row
-     * centred along the foot. The art is square and inside the inset, beside the words where the
-     * width allows and above them where it does not. Where the room is short the clocks, the
-     * source, the progress and the artist go, in that order, before the art is shrunk below its floor.
+     * Whether a card of this size is the polaroid: a 2x2 span whose room, inside the thin frame,
+     * is upright. A wider card of the same span takes the art-and-column layout of the 4x2.
      */
-    private static void twoRow(@NonNull BuiltinWidgetSpan span, @NonNull Box inner, float fontScale, @NonNull Content content,
-                               @NonNull List<Part> parts) {
-        if (span == BuiltinWidgetSpan.FOUR_BY_TWO) {
-            artAndColumn(inner, fontScale, content, parts);
-            return;
-        }
+    static boolean isPolaroid(@NonNull BuiltinWidgetSpan span, float widthDp, float heightDp) {
+        if (span != BuiltinWidgetSpan.TWO_BY_TWO) return false;
+        float innerWidth = widthDp - 2f * POLAROID_INSET_DP;
+        float innerHeight = heightDp - 2f * POLAROID_INSET_DP;
+        return innerHeight >= POLAROID_MIN_ASPECT * innerWidth;
+    }
+
+    /** The content inset of the Media card: thin on a polaroid, the shared one elsewhere. */
+    static int insetDp(@NonNull BuiltinWidgetSpan span, float widthDp, float heightDp) {
+        return isPolaroid(span, widthDp, heightDp) ? POLAROID_INSET_DP : WidgetTokens.insetDp(span);
+    }
+
+    /**
+     * The 2x2 as a polaroid: a square art across the top inside a thin frame, and below it the
+     * title, the artist, the progress bar and the controls, centred. Where the room is short the
+     * art shrinks first (square, centred); under its floor the artist, the progress and the title
+     * go, in that order, and past that the art goes and the rest centres vertically.
+     */
+    private static void polaroid(@NonNull Box inner, float fontScale, @NonNull Content content,
+                                 @NonNull Measure measure, @NonNull List<Part> parts) {
         boolean resume = content.mode == Mode.RESUME;
         boolean playing = content.mode == Mode.PLAYING;
         float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
         float labelSp = WidgetTokens.sizeDp(Role.LABEL, fontScale);
         float titleH = WidgetTokens.lineDp(titleSp);
         float labelH = WidgetTokens.lineDp(labelSp);
-        boolean wide = inner.width >= CLOCKS_MIN_WIDTH_DP;
         boolean progress = playing && content.hasProgress;
-        boolean clocks = progress && wide;
-        boolean source = playing && wide && !content.source.isEmpty();
         boolean artist = playing && !content.artist.isEmpty();
+        boolean title = true;
         float control = Math.min(CONTROL_DP, inner.height);
 
-        float footer = 0f;
-        float textH = 0f;
-        float header = 0f;
-        for (int attempt = 0; attempt < 5; attempt++) {
-            footer = control + (progress ? GAP_M + BAR_DP + (clocks ? GAP_S + labelH : 0f) : 0f);
-            textH = titleH + (artist ? GAP_S + labelH : 0f) + (source ? GAP_M + labelH : 0f);
-            header = inner.height - footer - GAP_M;
-            if (textH <= header + 0.01f) break;
-            if (clocks) clocks = false;
-            else if (source) source = false;
+        float band = 0f;
+        float side = 0f;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            band = (title ? titleH + GAP_S : 0f) + (artist ? labelH + GAP_S : 0f)
+                + (progress ? BAR_DP + GAP_M : 0f) + control;
+            side = Math.min(inner.width, inner.height - GAP_M - band);
+            if (side >= ART_MIN_DP) break;
+            if (artist) artist = false;
             else if (progress) progress = false;
-            else if (artist) artist = false;
+            else if (title) title = false;
         }
-        // Not even the title fits above the controls (a large font at the minimum): it goes.
-        boolean title = textH <= header + 0.01f;
-        if (!title) { textH = 0f; source = false; artist = false; }
-
-        float top = inner.top;
-        float textLeft = inner.left;
-        float textWidth = inner.width;
-        float textTop;
-        float beside = Math.min(header, inner.width - GAP_L - TEXT_BESIDE_MIN_DP);
-        if (beside >= ART_BESIDE_MIN_DP) {
-            parts.add(Part.touch("art",
-                new Box(inner.left, top + (header - beside) / 2f, beside, beside)));
-            textLeft = inner.left + beside + GAP_L;
-            textWidth = inner.width - beside - GAP_L;
-            textTop = top + Math.max(0f, (header - textH) / 2f);
+        boolean art = side >= ART_MIN_DP;
+        float y;
+        if (art) {
+            parts.add(Part.touch("art", new Box(inner.centerX() - side / 2f, inner.top, side, side)));
+            // The band rides at the foot; the art takes what it leaves.
+            y = inner.bottom() - band;
         } else {
-            float stacked = Math.min(inner.width, header - textH - GAP_M);
-            if (stacked >= ART_MIN_DP) {
-                parts.add(Part.touch("art", new Box(inner.left, top, stacked, stacked)));
-                textTop = top + header - textH;
-            } else {
-                textTop = top + Math.max(0f, (header - textH) / 2f);
-            }
-        }
-
-        float y = textTop;
-        if (source) {
-            parts.add(Part.text("source", new Box(textLeft, y, textWidth, labelH), content.source,
-                Role.LABEL, false, labelSp, Ink.SOFT));
-            y += labelH + GAP_M;
+            band = (title ? titleH + GAP_S : 0f) + (artist ? labelH + GAP_S : 0f)
+                + (progress ? BAR_DP + GAP_M : 0f) + control;
+            y = inner.top + Math.max(0f, (inner.height - band) / 2f);
         }
         if (title) {
-            parts.add(Part.text("title", new Box(textLeft, y, textWidth, titleH), content.title,
-                Role.TITLE, false, titleSp, Ink.STRONG));
+            parts.add(centred("title", inner, y, titleH, content.title, Role.TITLE, titleSp,
+                Ink.STRONG, measure));
+            y += titleH + GAP_S;
         }
-        y += titleH;
         if (artist) {
-            parts.add(Part.text("artist", new Box(textLeft, y + GAP_S, textWidth, labelH),
-                content.artist, Role.LABEL, false, labelSp, Ink.SOFT));
+            parts.add(centred("artist", inner, y, labelH, content.artist, Role.LABEL, labelSp,
+                Ink.SOFT, measure));
+            y += labelH + GAP_S;
         }
-
-        float footTop = inner.bottom() - footer;
         if (progress) {
-            parts.add(Part.touch("bar", new Box(inner.left, footTop, inner.width, BAR_DP)));
-            if (clocks) {
-                float clockTop = footTop + BAR_DP + GAP_S;
-                float half = inner.width / 2f;
-                parts.add(Part.touch("elapsed", new Box(inner.left, clockTop, half, labelH)));
-                parts.add(Part.touch("total", new Box(inner.left + half, clockTop, half, labelH)));
-            }
+            float barWidth = Math.max(0f, inner.width - 2f * POLAROID_BAR_INSET_DP);
+            parts.add(Part.touch("bar", new Box(inner.left + POLAROID_BAR_INSET_DP, y, barWidth,
+                BAR_DP)));
+            y += BAR_DP + GAP_M;
         }
-        controlsRow(parts, inner.left, inner.width, inner.bottom() - control, control, resume);
+        controlsRow(parts, inner.left, inner.width, y, control, resume);
+    }
+
+    /** A line of text centred across {@code inner}: its box is as wide as the words, or the inner width. */
+    @NonNull private static Part centred(@NonNull String id, @NonNull Box inner, float top, float height,
+                                         @NonNull String text, @NonNull Role role, float sizeDp,
+                                         @NonNull Ink ink, @NonNull Measure measure) {
+        float width = Math.min(inner.width,
+            measure.widthDp(text, role, false, sizeDp) + MEASURE_SLACK_DP);
+        return Part.text(id, new Box(inner.centerX() - width / 2f, top, width, height), text, role,
+            false, sizeDp, ink);
     }
 
     /** The controls are shrunk toward this before prev and next are dropped. */
@@ -214,7 +219,7 @@ final class MediaLayoutPlanner {
      * the clocks, the source, the progress and the artist go, in that order.
      */
     private static void artAndColumn(@NonNull Box inner, float fontScale, @NonNull Content content,
-                                     @NonNull List<Part> parts) {
+                                     boolean squareArt, @NonNull List<Part> parts) {
         boolean resume = content.mode == Mode.RESUME;
         boolean playing = content.mode == Mode.PLAYING;
         float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
@@ -222,12 +227,19 @@ final class MediaLayoutPlanner {
         float titleH = WidgetTokens.lineDp(titleSp);
         float labelH = WidgetTokens.lineDp(labelSp);
 
-        float side = Math.min(inner.height, inner.width - GAP_L - TEXT_BESIDE_MIN_DP);
+        // A wide 2x2 keeps room in its column for three controls and a square art; the 4x2's art
+        // is as tall as the card and the column's width comes first.
+        float columnMin = squareArt ? Math.max(TEXT_BESIDE_MIN_DP, 3f * CONTROL_MIN_DP)
+            : TEXT_BESIDE_MIN_DP;
+        float side = Math.min(inner.height, inner.width - GAP_L - columnMin);
         Box column = inner;
         if (side >= ART_MIN_DP) {
-            // Square at the inner height; a tall card narrower than that gives the column its width
-            // first and the art is cut to the narrower box.
-            parts.add(Part.touch("art", new Box(inner.left, inner.top, side, inner.height)));
+            // The 4x2: square at the inner height; a tall card narrower than that gives the column
+            // its width first and the art is cut to the narrower box. The 2x2: a square, centred.
+            Box artBox = squareArt
+                ? new Box(inner.left, inner.top + (inner.height - side) / 2f, side, side)
+                : new Box(inner.left, inner.top, side, inner.height);
+            parts.add(Part.touch("art", artBox));
             column = new Box(inner.left + side + GAP_L, inner.top,
                 inner.width - side - GAP_L, inner.height);
         }
