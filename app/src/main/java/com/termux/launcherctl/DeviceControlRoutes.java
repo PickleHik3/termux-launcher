@@ -127,14 +127,19 @@ final class DeviceControlRoutes {
 
     // ------------------------------------------------------------------------------------- look
 
-    /** {@code launcherctl look}: the look grid, answered by {@link LookCommand}. */
+    /**
+     * {@code launcherctl look}: the look grid, answered by {@link LookCommand}. A change re-dresses
+     * the live chrome on the main thread the way the Appearance editor's Done does; with no
+     * launcher running the grid is written all the same and the next start reads it.
+     */
     @NonNull
     private static JSONObject look(@NonNull Context context, @NonNull JSONObject arguments)
             throws JSONException {
         Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         if (preferences == null) return error(503, "unavailable", "The launcher's settings are not ready");
-        return LookCommand.handle(preferences.lookGrid(), arguments);
+        return LookCommand.handle(preferences.lookGrid(), arguments,
+            () -> TerminalActionDispatcher.getInstance().redressChrome());
     }
 
     // ------------------------------------------------------------------------------------ vibrate

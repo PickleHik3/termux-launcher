@@ -14,8 +14,9 @@ import java.util.Locale;
 /**
  * {@code launcherctl look get|set|reset}: the look grid (ADR 0017) over the API. Pure over a
  * {@link LookGrid}, so the grammar is tested without a device. A write goes through the grid's
- * store, which is a preference write: the same change notification the editor's Done and the
- * Settings rows rely on redresses the chrome.
+ * store, which is a plain preference write and redresses nothing by itself: a {@code set}, or a
+ * {@code reset} that cleared something, runs the caller's {@code onChanged} once, and the route
+ * re-dresses the live chrome from there.
  *
  * <p>Request: {@code {"op":"get|set|reset","property":"opacity","value":"60","element":"dock",
  * "page":2}}; property, element and page are optional where the CLI makes them so.</p>
@@ -46,6 +47,16 @@ final class LookCommand {
 
     @NonNull
     static JSONObject handle(@NonNull LookGrid grid, @NonNull JSONObject request) throws JSONException {
+        return handle(grid, request, () -> { });
+    }
+
+    /**
+     * Answers one request. {@code onChanged} runs once after a {@code set}, or after a
+     * {@code reset} that cleared at least one cell; never for a {@code get} or an error.
+     */
+    @NonNull
+    static JSONObject handle(@NonNull LookGrid grid, @NonNull JSONObject request,
+                             @NonNull Runnable onChanged) throws JSONException {
         String op = request.optString("op", "");
         String propertyName = request.optString("property", "").trim().toLowerCase(Locale.ROOT);
         String elementName = request.optString("element", "").trim().toLowerCase(Locale.ROOT);
@@ -77,9 +88,9 @@ final class LookCommand {
                 return get(grid, property, element, page);
             case "set":
                 if (property == null) return error("'property' is required");
-                return set(grid, property, element, page, request.optString("value", ""));
+                return set(grid, property, element, page, request.optString("value", ""), onChanged);
             case "reset":
-                return reset(grid, property, element, page);
+                return reset(grid, property, element, page, onChanged);
             default:
                 return error("'op' must be get, set or reset");
         }
@@ -96,11 +107,12 @@ final class LookCommand {
 
     @NonNull
     private static JSONObject set(LookGrid grid, LookGrid.Property property,
-                                  @Nullable LookGrid.Element element, int page, String text)
-            throws JSONException {
+                                  @Nullable LookGrid.Element element, int page, String text,
+                                  @NonNull Runnable onChanged) throws JSONException {
         Integer value = parse(property, text.trim().toLowerCase(Locale.ROOT));
         if (value == null) return error(hint(property));
         grid.write(property, element, page, value);
+        onChanged.run();
         return new JSONObject().put("ok", true).put("property", name(property))
             .put("value", render(property, grid.value(property, element, page)))
             .put("at", describeCell(element, page));
@@ -109,7 +121,8 @@ final class LookCommand {
     /** Resets one cell of one property, or of every property the cell holds. */
     @NonNull
     private static JSONObject reset(LookGrid grid, @Nullable LookGrid.Property property,
-                                    @Nullable LookGrid.Element element, int page) throws JSONException {
+                                    @Nullable LookGrid.Element element, int page,
+                                    @NonNull Runnable onChanged) throws JSONException {
         int cleared = 0;
         for (LookGrid.Property each : LookGrid.Property.values()) {
             if (property != null && each != property) continue;
@@ -119,6 +132,7 @@ final class LookCommand {
                 cleared++;
             }
         }
+        if (cleared > 0) onChanged.run();
         return new JSONObject().put("ok", true).put("reset", cleared)
             .put("at", describeCell(element, page));
     }
