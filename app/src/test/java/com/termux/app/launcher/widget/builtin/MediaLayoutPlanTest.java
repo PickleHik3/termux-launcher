@@ -176,7 +176,12 @@ public class MediaLayoutPlanTest {
         assertEquals(16f, wide.inset.left, 0.01f);
         Part art = wide.part("art"), title = wide.part("title");
         assertNotNull(art);
-        assertEquals("art at the full inner height", wide.inset.height, art.box.height, 0.01f);
+        assertEquals("art square", art.box.width, art.box.height, 0.01f);
+        assertEquals("art centred vertically", wide.inset.centerY(), art.box.centerY(), 0.01f);
+        assertTrue("three controls fit the column", wide.has("prev") && wide.has("next"));
+        WidgetLayoutPlan short2 = plan(BuiltinWidgetSpan.TWO_BY_TWO, 184f, 150f, 1f, playing());
+        check(short2, "184x150");
+        assertFalse("no art where the column would be too narrow", short2.has("art"));
         assertEquals("art on the start side", wide.inset.left, art.box.left, 0.01f);
         assertTrue("column beside the art", title.box.left >= art.box.right() - 0.01f);
     }

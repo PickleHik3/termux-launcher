@@ -79,7 +79,7 @@ final class MediaLayoutPlanner {
             if (isPolaroid(span, widthDp, heightDp)) {
                 polaroid(inner, fontScale, content, measure, parts);
             } else {
-                artAndColumn(inner, fontScale, content, parts);
+                artAndColumn(inner, fontScale, content, span == BuiltinWidgetSpan.TWO_BY_TWO, parts);
             }
         } else {
             tall(span, inner, fontScale, content, parts);
@@ -219,7 +219,7 @@ final class MediaLayoutPlanner {
      * the clocks, the source, the progress and the artist go, in that order.
      */
     private static void artAndColumn(@NonNull Box inner, float fontScale, @NonNull Content content,
-                                     @NonNull List<Part> parts) {
+                                     boolean squareArt, @NonNull List<Part> parts) {
         boolean resume = content.mode == Mode.RESUME;
         boolean playing = content.mode == Mode.PLAYING;
         float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
@@ -227,12 +227,19 @@ final class MediaLayoutPlanner {
         float titleH = WidgetTokens.lineDp(titleSp);
         float labelH = WidgetTokens.lineDp(labelSp);
 
-        float side = Math.min(inner.height, inner.width - GAP_L - TEXT_BESIDE_MIN_DP);
+        // A wide 2x2 keeps room in its column for three controls and a square art; the 4x2's art
+        // is as tall as the card and the column's width comes first.
+        float columnMin = squareArt ? Math.max(TEXT_BESIDE_MIN_DP, 3f * CONTROL_MIN_DP)
+            : TEXT_BESIDE_MIN_DP;
+        float side = Math.min(inner.height, inner.width - GAP_L - columnMin);
         Box column = inner;
         if (side >= ART_MIN_DP) {
-            // Square at the inner height; a tall card narrower than that gives the column its width
-            // first and the art is cut to the narrower box.
-            parts.add(Part.touch("art", new Box(inner.left, inner.top, side, inner.height)));
+            // The 4x2: square at the inner height; a tall card narrower than that gives the column
+            // its width first and the art is cut to the narrower box. The 2x2: a square, centred.
+            Box artBox = squareArt
+                ? new Box(inner.left, inner.top + (inner.height - side) / 2f, side, side)
+                : new Box(inner.left, inner.top, side, inner.height);
+            parts.add(Part.touch("art", artBox));
             column = new Box(inner.left + side + GAP_L, inner.top,
                 inner.width - side - GAP_L, inner.height);
         }
