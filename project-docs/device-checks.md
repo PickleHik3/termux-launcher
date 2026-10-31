@@ -21,6 +21,18 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · dock as one surface (ADR 0018 wave D: root stops fitting the bottom inset,
+  `BottomInsets`, the dock host reaches the screen's edge, the decor strip kept for the keyboard
+  only) · pong, Floating + Peek: `dockfoot-check.py` step at row 2349 reads under 4 at dock
+  opacity 0, 34 and 100; Docked Tray, Floating Tray, Beads, Peek with the keyboard down and up,
+  one pane and split, light/dark/black, Home and Terminal pages look as before but for the seam
+  (no band under the pill for the Floating Tray card, the strip under the keyboard as before);
+  the terminal's rows, the widgets, the drawer, sheets, palette, the A–Z tab and the floating
+  keyboard stop above the pill as before; system keyboard up over the terminal and over Home:
+  nothing moves vs before, no glass under the system keyboard; Display with the system keyboard:
+  the room is as before; the editor's Dock card still rings the dock and its rows change it live;
+  `launcherctl look set opacity 95 --element dock` darkens the whole dock, foot included, at once;
+  `motion-invariants.sh` over a Home ⇄ Terminal round trip reports no new resize · pong.
 - 2026-10-31 · horizontal slider rows (ef0f80ede and the three before it) · Dock, Status bar,
   Keyboard, Home and Appearance cards at half and full, font 1.0 and 1.3, light and dark: every
   value slider is a horizontal row (glyph, name, source dot, value, then the track across the

@@ -233,7 +233,8 @@ public final class KeyboardGeometryChoreographer {
         int width = floating != null ? floating.widthPx
             : availableRoot != null ? availableRoot.getWidth() : 0;
         int availableHeight = floating != null ? floating.availableHeightPx
-            : availableRoot != null ? availableRoot.getHeight() : 0;
+            : availableRoot != null
+            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
         DisplayMetrics metrics = mSurface.displayMetrics();
         if (width <= 0)
             width = metrics.widthPixels;
