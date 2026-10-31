@@ -129,11 +129,20 @@ public class TermuxApplication extends Application {
                 terminalId);
             // Every look value moves into the one grid (ADR 0017), once, before the glass
             // controls' start-up work reads and writes looks through it.
+            com.termux.app.wall.WallPagesStore wallStore =
+                com.termux.app.wall.WallPagesStore.open(context);
             java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
-            for (com.termux.app.wall.WallPages.Page page
-                    : com.termux.app.wall.WallPagesStore.open(context).current().allPages())
+            for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
                 lookPageIds.add(page.id);
             surfacePreferences.migrateLookGrid(lookPageIds);
+            // Every grid reads a page's kind from the wall and a kind's shipped look from the
+            // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
+            com.termux.shared.termux.settings.preferences.LookGrid.install(
+                new com.termux.app.wall.WallLookKinds(wallStore),
+                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+            com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()));
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);

@@ -117,4 +117,47 @@ public class GlassRowsTest {
             assertFalse(row + " leaves the wall", grid.has(cell.property, null, LookGrid.NO_PAGE));
         }
     }
+
+    /** ADR 0018 §3: the keyboard ships Mist on Home pages and Clear on Display pages. */
+    @Test
+    public void theKeyboardShipsItsOwnLookPerKind() {
+        java.util.Map<Integer, LookGrid.Kind> kinds = new java.util.HashMap<>();
+        kinds.put(1, LookGrid.Kind.HOME);
+        kinds.put(2, LookGrid.Kind.TERMINAL);
+        kinds.put(3, LookGrid.Kind.DISPLAY);
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(), kinds::get,
+            SurfacePresets.SHIPPED_BY_KIND);
+        SurfacePresets.ShippedLook mist = SurfacePresets.shippedLook(
+            AppearanceLooks.stopForPresetId("frost"));
+        SurfacePresets.ShippedLook clear = SurfacePresets.shippedLook(
+            AppearanceLooks.stopForPresetId("minimal"));
+        LookGrid.Element keyboard = LookGrid.Element.KEYBOARD;
+
+        assertEquals(FrostStops.MIST, grid.value(LookGrid.Property.FROST, keyboard, 1));
+        assertEquals(60, grid.value(LookGrid.Property.OPACITY, keyboard, 1));
+        assertEquals(mist.tint, grid.value(LookGrid.Property.TINT, keyboard, 1));
+        assertTrue("grain on", grid.value(LookGrid.Property.GRAIN, keyboard, 1) > 0);
+        assertEquals(LookGrid.Cell.SHIPPED, grid.resolve(LookGrid.Property.OPACITY, keyboard, 1).cell);
+
+        assertEquals(clear.frostStop, grid.value(LookGrid.Property.FROST, keyboard, 3));
+        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, 3));
+        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY));
+
+        // The Terminal page, the wall and every other element ship one look for every kind.
+        for (LookGrid.Property property : new LookGrid.Property[] {LookGrid.Property.FROST,
+                LookGrid.Property.OPACITY, LookGrid.Property.TINT, LookGrid.Property.GRAIN}) {
+            int plain = new LookGrid(new LookGrid.MemoryStore(), null, null)
+                .value(property, keyboard, LookGrid.NO_PAGE);
+            assertEquals(property.key, plain, grid.value(property, keyboard, 2));
+            assertEquals(property.key, plain, grid.value(property, keyboard, LookGrid.NO_PAGE));
+            for (LookGrid.Element element : LookGrid.Element.values()) {
+                if (element == keyboard) continue;
+                for (int page = 1; page <= 3; page++)
+                    assertEquals(element + " " + property.key + " on " + page,
+                        new LookGrid(new LookGrid.MemoryStore(), null, null)
+                            .value(property, element, LookGrid.NO_PAGE),
+                        grid.value(property, element, page));
+            }
+        }
+    }
 }
