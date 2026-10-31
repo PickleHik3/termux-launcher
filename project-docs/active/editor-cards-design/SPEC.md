@@ -28,7 +28,7 @@ Units are dp unless marked. "Inferred" means no design-system source; the reason
 | Detent | Sheet top | Visible height | Shows |
 | --- | --- | --- | --- |
 | Full | bar bottom + 4 = 108 | 807 | header, chips, body scrolls |
-| Half | round(915 × 0.608) = 556 | 359 | header, chips, Look, legend strip |
+| Half | round(915 × 0.608) = 556 | 359 | header, chips, Look, the Frost, Opacity and Tint sliders |
 | Peek | 915 − (24 + 48 + 28) = 815 | 100 | handle + title row |
 
 - The sheet extends to the screen bottom; the body keeps `safe bottom + 16` bottom padding.
@@ -87,7 +87,7 @@ Units are dp unless marked. "Inferred" means no design-system source; the reason
 | # | Row | Control |
 | --- | --- | --- |
 | 1 | Look | stacked segments: Clear · Mist · Tint · Solid · Custom |
-| 2–4 | Frost, Opacity, Tint | the legend strip |
+| 2–4 | Frost, Opacity, Tint | horizontal slider |
 | 5 | Colour | stacked segments: Primary · Secondary · Tertiary |
 | 6 | Corners | horizontal slider 0–32 dp |
 | 7 | Depth | horizontal slider 0–40 |
@@ -121,24 +121,25 @@ Units are dp unless marked. "Inferred" means no design-system source; the reason
 | Long-press row name | 500 ms, cancels after 8 px movement; also right-click and Enter on the name | user brief |
 | Row menu | caption "<Row>: from <cell>", item "Reset this row" (disabled when this cell has no value) | inferred |
 
-### Legend strip
-
-| Part | Value | Source |
-| --- | --- | --- |
-| Track | 28 wide, 120 long, corners 14 | `--tl-slider-track`, `--tl-slider-length` |
-| Track fill | inactive `--border-soft`, active `--accent` | design system legend slider |
-| Thumb | 4 high line, 8 inset from each side, `--accent-on`, 6 from the fill end | `--tl-slider-thumb` |
-| Track to label | 6 | user brief "6dp gap" |
-| Column | 96 wide; columns 8 apart | inferred: label "Opacity 100%" fits |
-| Label | name + dot + value on one line, `--text-sm` | user brief |
-| Strip padding | 8 top, 12 bottom | inferred |
-
 ### Horizontal slider
 
+Every value slider is one (decided 2026-10-31; the vertical legend strip is retired). Rows stack
+one under another in the card's order. `SliderRow`, `LegendSlider#setHorizontal`.
+
 | Part | Value | Source |
 | --- | --- | --- |
-| Track | 16 high, corners 8, in a 48 hit area | inferred (M3E slider track) |
-| Fill / thumb | as the legend strip, rotated | design system |
+| Row | two lines: glyph · name · source dot · value, then the track; height measured | developer 2026-10-31 |
+| Row top padding | 8; the track's hit area keeps its own room below | inferred |
+| Glyph | 24, `--accent`, 16 to the name (the 56 lead column) | rows |
+| Name | `--text-base` 16, one line, ellipsis, min width 0 | DESIGN.md row title |
+| Source dot | 8 × 8, 6 after the name's last glyph | user brief |
+| Value | `--font-mono`, LabelLarge, `--muted`, end aligned, 8 after the name, as wide as its widest readout | DESIGN.md: metrics are monospace |
+| Track | 16 high, corners 8, the row's full width inside the 16 margins, centred in a 48 hit area | M3E XS slider track |
+| Track fill | active `--accent` from the start, inactive `--border-soft` after the handle, 4 stop at the end | design system |
+| Handle | 4 wide, 2 past the track above and below, 6 gap to either fill | `--tl-slider-thumb` |
+| Touch | a drag along the track takes it at once; a drag across it scrolls the card; a tap moves the handle there | developer 2026-10-31 |
+| Link | the link toggle, 48, centred between the two rows it links | inferred |
+| Measured row | 80 at font 1.0 (name line 24), 84 at 1.3 (name line 28) | EditorRowKindsTest |
 
 ### Segments
 
@@ -190,7 +191,7 @@ Units are dp unless marked. "Inferred" means no design-system source; the reason
 | Keyboard | extra keys or keyboard | extra keys + keyboard | glass rows | Style (Full · Floating · Split), Key opacity, Key corners 0–20 |
 | Widgets | a widget | widget | glass rows | Padding 0–24, Labels |
 | Sheets | editor bar | none | glass rows | Scrim 0–60%, Handle |
-| Wallpaper page | editor bar or Wallpaper link | none | Image, legend strip (Dim 0–60%, Blur 0–24) | Colours from wallpaper |
+| Wallpaper page | editor bar or Wallpaper link | none | Image, sliders (Dim 0–60%, Blur 0–24) | Colours from wallpaper |
 
 All ten use the same header, chips and row kit, with the same paddings and heights. Only the title, the glyph, the chip options and the rows under More differ.
 

@@ -52,4 +52,14 @@ public class StripTouchPolicyTest {
         assertEquals(Decision.CLAIM,
             StripTouchPolicy.decide(true, false, false, 300f, SLOP, 1L));
     }
+
+    @Test
+    public void aHorizontalSliderTakesADragAlongItAndLeavesOneAcrossItToTheCard() {
+        assertEquals(Decision.WAIT, StripTouchPolicy.decideAcross(2f, 2f, SLOP, true));
+        assertEquals(Decision.CLAIM, StripTouchPolicy.decideAcross(SLOP + 1f, 3f, SLOP, true));
+        assertEquals(Decision.CLAIM, StripTouchPolicy.decideAcross(-(SLOP + 1f), 3f, SLOP, true));
+        assertEquals(Decision.SCROLL, StripTouchPolicy.decideAcross(3f, SLOP + 1f, SLOP, true));
+        assertEquals(Decision.SCROLL, StripTouchPolicy.decideAcross(3f, -(SLOP + 1f), SLOP, true));
+        assertEquals(Decision.CLAIM, StripTouchPolicy.decideAcross(0f, 300f, SLOP, false));
+    }
 }
