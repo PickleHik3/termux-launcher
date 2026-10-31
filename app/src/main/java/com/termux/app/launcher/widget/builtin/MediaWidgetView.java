@@ -397,11 +397,11 @@ public class MediaWidgetView extends BuiltinWidgetView {
                 total.setGravity(Gravity.END);
                 return total;
             case "prev":
-                previousButton = control(ui, GLYPH_PREVIOUS, 14, style().onSurface, true,
+                previousButton = control(ui, GLYPH_PREVIOUS, 14, style().onSurface, false,
                     TopPaneFeed::skipPrevious);
                 return previousButton;
             case "next":
-                nextButton = control(ui, GLYPH_NEXT, 14, style().onSurface, true,
+                nextButton = control(ui, GLYPH_NEXT, 14, style().onSurface, false,
                     TopPaneFeed::skipNext);
                 return nextButton;
             case "play":
