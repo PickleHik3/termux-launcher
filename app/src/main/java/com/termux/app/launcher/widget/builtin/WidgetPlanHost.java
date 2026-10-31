@@ -31,6 +31,7 @@ final class WidgetPlanHost extends FrameLayout {
     @NonNull private final ViewSource source;
     private final float density;
     private final List<View> placed = new ArrayList<>();
+    private final List<WidgetLayoutPlan.Box> placedBoxes = new ArrayList<>();
     @Nullable private WidgetLayoutPlan synced;
     @Nullable private WidgetLayoutPlan latest;
 
@@ -51,30 +52,42 @@ final class WidgetPlanHost extends FrameLayout {
     @Nullable WidgetLayoutPlan plan() { return latest; }
 
     @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        // The superclass lays every child at the frame's origin; the parts go back in their boxes
+        // on every pass, not only when the plan changes.
         super.onLayout(changed, left, top, right, bottom);
         WidgetLayoutPlan plan = latest;
-        if (plan == null || plan == synced) return;
-        synced = plan;
-        // Inside the layout pass: removeView would ask for another layout, as addView would.
-        for (View view : placed) removeViewInLayout(view);
-        placed.clear();
+        if (plan == null) return;
+        boolean rebuilt = plan != synced;
+        if (rebuilt) {
+            synced = plan;
+            // Inside the layout pass: removeView would ask for another layout, as addView would.
+            for (View view : placed) removeViewInLayout(view);
+            placed.clear();
+            placedBoxes.clear();
+            for (Part part : plan.parts) {
+                if (part.type != WidgetLayoutPlan.Type.TOUCH) continue;
+                View view = source.view(part);
+                if (view == null) continue;
+                int w = Math.max(1, Math.round(part.box.width * density));
+                int h = Math.max(1, Math.round(part.box.height * density));
+                addViewInLayout(view, -1, new LayoutParams(w, h), true);
+                view.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
+                placed.add(view);
+                placedBoxes.add(part.box);
+            }
+        }
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         int width = right - left;
-        for (Part part : plan.parts) {
-            if (part.type != WidgetLayoutPlan.Type.TOUCH) continue;
-            View view = source.view(part);
-            if (view == null) continue;
-            int w = Math.max(1, Math.round(part.box.width * density));
-            int h = Math.max(1, Math.round(part.box.height * density));
-            int x = Math.round(part.box.left * density);
+        for (int i = 0; i < placed.size(); i++) {
+            WidgetLayoutPlan.Box box = placedBoxes.get(i);
+            int w = Math.max(1, Math.round(box.width * density));
+            int h = Math.max(1, Math.round(box.height * density));
+            int x = Math.round(box.left * density);
             if (rtl) x = width - x - w;
-            int y = Math.round(part.box.top * density);
-            addViewInLayout(view, -1, new LayoutParams(w, h), true);
-            view.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
-            view.layout(x, y, x + w, y + h);
-            placed.add(view);
+            int y = Math.round(box.top * density);
+            placed.get(i).layout(x, y, x + w, y + h);
         }
-        source.onPlanned(plan);
+        if (rebuilt) source.onPlanned(plan);
     }
 }
