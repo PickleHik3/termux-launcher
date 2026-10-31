@@ -123,7 +123,7 @@ public class MediaLayoutPlanTest {
 
     @Test public void deckKeepsProgressAndSourceOnTheBigCard() {
         WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.FOUR_BY_TWO, 360f, 192f, 1f, playing());
-        assertTrue(plan.has("bar") && plan.has("elapsed") && plan.has("total"));
+        assertTrue(plan.has("bar") && !plan.has("elapsed") && !plan.has("total"));
         assertTrue(plan.has("source") && plan.has("artist") && plan.has("title"));
     }
 
@@ -134,8 +134,7 @@ public class MediaLayoutPlanTest {
     }
 
     @Test public void twoRowCardsKeepTheArtSquareAboveTheProgressAndTheControls() {
-        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {
-            BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.FOUR_BY_TWO }) {
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] { BuiltinWidgetSpan.TWO_BY_TWO }) {
             for (float fs : new float[] { 1.0f, 1.3f }) {
                 WidgetLayoutPlan plan = plan(span, span.widthDp, span.heightDp, fs, playing());
                 Part art = plan.part("art"), bar = plan.part("bar"), play = plan.part("play");
@@ -157,6 +156,40 @@ public class MediaLayoutPlanTest {
                 assertTrue(content.mode + " " + fs, plan.has("play") && plan.has("title"));
                 assertFalse(plan.has("bar"));
             }
+        }
+    }
+
+    @Test public void theControlsRowNeverOverflowsAtTheMinimumSizes() {
+        float[][] sizes = { { 109f, 115f }, { 245f, 115f }, { 130f, 150f } };
+        BuiltinWidgetSpan[] spans = { BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.FOUR_BY_TWO,
+            BuiltinWidgetSpan.TWO_BY_TWO };
+        for (int i = 0; i < sizes.length; i++) {
+            for (float fs : FONT_SCALES) {
+                WidgetLayoutPlan plan = plan(spans[i], sizes[i][0], sizes[i][1], fs, playing());
+                check(plan, spans[i] + " min " + fs);
+                Part play = plan.part("play");
+                assertNotNull(spans[i] + " keeps play", play);
+                assertTrue("play >= 40dp", play.box.width >= 40f - 0.01f);
+                if (plan.has("prev")) {
+                    assertTrue("buttons >= 40dp", plan.part("prev").box.width >= 40f - 0.01f);
+                }
+            }
+        }
+        // Three targets do not fit the 2x2 minimum's 77 dp: play stays alone.
+        WidgetLayoutPlan narrow = plan(BuiltinWidgetSpan.TWO_BY_TWO, 109f, 115f, 1f, playing());
+        assertFalse(narrow.has("prev") || narrow.has("next"));
+    }
+
+    @Test public void theFourByTwoKeepsTheArtSquareAtTheInnerHeightWithTheColumnBeside() {
+        for (float[] size : new float[][] { { 376f, 208f }, { 366f, 180f }, { 376f, 192f } }) {
+            WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.FOUR_BY_TWO, size[0], size[1], 1f, playing());
+            Part art = plan.part("art"), bar = plan.part("bar"), play = plan.part("play");
+            assertEquals(plan.inset.height, art.box.height, 0.01f);
+            assertEquals(art.box.width, art.box.height, 0.01f);
+            assertEquals(plan.inset.left, art.box.left, 0.01f);
+            assertTrue(plan.part("title").box.left >= art.box.right());
+            assertTrue(bar.box.left >= art.box.right() && play.box.left >= art.box.right());
+            assertTrue(plan.has("prev") && plan.has("next"));
         }
     }
 }

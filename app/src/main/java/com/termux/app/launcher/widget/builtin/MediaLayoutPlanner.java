@@ -76,7 +76,7 @@ final class MediaLayoutPlanner {
             parts.add(Part.touch("play", new Box(inner.centerX() - side / 2f,
                 inner.centerY() - side / 2f, side, side)));
         } else if (span.rows == 2) {
-            twoRow(inner, fontScale, content, parts);
+            twoRow(span, inner, fontScale, content, parts);
         } else {
             tall(span, inner, fontScale, content, parts);
         }
@@ -97,8 +97,12 @@ final class MediaLayoutPlanner {
      * width allows and above them where it does not. Where the room is short the clocks, the
      * source, the progress and the artist go, in that order, before the art is shrunk below its floor.
      */
-    private static void twoRow(@NonNull Box inner, float fontScale, @NonNull Content content,
+    private static void twoRow(@NonNull BuiltinWidgetSpan span, @NonNull Box inner, float fontScale, @NonNull Content content,
                                @NonNull List<Part> parts) {
+        if (span == BuiltinWidgetSpan.FOUR_BY_TWO) {
+            artAndColumn(inner, fontScale, content, parts);
+            return;
+        }
         boolean resume = content.mode == Mode.RESUME;
         boolean playing = content.mode == Mode.PLAYING;
         float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
@@ -125,6 +129,9 @@ final class MediaLayoutPlanner {
             else if (progress) progress = false;
             else if (artist) artist = false;
         }
+        // Not even the title fits above the controls (a large font at the minimum): it goes.
+        boolean title = textH <= header + 0.01f;
+        if (!title) { textH = 0f; source = false; artist = false; }
 
         float top = inner.top;
         float textLeft = inner.left;
@@ -153,8 +160,10 @@ final class MediaLayoutPlanner {
                 Role.LABEL, false, labelSp, Ink.SOFT));
             y += labelH + GAP_M;
         }
-        parts.add(Part.text("title", new Box(textLeft, y, textWidth, titleH), content.title,
-            Role.TITLE, false, titleSp, Ink.STRONG));
+        if (title) {
+            parts.add(Part.text("title", new Box(textLeft, y, textWidth, titleH), content.title,
+                Role.TITLE, false, titleSp, Ink.STRONG));
+        }
         y += titleH;
         if (artist) {
             parts.add(Part.text("artist", new Box(textLeft, y + GAP_S, textWidth, labelH),
@@ -171,16 +180,103 @@ final class MediaLayoutPlanner {
                 parts.add(Part.touch("total", new Box(inner.left + half, clockTop, half, labelH)));
             }
         }
-        float rowTop = inner.bottom() - control;
-        if (resume) {
-            parts.add(Part.touch("play", new Box(inner.centerX() - control / 2f, rowTop, control,
-                control)));
-        } else {
-            float x = inner.centerX() - 1.5f * control;
-            parts.add(Part.touch("prev", new Box(x, rowTop, control, control)));
-            parts.add(Part.touch("play", new Box(x + control, rowTop, control, control)));
-            parts.add(Part.touch("next", new Box(x + 2f * control, rowTop, control, control)));
+        controlsRow(parts, inner.left, inner.width, inner.bottom() - control, control, resume);
+    }
+
+    /** The controls are shrunk toward this before prev and next are dropped. */
+    private static final float CONTROL_MIN_DP = 40f;
+
+    /**
+     * Prev, play and next centred in {@code width}: three at up to {@code control} each, then
+     * three shrunk toward {@link #CONTROL_MIN_DP}, then play alone. The row never overflows.
+     */
+    private static void controlsRow(@NonNull List<Part> parts, float left, float width, float top,
+                                    float control, boolean resume) {
+        float centre = left + width / 2f;
+        float size = Math.min(control, width / 3f);
+        if (resume || size < CONTROL_MIN_DP - 0.01f) {
+            float play = Math.min(control, width);
+            parts.add(Part.touch("play", new Box(centre - play / 2f, top + (control - play) / 2f,
+                play, play)));
+            return;
         }
+        float y = top + (control - size) / 2f;
+        float x = centre - 1.5f * size;
+        parts.add(Part.touch("prev", new Box(x, y, size, size)));
+        parts.add(Part.touch("play", new Box(x + size, y, size, size)));
+        parts.add(Part.touch("next", new Box(x + 2f * size, y, size, size)));
+    }
+
+    /**
+     * The 4×2: the art square at the card's inner height on the start side, and beside it a
+     * column of words (source, title, artist) over a foot of progress and the controls. The
+     * clocks sit under the bar only where the column is wide enough. Where the column is short
+     * the clocks, the source, the progress and the artist go, in that order.
+     */
+    private static void artAndColumn(@NonNull Box inner, float fontScale, @NonNull Content content,
+                                     @NonNull List<Part> parts) {
+        boolean resume = content.mode == Mode.RESUME;
+        boolean playing = content.mode == Mode.PLAYING;
+        float titleSp = WidgetTokens.sizeDp(Role.TITLE, fontScale);
+        float labelSp = WidgetTokens.sizeDp(Role.LABEL, fontScale);
+        float titleH = WidgetTokens.lineDp(titleSp);
+        float labelH = WidgetTokens.lineDp(labelSp);
+
+        float side = Math.min(inner.height, inner.width - GAP_L - TEXT_BESIDE_MIN_DP);
+        Box column = inner;
+        if (side >= ART_MIN_DP) {
+            // Square at the inner height; a tall card narrower than that gives the column its width
+            // first and the art is cut to the narrower box.
+            parts.add(Part.touch("art", new Box(inner.left, inner.top, side, inner.height)));
+            column = new Box(inner.left + side + GAP_L, inner.top,
+                inner.width - side - GAP_L, inner.height);
+        }
+        boolean progress = playing && content.hasProgress;
+        boolean clocks = progress && column.width >= CLOCKS_MIN_WIDTH_DP;
+        boolean source = playing && !content.source.isEmpty();
+        boolean artist = playing && !content.artist.isEmpty();
+        float control = Math.min(CONTROL_DP, column.height);
+
+        float footer = 0f;
+        float textH = 0f;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            footer = control + (progress ? GAP_M + BAR_DP + (clocks ? GAP_S + labelH : 0f) : 0f);
+            textH = titleH + (artist ? GAP_S + labelH : 0f) + (source ? GAP_M + labelH : 0f);
+            if (textH + GAP_M <= column.height - footer + 0.01f) break;
+            if (clocks) clocks = false;
+            else if (source) source = false;
+            else if (progress) progress = false;
+            else if (artist) artist = false;
+        }
+        boolean title = textH + GAP_M <= column.height - footer + 0.01f;
+        if (!title) { source = false; artist = false; }
+
+        float y = column.top;
+        if (source && title) {
+            parts.add(Part.text("source", new Box(column.left, y, column.width, labelH),
+                content.source, Role.LABEL, false, labelSp, Ink.SOFT));
+            y += labelH + GAP_M;
+        }
+        if (title) {
+            parts.add(Part.text("title", new Box(column.left, y, column.width, titleH),
+                content.title, Role.TITLE, false, titleSp, Ink.STRONG));
+        }
+        y += titleH;
+        if (artist) {
+            parts.add(Part.text("artist", new Box(column.left, y + GAP_S, column.width, labelH),
+                content.artist, Role.LABEL, false, labelSp, Ink.SOFT));
+        }
+        float footTop = column.bottom() - footer;
+        if (progress) {
+            parts.add(Part.touch("bar", new Box(column.left, footTop, column.width, BAR_DP)));
+            if (clocks) {
+                float clockTop = footTop + BAR_DP + GAP_S;
+                float half = column.width / 2f;
+                parts.add(Part.touch("elapsed", new Box(column.left, clockTop, half, labelH)));
+                parts.add(Part.touch("total", new Box(column.left + half, clockTop, half, labelH)));
+            }
+        }
+        controlsRow(parts, column.left, column.width, column.bottom() - control, control, resume);
     }
 
     /** One row of the text-and-controls column. */
