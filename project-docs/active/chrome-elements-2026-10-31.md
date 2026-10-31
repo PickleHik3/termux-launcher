@@ -135,7 +135,54 @@ place), move it to `@kind:home` and delete the everywhere key. Cells with no `_h
 On pong this moves the keyboard's opacity 0 / frost 0 / grain 0 / tint 0 to the Home kind; the
 Terminal page's `@4` cells are page cells and stay.
 
-## 4. The redress path (ADR 0018 §2)
+## 4. One rest per page kind, held across every crossing (D11, 2026-10-31 evening)
+
+The developer's words: "store the layout of the terminal, keyboard and dock all the time, so
+that if the keyboard was up the layout is held even when I swipe to Home and the terminal never
+resizes during swipes; the same for the status bar between windows; everything seamlessly
+animated, no stutters or snapping; and the dock over the keyboard on Home must be Home's dock."
+
+Today the bottom stack is laid out for the page the wall is moving toward (`StackLayout`'s one
+pass per crossing), the keyboard's shown state is one flag for the whole wall, and the terminal
+is pre-sized to its rest on every Home → Terminal crossing (7ad038290). That is one resize per
+crossing, masked by a frost; the 2026-10-31 recording still shows the stack being rebuilt as the
+page changes, and the dock over the keyboard on Home wears the Workspace's design.
+
+**The rule.** Every page kind owns a **rest**: the terminal's grid (rows × columns), whether its
+keyboard is up and in which form, the dock's rows and design, the strip row, and the status bar's
+state (edge, compact or expanded). A rest changes only by an act on that page (the keyboard
+toggled there, a layout edit, a rotation), never by a page change. A crossing animates between
+two rests with pictures and translations only; nothing is laid out and nothing is resized while
+the wall moves, and the landing finds every element already at its rest. Leaving the Terminal
+with its keyboard up and coming back finds it up, the grid unchanged, with no PTY resize at any
+point of the round trip.
+
+- `StackLayout.Rest` becomes a stored value per page kind (`RestStore`, in the layout store under
+  the page kind), read by the Specs of the dock, the strip row and the keyboard; `StackLayout`
+  computes it when a rest input changes and never during a crossing.
+- The keyboard's shown state moves from one wall-wide flag into each kind's rest. Home's rest
+  carries its own (the palette raises it; a swipe to Terminal does not lower Terminal's).
+- The terminal's PTY size is settled from the Terminal kind's rest alone. The motion invariant
+  `one-resize-per-crossing` becomes **`no-resize-per-crossing`**: a `pty-resize` line between a
+  `crossing-begin` and its `land` is a violation.
+- The status bar's state is part of its kind's rest; a crossing between kinds whose bars differ
+  morphs the bar along the slide (`StatusBarFoldMotion`), never at the landing.
+- The dock over the keyboard on Home is Home's dock: `DockSpec` takes the page kind and the
+  keyboard state as inputs and answers Home's design compacted, never the Workspace's tray. The
+  same holds for every (kind × keyboard up/down × style × design × orientation) combination.
+
+**How it is kept true.** `LayoutFixtures` (wave M) grows a matrix over page kind × keyboard
+up/down × keyboard form × dock style × design × status state × orientation; for each cell the
+parity tests assert that the rest is the only source of the stack's height, that every crossing
+between two cells answers zero resizes and zero layouts, and that each element's dress is its
+kind's. On the device, `motion-invariants.sh` with the Motion log on over a round trip of every
+kind pair must report none.
+
+**Waves.** This is wave S's scope (the stack) plus a slice of wave B (the bar's state in the
+rest). Wave D's `DockSpec` takes the kind and keyboard inputs from the start so the dock over the
+keyboard on Home comes right with it.
+
+## 5. The redress path (ADR 0018 §2)
 
 One request: `ChromeRenderer.requestRedress(reason)`; one pass: every Spec rebuilt from one
 input, every View handed its Spec. Writers: the editor (every row write and Done), Settings
@@ -144,7 +191,7 @@ request), the migrations at startup, a wallpaper change. No View caches a resolv
 requests; a cache of baked pixels (the blur frames, a still) is keyed by the Spec values it was
 baked from.
 
-## 5. Waves (D6)
+## 6. Waves (D6)
 
 Each wave is one worker on one seam, cut from the previous wave's merge, with its Spec tests, and
 lands on pong before the next starts. Device checks go on `project-docs/device-checks.md`; hand
@@ -165,11 +212,12 @@ the editor's cards (they read the Specs' inputs, unchanged), the wall and its cr
 keyboard cell set by the editor, which wave K makes possible; its PixelCopy still of the display
 is a later wave).
 
-## 6. Open points settled on 2026-10-31
+## 7. Open points settled on 2026-10-31
 
 - D1 the kind tier, over seeding page cells at creation: a kind-wide change is one write.
 - D2 keyboard Home lifted (Mist) / Display Clear (the Clear preset, frost stop 2); other elements one look per kind for now.
 - D10 per-kind shipped looks are seeded as kind cells (a Base cell would otherwise hide them).
+- D11 one rest per page kind, held across every crossing; the invariant becomes no-resize-per-crossing; the dock over the keyboard on Home is Home's dock.
 - D3 one glass to the bottom; the Floating no-foot rule withdrawn.
 - D4 sheets on the shared frame; the live window is no longer seen through a sheet.
 - D5 re-home: everywhere cells that equal the saved `_home` values move to the Home kind.

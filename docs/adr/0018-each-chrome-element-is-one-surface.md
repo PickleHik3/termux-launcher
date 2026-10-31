@@ -1,7 +1,7 @@
 ---
 status: proposed
 date: 2026-10-31
-amends: 0017 (a page-kind tier joins the grid; shipped looks differ per page kind), 0009 (the chrome's glass is one surface per element), 0016 §2 (the stack picture is a capture of the element's own view), 0004 (every sheet samples the shared frame; no element blurs the live window)
+amends: 0017 (a page-kind tier joins the grid; shipped looks differ per page kind), 0012 (a crossing lays out nothing: it moves between two held rests), 0009 (the chrome's glass is one surface per element), 0016 §2 (the stack picture is a capture of the element's own view), 0004 (every sheet samples the shared frame; no element blurs the live window)
 supersedes: the Floating rule in `project-docs/active/home-dock-styles-2026-10-20.md` ("there is no foot: the strip under the pill is not shown under Floating")
 ---
 
@@ -101,6 +101,17 @@ Upgrading installs that already hold cells the 2026-10-30 fold built from Home-o
 one-way step that moves those element cells into the Home kind, so the everywhere cell is free
 again and the kind defaults apply on the other kinds; a value the user set since stays where it
 is.
+
+## 4. One rest per page kind
+
+Each page kind owns a rest: the terminal's grid, the keyboard's shown state and form, the dock's
+rows and design, the strip row, the status bar's state. A rest changes only by an act on that
+page, never by a page change. A crossing animates between two rests with pictures and
+translations and lays out nothing; the landing finds every element at its rest. The terminal's
+PTY size follows the Terminal kind's rest alone, so the motion invariant becomes no resize per
+crossing (amends `project-docs/active/motion-invariants-2026-10-30.md`). The dock over the
+keyboard on a Home page is Home's dock, in Home's design, for every combination of style, design,
+keyboard form and orientation (the developer, 2026-10-31).
 
 ## Consequences
 
