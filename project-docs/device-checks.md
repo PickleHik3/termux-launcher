@@ -21,6 +21,7 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · wave D part one (2801c1f14), the dock's surface to the screen's bottom · seen on pong 2026-10-31 19:30: the seam loop reads +2.5 / +3.4 / +2.4 at opacity 34 / 0 / 100 (was +12), Home 2 wears Peek like Home 1, Home's Peek card stands on Home's keyboard, the Terminal page looks as before. Still owed: the dock never sits under the gesture pill after an insets change (rotate, the system IME shown and hidden, a notification shade pull) and after a Peek ↔ Tray switch; the editor's Dock card still rings the dock and its rows change it live (my tap missed the editor and opened the dock's YouTube instead); Docked Tray, Floating Tray, Beads, one pane and split, light/dark/black; `launcherctl keyboard show` once did not return for ten minutes although the keyboard came up (the second call returned at once): watch for it · pong.
 - 2026-10-31 · dock as one surface (ADR 0018 wave D: root stops fitting the bottom inset,
   `BottomInsets`, the dock host reaches the screen's edge, the decor strip kept for the keyboard
   only) · pong, Floating + Peek: `dockfoot-check.py` step at row 2349 reads under 4 at dock
@@ -33,11 +34,6 @@ dropped; what follows is what still owes a look.
   the room is as before; the editor's Dock card still rings the dock and its rows change it live;
   `launcherctl look set opacity 95 --element dock` darkens the whole dock, foot included, at once;
   `motion-invariants.sh` over a Home ⇄ Terminal round trip reports no new resize · pong.
-- 2026-10-31 · Home's Peek card on Home's keyboard (D11, 488ba2585) · Home in Peek, Docked and
-  Floating, open the palette (keyboard up): the dock over the keyboard is the Peek card (icons'
-  reflections, card corners), flush on the keyboard with no gap or rim between them; the Terminal
-  page with the keyboard up still wears the tray, Floating gap and all; swiping Home ⇄ Terminal
-  with the keyboard up shows each page's dock with no resize of the terminal · pong.
 - 2026-10-31 · horizontal slider rows (ef0f80ede and the three before it) · Dock, Status bar,
   Keyboard, Home and Appearance cards at half and full, font 1.0 and 1.3, light and dark: every
   value slider is a horizontal row (glyph, name, source dot, value, then the track across the
