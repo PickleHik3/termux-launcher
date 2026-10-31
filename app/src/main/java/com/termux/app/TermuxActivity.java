@@ -3270,8 +3270,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         float width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         float height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
-        return Math.round(com.termux.app.chrome.LiveChromeShape.openingInsetPx(shape,
-            vertical ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.LEFT, width, height));
+        return Math.round(com.termux.app.chrome.LiveChromeShape.terminalOpeningInsetPx(shape,
+            vertical ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.LEFT, width, height,
+            metrics.density));
     }
 
     private void applyTerminalBorderAppearance() {
@@ -6780,7 +6781,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             layoutCornersPx(surface), layoutMarginPx(surface), screenRadiusPx(),
             metrics.density, Math.max(1, visiblePaneCount()),
             width >= height ? com.termux.app.place.ChromeShapeModel.SplitAxis.SIDE_BY_SIDE
-                : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null);
+                : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null,
+            // The insert stands as close to the bars as the terminal does, on the Workspace only.
+            !chromeWearsHomeShape(surface)
+                && mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS);
     }
 
     /**

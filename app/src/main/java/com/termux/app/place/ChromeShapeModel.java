@@ -118,6 +118,8 @@ public final class ChromeShapeModel {
         @NonNull final Thickness thickness;
         final float corners;
         final float margin;
+        /** The opening's air above and below it; negative for Margin ({@link Builder#openingVerticalGap}). */
+        final float openingVerticalGap;
         final float screenRadius;
         final float paneGapCap;
         final float paneGapFloor;
@@ -136,6 +138,7 @@ public final class ChromeShapeModel {
             thickness = b.thickness;
             corners = b.corners;
             margin = b.margin;
+            openingVerticalGap = b.openingVerticalGap;
             screenRadius = b.screenRadius;
             paneGapCap = b.paneGapCap;
             paneGapFloor = b.paneGapFloor;
@@ -173,6 +176,7 @@ public final class ChromeShapeModel {
             @NonNull private final Thickness thickness;
             private float corners;
             private float margin;
+            private float openingVerticalGap = -1f;
             private float screenRadius;
             private float paneGapCap = Float.MAX_VALUE;
             private float paneGapFloor;
@@ -211,6 +215,16 @@ public final class ChromeShapeModel {
             /** Margin, the air between and around Floating cards. Docked spends none. */
             @NonNull public Builder margin(float value) {
                 margin = value;
+                return this;
+            }
+
+            /**
+             * The air the opening keeps from what lies above and below it, in place of Margin:
+             * the Workspace's terminal stands this close to its bars, so it gets the rows. Never
+             * more than Margin; negative (the default) is Margin itself. The sides keep Margin.
+             */
+            @NonNull public Builder openingVerticalGap(float value) {
+                openingVerticalGap = value;
                 return this;
             }
 
@@ -277,6 +291,7 @@ public final class ChromeShapeModel {
             Builder b = new Builder(layout, style, width, height, thickness);
             b.corners = corners;
             b.margin = margin;
+            b.openingVerticalGap = openingVerticalGap;
             b.screenRadius = screenRadius;
             b.paneGapCap = paneGapCap;
             b.paneGapFloor = paneGapFloor;
@@ -348,6 +363,9 @@ public final class ChromeShapeModel {
         final float m = floating ? Math.max(0f, in.margin) : 0f;
         // The gutter: Margin as the Docked insert's air from the bars and the screen's edge.
         final float gutter = Math.max(0f, in.margin);
+        // The opening's air above and below: Margin, or the closer gap a Workspace terminal asks.
+        final float verticalGap = in.openingVerticalGap < 0f ? gutter
+            : Math.min(in.openingVerticalGap, gutter);
         final PlaceLayout layout = in.layout;
         final boolean keyboardOverlay = layout.keyboardShown
             && layout.keyboardForm == KeyboardForm.FLOATING;
@@ -406,7 +424,9 @@ public final class ChromeShapeModel {
         // Between the bars. Floating's panes fill it (the cards' Margin is already around it);
         // Docked's inserts stand a gutter inside it, on the frame glass.
         Box barsBox = new Box(xLeft, yTop, Math.max(xLeft, xRight), Math.max(yTop, yBottom));
-        Box openingBox = floating ? barsBox : insetBy(barsBox, gutter);
+        // Floating's bars already stand Margin (m) off it; a closer vertical gap gives some back.
+        Box openingBox = floating ? insetBy(barsBox, 0f, verticalGap - m)
+            : insetBy(barsBox, gutter, verticalGap);
         List<Cand> framePieces = new ArrayList<>(cands);
 
         // The floating keyboard, a card over the content.
@@ -760,17 +780,17 @@ public final class ChromeShapeModel {
             EdgeKind.RIM, EdgeKind.RIM, EdgeKind.RIM);
     }
 
-    /** {@code box} pulled in by {@code by} on every side; collapsed to its centre if it runs out. */
+    /**
+     * {@code box} pulled in by {@code dx} on its sides and {@code dy} on its top and bottom (a
+     * negative amount pushes that pair out); collapsed to its centre on an axis that runs out.
+     */
     @NonNull
-    private static Box insetBy(@NonNull Box box, float by) {
-        if (by <= 0f) return box;
+    private static Box insetBy(@NonNull Box box, float dx, float dy) {
+        if (dx == 0f && dy == 0f) return box;
         float cx = (box.left + box.right) / 2f;
         float cy = (box.top + box.bottom) / 2f;
-        float l = Math.min(box.left + by, cx);
-        float t = Math.min(box.top + by, cy);
-        float r = Math.max(box.right - by, cx);
-        float b = Math.max(box.bottom - by, cy);
-        return new Box(l, t, r, b);
+        return new Box(Math.min(box.left + dx, cx), Math.min(box.top + dy, cy),
+            Math.max(box.right - dx, cx), Math.max(box.bottom - dy, cy));
     }
 
     private static boolean onScreenBoundary(@NonNull Edge edge, float line, float w, float h,

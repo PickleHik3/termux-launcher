@@ -30,8 +30,9 @@ import com.termux.view.TerminalView;
  * arc, which is how a prompt that paints its own background to the very edge came out clipped.
  *
  * <p>So the shape and its clearance are set together, from one radius: the glass keeps filling the
- * whole slab and the terminal is laid out inside the arc's depth, the same distance off every
- * edge. The clearance is spent as the child's margin rather than as this frame's padding, because
+ * whole slab and the terminal is laid out clear of the arc: close to the rim at the top and
+ * bottom, where rows are scarce, and as far in at the sides as that leaves the corner cells
+ * inside the arc ({@link #onMeasure}). The clearance is spent as the child's margin rather than as this frame's padding, because
  * the frame's other child is the glass backdrop and it must still reach the corners the terminal
  * now stays out of.
  *
@@ -569,20 +570,20 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * measured against it — so the pane lays out once at its cleared size and the PTY is told one
      * size, not the flush one and then the inset one.
      *
-     * <p>Every edge gets the same clearance ({@link PaneShape#contentInsetPx}, the arc's), so the
-     * content sits the same distance off all four sides of the frame. The terminal centres its
-     * grid in its view ({@code TerminalView.getVerticalContentOffset()},
-     * {@code getHorizontalContentOffset()}), splitting the sub-cell leftover between opposite
-     * edges, so the grid's own gap from the frame is even too, to within half a cell. The top's
-     * margin is the only one that differs: the first row's cells start a fixed headroom below the
-     * view's top ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), so
-     * that much of the top's clearance is already paid and the margin only makes up the rest
-     * ({@link PaneShape#topInsetPx}) — the first cell then sits as far off the top as the last
-     * row's cells sit off the bottom.
+     * <p>The top and bottom are held only as far off the rim as the corner arc allows to be traded
+     * for side clearance ({@link PaneShape#verticalInsetPx}), and the sides take the clearance
+     * that keeps the corner cells inside the arc at that height ({@link PaneShape#sideInsetPx}):
+     * rows are what a terminal is short of, so the vertical gap is the one that gives. No glyph is
+     * ever cut by the arc. The terminal centres its grid in its view
+     * ({@code TerminalView.getVerticalContentOffset()}, {@code getHorizontalContentOffset()}),
+     * splitting the sub-cell leftover between opposite edges, so opposite gaps match to within half
+     * a cell. The top's margin differs from the bottom's only by the first row's headroom
+     * ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), which is
+     * clearance the top already has ({@link PaneShape#topInsetPx}) — the first cell then sits as
+     * far off the top as the last row's cells sit off the bottom.
      *
-     * <p>Along a straight edge none of this is what holds the text off the border — the rim's
-     * stroke is, plus a hair — so every margin is floored at that; the floor only ever bites at a
-     * radius too small for its own arc to clear the stroke.
+     * <p>Along a straight edge the rim's stroke, plus a hair, is what holds the text off the
+     * border, so every margin is floored at that; on a square pane the floor is all there is.
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -592,8 +593,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, width, height);
             float edgeFloor = mRimStrokePx > 0f
                 ? mRimStrokePx + EDGE_GAP_DP * getResources().getDisplayMetrics().density : 0f;
-            int side = Math.max(PaneShape.contentInsetPx(radius), (int) Math.ceil(edgeFloor));
-            int bottom = side;
+            int floor = (int) Math.ceil(edgeFloor);
+            int bottom = PaneShape.verticalInsetPx(radius, floor);
+            int side = Math.max(PaneShape.sideInsetPx(radius, bottom), floor);
             if (bezelWorn()) {
                 // Inside the bezel: past it, past the screen's arc and past what the bend pushes
                 // off the screen's edges, so the effect loses no cell.

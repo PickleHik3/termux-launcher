@@ -36,6 +36,12 @@ public final class LiveChromeShape {
     public static final float FALLBACK_SCREEN_RADIUS_DP = 28f;
     /** The most air between Floating pane cards. */
     public static final float PANE_GAP_CAP_DP = 24f;
+    /**
+     * The air the Workspace's terminal keeps from what stands above and below it, in place of
+     * Margin (never more than Margin): rows are what a terminal is short of, so it stands close to
+     * the status bar and the dock or keyboard while its sides keep Margin.
+     */
+    public static final float TERMINAL_VERTICAL_GAP_DP = 4f;
     /** The least gap between split panes: the strip the divider is dragged by. */
     public static final float PANE_GAP_FLOOR_DP = 10f;
     /** How thick a Docked divider line draws. */
@@ -61,9 +67,31 @@ public final class LiveChromeShape {
                                  int paneCount, @NonNull ChromeShapeModel.SplitAxis axis,
                                  float splitHalfWidthPx,
                                  @Nullable ChromeShape.Box floatingKeyboardBox) {
+        return of(layout, style, widthPx, heightPx, thickness, cornersPx, marginPx,
+            screenRadiusPx, density, paneCount, axis, splitHalfWidthPx, floatingKeyboardBox,
+            false);
+    }
+
+    /**
+     * {@link #of}, for the Workspace when {@code terminalGap}: the opening (the terminal's pane
+     * area, the Docked insert) stands {@link #TERMINAL_VERTICAL_GAP_DP} off the bars above and
+     * below it instead of Margin, so the insert's glass and the terminal's own margins
+     * ({@link #terminalOpeningInsetPx}) are one number.
+     */
+    @NonNull
+    public static ChromeShape of(@NonNull PlaceLayout layout, @NonNull LayoutStyle style,
+                                 int widthPx, int heightPx,
+                                 @NonNull ChromeShapeModel.Thickness thickness, float cornersPx,
+                                 float marginPx, float screenRadiusPx, float density,
+                                 int paneCount, @NonNull ChromeShapeModel.SplitAxis axis,
+                                 float splitHalfWidthPx,
+                                 @Nullable ChromeShape.Box floatingKeyboardBox,
+                                 boolean terminalGap) {
         return ChromeShapeModel.shape(ChromeShapeModel.input(layout, style, widthPx, heightPx,
                 thickness)
-            .corners(cornersPx).margin(marginPx).screenRadius(screenRadiusPx)
+            .corners(cornersPx).margin(marginPx)
+            .openingVerticalGap(terminalGap ? TERMINAL_VERTICAL_GAP_DP * density : -1f)
+            .screenRadius(screenRadiusPx)
             .paneGapCap(PANE_GAP_CAP_DP * density)
             .paneGapFloor(PANE_GAP_FLOOR_DP * density).dividerThickness(DIVIDER_DP * density)
             .panes(paneCount, axis).splitHalfWidth(splitHalfWidthPx)
@@ -229,6 +257,22 @@ public final class LiveChromeShape {
             case LEFT: return Math.max(0f, open.left - neighbour);
             default: return Math.max(0f, neighbour - open.right);
         }
+    }
+
+    /**
+     * How far the Workspace's terminal stands in from the opening's neighbour across
+     * {@code edge}: {@link #openingInsetPx} at the sides, and along the top and bottom no more
+     * than {@link #TERMINAL_VERTICAL_GAP_DP}. Whichever shape the frame wears (a Workspace's,
+     * already built with that gap, or Home's own while a slide or Home holds the chrome) the
+     * terminal is told the same number, so it never resizes at a settle. Its page and every view
+     * framed off it (the border line, the side stacks' ends, the display window's frame) read
+     * this one answer.
+     */
+    public static float terminalOpeningInsetPx(@NonNull ChromeShape shape, @NonNull Edge edge,
+                                               float widthPx, float heightPx, float density) {
+        float inset = openingInsetPx(shape, edge, widthPx, heightPx);
+        if (edge.isOnSide()) return inset;
+        return Math.min(inset, TERMINAL_VERTICAL_GAP_DP * density);
     }
 
     /** The refraction seams of the same views: every edge that is not a rim. */

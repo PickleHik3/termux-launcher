@@ -25,13 +25,16 @@ public class BorderGrabberTest {
     private static final float EPS = 0.01f;
 
     @Test
-    public void atRestItIsAShortPillCentredOnTheBottomEdgeAndOutsideThePage() {
+    public void atRestItIsAShortPillCentredOnTheBottomRim() {
         RectF pill = new RectF();
         BorderGrabber.bounds(pill, 540f, 1800f, 0f, 0f, 1f, DENSITY);
         assertEquals(540f, pill.centerX(), EPS);
         assertEquals(BorderGrabber.WIDTH_DP * DENSITY, pill.width(), EPS);
         assertEquals(BorderGrabber.THICKNESS_DP * DENSITY, pill.height(), EPS);
-        assertTrue("never over the page's own text", pill.top >= 1800f);
+        // On the rim's stroke, which is painted just inside the page's outline.
+        assertEquals(1800f - BorderGrabber.rimCentreInsetPx(DENSITY), pill.centerY(), EPS);
+        assertTrue("reaches into the page no further than its own half and the rim's",
+            pill.top >= 1800f - BorderGrabber.rimCentreInsetPx(DENSITY) - pill.height() / 2f - EPS);
         // Short: a sheet grabber, not a bar.
         assertTrue(pill.width() < 1080f * 0.1f);
     }
@@ -73,7 +76,8 @@ public class BorderGrabberTest {
         BorderGrabber.bounds(flush, 540f, 1800f, 0f, 0f, 1f, DENSITY);
         BorderGrabber.bounds(sunk, 540f, 1746f, 0f, 0f, PageSink.SCALE, DENSITY);
         assertEquals(flush.width() * PageSink.SCALE, sunk.width(), EPS);
-        assertTrue(sunk.top >= 1746f);
+        assertEquals(1746f - BorderGrabber.rimCentreInsetPx(DENSITY) * PageSink.SCALE,
+            sunk.centerY(), EPS);
         // A nonsense scale draws it at full size rather than not at all.
         RectF broken = new RectF();
         BorderGrabber.bounds(broken, 540f, 1800f, 0f, 0f, Float.NaN, DENSITY);
@@ -81,7 +85,7 @@ public class BorderGrabberTest {
     }
 
     @Test
-    public void onTheTopBorderItIsTheSamePillMirroredAboveTheEdge() {
+    public void onTheTopBorderItIsTheSamePillAboveTheEdge() {
         RectF bottom = new RectF();
         RectF top = new RectF();
         BorderGrabber.bounds(bottom, 540f, 1800f, 0f, 0f, 1f, DENSITY, false);
@@ -90,12 +94,30 @@ public class BorderGrabberTest {
         assertEquals(bottom.width(), top.width(), EPS);
         assertEquals(bottom.height(), top.height(), EPS);
         assertTrue("never over the page's own text", top.bottom <= 200f);
-        assertEquals("as far outside the top edge as the bottom one sits outside its own",
-            bottom.centerY() - 1800f, 200f - top.centerY(), EPS);
+        assertEquals(200f - BorderGrabber.DROP_DP * DENSITY, top.centerY(), EPS);
         // The old signature is the bottom border's.
         RectF legacy = new RectF();
         BorderGrabber.bounds(legacy, 540f, 1800f, 0f, 0f, 1f, DENSITY);
         assertEquals(bottom, legacy);
+    }
+
+    @Test
+    public void overAWindowTheStatusPillHangsFromTheBarsBorder() {
+        RectF pill = new RectF();
+        BorderGrabber.borderBounds(pill, 540f, 300f, 0f, 0f, 1f, DENSITY);
+        assertEquals(540f, pill.centerX(), EPS);
+        assertEquals("its top edge on the border, so it sits in the air under the bar",
+            300f, pill.top, EPS);
+        assertEquals(BorderGrabber.THICKNESS_DP * DENSITY, pill.height(), EPS);
+        assertEquals(BorderGrabber.WIDTH_DP * DENSITY, pill.width(), EPS);
+        // The 4dp air between the bar and a window holds it whole.
+        assertTrue(pill.height()
+            <= com.termux.app.chrome.LiveChromeShape.TERMINAL_VERTICAL_GAP_DP * DENSITY);
+        // Drawn along the swipe and wider under a finger, as the other pills are.
+        RectF pressed = new RectF();
+        BorderGrabber.borderBounds(pressed, 540f, 300f, 1f, 12f, 1f, DENSITY);
+        assertEquals(312f, pressed.top, EPS);
+        assertTrue(pressed.width() > pill.width());
     }
 
     @Test
