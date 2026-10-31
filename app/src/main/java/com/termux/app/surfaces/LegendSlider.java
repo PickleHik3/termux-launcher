@@ -114,6 +114,8 @@ public final class LegendSlider extends View {
     private final Paint mTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mTextPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
+    /** The track pieces' path, reused on every draw: a drag draws per frame. */
+    private final android.graphics.Path mPiecePath = new android.graphics.Path();
 
     private int mActiveColor;
     private int mInactiveColor;
@@ -670,7 +672,8 @@ public final class LegendSlider extends View {
         float h = rect.height();
         float l = Math.min(Math.min(left, w / 2f), h / 2f);
         float r = Math.min(Math.min(right, w / 2f), h / 2f);
-        android.graphics.Path path = new android.graphics.Path();
+        android.graphics.Path path = mPiecePath;
+        path.rewind();
         float[] radii = {l, l, r, r, r, r, l, l};
         path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
         canvas.drawPath(path, mTrackPaint);
@@ -690,7 +693,8 @@ public final class LegendSlider extends View {
         float w = rect.width();
         top = Math.min(top, w / 2f);
         bottom = Math.min(bottom, w / 2f);
-        android.graphics.Path path = new android.graphics.Path();
+        android.graphics.Path path = mPiecePath;
+        path.rewind();
         float[] radii = {top, top, top, top, bottom, bottom, bottom, bottom};
         path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
         canvas.drawPath(path, mTrackPaint);
