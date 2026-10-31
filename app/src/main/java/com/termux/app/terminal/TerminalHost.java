@@ -256,6 +256,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     boolean isVisible();
 
     /**
+     * Re-dresses every glass surface (status bar, dock, keyboard, terminal, Home's widgets, sheets)
+     * from the stored Look, as the Appearance editor does on Done. Main thread only.
+     */
+    default void redressChrome() {
+    }
+
+    /**
      * Whether the terminal place's pixels can be on screen: the wall rests on the terminal, or it
      * is moving and the terminal may be sliding into or out of the frame. False only while another
      * place — Widgets, Display — is at rest in front of it.

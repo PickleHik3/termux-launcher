@@ -257,6 +257,19 @@ public final class TerminalActionDispatcher {
         }
     }
 
+    /**
+     * Re-dresses the attached host's chrome from the stored Look, on the main thread, after a
+     * Look write from outside the editor ({@code launcherctl look}). Does not wait for it; with no
+     * live host there is nothing on screen to re-dress and the next start reads the Look anyway.
+     */
+    public void redressChrome() {
+        if (currentHost() == null) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            TerminalHost host = currentHost();
+            if (host != null) host.redressChrome();
+        });
+    }
+
     /** Whether a live host is attached, regardless of whether it is currently visible. */
     public boolean isAttached() {
         return currentHost() != null;

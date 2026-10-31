@@ -33264,6 +33264,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Bridges the terminal clients back into the activity. */
     private final class ActivityTerminalHost implements com.termux.app.terminal.TerminalHost {
 
+        @Override public void redressChrome() {
+            // The editor's Done path: chrome bands, keyboard, sheets, Home's widgets and the
+            // terminal's surface and frost, all from the stored Look.
+            redressChromeFromState();
+        }
+
         @Override @Nullable public TerminalView focusedView() {
             return getTerminalView();
         }
