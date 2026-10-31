@@ -13,7 +13,7 @@ label above a key shows what that is.
 |---|---|---|
 | Keyboard | Show or hide the keyboard | **Next keyboard type** (docked, floating, split) |
 | Mouse | **Mouse mode** on or off | |
-| Widgets | **Go to Widgets** | |
+| Home | **Go to Home** | |
 | Terminal | **Go to Terminal** | |
 | Display | **Go to Display** | |
 | New pane | **New pane** | **New window** |

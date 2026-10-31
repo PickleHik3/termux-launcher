@@ -98,6 +98,17 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void pageTools_narrateThemselves() {
+        // The page slides in; the pill names nothing (it used to read "Go to Widgets" over Home).
+        for (String name : new String[] {"wall.go", "wall.widgets", "wall.terminal", "wall.display"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.CATEGORY_WALL, tool.category);
+            assertTrue(name + " is self-evident", tool.selfEvident);
+        }
+    }
+
+    @Test
     public void consumeAndExpel_arePlainPaneRowsOnNiriKeys() {
         String[][] tools = {{"pane.consume", "from", "ctrl+alt+,"}, {"pane.expel", "to", "ctrl+alt+."}};
         for (String[] spec : tools) {

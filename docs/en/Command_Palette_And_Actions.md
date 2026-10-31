@@ -190,7 +190,7 @@ not.
 | Id | Title | Arguments | Default shortcut |
 |---|---|---|---|
 | `wall.go` | Go to place | `page`: `widgets`, `terminal`, `display`, `left`, `right` (required) | |
-| `wall.widgets` | Go to Widgets | | |
+| `wall.widgets` | Go to Home | | |
 | `wall.terminal` | Go to Terminal | | |
 | `wall.display` | Go to Display | | |
 

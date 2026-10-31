@@ -264,7 +264,9 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
                 TOOL_PANE_CONSUME, TOOL_PANE_EXPEL,
-                TOOL_WALL_GO,
+                // A page change is its own read-out: the page slides in. Naming it on the pill
+                // ("Go to Widgets" over Home) was clutter, and wrong (developer, 2026-10-31).
+                TOOL_WALL_GO, TOOL_WALL_WIDGETS, TOOL_WALL_TERMINAL, TOOL_WALL_DISPLAY,
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,

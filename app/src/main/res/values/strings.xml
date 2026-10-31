@@ -2314,7 +2314,7 @@
     <string name="tool_pane_rotate">Rotate pane layout</string>
     <string name="tool_pane_layout">Pane layout</string>
     <string name="tool_pane_move_to_edge">Move pane to edge</string>
-    <string name="tool_wall_widgets">Go to Widgets</string>
+    <string name="tool_wall_widgets">Go to Home</string>
     <string name="tool_wall_terminal">Go to Terminal</string>
     <string name="tool_wall_display">Go to Display</string>
     <string name="tool_wall_go">Go to place</string>
@@ -2410,7 +2410,7 @@
     <string name="tool_desc_pane_rotate">Rotate this window’s pane layout clockwise.</string>
     <string name="tool_desc_pane_layout">Arrange this window’s panes with a chosen layout.</string>
     <string name="tool_desc_pane_move_to_edge">Move the focused pane to an outer edge of this window.</string>
-    <string name="tool_desc_wall_widgets">Show the widget grid.</string>
+    <string name="tool_desc_wall_widgets">Show the Home pages.</string>
     <string name="tool_desc_wall_terminal">Show the terminal.</string>
     <string name="tool_desc_wall_display">Show the Linux display.</string>
     <string name="tool_desc_wall_go">Show a chosen place, or the one to the left or right.</string>
