@@ -207,6 +207,7 @@ public final class SeamCrossing {
         boolean moved;
         boolean barRedressed;
         float pictureReveal;
+        float pictureSlide;
         float statusFade;
 
         Answers() {
@@ -227,6 +228,7 @@ public final class SeamCrossing {
             moved = false;
             barRedressed = false;
             pictureReveal = Float.NaN;
+            pictureSlide = Float.NaN;
             statusFade = Float.NaN;
         }
 
@@ -316,6 +318,15 @@ public final class SeamCrossing {
         public float pictureReveal() {
             return pictureReveal;
         }
+
+        /**
+         * Where the picture of the committed half's stack is drawn across, as an x offset from its
+         * rest in widths of the wall: with its page, on a crossing whose arriving stack waits for
+         * the landing ({@link SeamDress#stackRisesAfterLanding}). NaN while it does not ride.
+         */
+        public float pictureSlide() {
+            return pictureSlide;
+        }
     }
 
     /** What a settle has left to do for the crossing ({@link #land}). The same object each time. */
@@ -326,6 +337,17 @@ public final class SeamCrossing {
         @Nullable PaneWallPage dressedFor;
         boolean dressDiffered;
         boolean shapeDiffered;
+        /** The half whose stack rises after the landing, should the wall land there; or null. */
+        @Nullable PaneWallPage risesFor;
+
+        /**
+         * Whether the stack rises into its place now that the wall has landed on {@code landed}
+         * ({@link SeamDress#stackRisesAfterLanding}): it stood below the screen through the slide.
+         * A slide that came back finds it as it left it.
+         */
+        public boolean risesOn(@NonNull PaneWallPage landed) {
+            return risesFor != null && !SeamTravel.crosses(risesFor, landed);
+        }
 
         /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
         public boolean bandsMoved() {
@@ -401,6 +423,12 @@ public final class SeamCrossing {
          * two cross over the whole way ({@link #pictured}).
          */
         boolean pictured;
+        /**
+         * Whether the arriving stack stands below the screen through the slide and rises once the
+         * wall has landed, the picture of the committed half's riding out with its page
+         * ({@link SeamDress#stackRisesAfterLanding}).
+         */
+        boolean risesAfterLanding;
         /**
          * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
          * whether the Workspace's bar rides with its page; and whether a slide from Home may lay the
@@ -548,6 +576,16 @@ public final class SeamCrossing {
     /** Whether the picture was taken; one that was not leaves the dip as it was. */
     public void pictured(boolean taken) {
         mRun.pictured = taken && mRun.wholeStack;
+        mRun.risesAfterLanding = SeamDress.stackRisesAfterLanding(mRun.committed, mRun.other,
+            mRun.pictured && !mRun.oneKind);
+    }
+
+    /**
+     * Whether the arriving stack waits below the screen for the landing on this crossing
+     * ({@link SeamDress#stackRisesAfterLanding}), and rises if the wall lands on its half.
+     */
+    public boolean stackRisesAfterLanding() {
+        return pictured() && mRun.risesAfterLanding;
     }
 
     /**
@@ -664,17 +702,27 @@ public final class SeamCrossing {
             answers.restyleShape = mRun.shapeDiffers;
             mRun.restylePending = false;
         }
+        // A stack that waits for the landing stands below the screen the whole way, the picture of
+        // the committed half's standing whole and riding out with its page.
+        boolean waits = pictured && mRun.risesAfterLanding;
         if (mRun.plan != DockPlan.NONE) {
-            answers.dockReveal = pictured ? travel : SeamTravel.dockReveal(mRun.plan, progress);
+            answers.dockReveal = waits ? 0f : pictured ? travel
+                : SeamTravel.dockReveal(mRun.plan, progress);
         }
         answers.moved = answers.relayout || mRun.plan != DockPlan.NONE;
         // Between halves that dress the stack differently the keyboard dips with the rows, so it
         // is below the screen where the stack changes its dress.
         if (mRun.wholeStack) {
-            answers.keyboardReveal = pictured ? (mRun.otherKeyboard ? travel : 0f)
+            answers.keyboardReveal = waits ? 0f
+                : pictured ? (mRun.otherKeyboard ? travel : 0f)
                 : SeamDress.wholeStackKeyboardReveal(progress, mRun.committedKeyboard,
                     mRun.otherKeyboard);
-            if (pictured) answers.pictureReveal = 1f - travel;
+            if (waits) {
+                answers.pictureReveal = 1f;
+                answers.pictureSlide = SeamTravel.committedScreenShare(wallFrame, committedEnd);
+            } else if (pictured) {
+                answers.pictureReveal = 1f - travel;
+            }
         }
         answers.folds = SeamTravel.folds(mRun.plan);
         if (answers.folds) answers.extraKeysShare = SeamTravel.extraKeysShare(mRun.plan, progress);
@@ -788,6 +836,7 @@ public final class SeamCrossing {
         landing.dressedFor = mRun.stackDressPage;
         landing.dressDiffered = mRun.dressDiffers;
         landing.shapeDiffered = mRun.shapeDiffers;
+        landing.risesFor = stackRisesAfterLanding() ? mRun.other : null;
         mRun = mRun.landed();
         return landing;
     }

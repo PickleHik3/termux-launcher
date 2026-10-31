@@ -153,7 +153,7 @@ public class SeamCrossingTest {
         float fraction, progress, dockReveal, keyboardReveal, frameKeyboardReveal, extraKeysShare;
         float beadShare;
         float stripShare, fieldShare;
-        float pictureReveal;
+        float pictureReveal, pictureSlide;
         DockStyle stackDesign;
         boolean active, folds, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
@@ -216,6 +216,7 @@ public class SeamCrossingTest {
             step.extraKeysShare = answers.extraKeysShare();
             step.beadShare = answers.beadShare();
             step.pictureReveal = answers.pictureReveal();
+            step.pictureSlide = answers.pictureSlide();
             step.stackDesign = crossing.stackDesign();
             step.folds = answers.folds();
             step.rowsSink = answers.rowsSink(100);
@@ -970,25 +971,72 @@ public class SeamCrossingTest {
         assertEquals(1f, drive.last().dockReveal, EPSILON);
         assertTrue("the window's keyboard leaves with the picture",
             drive.crossing.picturesKeyboardAway());
+        // Toward Home the stacks keep crossing in step: the picture sinks in place and nothing
+        // waits for the landing.
+        assertFalse(drive.crossing.stackRisesAfterLanding());
+        for (Step step : drive.steps) assertTrue(Float.isNaN(step.pictureSlide));
+        assertFalse(drive.crossing.land().risesOn(PaneWallPage.WIDGETS));
     }
 
+    /**
+     * From Home toward the Terminal (the developer's decision, 2026-10-31): Home's dock, pictured
+     * as it stood, keeps Home's dress and stays whole on every frame of the slide, while the
+     * Terminal's stack, its rows and its keyboard, stays below the screen until the page has
+     * landed and only then rises. Pong, 2026-10-31: the strip row and a rising keyboard covered
+     * Home's dock from the gesture's first frame.
+     */
     @Test
-    public void aPicturedDipFromHomeRaisesTheWindowsKeyboardWithItsRows() {
+    public void fromHomeTheTerminalsStackWaitsForTheLanding() {
         Stored stored = new Stored();
         stored.minimal = true;
         Drive drive = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
             minimalWindow(), true, false);
         drive.picture = true;
         drive.slow(0f, 1f);
+        assertTrue(drive.askedForPicture);
+        assertTrue(drive.crossing.pictured());
         for (Step step : drive.steps) {
             if (!step.active) continue;
-            assertSame(PaneWallPage.TERMINAL, step.stackDressPage);
-            assertEquals(step.fraction, step.dockReveal, EPSILON);
-            assertEquals("the keyboard comes with the rows at " + step.fraction, step.fraction,
-                step.keyboardReveal, EPSILON);
-            assertEquals(1f - step.fraction, step.pictureReveal, EPSILON);
+            assertEquals("Home's dock shows whole at " + step.fraction, 1f, step.pictureReveal,
+                EPSILON);
+            assertEquals("no strip row before the landing, " + step.fraction, 0f, step.dockReveal,
+                EPSILON);
+            assertEquals("no keys before the landing, " + step.fraction, 0f, step.keyboardReveal,
+                EPSILON);
+            assertEquals("Home's dock rides out with its page at " + step.fraction,
+                -step.fraction, step.pictureSlide, EPSILON);
         }
         assertFalse("Home has no keyboard to put away", drive.crossing.picturesKeyboardAway());
+        assertTrue(drive.crossing.stackRisesAfterLanding());
+        SeamCrossing.Landing landing = drive.crossing.land();
+        assertTrue("the stack rises once the Terminal has landed",
+            landing.risesOn(PaneWallPage.TERMINAL));
+        assertFalse(landing.risesOn(PaneWallPage.WIDGETS));
+    }
+
+    /**
+     * The same slide turned back: Home's dock rides back in with its page to where it stood, and
+     * nothing rises on Home.
+     */
+    @Test
+    public void fromHomeTurnedBackBringsHomesDockBackWithItsPage() {
+        Stored stored = new Stored();
+        stored.minimal = true;
+        Drive drive = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+            minimalWindow(), true, false);
+        drive.picture = true;
+        drive.slow(0f, 0.7f).slow(0.7f, 0f);
+        for (Step step : drive.steps) {
+            if (!step.active) continue;
+            assertEquals(1f, step.pictureReveal, EPSILON);
+            assertEquals(-step.fraction, step.pictureSlide, EPSILON);
+            assertEquals(0f, step.dockReveal, EPSILON);
+            assertEquals(0f, step.keyboardReveal, EPSILON);
+        }
+        assertEquals(0f, drive.last().pictureSlide, EPSILON);
+        SeamCrossing.Landing landing = drive.crossing.land();
+        assertFalse("back on Home nothing rises", landing.risesOn(PaneWallPage.WIDGETS));
+        assertTrue("the settle dresses the stack back", landing.redressesBack(PaneWallPage.WIDGETS));
     }
 
     /**

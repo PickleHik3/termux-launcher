@@ -162,6 +162,22 @@ public final class SeamTravel {
     }
 
     /**
+     * Where the committed end's page stands on screen in {@code frame}, as an x offset from its
+     * rest in widths of the wall: 0 at rest, -{@code fraction} where it is the frame's near side
+     * (the far side stands one width to its right), 1 - {@code fraction} where it is the far side.
+     * A frame wholly on other pages has passed it: a Home page, standing left of every window,
+     * one width to the left, a window one to the right. What a picture of the committed end's
+     * stack rides at, with its page.
+     */
+    public static float committedScreenShare(@NonNull Frame frame, @NonNull PageRef committed) {
+        boolean fromOther = differs(frame.from, frame.fromId, committed);
+        boolean towardOther = differs(frame.toward, frame.towardId, committed);
+        if (fromOther && towardOther) return committed.isHome() ? -1f : 1f;
+        if (!fromOther && !towardOther) return 0f;
+        return fromOther ? 1f - frame.fraction : -frame.fraction;
+    }
+
+    /**
      * Which of two Home pages' layouts wears the bar that crosses between them (#173 slice E):
      * the one that stands it along the top while the other puts it away, so it can ride in or
      * out with that page ({@link #statusRides}); toward it, only where the committed page stands
