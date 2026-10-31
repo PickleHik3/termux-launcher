@@ -179,19 +179,23 @@ public final class DockSpec {
 
     /**
      * Whether the Peek card stands: the design is Peek, the dock is shown and its row stands alone.
-     * The keyboard no longer refuses it (D11); with it up the card stands on the stack.
+     * On a Home page the keyboard no longer refuses it (D11): the card stands on the keyboard,
+     * flush under Floating too. Elsewhere the keyboard still does, and the design draws as the
+     * tray's slab over it, as before.
      */
     public static boolean peekCardStands(@Nullable DockStyle design, boolean dockShown,
-                                         boolean peekRowAlone, boolean imeVisible) {
+                                         boolean peekRowAlone, boolean imeVisible,
+                                         boolean keyboardShown, @NonNull PageKind kind) {
         return DockStyle.effectiveStyle(design) == DockStyle.PEEK_GLASS && dockShown
-            && peekRowAlone && !imeVisible;
+            && peekRowAlone && !imeVisible && (!keyboardShown || kind == PageKind.HOME);
     }
 
     /** The dock's surface for {@code in}. */
     @NonNull
     public static DockSpec of(@NonNull Input in) {
         DockStyle design = DockStyle.effectiveStyle(in.design);
-        boolean peekStands = peekCardStands(design, in.dockShown, in.peekRowAlone, in.imeVisible);
+        boolean peekStands = peekCardStands(design, in.dockShown, in.peekRowAlone, in.imeVisible,
+            in.keyboardShown, in.kind);
         boolean floats = DockPlacement.floats(in.floatingStyle, peekStands);
         boolean foot = footExists(in.dockShown, floats, in.keyboardShown, in.imeVisible,
             in.navInsetPx);

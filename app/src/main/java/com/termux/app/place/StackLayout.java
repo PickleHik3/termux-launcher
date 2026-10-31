@@ -125,7 +125,7 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx);
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dockOverlays);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -217,10 +217,11 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx) {
+             int imeLiftPx, boolean homePage) {
+            // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             boolean peekCardStands = DockPlacement.peekCardStands(
                 DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
-                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
+                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0, homePage);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
             lifted = toolbarShown || keyboardShown;
@@ -333,7 +334,7 @@ public final class StackLayout {
         DockGeometry.Half half = in.dock.half(in.page);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.page));
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx);
+            in.imeLiftPx, in.page.isHome());
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
@@ -352,7 +353,7 @@ public final class StackLayout {
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.page);
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx);
+            in.imeLiftPx, in.page.isHome());
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);

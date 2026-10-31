@@ -5531,7 +5531,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return false;
         return com.termux.app.dock.DockPlacement.peekCardStands(shownDockSurfaceSpec().peek,
                 dockShown, arrangement().layout(), false, keyboardShown, mImeLiftPx > 0,
-                mAppliedPromptFieldBandPx > 0)
+                mAppliedPromptFieldBandPx > 0,
+                mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
             && (arrangement().floating() || !stackStandsDownOnFrame());
     }
 

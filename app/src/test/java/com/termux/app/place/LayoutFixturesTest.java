@@ -44,4 +44,31 @@ public class LayoutFixturesTest {
         assertTrue(LayoutFixtures.PONG.pass(PageRef.TERMINAL, false, false).flushAllowed);
         assertFalse(LayoutFixtures.SPLIT_PANE.pass(PageRef.TERMINAL, false, false).flushAllowed);
     }
+
+    /**
+     * D11: on Home with the keyboard up a Floating Peek dock is Home's card standing on the
+     * keyboard, flush, so Home's rest loses Floating's edge gap and nothing else; the Terminal's
+     * rest (its tray) is untouched.
+     */
+    @Test
+    public void homePeekStandsOnTheKeyboardAndTheTerminalRestHolds() {
+        LayoutFixtures.Fixture tray = LayoutFixtures.PONG;
+        LayoutFixtures.Fixture peek = LayoutFixtures.PONG.withHomeDesign(
+            com.termux.app.dock.DockStyle.PEEK_GLASS);
+        StackLayout.Result trayHome = tray.settle(PageRef.HOME, true, true);
+        StackLayout.Result peekHome = peek.settle(PageRef.HOME, true, true);
+        assertTrue("the tray keeps Floating's gap over the keyboard", trayHome.bottomMarginPx > 0);
+        assertEquals("the Peek card stands flush on the keyboard", 0, peekHome.bottomMarginPx);
+        assertEquals(trayHome.stackHeightPx, peekHome.stackHeightPx);
+        // Keyboard down the card stood already: nothing changes there.
+        assertEquals(0, peek.settle(PageRef.HOME, false, true).bottomMarginPx);
+        for (boolean keyboard : new boolean[] {false, true}) {
+            StackLayout.Result before = tray.settle(PageRef.TERMINAL, keyboard, true);
+            StackLayout.Result after = peek.settle(PageRef.TERMINAL, keyboard, true);
+            assertEquals(before.stackHeightPx, after.stackHeightPx);
+            assertEquals(before.bottomMarginPx, after.bottomMarginPx);
+            assertEquals(tray.restReservationPx(PageRef.TERMINAL, keyboard, true),
+                peek.restReservationPx(PageRef.TERMINAL, keyboard, true));
+        }
+    }
 }

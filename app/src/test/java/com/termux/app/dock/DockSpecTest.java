@@ -156,6 +156,19 @@ public class DockSpecTest {
         }
     }
 
+    /** Off Home the keyboard still refuses the card: the Terminal's rest is untouched. */
+    @Test
+    public void terminalPeekOverTheKeyboardKeepsTheTraySlab() {
+        DockSpec.Input in = pong(DockStyle.PEEK_GLASS, true, true);
+        in.kind = DockSpec.PageKind.TERMINAL;
+        DockSpec spec = DockSpec.of(in);
+        assertEquals(DockStyle.PEEK_GLASS, spec.design);
+        assertNull(spec.card);
+        assertFalse(spec.surface.peek);
+        assertTrue("Floating keeps its card with air under it", spec.floats);
+        assertEquals(DockSpec.Base.AIR, spec.base);
+    }
+
     @Test
     public void noFootWhileTheSystemKeyboardIsVisible() {
         DockSpec.Input in = pong(DockStyle.GLASS_TRAY, false, false);
