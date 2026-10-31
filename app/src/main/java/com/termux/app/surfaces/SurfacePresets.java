@@ -760,7 +760,7 @@ public final class SurfacePresets {
     @Nullable
     private static SurfaceProperty baseOfKey(@NonNull String key) {
         LookGrid.Key cell = LookGrid.parse(key);
-        return cell == null || cell.element != null || cell.page >= 0 ? null
+        return cell == null || cell.element != null || cell.page >= 0 || cell.kind != null ? null
             : propertyOf(cell.property);
     }
 
@@ -768,7 +768,7 @@ public final class SurfacePresets {
     @Nullable
     private static SurfaceEditorRows.Row rowOfKey(@NonNull String key) {
         LookGrid.Key cell = LookGrid.parse(key);
-        if (cell == null || cell.element == null || cell.page >= 0) return null;
+        if (cell == null || cell.element == null || cell.page >= 0 || cell.kind != null) return null;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (row.slot.element == cell.element && row.property.grid == cell.property)
                 return row;
@@ -836,7 +836,8 @@ public final class SurfacePresets {
                                           @NonNull LookGrid.Element element) {
         for (String stored : grid.gridKeys()) {
             LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element && key.page >= 0)
+            if (key != null && key.property == property && key.element == element
+                    && (key.page >= 0 || key.kind != null))
                 grid.store().remove(stored);
         }
     }
