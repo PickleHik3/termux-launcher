@@ -125,4 +125,24 @@ public class PlaceLayoutStoreHomeFallbackTest {
         assertEquals(Edge.TOP,
             page(8, PageKind.HOME).slot(PlaceOrientation.PORTRAIT, Element.STATUS).edge);
     }
+
+    /**
+     * The arrangement the dock is drawn from agrees with the dress: on the shared layout a Home
+     * page draws Home's design, a window the shared one (emulator, pong's prefs, 2026-11-01: the
+     * dress said Peek while Home 2's dock still drew the Tray).
+     */
+    @Test
+    public void theDrawnArrangementOfAHomePageOnTheSharedLayoutIsHomes() {
+        prefs.edit().putString("layout.dock_design", "glass_tray").commit();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle style =
+            store.shape().style;
+        assertEquals(DockStyle.PEEK_GLASS, ResolvedArrangement.resolve(store,
+            PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL,
+            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, 8), style)
+            .design());
+        assertEquals(DockStyle.GLASS_TRAY, ResolvedArrangement.resolve(store,
+            PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL,
+            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.TERMINAL, 4), style)
+            .design());
+    }
 }

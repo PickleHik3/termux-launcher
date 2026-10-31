@@ -109,7 +109,10 @@ public final class ResolvedArrangement {
                                               @NonNull LayoutStyle style) {
         PlaceLayoutStore view = store.forVariant(variant);
         PlaceLayout layout = store.resolve(orientation, variant, page.kind);
-        return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(view.dockStyle()),
+        // A Home page draws the design PlaceLayoutStore#homePageDockDesign answers, the dress's too.
+        DockStyle design = page.kind == PaneWallPage.WIDGETS
+            ? store.homePageDockDesign(variant) : view.dockStyle();
+        return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(design),
             view.searchField(), view.drawerTile(), orientation, variant, page);
     }
 
