@@ -164,9 +164,19 @@ public final class StackPicture extends View {
         }, Math.max(0L, delayMs));
     }
 
+    /**
+     * The picture drawn {@code px} across from the stack's own place, with the page it was taken
+     * on (0 puts it back); its cut moves with it.
+     */
+    public void slide(float px) {
+        if (mBitmap == null) return;
+        if (getTranslationX() != px) setTranslationX(px);
+    }
+
     /** Whether the picture shows all of itself, at the stack's own place. */
     public boolean atRest() {
-        return mBitmap != null && getVisibility() == VISIBLE && mSinkPx == 0f;
+        return mBitmap != null && getVisibility() == VISIBLE && mSinkPx == 0f
+            && getTranslationX() == 0f;
     }
 
     /** The picture goes, and the buffer it held with it. */
@@ -181,6 +191,7 @@ public final class StackPicture extends View {
         mSinkPx = Float.NaN;
         if (getVisibility() != INVISIBLE) setVisibility(INVISIBLE);
         if (getTranslationY() != 0f) setTranslationY(0f);
+        if (getTranslationX() != 0f) setTranslationX(0f);
         if (getClipBounds() != null) setClipBounds(null);
         if (bitmap != null) bitmap.recycle();
         if (image != null) image.close();

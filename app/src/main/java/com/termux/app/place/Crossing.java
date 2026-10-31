@@ -69,6 +69,9 @@ public final class Crossing {
         /** The picture drawn with {@code reveal} of it showing, sunk below the screen by the rest. */
         default void pictureAt(float reveal) {}
 
+        /** The picture drawn {@code widths} of the wall's width across from its rest (0 puts it back). */
+        default void pictureSlide(float widths) {}
+
         /** The picture goes, and what it held with it. */
         default void dropPicture() {}
     }
@@ -114,6 +117,7 @@ public final class Crossing {
         boolean contentPreRolled;
         boolean beadsMelted;
         boolean storeMoved;
+        boolean rises;
         int terminalPreSizePx;
         @Nullable GeometryScheduler.Transition gridHold;
         @NonNull SeamCrossing.Landing seam;
@@ -140,6 +144,12 @@ public final class Crossing {
          * store again from here, and the landing lays it out whole.
          */
         public boolean storeMoved() { return storeMoved; }
+        /**
+         * Whether the stack stands below the screen after the landing and rises into its place
+         * now ({@link Crossing#rise}): it waited for the page to land
+         * ({@link SeamDress#stackRisesAfterLanding}).
+         */
+        public boolean rises() { return rises; }
         /** The grid's paused resize, for the settle to end after its layout; null if none. */
         @Nullable public GeometryScheduler.Transition gridHold() { return gridHold; }
         /** What the seam's crossing has left to do; nothing for a hold let go on its own. */
@@ -184,6 +194,18 @@ public final class Crossing {
     // ---- What the frames ease ----
     private float mFoldShare = Float.NaN;
     private float mBeadShare = Float.NaN;
+    /** The stack's translation the last frame drew, all of it and the keyboard's part. */
+    private float mStackPx;
+    private float mStackKeyboardPx;
+
+    // ---- After the landing ----
+    /**
+     * Where the stack stood below the screen as the wall landed, for a stack that rises after it
+     * ({@link SeamDress#stackRisesAfterLanding}): all of it and the keyboard's part; 0 while none
+     * rises.
+     */
+    private float mRiseFromPx;
+    private float mRiseKeyboardFromPx;
 
     private final Landing mLanding = new Landing(new SeamCrossing.Landing());
     /** What a hold let go on its own hands back for the seam: nothing to do. Never written. */
@@ -218,6 +240,8 @@ public final class Crossing {
         boolean begins = !crossing();
         if (begins && (here.arrangement == null || there.arrangement == null))
             throw new IllegalArgumentException("a crossing's ends carry their arrangements");
+        // A rise still under way hands the stack to the crossing's frames.
+        stopRise();
         mSeam.begin(here, there, stage);
         if (!begins) return;
         if (MotionLog.enabled) MotionLog.log("crossing-begin", "revision=" + revision);
@@ -279,6 +303,8 @@ public final class Crossing {
      */
     public float stack(@NonNull SeamCrossing.Answers seam, float dockReveal, int keyboardPx,
                        int dockPx, int rowsPx) {
+        // A travel frame draws the stack where it answers: a rise under way ends.
+        stopRise();
         float keyboardReveal = seam.keyboardReveal();
         boolean rowsSink = seam.rowsSink(keyboardPx);
         if (seam.folds()) {
@@ -292,10 +318,15 @@ public final class Crossing {
         }
         float translation = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
             rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
-        mStack.translate(translation, keyboardPx * (1f - clamp01(keyboardReveal)));
-        // The committed half's stack, pictured, goes as the other half's comes.
+        mStackPx = translation;
+        mStackKeyboardPx = keyboardPx * (1f - clamp01(keyboardReveal));
+        mStack.translate(translation, mStackKeyboardPx);
+        // The committed half's stack, pictured, goes as the other half's comes: sinking, or
+        // riding out with its page while the other half's waits for the landing.
         float picture = seam.pictureReveal();
         if (!Float.isNaN(picture)) mStack.pictureAt(clamp01(picture));
+        float slide = seam.pictureSlide();
+        if (!Float.isNaN(slide)) mStack.pictureSlide(slide);
         return translation;
     }
 
@@ -322,6 +353,7 @@ public final class Crossing {
      * cover for it under the hold.
      */
     public void keyboardSwipe(float translationPx) {
+        stopRise();
         mStack.translate(translationPx, translationPx);
         coverAt(translationPx);
     }
@@ -576,7 +608,20 @@ public final class Crossing {
         if (MotionLog.enabled) MotionLog.log("land", "landed=" + landed + " revision=" + revision);
         // The picture goes in the frame the stack is put back at its rest, whichever half that is.
         if (mSeam.pictured()) mStack.dropPicture();
+        // A stack that waited below the screen for the landing stays there, to rise from it
+        // (rise); its room is already the landed rest's, so nothing but the stack moves.
+        PaneWallPage other = mSeam.other();
+        boolean rises = mSeam.stackRisesAfterLanding() && other != null
+            && !SeamTravel.crosses(other, landed.kind);
+        float heldPx = mStackPx;
+        float heldKeyboardPx = mStackKeyboardPx;
         Landing landing = releaseInto(mLanding);
+        landing.rises = rises && heldPx > 0f;
+        if (landing.rises) {
+            mRiseFromPx = heldPx;
+            mRiseKeyboardFromPx = heldKeyboardPx;
+            mStack.translate(mRiseFromPx, mRiseKeyboardFromPx);
+        }
         landing.beadsMelted = !Float.isNaN(mBeadShare);
         landing.storeMoved = mCommitted != null && revision != mRevision;
         landing.seam = mSeam.land();
@@ -610,6 +655,7 @@ public final class Crossing {
         Landing landing = releaseInto(mLanding);
         landing.beadsMelted = false;
         landing.storeMoved = false;
+        landing.rises = false;
         landing.seam = mNoSeam;
         return landing;
     }
@@ -635,6 +681,10 @@ public final class Crossing {
         mRoomChangePx = 0;
         // The grid's hold is handed to the settle, which ends it after its layout.
         mGridHold = null;
+        mStackPx = 0f;
+        mStackKeyboardPx = 0f;
+        mRiseFromPx = 0f;
+        mRiseKeyboardFromPx = 0f;
         mStack.translate(0f, 0f);
         mCoverPx = 0;
         if (covered) mCover.cover(0);
@@ -650,6 +700,35 @@ public final class Crossing {
     /** After the page's commit, the stack's dress the seam kept through it lets go. */
     public void end() {
         mSeam.end();
+    }
+
+    // ---- After the landing ----
+
+    /**
+     * The stack that waited for the landing ({@link Landing#rises}) drawn with {@code reveal} of
+     * its way up done: from where it stood below the screen at 0 to its place at 1, which ends
+     * the rise. A translation only: the room was the landed rest's already, so the content and
+     * the terminal's rows do not move. Nothing while none rises.
+     */
+    public void rise(float reveal) {
+        if (!rising()) return;
+        float rest = 1f - clamp01(reveal);
+        mStack.translate(mRiseFromPx * rest, mRiseKeyboardFromPx * rest);
+        if (rest == 0f) {
+            mRiseFromPx = 0f;
+            mRiseKeyboardFromPx = 0f;
+        }
+    }
+
+    /** A rise under way ends where it stands: what moves the stack next owns it. */
+    private void stopRise() {
+        mRiseFromPx = 0f;
+        mRiseKeyboardFromPx = 0f;
+    }
+
+    /** Whether a stack is rising after a landing ({@link #rise}). */
+    public boolean rising() {
+        return mRiseFromPx != 0f || mRiseKeyboardFromPx != 0f;
     }
 
     /**
