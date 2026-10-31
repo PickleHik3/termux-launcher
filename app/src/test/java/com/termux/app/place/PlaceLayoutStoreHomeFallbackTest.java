@@ -48,6 +48,43 @@ public class PlaceLayoutStoreHomeFallbackTest {
         return store.forVariant(LayoutVariant.page(id, kind));
     }
 
+    private PlaceLayoutStore fresh() {
+        Application app = RuntimeEnvironment.getApplication();
+        return new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+    }
+
+    private static DockStyle drawn(PlaceLayoutStore s, LayoutVariant variant,
+                                   com.termux.app.wall.PaneWallPage page) {
+        return s.resolve(com.termux.app.place.PlaceOrientation.PORTRAIT, variant, page).dockStyle;
+    }
+
+    @Test
+    public void aHomePageOnTheSharedLayoutDrawsHomesDockDesign() {
+        prefs.edit().putString("layout.dock_design", "glass_tray").commit();
+        PlaceLayoutStore s = fresh();
+        assertEquals(DockStyle.PEEK_GLASS,
+            drawn(s, LayoutVariant.NORMAL, com.termux.app.wall.PaneWallPage.WIDGETS));
+        assertEquals("the dress agrees", DockStyle.PEEK_GLASS,
+            com.termux.app.chrome.DressResolver.of(s)
+                .dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS));
+        assertEquals("a window is unchanged", DockStyle.GLASS_TRAY,
+            drawn(s, LayoutVariant.NORMAL, com.termux.app.wall.PaneWallPage.TERMINAL));
+        assertEquals("the page's own keys are unchanged", DockStyle.PEEK_GLASS,
+            drawn(s, LayoutVariant.page(1, PageKind.HOME),
+                com.termux.app.wall.PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void aHomePageDrawsTheSharedDockDesignWhenHomeHoldsNone() {
+        prefs.edit().remove("layout.home.dock_design")
+            .putString("layout.dock_design", "glass_tray").commit();
+        PlaceLayoutStore s = fresh();
+        assertEquals(DockStyle.GLASS_TRAY,
+            drawn(s, LayoutVariant.NORMAL, com.termux.app.wall.PaneWallPage.WIDGETS));
+        assertEquals(DockStyle.GLASS_TRAY, com.termux.app.chrome.DressResolver.of(s)
+            .dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS));
+    }
+
     @Test
     public void aHomePageWithNoKeysWearsHomes() {
         assertEquals(DockStyle.PEEK_GLASS, page(8, PageKind.HOME).dockStyle());

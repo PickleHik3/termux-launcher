@@ -1025,7 +1025,22 @@ public final class PlaceLayoutStore {
             if (slot.hidden == shown) resolved = resolved.withSlot(element, slot.withHidden(!shown));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
-            .withDockStyle(DockStyle.effectiveStyle(layout.dockStyle()));
+            .withDockStyle(DockStyle.effectiveStyle(homePageDockDesign(variant)));
+    }
+
+    /**
+     * The Dock design a Home page draws on {@code variant}: on the shared layout it is the Home
+     * kind's own while Home holds one ({@code layout.home.dock_design}), so Home pages with no
+     * layout of their own look like Home (ADR 0018 section 4); else the variant's. The stack's dock
+     * ({@link #resolve}) and the dress ({@link DressResolver#dockDesignOf}) both read it.
+     */
+    @NonNull
+    public DockStyle homePageDockDesign(@NonNull LayoutVariant variant) {
+        if (variant == LayoutVariant.NORMAL && mStore != null
+            && mStore.contains(layoutWideKey(LayoutVariant.HOME, KEY_DOCK_DESIGN))) {
+            return forVariant(LayoutVariant.HOME).dockStyle();
+        }
+        return forVariant(variant).dockStyle();
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */

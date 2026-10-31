@@ -63,6 +63,15 @@ public final class DressResolver {
         @NonNull
         DockStyle dockDesign(@NonNull LayoutVariant layout);
 
+        /**
+         * The Dock design a Home page draws on {@code layout}: the Home kind's own when the page
+         * is on the shared layout and Home holds one, else {@link #dockDesign}.
+         */
+        @NonNull
+        default DockStyle homePageDockDesign(@NonNull LayoutVariant layout) {
+            return dockDesign(layout);
+        }
+
         /** Whether one layout turns the Search field on, beside its design (#96). */
         boolean searchField(@NonNull LayoutVariant layout);
 
@@ -138,6 +147,11 @@ public final class DressResolver {
                 return store != null && store.hasPageLayout(pageId);
             }
 
+            @NonNull @Override public DockStyle homePageDockDesign(@NonNull LayoutVariant layout) {
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.homePageDockDesign(layout) : DockStyle.GLASS_TRAY;
+            }
+
             @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
                 PlaceLayoutStore store = places.get();
                 return store != null ? store.forVariant(layout).dockStyle() : DockStyle.GLASS_TRAY;
@@ -194,13 +208,18 @@ public final class DressResolver {
     }
 
     @NonNull
+    private DockStyle dockDesignFor(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
+        return kind == PageKind.HOME ? mSource.homePageDockDesign(layout) : mSource.dockDesign(layout);
+    }
+
+    @NonNull
     private Dress dressOf(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
         Set<Element> leftOut = EnumSet.noneOf(Element.class);
         for (Element element : Element.values()) {
             if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
         }
         return new Dress(layout, leftOut,
-            DockStyle.effectiveStyle(mSource.dockDesign(layout)), mSource.searchField(layout),
+            DockStyle.effectiveStyle(dockDesignFor(layout, kind)), mSource.searchField(layout),
             mSource.drawerTile(layout), mSource.shape());
     }
 
@@ -243,7 +262,7 @@ public final class DressResolver {
      */
     @NonNull
     public DockStyle dockDesignOf(@NonNull PaneWallPage page) {
-        return DockStyle.effectiveStyle(mSource.dockDesign(layoutOf(page)));
+        return DockStyle.effectiveStyle(dockDesignFor(layoutOf(page), kindOf(page)));
     }
 
     /**
