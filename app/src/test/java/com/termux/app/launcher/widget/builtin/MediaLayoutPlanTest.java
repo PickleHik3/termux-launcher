@@ -154,20 +154,31 @@ public class MediaLayoutPlanTest {
             assertEquals(what + " controls at the foot", plan.inset.bottom(), play.box.bottom(), 0.01f);
             assertEquals(what + " play centred", plan.inset.centerX(), play.box.centerX(), 0.01f);
             assertTrue(what, plan.has("prev") && plan.has("next"));
-            System.out.println("POLAROID " + what + " inset=" + plan.inset + " " + plan.parts);
         }
-        for (float[] size : new float[][] { { 109f, 115f }, { 184f, 150f } }) {
+        for (float[] size : new float[][] { { 109f, 115f }, { 184f, 200f } }) {
             WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.TWO_BY_TWO, size[0], size[1], 1f, playing());
             check(plan, "2x2 " + size[0] + "x" + size[1]);
             if (plan.has("art")) {
                 assertEquals(plan.part("art").box.width, plan.part("art").box.height, 0.01f);
             }
-            System.out.println("POLAROID " + size[0] + "x" + size[1] + " " + plan.parts);
         }
-        for (float fs : new float[] { 1.0f, 1.3f }) {
-            System.out.println("POLAROID min 1.3 " + fs + " "
-                + plan(BuiltinWidgetSpan.TWO_BY_TWO, 109f, 115f, fs, playing()).parts);
+    }
+
+    @Test public void upright2x2sArePolaroidsAndWiderOnesTakeTheColumnLayout() {
+        float[][] polaroids = { { 184f, 280f }, { 184f, 200f }, { 200f, 184f }, { 109f, 115f } };
+        for (float[] size : polaroids) {
+            WidgetLayoutPlan plan = plan(BuiltinWidgetSpan.TWO_BY_TWO, size[0], size[1], 1f, playing());
+            assertEquals(size[0] + "x" + size[1], MediaLayoutPlanner.POLAROID_INSET_DP,
+                plan.inset.left, 0.01f);
         }
+        WidgetLayoutPlan wide = plan(BuiltinWidgetSpan.TWO_BY_TWO, 255f, 160f, 1f, playing());
+        check(wide, "255x160");
+        assertEquals(16f, wide.inset.left, 0.01f);
+        Part art = wide.part("art"), title = wide.part("title");
+        assertNotNull(art);
+        assertEquals("art at the full inner height", wide.inset.height, art.box.height, 0.01f);
+        assertEquals("art on the start side", wide.inset.left, art.box.left, 0.01f);
+        assertTrue("column beside the art", title.box.left >= art.box.right() - 0.01f);
     }
 
     @Test public void twoRowResumeAndIdleStillOfferPlay() {

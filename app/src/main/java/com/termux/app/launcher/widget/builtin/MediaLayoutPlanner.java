@@ -68,7 +68,7 @@ final class MediaLayoutPlanner {
                                           float heightDp, float fontScale,
                                           @NonNull Content content, @NonNull Measure measure) {
         Box card = new Box(0f, 0f, widthDp, heightDp);
-        Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, insetDp(span));
+        Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, insetDp(span, widthDp, heightDp));
         List<Part> parts = new ArrayList<>();
         if (span == BuiltinWidgetSpan.ONE_BY_ONE) {
             parts.add(Part.touch("art", inner));
@@ -76,10 +76,10 @@ final class MediaLayoutPlanner {
             parts.add(Part.touch("play", new Box(inner.centerX() - side / 2f,
                 inner.centerY() - side / 2f, side, side)));
         } else if (span.rows == 2) {
-            if (span == BuiltinWidgetSpan.FOUR_BY_TWO) {
-                artAndColumn(inner, fontScale, content, parts);
-            } else {
+            if (isPolaroid(span, widthDp, heightDp)) {
                 polaroid(inner, fontScale, content, measure, parts);
+            } else {
+                artAndColumn(inner, fontScale, content, parts);
             }
         } else {
             tall(span, inner, fontScale, content, parts);
@@ -99,9 +99,23 @@ final class MediaLayoutPlanner {
     /** Slack added to a measured line so rounding never ellipsizes it. */
     private static final float MEASURE_SLACK_DP = 1f;
 
-    /** The content inset of the Media card at {@code span}: thin on the 2x2, the shared one elsewhere. */
-    static int insetDp(@NonNull BuiltinWidgetSpan span) {
-        return span == BuiltinWidgetSpan.TWO_BY_TWO ? POLAROID_INSET_DP : WidgetTokens.insetDp(span);
+    /** A 2x2-span card is a polaroid while its inner height is at least this share of its inner width. */
+    static final float POLAROID_MIN_ASPECT = 0.85f;
+
+    /**
+     * Whether a card of this size is the polaroid: a 2x2 span whose room, inside the thin frame,
+     * is upright. A wider card of the same span takes the art-and-column layout of the 4x2.
+     */
+    static boolean isPolaroid(@NonNull BuiltinWidgetSpan span, float widthDp, float heightDp) {
+        if (span != BuiltinWidgetSpan.TWO_BY_TWO) return false;
+        float innerWidth = widthDp - 2f * POLAROID_INSET_DP;
+        float innerHeight = heightDp - 2f * POLAROID_INSET_DP;
+        return innerHeight >= POLAROID_MIN_ASPECT * innerWidth;
+    }
+
+    /** The content inset of the Media card: thin on a polaroid, the shared one elsewhere. */
+    static int insetDp(@NonNull BuiltinWidgetSpan span, float widthDp, float heightDp) {
+        return isPolaroid(span, widthDp, heightDp) ? POLAROID_INSET_DP : WidgetTokens.insetDp(span);
     }
 
     /**
