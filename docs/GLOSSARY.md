@@ -480,15 +480,18 @@ that cell deletes it (ADR 0017).
 _Avoid_: half value, per-page setting
 
 **Cell**:
-One slot of the look grid (ADR 0017): a property at one *Where* (everywhere or a page) and one
-*What* (all glass or one element), keyed `look.<property>[.<element>][@<page>]`. A present key
-is the cell's value; an absent key follows. Read order: the element on this page, all glass on
-this page, the element everywhere, **Base**, the shipped Look.
+One slot of the look grid (ADR 0017, ADR 0018 §3): a property at one *Where* (everywhere, a kind
+of page, or a page) and one *What* (all glass or one element), keyed
+`look.<property>[.<element>][@<page>|@kind:<home|terminal|display>]`. A present key is the cell's
+value; an absent key follows. Read order: the element on this page, all glass on this page, the
+element on the page's kind, all glass on that kind, the element everywhere, **Base**, the Look
+shipped for that kind. Vibrancy and Margin have no element column and no kind row.
 _Avoid_: layer, level, override slot
 
 **Scope chip**:
-The two chips at the top of every Appearance card: **Where it applies** (Everywhere | <page name>)
-and **What it applies to** (All glass | <element>). Together they name the **Cell** the card's
+The two chips at the top of every Appearance card: **Where it applies** (Everywhere | Home pages,
+Terminal or Display pages, the kind of the page in front | <page name>) and **What it applies to**
+(All glass | <element>). Together they name the **Cell** the card's
 rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
 _Avoid_: Global (the old label; in prose and code say Base)
 

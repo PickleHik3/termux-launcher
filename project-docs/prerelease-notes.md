@@ -26,6 +26,7 @@ Latest stable: v1.2.1.
 - The Home card has a Transition row of five glyph tiles (Slide, Depth, Fade, Carousel and Stack), and Settings › General › Page transition now opens it.
 
 ### Appearance editor
+- Where it applies now offers Home pages, Terminal or Display pages between Everywhere and This page, and each kind ships its own keyboard: lifted on Home pages, nearly clear on Display pages.
 - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
 - A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
 - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
