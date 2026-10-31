@@ -10,6 +10,13 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Editor sliders (2026-10-31)
+- 2026-10-31 · horizontal slider rows (ef0f80ede) · on pong, the thumb on a card's slider: a
+  sideways drag takes the slider at once and never scrolls the card; an up or down swipe that
+  starts on a track scrolls the card or moves the sheet and leaves the value alone; a tap jumps
+  the handle there; the row's two-line layout reads right (or say to put the track on the name
+  line, `SliderRow.TWO_LINES`) · pong.
+
 ## Not drivable over adb (pong checker, 2026-10-26)
 - 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
   never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints

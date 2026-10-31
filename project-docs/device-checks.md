@@ -21,6 +21,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · horizontal slider rows (ef0f80ede and the three before it) · Dock, Status bar,
+  Keyboard, Home and Appearance cards at half and full, font 1.0 and 1.3, light and dark: every
+  value slider is a horizontal row (glyph, name, source dot, value, then the track across the
+  card), none vertical; nothing clipped or overlapping; the keyboard card's link toggle stands
+  between Background and Key opacity and flips both; long-press a slider's name → "Reset this
+  row" resets it and the track springs back; Reset card springs the tracks one after another;
+  moving Frost, Opacity or Tint turns Look to Custom · emulator, then pong.
 - 2026-10-31 · wave K, the look grid's page-kind tier (322432562) · seen on pong 2026-10-31 17:37: the upgrade re-homed the keyboard's Home cells (0/0/0/0 at `@kind:home`) and seeded Display (frost 2, opacity 10, tint 0), `launcherctl look get … --kind home|display|terminal` and `--page 4` answer from the right cells, a kind `set`/`reset` writes and clears the kind cell. Still owed: (a) the keyboard on Home did NOT change on screen after `launcherctl look set opacity 70 --element keyboard --kind home` (pixel-identical with the keyboard up): find whether the live redress misses the keyboard's glass or the keyboard reads its look outside the grid's kind path (`GlassStack.keyboard`, `applyKeyboardSurfaceState`), then re-check after a restart; (b) on a Display page the keyboard reads Clear; (c) the Keyboard card's Where chip offers Home pages, a kind value wears the secondary dot, Reset this row at a kind cell clears it; (d) on the emulator a fresh install shows the Home keyboard as Mist over widgets · pong / emulator.
 - 2026-10-31 · W3 fix round (732a34e39..) · emulator at 1.0× and 1.3× font scale, light and
   dark: the Rim row reads None · Thin · Bright and (once fixed) stands beside its name on the
