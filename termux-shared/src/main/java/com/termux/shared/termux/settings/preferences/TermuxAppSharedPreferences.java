@@ -3512,10 +3512,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         LookGrid.Element element = cellElement(slot, property);
         if (element == null || !hasSurfaceProperty(slot, property))
             return true;
-        LookGrid grid = lookGrid();
-        if (pageId >= 0 && grid.has(property.grid, element, pageId))
-            return false;
-        return !grid.has(property.grid, element, LookGrid.NO_PAGE);
+        // The element's own cell on the page, on the page's kind (ADR 0018 §3), or everywhere.
+        return !lookGrid().holdsOwn(property.grid, element, pageId);
     }
 
     /** Links or unlinks the surface on both halves: the shared flag, with either half's dropped. */

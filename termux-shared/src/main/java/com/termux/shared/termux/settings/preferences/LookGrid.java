@@ -357,6 +357,19 @@ public final class LookGrid {
         return page >= 0 && kinds != null ? kinds.kindOf(page) : null;
     }
 
+    /**
+     * Whether {@code element} holds a value of its own for {@code property} on {@code page}: in
+     * the element's cell on that page, on the page's kind, or everywhere. False means the element
+     * follows all glass there (the "linked" state the keyboard's stack reads).
+     */
+    public boolean holdsOwn(@NonNull Property property, @Nullable Element element, int page) {
+        if (element == null || !property.perElement) return false;
+        if (page >= 0 && mStore.contains(key(property, element, page))) return true;
+        Kind kind = kindOf(page);
+        if (kind != null && mStore.contains(key(property, element, kind))) return true;
+        return mStore.contains(key(property, element, NO_PAGE));
+    }
+
     @NonNull
     public Store store() {
         return mStore;

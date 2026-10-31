@@ -297,4 +297,22 @@ public class LookGridTest {
         grid.clearElement(Element.KEYBOARD);
         assertFalse(grid.has(cell));
     }
+
+    @Test
+    public void anElementHoldsItsOwnValueOnAPageThroughItsKind() {
+        // The keyboard's "linked" state: it follows all glass only while no cell of its own holds
+        // for the page, the page's kind, or everywhere (the kind cell was skipped, 2026-10-31).
+        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
+        LookGrid grid = kindGrid(store);
+        assertFalse(grid.holdsOwn(Property.OPACITY, Element.KEYBOARD, HOME_PAGE));
+        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 70);
+        assertTrue("the Home kind's cell is the keyboard's own on a Home page",
+            grid.holdsOwn(Property.OPACITY, Element.KEYBOARD, HOME_PAGE));
+        assertFalse("not on the Terminal page", grid.holdsOwn(Property.OPACITY, Element.KEYBOARD, TERMINAL_PAGE));
+        grid.clear(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME);
+        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 50);
+        assertTrue("everywhere counts on every page", grid.holdsOwn(Property.OPACITY, Element.KEYBOARD, TERMINAL_PAGE));
+        assertFalse("all glass never holds an element's own", grid.holdsOwn(Property.OPACITY, null, HOME_PAGE));
+        assertFalse("Margin has no element", grid.holdsOwn(Property.MARGIN, Element.KEYBOARD, HOME_PAGE));
+    }
 }
