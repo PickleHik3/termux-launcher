@@ -214,7 +214,7 @@ public final class LegendSlider extends View {
     /**
      * Whether a touch on the handle drags at once (true, today's glass strips) or waits for the
      * hold like the rest of the column, so a swipe that starts on it scrolls the card
-     * ({@link com.termux.app.surfaces.rows.StripRow}).
+     * (the vertical strip rows before 2026-10-31).
      */
     public void setHandleGrabs(boolean grabs) {
         mHandleGrabs = grabs;

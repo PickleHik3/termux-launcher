@@ -24,9 +24,9 @@ import java.util.List;
  * What every card of the Appearance editor holds, as data (appearance-and-settings-rework §2.3,
  * §3, §7 and §8): one table of rows per {@link EditorCard}, each row in one of three tiers, so a
  * control's position teaches how often it is touched. Tiers only order the rows: every row of a
- * card is always shown, and the sheet scrolls. Every value slider of a card is a column of its
- * glass strip ({@link Kind#STRIP}), all of them in one run, first in the card; the Appearance
- * card's Look is the one horizontal slider.
+ * card is always shown, and the sheet scrolls. Every value slider of a card is a horizontal
+ * slider row ({@link Kind#SLIDER}), one under another; the Appearance card's Look is a stopped
+ * slider of its own.
  *
  * <p>It also answers where a row writes ({@link #halfFor}): the glass numbers of the dock, the
  * status bar and the keyboard, and the Look slider, land on the half the frame shows; everything
@@ -42,12 +42,13 @@ public final class EditorRows {
     /** How a row is drawn and what it reports. */
     public enum Kind {
         /**
-         * A vertical slider in the card's strip ({@link LegendSlider}): its name and value read
-         * upward beside the track ("Frost · 20%", "Corners · 16 dp"). Every value slider is one,
-         * the glass and the sizes alike; strip rows that follow one another stand side by side
-         * as one strip, as the previous editor's Custom row did.
+         * A horizontal slider row ({@link LegendSlider} lying along it): the glyph, the name and
+         * its source dot, the value at the end, and the track under them across the row. Every
+         * value slider is one, the glass and the sizes alike; slider rows that follow one another
+         * stand one under another (they stood side by side as vertical columns until
+         * 2026-10-31).
          */
-        STRIP,
+        SLIDER,
         /** A switch. */
         SWITCH,
         /** A connected button group: one of a few named choices. */
@@ -73,9 +74,9 @@ public final class EditorRows {
 
     /** Every row any card has. */
     public enum Row {
-        OPACITY(Kind.STRIP, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
-        TINT(Kind.STRIP, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
-        HEIGHT(Kind.STRIP, R.string.appearance_row_height, R.drawable.ic_editor_height),
+        OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        TINT(Kind.SLIDER, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
+        HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
         VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_symbol_dock_glass_tray),
@@ -83,25 +84,25 @@ public final class EditorRows {
          * Frost: blur and grain together along {@link GlassControls}' curve, the one glass slider
          * the cards have (BLUR and GRAIN are still the stored properties underneath).
          */
-        FROST(Kind.STRIP, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
-        CORNERS(Kind.STRIP, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
+        FROST(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
+        CORNERS(Kind.SLIDER, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
         /** The glass's grain at the chips' cell, 0 to 100%. */
-        GRAIN(Kind.STRIP, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
+        GRAIN(Kind.SLIDER, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
         /** The glass's rim at the chips' cell: None, Hairline or Bright. */
         RIM(Kind.SEGMENTS, R.string.appearance_row_rim, R.drawable.ic_editor_corners),
-        MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
-        DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
+        MARGIN(Kind.SLIDER, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
+        DEPTH(Kind.SLIDER, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         /**
          * How strongly the icons' reflections show on the Peek glass card, 0 (off) to strong;
          * the Dock card shows it only while Peek glass is the design.
          */
-        REFLECTION(Kind.STRIP, R.string.appearance_row_reflection,
+        REFLECTION(Kind.SLIDER, R.string.appearance_row_reflection,
             R.drawable.ic_symbol_dock_peek_glass),
-        TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
+        TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
-        SPLIT_GAP(Kind.STRIP, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
+        SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
@@ -118,9 +119,9 @@ public final class EditorRows {
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_editor_dark_mode),
-        KEY_OPACITY(Kind.STRIP, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
-        KEY_CORNERS(Kind.STRIP, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
-        KEY_SPACING(Kind.STRIP, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
+        KEY_OPACITY(Kind.SLIDER, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
+        KEY_CORNERS(Kind.SLIDER, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
+        KEY_SPACING(Kind.SLIDER, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_ed_look),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
@@ -129,9 +130,9 @@ public final class EditorRows {
             R.drawable.ic_ed_wallpaper_colours),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
-        VIBRANCY(Kind.STRIP, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
+        VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
-        GLASS_EDGE(Kind.STRIP, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
+        GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
         /** The Home card's way to the Widgets card. */
         LINK_WIDGETS(Kind.LINK, R.string.editor_element_widgets, R.drawable.ic_symbol_stacks),
@@ -169,7 +170,7 @@ public final class EditorRows {
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
         /** The air under the keyboard's last key row (the layout's chin), in dp. */
-        BOTTOM_PADDING(Kind.STRIP, R.string.editor_row_bottom_padding,
+        BOTTOM_PADDING(Kind.SLIDER, R.string.editor_row_bottom_padding,
             R.drawable.ic_ed_bottom_padding),
         /** The keyboard's two opacities move together, keeping their difference. */
         OPACITY_LINK(Kind.SWITCH, R.string.editor_row_opacity_link, R.drawable.ic_ms_link),
@@ -343,11 +344,11 @@ public final class EditorRows {
     }
 
     /**
-     * Whether {@code row} is one of the Appearance card's All surfaces columns, the strip that
+     * Whether {@code row} is one of the Appearance card's All surfaces sliders, the run that
      * stands only at the Custom stop: the shared glass, the glass edge and the shared text size.
      */
     public static boolean isAllSurfaces(@NonNull Row row) {
-        return row.kind == Kind.STRIP;
+        return row.kind == Kind.SLIDER;
     }
 
     /**

@@ -30,7 +30,7 @@ import com.termux.app.surfaces.rows.RowKit;
 import com.termux.app.surfaces.rows.SectionHeader;
 import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.surfaces.rows.StepperRow;
-import com.termux.app.surfaces.rows.StripRow;
+import com.termux.app.surfaces.rows.SliderRow;
 import com.termux.app.surfaces.rows.TileGrid;
 
 import java.util.ArrayList;
@@ -92,7 +92,7 @@ final class CardBody {
     }
 
     /** How a row is drawn here: its {@link Kind}, or the row itself where the Kind stands in. */
-    enum Shape { STRIP, STRIP_LINK, TILES, CHIPS, SEGMENTS, MENU, STEPPER, SECTION, HINT, LOOK,
+    enum Shape { SLIDER, SLIDER_LINK, TILES, CHIPS, SEGMENTS, MENU, STEPPER, SECTION, HINT, LOOK,
         ACTION }
 
     /** How {@code row} is drawn on these cards. */
@@ -100,7 +100,7 @@ final class CardBody {
     static Shape shape(@NonNull Row row) {
         switch (row) {
             case OPACITY_LINK:
-                return Shape.STRIP_LINK;
+                return Shape.SLIDER_LINK;
             case HOME_COLUMNS:
             case HOME_ROWS:
                 return Shape.STEPPER;
@@ -121,7 +121,7 @@ final class CardBody {
                 break;
         }
         switch (row.kind) {
-            case STRIP: return Shape.STRIP;
+            case SLIDER: return Shape.SLIDER;
             case SWITCH: return Shape.TILES;
             case LINK:
             case EXPANDER:
@@ -238,9 +238,9 @@ final class CardBody {
 
     private static boolean sameGroup(@NonNull Shape first, @NonNull Shape next) {
         switch (first) {
-            case STRIP:
-            case STRIP_LINK:
-                return next == Shape.STRIP || next == Shape.STRIP_LINK;
+            case SLIDER:
+            case SLIDER_LINK:
+                return next == Shape.SLIDER || next == Shape.SLIDER_LINK;
             case TILES:
                 return next == Shape.TILES;
             case CHIPS:
@@ -255,9 +255,9 @@ final class CardBody {
         List<Row> rows = group.rows;
         Row first = rows.get(0);
         switch (shape(first)) {
-            case STRIP:
-            case STRIP_LINK:
-                return strips(rows, widthPx);
+            case SLIDER:
+            case SLIDER_LINK:
+                return sliders(rows);
             case TILES:
                 return tiles(rows, widthPx);
             case CHIPS:
@@ -302,29 +302,33 @@ final class CardBody {
 
     // ---------------------------------------------------------------------------------- kinds
 
-    /** A strip run; the opacity link in it links the strips either side. */
+    /**
+     * A run of slider rows; the opacity link in it links the sliders either side. A long press on
+     * a slider's name opens the sheet's row menu, and each track carries its row as its tag, so
+     * the sheet's Reset can spring it.
+     */
     @NonNull
-    private CardRowView strips(@NonNull List<Row> rows, int widthPx) {
+    private CardRowView sliders(@NonNull List<Row> rows) {
         List<Row> columns = new ArrayList<>();
-        List<StripRow.Strip> strips = new ArrayList<>();
+        List<SliderRow.Track> strips = new ArrayList<>();
         Row linkRow = null;
         int linkAfter = -1;
         for (Row row : rows) {
-            if (shape(row) == Shape.STRIP_LINK) {
+            if (shape(row) == Shape.SLIDER_LINK) {
                 linkRow = row;
                 linkAfter = columns.size() - 1;
                 continue;
             }
             columns.add(row);
-            strips.add(new StripRow.Strip(glyph(row), name(row), mModel.from(row),
+            strips.add(new SliderRow.Track(glyph(row), name(row), mModel.from(row),
                 mModel.to(row), mModel.step(row), value -> mModel.readout(row, value)));
         }
         int[] values = new int[columns.size()];
         for (int i = 0; i < values.length; i++)
             values[i] = mModel.value(columns.get(i));
         Row link = linkRow;
-        StripRow strip = StripRow.build(mContext, strips, values, widthPx,
-            new StripRow.Listener() {
+        SliderRow strip = SliderRow.build(mContext, strips, values,
+            new SliderRow.Listener() {
                 @Override public void onValue(int index, int value, boolean dragging) {
                     mModel.onValue(columns.get(index), value, dragging);
                 }
@@ -337,7 +341,10 @@ final class CardBody {
             on -> {
                 if (link != null)
                     mModel.onValue(link, on ? 1 : 0, false);
-            });
+            },
+            (index, anchor) -> mModel.openRowMenu(anchor, columns.get(index)));
+        for (int i = 0; i < columns.size(); i++)
+            strip.items.get(i).slider.setTag(columns.get(i));
         return new CardRowView(strip.root, () -> {
             boolean any = false;
             for (int i = 0; i < columns.size(); i++) {
@@ -346,9 +353,8 @@ final class CardBody {
                 strip.setShown(i, shown);
                 any |= shown;
                 strip.setValue(i, mModel.value(row));
-                // The set-here dot: the surface's own value, where Reset would take it back.
-                LegendSlider slider = strip.columns.get(i).slider;
-                slider.setMark(mModel.source(row).ink(slider.getContext()), null);
+                // The source dot: where the value comes from, and Reset would take it back.
+                strip.setSource(i, mModel.source(row).ink(mContext), spokenSource(row));
             }
             if (link != null)
                 strip.setLinked(mModel.value(link) != 0);
@@ -356,6 +362,14 @@ final class CardBody {
             if (strip.root.getVisibility() != visibility)
                 strip.root.setVisibility(visibility);
         });
+    }
+
+    /** "<Row>, from <where>", or null where the row's value is shared. */
+    @Nullable
+    private CharSequence spokenSource(@NonNull Row row) {
+        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
+        return from == null ? null
+            : mContext.getString(R.string.editor_source_from, name(row), from);
     }
 
     /** A run of switches as one grid of tiles; a tile's long-press is its row's summary. */

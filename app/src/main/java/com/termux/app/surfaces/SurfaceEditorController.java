@@ -2697,6 +2697,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
         }
 
+        @Override public void openRowMenu(@NonNull View anchor, @NonNull Row row) {
+            EditorCardSheet sheet = mSheet;
+            if (sheet != null)
+                sheet.openRowMenu(anchor, row);
+        }
+
         @Override public void setScopeOnPage(boolean onPage) {
             // Nothing is written here: the cell shows what it follows until a value is set on it.
             mChips = mChips.withPage(onPage ? mScopePageId : -1);

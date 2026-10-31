@@ -197,7 +197,7 @@ public class EditorCardHeaderTest {
 
         @Override public int value(@NonNull Row row) {
             if (row == Row.VISIBLE) return visible;
-            return row.kind == EditorRows.Kind.STRIP ? 50 : 0;
+            return row.kind == EditorRows.Kind.SLIDER ? 50 : 0;
         }
 
         @Override public int from(@NonNull Row row) {
