@@ -46,9 +46,61 @@ public class EditorChipsTest {
     }
 
     @Test
-    public void whereOffersEverywhereThenThePage() {
-        assertEquals(Arrays.asList(LookGrid.NO_PAGE, PAGE), EditorChips.whereOptions(PAGE));
-        assertEquals(Collections.singletonList(LookGrid.NO_PAGE), EditorChips.whereOptions(-1));
+    public void whereOffersEverywhereThenThePagesKindThenThePage() {
+        assertEquals(Arrays.asList(EditorChips.Where.EVERYWHERE,
+                EditorChips.Where.kind(LookGrid.Kind.HOME), EditorChips.Where.page(PAGE)),
+            EditorChips.whereOptions(PAGE, LookGrid.Kind.HOME));
+        assertEquals(Arrays.asList(EditorChips.Where.EVERYWHERE, EditorChips.Where.page(PAGE)),
+            EditorChips.whereOptions(PAGE, null));
+        assertEquals(Collections.singletonList(EditorChips.Where.EVERYWHERE),
+            EditorChips.whereOptions(-1, null));
+    }
+
+    @Test
+    public void aKindNamesTheKindsCell() {
+        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.KEYBOARD);
+        assertTrue(chips.onKind());
+        assertFalse(chips.onPage());
+        assertEquals(EditorChips.Where.kind(LookGrid.Kind.HOME), chips.where());
+        LookGrid.Key cell = chips.cell(Property.OPACITY);
+        assertEquals(LookGrid.Kind.HOME, cell.kind);
+        assertEquals(Element.KEYBOARD, cell.element);
+        assertEquals(LookGrid.NO_PAGE, cell.page);
+        // Margin and Vibrancy have no kind row: everywhere, greyed as all glass.
+        LookGrid.Key margin = chips.cell(Property.MARGIN);
+        assertNull(margin.kind);
+        assertNull(margin.element);
+        assertTrue(chips.elementIgnored(Property.MARGIN));
+        assertTrue(new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), null)
+            .elementIgnored(Property.VIBRANCY));
+        // Picking What keeps the kind; picking a page or Everywhere drops it.
+        assertEquals(LookGrid.Kind.HOME, chips.withElement(null).kind);
+        assertNull(chips.withPage(PAGE).kind);
+        assertNull(chips.withWhere(EditorChips.Where.EVERYWHERE).kind);
+        assertFalse(chips.isOpening(EditorCard.KEYBOARD));
+        assertFalse(chips.equals(new EditorChips(LookGrid.NO_PAGE, Element.KEYBOARD)));
+    }
+
+    @Test
+    public void aWriteAndResetAtTheKindCellTouchOnlyTheKindKey() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
+            page -> page == PAGE ? LookGrid.Kind.HOME : null, null);
+        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.KEYBOARD);
+        LookGrid.Key cell = chips.cell(Property.OPACITY);
+        grid.write(cell, 60);
+        assertTrue(grid.store().contains("look.opacity.keyboard@kind:home"));
+        assertEquals(RowSource.ELEMENT_ON_KIND,
+            RowSource.of(grid.resolve(Property.OPACITY, Element.KEYBOARD, PAGE).cell));
+        assertEquals(RowSource.ELEMENT_ON_KIND, RowSource.of(grid.resolve(cell).cell));
+        grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 20);
+        assertEquals(RowSource.KIND,
+            RowSource.of(grid.resolve(Property.OPACITY, Element.DOCK, PAGE).cell));
+        // "Reset this row" at the kind cell deletes the kind key and nothing else.
+        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 40);
+        grid.clear(cell);
+        assertFalse(grid.has(cell));
+        assertTrue(grid.has(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE));
+        assertTrue(grid.has(Property.OPACITY, null, LookGrid.Kind.HOME));
     }
 
     @Test

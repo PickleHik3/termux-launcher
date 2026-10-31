@@ -4,6 +4,10 @@
     <string name="editor_chip_where">Where it applies</string>
     <string name="editor_chip_what">What it applies to</string>
     <string name="editor_chip_everywhere">Everywhere</string>
+    <!-- The Where chip's kind of page: every page of the kind in front. -->
+    <string name="editor_chip_kind_home">Home pages</string>
+    <string name="editor_chip_kind_terminal">Terminal</string>
+    <string name="editor_chip_kind_display">Display pages</string>
     <string name="editor_chip_all_glass">All glass</string>
     <string name="editor_element_widgets">Widgets</string>
     <string name="editor_element_sheets">Sheets</string>
