@@ -21,6 +21,7 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · wave K, the look grid's page-kind tier (merge after 9195e7edd) · on pong after the upgrade: `launcherctl look get opacity --element keyboard --kind home` answers 0 from "keyboard on Home pages" (the re-homed cell) and `--kind display` answers 10 from "keyboard on Display pages" (seeded); `--kind terminal` answers the Terminal page's own 46 by page; on a Display page the keyboard reads Clear (opacity 10, frost stop 2); in the editor on a Home page the Keyboard card's Where chip offers Everywhere · Home pages · This page, a value from a kind cell wears the secondary-colour dot, and Reset this row at a kind cell clears it; `launcherctl look set opacity 70 --element keyboard --kind home` darkens the keyboard on Home at once and `reset … --kind home` returns it; on the emulator a fresh install shows the Home keyboard as Mist over widgets · not run on a device.
 - 2026-10-31 · W3 fix round (732a34e39..) · emulator at 1.0× and 1.3× font scale, light and
   dark: the Rim row reads None · Thin · Bright and (once fixed) stands beside its name on the
   Status and Dock cards; Margin and Vibrancy are never greyed, say "Applies to all glass", and on a
