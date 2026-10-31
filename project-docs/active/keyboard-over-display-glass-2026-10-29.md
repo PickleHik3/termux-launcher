@@ -4,6 +4,12 @@ Grilled 2026-10-29. The in-app keyboard, when it sits over an X11 display window
 the Look's opacity and frost, with an editor-only override scoped to the display, a snapshot blur
 of the display behind it, and an opt-in live blur.
 
+> **2026-10-31, ADR 0018:** decisions 2–4 below are superseded. The keyboard's look over a
+> display, in overlay and resize mode alike, is set on the Keyboard card with Where = Display
+> pages (the look grid's page-kind tier, `project-docs/active/chrome-elements-2026-10-31.md` §3);
+> there is no "Over the display" switch and no display-scoped keys. Decision 5 (the still of the
+> display behind the keyboard) stands and waits for a later wave.
+
 ## Today
 
 - `x11_keyboard_over_display` (res/xml/x11_display_input_preferences.xml:24-28) is `overlay` or
