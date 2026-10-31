@@ -218,6 +218,9 @@ is a later wave).
 - D2 keyboard Home lifted (Mist) / Display Clear (the Clear preset, frost stop 2); other elements one look per kind for now.
 - D10 per-kind shipped looks are seeded as kind cells (a Base cell would otherwise hide them).
 - D11 one rest per page kind, held across every crossing; the invariant becomes no-resize-per-crossing; the dock over the keyboard on Home is Home's dock.
+- D12 (wave D, 2026-10-31 night) the activity's root stops fitting the bottom inset; the content keeps the band clear through its own margin and the dock's surface alone reaches the screen's bottom edge; one pure owner answers how the inset splits, with a parity test. No negative margins.
+- D13 the decor strip overlay survives wave D for the keyboard-up band only (the keyboard's foot, D8) and is deleted in wave S when `KeyboardView` reaches under the inset itself.
+- D14 Floating + Peek on a Home page with the keyboard up: the Peek card stands on the keyboard (floats=false, its bottom edge a seam into the keyboard's glass, the capsule gap gone there); Home's keyboard-up rest height changes by the gap, the Terminal page's rest does not.
 - D3 one glass to the bottom; the Floating no-foot rule withdrawn.
 - D4 sheets on the shared frame; the live window is no longer seen through a sheet.
 - D5 re-home: everywhere cells that equal the saved `_home` values move to the Home kind.
