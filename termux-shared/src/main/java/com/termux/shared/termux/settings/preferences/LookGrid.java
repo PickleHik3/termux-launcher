@@ -13,18 +13,24 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Every look value in one grid (ADR 0017): two axes, four cells.
+ * Every look value in one grid (ADR 0017, the kind row ADR 0018 §3): two axes, six cells.
  *
  * <pre>
  *                 all glass                  this element
  *   everywhere    look.&lt;p&gt;  (Base)          look.&lt;p&gt;.&lt;element&gt;
+ *   this kind     look.&lt;p&gt;@kind:&lt;kind&gt;     look.&lt;p&gt;.&lt;element&gt;@kind:&lt;kind&gt;
  *   this page     look.&lt;p&gt;@&lt;page&gt;          look.&lt;p&gt;.&lt;element&gt;@&lt;page&gt;
  * </pre>
  *
  * <p>A value is read from the first cell that holds one: the element on this page, all glass on
- * this page, the element everywhere, Base, then the shipped value. A key present at a cell is
- * that cell's value; an absent key follows; Reset deletes the key. Vibrancy and Margin have only
- * the all-glass column. Clamps live here, once.</p>
+ * this page, the element on this page's kind, all glass on that kind, the element everywhere,
+ * Base, then the value shipped for that kind. A key present at a cell is that cell's value; an
+ * absent key follows; Reset deletes the key. Vibrancy and Margin have only the all-glass column
+ * and no kind row. A key names a page or a kind, never both. Clamps live here, once.</p>
+ *
+ * <p>The kind of a page comes from {@link PageKinds} and a kind's shipped value from
+ * {@link ShippedLooks}, both supplied at construction; {@link #install} sets the ones every grid
+ * built with {@link #LookGrid(Store)} gets, so this module needs no app class.</p>
  *
  * <p>Who writes which cell: a setter named for an element (the dock's opacity, the status bar's
  * blur) writes that element's everywhere-cell when it holds one and Base when it follows; the
@@ -39,6 +45,8 @@ public final class LookGrid {
 
     public static final String PREFIX = "look.";
     public static final String PAGE_SEPARATOR = "@";
+    /** What follows {@link #PAGE_SEPARATOR} in a kind's key: {@code look.opacity@kind:home}. */
+    public static final String KIND_PREFIX = "kind:";
 
     /** Corners' "follow the Style" value: the Style formula decides (resolveAutoCornerRadiusDp). */
     public static final int CORNERS_AUTO = -1;
@@ -126,8 +134,41 @@ public final class LookGrid {
         }
     }
 
+    /** The kinds of page (ADR 0018 §3): a kind's cells hold for every page of it. */
+    public enum Kind {
+        HOME("home"), TERMINAL("terminal"), DISPLAY("display");
+
+        public final String key;
+
+        Kind(String key) { this.key = key; }
+
+        @Nullable
+        public static Kind forKey(@Nullable String key) {
+            for (Kind kind : values()) {
+                if (kind.key.equals(key)) return kind;
+            }
+            return null;
+        }
+    }
+
+    /** The kind of a page, from the wall. */
+    public interface PageKinds {
+        /** The kind of page {@code pageId}; null for the wall itself or a page it does not know. */
+        @Nullable Kind kindOf(int pageId);
+    }
+
+    /** The value a kind ships with where it differs from the property's own shipped value. */
+    public interface ShippedLooks {
+        /**
+         * The shipped value of {@code property} for {@code element} (null: all glass) on
+         * {@code kind} (null: no kind), or null for the property's own {@link Property#shipped}.
+         */
+        @Nullable Integer shipped(@NonNull Property property, @Nullable Element element,
+                                  @Nullable Kind kind);
+    }
+
     /** The cell a value came from, in read order. */
-    public enum Cell { ELEMENT_ON_PAGE, PAGE, ELEMENT, BASE, SHIPPED }
+    public enum Cell { ELEMENT_ON_PAGE, PAGE, ELEMENT_ON_KIND, KIND, ELEMENT, BASE, SHIPPED }
 
     /** A resolved value and the cell it was read from. */
     public static final class Resolved {
@@ -146,16 +187,34 @@ public final class LookGrid {
         }
     }
 
-    /** A parsed grid key. {@code element} is null for all glass, {@code page} NO_PAGE for everywhere. */
+    /**
+     * A parsed grid key. {@code element} is null for all glass; {@code page} is NO_PAGE and
+     * {@code kind} null for everywhere; a key names a page or a kind, never both.
+     */
     public static final class Key {
         @NonNull public final Property property;
         @Nullable public final Element element;
         public final int page;
+        @Nullable public final Kind kind;
 
         public Key(@NonNull Property property, @Nullable Element element, int page) {
             this.property = property;
             this.element = element;
             this.page = page;
+            this.kind = null;
+        }
+
+        public Key(@NonNull Property property, @Nullable Element element, @Nullable Kind kind) {
+            this.property = property;
+            this.element = element;
+            this.page = NO_PAGE;
+            this.kind = kind;
+        }
+
+        /** This key's text in the store. */
+        @NonNull
+        public String text() {
+            return kind != null ? key(property, element, kind) : key(property, element, page);
         }
     }
 
@@ -264,10 +323,38 @@ public final class LookGrid {
 
     // -------------------------------------------------------------------------------- the grid
 
+    @Nullable private static volatile PageKinds sPageKinds;
+    @Nullable private static volatile ShippedLooks sShippedLooks;
+
+    /**
+     * The page kinds and kind-shipped values every grid built with {@link #LookGrid(Store)} gets:
+     * the app's wall and shipped Looks, set once at start-up. Until then a page has no kind and
+     * every kind ships the property's own value.
+     */
+    public static void install(@Nullable PageKinds kinds, @Nullable ShippedLooks shipped) {
+        sPageKinds = kinds;
+        sShippedLooks = shipped;
+    }
+
     @NonNull private final Store mStore;
+    @Nullable private final PageKinds mKinds;
+    @Nullable private final ShippedLooks mShipped;
 
     public LookGrid(@NonNull Store store) {
+        this(store, sPageKinds, sShippedLooks);
+    }
+
+    public LookGrid(@NonNull Store store, @Nullable PageKinds kinds, @Nullable ShippedLooks shipped) {
         mStore = store;
+        mKinds = kinds;
+        mShipped = shipped;
+    }
+
+    /** The kind of page {@code page}; null for everywhere, the wall or a page the wall lacks. */
+    @Nullable
+    public Kind kindOf(int page) {
+        PageKinds kinds = mKinds;
+        return page >= 0 && kinds != null ? kinds.kindOf(page) : null;
     }
 
     @NonNull
@@ -290,14 +377,33 @@ public final class LookGrid {
         return key.toString();
     }
 
+    /**
+     * The key of one kind's cell; a null kind is everywhere.
+     *
+     * @throws IllegalArgumentException for an element on, or a kind of, Vibrancy or Margin
+     */
+    @NonNull
+    public static String key(@NonNull Property property, @Nullable Element element,
+                             @Nullable Kind kind) {
+        if (kind != null && !property.perElement)
+            throw new IllegalArgumentException(property.key + " has no kind row");
+        String plain = key(property, element, NO_PAGE);
+        return kind == null ? plain : plain + PAGE_SEPARATOR + KIND_PREFIX + kind.key;
+    }
+
     /** A grid key read back, or null for anything that is not one. */
     @Nullable
     public static Key parse(@Nullable String key) {
         if (key == null || !key.startsWith(PREFIX)) return null;
         String rest = key.substring(PREFIX.length());
         int page = NO_PAGE;
+        Kind kind = null;
         int at = rest.indexOf(PAGE_SEPARATOR);
-        if (at >= 0) {
+        if (at >= 0 && rest.startsWith(KIND_PREFIX, at + 1)) {
+            kind = Kind.forKey(rest.substring(at + 1 + KIND_PREFIX.length()));
+            if (kind == null) return null;
+            rest = rest.substring(0, at);
+        } else if (at >= 0) {
             String id = rest.substring(at + 1);
             if (id.isEmpty()) return null;
             for (int i = 0; i < id.length(); i++) {
@@ -319,34 +425,70 @@ public final class LookGrid {
         }
         Property property = Property.forKey(rest);
         if (property == null || (element != null && !property.perElement)) return null;
+        if (kind != null) return property.perElement ? new Key(property, element, kind) : null;
         return new Key(property, element, page);
     }
 
     /**
      * The value at (property, element, page) and the cell it came from: the element on this page,
-     * all glass on this page, the element everywhere, Base, then the shipped value. Grain absent
-     * from every cell follows the Frost stop the same place resolves to.
+     * all glass on this page, the element on the page's kind, all glass on that kind, the element
+     * everywhere, Base, then the value shipped for that kind. Grain absent from every cell (and
+     * not shipped apart for the kind) follows the Frost stop the same place resolves to.
      */
     @NonNull
     public Resolved resolve(@NonNull Property property, @Nullable Element element, int page) {
-        if (!property.perElement) element = null;
+        return resolveAt(property, element, page, kindOf(page));
+    }
+
+    /** The value at (property, element) for every page of {@code kind}: the kind's row down. */
+    @NonNull
+    public Resolved resolve(@NonNull Property property, @Nullable Element element,
+                            @Nullable Kind kind) {
+        return resolveAt(property, element, NO_PAGE, kind);
+    }
+
+    /** The value a cell shows: from its page, its kind, or everywhere down. */
+    @NonNull
+    public Resolved resolve(@NonNull Key cell) {
+        return cell.kind != null ? resolve(cell.property, cell.element, cell.kind)
+            : resolve(cell.property, cell.element, cell.page);
+    }
+
+    @NonNull
+    private Resolved resolveAt(@NonNull Property property, @Nullable Element element, int page,
+                               @Nullable Kind kind) {
+        if (!property.perElement) {
+            element = null;
+            kind = null;
+        }
         if (element != null && page >= 0) {
-            Resolved found = read(property, element, page, Cell.ELEMENT_ON_PAGE);
+            Resolved found = read(key(property, element, page), property, Cell.ELEMENT_ON_PAGE);
             if (found != null) return found;
         }
         if (page >= 0) {
-            Resolved found = read(property, null, page, Cell.PAGE);
+            Resolved found = read(key(property, null, page), property, Cell.PAGE);
+            if (found != null) return found;
+        }
+        if (element != null && kind != null) {
+            Resolved found = read(key(property, element, kind), property, Cell.ELEMENT_ON_KIND);
+            if (found != null) return found;
+        }
+        if (kind != null) {
+            Resolved found = read(key(property, null, kind), property, Cell.KIND);
             if (found != null) return found;
         }
         if (element != null) {
-            Resolved found = read(property, element, NO_PAGE, Cell.ELEMENT);
+            Resolved found = read(key(property, element, NO_PAGE), property, Cell.ELEMENT);
             if (found != null) return found;
         }
-        Resolved found = read(property, null, NO_PAGE, Cell.BASE);
+        Resolved found = read(key(property, null, NO_PAGE), property, Cell.BASE);
         if (found != null) return found;
+        ShippedLooks looks = mShipped;
+        Integer shipped = looks == null ? null : looks.shipped(property, element, kind);
+        if (shipped != null) return new Resolved(property.clamp(shipped), Cell.SHIPPED);
         if (property == Property.GRAIN)
-            return new Resolved(FrostStops.grainPercentFor(resolve(Property.FROST, element, page).value),
-                Cell.SHIPPED);
+            return new Resolved(FrostStops.grainPercentFor(
+                resolveAt(Property.FROST, element, page, kind).value), Cell.SHIPPED);
         return new Resolved(property.shipped, Cell.SHIPPED);
     }
 
@@ -355,9 +497,18 @@ public final class LookGrid {
         return resolve(property, element, page).value;
     }
 
+    /** {@link #resolve}'s value alone, for a kind. */
+    public int value(@NonNull Property property, @Nullable Element element, @Nullable Kind kind) {
+        return resolve(property, element, kind).value;
+    }
+
+    /** {@link #resolve}'s value alone, for a cell. */
+    public int value(@NonNull Key cell) {
+        return resolve(cell).value;
+    }
+
     @Nullable
-    private Resolved read(Property property, @Nullable Element element, int page, Cell cell) {
-        String key = key(property, element, page);
+    private Resolved read(@NonNull String key, @NonNull Property property, @NonNull Cell cell) {
         if (!mStore.contains(key)) return null;
         return new Resolved(property.clamp(mStore.getInt(key, property.shipped)), cell);
     }
@@ -375,6 +526,37 @@ public final class LookGrid {
     /** Resets one cell: it follows again. */
     public void clear(@NonNull Property property, @Nullable Element element, int page) {
         mStore.remove(key(property, element, page));
+    }
+
+    /** Whether a kind's cell holds a value of its own. */
+    public boolean has(@NonNull Property property, @Nullable Element element, @Nullable Kind kind) {
+        return mStore.contains(key(property, element, kind));
+    }
+
+    /** Sets one kind's cell, clamped. */
+    public void write(@NonNull Property property, @Nullable Element element, @Nullable Kind kind,
+                      int value) {
+        mStore.putInt(key(property, element, kind), property.clamp(value));
+    }
+
+    /** Resets one kind's cell: it follows again. */
+    public void clear(@NonNull Property property, @Nullable Element element, @Nullable Kind kind) {
+        mStore.remove(key(property, element, kind));
+    }
+
+    /** Whether {@code cell} holds a value of its own. */
+    public boolean has(@NonNull Key cell) {
+        return mStore.contains(cell.text());
+    }
+
+    /** Sets {@code cell}, clamped. */
+    public void write(@NonNull Key cell, int value) {
+        mStore.putInt(cell.text(), cell.property.clamp(value));
+    }
+
+    /** Resets {@code cell}: it follows again. */
+    public void clear(@NonNull Key cell) {
+        mStore.remove(cell.text());
     }
 
     /** Drops every cell a page holds, all glass and element alike. */

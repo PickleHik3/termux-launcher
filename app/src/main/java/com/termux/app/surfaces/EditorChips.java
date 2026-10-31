@@ -10,19 +10,64 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The two chips at the top of every card (ADR 0017): Where it applies (Everywhere or one page)
- * and What it applies to (All glass or one element). Together they name the grid cell a card's
- * rows read and write. Pure: the caller says which page the editor shows and which elements it has.
+ * The two chips at the top of every card (ADR 0017): Where it applies (Everywhere, the kind of
+ * the page in front (ADR 0018 §3), or that page) and What it applies to (All glass or one
+ * element). Together they name the grid cell a card's rows read and write. Pure: the caller says
+ * which page the editor shows, its kind and which elements it has.
  */
 public final class EditorChips {
 
-    /** The page the Where chip stands on, or {@link LookGrid#NO_PAGE} for Everywhere. */
+    /** One option of the Where chip: Everywhere, a kind of page, or one page. */
+    public static final class Where {
+        public static final Where EVERYWHERE = new Where(LookGrid.NO_PAGE, null);
+
+        public final int page;
+        @Nullable public final LookGrid.Kind kind;
+
+        private Where(int page, @Nullable LookGrid.Kind kind) {
+            this.page = page;
+            this.kind = kind;
+        }
+
+        @NonNull
+        public static Where page(int pageId) {
+            return pageId < 0 ? EVERYWHERE : new Where(pageId, null);
+        }
+
+        @NonNull
+        public static Where kind(@Nullable LookGrid.Kind kind) {
+            return kind == null ? EVERYWHERE : new Where(LookGrid.NO_PAGE, kind);
+        }
+
+        @Override public boolean equals(Object other) {
+            if (!(other instanceof Where)) return false;
+            Where that = (Where) other;
+            return page == that.page && kind == that.kind;
+        }
+
+        @Override public int hashCode() {
+            return page * 31 + (kind == null ? 0 : kind.hashCode());
+        }
+
+        @NonNull @Override public String toString() {
+            return kind != null ? kind.key + " pages" : page < 0 ? "everywhere" : "page " + page;
+        }
+    }
+
+    /** The page the Where chip stands on, or {@link LookGrid#NO_PAGE} for Everywhere or a kind. */
     public final int page;
+    /** The kind the Where chip stands on, or null for Everywhere or a page. */
+    @Nullable public final LookGrid.Kind kind;
     /** The element the What chip stands on, or null for All glass. */
     @Nullable public final LookGrid.Element element;
 
     public EditorChips(int page, @Nullable LookGrid.Element element) {
-        this.page = page < 0 ? LookGrid.NO_PAGE : page;
+        this(Where.page(page), element);
+    }
+
+    public EditorChips(@NonNull Where where, @Nullable LookGrid.Element element) {
+        this.page = where.page < 0 ? LookGrid.NO_PAGE : where.page;
+        this.kind = where.page >= 0 ? null : where.kind;
         this.element = element;
     }
 
@@ -52,13 +97,23 @@ public final class EditorChips {
         return card != null && card != EditorCard.APPEARANCE;
     }
 
-    /** The Where chip's options: Everywhere, then the page the editor shows when one is known. */
+    /**
+     * The Where chip's options: Everywhere, then the kind of the page the editor shows when it
+     * has one, then that page when one is known.
+     */
     @NonNull
-    public static List<Integer> whereOptions(int pageId) {
-        List<Integer> out = new ArrayList<>();
-        out.add(LookGrid.NO_PAGE);
-        if (pageId >= 0) out.add(pageId);
+    public static List<Where> whereOptions(int pageId, @Nullable LookGrid.Kind kind) {
+        List<Where> out = new ArrayList<>();
+        out.add(Where.EVERYWHERE);
+        if (kind != null) out.add(Where.kind(kind));
+        if (pageId >= 0) out.add(Where.page(pageId));
         return out;
+    }
+
+    /** The Where option these chips stand on. */
+    @NonNull
+    public Where where() {
+        return kind != null ? Where.kind(kind) : Where.page(page);
     }
 
     /**
@@ -85,50 +140,65 @@ public final class EditorChips {
     }
 
     @NonNull
-    public EditorChips withElement(@Nullable LookGrid.Element value) {
-        return new EditorChips(page, value);
+    public EditorChips withWhere(@NonNull Where where) {
+        return new EditorChips(where, element);
     }
 
-    /** Whether Where stands on a page rather than Everywhere. */
+    @NonNull
+    public EditorChips withElement(@Nullable LookGrid.Element value) {
+        return new EditorChips(where(), value);
+    }
+
+    /** Whether Where stands on a page rather than Everywhere or a kind. */
     public boolean onPage() {
         return page >= 0;
     }
 
+    /** Whether Where stands on a kind of page. */
+    public boolean onKind() {
+        return kind != null;
+    }
+
     /**
      * The cell the chips name for {@code property}: a property without an element column (Margin,
-     * Vibrancy) drops the element, as the grid stores it.
+     * Vibrancy) drops the element, as the grid stores it, and having no kind row either, reads
+     * and writes everywhere under a kind.
      */
     @NonNull
     public LookGrid.Key cell(@NonNull LookGrid.Property property) {
+        if (kind != null)
+            return property.perElement ? new LookGrid.Key(property, element, kind)
+                : new LookGrid.Key(property, null, LookGrid.NO_PAGE);
         return new LookGrid.Key(property, property.perElement ? element : null, page);
     }
 
     /**
-     * Whether the What chip greys {@code property}'s row: a property with no element column while
-     * the chip names an element (the row then writes All glass and says so).
+     * Whether the chips grey {@code property}'s row: a property with no element column (and no
+     * kind row) while the What chip names an element or the Where chip a kind (the row then
+     * writes All glass and says so).
      */
     public boolean elementIgnored(@NonNull LookGrid.Property property) {
-        return element != null && !property.perElement;
+        return (element != null || kind != null) && !property.perElement;
     }
 
     /** Whether these chips stand where {@code card} opens: the editor's plain writes apply. */
     public boolean isOpening(@Nullable EditorCard card) {
         EditorChips open = openFor(card, page);
-        return open.page == page && open.element == element;
+        return open.page == page && open.kind == kind && open.element == element;
     }
 
     @Override public boolean equals(Object other) {
         if (!(other instanceof EditorChips)) return false;
         EditorChips that = (EditorChips) other;
-        return page == that.page && element == that.element;
+        return page == that.page && kind == that.kind && element == that.element;
     }
 
     @Override public int hashCode() {
-        return page * 31 + (element == null ? 0 : element.hashCode());
+        return (page * 31 + (kind == null ? 0 : kind.hashCode())) * 31
+            + (element == null ? 0 : element.hashCode());
     }
 
     @NonNull @Override public String toString() {
-        return (page < 0 ? "everywhere" : "page " + page) + " · "
-            + (element == null ? "all glass" : element.key);
+        return where() + " · " + (element == null ? "all glass" : element.key);
     }
 }

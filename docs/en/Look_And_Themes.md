@@ -66,8 +66,13 @@ a terminal pane, and Home's label size still applies.
 
 Every card with glass opens with two chips.
 
-- **Where it applies**: **Everywhere**, or one page (Home page, Workspace, a Display). A value set
-  for a page wins over the same value set everywhere.
+- **Where it applies**: **Everywhere**; every page of the kind in front (**Home pages**,
+  **Terminal** or **Display pages**); or this one page. A value set for a page wins over the same
+  value set for its kind, and a value set for a kind wins over the one set everywhere. A new page
+  starts with nothing of its own, so it wears its kind's look.
+- Each kind ships its own look where its content asks for one: on Home pages the keyboard is
+  lifted (Mist) so it stands off your widgets, and on Display pages it is nearly clear so the app
+  shows through. Margin and Vibrancy are the same on every page.
 - **What it applies to**: **All glass**, or the surface the card is about (the status bar, the
   dock, the keyboard, the terminal, widgets or sheets). A value set for one surface wins over the
   value set for all glass.

@@ -3182,12 +3182,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return property.grid.perElement ? slot.element : null;
     }
 
-    /** Drops every page's own value of an element's property. */
+    /** Drops every page's and every kind's own value of an element's property. */
     private void clearElementPages(@NonNull LookGrid grid, @NonNull LookGrid.Property property,
                                    @NonNull LookGrid.Element element) {
         for (String stored : grid.gridKeys()) {
             LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element && key.page >= 0)
+            if (key != null && key.property == property && key.element == element
+                    && (key.page >= 0 || key.kind != null))
                 grid.store().remove(stored);
         }
     }

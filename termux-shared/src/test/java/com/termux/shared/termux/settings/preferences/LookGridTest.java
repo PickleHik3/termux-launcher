@@ -171,4 +171,130 @@ public class LookGridTest {
         grid.clear(Property.OPACITY, null, LookGrid.NO_PAGE);
         assertEquals(Cell.SHIPPED, grid.resolve(Property.OPACITY, null, LookGrid.NO_PAGE).cell);
     }
+
+    // ------------------------------------------------------------------------ the kind row
+
+    private static final int HOME_PAGE = 4;
+    private static final int DISPLAY_PAGE = 6;
+    private static final int UNBOUND_DISPLAY_PAGE = 7;
+    private static final int TERMINAL_PAGE = 2;
+
+    /** The wall of these tests: page 4 Home, 2 Terminal, 6 and 7 Display (7 with no window). */
+    private static LookGrid kindGrid(LookGrid.MemoryStore store) {
+        java.util.Map<Integer, LookGrid.Kind> kinds = new java.util.HashMap<>();
+        kinds.put(HOME_PAGE, LookGrid.Kind.HOME);
+        kinds.put(TERMINAL_PAGE, LookGrid.Kind.TERMINAL);
+        kinds.put(DISPLAY_PAGE, LookGrid.Kind.DISPLAY);
+        kinds.put(UNBOUND_DISPLAY_PAGE, LookGrid.Kind.DISPLAY);
+        return new LookGrid(store, kinds::get, (property, element, kind) ->
+            element == Element.KEYBOARD && kind == LookGrid.Kind.HOME && property == Property.OPACITY
+                ? Integer.valueOf(60) : null);
+    }
+
+    /** Every combination of the six cells, opacity on the keyboard on a Home page. */
+    @Test
+    public void theKindRowSitsBetweenThePageAndEverywhere() {
+        Cell[] order = {Cell.ELEMENT_ON_PAGE, Cell.PAGE, Cell.ELEMENT_ON_KIND, Cell.KIND,
+            Cell.ELEMENT, Cell.BASE};
+        for (int mask = 0; mask < 64; mask++) {
+            LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+            if ((mask & 1) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, HOME_PAGE, 11);
+            if ((mask & 2) != 0) grid.write(Property.OPACITY, null, HOME_PAGE, 12);
+            if ((mask & 4) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 13);
+            if ((mask & 8) != 0) grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 14);
+            if ((mask & 16) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 15);
+            if ((mask & 32) != 0) grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 16);
+            Resolved got = grid.resolve(Property.OPACITY, Element.KEYBOARD, HOME_PAGE);
+            int first = Integer.numberOfTrailingZeros(mask);
+            if (mask == 0) {
+                assertEquals(Cell.SHIPPED, got.cell);
+                assertEquals(60, got.value);
+            } else {
+                assertEquals("mask " + mask, order[first], got.cell);
+                assertEquals("mask " + mask, 11 + first, got.value);
+            }
+        }
+    }
+
+    @Test
+    public void aKindCellHoldsOnlyForItsKind() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 0);
+        assertEquals(0, grid.value(Property.OPACITY, Element.KEYBOARD, HOME_PAGE));
+        Resolved terminal = grid.resolve(Property.OPACITY, Element.KEYBOARD, TERMINAL_PAGE);
+        assertEquals(Cell.SHIPPED, terminal.cell);
+        assertEquals(Property.OPACITY.shipped, terminal.value);
+        // The wall itself and everywhere have no kind: the Terminal's shipped look.
+        assertEquals(Property.OPACITY.shipped,
+            grid.value(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE));
+        Resolved atKind = grid.resolve(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME);
+        assertEquals(Cell.ELEMENT_ON_KIND, atKind.cell);
+        assertEquals(0, atKind.value);
+    }
+
+    @Test
+    public void anUnboundDisplayPageReadsTheDisplayKindNotTheTerminalPage() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        grid.write(Property.OPACITY, Element.KEYBOARD, TERMINAL_PAGE, 43);
+        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.DISPLAY, 10);
+        Resolved got = grid.resolve(Property.OPACITY, Element.KEYBOARD, UNBOUND_DISPLAY_PAGE);
+        assertEquals(Cell.ELEMENT_ON_KIND, got.cell);
+        assertEquals(10, got.value);
+    }
+
+    @Test
+    public void theShippedValueIsTheKinds() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        assertEquals(60, grid.value(Property.OPACITY, Element.KEYBOARD, HOME_PAGE));
+        assertEquals(60, grid.value(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME));
+        assertEquals(Property.OPACITY.shipped, grid.value(Property.OPACITY, Element.DOCK, HOME_PAGE));
+        // Base wins over the shipped value, as it does over every shipped value.
+        grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 30);
+        assertEquals(30, grid.value(Property.OPACITY, Element.KEYBOARD, HOME_PAGE));
+    }
+
+    @Test
+    public void kindKeysParseBackAndNeverNameAPageToo() {
+        String key = LookGrid.key(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME);
+        assertEquals("look.opacity.keyboard@kind:home", key);
+        LookGrid.Key parsed = LookGrid.parse(key);
+        assertEquals(Property.OPACITY, parsed.property);
+        assertEquals(Element.KEYBOARD, parsed.element);
+        assertEquals(LookGrid.Kind.HOME, parsed.kind);
+        assertEquals(LookGrid.NO_PAGE, parsed.page);
+        assertEquals(key, parsed.text());
+        assertEquals(LookGrid.Kind.DISPLAY, LookGrid.parse("look.frost@kind:display").kind);
+        assertNull(LookGrid.parse("look.opacity@kind:sofa"));
+        assertNull(LookGrid.parse("look.opacity@kind:"));
+        assertNull(LookGrid.parse("look.vibrancy@kind:home"));
+        assertNull(LookGrid.parse("look.opacity@kind:home@4"));
+        try {
+            LookGrid.key(Property.MARGIN, null, LookGrid.Kind.HOME);
+            fail("margin has no kind row");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    @Test
+    public void vibrancyAndMarginIgnoreTheKind() {
+        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
+        store.putInt("look.vibrancy@kind:home", 5);
+        LookGrid grid = kindGrid(store);
+        assertEquals(Cell.SHIPPED, grid.resolve(Property.VIBRANCY, null, HOME_PAGE).cell);
+    }
+
+    @Test
+    public void aKindCellIsSetAndResetByItsKey() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        LookGrid.Key cell = new LookGrid.Key(Property.FROST, Element.KEYBOARD, LookGrid.Kind.HOME);
+        assertFalse(grid.has(cell));
+        grid.write(cell, 99);
+        assertTrue(grid.has(cell));
+        assertEquals(Property.FROST.max, grid.value(cell));
+        grid.clear(cell);
+        assertFalse(grid.has(cell));
+        grid.write(cell, 1);
+        grid.clearElement(Element.KEYBOARD);
+        assertFalse(grid.has(cell));
+    }
 }

@@ -373,6 +373,50 @@ public final class SurfacePresets {
             intOf(preset.values.get(cellKey(null, SurfaceProperty.TINT))));
     }
 
+    // ------------------------------------------------------------- shipped per kind (ADR 0018 §3)
+
+    /**
+     * The Look stop {@code element} ships with on {@code kind}, where the kind's focus asks for
+     * its own: the keyboard stands off the widgets on Home pages (Mist) and barely covers the
+     * screen on Display pages (Clear). -1 where it ships the property's own values, as on the
+     * Terminal page and for every other element.
+     */
+    static int shippedStop(@Nullable LookGrid.Element element, @Nullable LookGrid.Kind kind) {
+        if (element != LookGrid.Element.KEYBOARD || kind == null) return -1;
+        switch (kind) {
+            case HOME: return AppearanceLooks.stopForPresetId("frost");
+            case DISPLAY: return AppearanceLooks.stopForPresetId("minimal");
+            case TERMINAL:
+            default:
+                return -1;
+        }
+    }
+
+    /** The shipped Look {@code element} wears on {@code kind}, or null where it has none apart. */
+    @Nullable
+    public static ShippedLook shippedLook(@Nullable LookGrid.Element element,
+                                          @Nullable LookGrid.Kind kind) {
+        int stop = shippedStop(element, kind);
+        return stop < 0 ? null : shippedLook(stop);
+    }
+
+    /**
+     * The look grid's shipped step for a kind: the Frost stop, opacity and tint of the Look the
+     * element ships with there ({@link #shippedLook(LookGrid.Element, LookGrid.Kind)}, the one
+     * owner of those numbers); null for everything else, which ships the property's own value.
+     * Grain follows the Frost stop, as the grid's shipped grain always does.
+     */
+    public static final LookGrid.ShippedLooks SHIPPED_BY_KIND = (property, element, kind) -> {
+        ShippedLook look = shippedLook(element, kind);
+        if (look == null) return null;
+        switch (property) {
+            case FROST: return look.frostStop;
+            case OPACITY: return look.opacity;
+            case TINT: return look.tint;
+            default: return null;
+        }
+    };
+
     /** The Looks as they ship on dark glass; {@link #presets(boolean)} for the glass on screen. */
     @NonNull
     public static List<Preset> presets() {
@@ -760,7 +804,7 @@ public final class SurfacePresets {
     @Nullable
     private static SurfaceProperty baseOfKey(@NonNull String key) {
         LookGrid.Key cell = LookGrid.parse(key);
-        return cell == null || cell.element != null || cell.page >= 0 ? null
+        return cell == null || cell.element != null || cell.page >= 0 || cell.kind != null ? null
             : propertyOf(cell.property);
     }
 
@@ -768,7 +812,7 @@ public final class SurfacePresets {
     @Nullable
     private static SurfaceEditorRows.Row rowOfKey(@NonNull String key) {
         LookGrid.Key cell = LookGrid.parse(key);
-        if (cell == null || cell.element == null || cell.page >= 0) return null;
+        if (cell == null || cell.element == null || cell.page >= 0 || cell.kind != null) return null;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (row.slot.element == cell.element && row.property.grid == cell.property)
                 return row;
@@ -836,7 +880,8 @@ public final class SurfacePresets {
                                           @NonNull LookGrid.Element element) {
         for (String stored : grid.gridKeys()) {
             LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element && key.page >= 0)
+            if (key != null && key.property == property && key.element == element
+                    && (key.page >= 0 || key.kind != null))
                 grid.store().remove(stored);
         }
     }

@@ -303,24 +303,32 @@ launcherctl motion-log dump > motion.txt
 ## look
 
 ```text
-launcherctl look get PROPERTY [--element ELEMENT] [--page ID]
-launcherctl look set PROPERTY VALUE [--element ELEMENT] [--page ID]
-launcherctl look reset [PROPERTY] [--element ELEMENT] [--page ID]
+launcherctl look get PROPERTY [--element ELEMENT] [--page ID | --kind KIND]
+launcherctl look set PROPERTY VALUE [--element ELEMENT] [--page ID | --kind KIND]
+launcherctl look reset [PROPERTY] [--element ELEMENT] [--page ID | --kind KIND]
 ```
 
 Reads and sets the glass look the way the Appearance editor does. **Properties**: `frost`,
 `opacity`, `tint`, `colour`, `corners`, `depth`, `edge`, `grain`, `rim`, `vibrancy` and `margin`.
 **Elements**: `status`, `dock`, `keyboard`, `terminal`, `widgets` and `sheets`. Without
-`--element` a value applies to all glass; without `--page`, everywhere. `vibrancy` and `margin`
-are for all glass only.
+`--element` a value applies to all glass; without `--page` or `--kind`, everywhere. `--kind` takes
+`home`, `terminal` or `display` and names every page of that kind, as the editor's **Home pages**,
+**Terminal** and **Display pages**; it cannot be given with `--page`. `vibrancy` and `margin` are
+for all glass, everywhere, only.
+
+```text
+launcherctl look set opacity 60 --element keyboard --kind home
+launcherctl look get opacity --element keyboard --kind display
+```
 
 Values are numbers, except `frost`, which takes a step from 0 to 7 or a blur in dp such as
 `12dp`; `colour`, which takes `primary`, `secondary` or `tertiary`; `rim`, which takes `off`,
 `hairline` or `bright`; and `corners`, which takes dp or `auto`. A value outside a property's range
 is held to it.
 
-`get` answers the value and where it is set (the element on a page, the page, the element
-everywhere, all glass everywhere, or the shipped look). `set` changes one place and the launcher
+`get` answers the value and where it is set (the element on a page, the page, the element on a
+kind of page such as "keyboard on Home pages", all glass on that kind, the element everywhere,
+all glass everywhere, or the shipped look). `set` changes one place and the launcher
 redraws at once. `reset` puts a place back on what it followed before; without a property it
 resets everything that place holds.
 
