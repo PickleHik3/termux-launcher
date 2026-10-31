@@ -1126,7 +1126,7 @@ public final class PlaceLayoutStore {
         int revision = mRevision.get();
         if (mDockDesignRevision != revision || mDockDesignVariant != variant) {
             mDockDesign = DockStyle.parse(
-                mStore.getString(layoutWideKey(variant, KEY_DOCK_DESIGN), null));
+                mStore.getString(readKey(layoutWideKey(variant, KEY_DOCK_DESIGN)), null));
             mDockDesignRevision = revision;
             mDockDesignVariant = variant;
         }
@@ -1208,7 +1208,7 @@ public final class PlaceLayoutStore {
 
     private boolean toggle(@NonNull String key, @NonNull DockStyle bringer) {
         if (mStore == null) return false;
-        String stored = layoutWideKey(activeVariant(), key);
+        String stored = readKey(layoutWideKey(activeVariant(), key));
         if (mStore.contains(stored)) return mStore.getBoolean(stored, false);
         return dockStyle() == bringer;
     }
@@ -1221,7 +1221,7 @@ public final class PlaceLayoutStore {
     public DrawerTilePolicy.Position drawerTilePosition() {
         if (mStore == null) return DrawerTilePolicy.DEFAULT;
         return DrawerTilePolicy.parse(mStore.getString(
-            layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION), null));
+            readKey(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION)), null));
     }
 
     /**
@@ -1232,6 +1232,23 @@ public final class PlaceLayoutStore {
         if (mStore == null || position == drawerTilePosition()) return;
         mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION),
             DrawerTilePolicy.persisted(position)).apply();
+    }
+
+    /**
+     * The key a read of {@code ownKey} (this view's own {@code layout.page<id>.…} key) lands on.
+     * A Home page that holds no value of its own wears the Home kind's ({@code layout.home.…}), so a
+     * page nobody edited looks like Home; every other variant reads its own key as it always did.
+     * Writes never come through here: they go to the page's own scope, which detaches it.
+     */
+    @NonNull
+    private String readKey(@NonNull String ownKey) {
+        LayoutVariant variant = activeVariant();
+        if (mStore == null || !variant.isPage() || !variant.isHomeKind()
+            || mStore.contains(ownKey)) return ownKey;
+        String scope = LAYOUT_PREFIX + variant.keyScope();
+        if (!ownKey.startsWith(scope)) return ownKey;
+        String home = LAYOUT_PREFIX + LayoutVariant.HOME.keyScope() + ownKey.substring(scope.length());
+        return mStore.contains(home) ? home : ownKey;
     }
 
     /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
@@ -1350,7 +1367,7 @@ public final class PlaceLayoutStore {
     public boolean slotUnderKeyboard(@NonNull PlaceOrientation orientation,
                                      @NonNull Element element) {
         return element.underKeyboardAllowed() && mStore != null
-            && mStore.getBoolean(variantKey(orientation, underKeyboardKeyName(element)), false);
+            && mStore.getBoolean(readKey(variantKey(orientation, underKeyboardKeyName(element))), false);
     }
 
     public void setSlotUnderKeyboard(@NonNull PlaceOrientation orientation,
@@ -1365,7 +1382,7 @@ public final class PlaceLayoutStore {
      * the edge the element is actually on.
      */
     public int slotOrder(@NonNull PlaceOrientation orientation, @NonNull Element element) {
-        String key = variantKey(orientation, orderKeyName(element));
+        String key = readKey(variantKey(orientation, orderKeyName(element)));
         int fallback = element.defaultOrder(elementEdge(orientation, element));
         if (mStore == null || !mStore.contains(key)) return fallback;
         return Math.max(0, mStore.getInt(key, fallback));
@@ -1466,7 +1483,7 @@ public final class PlaceLayoutStore {
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
     public boolean azRowShown(@NonNull PlaceOrientation orientation) {
-        String key = variantKey(orientation, KEY_AZ_ROW);
+        String key = readKey(variantKey(orientation, KEY_AZ_ROW));
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, true);
         return mPreferences.isAppLauncherAzRowEnabled();
     }
@@ -1601,7 +1618,7 @@ public final class PlaceLayoutStore {
 
     /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
     public float dockHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = variantKey(orientation, KEY_DOCK_HEIGHT);
+        String key = readKey(variantKey(orientation, KEY_DOCK_HEIGHT));
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
             : mPreferences.getSharedAppLauncherBarHeightScale();
@@ -1615,7 +1632,7 @@ public final class PlaceLayoutStore {
 
     /** How tall the in-app keyboard stands, as a multiple of its unscaled height. */
     public float keyboardHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = variantKey(orientation, KEY_KEYBOARD_HEIGHT);
+        String key = readKey(variantKey(orientation, KEY_KEYBOARD_HEIGHT));
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, mPreferences.getDefaultInAppKeyboardHeightScale())
             : mPreferences.getSharedInAppKeyboardHeightScale(
@@ -1630,7 +1647,7 @@ public final class PlaceLayoutStore {
 
     /** Extra air in dp under the last key row, inside the keyboard's own surface. */
     public int keyboardChinDp(@NonNull PlaceOrientation orientation) {
-        String key = variantKey(orientation, KEY_KEYBOARD_CHIN);
+        String key = readKey(variantKey(orientation, KEY_KEYBOARD_CHIN));
         int value = mStore != null && mStore.contains(key)
             ? mStore.getInt(key, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)
             : mPreferences.getSharedInAppKeyboardBottomPadding();
@@ -1647,7 +1664,7 @@ public final class PlaceLayoutStore {
      * shipped row while it has none. Read only where a dock wears the Wall strip.
      */
     public int wallStripHeightDp(@NonNull PlaceOrientation orientation) {
-        String key = variantKey(orientation, KEY_WALL_STRIP_HEIGHT);
+        String key = readKey(variantKey(orientation, KEY_WALL_STRIP_HEIGHT));
         int value = mStore != null && mStore.contains(key)
             ? mStore.getInt(key, WallStripRowPolicy.DEFAULT_HEIGHT_DP)
             : WallStripRowPolicy.DEFAULT_HEIGHT_DP;
@@ -1885,6 +1902,9 @@ public final class PlaceLayoutStore {
     private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
         if (mStore == null || variant == LayoutVariant.NORMAL
             || !mSeeded.add(seededKey(variant, orientation))) return;
+        // A Home page reads Home's keys until it is edited; seeding a copy would detach it.
+        if (variant.isPage() && variant.isHomeKind() && holdsAnyKey(LayoutVariant.HOME, orientation))
+            return;
         for (String key : ARRANGEMENT_KEYS) {
             if (mStore.contains(layoutKey(variant, orientation, key))) return;
         }
@@ -1914,6 +1934,13 @@ public final class PlaceLayoutStore {
             if (away && !stored.hidden)
                 seededStore.setSlot(orientation, element, stored.withHidden(true));
         }
+    }
+
+    private boolean holdsAnyKey(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
+        for (String key : ARRANGEMENT_KEYS) {
+            if (mStore.contains(layoutKey(variant, orientation, key))) return true;
+        }
+        return false;
     }
 
     /** Where a place kept its own copy of an arrangement value, before version 6 shared them. */
@@ -2590,11 +2617,11 @@ public final class PlaceLayoutStore {
 
     @Nullable
     private String readString(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        return mStore == null ? null : mStore.getString(variantKey(orientation, key), null);
+        return mStore == null ? null : mStore.getString(readKey(variantKey(orientation, key)), null);
     }
 
     private int readInt(@NonNull PlaceOrientation orientation, @NonNull String key, int fallback) {
-        String shared = variantKey(orientation, key);
+        String shared = readKey(variantKey(orientation, key));
         return mStore != null && mStore.contains(shared) ? mStore.getInt(shared, fallback) : fallback;
     }
 
