@@ -1,5 +1,6 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetManager;
 import android.content.Context;
 import android.graphics.Rect;
 import android.view.Gravity;
@@ -90,15 +91,17 @@ public final class WidgetGridView extends ViewGroup {
     /**
      * The widget a finger is carrying to another page. Its cell stays attached through the flip,
      * hidden and unplaced, because the gesture the user is still making is being delivered through
-     * that view: removing it with the page it left would cancel the drag mid-air. -1 for none.
+     * that view: removing it with the page it left would cancel the drag mid-air. The launcher's
+     * own widgets have negative ids, the first one -1, so "none" is the id no widget ever has.
      */
-    private int dragPinnedId = -1;
+    public static final int NO_DRAG_PIN = AppWidgetManager.INVALID_APPWIDGET_ID;
+    private int dragPinnedId = NO_DRAG_PIN;
 
     public void setDragPinned(int appWidgetId) {
         if (dragPinnedId == appWidgetId) return;
         int released = dragPinnedId;
         dragPinnedId = appWidgetId;
-        if (released < 0) return;
+        if (released == NO_DRAG_PIN) return;
         for (LauncherWidgetRecord record : records) {
             if (record.appWidgetId == released) return; // it landed on the page showing now
         }
@@ -160,7 +163,7 @@ public final class WidgetGridView extends ViewGroup {
             if (cell.getChildCount() != 1 || cell.getChildAt(0) != content) cell.setContent(content);
         }
         // The widget in the air belongs to no page while it crosses; its cell stays all the same.
-        if (dragPinnedId >= 0) live.add(dragPinnedId);
+        if (dragPinnedId != NO_DRAG_PIN) live.add(dragPinnedId);
         ArrayList<Integer> stale = new ArrayList<>();
         for (Map.Entry<Integer, WidgetCellView> entry : cells.entrySet()) {
             if (!live.contains(entry.getKey())) {

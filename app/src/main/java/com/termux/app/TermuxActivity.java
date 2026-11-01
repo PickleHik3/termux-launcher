@@ -16391,6 +16391,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
+        // Over a running display the focus is the display's, so the system keyboard below is
+        // refused as "not served" and the search would have no keyboard at all: raise the
+        // launcher's, which the drawer types through, in whatever frame the place keeps it.
+        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
+                isDisplayPageShowing(), isEmbeddedDisplayRunning(),
+                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
+            if (isDisplayTouchpadFrame()) {
+                applyDisplayFrameDecision(mFrameContent.onKeyboardIntent(true));
+            } else {
+                mInAppKeyboard.show(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            }
+            return;
+        }
         onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(this, mTerminalView);
     }
@@ -17691,12 +17705,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mTerminalToolbarDefaultHeight;
     }
 
+    /** Any key page is showing; the text input is the one page after them. */
     public boolean isTerminalViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 0;
+        return getTerminalToolbarViewPager().getCurrentItem() < getExtraKeysPageCount();
     }
 
     public boolean isTerminalToolbarTextInputViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == 1;
+        return getTerminalToolbarViewPager().getCurrentItem() == getExtraKeysPageCount();
     }
 
     void termuxSessionListNotifyUpdated() {
@@ -20707,7 +20722,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mX11Display.destroy();
             mX11Display = null;
         }
-        if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+        // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
+        restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
         mPaneWallController.detachDisplayPage();
         syncDisplayEnvironment();
@@ -20846,7 +20862,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             mX11Display.detachView();
             mX11Display.onDisplayPlaceLeft();
-            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(null);
+            restoreInAppKeyboardTypingClaim();
             // The phone's keyboard belongs to the place it was raised on; it goes down with it,
             // and the launcher's keyboard takes its suppression back for the terminal.
             hideDisplaySystemKeyboard();

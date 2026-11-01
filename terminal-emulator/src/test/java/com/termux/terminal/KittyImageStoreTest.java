@@ -529,4 +529,41 @@ public class KittyImageStoreTest extends TestCase {
         assertFalse("a per-image frame count is not a byte problem, so reclaiming cannot help",
             store.reclaimFrameBudget(full, 0, id -> false));
     }
+
+    private static final int FOUR_MIB = 4 * 1024 * 1024;
+
+    /** A full store evicts older unplaced images, oldest first, and keeps placed ones (spec finding 2). */
+    public void testAFullStoreEvictsTheOldestUnplacedImagesFirst() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        for (long id = 1; id <= 8; id++) store.reserve(id, 0, 1024, 1024, FOUR_MIB);
+        assertTrue(store.wouldExceedLimits(9, FOUR_MIB));
+        // 1 is placed; 2 is the oldest image nothing displays.
+        assertTrue(store.makeRoomForImage(9, FOUR_MIB, id -> id == 1));
+        assertNotNull("a placed image is never evicted", store.get(1));
+        assertNull("the oldest unplaced image went", store.get(2));
+        assertNotNull("only as many as needed", store.get(3));
+        store.reserve(9, 0, 1024, 1024, FOUR_MIB);
+        assertTrue(store.makeRoomForImage(10, 2 * FOUR_MIB, id -> id == 1));
+        assertNull(store.get(3));
+        assertNull(store.get(4));
+        assertNotNull(store.get(5));
+    }
+
+    /** When even every unplaced image would not make room, nothing is evicted and the upload is refused. */
+    public void testAStoreFullOfPlacedImagesRefusesAndKeepsEverything() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        for (long id = 1; id <= 8; id++) store.reserve(id, 0, 1024, 1024, FOUR_MIB);
+        assertFalse("every image is placed", store.makeRoomForImage(9, FOUR_MIB, id -> true));
+        assertFalse("one unplaced image is not room for two", store.makeRoomForImage(9, 2 * FOUR_MIB, id -> id != 8));
+        for (long id = 1; id <= 8; id++) assertNotNull(store.get(id));
+    }
+
+    /** Count, not only bytes: the 257th image evicts the oldest unplaced one. */
+    public void testTheImageCountLimitEvictsToo() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        for (long id = 1; id <= KittyImageStore.MAX_STORED_IMAGES; id++) store.reserve(id, 0, 1, 1, 4);
+        assertTrue(store.makeRoomForImage(1000, 4, id -> false));
+        assertNull(store.get(1));
+        assertNotNull(store.get(2));
+    }
 }

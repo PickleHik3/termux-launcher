@@ -115,6 +115,50 @@ public class LinuxAppCatalogTest {
             LinuxAppCatalog.find(apps, "shown").terminal);
     }
 
+    private File executable(File dir, String name) throws IOException {
+        File f = write(dir, name, "#!/bin/sh\n");
+        f.setExecutable(true);
+        return f;
+    }
+
+    @Test public void aTemplateExecIsRepairedToTheOneBinaryNamedAfterTheId() throws IOException {
+        File dir = temp.newFolder("applications");
+        executable(dir, "chromium-browser");
+        write(dir, "chromium.desktop", "[Desktop Entry]\nType=Application\nName=C\nExec=@@desktop_exec --incognito %U\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
+
+        assertEquals("chromium-browser --incognito", apps.get(0).exec);
+    }
+
+    @Test public void aTemplateExecUsesTryExecWhenThereIsOne() throws IOException {
+        File dir = temp.newFolder("applications");
+        executable(dir, "real-bin");
+        write(dir, "x.desktop", "[Desktop Entry]\nType=Application\nName=X\nExec=@@exec %U\nTryExec=real-bin\n");
+
+        assertEquals("real-bin", LinuxAppCatalog.scan(host(dir)).get(0).exec);
+    }
+
+    @Test public void aTemplateExecWithNoOrSeveralCandidatesIsLeftAlone() throws IOException {
+        File dir = temp.newFolder("applications");
+        write(dir, "none.desktop", "[Desktop Entry]\nType=Application\nName=N\nExec=@@x\n");
+        executable(dir, "many-a");
+        executable(dir, "many-b");
+        write(dir, "many.desktop", "[Desktop Entry]\nType=Application\nName=M\nExec=@@x\n");
+
+        for (LinuxAppCatalog.LinuxApp app : LinuxAppCatalog.scan(host(dir))) {
+            assertEquals("@@x", app.exec);
+        }
+    }
+
+    @Test public void anExecWithoutATemplateTokenIsNeverRepaired() throws IOException {
+        File dir = temp.newFolder("applications");
+        executable(dir, "tool-real");
+        write(dir, "tool.desktop", "[Desktop Entry]\nType=Application\nName=T\nExec=tool-gone\n");
+
+        assertEquals("tool-gone", LinuxAppCatalog.scan(host(dir)).get(0).exec);
+    }
+
     @Test public void tryExecNamingAMissingBinaryHidesTheEntry() throws IOException {
         File dir = temp.newFolder("applications");
         File present = new File(dir, "present-bin");

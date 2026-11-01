@@ -137,7 +137,9 @@ public final class AppearanceEditorPage {
         mDone.setOnClickListener(v -> callbacks.onDone());
         if (title != null)
             mTitle.setText(title);
-        mUndo.setVisibility(View.GONE);
+        // Undo keeps its place while there is nothing to undo, so the pill, centred in what the
+        // bar leaves it, never moves when Undo appears.
+        mUndo.setVisibility(View.INVISIBLE);
         mDone.setVisibility(View.VISIBLE);
         mCurrent = kind == Kind.OVERVIEW ? Segment.WALLPAPER : Segment.LOOK;
 
@@ -278,7 +280,7 @@ public final class AppearanceEditorPage {
     }
 
     void setDirty(boolean dirty) {
-        int visibility = dirty ? View.VISIBLE : View.GONE;
+        int visibility = dirty ? View.VISIBLE : View.INVISIBLE;
         if (mUndo.getVisibility() != visibility)
             mUndo.setVisibility(visibility);
     }
