@@ -75,7 +75,28 @@ public class TermuxAppSharedPreferencesPageLookTest {
         String key = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.TERMINAL,
             LookGrid.NO_PAGE);
         store.edit().putInt(key, 80).putInt(PageLookKeys.pageKey(key, T), 30).commit();
+        // The Terminal page's own value reaches the Terminal kind's cell through step 17.
+        foldPageCellsThroughStep17(store, -1, T);
         assertEquals(30, prefs.getTerminalBackgroundOpacity());
         assertEquals(30, prefs.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, T));
+    }
+
+    /**
+     * The layouts upgrade's look fold (step 17, ADR 0020 §2) over the test store: the Start-in
+     * Home page's and the Terminal page's @<page> cells become their kinds' cells.
+     */
+    private static void foldPageCellsThroughStep17(android.content.SharedPreferences store,
+                                                   int homePageId, int terminalPageId) {
+        android.content.SharedPreferences.Editor editor = store.edit();
+        for (java.util.Map.Entry<String, Object> cell : LookGrid.foldedPageCells(store.getAll(),
+                homePageId, terminalPageId).entrySet())
+            editor.putInt(cell.getKey(), ((Number) cell.getValue()).intValue());
+        editor.commit();
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        LookGrid.install(null, null);
     }
 }
