@@ -207,6 +207,17 @@ public final class DressResolver {
         return dressOf(layoutOf(page), kindOf(page.kind));
     }
 
+    /**
+     * The layout whose scope holds the dock {@code kind} draws on {@code layout}: Home's on every
+     * Home page, whether it wears its own page layout or the shared one (ADR 0018 section 4); the
+     * page's layout otherwise. The one rule the draw side and the editor ({@code LayoutEditorPlan})
+     * both read the dock through.
+     */
+    @NonNull
+    public static LayoutVariant dockLayoutOf(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
+        return kind == PageKind.HOME && !layout.isHomeKind() ? LayoutVariant.HOME : layout;
+    }
+
     @NonNull
     private DockStyle dockDesignFor(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
         return kind == PageKind.HOME ? mSource.homePageDockDesign(layout) : mSource.dockDesign(layout);
@@ -219,8 +230,9 @@ public final class DressResolver {
             if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
         }
         return new Dress(layout, leftOut,
-            DockStyle.effectiveStyle(dockDesignFor(layout, kind)), mSource.searchField(layout),
-            mSource.drawerTile(layout), mSource.shape());
+            DockStyle.effectiveStyle(dockDesignFor(layout, kind)),
+            mSource.searchField(dockLayoutOf(layout, kind)),
+            mSource.drawerTile(dockLayoutOf(layout, kind)), mSource.shape());
     }
 
     /**
@@ -270,7 +282,7 @@ public final class DressResolver {
      * the rest of the dress, as {@link #dockDesignOf} is: the dock's pass asks it.
      */
     public boolean searchFieldOf(@NonNull PaneWallPage page) {
-        return mSource.searchField(layoutOf(page));
+        return mSource.searchField(dockLayoutOf(layoutOf(page), kindOf(page)));
     }
 
     /**
@@ -278,7 +290,7 @@ public final class DressResolver {
      * the rest of the dress, as {@link #searchFieldOf} is: the dock's row asks it.
      */
     public boolean drawerTileOf(@NonNull PaneWallPage page) {
-        return mSource.drawerTile(layoutOf(page));
+        return mSource.drawerTile(dockLayoutOf(layoutOf(page), kindOf(page)));
     }
 
     /**

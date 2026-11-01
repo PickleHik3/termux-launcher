@@ -1036,21 +1036,16 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public DockStyle homePageDockDesign(@NonNull LayoutVariant variant) {
-        if (variant.isPage() && variant.isHomeKind()) {
-            return forVariant(LayoutVariant.HOME).dockStyle();
-        }
-        if (variant == LayoutVariant.NORMAL && mStore != null
-            && mStore.contains(layoutWideKey(LayoutVariant.HOME, KEY_DOCK_DESIGN))) {
-            return forVariant(LayoutVariant.HOME).dockStyle();
-        }
-        return forVariant(variant).dockStyle();
+        return forVariant(DressResolver.dockLayoutOf(variant, PageKind.HOME)).dockStyle();
     }
 
     /**
      * The layout whose scope holds this view's dock keys: the Home kind's own on a page of the Home
      * kind, whose own layout never carries a dock (ADR 0018 section 4: the dock is the Home kind's
-     * rest, so a page change never changes it); the active variant otherwise. Both reads and
-     * writes go through it, so the editor opened on a Home page edits Home's dock.
+     * rest, so a page change never changes it); the active variant otherwise. Reads and writes go
+     * through it. A Home page with no layout of its own is on the shared variant, which the Terminal
+     * shares: the page kind picks Home's dock there ({@link DressResolver#dockLayoutOf}), through
+     * the view {@code forVariant(HOME)}.
      */
     @NonNull
     private LayoutVariant dockVariant() {
@@ -1061,11 +1056,22 @@ public final class PlaceLayoutStore {
     /** The dock's per-orientation key {@code key}, in {@link #dockVariant}'s scope. */
     @NonNull
     private String dockKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        LayoutVariant variant = activeVariant();
-        if (variant.isPage() && variant.isHomeKind()) {
-            return forVariant(LayoutVariant.HOME).variantKey(orientation, key);
-        }
-        return variantKey(orientation, key);
+        return forVariant(dockVariant()).variantKey(orientation, key);
+    }
+
+    /**
+     * A dock key as a read finds it: {@link #readKey}'s, and for the Home layout's view a key Home
+     * holds none of reads the shared layout's, so a dock nobody has edited from Home keeps the look
+     * it had before every Home page wore Home's dock.
+     */
+    @NonNull
+    private String dockReadKey(@NonNull String ownKey) {
+        String key = readKey(ownKey);
+        if (mStore == null || activeVariant() != LayoutVariant.HOME || mStore.contains(key))
+            return key;
+        String scope = LAYOUT_PREFIX + LayoutVariant.HOME.keyScope();
+        if (!key.startsWith(scope)) return key;
+        return LAYOUT_PREFIX + LayoutVariant.NORMAL.keyScope() + key.substring(scope.length());
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
@@ -1166,7 +1172,7 @@ public final class PlaceLayoutStore {
         int revision = mRevision.get();
         if (mDockDesignRevision != revision || mDockDesignVariant != variant) {
             mDockDesign = DockStyle.parse(
-                mStore.getString(readKey(layoutWideKey(dockVariant(), KEY_DOCK_DESIGN)), null));
+                mStore.getString(dockReadKey(layoutWideKey(dockVariant(), KEY_DOCK_DESIGN)), null));
             mDockDesignRevision = revision;
             mDockDesignVariant = variant;
         }
@@ -1248,7 +1254,7 @@ public final class PlaceLayoutStore {
 
     private boolean toggle(@NonNull String key, @NonNull DockStyle bringer) {
         if (mStore == null) return false;
-        String stored = readKey(layoutWideKey(dockVariant(), key));
+        String stored = dockReadKey(layoutWideKey(dockVariant(), key));
         if (mStore.contains(stored)) return mStore.getBoolean(stored, false);
         return dockStyle() == bringer;
     }
@@ -1261,7 +1267,7 @@ public final class PlaceLayoutStore {
     public DrawerTilePolicy.Position drawerTilePosition() {
         if (mStore == null) return DrawerTilePolicy.DEFAULT;
         return DrawerTilePolicy.parse(mStore.getString(
-            readKey(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION)), null));
+            dockReadKey(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION)), null));
     }
 
     /**
@@ -1523,7 +1529,7 @@ public final class PlaceLayoutStore {
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
     public boolean azRowShown(@NonNull PlaceOrientation orientation) {
-        String key = readKey(dockKey(orientation, KEY_AZ_ROW));
+        String key = dockReadKey(dockKey(orientation, KEY_AZ_ROW));
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, true);
         return mPreferences.isAppLauncherAzRowEnabled();
     }
@@ -1658,7 +1664,7 @@ public final class PlaceLayoutStore {
 
     /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
     public float dockHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = readKey(dockKey(orientation, KEY_DOCK_HEIGHT));
+        String key = dockReadKey(dockKey(orientation, KEY_DOCK_HEIGHT));
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
             : mPreferences.getSharedAppLauncherBarHeightScale();

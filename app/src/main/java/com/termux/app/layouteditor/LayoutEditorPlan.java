@@ -134,6 +134,7 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
+        enterVariant(dockLayout());
         // What the session may touch: the layout the page wears and the Workspace layout the
         // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
         // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
@@ -141,6 +142,21 @@ public final class LayoutEditorPlan {
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
         rememberPage(places.shownPageId(place), DressResolver.kindOf(place));
+    }
+
+    /**
+     * The view the dock's keys are read and written through: Home's on every Home page, whether it
+     * wears a page layout of its own or the shared one the Terminal shares (ADR 0018 section 4),
+     * else the edited layout's. Both sides read the dock through {@link DressResolver#dockLayoutOf}.
+     */
+    @NonNull
+    private PlaceLayoutStore dockPlaces() {
+        return mRoot.forVariant(dockLayout());
+    }
+
+    @NonNull
+    private LayoutVariant dockLayout() {
+        return DressResolver.dockLayoutOf(mVariant, DressResolver.kindOf(mDressedPage));
     }
 
     /** Keeps {@code pageId}'s page-layout flag as the session first found it. */
@@ -196,6 +212,7 @@ public final class LayoutEditorPlan {
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
+        enterVariant(dockLayout());
     }
 
     /** Whether any page's layout flag differs from what the session found. */
@@ -319,7 +336,7 @@ public final class LayoutEditorPlan {
 
     /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
     public float dockHeightScale() {
-        return mPlaces.dockHeightScale(mShownOrientation);
+        return dockPlaces().dockHeightScale(mShownOrientation);
     }
 
     /** The keyboard's height in the shown orientation, as a multiple of its unscaled height. */
@@ -340,7 +357,7 @@ public final class LayoutEditorPlan {
     /** The dock's handle dragged. */
     @NonNull
     public Drop setDockHeightScale(float scale) {
-        mPlaces.setDockHeightScale(mShownOrientation, scale);
+        dockPlaces().setDockHeightScale(mShownOrientation, scale);
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
@@ -434,7 +451,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public DockStyle dockStyle() {
-        return mPlaces.dockStyle();
+        return dockPlaces().dockStyle();
     }
 
     /**
@@ -448,7 +465,7 @@ public final class LayoutEditorPlan {
         // the Drawer tile (#97).
         if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
-        mPlaces.setDockStyle(style);
+        dockPlaces().setDockStyle(style);
         return Drop.LIVE;
     }
 
@@ -456,7 +473,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Search field on: what the toggle shows. */
     public boolean searchField() {
-        return mPlaces.searchField();
+        return dockPlaces().searchField();
     }
 
     /**
@@ -467,7 +484,7 @@ public final class LayoutEditorPlan {
     public Drop setSearchField(boolean on) {
         if (on == searchField())
             return Drop.NONE;
-        mPlaces.setSearchField(on);
+        dockPlaces().setSearchField(on);
         return Drop.LIVE;
     }
 
@@ -475,7 +492,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
     public boolean drawerTile() {
-        return mPlaces.drawerTile();
+        return dockPlaces().drawerTile();
     }
 
     /**
@@ -487,7 +504,7 @@ public final class LayoutEditorPlan {
     public Drop setDrawerTile(boolean on) {
         if (on == drawerTile())
             return Drop.NONE;
-        mPlaces.setDrawerTile(on);
+        dockPlaces().setDrawerTile(on);
         return Drop.LIVE;
     }
 
@@ -583,6 +600,7 @@ public final class LayoutEditorPlan {
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
+        enterVariant(dockLayout());
         return place;
     }
 
