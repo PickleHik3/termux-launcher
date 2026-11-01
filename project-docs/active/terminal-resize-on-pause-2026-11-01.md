@@ -188,6 +188,36 @@ Paired trace (one drag, 32 → 21 rows):
      after a reflow is the expensive one.
 
 Gate result: jank is still above the before build (10.0 against 5.8 per drag), though no longer
-from A or B. The remaining cost is the layout pass and the settle frame, not the pause-resize. Whether the
+from A or B.
+
+### Wave D (a3d3a0981, 2026-11-01, 90 Hz)
+
+D1 re-lays out only the dragged split in place (`SplitRelayout`, trace `Pane.splitRelayout`). D2
+weights the pane backdrop mean by area (`ChromeInk.meanPaneSurface`), keeps an applied backdrop
+under 1.05:1 (`ContrastFloor.sameBackdrop`), and traces `Terminal.groundSettled` /
+`Terminal.contrastInvalidate`. D2's cause was reproduced on emu2 with a reverted `TLGround` log:
+the equal-weight mean crept #8D → #83 over one drag and every settle re-recorded both panes.
+
+| Per drag | Before (39f0faf4d) | Follow-up (04b5921b1) | Wave D (a3d3a0981) |
+|---|---|---|---|
+| Frames | 135.4 | 145.4 | 156.2 |
+| Janky (missed deadline) | 5.8 (4.3%) | 10.0 (6.9%) | 11.4 (7.3%) |
+| p50 / p90 / p99 | 12.6 / 23.7 / 32.3 ms | 14.7 / 22.7 / 33.2 ms | 11.3 / 22.8 / 33.4 ms |
+
+Paired trace (32 → 21 rows):
+
+- **D2 held:** no `Terminal.contrastInvalidate` at all; `Terminal.groundSettled` 3× at 2-3 ms; the
+  31 ms post-lift frame is gone (worst `Terminal.render` 7.9 ms).
+- **D1 moved the cost, not removed it:** window `layout` is down to 0.2 ms, but
+  `Pane.splitRelayout` itself takes 5-11 ms (mean 8.3, 6 per drag) inside the touch handler, on big
+  cores, with no named section under it. The cost is the panes' own measure/layout, not the
+  window's. Lead (unconfirmed): per-move work on a size change inside a pane frame, e.g.
+  `ChromeInk`'s per-pane wallpaper measurement (the emulator log showed it re-measuring on every
+  geometry step) or a glass backdrop view's resize. Next: trace sections inside the pane frame's
+  measure/layout and the per-pane ground measurement, one more pong trace, then the fix.
+- Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
+  `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
+  to open a float without changing the developer's Home, so its trace needs a float opened by
+  the developer or a route that leaves Home untouched. The remaining cost is the layout pass and the settle frame, not the pause-resize. Whether the
 follow-up passes, and whether a wave D takes the layout pass (and the settle render), is the
 developer's decision.
