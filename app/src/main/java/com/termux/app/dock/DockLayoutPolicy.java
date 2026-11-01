@@ -888,11 +888,6 @@ public final class DockLayoutPolicy {
         return Math.max(1, Math.min(iconPx, slotPx - loneRowAirPx(density)));
     }
 
-    /**
-     * The icon one slot of a row lying down draws: {@code iconPx} held to its slot
-     * ({@link #slotFitIconPx}) and, under Lens beads, to what a bead covers in it
-     * ({@link LensBeadGeometry#fitIconPx}). A row with no width yet is not held at all.
-     */
     /** The least gap between two pinned icons of the one icon size (spec §8a). */
     public static final float MIN_ICON_GAP_DP = 4f;
     /** The least side inset of a Docked (full-width) dock, from the screen edge (spec §8a). */
@@ -926,6 +921,11 @@ public final class DockLayoutPolicy {
         return usableWidthPx / slotCount - iconPx < gapPx;
     }
 
+    /**
+     * The icon one slot of a row lying down draws: {@code iconPx} held to its slot
+     * ({@link #slotFitIconPx}) and, under Lens beads, to what a bead covers in it
+     * ({@link LensBeadGeometry#fitIconPx}). A row with no width yet is not held at all.
+     */
     public static int slotIconPx(int iconPx, int usableWidthPx, int slotCount, boolean beads,
                                  float density) {
         int slots = Math.max(1, slotCount);
