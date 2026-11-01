@@ -213,10 +213,10 @@ migration code.
 
 ## 9. Open points for the developer
 
-1. **Downgrade guard.** Verify on `dev`'s `PlaceLayoutStore.migrate` that a stored version above 8
-   (1.2.x writes 8) leaves the flat keys alone and does not run steps downward or reset. If it
-   resets, 1.2.x needs a patch release before the first stable v2. This is checked by reading
-   `dev`, not by running it.
+1. **Downgrade guard (settled).** `dev`'s `PlaceLayoutStore.migrateIfNeeded` (dev:895-898)
+   returns at once when the stored version is 8 or higher, so 1.2.x leaves a v2 store alone and
+   reads the flat keys it knows. Keys v2's steps 9-16 renamed (e.g. `dock_style`) read as unset
+   there, as they already do for any v2 downgrade today.
 2. **Where the loose keys go.** `keyboard_shown`, `keyboard_rows`, `keyboard_open` and `minimal`
    are not named in decisions 5 or 6. The spec keeps them where they are (per page kind in the
    keyboard's own store, and one minimal flag); say if they should move into the kind documents.
