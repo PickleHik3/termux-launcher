@@ -338,6 +338,24 @@ launcherctl look get opacity --element dock
 launcherctl look reset --element dock
 ```
 
+## layout
+
+```
+launcherctl layout get <kind>
+launcherctl layout set <kind> FILE
+```
+
+Prints or replaces one layout document (ADR 0020). `<kind>` is `home`, `terminal`,
+`terminal_minimal`, `display`, or `sizes` (the sizes every kind shares). `set` checks the file
+first and refuses it with the bad field named; nothing changes then. A good file is written
+whole and shows at once.
+
+```
+launcherctl layout get home > h.json
+# edit one value in h.json
+launcherctl layout set home h.json
+```
+
 ## wallpaper
 
 ```text
