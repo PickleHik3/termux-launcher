@@ -1920,6 +1920,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setActivityThemeAndWindow();
         super.onCreate(savedInstanceState);
         sLiveActivity = new java.lang.ref.WeakReference<>(this);
+        registerRotationListener();
         setContentView(R.layout.activity_termux);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -10929,6 +10930,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
+        unregisterRotationListener();
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
@@ -17752,6 +17754,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setTerminalToolbarHeight(true);
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
     };
+
+    /**
+     * A turn straight from landscape to seascape (90 to 270) fires no configuration change, so
+     * Home's side bar (ADR 0020 §12) would stay on the old edge: the display's rotation is
+     * watched, and a change drops the held arrangements and relays the layouts out.
+     */
+    @Nullable private android.hardware.display.DisplayManager.DisplayListener mRotationListener;
+
+    private void registerRotationListener() {
+        android.hardware.display.DisplayManager displays =
+            getSystemService(android.hardware.display.DisplayManager.class);
+        if (displays == null || mRotationListener != null) return;
+        mRotationListener = new android.hardware.display.DisplayManager.DisplayListener() {
+            @Override public void onDisplayAdded(int displayId) { }
+            @Override public void onDisplayRemoved(int displayId) { }
+            @Override public void onDisplayChanged(int displayId) {
+                if (isFinishing() || isDestroyed()) return;
+                int rotation = displayRotation();
+                if (rotation == mArrangedRotation || mArrangedRotation < 0) return;
+                mHomeArrangement = null;
+                mWorkspaceArrangement = null;
+                scheduleLayoutsRelayout();
+            }
+        };
+        displays.registerDisplayListener(mRotationListener, mLayoutsRelayoutHandler);
+    }
+
+    private void unregisterRotationListener() {
+        android.hardware.display.DisplayManager displays =
+            getSystemService(android.hardware.display.DisplayManager.class);
+        if (displays != null && mRotationListener != null)
+            displays.unregisterDisplayListener(mRotationListener);
+        mRotationListener = null;
+    }
 
     /** Posts {@link #mLayoutsRelayout} unless one is already waiting. */
     private void scheduleLayoutsRelayout() {
