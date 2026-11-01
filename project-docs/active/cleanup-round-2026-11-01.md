@@ -90,4 +90,4 @@ when the developer says so.
 
 - Pong: W1 build installed, Motion log on; two days; `launcherctl motion-log dump` read.
 - Emulator: the hold sweep run twenty times per scenario; log kept beside the pong dump.
-- The umbrella issue number, once filed, goes here.
+- Umbrella issue for the thread hazards: #195.
