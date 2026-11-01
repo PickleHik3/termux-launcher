@@ -40,6 +40,7 @@ Usage: DEVICE=<serial> [PKG=<package>] $0 [scenario-file]
   DEVICE     adb serial (required; see 'adb devices')
   PKG        package under test (default com.termux)
   ROUNDS     plays of the scenario (default 3)
+  ON_DEVICE  1 plays the scenario on the device in one adb call (for a slow link)
   SETTLE     seconds to wait before recording (default 2)
 USAGE
   exit 2
@@ -68,32 +69,48 @@ while IFS= read -r line || [ -n "$line" ]; do
   [ -n "${line// /}" ] && LINES+=("$line")
 done <"$SCENARIO"
 
+# ON_DEVICE=1 plays the scenario on the device in one adb call: each step is appended to one
+# shell script instead of running as its own adb shell, so a slow link (a relayed Tailscale peer)
+# cannot stretch a press into a long-press or a pause between moves. Off by default, so numbers
+# taken host-driven stay comparable.
+ON_DEVICE="${ON_DEVICE:-0}"
+DEVICE_SCRIPT=""
+emit() {
+  if [ "$ON_DEVICE" = 1 ]; then
+    DEVICE_SCRIPT+="$* >/dev/null;"$'\n'
+  elif [ "$1" = sleep ]; then
+    sleep "$2"
+  else
+    sh_ "$@" >/dev/null
+  fi
+}
+
 play() {
   local from=$1 to=$2 i=$1 cmd a b c d e depth j n
   while [ "$i" -lt "$to" ]; do
     read -r cmd a b c d e <<<"${LINES[$i]}"
     case "$cmd" in
-      swipe) sh_ input swipe "$(px "$a")" "$(py "$b")" "$(px "$c")" "$(py "$d")" "${e:-250}" ;;
+      swipe) emit input swipe "$(px "$a")" "$(py "$b")" "$(px "$c")" "$(py "$d")" "${e:-250}" ;;
       hold)
-        sh_ input motionevent DOWN "$(px "$a")" "$(py "$b")" >/dev/null
-        sleep "$(awk -v m="$e" 'BEGIN { print m / 1000 }')"
+        emit input motionevent DOWN "$(px "$a")" "$(py "$b")" >/dev/null
+        emit sleep "$(awk -v m="$e" 'BEGIN { print m / 1000 }')"
         for n in 1 2 3 4 5 6 7 8; do
-          sh_ input motionevent MOVE "$(px $((a + (c - a) * n / 8)))" "$(py $((b + (d - b) * n / 8)))" >/dev/null
+          emit input motionevent MOVE "$(px $((a + (c - a) * n / 8)))" "$(py $((b + (d - b) * n / 8)))" >/dev/null
         done
-        sh_ input motionevent UP "$(px "$c")" "$(py "$d")" >/dev/null
+        emit input motionevent UP "$(px "$c")" "$(py "$d")" >/dev/null
         ;;
-      down) sh_ input motionevent DOWN "$(px "$a")" "$(py "$b")" >/dev/null; FX=$a FY=$b ;;
+      down) emit input motionevent DOWN "$(px "$a")" "$(py "$b")" >/dev/null; FX=$a FY=$b ;;
       move)
         # Glide from the finger's last point to x,y in n steps (default 8); the finger stays down.
         for ((n = 1; n <= ${c:-8}; n++)); do
-          sh_ input motionevent MOVE "$(px $((FX + (a - FX) * n / ${c:-8})))" \
+          emit input motionevent MOVE "$(px $((FX + (a - FX) * n / ${c:-8})))" \
             "$(py $((FY + (b - FY) * n / ${c:-8})))" >/dev/null
         done
         FX=$a FY=$b
         ;;
-      up) sh_ input motionevent UP "$(px "${a:-$FX}")" "$(py "${b:-$FY}")" >/dev/null ;;
-      tap) sh_ input tap "$(px "$a")" "$(py "$b")" ;;
-      sleep) sleep "$a" ;;
+      up) emit input motionevent UP "$(px "${a:-$FX}")" "$(py "${b:-$FY}")" >/dev/null ;;
+      tap) emit input tap "$(px "$a")" "$(py "$b")" ;;
+      sleep) emit sleep "$a" ;;
       repeat)
         depth=1 j=$((i + 1))
         while [ "$j" -lt "$to" ] && [ "$depth" -gt 0 ]; do
@@ -125,6 +142,7 @@ sleep "$SETTLE"
 sh_ dumpsys gfxinfo "$PKG" reset >/dev/null
 start=$(date +%s)
 for ((r = 0; r < ROUNDS; r++)); do play 0 "${#LINES[@]}"; done
+[ "$ON_DEVICE" = 1 ] && sh_ "$DEVICE_SCRIPT" >/dev/null
 elapsed=$(($(date +%s) - start))
 out="$(sh_ dumpsys gfxinfo "$PKG")"
 

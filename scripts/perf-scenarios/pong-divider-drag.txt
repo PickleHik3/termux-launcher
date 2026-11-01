@@ -1,7 +1,7 @@
 # A split divider dragged with pauses, for ADR 0019 (resize on pause). Pong's Terminal page,
 # keyboard down, one window split top/bottom at half (1080x2412). Coordinates are thousandths of
-# the screen; re-measure the divider's gap from a screenshot when the layout changes (y=500 is
-# the half split's gap on pong's Floating style, 2026-11-01 — check before the first run).
+# the screen; re-measure the divider's gap from a screenshot when the layout changes (y=508 is
+# the half split's gap on pong's Floating style, 2026-11-01 — measured from a screenshot).
 #
 # Set up once, from `ssh termux`, before running (the top pane carries a long scrollback, the
 # bottom one a kitty image, so the frames include a reflow over history and an image):
@@ -11,28 +11,27 @@
 #   launcherctl pane write "$bot" --enter 'timg -pk -g 30x15 ~/logo.png'
 #
 # Each drag: down on the gap, move, hold still 400 ms (past the 100 ms pause, so the pause-resize
-# fires on builds that have it), move on, hold, release. Both directions, so each pane both
-# grows and shrinks.
+# fires on builds that have it), move on, hold, then back to where it started and release, so the
+# gap is at y=508 again for the next press (a release does not leave the gap exactly under the
+# finger, and a press that misses the gap starts a text selection instead). Up and down, so each
+# pane both grows and shrinks. Play with ON_DEVICE=1 over a relayed link.
 repeat 3
-down 500 500
-move 500 420
+down 500 508
+move 500 430
 sleep 0.4
 move 500 340
 sleep 0.4
-move 500 300 4
+move 500 508 6
+sleep 0.3
 up
 sleep 1
-down 500 300
-move 500 450
+down 500 508
+move 500 590
 sleep 0.4
-move 500 600
+move 500 680
 sleep 0.4
-move 500 660 4
-up
-sleep 1
-down 500 660
-move 500 500
-sleep 0.4
+move 500 508 6
+sleep 0.3
 up
 sleep 1
 end
