@@ -911,7 +911,9 @@ public final class TerminalRenderer {
         final int backdrop = (color >>> 24) == 0 ? 0 : color | 0xFF000000;
         if (mContrastBackdrop == backdrop) return;
         mContrastBackdrop = backdrop;
+        Trace.beginSection("Terminal.contrastInvalidate");
         mRowCache.invalidate();
+        Trace.endSection();
     }
 
     public int getContrastBackdrop() {
@@ -928,7 +930,9 @@ public final class TerminalRenderer {
         if (mContrastFloor == text) return;
         mContrastFloor = text;
         mContrastMemo.setTextFloor(text);
+        Trace.beginSection("Terminal.contrastInvalidate");
         mRowCache.invalidate();
+        Trace.endSection();
     }
 
     public double getContrastFloor() {

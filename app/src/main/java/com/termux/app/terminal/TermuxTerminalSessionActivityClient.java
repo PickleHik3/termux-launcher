@@ -1346,7 +1346,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     private void onTerminalTextGroundSettled() {
-        if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        android.os.Trace.beginSection("Terminal.groundSettled");
+        try {
+            if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        } finally {
+            android.os.Trace.endSection();
+        }
     }
 
     /**
