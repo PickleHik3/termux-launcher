@@ -47,7 +47,7 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = com.termux.app.surfaces.GlassRows.card(offers,
-            Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST, Row.CURSOR_TRAIL);
+            Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
         if (offers.terminalEffect)
             rows.tier(3, Row.EFFECT);
         return rows.tier(3, Row.MARGIN, Row.LINK_FONT).build();

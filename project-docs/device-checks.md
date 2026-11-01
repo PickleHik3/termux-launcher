@@ -803,3 +803,17 @@ Agent
   `availableBytes` clears it, and a refusal shows those three numbers in agreement (no
   `fits:false` while available exceeds needed). Record the three numbers either way · pong, go-ahead,
   curl from a shell on the phone with `~/.launcherctl/endpoint` and `token`.
+
+## Pane borders card (2026-11-01, #206 wave 2)
+- 2026-11-01 · feat/pane-borders · Appearance editor › Terminal card › Pane borders opens the card
+  in the Terminal card's place (title "Pane borders", back arrow in the header); the back arrow and
+  system Back return to the Terminal card at the same detent, scrolled to the Pane borders row;
+  Elements › Terminal opens the Terminal card scrolled to that row · emulator.
+- Border colour Custom shows Custom colour; typing `#DC143C` + Done tints the strip's Normal frame
+  and the live pane; garbage (`#12`) snaps back to the last colour; the system keyboard's insets
+  are honoured (the field stays visible above it) · emulator, then pong.
+- When focused / Glow Steady / Glow colour change the Focused frame and a live split; the
+  Attention frame never pulses; Reset pane borders and the header's reset put back Theme outline,
+  Primary, Glow off; Undo after a change restores it and the bar shows unsaved changes · emulator.
+- Font scale 1.3 at 360 × 640: the six-swatch choosers and the hex field fit without clipping,
+  strip labels single-line · emulator.

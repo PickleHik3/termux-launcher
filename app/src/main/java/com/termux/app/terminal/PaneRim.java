@@ -256,7 +256,7 @@ public final class PaneRim {
      * The plain line's colour: the theme's outline role (so light, dark, black and the scheme's
      * chrome each resolve their own) at the divider's strength. Also the Docked opening's line.
      */
-    static int lineColour(@NonNull Context context) {
+    public static int lineColour(@NonNull Context context) {
         return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOutline,
             ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);

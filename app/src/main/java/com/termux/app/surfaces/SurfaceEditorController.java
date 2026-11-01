@@ -56,6 +56,9 @@ import com.termux.app.place.SeamDress;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
+import com.termux.app.terminal.PaneBorderColours;
+import com.termux.app.terminal.PaneBorderStyle;
+import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
@@ -152,6 +155,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int statusBarInsetTop();
         int themeColor(int attr, int fallbackRes);
         void refreshPaneLayout();
+        /** The system keyboard is about to show for a field in the editor. */
+        default void onSystemImeRequested() {}
         /** Hold the pane wall's gestures while the editor is up, or hand them back. */
         void holdPaneWall(boolean held);
         void applyTerminalSurfaceAppearance();
@@ -1118,6 +1123,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mCard != card)
             mChips = EditorChips.openFor(card, mScopePageId);
         mCard = card;
+        mSubcardParent = null;
         mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
         mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
@@ -1281,9 +1287,142 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         if (sheet == null || card == null || !sheet.isShown())
             return;
-        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
+        if (mSubcardParent == card)
+            showPaneBorders(false);
+        else
+            sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
         sheet.restate();
     }
+
+    // ------------------------------------------------------------------------ Pane borders
+    //
+    // The Terminal card's one subcard (#206): shown in the card's place, the Terminal card staying
+    // the card underneath (its surface, chips and Rim cell), with no stack of cards.
+
+    /** The card the Pane borders subcard stands over, or null while no subcard is shown. */
+    @Nullable private EditorCard mSubcardParent;
+
+    /** Pane borders in the Terminal card's place, at the detent the sheet stands at. */
+    private void openPaneBorders() {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || mCard != EditorCard.TERMINAL || !sheet.isShown())
+            return;
+        mSubcardParent = mCard;
+        showPaneBorders(true);
+    }
+
+    private void showPaneBorders(boolean animate) {
+        EditorCardSheet sheet = mSheet;
+        EditorCard parent = mSubcardParent;
+        if (sheet == null || parent == null)
+            return;
+        sheet.showSubcard(parent, R.string.appearance_row_pane_borders,
+            com.termux.app.surfaces.cards.PaneBordersCard.rows(),
+            getString(R.string.appearance_pane_borders_reset), animate, this::closeSubcard);
+    }
+
+    /** Back from Pane borders: the Terminal card again, scrolled to its Pane borders row. */
+    private void closeSubcard() {
+        EditorCard parent = mSubcardParent;
+        EditorCardSheet sheet = mSheet;
+        if (parent == null || sheet == null)
+            return;
+        mSubcardParent = null;
+        openCard(parent, true);
+        if (mCard == parent)
+            sheet.scrollTo(Row.PANE_BORDERS);
+    }
+
+    /** Writes a Pane borders value, then shows it in the card's strip and in the live panes. */
+    private void writePaneBorders(@NonNull java.util.function.Consumer<TermuxAppSharedPreferences> write) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        write.accept(prefs);
+        mHost.refreshPaneLayout();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.isShown())
+            sheet.restate();
+        syncDirty();
+    }
+
+    @NonNull private final com.termux.app.surfaces.cards.PaneBordersCard.Host mPaneBordersHost =
+        new com.termux.app.surfaces.cards.PaneBordersCard.Host() {
+            @NonNull @Override
+            public PaneBorderColours.ColourChoice choice(@NonNull Row chooser) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return new PaneBorderColours.ColourChoice(fallbackMode(chooser), 0);
+                switch (chooser) {
+                    case PANE_FOCUS_COLOUR:
+                        return PaneBorderColours.ColourChoice.fromId(
+                            prefs.getTerminalPaneFocusColour(), prefs.getTerminalPaneFocusCustom(),
+                            PaneBorderColours.Mode.PRIMARY);
+                    case PANE_GLOW_COLOUR:
+                        return PaneBorderColours.ColourChoice.fromId(
+                            prefs.getTerminalPaneGlowColour(), prefs.getTerminalPaneGlowCustom(),
+                            PaneBorderColours.Mode.SAME_AS_BORDER);
+                    case PANE_BORDER_COLOUR:
+                    default:
+                        return PaneBorderColours.ColourChoice.fromId(
+                            prefs.getTerminalPaneBorderColour(),
+                            prefs.getTerminalPaneBorderCustom(), PaneBorderColours.Mode.OUTLINE);
+                }
+            }
+
+            @NonNull
+            private PaneBorderColours.Mode fallbackMode(@NonNull Row chooser) {
+                return chooser == Row.PANE_FOCUS_COLOUR ? PaneBorderColours.Mode.PRIMARY
+                    : chooser == Row.PANE_GLOW_COLOUR ? PaneBorderColours.Mode.SAME_AS_BORDER
+                    : PaneBorderColours.Mode.OUTLINE;
+            }
+
+            @Override
+            public void setMode(@NonNull Row chooser, @NonNull PaneBorderColours.Mode mode) {
+                writePaneBorders(prefs -> {
+                    switch (chooser) {
+                        case PANE_FOCUS_COLOUR: prefs.setTerminalPaneFocusColour(mode.id); break;
+                        case PANE_GLOW_COLOUR: prefs.setTerminalPaneGlowColour(mode.id); break;
+                        case PANE_BORDER_COLOUR: prefs.setTerminalPaneBorderColour(mode.id); break;
+                        default: break;
+                    }
+                });
+            }
+
+            @Override public void setCustom(@NonNull Row custom, int argb) {
+                if (argb == 0)
+                    return;
+                writePaneBorders(prefs -> {
+                    switch (custom) {
+                        case PANE_FOCUS_CUSTOM: prefs.setTerminalPaneFocusCustom(argb); break;
+                        case PANE_GLOW_CUSTOM: prefs.setTerminalPaneGlowCustom(argb); break;
+                        case PANE_BORDER_CUSTOM: prefs.setTerminalPaneBorderCustom(argb); break;
+                        default: break;
+                    }
+                });
+            }
+
+            @Override public boolean glow() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs != null && prefs.getTerminalPaneGlow();
+            }
+
+            @Override public void setGlow(boolean on) {
+                writePaneBorders(prefs -> prefs.setTerminalPaneGlow(on));
+            }
+
+            @Override public void resetPaneBorders() {
+                writePaneBorders(EditorCardReset::resetPaneBorders);
+            }
+
+            @NonNull @Override public PaneBorderStyle.Palette palette() {
+                return PaneRim.palette(mHost.context());
+            }
+
+            @Override public void onSystemImeRequested() {
+                mHost.onSystemImeRequested();
+            }
+        };
 
     private final class SheetListener implements EditorCardSheet.Listener {
         @Override public void onReset() {
@@ -1315,6 +1454,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         if (prefs == null || card == null)
             return;
+        if (mSubcardParent != null) {
+            // The subcard's Reset is its own: Reset pane borders.
+            writePaneBorders(EditorCardReset::resetPaneBorders);
+            return;
+        }
         if (!chipsPlain(card)) {
             // Away from the card's own cell, Reset clears the chips' cell and leaves the rest.
             resetOnPage(card);
@@ -2287,6 +2431,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public boolean consumeBack() {
         EditorCardSheet sheet = mSheet;
+        if (mOpen && sheetUp() && sheet != null && mSubcardParent != null) {
+            closeSubcard();
+            return true;
+        }
         if (!mOpen || !sheetUp() || sheet == null
             || sheet.detent() == EditorCardSheet.DETENT_PEEK)
             return false;
@@ -2820,6 +2968,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean shown(@NonNull Row row) {
+            if (com.termux.app.surfaces.cards.PaneBordersCard.owns(row))
+                return com.termux.app.surfaces.cards.PaneBordersCard.shown(row, mPaneBordersHost);
             // All surfaces is the Custom stop's, as the Look page's Custom row was.
             if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
                 && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
@@ -3191,6 +3341,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         switch (row) {
+            case PANE_BORDERS:
+                openPaneBorders();
+                break;
             case KEYBOARD_THEME:
                 openKeyboardTheme();
                 break;
@@ -5071,7 +5224,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         Context context = mHost.context();
         com.termux.app.surfaces.cards.CardRowView built = null;
-        if (card == EditorCard.STATUS)
+        if (mSubcardParent != null
+                && com.termux.app.surfaces.cards.PaneBordersCard.owns(row))
+            built = com.termux.app.surfaces.cards.PaneBordersCard.view(context, row, widthPx,
+                mPaneBordersHost);
+        else if (card == EditorCard.STATUS)
             built = com.termux.app.surfaces.cards.StatusBarCard.view(context, row, widthPx,
                 mStatusCardHost);
         else if (card == EditorCard.TERMINAL)

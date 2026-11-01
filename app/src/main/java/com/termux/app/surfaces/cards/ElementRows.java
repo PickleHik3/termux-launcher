@@ -65,7 +65,7 @@ public final class ElementRows {
         COMMAND_PALETTE(R.string.editor_elements_command_palette, R.drawable.ic_symbol_terminal,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.COMMAND_PALETTE_BUTTON),
         TERMINAL(R.string.editor_elements_terminal, R.drawable.ic_symbol_terminal,
-            EditorCard.TERMINAL, null, null, Visibility.NONE),
+            EditorCard.TERMINAL, null, Row.PANE_BORDERS, Visibility.NONE),
         /** The widget grid: Home's own card, at its Grid section. */
         WIDGETS(R.string.editor_elements_widgets, R.drawable.ic_ms_widgets,
             EditorCard.HOME, null, Row.SECTION_GRID, Visibility.NONE);
