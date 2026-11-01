@@ -84,6 +84,9 @@ public class LayoutUpgradeMatrixTest {
     /** Five pinned apps fit at L, so the phone's L stands (seven cap it at M). */
     @Test public void v2FivePinsKeepL() throws Exception { check("v16-five-pins-icon-size"); }
 
+    /** One grid for both orientations (ADR 0020 §12): the portrait count wins, landscape goes. */
+    @Test public void v2LandscapeGridDropped() throws Exception { check("v16-landscape-grid-dropped"); }
+
     /** 1.3.0-pre.4 with the shared dock on and Home's own layout's dock off: Home keeps it off. */
     @Test public void pre4HomeDockOff() throws Exception {
         check("v14-home-dock-off");

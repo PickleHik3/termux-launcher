@@ -1,0 +1,9 @@
+{
+  "home": {
+    "portrait": {
+      "widget_columns": 4,
+      "widget_rows": 6
+    }
+  },
+  "absent": ["home.landscape.widget_columns", "home.landscape.widget_rows"]
+}

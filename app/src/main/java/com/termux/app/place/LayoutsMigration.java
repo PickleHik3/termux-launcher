@@ -163,8 +163,10 @@ final class LayoutsMigration {
                 if (value != null) fields.put(field, value);
             }
             if (kind == LayoutKind.HOME) {
-                // The widget grid has only ever been Home's.
-                for (String field : LayoutsJson.GRID_FIELDS) {
+                // The widget grid has only ever been Home's, and is one grid for both orientations
+                // now (ADR 0020 §12): the portrait count wins and the landscape copy is dropped.
+                for (String field : orientation == PlaceOrientation.LANDSCAPE
+                        ? new String[0] : LayoutsJson.GRID_FIELDS.toArray(new String[0])) {
                     Object value = mAll.get(
                         PlaceLayoutStore.layoutKey(LayoutVariant.HOME, orientation, field));
                     if (value != null) fields.put(field, value);
