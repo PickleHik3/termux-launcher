@@ -143,6 +143,13 @@ public final class TerminalView extends View {
     private boolean mTerminalSizeUpdatesPaused;
     private boolean mTerminalSizeUpdatePending;
     /**
+     * While a held resize is pending, the slack kept above the grid: the slack it had when the
+     * hold began, so the old grid stays anchored at the top of a pane that grows or shrinks under
+     * it (background below, cut at the bottom) instead of being re-centred each frame. -1 at rest,
+     * where the grid is centred in its view as usual (ADR 0019).
+     */
+    private int mHeldGridSlackPx = -1;
+    /**
      * Pixels at the top of this view that the text keeps clear of while the view's own bounds (and
      * the glass behind it) still reach there: the camera's band when Full screen lifts the pane to
      * the screen's top edge (FullScreenCornerPolicy). The rows are counted in what is left below
@@ -3164,6 +3171,7 @@ public final class TerminalView extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         retireScrollCache();
         if (mTerminalSizeUpdatesPaused) {
+            holdGridAtTop(oldh);
             mTerminalSizeUpdatePending = true;
             invalidate();
         } else {
@@ -3185,9 +3193,14 @@ public final class TerminalView extends View {
      */
     private void updateSize(boolean allowZeroHeight, @NonNull String cause) {
         if (mTerminalSizeUpdatesPaused) {
+            holdGridAtTop(getHeight());
             mTerminalSizeUpdatePending = true;
             invalidate();
             return;
+        }
+        if (mHeldGridSlackPx >= 0) {
+            mHeldGridSlackPx = -1;
+            invalidate();
         }
         // A travel ends on the resize it was drawn toward, whether or not the grid moves: a slide
         // that sprang back finds the grid already fitting and the displacement already zero.
@@ -3639,8 +3652,29 @@ public final class TerminalView extends View {
         return inset + centredSlackPx(heightPx - inset, contentPx);
     }
 
+    /**
+     * The first time a pending resize is held, keeps the slack the grid had above it in a view
+     * {@code heightPx} tall, so the held grid stays where it was at the top from then on.
+     */
+    private void holdGridAtTop(int heightPx) {
+        if (mHeldGridSlackPx >= 0) return;
+        if (mEmulator == null || mRenderer == null || heightPx <= 0) {
+            mHeldGridSlackPx = 0;
+            return;
+        }
+        int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
+            + mRenderer.mFontLineSpacingAndAscent;
+        mHeldGridSlackPx = heldGridSlackPx(heightPx, mTextTopInsetPx, contentHeight);
+    }
+
+    /** The slack above a grid of {@code contentPx} in a view {@code heightPx} tall, below the inset. */
+    static int heldGridSlackPx(int heightPx, int topInsetPx, int contentPx) {
+        return verticalContentOffsetPx(heightPx, topInsetPx, contentPx) - Math.max(0, topInsetPx);
+    }
+
     /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
     public void resumeTerminalSizeUpdatesDiscardingPending() {
+        mHeldGridSlackPx = -1;
         mTerminalSizeUpdatePending = false;
         mTerminalSizeUpdatesPaused = false;
     }
@@ -3687,8 +3721,6 @@ public final class TerminalView extends View {
             final float drawOffset = currentDrawOffset();
             computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
-            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
-                || mTravelActive;
             // A travel toward a taller grid draws the transcript its resize will reveal above the
             // rows, where the resize will put it: drawing starts that many rows up and is moved up
             // by as many lines, so mTopRow, hit-testing and every row below stay where they were.
@@ -3698,13 +3730,14 @@ public final class TerminalView extends View {
                 mRenderer.mFontLineSpacingAndAscent)) : 0f;
             final int drawTopRow = mTopRow - fillRows;
             final int extraRows = fillRows + (scrollOffset != 0f ? 1 : 0);
-            if (canvasTranslated) {
-                canvas.save();
-                // Rows displaced past this view's edges stay inside it: the pane frame around
-                // this view lets its children draw outside their bounds on purpose.
-                if (mTravelActive) canvas.clipRect(0, 0, getWidth(), getHeight());
-                canvas.translate(0f, drawOffset);
-            }
+            // Everything this pane draws stays inside it, in every state: rows displaced by a
+            // travel, a held grid larger than a pane that shrank under it, a classic image or a
+            // placeholder reaching past the last row. The pane frame around this view lets its
+            // children draw outside their bounds on purpose (glows, rims, shadows), so the clip
+            // is this view's own, not the frame's (ADR 0019).
+            canvas.save();
+            canvas.clipRect(0, 0, getWidth(), getHeight());
+            if (drawOffset != 0f) canvas.translate(0f, drawOffset);
             if (paintingPaddingFill)
                 drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset,
                     fillRows > 0 ? fillClipTop - drawOffset : Float.NaN);
@@ -3744,8 +3777,7 @@ public final class TerminalView extends View {
                 else
                     mCursorTrailListener.onCursorMayHaveMoved(this);
             }
-            if (canvasTranslated)
-                canvas.restore();
+            canvas.restore();
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
@@ -4239,6 +4271,22 @@ public final class TerminalView extends View {
         return Math.round((cy - mTopRow) * mRenderer.mFontLineSpacing + getVerticalContentOffset());
     }
 
+    /**
+     * The columns this view's present size holds, whatever the session is sized to now: during a
+     * held resize, the columns the resize will give it. 0 before a font is set.
+     */
+    public int getColumnsForViewSize() {
+        if (mRenderer == null) return 0;
+        return Math.max(4, (int) (getWidth() / mRenderer.mFontWidth));
+    }
+
+    /** As {@link #getColumnsForViewSize}, for rows. */
+    public int getRowsForViewSize() {
+        if (mRenderer == null) return 0;
+        return rowsFor(getHeight(), mTextTopInsetPx, mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing);
+    }
+
     public float getHorizontalContentOffset() {
         if (mEmulator == null || mRenderer == null) {
             return 0f;
@@ -4303,6 +4351,8 @@ public final class TerminalView extends View {
         if (mEmulator == null || mRenderer == null) {
             return 0f;
         }
+        // A held grid stays at the top of its pane while the pane changes size under it.
+        if (mHeldGridSlackPx >= 0) return Math.max(0, mTextTopInsetPx) + mHeldGridSlackPx;
         int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
             + mRenderer.mFontLineSpacingAndAscent;
         return verticalContentOffsetPx(getHeight(), mTextTopInsetPx, contentHeight);

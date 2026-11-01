@@ -363,6 +363,38 @@ public final class TerminalBuffer {
     }
 
     /**
+     * Resize a screen that keeps no transcript (the alternate screen) the way kitty does
+     * ({@code resize_screen_buffer_without_rewrap}): rows 0..min(old, new) stay where they are,
+     * top-anchored; columns are cut or padded on the right and rows at the bottom; nothing
+     * reflows and nothing rotates, so a full-screen program's frame reads in order until it
+     * repaints. Pictures stay on their rows, fitted to the new columns; those on cut rows go with
+     * them. The cursor is clamped into the new screen.
+     */
+    public void resizeWithoutRewrap(int newColumns, int newRows, int[] cursor, long currentStyle) {
+        TerminalRow[] lines = new TerminalRow[newRows];
+        int keep = Math.min(mScreenRows, newRows);
+        for (int r = 0; r < keep; r++) {
+            TerminalRow old = mLines[externalToInternalRow(r)];
+            if (old == null) lines[r] = new TerminalRow(newColumns, currentStyle);
+            else if (newColumns == mColumns) lines[r] = old;
+            else lines[r] = old.resizedTo(newColumns, currentStyle);
+        }
+        for (int r = keep; r < mScreenRows; r++) {
+            TerminalRow old = mLines[externalToInternalRow(r)];
+            if (old != null) old.dropKittyPlacements();
+        }
+        for (int r = keep; r < newRows; r++) lines[r] = new TerminalRow(newColumns, currentStyle);
+        mLines = lines;
+        mTotalRows = newRows;
+        mScreenRows = newRows;
+        mScreenFirstRow = 0;
+        mActiveTranscriptRows = 0;
+        mColumns = newColumns;
+        cursor[0] = Math.max(0, Math.min(cursor[0], newColumns - 1));
+        cursor[1] = Math.max(0, Math.min(cursor[1], newRows - 1));
+    }
+
+    /**
      * Resize the screen which this transcript backs. Currently, this only works if the number of columns does not
      * change or the rows expand (that is, it only works when shrinking the number of rows).
      *
