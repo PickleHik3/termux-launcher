@@ -151,6 +151,8 @@ public final class PaneGlass {
             : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
         backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
+        // The slab answers for this pane now; the bare frame's answer would count it twice.
+        if (terminalPane && style != null) style.paneGlassForget(frame);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;
     }
@@ -173,8 +175,22 @@ public final class PaneGlass {
             sBareRootLocation);
         sBareRect.set(sBareLocation[0], sBareLocation[1],
             sBareLocation[0] + frame.getWidth(), sBareLocation[1] + frame.getHeight());
-        style.paneGlassVeil(sBareRect);
+        style.paneGlassVeil(sBareRect, frame);
+        if (sForgetWired.put(frame, Boolean.TRUE) == null) {
+            frame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(@NonNull View v) {
+                }
+
+                @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                    style.paneGlassForget(v);
+                }
+            });
+        }
     }
+
+    /** Bare frames already watching for their detach, so each is wired once. */
+    private static final java.util.WeakHashMap<View, Boolean> sForgetWired =
+        new java.util.WeakHashMap<>();
 
     /**
      * {@code foreground} as the terminal renderer draws faint (SGR 2) text: each channel at two

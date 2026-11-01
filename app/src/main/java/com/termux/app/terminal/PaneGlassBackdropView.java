@@ -306,6 +306,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * change lands its new veil in the same pass.
      */
     public void setVeilSource(@Nullable PaneSurfaceStyle source) {
+        if (mVeilSource != null && mVeilSource != source) mVeilSource.paneGlassForget(this);
         mVeilSource = source;
         if (refreshVeil()) invalidate();
     }
@@ -365,8 +366,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             restingOriginOnScreen(mVeilLocation, mVeilRootLocation);
             mVeilRect.set(mVeilLocation[0], mVeilLocation[1],
                 mVeilLocation[0] + getWidth(), mVeilLocation[1] + getHeight());
-            veil = mVeilSource.paneGlassVeil(mVeilRect);
-            evenOut = mVeilSource.paneGlassEvenOut(mVeilRect);
+            veil = mVeilSource.paneGlassVeil(mVeilRect, this);
+            evenOut = mVeilSource.paneGlassEvenOut(mVeilRect, this);
         } else {
             mVeilRect.setEmpty();
         }
@@ -743,8 +744,17 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        // A slab that detached lost its answer; ask again so it is counted before any layout.
+        if (mVeilSource != null && refreshVeil()) invalidate();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        // The pane's answer goes with it; a slab that comes back is asked again (onAttachedToWindow).
+        if (mVeilSource != null) mVeilSource.paneGlassForget(this);
         // A slab that comes back starts from rest, never from the bend it left with.
         if (mMotionLight != null) mMotionLight.reset();
         mTilt[0] = 0f;

@@ -68,8 +68,10 @@ public class EvenOutBandPolarityTest {
             ChromeInk.Polarity.PALE_INK));
     }
 
+    private final Object pane = new Object();
+
     private void measure(Rect rect) {
-        ink.terminalPane(rect, TINT, 0xFF101418, FG, PaneGlass.dimTerminalInk(FG));
+        ink.terminalPane(rect, pane, TINT, 0xFF101418, FG, PaneGlass.dimTerminalInk(FG));
     }
 
     private double drawn(@Nullable ColorMatrix matrix, double tone) {
@@ -82,7 +84,7 @@ public class EvenOutBandPolarityTest {
     @Test
     public void theLoggedPongCaseKeepsPaleInkAndABandWithRoomUnderTheCeiling() {
         measure(TALL);
-        ColorMatrix matrix = ink.evenOutMatrix(TALL);
+        ColorMatrix matrix = ink.evenOutMatrix(TALL, pane);
         assertNotNull(matrix);
         EvenOut.Chain chain = ChromeInk.compositeChain(MEAN, Color.TRANSPARENT, TINT);
         double lo = drawn(matrix, 57.86d);
@@ -101,9 +103,9 @@ public class EvenOutBandPolarityTest {
     public void aResizedPaneReplacesItsStaleAnswerAndThePaletteGroundIsTheLiveOnes() {
         measure(TALL);
         measure(SHORT);
-        assertEquals("the stale rect is pruned", 1, ink.paneAnswerCountForTests());
-        assertNull(ink.evenOutMatrix(TALL));
-        ColorMatrix live = ink.evenOutMatrix(SHORT);
+        assertEquals("the same pane replaces its answer", 1, ink.paneAnswerCountForTests());
+        assertNull(ink.evenOutMatrix(TALL, pane));
+        ColorMatrix live = ink.evenOutMatrix(SHORT, pane);
         assertNotNull(live);
         double worstEnd = Math.max(drawn(live, 57.86d), drawn(live, 94.69d));
         assertEquals(worstEnd, ColorUtils.lstarFromArgb(ink.terminalPaneGround(TINT)), TOLERANCE);

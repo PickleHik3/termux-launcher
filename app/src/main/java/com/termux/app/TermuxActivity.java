@@ -3872,6 +3872,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
+                return paneGlassVeil(rootRect, new Rect(rootRect));
+            }
+
+            @Override public int paneGlassVeil(@NonNull Rect rootRect, @NonNull Object key) {
                 // The terminal pane band (appearance-layout-editor SPEC §2): the scheme's default
                 // foreground and its dim, veiled toward the terminal's own background. Off the
                 // wallpaper the text stands on the palette's own background (terminalTextGround)
@@ -3881,7 +3885,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 updateEvenOutPolicy();
                 int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
                     .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
-                return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
+                return mChrome.ink().terminalPane(rootRect, key, paneGlassTintColor(),
                     com.termux.app.chrome.OnGlass.opaque(resolveTerminalSurfaceColor()),
                     com.termux.app.chrome.OnGlass.opaque(foreground),
                     com.termux.app.terminal.PaneGlass.dimTerminalInk(foreground)).veil;
@@ -3889,8 +3893,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override @Nullable
             public android.graphics.ColorMatrix paneGlassEvenOut(@NonNull Rect rootRect) {
+                return paneGlassEvenOut(rootRect, new Rect(rootRect));
+            }
+
+            @Override @Nullable
+            public android.graphics.ColorMatrix paneGlassEvenOut(@NonNull Rect rootRect,
+                                                                 @NonNull Object key) {
                 if (mChrome == null) return null;
-                return mChrome.ink().evenOutMatrix(rootRect);
+                return mChrome.ink().evenOutMatrix(rootRect, key);
+            }
+
+            @Override public void paneGlassForget(@NonNull Object key) {
+                if (mChrome != null) mChrome.ink().forgetPane(key);
             }
 
             @Override public int paneGlassGeneration() {

@@ -52,6 +52,22 @@ public interface PaneSurfaceStyle {
         return null;
     }
     /**
+     * {@link #paneGlassVeil(android.graphics.Rect)} for the pane {@code key} names (its slab): the
+     * pane's one answer is kept under the key, so another pane over or beside it never evicts it.
+     */
+    default int paneGlassVeil(@NonNull android.graphics.Rect rootRect, @NonNull Object key) {
+        return paneGlassVeil(rootRect);
+    }
+    /** {@link #paneGlassEvenOut(android.graphics.Rect)} for the pane {@code key} names. */
+    @androidx.annotation.Nullable
+    default android.graphics.ColorMatrix paneGlassEvenOut(@NonNull android.graphics.Rect rootRect,
+                                                          @NonNull Object key) {
+        return paneGlassEvenOut(rootRect);
+    }
+    /** The pane {@code key} names is gone (detached, or no longer measured): drop its answer. */
+    default void paneGlassForget(@NonNull Object key) {
+    }
+    /**
      * A token that changes whenever what {@link #paneGlassEvenOut} answers may have changed
      * without any pane moving (the Debugging switch, the Contrast level, a re-measure). A laid-out
      * pane polls it in onDraw, a plain int compare, and re-asks when it moved.
