@@ -96,7 +96,8 @@ final class LayoutsMigration {
             new LayoutVariant[]{LayoutVariant.MINIMAL}, terminal);
         KindLayout display = withDress(withKeyboardOpen(terminal, PaneWallPage.DISPLAY),
             PageKind.DISPLAY);
-        kinds.put(LayoutKind.HOME, home);
+        // Home keeps the kind visibility it had (was place.dress.home.*).
+        kinds.put(LayoutKind.HOME, withDress(home, PageKind.HOME));
         kinds.put(LayoutKind.TERMINAL, withDress(
             withKeyboardOpen(terminal, PaneWallPage.TERMINAL), PageKind.TERMINAL));
         kinds.put(LayoutKind.TERMINAL_MINIMAL,
@@ -135,7 +136,8 @@ final class LayoutsMigration {
         Map<String, Object> wide = new LinkedHashMap<>();
         for (String field : LayoutsJson.WIDE_FIELDS) {
             if (LayoutsJson.KEYBOARD_OPEN.equals(field)) continue;
-            Object value = first(sources, null, field);
+            Object value = first(dockToggle(field) ? designSources(sources) : sources, null,
+                field);
             if (value == null && fallback != null) value = fallback.wide().get(field);
             if (value != null) wide.put(field, value);
         }
@@ -167,6 +169,26 @@ final class LayoutsMigration {
     }
 
     @Nullable
+    /** The Search field and the drawer tile belong with the dock design they were set on. */
+    private static boolean dockToggle(@NonNull String field) {
+        return LayoutsJson.SEARCH_FIELD.equals(field) || LayoutsJson.DRAWER_TILE.equals(field)
+            || LayoutsJson.DRAWER_TILE_POSITION.equals(field);
+    }
+
+    /**
+     * The sources up to the one that holds the dock design: a layout that held its own design
+     * read its absent toggles from that design (the Search field on the Prompt line, no tile),
+     * never from a later source's, so a Home on its own design gains no toggle at the fold.
+     */
+    @NonNull
+    private LayoutVariant[] designSources(@NonNull LayoutVariant[] sources) {
+        for (int i = 0; i < sources.length; i++) {
+            if (mAll.get(PlaceLayoutStore.layoutWideKey(sources[i], LayoutsJson.DOCK_DESIGN)) != null)
+                return java.util.Arrays.copyOf(sources, i + 1);
+        }
+        return sources;
+    }
+
     private Object first(@NonNull LayoutVariant[] sources, @Nullable PlaceOrientation orientation,
                          @NonNull String field) {
         for (LayoutVariant source : sources) {
