@@ -1,5 +1,6 @@
 package com.termux.app.place;
 
+import com.termux.app.chrome.DressResolver;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -108,12 +109,15 @@ public final class ResolvedArrangement {
                                               @NonNull PageRef page,
                                               @NonNull LayoutStyle style) {
         PlaceLayoutStore view = store.forVariant(variant);
+        // Home pages read the dock's toggles from Home's scope whichever layout they wear.
+        PlaceLayoutStore dock = store.forVariant(
+            DressResolver.dockLayoutOf(variant, DressResolver.kindOf(page.kind)));
         PlaceLayout layout = store.resolve(orientation, variant, page.kind);
         // A Home page draws the design PlaceLayoutStore#homePageDockDesign answers, the dress's too.
         DockStyle design = page.kind == PaneWallPage.WIDGETS
             ? store.homePageDockDesign(variant) : view.dockStyle();
         return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(design),
-            view.searchField(), view.drawerTile(), orientation, variant, page);
+            dock.searchField(), dock.drawerTile(), orientation, variant, page);
     }
 
     /** An arrangement made of its parts, for a reader with no store (before one, and tests). */

@@ -17868,7 +17868,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.wall.PaneWallPage page) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store == null ? null : store.forVariant(mDresses.layoutOf(page));
+        return store == null ? null : store.forVariant(com.termux.app.chrome.DressResolver
+            .dockLayoutOf(mDresses.layoutOf(page), com.termux.app.chrome.DressResolver.kindOf(page)));
     }
 
     /**

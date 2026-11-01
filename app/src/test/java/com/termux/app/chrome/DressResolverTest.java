@@ -54,6 +54,9 @@ public class DressResolverTest {
         Stored() {
             for (LayoutVariant layout : LayoutVariant.values()) {
                 designs.put(layout, DockStyle.GLASS_TRAY);
+                // Home's own toggles stay unset until a test sets them: a Home dock nobody
+                // edited reads the shared layout's, as the store does.
+                if (layout == LayoutVariant.HOME) continue;
                 searchFields.put(layout, false);
                 drawerTiles.put(layout, false);
             }
@@ -77,10 +80,12 @@ public class DressResolverTest {
             return designs.getOrDefault(layout, DockStyle.GLASS_TRAY);
         }
         @Override public boolean searchField(@NonNull LayoutVariant layout) {
-            return searchFields.getOrDefault(layout, false);
+            return searchFields.getOrDefault(layout, layout == LayoutVariant.HOME
+                ? searchFields.getOrDefault(LayoutVariant.NORMAL, false) : false);
         }
         @Override public boolean drawerTile(@NonNull LayoutVariant layout) {
-            return drawerTiles.getOrDefault(layout, false);
+            return drawerTiles.getOrDefault(layout, layout == LayoutVariant.HOME
+                ? drawerTiles.getOrDefault(LayoutVariant.NORMAL, false) : false);
         }
         @NonNull @Override public WallShape shape() {
             return workspace;
