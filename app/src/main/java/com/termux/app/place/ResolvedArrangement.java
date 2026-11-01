@@ -112,9 +112,8 @@ public final class ResolvedArrangement {
         // A Home page wears Home's layout, so its dock is that layout's (ADR 0020 §1).
         PlaceLayoutStore dock = view;
         PlaceLayout layout = store.resolve(orientation, variant, page.kind);
-        // A Home page draws the design PlaceLayoutStore#homePageDockDesign answers, the dress's too.
-        DockStyle design = page.kind == PaneWallPage.WIDGETS
-            ? store.homePageDockDesign(variant) : view.dockStyle();
+        // Every page draws its own layout's design; a Home page's is Home's (ADR 0020 §1).
+        DockStyle design = view.dockStyle();
         return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(design),
             dock.searchField(), dock.drawerTile(), orientation, variant, page);
     }

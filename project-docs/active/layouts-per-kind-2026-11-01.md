@@ -67,22 +67,24 @@ writes version 8; tag v1.3.0-pre.4 writes 14; v2 writes 16. No end-to-end upgrad
 
 `layouts` keys and values. `version` is the document's own version, 1 now.
 
+As built (2026-11-01). Field names, types and units are the flat keys' own, so step 17 copies
+rather than translates; the authoritative table is the comment at the head of
+`place/layout/LayoutsJson.java`.
+
 ```json
 // key "home"  (terminal, terminal_minimal and display have the same shape)
 {
   "version": 1,
-  "dock_design": "glass",
-  "search_field": true,
-  "drawer_tile": "tray",
-  "drawer_tile_position": "end",
-  "status_compact": false,
-  "keyboard_mode": "transient",
-  "keyboard_form": "docked",
+  "dock_design": "peek_glass", "search_field": true, "drawer_tile": false,
+  "drawer_tile_position": "end", "keyboard_shown": false, "keyboard_rows": 0,
+  "keyboard_open": false,
   "portrait": {
-    "placements": { "status_bar": "top", "apps_row": "dock", "az_row": "off",
-                    "az_bar": "off", "extra_keys": "above_keyboard" },
-    "bars": { "order": ["apps_row", "extra_keys"],
-              "under_keyboard": ["extra_keys"], "restore_edge": {} },
+    "status_bar": "top", "apps_row": "bottom", "az_bar": "bottom", "az_row": true,
+    "extra_keys": "hidden", "apps_row_order": 2, "extra_keys_under_keyboard": false,
+    "apps_row_restore_edge": "bottom", "keyboard_mode": "overlay", "keyboard_form": "docked",
+    "bar_order": "…", "status_compact": false,
+    "dress.status_bar": true, "dress.apps_row": true, "dress.az_bar": true,
+    "dress.extra_keys": false,
     "widget_columns": 4, "widget_rows": 6
   },
   "landscape": { "…": "same keys" }
@@ -93,17 +95,21 @@ writes version 8; tag v1.3.0-pre.4 writes 14; v2 writes 16. No end-to-end upgrad
 // key "sizes"
 {
   "version": 1,
-  "portrait":  { "keyboard_height": 0.42, "keyboard_chin": 0, "dock_height": 64, "wall_strip_height": 40 },
-  "landscape": { "keyboard_height": 0.55, "keyboard_chin": 0, "dock_height": 56, "wall_strip_height": 36 }
+  "portrait":  { "keyboard_height": 0.9, "keyboard_chin": 6, "dock_height": 1.25, "wall_strip_height": 44 },
+  "landscape": { "keyboard_height": 1.0, "keyboard_chin": 0, "dock_height": 1.1, "wall_strip_height": 40 }
 }
 ```
 
-The values above are examples; the builder takes names, types and units from the existing keys
-and writes them in the table at `LayoutsJson`'s head. `widget_columns` and `widget_rows` appear
-only in `home`. `keyboard_shown`, `keyboard_rows`, `keyboard_open` and `minimal` stay where they
-are unless the builder finds one is per layout (see §9, point 2). Unknown fields are kept on
-rewrite and ignored on read. A document that fails to parse is replaced by the shipped default
-for its kind and logged once; the other four are untouched.
+- Placements are the flat values: an edge or `"hidden"`; `az_row` is a boolean, `az_bar` an edge.
+- `dress.<element>` is the kind's visibility (was `place.dress.<kind>.<o>.<element>`);
+  Terminal-minimal holds none (its slots carry it).
+- `keyboard_height` and `dock_height` are scales (floats); `keyboard_chin` and
+  `wall_strip_height` are dp (ints).
+- An absent field reads the same shipped default as an absent flat key did (some defaults come
+  from global preferences), so shipped documents hold only the visibility.
+- `widget_columns` and `widget_rows` appear only in `home`. Unknown fields are kept on rewrite
+  and ignored on read. A document that fails to parse is replaced by the shipped default for its
+  kind and logged once; the other four are untouched.
 
 Global, outside `layouts`: `keyboard_float_x/y`, `voice_pill_x/y`, `app_launcher_dock_style`.
 
@@ -223,3 +229,6 @@ migration code.
 3. **Terminal-minimal is worn by Display too (settled).** While minimal is on, the Display layout
    is not worn; its own edits show with minimal off. Minimal is one look for every window.
 4. **Start-in on the Terminal (settled).** The fold rule then uses the first Home page on the wall.
+5. **Terminal keyboard_shown (deviation, 2026-11-01).** The Terminal's and the Display's
+   `keyboard_shown` stays the existing global keyboard-off preference; only Home's is in its
+   document. No settings page changed.
