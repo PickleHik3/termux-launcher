@@ -243,6 +243,11 @@ is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
 
+**Notice**:
+The one transient message in the app, on a pill centred at the top of the screen, inside the
+terminal's rim while a terminal is on screen. Replaces stock toasts.
+_Avoid_: toast, pill (that is the dictation card), banner, chip
+
 **Orientation**:
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
 see Minimal mode); appearance is never per orientation.
@@ -275,6 +280,12 @@ conversation fold into one card with a count. Tap opens it, a sideways swipe dis
 4 s undo, and a long press shows the whole message with Open, Dismiss and Mute this rule. See
 `project-docs/reference/launcher/pinned-notification-SPEC.md`.
 _Avoid_: essential notification (that is the rule, not the card), heads-up, pin (alone)
+
+**Read-out**:
+A fleeting **notice** naming what a key just did or something still under way, such as a pane's
+size in cells during a resize drag. A new label swaps its words in place, and any real notice
+displaces it.
+_Avoid_: size banner, resize overlay, hint
 
 **Saved sessions**:
 A named set of sessions, windows, splits and working directories kept under `~/.termux/workspaces/`
