@@ -42,6 +42,9 @@ Latest stable: v1.2.1.
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
 
+### On-device AI
+- The AI runtime keeps a share of your phone's RAM free before it loads a model, so a large GPU model no longer takes the launcher down with it.
+
 ### Linux apps
 - A display you start from a shell with termux-x11 gets a window manager, so apps open with window frames instead of unmanaged at their own size.
 - The display starts on its own again after it was killed, instead of staying down until you cleared it by hand.
