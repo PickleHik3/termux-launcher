@@ -60,11 +60,6 @@ public final class ContrastFloor {
     }
 
     /**
-     * The faint text floor that goes with a normal text floor of {@code textFloor}: the same share
-     * of it as {@link #DIM_TEXT} is of {@link #TEXT}, so faint ink stays below normal ink at every
-     * level the user can pick.
-     */
-    /**
      * Whether {@code candidate} is the backdrop {@code applied} already is, for the renderer's
      * purposes: equal, or both opaque and closer than {@link #BACKDROP_TOLERANCE}. Zero (the
      * palette's own background) is the same only as zero.
@@ -75,6 +70,11 @@ public final class ContrastFloor {
         return contrast(applied, candidate) < BACKDROP_TOLERANCE;
     }
 
+    /**
+     * The faint text floor that goes with a normal text floor of {@code textFloor}: the same share
+     * of it as {@link #DIM_TEXT} is of {@link #TEXT}, so faint ink stays below normal ink at every
+     * level the user can pick.
+     */
     public static double dimFloorFor(double textFloor) {
         return textFloor * (DIM_TEXT / TEXT);
     }
