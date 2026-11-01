@@ -748,7 +748,11 @@ public final class SuggestionBarView extends GridLayout
         attachNotificationBadgeListener();
         // Renders parked while the window was away, for cells still waiting on them.
         iconBinder.resumeAll();
-        if (configRepository != null) configRepository.addListener(configListener);
+        if (configRepository != null) {
+            configRepository.addListener(configListener);
+            // The listener was off while the row was away: catch up on any pin written meanwhile.
+            syncPinnedItemsWithStore();
+        }
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
         // views still hold whatever drawables they were last bound with.
@@ -1288,8 +1292,39 @@ public final class SuggestionBarView extends GridLayout
         this.configRepository = configRepository;
         if (this.configRepository != null) {
             this.configRepository.addListener(configListener);
-            this.pinnedItems = this.configRepository.loadPinnedItems();
+            syncPinnedItemsWithStore();
         }
+    }
+
+    /**
+     * Re-reads the pins from the store and asks for a render when they differ from what the row
+     * holds. The store is the row's only source of truth, but the row hears about writes through
+     * a listener it drops while detached, and the first render can come before the store is
+     * handed over; either way a render of the old list (an empty one shows the "pin your apps"
+     * hint) would otherwise stand until something unrelated re-rendered the row.
+     */
+    private void syncPinnedItemsWithStore() {
+        if (configRepository == null) return;
+        List<PinnedItem> stored = configRepository.loadPinnedItems();
+        boolean changed = !pinsFingerprint(stored).equals(pinsFingerprint(pinnedItems));
+        pinnedItems = stored;
+        if (changed) scheduleCatalogRefreshRender();
+    }
+
+    /** What the row draws from a pin list: its refs and folders in order. */
+    @NonNull
+    static String pinsFingerprint(@Nullable List<PinnedItem> items) {
+        if (items == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (PinnedItem item : items) {
+            if (item instanceof PinnedAppItem) {
+                out.append(((PinnedAppItem) item).appRef.stableId());
+            } else if (item instanceof PinnedFolderItem) {
+                out.append(buildFolderRenderKey((PinnedFolderItem) item));
+            }
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     @NonNull
@@ -1402,6 +1437,9 @@ public final class SuggestionBarView extends GridLayout
                 pendingCatalogRefreshRender = false;
                 post(() -> reloadWithInput(lastInput, lastTerminalView));
             }
+            // A render dropped while hidden is otherwise re-issued only by a layout pass, and
+            // coming back into view need not lay the row out again.
+            if (renderLostWhileUnstable) post(this::reissueLostRender);
             scheduleStableDrawReleaseIfPossible();
             return;
         }
@@ -1603,9 +1641,11 @@ public final class SuggestionBarView extends GridLayout
      * This prevents stale "ghost" pinned slots after apps are uninstalled.
      */
     private void pruneUnavailablePinnedItems() {
-        if (configRepository == null || pinnedItems == null || pinnedItems.isEmpty() || allApps == null || allApps.isEmpty()) {
-            return;
-        }
+        if (configRepository == null || allApps == null || allApps.isEmpty()) return;
+        // Prune what the store holds, not the row's copy: the cleaned list is written back whole,
+        // so a copy that missed a write would take those pins off the dock with the unresolved.
+        pinnedItems = configRepository.loadPinnedItems();
+        if (pinnedItems.isEmpty()) return;
 
         List<PinnedItem> cleaned = new ArrayList<>();
         boolean changed = false;
@@ -1678,8 +1718,10 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
 
-        pinnedItems = cleaned;
-        configRepository.savePinnedItems(pinnedItems);
+        configRepository.savePinnedItems(cleaned);
+        // Read back rather than keep `cleaned`: a write that did not land leaves the store as it
+        // was, and the row must not draw a dock the store does not hold.
+        pinnedItems = configRepository.loadPinnedItems();
         pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
     }
 
@@ -3038,6 +3080,12 @@ public final class SuggestionBarView extends GridLayout
             renderStartCol = 0;
         }
 
+        if (!azPreview && TextUtils.isEmpty(lastInput.trim())
+            && (pinnedItems == null || pinnedItems.isEmpty()) && configRepository != null) {
+            // An empty list here draws the "pin your apps" hint, so it must be the store's answer,
+            // not a copy the row failed to refresh.
+            pinnedItems = configRepository.loadPinnedItems();
+        }
         boolean pinnedSurface = !azPreview && TextUtils.isEmpty(lastInput.trim()) && pinnedItems != null && !pinnedItems.isEmpty();
         if (pinnedSurface) {
             pinnedItemsPerPage = computePinnedItemsPerPage();
@@ -4988,10 +5036,38 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void removePinnedAt(int index) {
-        if (index >= 0 && index < pinnedItems.size()) {
+        if (index < 0 || index >= pinnedItems.size()) return;
+        PinnedItem target = pinnedItems.get(index);
+        if (configRepository != null) {
+            // The index is into the row as drawn; the write starts from what the store holds now.
+            // Saving the row's own copy with one item gone also wrote every pin that copy had
+            // missed as gone: a copy holding only the Terminal entry emptied the dock.
+            List<PinnedItem> stored = configRepository.loadPinnedItems();
+            int storedIndex = indexOfSamePin(stored, target);
+            pinnedItems = stored;
+            if (storedIndex < 0) {
+                reloadWithInput("", lastTerminalView);
+                return;
+            }
+            stored.remove(storedIndex);
+        } else {
             pinnedItems.remove(index);
-            persistPinsAndReload();
         }
+        persistPinsAndReload();
+    }
+
+    /** Where {@code target} sits in {@code items}: the same app ref, or the same folder id. */
+    static int indexOfSamePin(@NonNull List<PinnedItem> items, @NonNull PinnedItem target) {
+        for (int i = 0; i < items.size(); i++) {
+            PinnedItem item = items.get(i);
+            if (target instanceof PinnedAppItem && item instanceof PinnedAppItem) {
+                if (((PinnedAppItem) target).appRef.stableId()
+                    .equals(((PinnedAppItem) item).appRef.stableId())) return i;
+            } else if (target instanceof PinnedFolderItem && item instanceof PinnedFolderItem) {
+                if (((PinnedFolderItem) target).id.equals(((PinnedFolderItem) item).id)) return i;
+            }
+        }
+        return -1;
     }
 
     private void persistPinsAndReload() {
@@ -5145,6 +5221,7 @@ public final class SuggestionBarView extends GridLayout
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
                 state = new LongPressPickupState(pressTarget, pinnedIndex, 0f, 0f);
+                state.downKnown = false;
                 activeLongPressPickupState = state;
             }
             state.menuShown = true;
@@ -5201,6 +5278,11 @@ public final class SuggestionBarView extends GridLayout
                 if (state != null && state.sourceView == pressTarget && state.menuShown && !state.dragStarted) {
                     float rawX = event.getRawX();
                     float rawY = event.getRawY();
+                    if (!state.downKnown) {
+                        state.downRawX = rawX;
+                        state.downRawY = rawY;
+                        state.downKnown = true;
+                    }
                     float dx = rawX - state.downRawX;
                     float dy = rawY - state.downRawY;
                     float absDx = Math.abs(dx);
@@ -5211,6 +5293,7 @@ public final class SuggestionBarView extends GridLayout
                     if (absDy >= yIntentThreshold) {
                         state.definitiveYMovement = true;
                     }
+                    state.maxTravelPx = Math.max(state.maxTravelPx, Math.max(absDx, absDy));
                     if (!state.selectionArmed && Math.max(absDx, absDy) >= (slop * MENU_SELECTION_ARM_SLOP_FACTOR)) {
                         state.selectionArmed = true;
                     }
@@ -5288,7 +5371,8 @@ public final class SuggestionBarView extends GridLayout
                         return true;
                     }
                     if (action == MotionEvent.ACTION_UP && state.menuShown && !state.dragStarted) {
-                        if (state.selectionArmed) {
+                        if (menuReleaseCommits(state.selectionArmed, state.maxTravelPx,
+                                ViewConfiguration.get(getContext()).getScaledTouchSlop())) {
                             menuHighlight.updateForRaw(event.getRawX(), event.getRawY(), true, true);
                             menuHighlight.commitHighlighted();
                         }
@@ -5303,6 +5387,15 @@ public final class SuggestionBarView extends GridLayout
             }
             return false;
         });
+    }
+
+    /**
+     * Whether lifting the finger off a long press runs the menu row it is on: only once the
+     * finger has slid toward the menu. A press held still never runs a row, whatever lies under
+     * it, so it can never unpin, delete or uninstall on its own.
+     */
+    static boolean menuReleaseCommits(boolean selectionArmed, float maxTravelPx, int touchSlopPx) {
+        return selectionArmed && maxTravelPx >= touchSlopPx * MENU_SELECTION_ARM_SLOP_FACTOR;
     }
 
     private void cancelPendingContextLongPresses() {
@@ -6361,8 +6454,16 @@ public final class SuggestionBarView extends GridLayout
     private static final class LongPressPickupState {
         final View sourceView;
         final int pinnedIndex;
-        final float downRawX;
-        final float downRawY;
+        float downRawX;
+        float downRawY;
+        /**
+         * Whether {@link #downRawX}/{@link #downRawY} are where this finger went down. A state the
+         * long press had to make itself saw no DOWN, so it takes the first MOVE as its origin
+         * rather than the screen's corner, which read as a long drag the moment the menu opened.
+         */
+        boolean downKnown = true;
+        /** The farthest the finger has got from its origin since the menu opened, in px. */
+        float maxTravelPx = 0f;
         boolean menuShown = false;
         boolean dragStarted = false;
         long menuShownAtMs = 0L;

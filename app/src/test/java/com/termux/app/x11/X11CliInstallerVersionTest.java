@@ -16,9 +16,9 @@ import java.security.MessageDigest;
  */
 public class X11CliInstallerVersionTest {
 
-    private static final int VERSION_OF_THESE_ASSETS = 15;
+    private static final int VERSION_OF_THESE_ASSETS = 1016;
     private static final String GPU_SETUP_SHA256 =
-        "87262325600ede79d531ace0a1ecf9471dc59aec86173f7c3d83740854e63f21";
+        "6a5418858375cd48a3b438e826508aef917eda14a2cbd7cabbff629a9d182f07";
 
     private static String sha256(String asset) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")

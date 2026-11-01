@@ -434,7 +434,8 @@ public class AppearanceSurfaceControllerTest {
         assertNotNull(mEditor.pageListener);
         mEditor.pageListener.onModeChanged(EditorMode.LAYOUT);
         assertEquals("Layout", title.getText().toString());
-        assertEquals(View.GONE, bar.findViewById(R.id.appearance_page_undo).getVisibility());
+        assertEquals("Undo keeps its place, so the pill never shifts", View.INVISIBLE,
+            bar.findViewById(R.id.appearance_page_undo).getVisibility());
         mEditor.pageListener.onDirtyChanged(true);
         assertEquals(View.VISIBLE, bar.findViewById(R.id.appearance_page_undo).getVisibility());
         bar.findViewById(R.id.appearance_page_undo).performClick();

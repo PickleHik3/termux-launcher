@@ -141,6 +141,19 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         assertEquals("no second retry attempted", 1, host.scripts.size());
     }
 
+    @Test public void aMissingCommandIsNotRetriedAndNamesTheCommand() {
+        LinuxAppCatalog.LinuxApp app = app("typora");
+        new X11ElectronSandboxStore(context).remember(app.id);
+        runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+
+        host.listeners.get(0).onExit(127);
+
+        assertEquals("no retry", 1, host.scripts.size());
+        assertEquals(1, host.notices.size());
+        assertTrue(host.notices.get(0).contains("typora"));
+        assertTrue("the sandbox store is left as it was", runner.shouldStartWithNoSandbox(app));
+    }
+
     @Test public void aTaskThatNeverStartsIsNotWatched() {
         LinuxAppCatalog.LinuxApp app = app("typora");
         host.startSucceeds = false;

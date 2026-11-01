@@ -102,4 +102,19 @@ public class ChromeEdgeRuleTest {
         assertEquals(0f, ChromeEdgeRule.stripFraction(0, 120), 0f);
         assertEquals(0f, ChromeEdgeRule.stripFraction(0, 0), 0f);
     }
+
+    @Test
+    public void aLoneBandIsAWholeCard() {
+        // The extra keys alone, nothing above or below: no seam anywhere, a stroke all round.
+        assertEquals(ChromeEdgeRule.NONE, ChromeEdgeRule.seams(true, 0, 0));
+        assertEquals(ChromeEdgeRule.ALL, ChromeEdgeRule.strokeEdges(true, true, false, 0, 0));
+        assertFalse(ChromeEdgeRule.innerCornersOnly(true, 0));
+        // The keyboard up over it: only its top joins.
+        assertEquals(ChromeEdgeRule.TOP, ChromeEdgeRule.seams(true, 0, ChromeEdgeRule.TOP));
+        // Docked it is a slice of the frame along the bottom: the screen and the join are seams,
+        // and with nothing above it its inner edge keeps the rim.
+        assertEquals(BOTTOM_ROW, ChromeEdgeRule.seams(false, BOTTOM_ROW, 0));
+        assertEquals(ChromeEdgeRule.TOP,
+            ChromeEdgeRule.strokeEdges(false, true, true, BOTTOM_ROW, 0));
+    }
 }

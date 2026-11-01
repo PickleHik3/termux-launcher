@@ -62,11 +62,14 @@ public class TerminalToolbarViewPager {
                 layout = extraKeysView;
                 extraKeysView.setExtraKeysViewClient(mActivity.getTermuxTerminalExtraKeys(position));
                 extraKeysView.setButtonTextAllCaps(mActivity.getProperties().shouldExtraKeysTextBeAllCaps());
-                // Left swipe from the last key page reaches the text input; from an earlier one it
-                // is just the next key page, which the pager already handles.
-                final int textInputPage = keyPages;
-                extraKeysView.setToolbarTextInputSwipeListener(() ->
-                    mActivity.getTerminalToolbarViewPager().setCurrentItem(textInputPage, true));
+                // A sideways drag that starts on a key turns one page either way: left to the next
+                // key page (the text input after the last), right back to the previous one.
+                extraKeysView.setToolbarPageSwipeListener(direction -> {
+                    ViewPager pager = mActivity.getTerminalToolbarViewPager();
+                    int target = pager.getCurrentItem() + direction;
+                    if (target >= 0 && target <= mActivity.getExtraKeysPageCount())
+                        pager.setCurrentItem(target, true);
+                });
                 extraKeysView.setPageIndicator(position, keyPages);
                 mActivity.setExtraKeysView(extraKeysView, position);
                 extraKeysView.reload(

@@ -2131,6 +2131,18 @@ public final class TerminalView extends View {
      * Scroll to the bottom of the transcript on user-initiated input, so typed characters are
      * visible even when the user had scrolled up (matching desktop terminals' scroll-on-keystroke).
      */
+    /**
+     * Writes {@code text} to the session as typed input: a selection ends and the view snaps to
+     * the bottom first, as for a typed code point. For the in-app keyboard's string keys, which
+     * used to write to the session directly and so left a scrolled or selecting view where it was.
+     */
+    public void inputText(@NonNull String text) {
+        if (mTermSession == null) return;
+        if (isSelectingText()) stopTextSelectionMode();
+        snapToBottomForInput();
+        mTermSession.write(text);
+    }
+
     private void snapToBottomForInput() {
         if (mTopRow != 0) {
             mTopRow = 0;
@@ -2764,8 +2776,14 @@ public final class TerminalView extends View {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
             mClient.logInfo(LOG_TAG, "onKeyDown(keyCode=" + keyCode + ", isSystem()=" + event.isSystem() + ", event=" + event + ")");
-        if (mEmulator == null)
+        if (mEmulator == null) {
+            // Nothing to type into, but Back still reaches the client, as its release does
+            // (onKeyUp): whatever the client puts over this view has to hear the press, or the
+            // release arrives alone and is taken for a Back nothing claimed.
+            if (keyCode == KeyEvent.KEYCODE_BACK)
+                return mClient.onKeyDown(keyCode, event, mTermSession) || super.onKeyDown(keyCode, event);
             return true;
+        }
         if (isCtrlSpacePassThrough(keyCode, event)) {
             return super.onKeyDown(keyCode, event);
         }
@@ -2853,6 +2871,12 @@ public final class TerminalView extends View {
         }
         if (mTermSession == null)
             return;
+        // A key typed while text is selected ends the selection, as a hardware key does in
+        // onKeyDown: the in-app keyboard reaches this entry directly, and a selection it left
+        // standing kept pinning the screen to the selected rows while the shell went on printing,
+        // so the typed keys landed but nothing new showed until something resized the view.
+        if (isSelectingText())
+            stopTextSelectionMode();
         // Ensure cursor is shown when a key is pressed down like long hold on (arrow) keys
         if (mEmulator != null)
             mEmulator.setCursorBlinkState(true);
@@ -3481,7 +3505,9 @@ public final class TerminalView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         if (mEmulator == null) {
-            canvas.drawColor(0XFF000000);
+            // Nothing to draw yet, and nothing painted: the launcher's panes sit on glass and the
+            // wallpaper, and a black fill here was a black frame each time a pane was rebuilt
+            // before its session came back (a launcher restart).
         } else {
             long drawStartNanos = SystemClock.elapsedRealtimeNanos();
             // render the terminal view and highlight any selected text
@@ -3493,8 +3519,6 @@ public final class TerminalView extends View {
             final float drawOffset = currentDrawOffset();
             computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
-            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
-                || mTravelActive;
             // A travel toward a taller grid draws the transcript its resize will reveal above the
             // rows, where the resize will put it: drawing starts that many rows up and is moved up
             // by as many lines, so mTopRow, hit-testing and every row below stay where they were.
@@ -3504,13 +3528,14 @@ public final class TerminalView extends View {
                 mRenderer.mFontLineSpacingAndAscent)) : 0f;
             final int drawTopRow = mTopRow - fillRows;
             final int extraRows = fillRows + (scrollOffset != 0f ? 1 : 0);
-            if (canvasTranslated) {
-                canvas.save();
-                // Rows displaced past this view's edges stay inside it: the pane frame around
-                // this view lets its children draw outside their bounds on purpose.
-                if (mTravelActive) canvas.clipRect(0, 0, getWidth(), getHeight());
-                canvas.translate(0f, drawOffset);
-            }
+            // Everything this pane draws stays inside it, in every state: rows displaced by a
+            // travel, a held grid larger than a pane that shrank under it, a classic image or a
+            // placeholder reaching past the last row. The pane frame around this view lets its
+            // children draw outside their bounds on purpose (glows, rims, shadows), so the clip
+            // is this view's own, not the frame's (ADR 0019).
+            canvas.save();
+            canvas.clipRect(0, 0, getWidth(), getHeight());
+            if (drawOffset != 0f) canvas.translate(0f, drawOffset);
             if (paintingPaddingFill)
                 drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset,
                     fillRows > 0 ? fillClipTop - drawOffset : Float.NaN);
@@ -3550,8 +3575,7 @@ public final class TerminalView extends View {
                 else
                     mCursorTrailListener.onCursorMayHaveMoved(this);
             }
-            if (canvasTranslated)
-                canvas.restore();
+            canvas.restore();
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();

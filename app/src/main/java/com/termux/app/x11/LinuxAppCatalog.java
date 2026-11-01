@@ -329,6 +329,7 @@ public final class LinuxAppCatalog {
         if (noDisplay || hidden) return null;
         if (!tryExec.isEmpty() && !executableExists(container, tryExec, file)) return null;
         String command = stripFieldCodes(exec);
+        if (!sessions) command = repairTemplateExec(container, desktopFile, file, command, tryExec);
         if (sessions) {
             // D7, session roots only: the command itself has to be there, not only the TryExec
             // that may or may not be beside it.
@@ -337,6 +338,60 @@ public final class LinuxAppCatalog {
         }
         return new LinuxApp(container, desktopFile, name, command, icon, comment,
             startupWmClass, terminal, sessions, sessions ? desktopNames : "");
+    }
+
+    /**
+     * 2026-10-21: Termux's x11 {@code chromium} ships {@code Exec=@@desktop_exec %U}, a build
+     * placeholder nobody substituted. A first word with an {@code @} in it is never a real command
+     * name, so only that, when it does not resolve, is repaired: by the {@code TryExec}, else by
+     * the one executable called {@code <id>} or {@code <id>-*} (chromium becomes chromium-browser).
+     * Zero or several candidates leave the command as written. An entry that resolves, or a
+     * package fixed upstream, never gets this far.
+     */
+    @NonNull
+    private static String repairTemplateExec(@NonNull ProotDistro.Container container,
+                                             @NonNull String id, @NonNull File desktopFile,
+                                             @NonNull String command, @NonNull String tryExec) {
+        String binary = execBinary(command);
+        if (binary.indexOf('@') < 0 || executableExists(container, binary, desktopFile)) {
+            return command;
+        }
+        String replacement = tryExec;
+        if (replacement.isEmpty()) {
+            java.util.Set<String> found = new java.util.TreeSet<>();
+            for (File dir : binDirs(container, desktopFile)) {
+                String[] names = dir.list();
+                if (names == null) continue;
+                for (String n : names) {
+                    if ((n.equals(id) || n.startsWith(id + "-")) && new File(dir, n).canExecute()) {
+                        found.add(n);
+                    }
+                }
+            }
+            if (found.size() != 1) return command;
+            replacement = found.iterator().next();
+        }
+        String trimmed = command.trim();
+        String rest = trimmed.substring(Math.min(trimmed.length(),
+            trimmed.split("\\s", 2)[0].length()));
+        return replacement + rest;
+    }
+
+    /** Where {@link #executableExists} looks for a bare name, for this kind of container. */
+    @NonNull
+    private static List<File> binDirs(@NonNull ProotDistro.Container container,
+                                      @NonNull File desktopFile) {
+        List<File> dirs = new ArrayList<>(2);
+        if (container.kind == ProotDistro.Container.Kind.NIX) {
+            if (container.profile != null) dirs.add(container.under(container.profile, "bin"));
+        } else if (!container.isPrefix()) {
+            dirs.add(container.inside("/usr/bin"));
+            dirs.add(container.inside("/usr/local/bin"));
+        } else {
+            dirs.add(new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH));
+            if (desktopFile.getParentFile() != null) dirs.add(desktopFile.getParentFile());
+        }
+        return dirs;
     }
 
     /**
