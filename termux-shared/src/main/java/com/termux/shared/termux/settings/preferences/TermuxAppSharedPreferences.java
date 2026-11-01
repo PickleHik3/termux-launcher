@@ -635,6 +635,66 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_PANE_GAP), false);
     }
 
+    public String getTerminalPaneBorderColour() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PANE_BORDER_COLOUR, TERMUX_APP.DEFAULT_TERMINAL_PANE_BORDER_COLOUR, true);
+    }
+
+    public void setTerminalPaneBorderColour(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_BORDER_COLOUR, value, false);
+    }
+
+    public int getTerminalPaneBorderCustom() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_BORDER_CUSTOM, 0);
+    }
+
+    public void setTerminalPaneBorderCustom(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_BORDER_CUSTOM, value, false);
+    }
+
+    public String getTerminalPaneFocusColour() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_COLOUR, TERMUX_APP.DEFAULT_TERMINAL_PANE_FOCUS_COLOUR, true);
+    }
+
+    public void setTerminalPaneFocusColour(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_COLOUR, value, false);
+    }
+
+    public int getTerminalPaneFocusCustom() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_CUSTOM, 0);
+    }
+
+    public void setTerminalPaneFocusCustom(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_CUSTOM, value, false);
+    }
+
+    public boolean getTerminalPaneGlow() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PANE_GLOW, TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW);
+    }
+
+    public void setTerminalPaneGlow(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_GLOW, value, false);
+    }
+
+    public String getTerminalPaneGlowColour() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PANE_GLOW_COLOUR, TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW_COLOUR, true);
+    }
+
+    public void setTerminalPaneGlowColour(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_GLOW_COLOUR, value, false);
+    }
+
+    public int getTerminalPaneGlowCustom() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_GLOW_CUSTOM, 0);
+    }
+
+    public void setTerminalPaneGlowCustom(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PANE_GLOW_CUSTOM, value, false);
+    }
+
     public static int clampSurfaceHorizontalInset(int value) {
         return DataUtils.clamp(value, 0, TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET);
     }

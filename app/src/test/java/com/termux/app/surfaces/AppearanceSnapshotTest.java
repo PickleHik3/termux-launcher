@@ -118,6 +118,32 @@ public class AppearanceSnapshotTest {
 
     /** The Text size slider dirties the editor, and its way back cleans it again. */
     @Test
+    public void thePaneBordersAreSnapshottedSignedAndRestored() {
+        AppearanceSnapshot snapshot = AppearanceSnapshot.capture(preferences);
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        preferences.setTerminalPaneBorderColour("custom");
+        preferences.setTerminalPaneBorderCustom(0xFFDC143C);
+        preferences.setTerminalPaneFocusColour("same_as_border");
+        preferences.setTerminalPaneFocusCustom(0xFF00FF00);
+        preferences.setTerminalPaneGlow(true);
+        preferences.setTerminalPaneGlowColour("tertiary");
+        preferences.setTerminalPaneGlowCustom(0x800000FF);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        snapshot.restore(preferences);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_BORDER_COLOUR,
+            preferences.getTerminalPaneBorderColour());
+        assertEquals(0, preferences.getTerminalPaneBorderCustom());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_FOCUS_COLOUR,
+            preferences.getTerminalPaneFocusColour());
+        assertEquals(0, preferences.getTerminalPaneFocusCustom());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW, preferences.getTerminalPaneGlow());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW_COLOUR,
+            preferences.getTerminalPaneGlowColour());
+        assertEquals(0, preferences.getTerminalPaneGlowCustom());
+    }
+
+    @Test
     public void theSignatureSeesTheTextSize() {
         String before = AppearanceSnapshot.signatureOf(preferences);
         preferences.setTextSizePercent(115);

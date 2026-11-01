@@ -205,7 +205,28 @@ public final class EditorRows {
          * the screen, its eye and the sliders glyph that opens its card. Drawn by the editor
          * through EditorCardSheet.Model#rowView; the Kind is the stand-in.
          */
-        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune);
+        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
+        /** The Terminal card's way to its Pane borders card (#206). */
+        PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
+        // The Pane borders card's rows (cards/PaneBordersCard), drawn by that card through
+        // EditorCardSheet.Model#rowView; the Kind is the stand-in. Rim is RIM itself.
+        /** The three frames, Normal, Focused and Attention, in the panes' own drawables. */
+        PANE_PREVIEW(Kind.MENU, R.string.appearance_row_pane_borders, 0),
+        PANE_BORDER_COLOUR(Kind.SEGMENTS, R.string.appearance_row_border_colour,
+            R.drawable.ic_editor_tint),
+        PANE_BORDER_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_FOCUS_COLOUR(Kind.SEGMENTS, R.string.appearance_row_when_focused,
+            R.drawable.ic_editor_tint),
+        PANE_FOCUS_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_GLOW(Kind.SEGMENTS, R.string.appearance_row_glow, R.drawable.ic_editor_depth),
+        PANE_GLOW_COLOUR(Kind.SEGMENTS, R.string.appearance_row_glow_colour,
+            R.drawable.ic_editor_tint),
+        PANE_GLOW_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_BORDERS_RESET(Kind.ACTION, R.string.appearance_pane_borders_reset,
+            R.drawable.ic_editor_corners);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

@@ -617,6 +617,22 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_TERMINAL_PANE_GAP = 24;
 
         /**
+         * Pane border colour choices, terminal panes only. A mode id (outline, primary, secondary,
+         * tertiary, custom; the glow also takes same_as_border) and, for custom, a stored ARGB.
+         */
+        public static final String KEY_TERMINAL_PANE_BORDER_COLOUR = "terminal_pane_border_colour";
+        public static final String DEFAULT_TERMINAL_PANE_BORDER_COLOUR = "outline";
+        public static final String KEY_TERMINAL_PANE_BORDER_CUSTOM = "terminal_pane_border_custom";
+        public static final String KEY_TERMINAL_PANE_FOCUS_COLOUR = "terminal_pane_focus_colour";
+        public static final String DEFAULT_TERMINAL_PANE_FOCUS_COLOUR = "primary";
+        public static final String KEY_TERMINAL_PANE_FOCUS_CUSTOM = "terminal_pane_focus_custom";
+        public static final String KEY_TERMINAL_PANE_GLOW = "terminal_pane_glow";
+        public static final boolean DEFAULT_TERMINAL_PANE_GLOW = false;
+        public static final String KEY_TERMINAL_PANE_GLOW_COLOUR = "terminal_pane_glow_colour";
+        public static final String DEFAULT_TERMINAL_PANE_GLOW_COLOUR = "same_as_border";
+        public static final String KEY_TERMINAL_PANE_GLOW_CUSTOM = "terminal_pane_glow_custom";
+
+        /**
          * Symmetric left/right inset in dp between a surface and the physical screen edges. The
          * default matches the floating capsule's redline outer margin; the edge-to-edge default
          * shape only honours whatever is configured beyond that baseline.

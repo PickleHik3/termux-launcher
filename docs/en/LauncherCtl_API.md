@@ -830,6 +830,8 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag. The reply also carries `memoryMode` (`relaxed` or `unrestricted`, read-only) |
 | POST | `/v1/auth/rotate` | Rotate the API token and rewrite discovery files |
 
+A load that Android closes the runtime for (a `tai_runtime_crashed` error with `exitReason: "low_memory"`) is not held against the accelerator for good: automatic loads try it again once at the full window after a few minutes, and the load plan's `memoryBudget` reports that as `retriedAfterLowMemory: true`. A load that names its accelerator is tried right away at the smallest window.
+
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
 
 `POST /v1/ai/benchmarks/run` takes:

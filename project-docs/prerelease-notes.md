@@ -19,6 +19,7 @@ Latest stable: v1.2.1.
 - Switching terminal windows with Fancier Glass on no longer flashes the bare wallpaper behind the window that is leaving.
 - The terminal's Opacity stays yours: at 0% the glass is exactly as clear as you set it, with no evening-out, and below the default it evens out less.
 - A terminal window whose shell Android kills (its child-process limit, often hit with a Linux desktop on the display) stays open with "Process completed (signal 9)" instead of vanishing; Enter closes it, and a notice says how to lift the limit.
+- A window flooded with output, a kitty image stream included, no longer freezes the launcher: the terminal takes output in short turns.
 
 ### Home
 - Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable.
@@ -26,7 +27,8 @@ Latest stable: v1.2.1.
 - The Home card has a Transition row of five glyph tiles (Slide, Depth, Fade, Carousel and Stack), and Settings › General › Page transition now opens it.
 
 ### Appearance editor
-- Where it applies now offers Home pages, Terminal or Display pages between Everywhere and This page, and each kind ships its own keyboard: lifted on Home pages, nearly clear on Display pages.
+- You can give terminal panes a border colour of your own, a focus colour and a steady glow: Appearance › Terminal › Pane borders.
+- Where it applies now offers Home pages, Terminal pages or Display pages between Everywhere and This page, and each kind ships its own keyboard: lifted on Home pages, nearly clear on Display pages.
 - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
 - A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
 - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
@@ -38,9 +40,16 @@ Latest stable: v1.2.1.
 - The terminal lands on its new size without a reflow when a window opens, closes or moves.
 - The terminal's More sheet holds Cursor trail, Effect, Split gap and its font.
 - Settings > Debugging > Motion log notes page changes and resizes, and launcherctl look reads and sets any look value from a shell.
+- Opening Appearance while the setup cards are showing no longer stacks the two sheets.
+- The Where chip names Terminal pages and the Terminal page apart.
+- Changes in the Appearance editor are no longer kept if the launcher is closed before Done.
 
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
+
+### On-device AI
+- The AI runtime now keeps a share of your phone's RAM free when it loads a model, sized to the phone, so a large model that would starve the rest of the phone is refused up front.
+- A model load that Android closed to free memory is tried again on its own once memory has recovered, instead of staying off that accelerator until you ask for it by name.
 
 ### Linux apps
 - A display you start from a shell with termux-x11 gets a window manager, so apps open with window frames instead of unmanaged at their own size.

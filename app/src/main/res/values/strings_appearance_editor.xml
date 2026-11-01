@@ -117,6 +117,28 @@
     <string name="appearance_rim_none">None</string>
     <string name="appearance_rim_hairline">Thin</string>
     <string name="appearance_rim_bright">Bright</string>
+    <!-- The Pane borders card under the Terminal card (#206). -->
+    <string name="appearance_row_pane_borders">Pane borders</string>
+    <string name="appearance_row_border_colour">Border colour</string>
+    <string name="appearance_row_custom_colour">Custom colour</string>
+    <string name="appearance_row_when_focused">When focused</string>
+    <string name="appearance_row_glow">Glow</string>
+    <string name="appearance_row_glow_colour">Glow colour</string>
+    <string name="appearance_pane_colour_outline">Theme outline</string>
+    <string name="appearance_pane_colour_primary">Primary</string>
+    <string name="appearance_pane_colour_secondary">Secondary</string>
+    <string name="appearance_pane_colour_tertiary">Tertiary</string>
+    <string name="appearance_pane_colour_custom">Custom</string>
+    <string name="appearance_pane_colour_same">Same as border</string>
+    <string name="appearance_pane_glow_off">Off</string>
+    <string name="appearance_pane_glow_steady">Steady</string>
+    <string name="appearance_pane_preview_normal">Normal</string>
+    <string name="appearance_pane_preview_focused">Focused</string>
+    <string name="appearance_pane_preview_attention">Attention</string>
+    <string name="appearance_pane_custom_hint">#RRGGBB</string>
+    <string name="appearance_pane_borders_reset">Reset pane borders</string>
+    <string name="appearance_pane_borders_reset_action">Reset</string>
+    <string name="appearance_pane_borders_back">Back to Terminal</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
     <string name="appearance_row_glass_edge">Edge</string>
     <string name="appearance_row_tool_colours">Tool colours</string>

@@ -10,6 +10,10 @@ import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
 import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.surfaces.cards.DockCard;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -146,6 +150,40 @@ final class EditorSettingsSnapshot {
     @NonNull
     static EditorSettingsSnapshot capture(@NonNull Store store) {
         return new EditorSettingsSnapshot(store);
+    }
+
+    private EditorSettingsSnapshot(@NonNull String[] strings, @NonNull boolean[] booleans) {
+        mStrings = strings;
+        mBooleans = booleans;
+    }
+
+    /**
+     * Both lists as JSON arrays in {@link #STRING_KEYS} and {@link #BOOLEAN_KEYS} order, a null
+     * string kept as null, so the entry snapshot outlives a killed process.
+     */
+    @NonNull
+    JSONObject toJson() throws JSONException {
+        JSONArray strings = new JSONArray();
+        for (String value : mStrings) strings.put(value == null ? JSONObject.NULL : value);
+        JSONArray booleans = new JSONArray();
+        for (boolean value : mBooleans) booleans.put(value);
+        return new JSONObject().put("strings", strings).put("booleans", booleans);
+    }
+
+    /** The snapshot {@link #toJson} wrote; throws when it is malformed or from another build. */
+    @NonNull
+    static EditorSettingsSnapshot fromJson(@NonNull JSONObject in) throws JSONException {
+        JSONArray strings = in.getJSONArray("strings");
+        JSONArray booleans = in.getJSONArray("booleans");
+        if (strings.length() != STRING_KEYS.size() || booleans.length() != BOOLEAN_KEYS.size())
+            throw new JSONException("settings snapshot from another build");
+        String[] outStrings = new String[strings.length()];
+        for (int i = 0; i < outStrings.length; i++)
+            outStrings[i] = strings.isNull(i) ? null : strings.getString(i);
+        boolean[] outBooleans = new boolean[booleans.length()];
+        for (int i = 0; i < outBooleans.length; i++)
+            outBooleans[i] = booleans.getBoolean(i);
+        return new EditorSettingsSnapshot(outStrings, outBooleans);
     }
 
     /**
