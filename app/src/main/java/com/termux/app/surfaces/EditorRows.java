@@ -177,7 +177,7 @@ public final class EditorRows {
         /** Home's widget grid, in cells, each a stepper (− value +). */
         HOME_COLUMNS(Kind.MENU, R.string.editor_row_columns, R.drawable.ic_ed_grid_columns),
         HOME_ROWS(Kind.MENU, R.string.editor_row_rows, R.drawable.ic_ed_grid_rows),
-        /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
+        /** The one icon size, S/M/L/XL ({@code IconSize}): the Home card's and the Dock card's first row. */
         HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
         /**
          * A shortcut tile that never reads on: it opens the wallpaper picker (Change wallpaper).

@@ -5717,8 +5717,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return row == Row.HOME_COLUMNS ? grid[0] : grid[1];
             }
             case HOME_ICON_SIZE:
-                return com.termux.app.launcher.widget.HomeIconSize.fromStored(
-                    AppearanceSettingsStore.getString(context, HomeSettings.KEY_ICON_SCALE, null))
+                // The one icon size (ADR 0020 §3): the Home grid's and every dock design's.
+                return com.termux.app.place.layout.IconSize.of(
+                    com.termux.app.place.layout.LayoutStore.shared(context).current().sizes())
                     .ordinal();
             case SHOW_WALLPAPER:
                 return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
@@ -5752,6 +5753,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case HOME_ROWS:
                 return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS;
             case HOME_ICON_SIZE:
+                return com.termux.app.place.layout.IconSize.values().length - 1;
             case TINT_HUE:
                 return 2;
             default:
@@ -5792,8 +5794,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String[] cardRowChoices(@NonNull Row row) {
         switch (row) {
             case HOME_ICON_SIZE:
-                return strings(R.string.editor_home_icon_small, R.string.editor_home_icon_default,
-                    R.string.editor_home_icon_large);
+                return strings(R.string.editor_icon_size_s, R.string.editor_icon_size_m,
+                    R.string.editor_icon_size_l, R.string.editor_icon_size_xl);
             case TINT_HUE:
                 return getResources().getStringArray(R.array.appearance_editor_tint_hue_entries);
             default:
@@ -5813,7 +5815,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     EditorGlyphs.LABEL_LARGE};
             case HOME_ICON_SIZE:
                 return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
-                    EditorGlyphs.ICON_LARGE};
+                    EditorGlyphs.ICON_LARGE, EditorGlyphs.ICON_LARGE};
             case FOLDERS:
                 return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
                     EditorGlyphs.FOLDER_ROOMY};
@@ -5926,10 +5928,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             }
             case HOME_ICON_SIZE: {
-                com.termux.app.launcher.widget.HomeIconSize[] sizes =
-                    com.termux.app.launcher.widget.HomeIconSize.values();
-                writeHomeString(HomeSettings.KEY_ICON_SCALE,
-                    sizes[clamp(value, 0, sizes.length - 1)].value);
+                com.termux.app.place.layout.IconSize[] sizes =
+                    com.termux.app.place.layout.IconSize.values();
+                com.termux.app.place.layout.IconSize size = sizes[clamp(value, 0, sizes.length - 1)];
+                com.termux.app.place.layout.LayoutStore.shared(context).updateSizes(size::into);
+                requestGeometryPreview();
+                syncDirty();
                 break;
             }
             case SHOW_WALLPAPER:

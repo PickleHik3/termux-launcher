@@ -55,7 +55,7 @@ public class EditorRowsTest {
         // The one glass row set (GlassRows), then under More Grain, Rim and the dock's own rows.
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.HEIGHT,
+        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.HOME_ICON_SIZE,
             Row.DOCK_STYLE, Row.DOCK_TYPE, Row.MARGIN, Row.REFLECTION, Row.DOCK_BARS,
             Row.DOCK_OPTIONS), EditorRows.tier(EditorCard.DOCK, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.DOCK, ALL);

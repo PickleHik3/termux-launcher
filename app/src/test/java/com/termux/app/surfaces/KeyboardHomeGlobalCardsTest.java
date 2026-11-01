@@ -95,21 +95,27 @@ public class KeyboardHomeGlobalCardsTest {
     }
 
     @Test
-    public void homesIconSizeReadsAnOldPercentageAsItsNearestPresetAndWritesAPreset() {
+    public void homesIconSizeIsTheOneIconSizeOfFourSteps() {
         Context context = RuntimeEnvironment.getApplication();
+        com.termux.app.place.layout.LayoutStore.prefs(context).edit().clear().commit();
+        com.termux.app.place.layout.LayoutStore documents =
+            com.termux.app.place.layout.LayoutStore.shared(context);
+        documents.load();
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
-        AppearanceSettingsStore.putString(harness.themed, HomeSettings.KEY_ICON_SCALE, "110");
         harness.editor.present(EditorCard.HOME, PaneWallPage.WIDGETS, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         EditorCardSheet.Model model = model(harness.editor);
         assertEquals(EditorCard.HOME, harness.editor.shownCard());
-        assertEquals(HomeIconSize.DEFAULT.ordinal(), model.value(Row.HOME_ICON_SIZE));
+        assertEquals("the default step", com.termux.app.place.layout.IconSize.M.ordinal(),
+            model.value(Row.HOME_ICON_SIZE));
 
-        model.onValue(Row.HOME_ICON_SIZE, HomeIconSize.LARGE.ordinal(), false);
-        assertEquals("large", AppearanceSettingsStore.getString(harness.themed,
-            HomeSettings.KEY_ICON_SCALE, null));
-        assertEquals(HomeIconSize.LARGE.ordinal(), model.value(Row.HOME_ICON_SIZE));
-        assertEquals(3, model.choices(Row.HOME_ICON_SIZE).length);
+        model.onValue(Row.HOME_ICON_SIZE, com.termux.app.place.layout.IconSize.XL.ordinal(), false);
+        assertEquals("one value in the sizes document (ADR 0020 §3)",
+            com.termux.app.place.layout.IconSize.XL,
+            com.termux.app.place.layout.IconSize.of(documents.current().sizes()));
+        assertEquals(com.termux.app.place.layout.IconSize.XL.ordinal(),
+            model.value(Row.HOME_ICON_SIZE));
+        assertEquals(4, model.choices(Row.HOME_ICON_SIZE).length);
         assertEquals(context.getString(R.string.editor_note_home_only),
             String.valueOf(model.summary(Row.SECTION_LOOK)));
         assertEquals(context.getString(R.string.editor_note_home_glass),
