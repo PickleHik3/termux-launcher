@@ -255,6 +255,25 @@ public class ContrastFloorTest {
         return h < 0f ? h + 360f : h;
     }
 
+    @Test
+    public void sameBackdropIgnoresDriftNoReaderCanSee() {
+        assertTrue(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF8D8D8D));
+        assertTrue(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF89898A));
+        assertTrue(ContrastFloor.sameBackdrop(0xFF8B8B8C, 0xFF89898A));
+        assertTrue(ContrastFloor.sameBackdrop(0xFF868687, 0xFF858585));
+        // The whole logged creep, #8D8D8D to #838283, does cross: it re-records once, not per step.
+        assertFalse(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF838283));
+        assertTrue(ContrastFloor.sameBackdrop(0, 0));
+    }
+
+    @Test
+    public void sameBackdropSeesRealChanges() {
+        assertFalse(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF6E6E6E));
+        assertFalse(ContrastFloor.sameBackdrop(0xFFF5F0E6, 0xFF1E1E2E));
+        assertFalse(ContrastFloor.sameBackdrop(0, 0xFF000000));
+        assertFalse(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0));
+    }
+
     private static String hex(int color) {
         return String.format("#%08X", color);
     }

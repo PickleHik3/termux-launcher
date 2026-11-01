@@ -21,6 +21,12 @@ public final class ContrastFloor {
     /** Faint text: WCAG's large-text floor, so it still recedes behind {@link #TEXT}. */
     public static final double DIM_TEXT = 3.0d;
 
+    /**
+     * The contrast between two backdrops under which no reader can tell them apart: text held to
+     * the {@link #TEXT} floor stays above 4.28:1 against a backdrop that moved this little.
+     */
+    public static final double BACKDROP_TOLERANCE = 1.05d;
+
     private static final int WHITE = 0xFFFFFFFF;
     private static final int BLACK = 0xFF000000;
     /** Steps the mix toward white or black is searched in. */
@@ -58,6 +64,17 @@ public final class ContrastFloor {
      * of it as {@link #DIM_TEXT} is of {@link #TEXT}, so faint ink stays below normal ink at every
      * level the user can pick.
      */
+    /**
+     * Whether {@code candidate} is the backdrop {@code applied} already is, for the renderer's
+     * purposes: equal, or both opaque and closer than {@link #BACKDROP_TOLERANCE}. Zero (the
+     * palette's own background) is the same only as zero.
+     */
+    public static boolean sameBackdrop(int applied, int candidate) {
+        if (applied == candidate) return true;
+        if ((applied >>> 24) != 0xFF || (candidate >>> 24) != 0xFF) return false;
+        return contrast(applied, candidate) < BACKDROP_TOLERANCE;
+    }
+
     public static double dimFloorFor(double textFloor) {
         return textFloor * (DIM_TEXT / TEXT);
     }

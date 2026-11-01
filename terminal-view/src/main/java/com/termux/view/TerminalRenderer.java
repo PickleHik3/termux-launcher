@@ -905,11 +905,14 @@ public final class TerminalRenderer {
      * background, which is what an opaque pane stands on. Text on a cell background of its own is
      * left alone: it stands on that colour, which the program chose.
      *
-     * <p>Set when the backdrop is measured anew, never per frame: a change re-records every row.</p>
+     * <p>Set when the backdrop is measured anew, never per frame: a change re-records every row,
+     * so one under {@link ContrastFloor#BACKDROP_TOLERANCE} of the applied backdrop is ignored and
+     * the applied one stays, letting a slow drift accumulate until it crosses and re-records
+     * once.</p>
      */
     public void setContrastBackdrop(int color) {
         final int backdrop = (color >>> 24) == 0 ? 0 : color | 0xFF000000;
-        if (mContrastBackdrop == backdrop) return;
+        if (ContrastFloor.sameBackdrop(mContrastBackdrop, backdrop)) return;
         mContrastBackdrop = backdrop;
         Trace.beginSection("Terminal.contrastInvalidate");
         mRowCache.invalidate();
