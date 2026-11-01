@@ -224,6 +224,11 @@ public class TerminalPaneController {
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
+        /**
+         * A split's divider moved and only that split was laid out again, so no window-wide
+         * layout pass followed; whatever follows pane bounds through one should re-read now.
+         */
+        default void onSplitMoved() {}
         /** Whether the terminal place is in minimal mode, which the corner tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** Whether the terminal place's pixels can be on screen (false while Widgets or Display rests in front). */
@@ -2803,12 +2808,8 @@ public class TerminalPaneController {
     private boolean applyWeightsToRenderedLayout(@NonNull Split split) {
         LinearLayout layout = mSplitLayouts.get(split);
         if (layout == null || layout.getChildCount() < 3) return false;
-        LinearLayout.LayoutParams a = (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
-        LinearLayout.LayoutParams b = (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
-        a.weight = split.weightA;
-        b.weight = split.weightB;
-        layout.getChildAt(0).setLayoutParams(a);
-        layout.getChildAt(2).setLayoutParams(b);
+        SplitRelayout.applyWeights(layout, split.weightA, split.weightB);
+        mHost.onSplitMoved();
         return true;
     }
 
@@ -6908,14 +6909,7 @@ public class TerminalPaneController {
             float total = split.weightA + split.weightB;
             split.weightA = snapFirstWeightToCell(total, available, split.weightA, cell);
             split.weightB = total - split.weightA;
-            LinearLayout.LayoutParams a =
-                (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
-            LinearLayout.LayoutParams b =
-                (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
-            a.weight = split.weightA;
-            b.weight = split.weightB;
-            layout.getChildAt(0).setLayoutParams(a);
-            layout.getChildAt(2).setLayoutParams(b);
+            applyWeightsToRenderedLayout(split);
         }
 
         /**
