@@ -230,6 +230,50 @@ Paired trace (32 → 21 rows):
 - One cause across all three: the pane's ink is resolved anew whenever its on-screen rect
   changes. Next: hold the veil during a pane gesture and resolve once at each pause and at the
   lift, like the grid (wave E).
+- **Wave E (ce5688cbf, veil held per gesture; 2026-11-01, phone charging):** divider drags
+  146.8 frames, 9.7 janky, p50/p90/p99 12.3/20.7/31.5 ms. `Pane.splitRelayout` 10 → ~1 ms;
+  `Ink.terminalPane` only at pauses and the lift (11 per drag). Per call: sample 0.5 ms,
+  lightness 0.8 ms, resolve 0.02 ms, ~1.2 ms other, so faster sampling alone would halve a
+  call that now runs only at pauses: the summed-area sampler is not worth building for drags.
+- **The janky count is mostly Buffer Stuffing**, not app lateness: in the wave E trace 62 of
+  68 flagged frames are Buffer Stuffing, 4 are App Deadline Missed. App Deadline Missed per
+  traced divider drag: 6 (04b5921b1, worst 52 ms) → 5 (wave D, 32 ms) → 4 (wave E, 30.5 ms).
+  The four left are the gesture's edges: the press (5 ms input), the first move after a pause
+  (both held panes record their cache, 15.8 ms), the lift (22 ms in the up handler: the
+  snap re-layout with the veil solve 7.8 ms, `Chrome.requestSync` 4.2 ms), and a render-side
+  frame ~750 ms after.
+- **Floats are not held yet:** float move and corner drag still run `Ink.terminalPane` ~2x
+  per frame from `PaneGlassBackdropView.onDraw` with a fresh rect each call; the divider hold
+  works. Cause unknown from reading; a `TLVeil` diagnostic log is next.
+- **Floats fixed (a60acdf3e):** the `TLVeil` log showed `ChromeInk` keyed pane answers by
+  rect and `pruneResized` dropped any answer a new rect overlapped by half: a float inside a
+  tiled pane and the pane itself evicted each other on every frame either redrew (126 fresh
+  measures of the unchanged tiled rect in one gesture). Answers are now keyed by the asking
+  slab, parked while detached, forgotten on teardown. Pong: `Ink.terminalPane` per float
+  corner drag 123 → 3, per float move 136 → 2; the window layout per corner step 0.9 ms; float
+  move frames 1.6 ms on the main thread. The late frames left are render/GPU side (moving
+  glass re-blurs its region).
+- **The lift, named (27 ms in the divider's up handler):** `Drawer.rebuildSessions` 12.0 ms
+  (`onTreesChanged` runs the whole drawer/wall/window-bar/overview funnel for a resize; only the
+  arrangement autosave needs it; fix in flight), the snap re-layout 12.1 ms (snapping to the
+  cell grid moves both panes a few px, so both veils are solved again after the pause already
+  solved them), the haptic 1.4 ms, the hold release 0.7 ms.
+- **Measuring note:** App Deadline Missed per single traced gesture is noisy (4 vs 7 on two
+  traces of the same divider drag); compare main-thread section costs, not one-trace counts.
+- **Lift fixed (abb3bdf73, pong, not charging):** a geometry-only tree change only saves the
+  arrangement (`Drawer.geometryChanged` 0.03 ms instead of `Drawer.rebuildSessions` 12 ms), and
+  the divider snaps to the cell grid at each pause (developer's call), so a lift after a pause
+  re-lays out and re-solves nothing: the divider's ACTION_UP is 1.7 ms (was 27 ms;
+  `Pane.lift.snap` 0.14 ms). Veil solves now sit at the pauses (~7 + 2 ms per pause, two panes).
+  10 drags: 142.0 frames, **5.3 janky** per drag (before ADR 0019: 5.8), p50/p90/p99
+  13.3/20.7/29.0 ms (before: 12.6/23.7/32.3). **The gate passes.**
+- **First move after a pause:** with the finger held, pause, then +8 px, +8 px: the bottom pane's
+  edge follows exactly (1146 → 1138 → 1130), no hop back by the snap. The top pane's visible
+  edge sits ~12 px higher while the finger moves than at the pause (gap 18 → ~30 px); likely the
+  held pane drawing its saved grid, not yet compared with an older build. Crop:
+  `~/reports/adr0019-hop/divider-after-pause.png`. Developer to judge on pong.
+- Known edge: at the 18% clamp a second snap can move the split by a cell at the lift
+  (`clampFirstWeight` leaves the weight off the grid); left as is.
 - Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
   `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
   to open a float without changing the developer's Home, so its trace needs a float opened by

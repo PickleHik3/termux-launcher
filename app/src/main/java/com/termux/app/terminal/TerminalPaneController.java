@@ -210,6 +210,11 @@ public class TerminalPaneController {
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /**
+         * Only pane sizes or split weights changed: no window, pane or session came or went. The
+         * arrangement still has to be saved; the drawer, wall and overview rebuild is not needed.
+         */
+        default void onTreeGeometryChanged() { onTreesChanged(); }
+        /**
          * The pane tree was just laid into the host view. Fires for every structural change —
          * split, close, maximize, layout change, window switch — so anything keyed off how many
          * panes are on screen can refresh from one place.
@@ -846,7 +851,7 @@ public class TerminalPaneController {
                 if (w.root != null) equalizeNode(w.root);
             }
             render();
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -908,7 +913,7 @@ public class TerminalPaneController {
                 }
                 if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
                 hold.release();
-                mHost.onTreesChanged();
+                mHost.onTreeGeometryChanged();
             }
         });
         mFocusGrowAnimator = animator;
@@ -1913,6 +1918,8 @@ public class TerminalPaneController {
         @Nullable private DragResizePause mPause;
         /** The session whose veil the drag holds; null holds every pane's. */
         @Nullable private TerminalSession mVeilOnly;
+        /** Run at each pause, before the hold is released, so the resize lands on its result. */
+        @Nullable private Runnable mOnPause;
         private final Runnable mPauseCheck = this::onPauseCheck;
         /**
          * The panes the read-out names: a divider's two, top/left first; a floating pane's one
@@ -1943,7 +1950,14 @@ public class TerminalPaneController {
         void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
                    @Nullable TerminalView second, boolean pastSlop,
                    @Nullable TerminalSession veilOnly) {
+            start(host, x, y, first, second, pastSlop, veilOnly, null);
+        }
+
+        void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
+                   @Nullable TerminalView second, boolean pastSlop,
+                   @Nullable TerminalSession veilOnly, @Nullable Runnable onPause) {
             end();
+            mOnPause = onPause;
             mVeilOnly = veilOnly;
             mReadFirst = first;
             mReadSecond = second;
@@ -2056,7 +2070,10 @@ public class TerminalPaneController {
         }
 
         private void onPauseCheck() {
-            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) releaseHold();
+            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) {
+                if (mOnPause != null) mOnPause.run();
+                releaseHold();
+            }
         }
 
         private void releaseHold() {
@@ -2403,7 +2420,7 @@ public class TerminalPaneController {
         target.weightB = total - target.weightA;
         if (!isDwindleManaged(window)) clearLayoutPolicy(window);
         if (window == mActiveWindow) render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2860,7 +2877,7 @@ public class TerminalPaneController {
             mPendingKeyResizeSplit = null;
             if (mPendingKeyResizeHold != null) mPendingKeyResizeHold.release();
             mPendingKeyResizeHold = null;
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -2873,7 +2890,7 @@ public class TerminalPaneController {
         if (!transformToLayout(mActiveWindow, layout)) return false;
         mActiveWindow.layoutPolicy = layout;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2998,7 +3015,7 @@ public class TerminalPaneController {
         forgetFocusShares(mActiveWindow);
         equalizeNode(mActiveWindow.root);
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -3010,7 +3027,7 @@ public class TerminalPaneController {
         rotateNode(mActiveWindow.root, clockwise);
         mActiveWindow.root.parent = null;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -5904,7 +5921,12 @@ public class TerminalPaneController {
     private void detachPaneView(TerminalSession session) {
         PaneRim rim = mBorderStates.remove(session);
         FrameLayout frame = mPaneFrames.remove(session);
-        mPaneGlassViews.remove(session);
+        PaneGlassBackdropView glass = mPaneGlassViews.remove(session);
+        // The pane is closed or rebuilt: its slab and frame keys are never asked again.
+        if (mSurfaceStyle != null) {
+            if (glass != null) mSurfaceStyle.paneGlassForget(glass);
+            if (frame != null) mSurfaceStyle.paneGlassForget(frame);
+        }
         if (rim != null && frame != null) rim.clear(frame);
         else if (rim != null) rim.cancel();
         releasePanePlank(frame);
@@ -6587,7 +6609,7 @@ public class TerminalPaneController {
                         mDownY = y;
                         if (mDraggingDivider) {
                             mDividerDrag.start(this, x, y, dividerReadoutPane(true),
-                                dividerReadoutPane(false), true, null);
+                                dividerReadoutPane(false), true, null, this::settleDividerAtPause);
                         }
                         mHandleX = x;
                         mHandleY = y;
@@ -6661,18 +6683,30 @@ public class TerminalPaneController {
                         if (resized) {
                             Split first = mXSplit;
                             Split second = mYSplit;
+                            android.os.Trace.beginSection("Pane.lift.snap");
                             snapSplitToCellGrid(first);
                             snapSplitToCellGrid(second);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.learnShare");
                             Leaf focused = mActiveWindow == null ? null : mActiveWindow.active;
                             Window window = windowOf(focused == null ? null : focused.session);
                             learnFocusShare(window, first, focused);
                             learnFocusShare(window, second, focused);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.release");
                             releaseDividerHold();
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.haptic");
                             Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
+                            android.os.Trace.endSection();
                         }
                         resetTouchState();
                         invalidate();
-                        if (resized) mHost.onTreesChanged();
+                        if (resized) {
+                            android.os.Trace.beginSection("Pane.lift.treesChanged");
+                            mHost.onTreeGeometryChanged();
+                            android.os.Trace.endSection();
+                        }
                         return true;
                     }
                     if (mHold.isTracking()) {
@@ -6937,6 +6971,27 @@ public class TerminalPaneController {
             split.weightA = clampFirstWeight(total, candidate);
             split.weightB = total - split.weightA;
             applyWeightsToRenderedLayout(split);
+        }
+
+        /**
+         * The finger paused mid-drag: the split settles on the cell grid under it, in the same
+         * pass as the held panes' resize, and the drag carries on from the settled weights and
+         * the finger's place, so the next move neither jumps nor re-adds the snap.
+         */
+        private void settleDividerAtPause() {
+            if (!mDraggingDivider) return;
+            snapSplitToCellGrid(mXSplit);
+            snapSplitToCellGrid(mYSplit);
+            if (mXSplit != null) {
+                mXWeightA = mXSplit.weightA;
+                mXWeightB = mXSplit.weightB;
+            }
+            if (mYSplit != null) {
+                mYWeightA = mYSplit.weightA;
+                mYWeightB = mYSplit.weightB;
+            }
+            mDownX = mHandleX;
+            mDownY = mHandleY;
         }
 
         private void snapSplitToCellGrid(@Nullable Split split) {
