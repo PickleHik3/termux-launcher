@@ -33243,6 +33243,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setMinimalMode(!TermuxActivity.this.isMinimalMode());
         }
 
+        @Override public void onSplitMoved() {
+            syncPanesForScreenTop();
+        }
+
         @Override public void onAutoTilingChanged(boolean enabled) {
             if (getPreferences() == null) return;
             getPreferences().setDwindleDefaultLayoutEnabled(enabled);
