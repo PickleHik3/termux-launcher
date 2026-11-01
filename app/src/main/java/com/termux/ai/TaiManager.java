@@ -2742,7 +2742,8 @@ public final class TaiManager {
      */
     private void closeVoiceIfItsGroupIsTight(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) {
         try {
-            long hold = TaiLoadBudget.floorBytes(false, gateConditions());
+            long hold = TaiLoadBudget.floorBytes(false, gateConditions(),
+                TaiDeviceCapabilities.detect(appContext).physicalMemoryBytes);
             long available = TaiMemInfo.read(appContext).availBytes;
             boolean tight = hold > 0L && available > 0L && available < hold;
             List<TaiResidency.Entry> residents = router.residency().snapshot();
