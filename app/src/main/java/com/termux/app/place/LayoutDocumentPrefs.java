@@ -181,6 +181,16 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         return read(store, route);
     }
 
+    /**
+     * Whether {@code key} reads straight from the preferences: no route into the documents. A
+     * typed getter then delegates to the preferences' own, so no read copies the whole map
+     * ({@code getAll}); PlaceLayoutStore reads on travel frames.
+     */
+    private boolean unrouted(@Nullable String key) {
+        LayoutStore store = mLayouts;
+        return key == null || store == null || route(key) == null;
+    }
+
     @NonNull
     @Override
     public Map<String, ?> getAll() {
@@ -235,6 +245,13 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     @Nullable
     @Override
     public String getString(String key, @Nullable String defValue) {
+        if (unrouted(key)) {
+            try {
+                return mPrefs.getString(key, defValue);
+            } catch (ClassCastException other) {
+                return defValue;
+            }
+        }
         Object value = value(key);
         return value instanceof String ? (String) value : defValue;
     }
@@ -247,24 +264,58 @@ final class LayoutDocumentPrefs implements SharedPreferences {
 
     @Override
     public int getInt(String key, int defValue) {
+        if (unrouted(key)) {
+            try {
+                return mPrefs.getInt(key, defValue);
+            } catch (ClassCastException otherNumber) {
+                // Stored as another number type: read it as the document path does.
+                Object stored = mPrefs.getAll().get(key);
+                return stored instanceof Number ? ((Number) stored).intValue() : defValue;
+            }
+        }
         Object value = value(key);
         return value instanceof Number ? ((Number) value).intValue() : defValue;
     }
 
     @Override
     public long getLong(String key, long defValue) {
+        if (unrouted(key)) {
+            try {
+                return mPrefs.getLong(key, defValue);
+            } catch (ClassCastException otherNumber) {
+                // Stored as another number type: read it as the document path does.
+                Object stored = mPrefs.getAll().get(key);
+                return stored instanceof Number ? ((Number) stored).longValue() : defValue;
+            }
+        }
         Object value = value(key);
         return value instanceof Number ? ((Number) value).longValue() : defValue;
     }
 
     @Override
     public float getFloat(String key, float defValue) {
+        if (unrouted(key)) {
+            try {
+                return mPrefs.getFloat(key, defValue);
+            } catch (ClassCastException otherNumber) {
+                // Stored as another number type: read it as the document path does.
+                Object stored = mPrefs.getAll().get(key);
+                return stored instanceof Number ? ((Number) stored).floatValue() : defValue;
+            }
+        }
         Object value = value(key);
         return value instanceof Number ? ((Number) value).floatValue() : defValue;
     }
 
     @Override
     public boolean getBoolean(String key, boolean defValue) {
+        if (unrouted(key)) {
+            try {
+                return mPrefs.getBoolean(key, defValue);
+            } catch (ClassCastException other) {
+                return defValue;
+            }
+        }
         Object value = value(key);
         return value instanceof Boolean ? (Boolean) value : defValue;
     }
