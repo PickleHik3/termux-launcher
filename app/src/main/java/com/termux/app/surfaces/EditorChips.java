@@ -84,12 +84,11 @@ public final class EditorChips {
 
     /**
      * Where a card opens: an element's card on (Everywhere, its element), a page card on (its
-     * page's kind, All glass), the Appearance card on (Everywhere, All glass).
+     * page, All glass), the Appearance card on (Everywhere, All glass).
      */
     @NonNull
-    public static EditorChips openFor(@Nullable EditorCard card, @Nullable LookGrid.Kind kind) {
-        // A page card opens on its page's kind: pages of a kind look the same (ADR 0020 §2).
-        if (isPageCard(card)) return new EditorChips(Where.kind(kind), null);
+    public static EditorChips openFor(@Nullable EditorCard card, int pageId) {
+        if (isPageCard(card)) return new EditorChips(pageId, null);
         return new EditorChips(LookGrid.NO_PAGE, elementOf(card));
     }
 
@@ -100,14 +99,14 @@ public final class EditorChips {
 
     /**
      * The Where chip's options: Everywhere, then the kind of the page the editor shows when it
-     * has one.
+     * has one, then that page when one is known.
      */
     @NonNull
     public static List<Where> whereOptions(int pageId, @Nullable LookGrid.Kind kind) {
         List<Where> out = new ArrayList<>();
         out.add(Where.EVERYWHERE);
-        // No "This page": the page tier is retired (ADR 0020 §2).
         if (kind != null) out.add(Where.kind(kind));
+        if (pageId >= 0) out.add(Where.page(pageId));
         return out;
     }
 
@@ -184,7 +183,7 @@ public final class EditorChips {
 
     /** Whether these chips stand where {@code card} opens: the editor's plain writes apply. */
     public boolean isOpening(@Nullable EditorCard card) {
-        EditorChips open = openFor(card, kind);
+        EditorChips open = openFor(card, page);
         return open.page == page && open.kind == kind && open.element == element;
     }
 
