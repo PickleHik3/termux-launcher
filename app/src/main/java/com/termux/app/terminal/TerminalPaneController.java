@@ -1656,6 +1656,70 @@ public class TerminalPaneController {
         }
     }
 
+    /**
+     * The grid's pause over a finger drag that resizes panes (a split divider, a floating pane's
+     * corner): held while the finger moves, resized each time it pauses ({@link DragResizePause})
+     * and once more at the lift if it moved since. A pause ends the hold through the same
+     * {@link GridHold#release} every hold ends with, so the pending size still lands after the
+     * final layout pass; the next move opens a new one.
+     */
+    private final class PausedDragHold {
+        @Nullable private GridHold mHold;
+        @Nullable private View mHost;
+        @Nullable private DragResizePause mPause;
+        private final Runnable mPauseCheck = this::onPauseCheck;
+
+        /** The drag began at ({@code x}, {@code y}) on {@code host}, which posts its timer. */
+        void start(@NonNull View host, float x, float y) {
+            end();
+            mHost = host;
+            if (mPause == null) {
+                mPause = new DragResizePause(
+                    ViewConfiguration.get(host.getContext()).getScaledTouchSlop());
+            }
+            mHold = new GridHold();
+            mPause.start(x, y, SystemClock.uptimeMillis());
+            armTimer();
+        }
+
+        /** The finger moved; call before the move changes the layout. */
+        void move(float x, float y) {
+            if (mPause == null || mHost == null) return;
+            int moved = mPause.onMove(x, y, SystemClock.uptimeMillis());
+            if (moved == DragResizePause.MOVE_STILL) return;
+            if (mHold == null) mHold = new GridHold();
+            armTimer();
+        }
+
+        /** The finger lifted or the drag was cancelled: the panes resize if they moved since. */
+        void end() {
+            if (mHost != null) mHost.removeCallbacks(mPauseCheck);
+            if (mPause != null) mPause.onRelease();
+            releaseHold();
+            mHost = null;
+        }
+
+        boolean isActive() {
+            return mHost != null;
+        }
+
+        private void armTimer() {
+            if (mHost == null) return;
+            mHost.removeCallbacks(mPauseCheck);
+            mHost.postDelayed(mPauseCheck, DragResizePause.PAUSE_MS);
+        }
+
+        private void onPauseCheck() {
+            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) releaseHold();
+        }
+
+        private void releaseHold() {
+            GridHold hold = mHold;
+            mHold = null;
+            if (hold != null) hold.release();
+        }
+    }
+
     /** Coalesce a host-surface animation into one final PTY resize. */
     public void beginHostSurfaceResize() {
         mHostSurfaceResizeDepth++;
@@ -5837,8 +5901,8 @@ public class TerminalPaneController {
         private float mYWeightA;
         private float mYWeightB;
         private boolean mDraggingDivider;
-        /** The grid's pause for the divider drag under way, released at the finger's lift. */
-        @Nullable private GridHold mDividerHold;
+        /** The grid's pause for the divider drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mDividerDrag = new PausedDragHold();
         /** A finger went down in a divider's gap: the gesture is the divider's, not a corner's. */
         private boolean mGapGesture;
         /** The splits whose gap held that finger, until its first movement says which it drags. */
@@ -6107,6 +6171,7 @@ public class TerminalPaneController {
                             x - mDownX, y - mDownY));
                         mDownX = x;
                         mDownY = y;
+                        if (mDraggingDivider) mDividerDrag.start(this, x, y);
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved = true;
@@ -6117,6 +6182,8 @@ public class TerminalPaneController {
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        // Held while the finger travels, resized when it pauses (ADR 0019).
+                        mDividerDrag.move(x, y);
                         applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
                         applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
                         invalidate();
@@ -6416,13 +6483,10 @@ public class TerminalPaneController {
             mYWeightB = split.weightB;
             mDraggingDivider = true;
             releaseDividerHold();
-            mDividerHold = new GridHold();
         }
 
         private void releaseDividerHold() {
-            GridHold hold = mDividerHold;
-            mDividerHold = null;
-            if (hold != null) hold.release();
+            mDividerDrag.end();
         }
 
         private void applySplitDrag(@Nullable Split split, float delta,
@@ -7065,6 +7129,10 @@ public class TerminalPaneController {
                         candidate.right += dx;
                         candidate.bottom += dy;
                     }
+                    // Held while the corner travels, resized when it pauses (ADR 0019).
+                    if (mDragMode == DRAG_RESIZE) {
+                        mResizeDrag.move(event.getRawX(), event.getRawY());
+                    }
                     mLeaf.floatFrac = mHomeFloat != null
                         ? HomeFloatPolicy.clampInRoom(candidate, hostWidth, hostHeight,
                             dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP),
@@ -7105,7 +7173,7 @@ public class TerminalPaneController {
             if (mLaidOutRoom != null) {
                 mDownFrac = HomeFloatPolicy.reframe(mDownFrac, mLaidOutRoom, room());
             }
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
+            if (mDragMode == DRAG_RESIZE) mResizeDrag.start(this, mDownRawX, mDownRawY);
             // Held still on the handle, the press opens the handle's menu instead of moving.
             if (mDragMode == DRAG_MOVE) {
                 postDelayed(mHandleLongPress, ViewConfiguration.getLongPressTimeout());
@@ -7125,7 +7193,7 @@ public class TerminalPaneController {
 
         private void endDrag() {
             removeCallbacks(mHandleLongPress);
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
+            if (mDragMode == DRAG_RESIZE) mResizeDrag.end();
             boolean shaped = mDragMoved;
             mDragMode = DRAG_NONE;
             mDragMoved = false;
@@ -7135,15 +7203,8 @@ public class TerminalPaneController {
             if (shaped && mHomeFloat != null) applyHomeFloatLift();
         }
 
-        /** The grid's pause for the resize drag under way. */
-        @Nullable private GridHold mResizeHold;
-
-        /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
-        private void setSizeUpdatesPaused(boolean paused) {
-            GridHold previous = mResizeHold;
-            mResizeHold = paused ? new GridHold() : null;
-            if (previous != null) previous.release();
-        }
+        /** The grid's pause for the resize drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mResizeDrag = new PausedDragHold();
 
         /**
          * Resize from the bottom-trailing corner and move from the titlebar, except where a
