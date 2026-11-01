@@ -167,8 +167,12 @@ public final class ChromeInk {
         double fixedTarget;
     }
 
-    /** One terminal pane's standing answer, remembered on its own rect. */
+    /** One terminal pane's standing answer, remembered for the pane that asked and the rect it asked at. */
     private static final class PaneAnswer {
+        /** The root-space rect this answer was measured at. */
+        @NonNull Rect rect = new Rect();
+        /** Detached: kept for its return at the same rect, but not counted in the band. */
+        boolean parked;
         int wallpaper;
         boolean sampled;
         int dim;
@@ -286,9 +290,46 @@ public final class ChromeInk {
      */
     @Nullable
     public android.graphics.ColorMatrix evenOutMatrix(@NonNull Rect rootRect) {
+        return evenOutMatrix(rootRect, new Rect(rootRect));
+    }
+
+    /**
+     * {@link #evenOutMatrix(Rect)} for the pane {@code key} names; null when that pane's answer
+     * was measured at another rect (it is stale until the pane asks again).
+     */
+    @Nullable
+    public android.graphics.ColorMatrix evenOutMatrix(@NonNull Rect rootRect, @NonNull Object key) {
         if (mEvenOutPolicy == null) return null;
-        PaneAnswer answer = mPanes.get(rootRect);
-        return answer == null ? null : answer.evenOut;
+        PaneAnswer answer = mPanes.get(key);
+        return answer == null || !answer.rect.equals(rootRect) ? null : answer.evenOut;
+    }
+
+    /**
+     * Forgets the answer of the pane {@code key} for good (its slab stopped being measured or the
+     * pane closed), and re-publishes the band's ground from the panes that remain.
+     */
+    public void forgetPane(@NonNull Object key) {
+        PaneAnswer gone = mPanes.remove(key);
+        if (gone == null || mPanes.isEmpty()) return;
+        publishPaneBand(gone.tint);
+    }
+
+    /**
+     * Parks or unparks the pane {@code key}: a detached pane keeps its answer but stops counting in
+     * the band (means, polarity, ground, count); unparked it counts again with no new measure. The
+     * band's ground is re-published, and tells its listener only if the published values moved.
+     */
+    public void parkPane(@NonNull Object key, boolean parked) {
+        PaneAnswer answer = mPanes.get(key);
+        if (answer == null || answer.parked == parked) return;
+        answer.parked = parked;
+        if (liveCount() > 0) publishPaneBand(answer.tint);
+    }
+
+    private int liveCount() {
+        int n = 0;
+        for (PaneAnswer pane : mPanes.values()) if (!pane.parked) n++;
+        return n;
     }
 
     /** Panes a window can hold at once, and then some; an older rect is dropped, not an error. */
@@ -379,7 +420,7 @@ public final class ChromeInk {
         new EnumMap<>(GlassBackdropCache.Band.class);
 
     /** Each terminal pane's answer by its root-space rect, eldest first. Cleared by {@link #invalidate}. */
-    @NonNull private final java.util.LinkedHashMap<Rect, PaneAnswer> mPanes =
+    @NonNull private final java.util.LinkedHashMap<Object, PaneAnswer> mPanes =
         new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
 
     @Nullable private Polarity mPolarity;
@@ -612,9 +653,22 @@ public final class ChromeInk {
     public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @ColorInt int tint,
                                            @ColorInt int veilColor, @ColorInt int ink,
                                            @ColorInt int dimInk) {
+        return terminalPane(rootRect, new Rect(rootRect), tint, veilColor, ink, dimInk);
+    }
+
+    /**
+     * {@link #terminalPane(Rect, int, int, int, int)} for the pane {@code key} names: one stable
+     * object per pane (its slab), equal to itself for as long as the pane lives. The key keeps one
+     * answer; asking at a new rect replaces that pane's own answer and touches no other pane's,
+     * so a float over a tiled pane does not evict it.
+     */
+    @NonNull
+    public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @NonNull Object key,
+                                           @ColorInt int tint, @ColorInt int veilColor,
+                                           @ColorInt int ink, @ColorInt int dimInk) {
         android.os.Trace.beginSection("Ink.terminalPane");
         try {
-            return terminalPaneImpl(rootRect, tint, veilColor, ink, dimInk);
+            return terminalPaneImpl(rootRect, key, tint, veilColor, ink, dimInk);
         } finally {
             android.os.Trace.endSection();
         }
@@ -631,17 +685,23 @@ public final class ChromeInk {
         }
     }
 
-    private OnGlass.Resolution terminalPaneImpl(@NonNull Rect rootRect, @ColorInt int tint,
+    private OnGlass.Resolution terminalPaneImpl(@NonNull Rect rootRect, @NonNull Object key,
+                                       @ColorInt int tint,
                                        @ColorInt int veilColor, @ColorInt int ink,
                                        @ColorInt int dimInk) {
         readMode();
         int dim = dimUnder(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
-        PaneAnswer answer = mPanes.get(rootRect);
-        if (answer == null) pruneResized(rootRect);
+        PaneAnswer answer = mPanes.get(key);
+        if (answer != null && !answer.rect.equals(rootRect)) {
+            // The same pane at a new rect: its old answer is replaced, nobody else's is touched.
+            mPanes.remove(key);
+            answer = null;
+        }
         if (answer != null && answer.sampled
                 && answer.matches(dim, tint, veilColor, ink, dimInk, target)
                 && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
+            if (answer.parked) parkPane(key, false);
             return answer.resolution;
         }
         int wallpaper;
@@ -685,7 +745,7 @@ public final class ChromeInk {
                     policy.level, chain);
                 // One polarity for the whole band: every live pane's shortfalls vote, this
                 // pane's fresh ones included (its old answer, if any, is replaced).
-                evenOutPolarity = bandPolarity(policy, rootRect, shortPale, shortDark);
+                evenOutPolarity = bandPolarity(policy, key, shortPale, shortDark);
                 mBandPolarity = evenOutPolarity;
                 boolean pale = evenOutPolarity == Polarity.PALE_INK;
                 EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
@@ -711,12 +771,14 @@ public final class ChromeInk {
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {
-                java.util.Iterator<Rect> eldest = mPanes.keySet().iterator();
+                java.util.Iterator<Object> eldest = mPanes.keySet().iterator();
                 eldest.next();
                 eldest.remove();
             }
-            mPanes.put(new Rect(rootRect), answer);
+            answer.rect.set(rootRect);
+            mPanes.put(key, answer);
         }
+        answer.parked = false;
         answer.resolution = resolution;
         answer.wallpaper = wallpaper;
         answer.sampled = sampled;
@@ -735,6 +797,13 @@ public final class ChromeInk {
         answer.shortPale = shortPale;
         answer.shortDark = shortDark;
         mEvenOutGeneration++;
+        publishPaneBand(tint);
+        return resolution;
+    }
+
+    /** Votes and publishes the pane band's ground and surface from every live pane's answer. */
+    private void publishPaneBand(@ColorInt int tint) {
+        EvenOutPolicy policy = mEvenOutPolicy;
         // The chrome's vote stays the mean (the keyboard, dock and status bar are not evened out
         // yet); the palette's ground is the worst end across panes when the stage is on.
         vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote(tint, true));
@@ -746,7 +815,6 @@ public final class ChromeInk {
             mPaneSurface = surface;
             if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
         }
-        return resolution;
     }
 
     /**
@@ -821,7 +889,7 @@ public final class ChromeInk {
 
     /** Terminal panes remembered right now, for tests. */
     int paneAnswerCountForTests() {
-        return mPanes.size();
+        return liveCount();
     }
 
     // ------------------------------------------------------------------ the widget band
@@ -987,9 +1055,8 @@ public final class ChromeInk {
     private int meanPaneVote(@ColorInt int tint, boolean plainMean) {
         long red = 0, green = 0, blue = 0;
         int count = 0;
-        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
-            PaneAnswer pane = entry.getValue();
-            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
+        for (PaneAnswer pane : mPanes.values()) {
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -1009,9 +1076,8 @@ public final class ChromeInk {
         boolean pale = polarity == Polarity.PALE_INK;
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
-        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
-            PaneAnswer pane = entry.getValue();
-            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
+        for (PaneAnswer pane : mPanes.values()) {
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -1036,7 +1102,7 @@ public final class ChromeInk {
         return pane.evenOutPolarity != bandPolarity(policy, null, 0d, 0d, pane);
     }
 
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Rect fresh,
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Object fresh,
                                   double shortPale, double shortDark) {
         return bandPolarity(policy, fresh, shortPale, shortDark, null);
     }
@@ -1045,11 +1111,11 @@ public final class ChromeInk {
      * The band's one polarity: the palette's current ink when every live pane can reach it with
      * room, else the other side when every pane can reach that, else the side with the least
      * total shortfall (the current one on a tie). A pane being measured ({@code fresh}, with its
-     * new shortfalls) replaces any stored answer for that rect; panes with no measurement (no
+     * new shortfalls) replaces any stored answer of that pane; panes with no measurement (no
      * shortfalls stored) do not vote.
      */
     @NonNull
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Rect fresh,
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Object fresh,
                                   double freshPale, double freshDark, @Nullable PaneAnswer self) {
         double totalPale = 0d, totalDark = 0d;
         double worstPale = 0d, worstDark = 0d;
@@ -1057,9 +1123,9 @@ public final class ChromeInk {
             totalPale = worstPale = freshPale;
             totalDark = worstDark = freshDark;
         }
-        for (java.util.Map.Entry<Rect, PaneAnswer> e : mPanes.entrySet()) {
+        for (java.util.Map.Entry<Object, PaneAnswer> e : mPanes.entrySet()) {
             PaneAnswer pane = e.getValue();
-            if (fresh != null && e.getKey().equals(fresh)) continue;
+            if (pane.parked || (fresh != null && e.getKey().equals(fresh))) continue;
             if (pane.evenOutPolicy == null || pane.evenOutPolarity == null) continue;
             totalPale += pane.shortPale;
             totalDark += pane.shortDark;
@@ -1076,24 +1142,6 @@ public final class ChromeInk {
         double ownTotal = paleCurrent ? totalPale : totalDark;
         double otherTotal = paleCurrent ? totalDark : totalPale;
         return otherTotal < ownTotal ? other : current;
-    }
-
-    /**
-     * A pane laid out anew replaces the answer of the rect it was resized from: any stored answer
-     * whose rect overlaps {@code fresh} by more than half of the smaller of the two is dropped.
-     * Split neighbours that merely touch or shift by a divider's width are kept.
-     */
-    private void pruneResized(@NonNull Rect fresh) {
-        java.util.Iterator<java.util.Map.Entry<Rect, PaneAnswer>> it = mPanes.entrySet().iterator();
-        while (it.hasNext()) {
-            Rect old = it.next().getKey();
-            Rect hit = new Rect();
-            if (!hit.setIntersect(old, fresh)) continue;
-            long overlap = (long) hit.width() * hit.height();
-            long smaller = Math.min((long) old.width() * old.height(),
-                (long) fresh.width() * fresh.height());
-            if (overlap * 2 > smaller) it.remove();
-        }
     }
 
     /** Bumped whenever a pane is measured anew or the stage changes; panes poll it to re-dress. */
@@ -1414,10 +1462,9 @@ public final class ChromeInk {
         int[] surfaces = new int[mPanes.size()];
         long[] areas = new long[mPanes.size()];
         int n = 0;
-        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
-            PaneAnswer pane = entry.getValue();
-            Rect rect = entry.getKey();
-            if (pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+        for (PaneAnswer pane : mPanes.values()) {
+            Rect rect = pane.rect;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(rect)) continue;
             long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
             if (area == 0) continue;
             surfaces[n] = pane.resolution.surface;
