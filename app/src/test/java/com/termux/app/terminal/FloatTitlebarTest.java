@@ -297,6 +297,18 @@ public class FloatTitlebarTest {
         return strip;
     }
 
+    @Test
+    public void aResizeThatKeepsTheCappedCornerDoesNotReDress() {
+        FloatTitlebarView strip = laidOut(strip(true, new ArrayList<>()), 400);
+        strip.dress(null, 1000f);
+        int base = strip.sizeDressCount();
+        laidOut(strip, 300);
+        assertEquals("the corner is capped by the height at both widths", base,
+            strip.sizeDressCount());
+        laidOut(strip, 6);
+        assertEquals("a width that lowers the cap re-dresses", base + 1, strip.sizeDressCount());
+    }
+
     // --- The handle's menu ---
 
     @Test

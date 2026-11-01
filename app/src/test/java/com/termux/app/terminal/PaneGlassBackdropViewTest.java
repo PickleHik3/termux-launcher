@@ -357,6 +357,7 @@ public class PaneGlassBackdropViewTest {
         final ColorMatrix matrix = new ColorMatrix(new float[] {
             0.5f, 0, 0, 0, 20, 0, 0.5f, 0, 0, 20, 0, 0, 0.5f, 0, 20, 0, 0, 0, 1, 0});
         int veilAsks;
+        int generation;
         final java.util.Set<Rect> rects = new java.util.HashSet<>();
         CountingSource(Rect bandRect) { this.bandRect = bandRect; }
         @Override public int paneGlassVeil(Rect rootRect) {
@@ -367,6 +368,7 @@ public class PaneGlassBackdropViewTest {
         @Override public ColorMatrix paneGlassEvenOut(Rect rootRect) {
             return rootRect.equals(bandRect) ? matrix : null;
         }
+        @Override public int paneGlassGeneration() { return generation; }
         @Override public boolean isPaneGlassActive() { return true; }
         @Override public Bitmap paneGlassBlurFrame() { return null; }
         @Override public Rect paneGlassBlurFrameRect() { return new Rect(); }
@@ -431,5 +433,54 @@ public class PaneGlassBackdropViewTest {
         assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(true, true));
         assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, false));
         assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, true));
+    }
+
+    private static void moveSlab(FrameLayout paneFrame, PaneGlassBackdropView backdrop, int dx) {
+        paneFrame.layout(40 + dx, 100, 1040 + dx, 1900);
+        backdrop.layout(0, 0, 1000, 1800 - dx);   // a resize too, so onLayout runs
+        // Layout alone does not run for a pure move of the parent; the draw is the other path.
+        backdrop.draw(new android.graphics.Canvas(
+            Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)));
+    }
+
+    @Test
+    public void aHeldVeilIsNotAskedForARectMoveAndIsAskedOnceAtTheRelease() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CountingSource source = new CountingSource(new Rect(0, 0, 1, 1));
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = slab(activity, paneFrame, source);
+        int atRest = source.veilAsks;
+        backdrop.setVeilHeld(true);
+        for (int i = 1; i <= 5; i++) moveSlab(paneFrame, backdrop, 10 * i);
+        assertEquals("no veil asked while held", atRest, source.veilAsks);
+        backdrop.setVeilHeld(false);
+        assertEquals("one ask at the release", atRest + 1, source.veilAsks);
+        backdrop.setVeilHeld(false);
+        assertEquals("releasing twice asks once", atRest + 1, source.veilAsks);
+    }
+
+    @Test
+    public void aHeldVeilStillFollowsAGenerationMove() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CountingSource source = new CountingSource(new Rect(0, 0, 1, 1));
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = slab(activity, paneFrame, source);
+        int atRest = source.veilAsks;
+        backdrop.setVeilHeld(true);
+        source.generation++;
+        backdrop.layout(0, 0, 1000, 1799);   // a pass that does run onLayout
+        assertEquals("a generation move refreshes at once", atRest + 1, source.veilAsks);
+    }
+
+    @Test
+    public void releasingAHeldVeilThatDidNotMoveAsksNothing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CountingSource source = new CountingSource(new Rect(0, 0, 1, 1));
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = slab(activity, paneFrame, source);
+        int atRest = source.veilAsks;
+        backdrop.setVeilHeld(true);
+        backdrop.setVeilHeld(false);
+        assertEquals(atRest, source.veilAsks);
     }
 }

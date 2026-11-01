@@ -64,8 +64,10 @@ import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Owns the recursive split-pane layout, organised as tmux-style <b>windows</b>.
@@ -1848,6 +1850,32 @@ public class TerminalPaneController {
         mGeometry = geometry;
     }
 
+    /** The pane glass slabs whose veil a drag is holding; see {@link #holdPaneVeils}. */
+    private final Set<PaneGlassBackdropView> mHeldVeils = new HashSet<>();
+
+    /**
+     * Hold the veil (text ink against the wallpaper) of {@code only}'s pane glass, or of every
+     * pane's when {@code only} is null, so a drag that moves or resizes panes does not re-solve
+     * it per move. The frost keeps tracking. Paired with {@link #releasePaneVeils}.
+     */
+    private void holdPaneVeils(@Nullable TerminalSession only) {
+        for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
+            if (only != null && entry.getKey() != only) continue;
+            View glass = entry.getValue().findViewById(R.id.terminal_pane_glass);
+            if (!(glass instanceof PaneGlassBackdropView)) continue;
+            PaneGlassBackdropView backdrop = (PaneGlassBackdropView) glass;
+            if (mHeldVeils.add(backdrop)) backdrop.setVeilHeld(true);
+        }
+    }
+
+    /** Let every held veil follow its pane again, once; idempotent. */
+    private void releasePaneVeils() {
+        if (mHeldVeils.isEmpty()) return;
+        List<PaneGlassBackdropView> held = new ArrayList<>(mHeldVeils);
+        mHeldVeils.clear();
+        for (PaneGlassBackdropView backdrop : held) backdrop.setVeilHeld(false);
+    }
+
     /**
      * The grid's pause over one transition this controller drives, released once: through the
      * scheduler, so it resizes with anything else moving the host, or directly without one.
@@ -1883,6 +1911,8 @@ public class TerminalPaneController {
         @Nullable private GridHold mHold;
         @Nullable private View mHost;
         @Nullable private DragResizePause mPause;
+        /** The session whose veil the drag holds; null holds every pane's. */
+        @Nullable private TerminalSession mVeilOnly;
         private final Runnable mPauseCheck = this::onPauseCheck;
         /**
          * The panes the read-out names: a divider's two, top/left first; a floating pane's one
@@ -1911,8 +1941,10 @@ public class TerminalPaneController {
          * {@link #move}.
          */
         void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
-                   @Nullable TerminalView second, boolean pastSlop) {
+                   @Nullable TerminalView second, boolean pastSlop,
+                   @Nullable TerminalSession veilOnly) {
             end();
+            mVeilOnly = veilOnly;
             mReadFirst = first;
             mReadSecond = second;
             mFirstColumns = mFirstRows = mSecondColumns = mSecondRows = -1;
@@ -1924,6 +1956,7 @@ public class TerminalPaneController {
                     ViewConfiguration.get(host.getContext()).getScaledTouchSlop());
             }
             mHold = new GridHold();
+            holdPaneVeils(mVeilOnly);
             mPause.start(x, y, SystemClock.uptimeMillis());
             armTimer();
         }
@@ -1934,7 +1967,10 @@ public class TerminalPaneController {
             if (!mReadoutLive) beginReadout(mHost);
             int moved = mPause.onMove(x, y, SystemClock.uptimeMillis());
             if (moved == DragResizePause.MOVE_STILL) return;
-            if (mHold == null) mHold = new GridHold();
+            if (mHold == null) {
+                mHold = new GridHold();
+                holdPaneVeils(mVeilOnly);
+            }
             armTimer();
         }
 
@@ -2027,6 +2063,7 @@ public class TerminalPaneController {
             GridHold hold = mHold;
             mHold = null;
             if (hold != null) hold.release();
+            releasePaneVeils();
         }
     }
 
@@ -6550,7 +6587,7 @@ public class TerminalPaneController {
                         mDownY = y;
                         if (mDraggingDivider) {
                             mDividerDrag.start(this, x, y, dividerReadoutPane(true),
-                                dividerReadoutPane(false), true);
+                                dividerReadoutPane(false), true, null);
                         }
                         mHandleX = x;
                         mHandleY = y;
@@ -7563,10 +7600,11 @@ public class TerminalPaneController {
             }
             if (mDragMode == DRAG_RESIZE) {
                 mResizeDrag.start(this, mDownRawX, mDownRawY,
-                    mLeaf.session == null ? null : mPaneViews.get(mLeaf.session), null, false);
+                    mLeaf.session == null ? null : mPaneViews.get(mLeaf.session), null, false, mLeaf.session);
             }
             // Held still on the handle, the press opens the handle's menu instead of moving.
             if (mDragMode == DRAG_MOVE) {
+                holdPaneVeils(mLeaf.session);
                 postDelayed(mHandleLongPress, ViewConfiguration.getLongPressTimeout());
             }
             getParent().requestDisallowInterceptTouchEvent(true);
@@ -7585,6 +7623,7 @@ public class TerminalPaneController {
         private void endDrag() {
             removeCallbacks(mHandleLongPress);
             if (mDragMode == DRAG_RESIZE) mResizeDrag.end();
+            releasePaneVeils();
             boolean shaped = mDragMoved;
             mDragMode = DRAG_NONE;
             mDragMoved = false;
