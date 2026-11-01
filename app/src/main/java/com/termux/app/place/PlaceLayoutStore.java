@@ -1036,11 +1036,36 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public DockStyle homePageDockDesign(@NonNull LayoutVariant variant) {
+        if (variant.isPage() && variant.isHomeKind()) {
+            return forVariant(LayoutVariant.HOME).dockStyle();
+        }
         if (variant == LayoutVariant.NORMAL && mStore != null
             && mStore.contains(layoutWideKey(LayoutVariant.HOME, KEY_DOCK_DESIGN))) {
             return forVariant(LayoutVariant.HOME).dockStyle();
         }
         return forVariant(variant).dockStyle();
+    }
+
+    /**
+     * The layout whose scope holds this view's dock keys: the Home kind's own on a page of the Home
+     * kind, whose own layout never carries a dock (ADR 0018 section 4: the dock is the Home kind's
+     * rest, so a page change never changes it); the active variant otherwise. Both reads and
+     * writes go through it, so the editor opened on a Home page edits Home's dock.
+     */
+    @NonNull
+    private LayoutVariant dockVariant() {
+        LayoutVariant variant = activeVariant();
+        return variant.isPage() && variant.isHomeKind() ? LayoutVariant.HOME : variant;
+    }
+
+    /** The dock's per-orientation key {@code key}, in {@link #dockVariant}'s scope. */
+    @NonNull
+    private String dockKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        LayoutVariant variant = activeVariant();
+        if (variant.isPage() && variant.isHomeKind()) {
+            return forVariant(LayoutVariant.HOME).variantKey(orientation, key);
+        }
+        return variantKey(orientation, key);
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
@@ -1141,7 +1166,7 @@ public final class PlaceLayoutStore {
         int revision = mRevision.get();
         if (mDockDesignRevision != revision || mDockDesignVariant != variant) {
             mDockDesign = DockStyle.parse(
-                mStore.getString(readKey(layoutWideKey(variant, KEY_DOCK_DESIGN)), null));
+                mStore.getString(readKey(layoutWideKey(dockVariant(), KEY_DOCK_DESIGN)), null));
             mDockDesignRevision = revision;
             mDockDesignVariant = variant;
         }
@@ -1154,7 +1179,7 @@ public final class PlaceLayoutStore {
      */
     public void setDockStyle(@NonNull DockStyle style) {
         if (mStore == null || style == dockStyle()) return;
-        mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DOCK_DESIGN),
+        mStore.edit().putString(layoutWideKey(dockVariant(), KEY_DOCK_DESIGN),
             style.storageValue()).apply();
         mRevision.incrementAndGet();
     }
@@ -1189,7 +1214,7 @@ public final class PlaceLayoutStore {
     /** The Search field turned on or off for this view's layout, its design left as it is. */
     public void setSearchField(boolean on) {
         if (mStore == null || on == searchField()) return;
-        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_SEARCH_FIELD), on).apply();
+        mStore.edit().putBoolean(layoutWideKey(dockVariant(), KEY_SEARCH_FIELD), on).apply();
         mRevision.incrementAndGet();
     }
 
@@ -1217,13 +1242,13 @@ public final class PlaceLayoutStore {
      */
     public void setDrawerTile(boolean on) {
         if (mStore == null || on == drawerTile()) return;
-        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_DRAWER_TILE), on).apply();
+        mStore.edit().putBoolean(layoutWideKey(dockVariant(), KEY_DRAWER_TILE), on).apply();
         mRevision.incrementAndGet();
     }
 
     private boolean toggle(@NonNull String key, @NonNull DockStyle bringer) {
         if (mStore == null) return false;
-        String stored = readKey(layoutWideKey(activeVariant(), key));
+        String stored = readKey(layoutWideKey(dockVariant(), key));
         if (mStore.contains(stored)) return mStore.getBoolean(stored, false);
         return dockStyle() == bringer;
     }
@@ -1236,7 +1261,7 @@ public final class PlaceLayoutStore {
     public DrawerTilePolicy.Position drawerTilePosition() {
         if (mStore == null) return DrawerTilePolicy.DEFAULT;
         return DrawerTilePolicy.parse(mStore.getString(
-            readKey(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION)), null));
+            readKey(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION)), null));
     }
 
     /**
@@ -1245,7 +1270,7 @@ public final class PlaceLayoutStore {
      */
     public void setDrawerTilePosition(@NonNull DrawerTilePolicy.Position position) {
         if (mStore == null || position == drawerTilePosition()) return;
-        mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION),
+        mStore.edit().putString(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION),
             DrawerTilePolicy.persisted(position)).apply();
     }
 
@@ -1498,13 +1523,13 @@ public final class PlaceLayoutStore {
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
     public boolean azRowShown(@NonNull PlaceOrientation orientation) {
-        String key = readKey(variantKey(orientation, KEY_AZ_ROW));
+        String key = readKey(dockKey(orientation, KEY_AZ_ROW));
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, true);
         return mPreferences.isAppLauncherAzRowEnabled();
     }
 
     public void setAzRowShown(@NonNull PlaceOrientation orientation, boolean shown) {
-        writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
+        writeBoolean(dockKey(orientation, KEY_AZ_ROW), shown);
         syncKind(orientation, Element.AZ, shown);
     }
 
@@ -1633,7 +1658,7 @@ public final class PlaceLayoutStore {
 
     /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
     public float dockHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = readKey(variantKey(orientation, KEY_DOCK_HEIGHT));
+        String key = readKey(dockKey(orientation, KEY_DOCK_HEIGHT));
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
             : mPreferences.getSharedAppLauncherBarHeightScale();
@@ -1641,7 +1666,7 @@ public final class PlaceLayoutStore {
     }
 
     public void setDockHeightScale(@NonNull PlaceOrientation orientation, float scale) {
-        writeFloat(variantKey(orientation, KEY_DOCK_HEIGHT),
+        writeFloat(dockKey(orientation, KEY_DOCK_HEIGHT),
             TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(scale));
     }
 
