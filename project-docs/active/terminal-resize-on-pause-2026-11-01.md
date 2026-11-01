@@ -127,3 +127,33 @@ Screenshots: session scratchpad `drag1/`, `drag2/`, `drag3/strip.png`, `pre3top.
   pane edge, glass on and off.
 - The read-out wording and timing on a divider and a floating pane.
 - The performance gate above.
+
+## Pong measurements and traces (2026-11-01, 90 Hz, 11.1 ms budget)
+
+Method: `scripts/perf-scenarios/pong-divider-drag-{up,down}.txt`, `ON_DEVICE=1 ROUNDS=1`, split reset
+to half before every run, 5 up + 5 down per build; builds installed through device-drops.
+
+| Per drag | Before (39f0faf4d) | After (b1628d923) |
+|---|---|---|
+| Frames | 135.4 | 161.8 |
+| Janky (missed deadline) | 5.8 (4.3%) | 10.9 (6.7%) |
+| p50 / p90 / p99 | 12.6 / 23.7 / 32.3 ms | 13.5 / 23.6 / 32.9 ms |
+
+Gate result: jank moved the wrong way. Paired Perfetto traces of one verified drag (32 → 21 rows)
+on each build:
+
+- **The pause-resize is cheap:** `Terminal.resize` ≤ 0.16 ms, `Terminal.updateSize` ≤ 0.58 ms, five
+  per drag (two pauses + release) against two. No guard needed.
+- **A. Cursor trail (after only):** `Effect.cursorTrail.draw` 45× during the drag and 17 frames
+  (0-196 ms) after release; none in the before build. A reflow snaps the trail
+  (`TerminalView.java:3244`), but the held grid's re-anchoring moves the grid on screen without one,
+  and the trail animates that as a cursor jump. Visible glitch as well as frames.
+- **B. Read-out exit:** 16 frames at 767-942 ms after release (the 750 ms linger + 160 ms fade), main
+  thread ~2 ms each, but RenderThread redraws the whole page (`Drawing 0 210 1080 2235`) per frame.
+- **C. The drag itself (both builds):** every move re-lays out (≤ 8-12 ms) and re-renders both panes'
+  text (`Terminal.render` ≤ 8 ms), giving 14-23 ms frames. Frame-timeline jank is almost all
+  "Buffer Stuffing" in both builds (frames queued faster than SurfaceFlinger takes them).
+
+Follow-up wave (decided 2026-11-01): A no trail from resizes or pane moves; B the read-out's fade
+redraws only the pill (or no fade); C a held pane reuses its last render instead of re-rendering
+its text per frame. Re-measure with the same 10 drags and a paired trace.
