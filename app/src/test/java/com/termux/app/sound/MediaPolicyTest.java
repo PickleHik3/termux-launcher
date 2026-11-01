@@ -247,12 +247,48 @@ public class MediaPolicyTest {
         focus.onFocusChange(FocusPolicy.Change.LOSS);
         focus.onActivity(1, NONE);
 
-        // The user presses play in kew.
-        assertTrue(focus.onActivity(1, KEW).request);
+        // The user presses play in kew: the duckable focus first, the full one after the grace.
+        FocusPolicy.Actions again = focus.onActivity(1, KEW);
+        assertTrue(again.request);
+        assertSame(FocusPolicy.Kind.TRANSIENT_DUCK, again.kind);
+        assertTrue(again.startGrace);
         FocusPolicy.Actions granted = focus.onRequestResult(true);
         assertTrue(granted.unmute);
         assertTrue(granted.play.isEmpty());
+        assertSame(FocusPolicy.State.PROBATION, focus.state());
+        FocusPolicy.Actions full = focus.onGraceElapsed();
+        assertSame(FocusPolicy.Kind.FULL, full.kind);
+        focus.onRequestResult(true);
         assertSame(FocusPolicy.State.HELD, focus.state());
+    }
+
+    // #179: another app (YouTube) took the focus for good; a short sound from the launcher's
+    // server must duck it, never pause it.
+    @Test public void afterALastingLossAShortSoundDucksOtherAppsAndPausesNobody() {
+        FocusPolicy focus = held(1, NONE);
+        focus.onFocusChange(FocusPolicy.Change.LOSS);
+        focus.onActivity(0, NONE);
+        assertSame(FocusPolicy.State.IDLE, focus.state());
+
+        FocusPolicy.Actions beep = focus.onActivity(1, NONE);
+        assertTrue(beep.request);
+        assertSame(FocusPolicy.Kind.TRANSIENT_DUCK, beep.kind);
+        focus.onRequestResult(true);
+        FocusPolicy.Actions quiet = focus.onActivity(0, NONE);
+        assertTrue(quiet.abandon);
+        assertSame(FocusPolicy.State.IDLE, focus.state());
+    }
+
+    @Test public void whileLostANewStreamAsksOnlyForDuckableFocus() {
+        FocusPolicy focus = held(1, NONE);
+        focus.onFocusChange(FocusPolicy.Change.LOSS);
+        assertSame(FocusPolicy.State.LOST, focus.state());
+
+        // A second stream starts (a notification sound in a Linux app) while the first is muted.
+        FocusPolicy.Actions beep = focus.onActivity(2, NONE);
+        assertTrue(beep.request);
+        assertSame(FocusPolicy.Kind.TRANSIENT_DUCK, beep.kind);
+        assertTrue(beep.startGrace);
     }
 
     @Test public void aShortLossResumesExactlyWhatTheLauncherPaused() {

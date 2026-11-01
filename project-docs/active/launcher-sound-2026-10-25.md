@@ -84,7 +84,8 @@ launcher-owned server for everything, and adds Android media integration on top.
       reporting Playing) is still playing after 3 s, the full focus is asked for and the rules above
       apply as before. If everything stops within the grace, the request is abandoned and the other
       app's media comes back by itself. A short loss during the grace resumes the grace when focus
-      returns; a lasting loss ends it.
+      returns; a lasting loss ends it. After a lasting loss, something new starting to play takes
+      the same two steps (amended 11-01 for #179: it used to ask for the full focus at once).
 
 ### Settings
 
