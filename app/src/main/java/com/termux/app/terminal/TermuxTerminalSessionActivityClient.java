@@ -155,6 +155,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // The pane band's measured ground can move inside a draw; the palette follows it from a
         // post, once it has settled, and only when the move changes what the signature sees.
         mHost.setTerminalTextGroundListener(() -> {
+            android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis() + " posted");
             mUiHandler.removeCallbacks(mGroundSettledRunnable);
             mUiHandler.postDelayed(mGroundSettledRunnable, GROUND_SETTLE_MS);
         });
@@ -1272,12 +1273,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
         if (mHost.preferences() == null) return;
+        android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis() + " refresh start");
         // Cheap and on every door here, the settled ground included: the panes' text floor
         // follows the measured backdrop whether or not the palette is rebuilt.
         applyTextBackdropToPanes();
         if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
             // A custom colors.properties is followed: re-read it only when it changed.
-            if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
+            boolean fileChanged = colorsFileStamp() != mLastColorsFileStamp;
+            android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
+                + " path=custom-colors rebuild=" + fileChanged);
+            if (fileChanged) applyTerminalColors();
             return;
         }
         int ground = mHost.terminalTextGround();
@@ -1285,7 +1290,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
             ground, decidedInk(band, ground), band != null);
-        if (signature == mLastMaterialTerminalPaletteSignature) return;
+        boolean rebuild = signature != mLastMaterialTerminalPaletteSignature;
+        android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
+            + " path=dynamic signature=" + signature + " last=" + mLastMaterialTerminalPaletteSignature
+            + " rebuild=" + rebuild + " ground=" + String.format("#%08X", ground));
+        if (!rebuild) return;
         applyTerminalColors();
     }
 
@@ -1346,11 +1355,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     private void onTerminalTextGroundSettled() {
+        final long tlStart = android.os.SystemClock.uptimeMillis();
         android.os.Trace.beginSection("Terminal.groundSettled");
         try {
             if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
         } finally {
             android.os.Trace.endSection();
+            android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
+                + " settled end elapsed=" + (android.os.SystemClock.uptimeMillis() - tlStart) + "ms");
         }
     }
 

@@ -708,6 +708,10 @@ public final class ChromeInk {
             ? mBandPolarity : policy.current) : meanPaneVote(tint, true);
         int surface = meanPaneSurface(tint);
         if (ground != mPaneGround || surface != mPaneSurface) {
+            android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
+                + " ground " + String.format("#%08X", mPaneGround) + " -> " + String.format("#%08X", ground)
+                + " surface " + String.format("#%08X", mPaneSurface) + " -> " + String.format("#%08X", surface)
+                + " listener=" + (mOnPaneGroundChanged != null));
             mPaneGround = ground;
             mPaneSurface = surface;
             if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
