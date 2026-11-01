@@ -450,7 +450,10 @@ public final class DockLayoutPolicy {
 
         // Vertical paddings. Exactly preserves the previous top (6dp + 7dp*progress) plus a 1dp
         // bottom budget; without a preference store the padding sits at the full-progress value.
-        float paddingProgress = in.preferencesAvailable ? sizeProgress : 1f;
+        // With the one icon size (ADR 0020 §3) the capsule's padding follows the icon step, S to XL,
+        // not the retired dock height, so the capsule grows with its icon.
+        float paddingProgress = !in.preferencesAvailable ? 1f
+            : in.iconDp > 0f ? iconStepProgress(in.iconDp) : sizeProgress;
         int capsuleTotalPadding = capsuleTotalPaddingPx(paddingProgress, density);
         out.capsuleAppsTotalPaddingPx = capsuleTotalPadding;
         // Top space equals bottom padding plus the 3dp icon/A-Z indicator band. Together with the
@@ -888,6 +891,13 @@ public final class DockLayoutPolicy {
         return Math.max(1, Math.min(iconPx, slotPx - loneRowAirPx(density)));
     }
 
+    /** Where {@code iconDp} stands between the smallest and the largest icon step, 0 to 1. */
+    static float iconStepProgress(float iconDp) {
+        float s = com.termux.app.place.layout.IconSize.S.dp;
+        float xl = com.termux.app.place.layout.IconSize.XL.dp;
+        return Math.max(0f, Math.min(1f, (iconDp - s) / (xl - s)));
+    }
+
     /** The least gap between two pinned icons of the one icon size (spec §8a). */
     public static final float MIN_ICON_GAP_DP = 4f;
     /** The least side inset of a Docked (full-width) dock, from the screen edge (spec §8a). */
@@ -903,8 +913,14 @@ public final class DockLayoutPolicy {
                                    float density) {
         int fromEdge = capsule ? out.horizontalInsetPx : 0;
         int least = Math.max(0, Math.round(in.minSideInsetDp * density) - fromEdge);
+        // On the grid's column centres: the grid shares its width less the gaps between its
+        // columns, so its column pitch is a column and a gap; slots of that pitch start half a
+        // gap outside the grid's margin (WidgetGridMetrics.GAP_DP). The icon, centred in its
+        // slot, still stands well inside the margin.
         if (in.alignToGridDp > 0f)
-            return Math.max(least, Math.round(in.alignToGridDp * density) - fromEdge);
+            return Math.max(0, Math.round(in.alignToGridDp * density)
+                - Math.round(com.termux.app.launcher.widget.WidgetGridMetrics.GAP_DP * density) / 2
+                - fromEdge);
         return Math.max(out.appsRowEdgeInsetPx, least);
     }
 

@@ -43,8 +43,13 @@ public class DockIconSizeRuleTest {
                             float leastDp = capsule ? GRID_EDGE_DP
                                 : Math.max(GRID_EDGE_DP, DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP);
                             int fromEdge = l.appsRowEdgeInsetPx + (capsule ? l.horizontalInsetPx : 0);
+                            // The first icon's edge, centred in its slot: never inside the least
+                            // inset (a row on the grid's columns starts its slots half a gap out).
+                            int slot = count > 0 ? l.appsRowUsableWidthPx / count : 0;
+                            int iconEdge = fromEdge + Math.max(0, (slot - iconPx) / 2);
                             assertTrue(at + ": inset " + fromEdge + "px",
-                                fromEdge >= Math.round(leastDp * DENSITY) - 1);
+                                (count == GRID_COLUMNS ? iconEdge : fromEdge)
+                                    >= Math.round(leastDp * DENSITY) - 1);
                             boolean tight = DockLayoutPolicy.overflows(iconPx,
                                 l.appsRowUsableWidthPx, count, DENSITY);
                             assertEquals(at + ": overflow is reported", tight, l.iconsOverflow);
@@ -69,9 +74,46 @@ public class DockIconSizeRuleTest {
     public void aRowOfAsManyIconsAsTheGridHasColumnsStandsOnTheGridsMargin() {
         for (DockStyle design : DockStyle.CHOICES) {
             DockLayout l = layout(design, false, IconSize.M, 412, GRID_COLUMNS);
-            assertEquals(design + ": the grid's margin", Math.round(GRID_EDGE_DP * DENSITY),
-                l.appsRowEdgeInsetPx);
+            // Home's columns as WidgetGridMetrics cuts them: the width inside the margins less
+            // the gaps, shared out, a gap between neighbours.
+            int width = Math.round(412 * DENSITY);
+            int margin = Math.round(GRID_EDGE_DP * DENSITY);
+            int gap = Math.round(com.termux.app.launcher.widget.WidgetGridMetrics.GAP_DP * DENSITY);
+            int usable = width - 2 * margin - gap * (GRID_COLUMNS - 1);
+            int slot = l.appsRowUsableWidthPx / GRID_COLUMNS;
+            for (int c = 0; c < GRID_COLUMNS; c++) {
+                float left = margin + edge(usable, GRID_COLUMNS, c) + gap * c;
+                float right = margin + edge(usable, GRID_COLUMNS, c + 1) + gap * c;
+                float gridCentre = (left + right) / 2f;
+                float dockCentre = l.appsRowEdgeInsetPx + slot * c + slot / 2f;
+                assertEquals(design + " column " + c + ": the icon on the column's centre",
+                    // Within a px per column: the grid's columns keep their fraction of a px
+                    // (its remainder goes to the first columns), the dock's slots are whole px
+                    // of the shared width, so they drift by under a px per slot.
+                    gridCentre, dockCentre, c + 1.5f);
+            }
         }
+    }
+
+    @Test
+    public void theCapsulesPaddingFollowsTheIconStepNotTheDockHeight() {
+        for (DockStyle design : DockStyle.CHOICES) {
+            int last = -1;
+            for (IconSize step : IconSize.values()) {
+                int padding = layout(design, true, step, 412, 5).capsuleAppsTotalPaddingPx;
+                assertTrue(design + " " + step + ": " + padding + " after " + last,
+                    padding >= last);
+                last = padding;
+            }
+            assertTrue(design + ": XL's capsule stands taller than S's",
+                layout(design, true, IconSize.XL, 412, 5).capsuleAppsTotalPaddingPx
+                    > layout(design, true, IconSize.S, 412, 5).capsuleAppsTotalPaddingPx);
+        }
+    }
+
+    /** WidgetGridMetrics' share: {@code e} columns' worth of {@code p} split {@code n} ways. */
+    private static int edge(int p, int n, int e) {
+        return e * (p / n) + Math.min(e, p % n);
     }
 
     private static DockLayout layout(DockStyle design, boolean capsule, IconSize step,
