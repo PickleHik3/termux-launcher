@@ -13,12 +13,6 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
-- 2026-11-01 · commit "fix(tai): report a low-memory kill of the AI runtime as one, not as a crash"
-  (#191) · Get `:tai_runtime` killed by the low-memory killer during a GPU load (memory hog beside an
-  E4B load). The 503 carries `"exitReason":"low_memory"` and "Android closed the AI runtime to free
-  memory…"; if the first 503 lacks it, note that, then check that the next status read's
-  `lastRuntimeCrash` has it. The Settings AI status reads "closed by Android to free memory". A
-  plain `kill -9` of the runtime still reads as before · emulator with little RAM, or pong by hand.
 - 2026-11-01 · rel/1.2.2 backport · Seen on emulator tl16 2026-11-01: fresh 1.2.1 to 1.2.2 upgrade,
   Nix fresh bootstrap, segmented pills, dock hold and unpin, drawer folder pull, hardware keys in
   search, punctuation-free selection. Still owed: two extra-key pages turn one page per swipe;
