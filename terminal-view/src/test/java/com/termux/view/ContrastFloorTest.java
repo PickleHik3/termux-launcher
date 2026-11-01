@@ -258,7 +258,9 @@ public class ContrastFloorTest {
     @Test
     public void sameBackdropIgnoresDriftNoReaderCanSee() {
         assertTrue(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF8D8D8D));
-        assertTrue(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF89898A));
+        assertTrue(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF8B8B8C));
+        // Two logged steps (#8D8D8D to #89898A) are 1.07:1, already past the tolerance.
+        assertFalse(ContrastFloor.sameBackdrop(0xFF8D8D8D, 0xFF89898A));
         assertTrue(ContrastFloor.sameBackdrop(0xFF8B8B8C, 0xFF89898A));
         assertTrue(ContrastFloor.sameBackdrop(0xFF868687, 0xFF858585));
         // The whole logged creep, #8D8D8D to #838283, does cross: it re-records once, not per step.
