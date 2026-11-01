@@ -238,8 +238,12 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private boolean built;
     private boolean started;
 
-    /** The most a layout is zoomed, however tall the card. */
-    private static final float MAX_ZOOM = 2f;
+    /**
+     * The most a layout is zoomed, however tall the card: none (ADR 0020 §12, spec §8b). A
+     * widget relayouts by its size bucket and never draws larger than laid out, so a turn of the
+     * screen never grows it past its cell.
+     */
+    static final float MAX_ZOOM = 1f;
     /** A zoom closer to 1 than this is not worth drawing the content scaled. */
     private static final float MIN_ZOOM = 1.02f;
     /** Steps of the search for the largest zoom that loses nothing. */
@@ -456,10 +460,16 @@ public abstract class BuiltinWidgetView extends FrameLayout
      * The zoom that lays the bucket out at its design height, or the largest below it at which
      * the layout keeps what it keeps unzoomed; 1 for a card no taller than the design.
      */
+    /** The largest zoom a card {@code heightPx} tall may draw a {@code designPx} design at. */
+    static float mostZoom(float heightPx, float designPx) {
+        if (designPx <= 0f) return 1f;
+        return Math.min(MAX_ZOOM, heightPx / designPx);
+    }
+
     private float chooseZoom(int width, int height) {
         if (!zoomsToFill(span)) return 1f;
         float density = getResources().getDisplayMetrics().density;
-        float most = Math.min(MAX_ZOOM, height / (span.heightDp * density));
+        float most = mostZoom(height, span.heightDp * density);
         if (most < MIN_ZOOM) return 1f;
         int allowed = lossesAt(width, height, 1f);
         if (lossesAt(width, height, most) <= allowed) return most;

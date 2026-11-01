@@ -52,21 +52,17 @@ public class BuiltinWidgetFillTest {
         metrics.densityDpi = 420;
     }
 
-    @Test public void oneRowCardsTallerThanTheDesignAreZoomedToFill() {
-        // Notes: the System widget this was written for became the Device, which plans its own
-        // layout at the card's size (#117). Notes zooms only as far as it loses no line.
+    @Test public void oneRowCardsTallerThanTheDesignAreNeverZoomed() {
+        // ADR 0020 §12 (spec §8b): built-in widgets relayout by their size bucket and never draw
+        // larger than laid out, so a card taller than its design keeps the design at 1.
         for (BuiltinWidgetKind kind : new BuiltinWidgetKind[] {
             BuiltinWidgetKind.NOTES}) {
             for (int columns : new int[] {2, 4}) {
                 BuiltinWidgetView view = laidOut(kind, columns, 1, columns * 92 - 4, 118);
                 View content = view.content();
                 String where = kind + " " + columns + "x1 at 118dp";
-                assertTrue(where + " is zoomed: " + content.getScaleY(),
-                    content.getScaleY() > 1.1f);
-                assertEquals(where + " fills the card's height", view.getHeight(),
-                    content.getHeight() * content.getScaleY(), 2f);
-                assertEquals(where + " fills the card's width", view.getWidth(),
-                    content.getWidth() * content.getScaleX(), 2f);
+                assertTrue(where + " is not zoomed: " + content.getScaleY(),
+                    content.getScaleY() <= 1f && content.getScaleX() <= 1f);
             }
         }
     }
