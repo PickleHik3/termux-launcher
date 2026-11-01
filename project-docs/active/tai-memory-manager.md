@@ -215,10 +215,11 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    reclaimable — LiteRT CPU counts only the KV cache plus 5% of the file as anonymous, since its
    weights are mapped file pages (E4B CPU 16k: 0.45 GB measured vs 4.25 GB estimated before);
    GPU and MNN stay fully non-reclaimable. The reserve became `floor = max(2 × MemoryInfo.threshold,
-   512 MiB)` (pong: 630 MB).
-   Issue #191 superseded this for the hold and peak floors: each is now at least a sixth and a ninth of physical RAM, the fixed 768 and 512 MiB being the minimum, and the critical floor is unchanged. plus a 25% margin of a ratio estimate, none for a measured one; the old
+   512 MiB)` (pong: 630 MB) plus a 25% margin of a ratio estimate, none for a measured one; the old
    max(1.5 GiB, 15%) reserve remains only when the threshold is unknown (`TaiDeviceCapabilities.
-   memoryThresholdBytes`). An automatic GPU window is capped at 4096 (`GPU_AUTO_CONTEXT`); an
+   memoryThresholdBytes`). Issue #191 (2026-11-01) superseded the hold and peak floors: each is now
+   at least a sixth and a ninth of physical RAM, the fixed 768 and 512 MiB being the minimum, and
+   the critical floor is unchanged. An automatic GPU window is capped at 4096 (`GPU_AUTO_CONTEXT`); an
    explicit setting or `context_window` above it is honoured, subject to the budget. Eviction: at
    every ladder step a load that does not fit is retried with idle residents evicted in the order
    embeddings → STT → idle chat (chat only for non-chat loads; a chat load replaces chat and is
