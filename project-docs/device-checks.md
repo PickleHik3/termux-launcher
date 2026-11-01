@@ -803,3 +803,19 @@ Agent
   `availableBytes` clears it, and a refusal shows those three numbers in agreement (no
   `fits:false` while available exceeds needed). Record the three numbers either way · pong, go-ahead,
   curl from a shell on the phone with `~/.launcherctl/endpoint` and `token`.
+
+## Pane borders card (2026-11-01, #206)
+Seen on the emulator (emu2, staging x86_64 of 9a8e5683c, 1080 × 2400 and 360 × 640 at font 1.3):
+the row and its label open the subcard, the back arrow and system Back return to the Terminal
+card scrolled to the row, Custom colour's dialog gets the keyboard and commits `#DC143C` /
+`#00AAFF` into the strip and the live float, garbage keeps the dialog open, Glow Steady shows on
+the live float, Back twice reaches Unsaved changes and Discard restores the entry values. At
+360 dp wide the six-swatch choosers fall into `SegmentRow`'s vertical stack (one swatch per row),
+nothing clipped. Still owed:
+- 2026-11-01 · 9a8e5683c · on pong: a crimson custom border on a single Terminal-page pane and on
+  a split (the focused pane Primary, the other crimson), Glow Steady, light and dark theme, the
+  launcher's scheme chrome on and off; the in-app keyboard comes back after the Custom colour
+  dialog's OK and after Cancel; Reset pane borders and the Terminal card's Reset put back the
+  theme outline, Primary and no glow · pong, go-ahead.
+- 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
+  drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.

@@ -78,7 +78,8 @@ public class StatusTerminalCardsTest {
     public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE,
             Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.TEXT_SIZE,
-            Row.SPLIT_GAP, Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT, Row.MARGIN, Row.LINK_FONT),
+            Row.SPLIT_GAP, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL, Row.EFFECT, Row.MARGIN,
+            Row.LINK_FONT),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));

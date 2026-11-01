@@ -7,19 +7,25 @@ No reply on #206 until pre.3 is out.
 
 ## What the user gets
 
-A **Pane borders** subcard under the Terminal surface card, after Text size, Contrast and Opacity,
-with a shortcut from the Terminal entry in Elements. Back returns to the Terminal card at the same
-detent and scroll; Done commits through the editor as every other row does; Undo covers it.
+A **Pane borders** subcard under the Terminal surface card, opened from a link row after Text
+size, Contrast and Opacity. The Terminal entry in Elements scrolls the Terminal card to that row
+(the existing section target), one tap from the subcard. The editor has no card stack: the subcard
+is shown in the sheet's place like Elements, its header carries a back chevron, and both the
+chevron and system Back re-open the Terminal card at the current detent, scrolled to the Pane
+borders row. Done commits through the editor as every other row does; Undo and the unsaved-changes
+dialog cover the new keys (`AppearanceSnapshot` capture, restore and signature).
 
 Rows, top to bottom:
 
 1. **Preview**: three small frames, *Normal*, *Focused*, *Attention*, drawn with the real rim and
-   glow drawables the panes use (`PaneRim`, `SharedRim`, `PaneAttentionGlow` held steady). It shows
-   what the terminal will get at this theme, density and Rim setting; Attention is static (no
-   pulse) and only explains that it outranks the user's colours.
-2. **Rim**: None / Hairline / Bright, the same key as the Rim row in Look and material (one key in
-   two places, both with the editor's source indication). With Rim None the preview honestly shows
-   no border.
+   glow classes the panes use (`PaneRim`, `SharedRim`, `PaneAttentionGlow` held steady) on a plain
+   pane style. It shows what the terminal will get at this theme and density; Attention is static
+   (no pulse) and only explains that it outranks the user's colours.
+2. *(dropped 2026-11-01 after the build)* A Rim row (None / Hairline / Bright) was grilled in on
+   the premise that the pane's border follows the Rim look. It does not: `GlassSurfaceFactory.
+   rimDrawable` builds the pane's gradient rim from fixed tokens, and the Rim look reaches only the
+   sheets and the dock (`ElementGlass.rimOff`, `DockSpec.rim`). A Rim row here would have changed
+   those while claiming to be about panes, so the subcard has no Rim row.
 3. **Border colour**: Theme outline (today's line) / Primary / Secondary / Tertiary / Custom.
    Custom reveals a **Custom colour** row: a hex field with a live swatch, accepting `#RRGGBB` and
    `#AARRGGBB`, alpha visible in the swatch. This is the editor's first free colour input.
@@ -40,13 +46,15 @@ the subcard (the line already carries drag and resize).
 - **Precedence** stays `PaneBorderStyle.decide`: Attention first, then Focus for a focused split
   pane or float, else Rim. The user's colours fill the Rim and Focus kinds; Attention keeps
   `colorError` and its pulse.
-- **Scheme.** Primary / Secondary / Tertiary resolve the way the editor's Tint colour swatches do,
-  through the launcher's own scheme when `LauncherSchemeTheme.isSchemeChromeActive()`, never raw
-  theme attributes. Today `PaneRim.palette` reads `colorPrimary` / `colorError` from theme attrs
-  directly; the focus colour moves onto the same resolution, attention may stay.
-- **Where the colour lands.** The pane's resting border is the shared glass rim following the Rim
-  look; the border colour tints that rim (and the `GlassRimDrawable` the Focus kind builds on
-  glass), it does not add a second line. `PaneRim.lineColour()` (`colorOutline` at alpha 150) is
+- **Scheme.** Primary / Secondary / Tertiary resolve exactly the way the editor's Tint colour
+  swatches do (`EditorViews.color`, the activity theme's `colorPrimary` / `colorSecondary` /
+  `colorTertiary` through `MaterialColors`), so the swatch the user picks and the line the pane
+  draws are the same colour. `PaneRim.palette` moves onto that same helper for the focus colour;
+  attention keeps `colorError`. Never a system palette resource read directly.
+- **Where the colour lands.** The pane's resting border is the shared glass rim (the gradient rim
+  `GlassSurfaceFactory.rimDrawable` builds; the Rim look does not reach it); the border colour
+  tints that rim (and the `GlassRimDrawable` the Focus kind builds on glass), it does not add a
+  second line. `PaneRim.lineColour()` (`colorOutline` at alpha 150) is
   the Theme outline choice and the Docked opening's line.
 - **Storage.** Plain terminal-only keys in `TermuxAppSharedPreferences`, one set shared by Terminal
   and Terminal-minimal, like text size; not in the surface inheritance table. Keys: border colour
@@ -65,9 +73,12 @@ the subcard (the line already carries drag and resize).
 2. The subcard: Terminal card row, Elements shortcut, the preview strip, the chooser (reused for
    border, focus and glow colour), the hex field, Reset, Undo/Done/dirty integration.
 
-## Verification owed
+## Verification
 
-- pong: a crimson custom border, Primary focus, steady glow on, single pane and a split, light and
-  dark theme, scheme chrome on and off; Rim None shows no border; Reset restores today's look.
-- Emulator: the subcard at font scale 1.3 and 360 × 640 (no clipped chooser, hex field usable).
-- The reporter's device (Solana Saga) after pre.3.
+- Emulator (2026-11-01, emu2, 9a8e5683c): the subcard, the label tap, the back route, the Custom
+  colour dialog with the keyboard, garbage rejection, Glow Steady on the live float, Undo via
+  Unsaved changes › Discard, and the 360 × 640 / font 1.3 layout (choosers stack vertically, nothing
+  clipped) were seen by the main session; screenshots in its scratchpad, items recorded in
+  `project-docs/device-checks.md`.
+- Owed: pong (single pane and split, light and dark, scheme chrome on and off, in-app keyboard
+  back after the dialog, Reset), Docked edges, and the reporter's Saga after pre.3.

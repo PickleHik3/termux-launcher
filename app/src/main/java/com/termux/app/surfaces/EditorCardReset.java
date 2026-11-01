@@ -86,10 +86,25 @@ final class EditorCardReset {
                 prefs.setTerminalRetroEffect(TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT);
                 prefs.setTextSizePercent(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT);
                 prefs.setTerminalPaneGap(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
+                resetPaneBorders(prefs);
                 break;
             default:
                 break;
         }
+    }
+
+    /**
+     * The Pane borders card's values as they ship (#206): the theme outline, Primary when
+     * focused, no glow, its colour the border's, and no custom colours.
+     */
+    public static void resetPaneBorders(@NonNull TermuxAppSharedPreferences prefs) {
+        prefs.setTerminalPaneBorderColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_BORDER_COLOUR);
+        prefs.setTerminalPaneBorderCustom(0);
+        prefs.setTerminalPaneFocusColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_FOCUS_COLOUR);
+        prefs.setTerminalPaneFocusCustom(0);
+        prefs.setTerminalPaneGlow(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW);
+        prefs.setTerminalPaneGlowColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW_COLOUR);
+        prefs.setTerminalPaneGlowCustom(0);
     }
 
     /** Drops {@code key}, so its getter answers the shipped default. */

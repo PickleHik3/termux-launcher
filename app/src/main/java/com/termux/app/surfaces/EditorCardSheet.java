@@ -20,6 +20,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.google.android.material.button.MaterialButton;
@@ -526,7 +527,28 @@ final class EditorCardSheet {
     /** {@link #show}, raising a sheet that is down to {@code raiseTo} instead of the half detent. */
     void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
               @NonNull String resetLabel, boolean animate, int raiseTo) {
-        boolean sameCard = mShown && card == mCard;
+        show(card, rows, resetLabel, animate, raiseTo, 0, null);
+    }
+
+    /**
+     * A card's subcard in the card's place (the Terminal card's Pane borders): {@code card} is
+     * the parent, whose surface and chips stay, the header names {@code titleRes} and carries a
+     * back arrow in the glyph's place that runs {@code back}.
+     */
+    void showSubcard(@NonNull EditorCard card, @StringRes int titleRes,
+                     @NonNull List<EditorRows.Spec> rows, @NonNull String resetLabel,
+                     boolean animate, @NonNull Runnable back) {
+        show(card, rows, resetLabel, animate, DETENT_HALF, titleRes, back);
+    }
+
+    /** The subcard's title shown in the header, or 0 while a card stands as itself. */
+    @StringRes private int mSubcardTitle;
+
+    private void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
+                      @NonNull String resetLabel, boolean animate, int raiseTo,
+                      @StringRes int subcardTitle, @Nullable Runnable back) {
+        boolean sameCard = mShown && card == mCard && subcardTitle == mSubcardTitle;
+        mSubcardTitle = subcardTitle;
         // Rule a: another card at a sheet that is up swaps in place, its labels and body fading.
         boolean swap = mShown && !sameCard && animate && !mParked && mSheet.isLaidOut()
             && mSheet.getVisibility() == View.VISIBLE;
@@ -553,9 +575,12 @@ final class EditorCardSheet {
         }
         restateEye();
         restateScope();
-        EditorViews.setText(mTitle, mContext.getString(card.titleRes));
-        mHeaderIcon.setImageResource(card.iconRes);
-        mSheet.setContentDescription(mContext.getString(card.titleRes));
+        int titleRes = subcardTitle != 0 ? subcardTitle : card.titleRes;
+        EditorViews.setText(mTitle, mContext.getString(titleRes));
+        mHeaderIcon.setImageResource(back != null ? R.drawable.ic_category_back_arrow
+            : card.iconRes);
+        restateHeaderBack(back);
+        mSheet.setContentDescription(mContext.getString(titleRes));
         boolean wasShown = mShown;
         mShown = true;
         // A card swapped in stands where the last one stood.
@@ -576,6 +601,44 @@ final class EditorCardSheet {
         settle(mDetent, animate);
         if (swap)
             fadeInAfterSwap();
+    }
+
+    /**
+     * The header glyph as a subcard's back arrow: tappable across a 48dp target round its 24dp
+     * glyph, or the card's plain glyph again for null.
+     */
+    private void restateHeaderBack(@Nullable Runnable back) {
+        int pad = back != null ? dp(12) : 0;
+        if (mHeaderIcon.getPaddingLeft() != pad) {
+            mHeaderIcon.setPadding(pad, pad, pad, pad);
+            ViewGroup.LayoutParams params = mHeaderIcon.getLayoutParams();
+            if (params instanceof FrameLayout.LayoutParams) {
+                int size = dp(24) + 2 * pad;
+                params.width = size;
+                params.height = size;
+                ((FrameLayout.LayoutParams) params).setMarginStart(dp(EDGE_DP) - pad);
+                mHeaderIcon.setLayoutParams(params);
+            }
+        }
+        if (back != null) {
+            mHeaderIcon.setOnClickListener(v -> back.run());
+            mHeaderIcon.setContentDescription(
+                mContext.getString(R.string.appearance_pane_borders_back));
+            mHeaderIcon.setBackgroundResource(borderlessRipple());
+        } else {
+            mHeaderIcon.setOnClickListener(null);
+            mHeaderIcon.setClickable(false);
+            mHeaderIcon.setContentDescription(null);
+            mHeaderIcon.setBackground(null);
+        }
+    }
+
+    /** The theme's borderless ripple. */
+    private int borderlessRipple() {
+        android.util.TypedValue value = new android.util.TypedValue();
+        mContext.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
+            value, true);
+        return value.resourceId;
     }
 
     /** The rise the new body fades in from on a card swap. */
@@ -1628,6 +1691,10 @@ final class EditorCardSheet {
         chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         root.addView(chevron, new LinearLayout.LayoutParams(dp(24), dp(24)));
         root.setOnClickListener(v -> mModel.onAction(row, v));
+        // The label's long-press (the row menu) makes it long-clickable, which takes its taps
+        // from the row: a tap on the name opens the row as a tap beside it does.
+        if (views.label != null)
+            views.label.setOnClickListener(v -> root.performClick());
         return views;
     }
 
