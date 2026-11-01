@@ -313,8 +313,10 @@ Reads and sets the glass look the way the Appearance editor does. **Properties**
 **Elements**: `status`, `dock`, `keyboard`, `terminal`, `widgets` and `sheets`. Without
 `--element` a value applies to all glass; without `--page` or `--kind`, everywhere. `--kind` takes
 `home`, `terminal` or `display` and names every page of that kind, as the editor's **Home pages**,
-**Terminal** and **Display pages**; it cannot be given with `--page`. `vibrancy` and `margin` are
-for all glass, everywhere, only.
+**Terminal** and **Display pages**; it cannot be given with `--page`. A page has no look of its
+own: `--page ID` names that page's kind, so `--page 2` on a Home page reads and writes the **Home
+pages** cell, and a page not on the wall is an error. `vibrancy` and `margin` are for all glass,
+everywhere, only.
 
 ```text
 launcherctl look set opacity 60 --element keyboard --kind home

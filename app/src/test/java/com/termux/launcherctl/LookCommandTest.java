@@ -32,13 +32,24 @@ public class LookCommandTest {
     }
 
     @Test
-    public void set_withoutAnElementWritesBaseAndAPageNamesItsCell() throws Exception {
-        run("{\"op\":\"set\",\"property\":\"tint\",\"value\":\"30\"}");
-        assertTrue(grid.has(LookGrid.Property.TINT, null, LookGrid.NO_PAGE));
-        run("{\"op\":\"set\",\"property\":\"tint\",\"value\":\"10\",\"page\":2}");
-        JSONObject get = run("{\"op\":\"get\",\"property\":\"tint\",\"element\":\"dock\",\"page\":2}");
+    public void set_withoutAnElementWritesBaseAndAPageNamesItsKindsCell() throws Exception {
+        // Page 2 is a Home page: a page has no cell of its own, it names its kind's.
+        LookGrid paged = new LookGrid(new LookGrid.MemoryStore(),
+            page -> page == 2 ? LookGrid.Kind.HOME : null, null);
+        LookCommand.handle(paged,
+            new JSONObject("{\"op\":\"set\",\"property\":\"tint\",\"value\":\"30\"}"));
+        assertTrue(paged.has(LookGrid.Property.TINT, null, LookGrid.NO_PAGE));
+        JSONObject set = LookCommand.handle(paged, new JSONObject(
+            "{\"op\":\"set\",\"property\":\"tint\",\"value\":\"10\",\"page\":2}"));
+        assertTrue(set.toString(), set.getBoolean("ok"));
+        assertTrue(paged.has(new LookGrid.Key(LookGrid.Property.TINT, null, LookGrid.Kind.HOME)));
+        JSONObject get = LookCommand.handle(paged, new JSONObject(
+            "{\"op\":\"get\",\"property\":\"tint\",\"element\":\"dock\",\"page\":2}"));
         assertEquals("10", get.getString("value"));
-        assertEquals("all glass on page 2", get.getString("from"));
+        assertEquals("all glass on Home pages", get.getString("from"));
+        JSONObject missing = LookCommand.handle(paged, new JSONObject(
+            "{\"op\":\"set\",\"property\":\"tint\",\"value\":\"10\",\"page\":9}"));
+        assertFalse(missing.toString(), missing.getBoolean("ok"));
     }
 
     @Test
