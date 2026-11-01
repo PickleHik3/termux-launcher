@@ -456,6 +456,9 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
+        // No page layouts (ADR 0020 §2): once the documents are in use a page wears its kind's.
+        if (variant.isPage() && documentsInUse())
+            variant = LayoutVariant.ofKind(variant.kind(), false);
         if (mFixedVariant == variant) return this;
         PlaceLayoutStore view = mVariantViews.get(variant);
         if (view == null) {
