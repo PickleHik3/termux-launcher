@@ -54,6 +54,16 @@ public final class WidgetGridCaps {
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
 
+    /**
+     * The caps for the screen in its portrait form, {@code widthDp} by {@code heightDp} either
+     * way round, with a rim of {@code edgeDp}: one grid for both orientations (ADR 0020 §12), so
+     * a turn of the screen, a keyboard or a sheet never changes the caps and never reflows.
+     */
+    @NonNull public static WidgetGridCaps forPortraitScreen(float widthDp, float heightDp,
+                                                            float edgeDp) {
+        return forWall(Math.min(widthDp, heightDp), Math.max(widthDp, heightDp), edgeDp);
+    }
+
     /** The caps for a wall measured in pixels, with a rim of {@code edgeDp} round the grid. */
     @NonNull public static WidgetGridCaps forWallPx(int widthPx, int heightPx, float density,
                                                     float edgeDp) {
