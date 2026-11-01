@@ -30,7 +30,8 @@ import static org.junit.Assert.assertTrue;
 public class TaiMemoryStopTest {
     private static final long MIB = 1024L * 1024L;
     private static final long E4B = 3_659_530_240L;
-    private static final long PONG_TOTAL = 11_530_736L * 1024L;
+    /** A phone small enough that the fixed floors apply (the RAM-share rule gives less), so the plan arithmetic below holds. */
+    private static final long SMALL_TOTAL = 4L * 1024L * 1024L * 1024L;
 
     private Context context;
     private TaiDeviceCapabilities device;
@@ -131,7 +132,7 @@ public class TaiMemoryStopTest {
             ? stop.optString("accelerator") : null;
         TaiLoadBudget.History history = (accelerator, window) -> TaiRuntimeHistory.measuredLoadBytes(context, e4b,
             device, TaiModelSpec.BACKEND_LITERT_LM, accelerator, window);
-        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false, PONG_TOTAL,
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false, SMALL_TOTAL,
             available, Arrays.asList("gpu", "cpu"), 2048, crashed, crashedContext, false, history,
             Collections.<TaiResidency.Entry>emptyList()).withHeldBack(heldBack));
     }
