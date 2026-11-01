@@ -25938,9 +25938,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isBorderStatusSwipeEnabled() {
                     return isBorderStatusSwipeAvailable();
                 }
-                @Override public boolean isBorderStatusSwipeTwoFingers() {
-                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
-                }
                 @Override public void onBorderStatusSwipe(boolean expand) {
                     if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
                 }
@@ -30071,9 +30068,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onFoldDragCancelled() {
                     // Back to the form the bar had, from wherever the finger left it.
                     if (mStatusBarFoldDragging) setTopStatusBarCollapsed(isStatusBarCompact(), true, 0f);
-                }
-                @Override public boolean isTwoFingerOnly() {
-                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
                 }
                 @Override public boolean isStatusGestureBlocked() {
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.

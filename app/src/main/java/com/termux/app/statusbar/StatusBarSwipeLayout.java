@@ -42,8 +42,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         /** The fold drag's stream was cancelled under it: the bar goes back to the form it had. */
         default void onFoldDragCancelled() { }
         default boolean isStatusGestureBlocked() { return false; }
-        /** Read at each DOWN: only two fingers on the bar expand or fold it; one never does. */
-        default boolean isTwoFingerOnly() { return false; }
     }
 
     private final int mTouchSlop;
@@ -197,7 +195,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mGesture != null) mGesture.secondPointer(event.getX(0), event.getY(0));
+                if (mGesture != null) mGesture.secondPointer();
                         break;
             case MotionEvent.ACTION_UP:
                 finish(event);
@@ -238,7 +236,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             event.getPointerId(0), event.getRawX(), event.getRawY(), event.getX(), event.getY(),
             event.getEventTime(), mState, inWindowBar, interactive, nestedChildOwned,
             blocked, formEligible, mTouchSlop, mEdge);
-        mGesture = new StatusBarGesturePolicy(down, listener != null && listener.isTwoFingerOnly());
+        mGesture = new StatusBarGesturePolicy(down);
         if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
         mVelocityTracker.clear();
         mVelocityTracker.addMovement(event);

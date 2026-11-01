@@ -307,7 +307,7 @@ Phrased as tests. Which of these became rules, and which are recorded departures
 
 **Gestures and chrome**
 22. No launcher gesture starts in the system's bottom-edge zone; the keyboard swipe starts on the page's bottom border, above the dock.
-23. The status swipe does not shadow the system notification panel unless opted in; the two-finger status pull stays opt-in.
+23. The status swipe does not shadow the system notification panel unless opted in; the bar unfolds and folds with a tap on it or a one-finger swipe (the two-finger pull was removed).
 24. Every custom gesture has a tap path and a visible cue.
 25. Haptics only on long-press recognition, pick-up and a snap or detent crossing; none per frame of a drag; each honours both
     the app's Haptics switch and Android's touch-feedback setting.

@@ -52,7 +52,7 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void emptyTap_performsClickWithoutExpansionAction() {
+    public void emptyTap_performsClickAndRequestsTheToggle() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         AtomicInteger clicks = new AtomicInteger();
@@ -63,7 +63,7 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
 
-        assertEquals(0, requests.size());
+        assertEquals(java.util.Collections.singletonList(false), requests);
         assertEquals(1, clicks.get());
     }
 
