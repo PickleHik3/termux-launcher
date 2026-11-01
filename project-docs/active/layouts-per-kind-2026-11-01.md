@@ -217,10 +217,9 @@ migration code.
    returns at once when the stored version is 8 or higher, so 1.2.x leaves a v2 store alone and
    reads the flat keys it knows. Keys v2's steps 9-16 renamed (e.g. `dock_style`) read as unset
    there, as they already do for any v2 downgrade today.
-2. **Where the loose keys go.** `keyboard_shown`, `keyboard_rows`, `keyboard_open` and `minimal`
-   are not named in decisions 5 or 6. The spec keeps them where they are (per page kind in the
-   keyboard's own store, and one minimal flag); say if they should move into the kind documents.
-3. **Terminal-minimal is worn by Display too.** While minimal is on, the Display layout is not
-   worn, so the Display's own edits show only when minimal is off. This follows decision 1.
-4. **Start-in on the Terminal.** The fold rule names the Start-in Home page; when Start in is the
-   Terminal this spec uses the first Home page.
+2. **Loose keys (settled 2026-11-01).** `keyboard_shown`, `keyboard_rows` and `keyboard_open` move
+   into each kind's document (that kind's rest, ADR 0018 §4); step 17 folds them by the same rule.
+   `minimal` stays one global flag.
+3. **Terminal-minimal is worn by Display too (settled).** While minimal is on, the Display layout
+   is not worn; its own edits show with minimal off. Minimal is one look for every window.
+4. **Start-in on the Terminal (settled).** The fold rule then uses the first Home page on the wall.
