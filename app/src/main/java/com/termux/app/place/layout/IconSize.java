@@ -8,21 +8,21 @@ import androidx.annotation.Nullable;
  * once in the {@code sizes} document as {@link #FIELD}. It sizes the Home grid's icons and every
  * dock design's alike; a design changes the frame around the icon, never the icon.
  *
- * <p>Steps (dp): M is today's default dock (2.18 × 37.5 dp draws a 40 dp icon), L today's
- * default Home icon (48 dp), XL the largest icon the dock can hold (55 dp at its top scale,
- * measured over {@code AppearanceLooks.iconSizeRangeDp}), S one step under M.</p>
+ * <p>Steps (dp, the developer's, 2026-11-01): S 40 (today's default dock), M 48 (today's
+ * default Home icon, the default), L 54, XL 60. The dock's height follows from the step, so
+ * every step draws on every design.</p>
  */
 public enum IconSize {
-    S("s", 34),
-    M("m", 40),
-    L("l", 48),
-    XL("xl", 54);
+    S("s", 40),
+    M("m", 48),
+    L("l", 54),
+    XL("xl", 60);
 
     /** The field in the {@code sizes} document's layout-wide section. */
     public static final String FIELD = "icon_size";
 
     /** What an install that never chose reads as: today's default Home icon. */
-    @NonNull public static final IconSize DEFAULT = L;
+    @NonNull public static final IconSize DEFAULT = M;
 
     @NonNull public final String key;
     public final int dp;

@@ -22,18 +22,19 @@ public class IconSizeTest {
 
     @Test
     public void todaysDefaultsLandOnTheirSteps() {
-        assertSame("the default dock draws 40 dp", IconSize.M, IconSize.nearest(40));
-        assertSame("Home's 48 dp", IconSize.L, IconSize.nearest(48));
-        assertSame("Home's 54 dp", IconSize.XL, IconSize.nearest(54));
-        assertSame("Home's 60 dp is past the top step", IconSize.XL, IconSize.nearest(60));
+        assertSame("the default dock draws 40 dp", IconSize.S, IconSize.nearest(40));
+        assertSame("Home's 48 dp", IconSize.M, IconSize.nearest(48));
+        assertSame("Home's 54 dp", IconSize.L, IconSize.nearest(54));
+        assertSame("Home's 60 dp", IconSize.XL, IconSize.nearest(60));
         assertSame(IconSize.S, IconSize.nearest(21));
+        assertSame(IconSize.M, IconSize.DEFAULT);
     }
 
     @Test
     public void homesIconWinsOverTheDocksAtTheFold() {
-        // The phone fixture: dock_height 2.994 portrait draws 55 dp; Home was never sized.
-        assertSame(IconSize.XL, IconSize.fold(null, 55));
-        assertSame("Home's choice wins", IconSize.L, IconSize.fold(48, 55));
+        // The developer's phone: dock_height 2.994 portrait draws 55 dp; Home was never sized.
+        assertSame(IconSize.L, IconSize.fold(null, 55));
+        assertSame("Home's choice wins", IconSize.M, IconSize.fold(48, 55));
         assertSame(IconSize.DEFAULT, IconSize.fold(null, null));
     }
 

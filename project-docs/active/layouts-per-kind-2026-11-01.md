@@ -243,13 +243,28 @@ floating; four steps S, M, L, XL; one value for both orientations; built on this
   AccessoryStackLayoutPolicy:111-113; beads fit icons to slot width (LensBeadGeometry,
   MIN_FIT_SCALE 1.1); Home grid icons `app_launcher_home_icon_scale` 48/54/60 dp
   (HomeIconSize.java:17-20); presets {1.72, 1.95, 2.18, 2.45} exist (DockLayoutPolicy.java:31).
-- Target: `sizes` holds `icon_size` (S|M|L|XL) once. Each step maps to one icon dp (pick the four
-  from today's Home 48/54/60 and the dock's default so M looks like today's default dock); the
-  dock's height = icon dp + the design's own padding/frame (+ wall strip's row). Floating and
-  docked share one curve; beads stop fitting to slots. `dock_height` stops being stored.
+- Target: `sizes` holds `icon_size` (S|M|L|XL) once, in its layout-wide section
+  (`place/layout/IconSize`). Steps (developer, 2026-11-01): **S 40, M 48, L 54, XL 60 dp; the
+  default is M.** The dock's height = icon dp + the design's own padding/frame (+ the wall
+  strip's row); the old 0.4–3.0 scale limit does not apply on this path, so XL (60 dp) draws.
+  Floating and docked share one curve; beads stop fitting to slots. `dock_height` stops being
+  stored.
+- **Dock side insets (developer, 2026-11-01).** Seen on pong: the docked glass tray put the
+  first icon against the left screen edge and cut the last icon's badge on the right. Rule, for
+  every design and style:
+  - the dock's side inset is never less than the Home grid's side margin, and for a docked
+    (full-width) dock never less than 16 dp from the screen edge;
+  - with as many icons as the Home grid has columns, the icons stand on the grid's column
+    centres (as Launcher3's hotseat does);
+  - otherwise the icons are spaced evenly within the inset;
+  - when they do not fit at the step, the gaps shrink first, to a 4 dp minimum; icons never
+    shrink below the chosen step and nothing is clipped; a case that still does not fit is
+    reported, never overflowed.
+  - Test: every design × style × step with 4–8 icons at 360 and 412 dp: no icon clipped, insets
+    at least the minimum, icon px equal across designs.
 - Migration (part of step 17): nearest step to the user's Home icon size and dock height (Home
-  icon size wins when they disagree); test fixtures assert the step for the phone fixture
-  (dock_height 2.994 portrait / 2.18 landscape).
+  icon size wins when they disagree); the phone fixture (dock_height 2.994 portrait, about a
+  55 dp icon / 2.18 landscape) lands on L 54.
 - Editor: the dock height slider and the Home icon size row become one "Icon size" S/M/L/XL
   control; settings pages are fragile, change only that row.
 - Acceptance: every design at each step draws the same icon px (unit test over DockSurfaceSpec
