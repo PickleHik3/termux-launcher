@@ -36,6 +36,8 @@ public class PlaceLayoutKindVisibilityTest {
     private static final PlaceOrientation LANDSCAPE = PlaceOrientation.LANDSCAPE;
 
     private SharedPreferences prefs;
+    /** The launcher's own file: {@link #prefs} becomes the routed view once a store opens. */
+    private SharedPreferences raw;
     private TermuxAppSharedPreferences launcher;
 
     @Before
@@ -43,6 +45,7 @@ public class PlaceLayoutKindVisibilityTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("place-layout-kind-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
+        raw = prefs;
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
     }
 
@@ -159,7 +162,9 @@ public class PlaceLayoutKindVisibilityTest {
 
     /** A store at version 14 with a shared layout and a Home layout as given. */
     private PlaceLayoutStore upgrade(boolean homeLayout, boolean sharedDock, boolean homeDock) {
-        SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 14)
+        // Each call is another device: no layouts document from the one before.
+        com.termux.app.place.layout.LayoutStore.prefs(app()).edit().clear().commit();
+        SharedPreferences.Editor editor = raw.edit().putInt("place.migrated", 14)
             .putBoolean("place.home_layout", homeLayout);
         for (PlaceOrientation o : PlaceOrientation.values()) {
             editor.putString(PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL, o, "apps_row"),
@@ -188,7 +193,7 @@ public class PlaceLayoutKindVisibilityTest {
     public void theHomeLayoutsVisibilityBecomesTheHomeKindsAndTheSharedOnesTheTerminals() {
         for (boolean sharedDock : new boolean[] {true, false}) {
             for (boolean homeDock : new boolean[] {true, false}) {
-                prefs.edit().clear().commit();
+                raw.edit().clear().commit();
                 PlaceLayoutStore store = upgrade(true, sharedDock, homeDock);
                 String why = "shared " + sharedDock + ", home " + homeDock;
                 // What Home showed: its own layout's slots (folded into Home's document whole).
