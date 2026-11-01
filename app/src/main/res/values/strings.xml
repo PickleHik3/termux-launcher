@@ -377,6 +377,7 @@
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
+    <string name="termux_x11_app_command_missing">%1$s could not start: its command %2$s is not installed.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
@@ -536,8 +537,8 @@
     <string name="settings_app_drawer_view_type_categories">Categories</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
-    <string name="settings_app_drawer_search_android_keyboard_title">Search keyboard</string>
-    <string name="settings_app_drawer_search_android_keyboard_summary">Use the Android keyboard, with its suggestions and swipe typing.</string>
+    <string name="settings_app_drawer_search_android_keyboard_title">Use system keyboard</string>
+    <string name="settings_app_drawer_search_android_keyboard_summary">Search with the phone\'s own keyboard instead of the launcher\'s, with its suggestions and swipe typing.</string>
     <string name="settings_app_drawer_category_sort_title">Category sorting</string>
     <string name="settings_app_drawer_category_sort_summary">Choose how apps are grouped.</string>
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>

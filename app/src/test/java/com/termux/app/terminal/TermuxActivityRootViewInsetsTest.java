@@ -40,4 +40,27 @@ public class TermuxActivityRootViewInsetsTest {
 
         assertEquals(Insets.of(0, 0, 126, 0), TermuxActivityRootView.horizontalRootInsets(insets));
     }
+
+    /**
+     * Fullscreen: the status bar is hidden, so its inset is gone, but the top cutout is not. The
+     * legacy padding folded the cutout in and left an empty band the height of the camera's row.
+     * (Robolectric's insets leave the cutout out of the legacy fold, so the band itself only shows
+     * on a device; this pins the rule the listener applies.)
+     */
+    @Test public void aHiddenStatusBarLeavesNoTopPaddingOverTheCutout() {
+        WindowInsetsCompat insets = new WindowInsetsCompat.Builder()
+            .setInsets(Type.displayCutout(), Insets.of(0, 136, 0, 0))
+            .build();
+
+        assertEquals(0, TermuxActivityRootView.topRootInset(insets));
+    }
+
+    @Test public void aShownStatusBarKeepsTheTallerOfBarAndCutout() {
+        WindowInsetsCompat insets = new WindowInsetsCompat.Builder()
+            .setInsets(Type.statusBars(), Insets.of(0, 126, 0, 0))
+            .setInsets(Type.displayCutout(), Insets.of(0, 136, 0, 0))
+            .build();
+
+        assertEquals(136, TermuxActivityRootView.topRootInset(insets));
+    }
 }

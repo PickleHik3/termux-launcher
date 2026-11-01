@@ -62,7 +62,14 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     private ClipboardManager clipboard;
-    private long lastClipboardTimestamp = System.currentTimeMillis();
+    /**
+     * The newest Android clip X has been told about, by its clipboard timestamp. It starts at
+     * zero, not at the view's creation, so a clip copied before the display window existed —
+     * a URL copied in the terminal, then the display started for the browser — is announced
+     * when the view is armed and when the paste key refreshes. Upstream starts it at "now",
+     * which made every clip older than the view unpasteable into X (2026-10-29).
+     */
+    private long lastClipboardTimestamp = 0;
     private long mNativeContext;
     private boolean clipboardSyncEnabled = false;
     private boolean hardwareKbdScancodesWorkaround = false;

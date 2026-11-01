@@ -101,7 +101,7 @@ installed_before() {
 pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else apt-get update && apt-get "${APT_OPTS[@]}" full-upgrade; fi; }
 pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
 pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else apt-get install "${APT_OPTS[@]}" "$@"; fi; }
-pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else apt-get remove "${APT_OPTS[@]}" "$@" && apt-get autoremove "${APT_OPTS[@]}"; fi; }
+pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else apt-get remove "${APT_OPTS[@]}" "$@"; fi; }
 # With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
 REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
@@ -462,7 +462,7 @@ else
       fi
     fi
     if [ $PROOT_INSTALLED_TEST = 1 ] && [ $KEEP = 0 ]; then
-      pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get purge ${APT_OPTS[*]} glmark2-es2 && apt-get autoremove ${APT_OPTS[*]}" && detail "Removed the test program from Debian again."
+      pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get purge ${APT_OPTS[*]} glmark2-es2" && detail "Removed the test program from Debian again."
     fi
   fi
   if [ -n "$PROOT_WINNER" ]; then

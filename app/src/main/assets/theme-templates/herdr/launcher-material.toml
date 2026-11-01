@@ -51,8 +51,10 @@ teal          = "{{ colors.terminal_normal_cyan.light.hex }}"
 peach         = "{{ colors.terminal_bright_yellow.light.hex }}"
 
 # The sidebar's rows, coloured from the palette the terminal is wearing: herdr's row styles have
-# no light and dark variant, so these follow the current mode and re-render when it flips. One
-# line per value, so apply.sh can read each key whole.
+# no light and dark variant, so these follow the current mode and re-render when it flips. They
+# are defaults for a config.toml that has no row of that name: a row you wrote there keeps its
+# content and its colours, and apply.sh leaves ours out beside it. One line per value, so
+# apply.sh can read each key whole.
 [ui.sidebar.spaces]
 rows = [["state_icon", { token = "workspace", fg = "{{ colors.primary.default.hex }}", bold = true }], [{ token = "branch", fg = "{{ colors.tertiary.default.hex }}" }, { token = "git_status", fg = "{{ colors.terminal_normal_green.default.hex }}" }]]
 

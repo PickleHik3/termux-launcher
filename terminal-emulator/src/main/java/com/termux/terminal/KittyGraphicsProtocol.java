@@ -594,7 +594,9 @@ final class KittyGraphicsProtocol {
         if (storeRequested) {
             if (effectiveId == 0) effectiveId = store.assignFreeId();
             int estimate = (int) pixelBytes;
-            if (store.wouldExceedLimits(effectiveId, estimate)) {
+            // A full store first evicts older images nothing displays, as the spec asks.
+            if (!store.makeRoomForImage(effectiveId, estimate,
+                    imageId -> !emulator.kittyPlacementsFor(imageId).isEmpty())) {
                 if (command.action == 't' || command.placeholder == 1) {
                     reply(command, "ENOSPC:image store is full", true, false, effectiveId);
                     return;
