@@ -6661,18 +6661,30 @@ public class TerminalPaneController {
                         if (resized) {
                             Split first = mXSplit;
                             Split second = mYSplit;
+                            android.os.Trace.beginSection("Pane.lift.snap");
                             snapSplitToCellGrid(first);
                             snapSplitToCellGrid(second);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.learnShare");
                             Leaf focused = mActiveWindow == null ? null : mActiveWindow.active;
                             Window window = windowOf(focused == null ? null : focused.session);
                             learnFocusShare(window, first, focused);
                             learnFocusShare(window, second, focused);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.release");
                             releaseDividerHold();
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.haptic");
                             Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
+                            android.os.Trace.endSection();
                         }
                         resetTouchState();
                         invalidate();
-                        if (resized) mHost.onTreesChanged();
+                        if (resized) {
+                            android.os.Trace.beginSection("Pane.lift.treesChanged");
+                            mHost.onTreesChanged();
+                            android.os.Trace.endSection();
+                        }
                         return true;
                     }
                     if (mHold.isTracking()) {

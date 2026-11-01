@@ -33343,7 +33343,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onTreesChanged() {
-            rebuildDrawerSessions();
+            android.os.Trace.beginSection("Drawer.rebuildSessions");
+            try {
+                rebuildDrawerSessions();
+            } finally {
+                android.os.Trace.endSection();
+            }
         }
 
         @Override public void onHomeFloatsChanged() {
