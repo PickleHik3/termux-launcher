@@ -349,8 +349,12 @@ launcherctl layout set <kind> FILE
 
 Prints or replaces one layout document (ADR 0020). `<kind>` is `home`, `terminal`,
 `terminal_minimal`, `display`, or `sizes` (the sizes every kind shares). `set` checks the file
-first and refuses it with the bad field named; nothing changes then. A good file is written
-whole and shows at once.
+first and refuses it with the bad field named; nothing changes then. `set` replaces the whole
+document: a field left out falls back to its default, so start from `layout get`. A known field
+with a value the launcher cannot read (an unknown `dock_design`, a placement that is not an
+edge, an `icon_size` outside s/m/l/xl, a negative `*_order`, a size outside its range) is
+refused; a field this build does not know is kept as it is. A good file is written whole and
+shows at once.
 
 ```
 launcherctl layout get home > h.json
