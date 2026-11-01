@@ -3687,8 +3687,6 @@ public final class TerminalView extends View {
             final float drawOffset = currentDrawOffset();
             computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
-            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
-                || mTravelActive;
             // A travel toward a taller grid draws the transcript its resize will reveal above the
             // rows, where the resize will put it: drawing starts that many rows up and is moved up
             // by as many lines, so mTopRow, hit-testing and every row below stay where they were.
@@ -3698,13 +3696,14 @@ public final class TerminalView extends View {
                 mRenderer.mFontLineSpacingAndAscent)) : 0f;
             final int drawTopRow = mTopRow - fillRows;
             final int extraRows = fillRows + (scrollOffset != 0f ? 1 : 0);
-            if (canvasTranslated) {
-                canvas.save();
-                // Rows displaced past this view's edges stay inside it: the pane frame around
-                // this view lets its children draw outside their bounds on purpose.
-                if (mTravelActive) canvas.clipRect(0, 0, getWidth(), getHeight());
-                canvas.translate(0f, drawOffset);
-            }
+            // Everything this pane draws stays inside it, in every state: rows displaced by a
+            // travel, a held grid larger than a pane that shrank under it, a classic image or a
+            // placeholder reaching past the last row. The pane frame around this view lets its
+            // children draw outside their bounds on purpose (glows, rims, shadows), so the clip
+            // is this view's own, not the frame's (ADR 0019).
+            canvas.save();
+            canvas.clipRect(0, 0, getWidth(), getHeight());
+            if (drawOffset != 0f) canvas.translate(0f, drawOffset);
             if (paintingPaddingFill)
                 drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset,
                     fillRows > 0 ? fillClipTop - drawOffset : Float.NaN);
@@ -3744,8 +3743,7 @@ public final class TerminalView extends View {
                 else
                     mCursorTrailListener.onCursorMayHaveMoved(this);
             }
-            if (canvasTranslated)
-                canvas.restore();
+            canvas.restore();
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
