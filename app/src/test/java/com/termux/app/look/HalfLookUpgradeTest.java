@@ -233,6 +233,42 @@ public class HalfLookUpgradeTest {
             .TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, true);
         com.termux.shared.termux.settings.preferences.LookGridMigration.run(
             LookKeys.gridStore(store), java.util.Arrays.asList(TERMINAL_ID, DISPLAY_ID, 1, 3));
+        // Then the layouts upgrade (step 17, ADR 0020 §2): the Start-in Home page's and the
+        // Terminal page's cells become their kinds' cells, the only cells a page reads now.
+        foldPageCellsIntoKinds(store, HOME_ID, TERMINAL_ID);
+        installKinds();
+    }
+
+    private static final int HOME_ID = 1;
+
+    /** Step 17's look fold over a memory store, with the app's rule. */
+    static void foldPageCellsIntoKinds(MemoryLookStore store, int homeId, int terminalId) {
+        java.util.Map<String, Object> all = new java.util.LinkedHashMap<>();
+        for (String key : store.keys()) {
+            if (key.startsWith(com.termux.shared.termux.settings.preferences.LookGrid.PREFIX))
+                all.put(key, store.getInt(key, 0));
+        }
+        for (java.util.Map.Entry<String, Object> cell : com.termux.shared.termux.settings
+                .preferences.LookGrid.foldedPageCells(all, homeId, terminalId).entrySet())
+            store.putInt(cell.getKey(), (Integer) cell.getValue());
+    }
+
+    /** The wall's page kinds, as the app installs them. */
+    private static void installKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(page ->
+            page == HOME_ID || page == 3
+                ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
+                : page == TERMINAL_ID
+                ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL
+                : page == DISPLAY_ID
+                ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.DISPLAY : null,
+            null);
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 
 }

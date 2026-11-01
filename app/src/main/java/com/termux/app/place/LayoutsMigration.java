@@ -40,9 +40,6 @@ import java.util.Map;
  */
 final class LayoutsMigration {
 
-    private static final String LOOK_PREFIX = "look.";
-    private static final String LOOK_PAGE_SEPARATOR = "@";
-    private static final String LOOK_KIND_PREFIX = "kind:";
 
     @NonNull private final Map<String, ?> mAll;
     /** The Start-in Home page, or the first Home page; -1 when the wall is unknown. */
@@ -321,35 +318,7 @@ final class LayoutsMigration {
      */
     @NonNull
     Map<String, Object> lookCells() {
-        Map<String, Object> out = new LinkedHashMap<>();
-        for (Map.Entry<String, ?> e : mAll.entrySet()) {
-            String key = e.getKey();
-            if (!key.startsWith(LOOK_PREFIX) || e.getValue() == null) continue;
-            int at = key.lastIndexOf(LOOK_PAGE_SEPARATOR);
-            if (at < 0) continue;
-            int page;
-            try {
-                page = Integer.parseInt(key.substring(at + 1));
-            } catch (NumberFormatException notAPage) {
-                continue;
-            }
-            // Vibrancy and Margin have no kind row; their page cells stay unread.
-            com.termux.shared.termux.settings.preferences.LookGrid.Key parsed =
-                com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
-            if (parsed == null || !parsed.property.perElement) continue;
-            String cell = key.substring(0, at + 1) + LOOK_KIND_PREFIX;
-            if (page >= 0 && page == homePageId) {
-                putAbsent(out, cell + "home", e.getValue());
-            } else if (page >= 0 && page == terminalPageId) {
-                putAbsent(out, cell + "terminal", e.getValue());
-                putAbsent(out, cell + "display", e.getValue());
-            }
-        }
-        return out;
-    }
-
-    private void putAbsent(@NonNull Map<String, Object> out, @NonNull String key,
-                           @NonNull Object value) {
-        if (!mAll.containsKey(key)) out.put(key, value);
+        return com.termux.shared.termux.settings.preferences.LookGrid.foldedPageCells(mAll,
+            homePageId, terminalPageId);
     }
 }

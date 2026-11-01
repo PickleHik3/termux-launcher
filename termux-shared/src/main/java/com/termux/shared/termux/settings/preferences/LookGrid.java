@@ -602,4 +602,45 @@ public final class LookGrid {
         }
         return keys;
     }
+
+    /**
+     * The page cells that fold into kind cells at the layouts upgrade (step 17, ADR 0020 §2/§7):
+     * {@code look.…@<page>} of the Start-in Home page {@code homePageId} into {@code @kind:home},
+     * of the Terminal page {@code terminalPageId} into {@code @kind:terminal} and
+     * {@code @kind:display}, each only where {@code all} holds no value for the kind's cell.
+     * Other pages' cells, and Vibrancy's and Margin's (no kind row), are left and no longer read.
+     */
+    @NonNull
+    public static java.util.Map<String, Object> foldedPageCells(
+            @NonNull java.util.Map<String, ?> all, int homePageId, int terminalPageId) {
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+            String key = e.getKey();
+            if (key == null || !key.startsWith(PREFIX) || e.getValue() == null) continue;
+            int at = key.lastIndexOf(PAGE_SEPARATOR);
+            if (at < 0) continue;
+            int page;
+            try {
+                page = Integer.parseInt(key.substring(at + 1));
+            } catch (NumberFormatException notAPage) {
+                continue;
+            }
+            Key parsed = parse(key);
+            if (parsed == null || !parsed.property.perElement) continue;
+            String cell = key.substring(0, at + 1) + KIND_PREFIX;
+            if (page >= 0 && page == homePageId) {
+                putAbsent(all, out, cell + Kind.HOME.key, e.getValue());
+            } else if (page >= 0 && page == terminalPageId) {
+                putAbsent(all, out, cell + Kind.TERMINAL.key, e.getValue());
+                putAbsent(all, out, cell + Kind.DISPLAY.key, e.getValue());
+            }
+        }
+        return out;
+    }
+
+    private static void putAbsent(@NonNull java.util.Map<String, ?> all,
+                                  @NonNull java.util.Map<String, Object> out,
+                                  @NonNull String key, @NonNull Object value) {
+        if (!all.containsKey(key)) out.put(key, value);
+    }
 }
