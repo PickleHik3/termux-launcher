@@ -525,6 +525,13 @@ returns the resolved value.
 _Avoid_: global, default (the shipped value is the default; Base is what the user set), inherited
 and detached (the old flag words)
 
+**Backstop**:
+The time or frame count after which a **Hold** releases on its own because its signal has not
+come. A backstop is a fail-safe, not a schedule: the design is that the signal arrives first, and
+every backstop that releases a hold is written to the motion log by name so it can be counted.
+_Avoid_: timeout (a timeout is an error; a backstop keeps the screen alive), fallback delay
+
+
 **Event effect**:
 A built-in shader effect that draws only in answer to something happening (a keystroke, a cursor
 move, the bell, a pane taking focus) and stops when its motion ends, so it costs nothing at rest.
@@ -579,6 +586,20 @@ chips, the dock strip's titles, Home's app labels). Each is drawn at its own siz
 surface's own size stays an offset: pane zoom and the terminal font setting, Home's label size.
 100% is every install's sizes as they were (`text_size_percent`, unset until moved).
 _Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
+
+**Gate**:
+A **Hold** that keeps a window from drawing until the first frame is right: the keyboard reveal
+gate, the first-draw gate. A gate's **Backstop** is short, because a gate that stays shut is a
+black home screen.
+_Avoid_: block, freeze
+
+**Hold**:
+A wait for one signal before something is let go: a layout the pass booked, a view's first draw,
+a surface's first frame after a swap, the settle of a return. A hold is named, is released once
+by the signal it waits for or by its **Backstop**, and says which of the two released it. A hold
+that is superseded by a newer one is a no-op when it fires.
+_Avoid_: wait, timer, delay, debounce (a debounce coalesces repeats; it waits for nothing)
+
 
 **Lazy mode**:
 The Battery setting that stops the launcher animating while nobody is watching: the clock swaps its
