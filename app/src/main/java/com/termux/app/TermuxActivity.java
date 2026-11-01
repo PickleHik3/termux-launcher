@@ -17648,8 +17648,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float scale = sizes.dockHeightScale(orientation);
         int stripDp = sizes.wallStripHeightDp(orientation);
         // The one icon size, and the Home grid the dock's side insets follow (spec §8a).
-        int iconDp = com.termux.app.place.layout.IconSize.of(
-            com.termux.app.place.layout.LayoutStore.shared(this).current().sizes()).dp;
+        // The step drawn: the user's choice, capped by what the pinned apps fit at.
+        int iconDp = drawnIconSize(store).dp;
         float gridEdgeDp = homeMarginDp();
         int gridColumns = store.widgetColumns(orientation);
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
@@ -17696,6 +17696,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The pinned slots a page of the row holds: the preference, or the width rule when unset. */
+    /** What the last {@link #drawnIconSize} measured the cap for, so a frame measures nothing. */
+    private int mIconCapCount = -1;
+    private int mIconCapWidthDp = -1;
+    private float mIconCapEdgeDp = -1f;
+    private int mIconCapColumns = -1;
+    @Nullable private com.termux.app.dock.DockStyle mIconCapHomeDesign;
+    @Nullable private com.termux.app.dock.DockStyle mIconCapTerminalDesign;
+    @NonNull private com.termux.app.place.layout.IconSize mIconCap =
+        com.termux.app.place.layout.IconSize.XL;
+    /** The step Home's icons were last given, so a change re-dresses them once. */
+    private int mDrawnIconDp = -1;
+
+    /**
+     * The one icon size as it draws (ADR 0020 §3, developer 2026-11-01): the stored choice,
+     * capped by the largest step the pinned apps fit at on the designs Home and the Terminal
+     * wear, both styles ({@link com.termux.app.dock.IconSizeCap}). The stored choice is kept, so
+     * unpinning brings it back. Measured at the screen's smallest width, so a turn keeps it. A
+     * changed step re-dresses Home's icons, which read the published cap.
+     */
+    @NonNull
+    private com.termux.app.place.layout.IconSize drawnIconSize(@NonNull PlaceLayoutStore store) {
+        com.termux.app.place.layout.IconSize chosen = com.termux.app.place.layout.IconSize.of(
+            com.termux.app.place.layout.LayoutStore.shared(this).current().sizes());
+        int count = mPreferences == null ? 0 : mPreferences.getAppLauncherButtonCount();
+        int widthDp = getResources().getConfiguration().smallestScreenWidthDp;
+        float edgeDp = homeMarginDp();
+        int columns = store.widgetColumns(PlaceOrientation.PORTRAIT);
+        com.termux.app.dock.DockStyle home =
+            storeArrangementOf(com.termux.app.wall.PageRef.HOME).design();
+        com.termux.app.dock.DockStyle terminal =
+            storeArrangementOf(com.termux.app.wall.PageRef.TERMINAL).design();
+        if (count != mIconCapCount || widthDp != mIconCapWidthDp
+            || Float.compare(edgeDp, mIconCapEdgeDp) != 0 || columns != mIconCapColumns
+            || home != mIconCapHomeDesign || terminal != mIconCapTerminalDesign) {
+            mIconCapCount = count;
+            mIconCapWidthDp = widthDp;
+            mIconCapEdgeDp = edgeDp;
+            mIconCapColumns = columns;
+            mIconCapHomeDesign = home;
+            mIconCapTerminalDesign = terminal;
+            mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
+                java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns);
+            com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
+        }
+        com.termux.app.place.layout.IconSize drawn =
+            com.termux.app.dock.IconSizeCap.effective(chosen, mIconCap);
+        if (drawn.dp != mDrawnIconDp) {
+            mDrawnIconDp = drawn.dp;
+            // Out of the layout pass: Home's icons re-dress once for the new step.
+            if (mWidgetPaneController != null && mTerminalView != null) {
+                mTerminalView.post(() -> {
+                    if (mWidgetPaneController != null)
+                        mWidgetPaneController.setIconStyle(
+                            com.termux.app.launcher.home.HomeSettings.iconStyle(this));
+                });
+            }
+        }
+        return drawn;
+    }
+
     private int dockSlotCount(@NonNull DisplayMetrics metrics) {
         int count = mPreferences == null ? 0 : mPreferences.getAppLauncherButtonCount();
         return count > 0 ? count : calculateSuggestionBarMaxButtons(metrics);

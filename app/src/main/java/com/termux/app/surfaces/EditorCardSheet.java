@@ -85,6 +85,11 @@ final class EditorCardSheet {
         @NonNull String[] choices(@NonNull Row row);
         /** A chips row's glyphs, one per choice, or null. */
         @Nullable int[] chipIcons(@NonNull Row row);
+        /**
+         * Whether choice {@code index} of a segments row can be picked; a greyed choice stays in
+         * its place and the row's summary says why (the icon size the pinned apps cap).
+         */
+        default boolean choiceEnabled(@NonNull Row row, int index) { return true; }
         /** What an expander row opens under itself, or null. */
         @Nullable View expanderContent(@NonNull Row row);
         /** A slider moved ({@code dragging} while the finger is on it), or a choice was made. */
@@ -1890,6 +1895,11 @@ final class EditorCardSheet {
                 }
                 if (views.segments.isEnabled() != enabled)
                     views.segments.setEnabled(enabled);
+                for (int i = 0; i < views.buttons.size(); i++) {
+                    boolean can = enabled && mModel.choiceEnabled(row, i);
+                    if (views.buttons.get(i).isEnabled() != can)
+                        views.buttons.get(i).setEnabled(can);
+                }
             } else if (views.buttons != null) {
                 for (int i = 0; i < views.buttons.size(); i++) {
                     MaterialButton chip = views.buttons.get(i);

@@ -2716,6 +2716,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (GlassRows.allGlassOnly(row))
                 return getString(R.string.editor_row_all_glass_only);
             switch (row) {
+                case HOME_ICON_SIZE:
+                    return iconSizeCapHint(mHost.context());
                 case CURSOR_TRAIL:
                     return optionLabel(R.array.appearance_editor_cursor_trail_entries,
                         R.array.appearance_editor_cursor_trail_values,
@@ -2788,6 +2790,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
             return row == Row.DESIGN ? DESIGN_ICONS.clone() : cardRowGlyphs(row);
+        }
+
+        @Override public boolean choiceEnabled(@NonNull Row row, int index) {
+            // The pinned apps cap the one icon size (ADR 0020 §3): a step they do not fit at
+            // is greyed, and the row's summary names the limit.
+            if (row != Row.HOME_ICON_SIZE) return true;
+            com.termux.app.place.layout.IconSize[] steps =
+                com.termux.app.place.layout.IconSize.values();
+            return index < 0 || index >= steps.length
+                || steps[index].dp <= com.termux.app.dock.IconSizeCap.published().dp;
         }
 
         @Nullable @Override public View expanderContent(@NonNull Row row) {
@@ -5803,6 +5815,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
+    /**
+     * The one line under the Icon size row while the pinned apps cap it ("7 pinned apps fit up
+     * to M"), or null while every step fits.
+     */
+    @Nullable
+    static CharSequence iconSizeCapHint(@Nullable Context context) {
+        com.termux.app.place.layout.IconSize cap = com.termux.app.dock.IconSizeCap.published();
+        if (context == null || cap == com.termux.app.place.layout.IconSize.XL) return null;
+        return context.getString(R.string.editor_icon_size_cap,
+            com.termux.app.dock.IconSizeCap.publishedCount(), cap.name());
+    }
+
     /** The glyphs a choice row shows instead of its words; null for words. */
     @Nullable
     private int[] cardRowGlyphs(@NonNull Row row) {
@@ -5813,9 +5837,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LABEL_SIZE:
                 return new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
                     EditorGlyphs.LABEL_LARGE};
+            // The one icon size reads its four short words (S, M, L, XL): four glyphs stood the
+            // row under its label on the Dock card, and three glyphs cannot name four steps.
             case HOME_ICON_SIZE:
-                return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
-                    EditorGlyphs.ICON_LARGE, EditorGlyphs.ICON_LARGE};
+                return null;
             case FOLDERS:
                 return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
                     EditorGlyphs.FOLDER_ROOMY};
