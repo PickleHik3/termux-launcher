@@ -190,14 +190,16 @@ public final class LauncherWidgetRepositoryPageIdsTest {
     @Test public void aShelfBeyondTheOwnersPagesAsksTheOwnerToGrow() {
         WidgetTestFixtures.Memory storage = new WidgetTestFixtures.Memory();
         storage.value = legacy(1, legacyRecord(15, 0),
-            ",\"orientation\":\"portrait\",\"layouts\":{\"landscape\":{\"grid\":{\"rows\":4,"
+            ",\"orientation\":\"landscape\",\"layouts\":{\"portrait\":{\"grid\":{\"rows\":4,"
                 + "\"columns\":6},\"pages\":4,\"cells\":[{\"id\":15,\"cell\":{\"left\":0,\"top\":0,"
                 + "\"right\":1,\"bottom\":1},\"page\":3}]}}");
         Owner owner = new Owner(1);
         LauncherWidgetRepository repository = new LauncherWidgetRepository(storage, owner);
         assertEquals("the owner grew to the four pages the shelf names", 4, owner.pages.size());
         assertEquals(4, repository.pageCount());
-        assertTrue(repository.applyOrientation("landscape", LANDSCAPE));
+        // Only the portrait arrangement is kept (ADR 0020 §12): a save made while landscape
+        // was on screen shelves the portrait one, and the turn to it restores the page.
+        assertTrue(repository.applyOrientation("portrait", new WidgetGridDefinition(4, 6)));
         assertEquals(3, repository.get(15).page);
     }
 
