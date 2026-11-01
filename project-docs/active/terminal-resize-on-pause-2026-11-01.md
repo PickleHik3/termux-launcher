@@ -26,7 +26,10 @@ One wave, one pong build. Base: v2-redesign.
    - a placeholder logo wraps into strips when its pane is narrower than the logo (accepted);
    - an old classic image stays until its program deletes it; we change nothing here unless the
      reproduction below shows we keep one the program did delete.
-7. **Image store full**: the store stays 32 MiB / 256 images. When a new image does not fit,
+7. **Alternate screen** (full-screen programs: kew, btop, editors): a resize keeps its rows where
+   they are, top-anchored, cut or padded at the bottom and right, as kitty does; it never
+   rotates or reflows them (finding 1 below).
+8. **Image store full**: the store stays 32 MiB / 256 images. When a new image does not fit,
    older images that have no placement are evicted first, as the graphics spec asks; only then is
    the new one refused, with the reply a client expects (verify today's reply first).
 
@@ -77,7 +80,36 @@ store size; moving the reflow off the main thread.
 3. The fastfetch logo drawn above its pane's top edge (pong recording, 5.5 s), with pane glass on
    and off.
 
-Findings: (filled in after the reproductions)
+Findings (2026-11-01, emulator `emu`, debug build installed 08:24, pane glass on — it is on whenever
+the launcher stands on a wallpaper, `LookGlassSpec.slabShown()`):
+
+1. **kew's art is text, not a kitty image here.** kew drew its cover with half-block characters
+   (`▀`, 24-bit colour) in every run, kitty APC count 0 in a `script` log; pong's recording shows
+   the same blocky art. The duplicate is a text effect.
+   **Reproduced:** after a keyboard-driven shrink of kew's pane, the pane showed its rows rotated
+   (the cover's lower half above its upper half, "Repro / 2:09" above "Resize Test / Agent")
+   while the emulator's own screen text was in the right order; kew's next repaint fixed it.
+   kew runs on the alternate screen (`?1049h`). Cause, confirmed in code: the alternate buffer
+   resizes through the same ring as the main screen with its total set to the new row count
+   (`TerminalEmulator.java:1220`), and "a shrinking alternate buffer keeps its old ring but wraps
+   it at the new, smaller total, so its rows do not land anywhere stable"
+   (`TerminalEmulator.java:1085-1089`). kitty resizes the alternate screen without reflow, copying
+   rows 0..n in place and cutting columns (`kitty/resize.c:433-463`, `screen.c:321`, at fe55cd1).
+   **We differ → in the wave:** the alternate screen keeps its rows in place on resize, top-anchored,
+   cut or padded at the bottom and right, never rotated or reflowed. Resize-on-pause would show the
+   rotation at every pause otherwise.
+2. **Image store full: we refuse, the spec evicts.** Twelve unplaced 1024×1024 RGBA uploads
+   (4 MiB each, `a=t`): 1-7 `OK`, 8-12 `ENOSPC:image store is full`; placing 1 and 2 afterwards
+   `OK`, 12 `ENOENT`. **In the wave:** evict older images with no placement before refusing.
+3. **Held grid with glass on: nothing spills on the emulator**, either direction. But a *growing*
+   pane shows its old grid **centred**, not top-anchored (`centredSlackPx`,
+   `TerminalView.java:4312-4319`): the bottom pane grown by an upward drag drew rows 14-30 lower
+   in the pane, and kew's old frame sat mid-pane in the grown top pane. **In the wave:** while held,
+   the old grid is anchored at the top (behaviour 2 above). The logo above the bottom pane's top
+   edge (pong 5.5 s) did not reproduce here; the always-on clip covers it whatever its cause, and
+   the pong check after the wave looks for it.
+
+Screenshots: session scratchpad `drag1/`, `drag2/`, `drag3/strip.png`, `pre3top.png`, `nowtop.png`.
 
 ## Tests owed
 
