@@ -282,20 +282,38 @@ public final class LookGridMigration {
             TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
     }
 
-    /** Whether the grid answers the old number: blur through its Frost stop. */
+    /**
+     * Whether the grid answers the old number: blur through its Frost stop. On a page, the page's
+     * own cell when it holds one, else the wall's (the read this fold's page cells had).
+     */
     private static boolean agrees(@NonNull LookGrid grid, @NonNull Element element,
                                   @NonNull OldProperty property, int page, int want) {
-        if (property == OldProperty.BLUR)
-            return grid.value(Property.FROST, element, page) == FrostStops.nearestStopByBlur(want);
-        return grid.value(gridProperty(property), element, page) == gridProperty(property).clamp(want);
+        Property target = property == OldProperty.BLUR ? Property.FROST : gridProperty(property);
+        int expected = property == OldProperty.BLUR
+            ? FrostStops.nearestStopByBlur(want) : target.clamp(want);
+        if (page >= 0) {
+            String pageCell = LookGrid.key(target, element, page);
+            if (grid.store().contains(pageCell))
+                return grid.store().getInt(pageCell, Integer.MIN_VALUE) == expected;
+            page = LookGrid.NO_PAGE;
+        }
+        return grid.value(target, element, page) == expected;
     }
 
+    /**
+     * Writes one old value. A page's own value goes to that page's cell
+     * ({@code look.<p>.<element>@<page>}), never through the grid's kind lookup: the wall's page
+     * kinds are not installed yet when this runs, and the layouts migration (step 17, ADR 0020 §7)
+     * folds the Start-in Home page's and the Terminal page's cells into their kinds' cells later.
+     */
     private static void writeOld(@NonNull LookGrid grid, @NonNull Element element,
                                  @NonNull OldProperty property, int page, int value) {
-        if (property == OldProperty.BLUR)
-            grid.write(Property.FROST, element, page, FrostStops.nearestStopByBlur(value));
+        Property target = property == OldProperty.BLUR ? Property.FROST : gridProperty(property);
+        int stored = property == OldProperty.BLUR ? FrostStops.nearestStopByBlur(value) : value;
+        if (page >= 0)
+            grid.store().putInt(LookGrid.key(target, element, page), target.clamp(stored));
         else
-            grid.write(gridProperty(property), element, page, value);
+            grid.write(target, element, page, stored);
     }
 
     @NonNull
