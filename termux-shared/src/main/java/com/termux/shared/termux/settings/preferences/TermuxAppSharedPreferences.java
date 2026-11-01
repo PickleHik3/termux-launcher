@@ -714,6 +714,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FANCIER_GLASS, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LIVE_WINDOWS_WHILE_SWIPING}. */
+    public boolean isLiveWindowsWhileSwipingEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LIVE_WINDOWS_WHILE_SWIPING,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WINDOWS_WHILE_SWIPING);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS}. */
     public void setFancierGlassEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS, value, false);
