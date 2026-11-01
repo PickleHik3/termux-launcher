@@ -109,9 +109,8 @@ public final class ResolvedArrangement {
                                               @NonNull PageRef page,
                                               @NonNull LayoutStyle style) {
         PlaceLayoutStore view = store.forVariant(variant);
-        // Home pages read the dock's toggles from Home's scope whichever layout they wear.
-        PlaceLayoutStore dock = store.forVariant(
-            DressResolver.dockLayoutOf(variant, DressResolver.kindOf(page.kind)));
+        // A Home page wears Home's layout, so its dock is that layout's (ADR 0020 §1).
+        PlaceLayoutStore dock = view;
         PlaceLayout layout = store.resolve(orientation, variant, page.kind);
         // A Home page draws the design PlaceLayoutStore#homePageDockDesign answers, the dress's too.
         DockStyle design = page.kind == PaneWallPage.WIDGETS

@@ -15,7 +15,7 @@ import java.util.function.UnaryOperator;
 /**
  * The {@code layouts} file (ADR 0020 §5): five JSON documents read once into an immutable
  * {@link Layouts}, each written whole. {@link #update} runs on the main thread only, so two writers
- * in one frame cannot lose one another's change, and tells its listeners once: the one redress
+ * in one frame cannot lose one another's change (writes are also serialised), and tells its listeners once: the one redress
  * request of ADR 0018 §2.
  */
 public final class LayoutStore {
@@ -71,10 +71,24 @@ public final class LayoutStore {
         mCurrent = load();
     }
 
-    /** The app's store, over the {@code layouts} file. */
+    private static final java.util.WeakHashMap<SharedPreferences, LayoutStore> SHARED =
+        new java.util.WeakHashMap<>();
+
+    /**
+     * The app's one store over the {@code layouts} file, shared by every reader in the process so
+     * no two hold different copies.
+     */
     @NonNull
-    public static LayoutStore open(@NonNull Context context) {
-        return new LayoutStore(new PrefsStorage(prefs(context)), true);
+    public static LayoutStore shared(@NonNull Context context) {
+        SharedPreferences file = prefs(context);
+        synchronized (SHARED) {
+            LayoutStore store = SHARED.get(file);
+            if (store == null) {
+                store = new LayoutStore(new PrefsStorage(file), true);
+                SHARED.put(file, store);
+            }
+            return store;
+        }
     }
 
     /** Reads the five documents afresh. */
@@ -100,7 +114,7 @@ public final class LayoutStore {
     }
 
     /** Changes one kind's document, writes it whole, and asks for one redress. */
-    public void update(@NonNull LayoutKind kind, @NonNull UnaryOperator<KindLayout> change) {
+    public synchronized void update(@NonNull LayoutKind kind, @NonNull UnaryOperator<KindLayout> change) {
         assertMainThread();
         KindLayout before = mCurrent.kind(kind);
         KindLayout after = change.apply(before);
@@ -113,7 +127,7 @@ public final class LayoutStore {
     }
 
     /** Changes the shared sizes, writes them whole, and asks for one redress. */
-    public void updateSizes(@NonNull UnaryOperator<Sizes> change) {
+    public synchronized void updateSizes(@NonNull UnaryOperator<Sizes> change) {
         assertMainThread();
         Sizes before = mCurrent.sizes();
         Sizes after = change.apply(before);
@@ -126,7 +140,7 @@ public final class LayoutStore {
     }
 
     /** Writes every document at once: the migration's and a reset's one write. */
-    public void replaceAll(@NonNull Layouts layouts) {
+    public synchronized void replaceAll(@NonNull Layouts layouts) {
         mStorage.write(documents(layouts));
         mCurrent = layouts;
         notifyChanged();
@@ -158,7 +172,10 @@ public final class LayoutStore {
     private void assertMainThread() {
         if (!mMainThreadOnly) return;
         Looper main = Looper.getMainLooper();
+        // Writes are serialised by the lock; one off the main thread is logged, not thrown, so
+        // a background caller cannot crash the launcher.
         if (main != null && Looper.myLooper() != main)
-            throw new IllegalStateException("layouts are written on the main thread only");
+            com.termux.shared.logger.Logger.logWarn("LayoutStore",
+                "a layout was written off the main thread");
     }
 }

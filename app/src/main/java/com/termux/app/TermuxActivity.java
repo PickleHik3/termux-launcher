@@ -15624,8 +15624,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        // The Home page in front holds a page layout of its own (ADR 0015 §3).
-        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS).isPage();
+        // Page layouts are gone (ADR 0020 §2); Home wears the Workspace's Style, Corners and
+        // Margin, as every Home page without a page layout did since version 16.
+        return false;
     }
 
     /**
@@ -17870,8 +17871,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.wall.PaneWallPage page) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store == null ? null : store.forVariant(com.termux.app.chrome.DressResolver
-            .dockLayoutOf(mDresses.layoutOf(page), com.termux.app.chrome.DressResolver.kindOf(page)));
+        // A layout's dock is its own: each page wears its kind's layout (ADR 0020 §1).
+        return store == null ? null : store.forVariant(mDresses.layoutOf(page));
     }
 
     /**
@@ -28134,8 +28135,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
-                PlaceLayoutStore places = placeLayoutStore();
-                if (places != null) places.dropPageLayout(page.id, page.kind);
                 if (mPaneController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
                     mPaneController.homePageRemoved(page.id);
                 }
