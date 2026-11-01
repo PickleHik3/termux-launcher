@@ -150,6 +150,13 @@ public final class TerminalView extends View {
      */
     private int mHeldGridSlackPx = -1;
     /**
+     * What the last draw reported to the cursor trail with: the held slack it drew with and the
+     * emulator's cursor-move stamp, so the next draw can tell a cursor the pane's geometry moved on
+     * screen from one the program moved ({@link #cursorTrailSnaps}).
+     */
+    private int mTrailHeldSlackPx = -1;
+    private long mTrailCursorStampMillis = Long.MIN_VALUE;
+    /**
      * Pixels at the top of this view that the text keeps clear of while the view's own bounds (and
      * the glass behind it) still reach there: the camera's band when Full screen lifts the pane to
      * the screen's top edge (FullScreenCornerPolicy). The rows are counted in what is left below
@@ -3169,13 +3176,25 @@ public final class TerminalView extends View {
      */
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        retireScrollCache();
         if (mTerminalSizeUpdatesPaused) {
+            // Held (ADR 0019): the grid is what it was, so its recording stays good and this
+            // redraw does not count as new content; the resize that ends the hold retires it.
             holdGridAtTop(oldh);
             mTerminalSizeUpdatePending = true;
-            invalidate();
+            invalidateGeometryOnly();
         } else {
+            retireScrollCache();
             updateSize(false, "layout");
+        }
+    }
+
+    /** Redraw for a change of this view's frame alone; see {@link #invalidateScrollPosition}. */
+    private void invalidateGeometryOnly() {
+        mScrollPositionInvalidate = true;
+        try {
+            invalidate();
+        } finally {
+            mScrollPositionInvalidate = false;
         }
     }
 
@@ -3195,11 +3214,13 @@ public final class TerminalView extends View {
         if (mTerminalSizeUpdatesPaused) {
             holdGridAtTop(getHeight());
             mTerminalSizeUpdatePending = true;
-            invalidate();
+            invalidateGeometryOnly();
             return;
         }
         if (mHeldGridSlackPx >= 0) {
             mHeldGridSlackPx = -1;
+            // The held grid's recording ends with the hold: never replayed across a real resize.
+            retireScrollCache();
             invalidate();
         }
         // A travel ends on the resize it was drawn toward, whether or not the grid moves: a slide
@@ -3674,6 +3695,7 @@ public final class TerminalView extends View {
 
     /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
     public void resumeTerminalSizeUpdatesDiscardingPending() {
+        if (mHeldGridSlackPx >= 0) retireScrollCache();
         mHeldGridSlackPx = -1;
         mTerminalSizeUpdatePending = false;
         mTerminalSizeUpdatesPaused = false;
@@ -3751,10 +3773,12 @@ public final class TerminalView extends View {
                 canvas.translate(0f, -fillRows * (float) mRenderer.mFontLineSpacing);
             }
             // Between row crossings a smooth scroll only moves the grid, so it is drawn from a
-            // recording made at zero translation; the translation above stays outside it.
+            // recording made at zero translation; the translation above stays outside it. A held
+            // resize (ADR 0019) only changes the frame around a grid that stays as it was, so a
+            // divider drag replays the same recording instead of rendering the text every move.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                 && ScrollRenderCache.applies(canvas.isHardwareAccelerated(), Build.VERSION.SDK_INT,
-                    isSmoothScrollMoving(), mTravelActive, fillRows,
+                    isSmoothScrollMoving() || mHeldGridSlackPx >= 0, mTravelActive, fillRows,
                     isSelectingText() || !selectorsAtRest(sel), mRowCacheBypassed)) {
                 drawGridThroughScrollCache(canvas, drawTopRow, sel, extraRows);
             } else {
@@ -3772,7 +3796,13 @@ public final class TerminalView extends View {
             // just this view); this pane only reports that its cursor may have moved, or — while
             // selecting text — that it should be hidden and not smeared into.
             if (mCursorTrailListener != null) {
-                if (isSelectingText())
+                final long cursorStamp = mEmulator.getCursorPositionChangedAtMillis();
+                final boolean programMoved = cursorStamp != mTrailCursorStampMillis;
+                final boolean slackChanged = mHeldGridSlackPx != mTrailHeldSlackPx;
+                mTrailCursorStampMillis = cursorStamp;
+                mTrailHeldSlackPx = mHeldGridSlackPx;
+                if (isSelectingText()
+                    || cursorTrailSnaps(mHeldGridSlackPx >= 0, slackChanged, programMoved))
                     mCursorTrailListener.onCursorTrailSnap(this);
                 else
                     mCursorTrailListener.onCursorMayHaveMoved(this);
@@ -3783,6 +3813,25 @@ public final class TerminalView extends View {
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
             mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
         }
+    }
+
+    /**
+     * Whether this draw's cursor position is a discontinuity the trail must snap across rather
+     * than animate. The pane's geometry can move the cursor on screen with no reflow behind it:
+     * while a resize is held (a divider drag, a corner drag, the keyboard) the old grid stays
+     * anchored at the top of a pane that moves and changes size under it, and when the hold ends
+     * the grid goes back to being centred. Those are the pane moving, not the cursor, so they
+     * snap (ADR 0019 follow-up; kitty skips the trail over a live resize the same way). A cursor
+     * the program moved still trails, even while held, unless the anchor itself jumped this draw.
+     *
+     * @param gridHeld            a held grid is drawn at its kept slack ({@code mHeldGridSlackPx >= 0})
+     * @param heldSlackChanged    the hold began, ended or re-anchored since the last draw
+     * @param cursorMovedByProgram the emulator's cursor-move stamp changed since the last draw
+     */
+    static boolean cursorTrailSnaps(boolean gridHeld, boolean heldSlackChanged,
+                                    boolean cursorMovedByProgram) {
+        if (heldSlackChanged) return true;
+        return gridHeld && !cursorMovedByProgram;
     }
 
     private static boolean selectorsAtRest(int[] sel) {
@@ -3801,10 +3850,21 @@ public final class TerminalView extends View {
         final int height = canvas.getHeight();
         final float horizontalOffset = getHorizontalContentOffset();
         final long generation = mContentGeneration;
+        final boolean held = mHeldGridSlackPx >= 0;
         if (mScrollGridNode == null) mScrollGridNode = new ScrollRenderCache.Node();
-        if (mScrollGridRenderer != mRenderer || !mScrollRenderCache.canReuse(drawTopRow,
-            extraRows, width, height, horizontalOffset, mUseTransparentFrameClear,
-            mTransparentFrameOverlayColor, generation)) {
+        if (held) {
+            // The recording's own ground stops at the height it was recorded at; a pane that grew
+            // under its held grid still gets the ground over the whole of itself, as the live
+            // render lays it over the whole clip. Laying it twice is the same pixels.
+            mRenderer.clearFrame(mEmulator, canvas, mUseTransparentFrameClear,
+                mTransparentFrameOverlayColor);
+        }
+        final boolean reusable = held
+            ? mScrollRenderCache.canReuseHeld(drawTopRow, extraRows, width, horizontalOffset,
+                mUseTransparentFrameClear, mTransparentFrameOverlayColor, generation)
+            : mScrollRenderCache.canReuse(drawTopRow, extraRows, width, height, horizontalOffset,
+                mUseTransparentFrameClear, mTransparentFrameOverlayColor, generation);
+        if (mScrollGridRenderer != mRenderer || !reusable) {
             android.os.Trace.beginSection("Terminal.scrollCache.record");
             try {
                 Canvas into = mScrollGridNode.beginRecording(width, height);

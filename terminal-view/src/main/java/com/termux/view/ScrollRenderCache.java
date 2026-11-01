@@ -35,8 +35,10 @@ final class ScrollRenderCache {
 
     /**
      * Whether this frame may draw the grid from a recording at all. Only a hardware canvas on API
-     * 29 or later can replay one, only a smooth scroll moves the grid without changing it, and a
-     * travel's revealed rows, a selection or a frozen copy of the pane each need the live render.
+     * 29 or later can replay one, only a smooth scroll or a held resize ({@code smoothScrolling}
+     * covers both: the grid moves or its frame changes without the grid changing) leaves it
+     * reusable, and a travel's revealed rows, a selection or a frozen copy of the pane each need
+     * the live render.
      */
     static boolean applies(boolean hardwareCanvas, int sdkInt, boolean smoothScrolling,
                            boolean travelling, int fillRows, boolean selecting,
@@ -51,6 +53,22 @@ final class ScrollRenderCache {
                      long generation) {
         return mValid && mTopRow == topRow && mExtraRows == extraRows && mWidth == width
             && mHeight == height && Float.compare(mHorizontalOffset, horizontalOffset) == 0
+            && mTransparentFrameClear == transparentFrameClear
+            && mTransparentOverlayColor == transparentOverlayColor
+            && mGeneration == generation;
+    }
+
+    /**
+     * {@link #canReuse} for a held grid (ADR 0019): a pane whose resize is held only changes size
+     * and place under a grid that stays as it was, anchored at the top and cut by the view's own
+     * clip, so the view's height is not part of what the recording drew. Everything else is,
+     * including the content generation: output, the cursor blink or a colour change records again.
+     */
+    boolean canReuseHeld(int topRow, int extraRows, int width, float horizontalOffset,
+                         boolean transparentFrameClear, int transparentOverlayColor,
+                         long generation) {
+        return mValid && mTopRow == topRow && mExtraRows == extraRows && mWidth == width
+            && Float.compare(mHorizontalOffset, horizontalOffset) == 0
             && mTransparentFrameClear == transparentFrameClear
             && mTransparentOverlayColor == transparentOverlayColor
             && mGeneration == generation;

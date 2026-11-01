@@ -131,4 +131,41 @@ public class ScrollRenderCacheTest {
     public void neverAppliesToAFrozenCopy() {
         assertFalse(ScrollRenderCache.applies(true, API_Q, true, false, 0, false, true));
     }
+    // A held resize (ADR 0019): a divider drag changes the pane's height every move under a grid
+    // that stays as it was, so the recording is replayed until the content itself changes.
+
+    @Test
+    public void aHeldGridReusesItsRecordingAsThePaneChangesHeight() {
+        assertTrue(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH, OFFSET, true, OVERLAY,
+            GENERATION));
+        // The same recording at another height is not reused outside a hold.
+        assertFalse(mCache.canReuse(TOP_ROW, EXTRA_ROWS, WIDTH, HEIGHT - 300, OFFSET, true,
+            OVERLAY, GENERATION));
+    }
+
+    @Test
+    public void aHeldGridReRecordsWhenTheProgramWritesOrTheCursorBlinks() {
+        assertFalse(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH, OFFSET, true, OVERLAY,
+            GENERATION + 1));
+    }
+
+    @Test
+    public void aHeldGridReRecordsWhenItsWidthOrRowsMove() {
+        assertFalse(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH - 1, OFFSET, true, OVERLAY,
+            GENERATION));
+        assertFalse(mCache.canReuseHeld(TOP_ROW + 1, EXTRA_ROWS, WIDTH, OFFSET, true, OVERLAY,
+            GENERATION));
+        assertFalse(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH, OFFSET + 1f, true, OVERLAY,
+            GENERATION));
+        assertFalse(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH, OFFSET, false, OVERLAY,
+            GENERATION));
+    }
+
+    @Test
+    public void aHeldGridNeverReusesAForgottenRecording() {
+        // The resize that ends the hold retires the recording: never replayed across it.
+        mCache.forget();
+        assertFalse(mCache.canReuseHeld(TOP_ROW, EXTRA_ROWS, WIDTH, OFFSET, true, OVERLAY,
+            GENERATION));
+    }
 }
