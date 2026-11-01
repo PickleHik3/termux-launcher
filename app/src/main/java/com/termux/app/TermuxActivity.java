@@ -14310,6 +14310,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPaneController != null) mPaneController.refreshPaneLayout();
         }
 
+        @Override public void onSystemImeRequested() {
+            TermuxActivity.this.onSystemImeRequested();
+        }
+
         @Override public void applyTerminalSurfaceAppearance() {
             TermuxActivity.this.applyTerminalSurfaceAppearance();
         }

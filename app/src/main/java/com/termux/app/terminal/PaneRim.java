@@ -6,6 +6,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -19,6 +21,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * One frame's border, rendered from what {@link PaneBorderStyle} decided: the shared glass rim,
@@ -64,9 +67,7 @@ public final class PaneRim {
             focus,
             MaterialColors.getColor(context, com.google.android.material.R.attr.colorSecondary, 0),
             MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary, 0));
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
-                context, false);
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
         if (prefs == null) return new PaneBorderStyle.Palette(focus, attention);
         return PaneBorderColours.palette(
             PaneBorderColours.ColourChoice.fromId(prefs.getTerminalPaneBorderColour(),
@@ -255,7 +256,7 @@ public final class PaneRim {
      * The plain line's colour: the theme's outline role (so light, dark, black and the scheme's
      * chrome each resolve their own) at the divider's strength. Also the Docked opening's line.
      */
-    static int lineColour(@NonNull Context context) {
+    public static int lineColour(@NonNull Context context) {
         return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOutline,
             ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
@@ -382,8 +383,7 @@ public final class PaneRim {
                 Drawable built = mStyle == null ? null : mStyle.paneRimDrawable(radius);
                 mInner = built != null ? built : stroke(radius, mFallbackColour, mDensity);
                 if (built != null && mTint != PaneBorderStyle.NO_COLOUR) {
-                    mInner.setColorFilter(new android.graphics.PorterDuffColorFilter(mTint,
-                        android.graphics.PorterDuff.Mode.SRC_IN));
+                    mInner.setColorFilter(new PorterDuffColorFilter(mTint, PorterDuff.Mode.SRC_IN));
                 }
                 mInnerRadiusPx = radius;
                 mInner.setAlpha(mAlpha);

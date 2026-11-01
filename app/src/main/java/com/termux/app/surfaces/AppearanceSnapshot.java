@@ -39,6 +39,14 @@ final class AppearanceSnapshot {
     private final boolean mBorder;
     private final int mTerminalRadius;
     private final int mPaneGap;
+    /** The Pane borders card's colours and glow (#206). */
+    private final String mPaneBorderColour;
+    private final int mPaneBorderCustom;
+    private final String mPaneFocusColour;
+    private final int mPaneFocusCustom;
+    private final boolean mPaneGlow;
+    private final String mPaneGlowColour;
+    private final int mPaneGlowCustom;
     private final int mWallpaperTerminalOpacity;
     private final String mTint;
     private final String mRim;
@@ -109,6 +117,13 @@ final class AppearanceSnapshot {
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();
         mPaneGap = prefs.getTerminalPaneGap();
+        mPaneBorderColour = prefs.getTerminalPaneBorderColour();
+        mPaneBorderCustom = prefs.getTerminalPaneBorderCustom();
+        mPaneFocusColour = prefs.getTerminalPaneFocusColour();
+        mPaneFocusCustom = prefs.getTerminalPaneFocusCustom();
+        mPaneGlow = prefs.getTerminalPaneGlow();
+        mPaneGlowColour = prefs.getTerminalPaneGlowColour();
+        mPaneGlowCustom = prefs.getTerminalPaneGlowCustom();
         mWallpaperTerminalOpacity = prefs.getWallpaperEnabledTerminalBackgroundOpacity();
         mTint = prefs.getSurfaceGlassTint();
         mRim = prefs.getSurfaceGlassRim();
@@ -194,6 +209,13 @@ final class AppearanceSnapshot {
         prefs.setTerminalBorderEnabled(mBorder);
         prefs.setTerminalCornerRadius(mTerminalRadius);
         prefs.setTerminalPaneGap(mPaneGap);
+        prefs.setTerminalPaneBorderColour(mPaneBorderColour);
+        prefs.setTerminalPaneBorderCustom(mPaneBorderCustom);
+        prefs.setTerminalPaneFocusColour(mPaneFocusColour);
+        prefs.setTerminalPaneFocusCustom(mPaneFocusCustom);
+        prefs.setTerminalPaneGlow(mPaneGlow);
+        prefs.setTerminalPaneGlowColour(mPaneGlowColour);
+        prefs.setTerminalPaneGlowCustom(mPaneGlowCustom);
         prefs.setWallpaperEnabledTerminalBackgroundOpacity(mWallpaperTerminalOpacity);
         prefs.setSurfaceGlassTint(mTint);
         prefs.setSurfaceGlassRim(mRim);
@@ -240,6 +262,10 @@ final class AppearanceSnapshot {
         return out.append('|').append(mMaterial).append('|').append(mIntensity)
             .append('|').append(mDockStyle).append('|').append(mBorder)
             .append('|').append(mTerminalRadius).append('|').append(mPaneGap)
+            .append('|').append(mPaneBorderColour).append(',').append(mPaneBorderCustom)
+            .append(',').append(mPaneFocusColour).append(',').append(mPaneFocusCustom)
+            .append(',').append(mPaneGlow).append(',').append(mPaneGlowColour)
+            .append(',').append(mPaneGlowCustom)
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mTintHue).append('|').append(mVibrancy)

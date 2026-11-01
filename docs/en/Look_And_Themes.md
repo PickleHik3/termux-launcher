@@ -96,8 +96,8 @@ chips name.
   its own look from its settings afterwards.
 - **Status bar**: the glass rows, **Visible** and **Position**; **12-hour clock** and **Clock
   face** (see [Status bar](Status_Bar.md#clock)); under More, a link to its indicators.
-- **Terminal**: the glass rows and **Text size**; **Contrast**; under More, **Cursor trail**,
-  **Effect**, **Split gap** and a link to its font.
+- **Terminal**: the glass rows and **Text size**; **Contrast**; **Pane borders**; under More,
+  **Cursor trail**, **Effect**, **Split gap** and a link to its font.
 - **Dock**: the glass rows, **Height**, **Visible** and **Position**; **Style** (Docked or
   Floating), **Design** (Tray, Beads or Strip) and **Margin**; under More, **Search field**,
   **App count** and a link to its items.
@@ -146,6 +146,21 @@ Both are on the Terminal card under More, and under **Settings → Terminal → 
   **Comet**.
 - **Terminal effect**: **None**, **CRT**, **CRT (green)**, **CRT (amber)**, **TFT grid**. It covers
   the status bar, dock and keyboard too, with scanlines fixed to the screen.
+
+## Pane borders
+
+**Pane borders** on the Terminal card opens its own card; the back arrow in its header, or Back,
+returns to the Terminal card. Three small frames at the top show a pane as it rests, as the focused
+pane of a split, and asking for attention (which always wears the error colour). Below them:
+
+- **Rim**: the same Rim as under More, **None**, **Hairline** or **Bright**.
+- **Border colour**: **Theme outline**, **Primary**, **Secondary**, **Tertiary** or **Custom**.
+  Custom opens a **Custom colour** field that takes `#RRGGBB`, or `#AARRGGBB` for a see-through
+  colour.
+- **When focused**: the colour of the focused pane in a split and of floating panes, the border's
+  own (**Same as border**) or any of the choices above. A single pane never takes it.
+- **Glow**: **Off** or **Steady**, a soft glow round every pane, and **Glow colour** for it.
+- **Reset pane borders** puts back the theme outline, Primary when focused and no glow.
 
 ## Icon pack
 
