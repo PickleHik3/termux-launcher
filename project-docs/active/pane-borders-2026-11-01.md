@@ -7,9 +7,13 @@ No reply on #206 until pre.3 is out.
 
 ## What the user gets
 
-A **Pane borders** subcard under the Terminal surface card, after Text size, Contrast and Opacity,
-with a shortcut from the Terminal entry in Elements. Back returns to the Terminal card at the same
-detent and scroll; Done commits through the editor as every other row does; Undo covers it.
+A **Pane borders** subcard under the Terminal surface card, opened from a link row after Text
+size, Contrast and Opacity. The Terminal entry in Elements scrolls the Terminal card to that row
+(the existing section target), one tap from the subcard. The editor has no card stack: the subcard
+is shown in the sheet's place like Elements, its header carries a back chevron, and both the
+chevron and system Back re-open the Terminal card at the current detent, scrolled to the Pane
+borders row. Done commits through the editor as every other row does; Undo and the unsaved-changes
+dialog cover the new keys (`AppearanceSnapshot` capture, restore and signature).
 
 Rows, top to bottom:
 
@@ -40,10 +44,11 @@ the subcard (the line already carries drag and resize).
 - **Precedence** stays `PaneBorderStyle.decide`: Attention first, then Focus for a focused split
   pane or float, else Rim. The user's colours fill the Rim and Focus kinds; Attention keeps
   `colorError` and its pulse.
-- **Scheme.** Primary / Secondary / Tertiary resolve the way the editor's Tint colour swatches do,
-  through the launcher's own scheme when `LauncherSchemeTheme.isSchemeChromeActive()`, never raw
-  theme attributes. Today `PaneRim.palette` reads `colorPrimary` / `colorError` from theme attrs
-  directly; the focus colour moves onto the same resolution, attention may stay.
+- **Scheme.** Primary / Secondary / Tertiary resolve exactly the way the editor's Tint colour
+  swatches do (`EditorViews.color`, the activity theme's `colorPrimary` / `colorSecondary` /
+  `colorTertiary` through `MaterialColors`), so the swatch the user picks and the line the pane
+  draws are the same colour. `PaneRim.palette` moves onto that same helper for the focus colour;
+  attention keeps `colorError`. Never a system palette resource read directly.
 - **Where the colour lands.** The pane's resting border is the shared glass rim following the Rim
   look; the border colour tints that rim (and the `GlassRimDrawable` the Focus kind builds on
   glass), it does not add a second line. `PaneRim.lineColour()` (`colorOutline` at alpha 150) is
