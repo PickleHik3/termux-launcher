@@ -424,6 +424,30 @@ public final class PlaceLayoutStore {
         foldIntoLayoutsIfNeeded();
         useLayoutDocumentsIfFolded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
+        // A document written outside this store (launcherctl layout set, another view) retires
+        // every cached read too: the documents live in their own file, which the listener above
+        // never hears.
+        com.termux.app.place.layout.LayoutStore documents = layouts();
+        if (documents != null) documents.addListener(new RevisionBump(documents, mRevision));
+    }
+
+    /** Bumps a store's revision on every layouts change; lets go once the store is gone. */
+    private static final class RevisionBump implements com.termux.app.place.layout.LayoutStore.Listener {
+        @NonNull private final com.termux.app.place.layout.LayoutStore mDocuments;
+        @NonNull private final java.lang.ref.WeakReference<AtomicInteger> mRevision;
+
+        RevisionBump(@NonNull com.termux.app.place.layout.LayoutStore documents,
+                     @NonNull AtomicInteger revision) {
+            mDocuments = documents;
+            mRevision = new java.lang.ref.WeakReference<>(revision);
+        }
+
+        @Override
+        public void onLayoutsChanged(@NonNull com.termux.app.place.layout.Layouts layouts) {
+            AtomicInteger revision = mRevision.get();
+            if (revision == null) mDocuments.removeListener(this);
+            else revision.incrementAndGet();
+        }
     }
 
     /** True while the migration runs: slots read what the arrangement keys held. */
