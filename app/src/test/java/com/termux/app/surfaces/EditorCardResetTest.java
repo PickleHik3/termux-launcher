@@ -139,4 +139,10 @@ public class EditorCardResetTest {
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT, prefs.getTerminalRetroEffect());
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP, prefs.getTerminalPaneGap());
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }

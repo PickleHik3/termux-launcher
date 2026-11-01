@@ -295,4 +295,10 @@ public class SurfaceEditorCardsTest {
     private int opacity(PaneWallPage half) {
         return preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, SurfacePresets.pageOf(half));
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }

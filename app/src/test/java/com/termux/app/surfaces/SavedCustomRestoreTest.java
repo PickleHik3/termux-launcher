@@ -264,4 +264,10 @@ public class SavedCustomRestoreTest {
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS,
             prefs.getInAppKeyboardBlurRadiusRaw());
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }

@@ -182,4 +182,10 @@ public class ElementGlassTest {
         assertNotEquals(widgets.opacityPercent,
             ElementGlass.resolve(grid, LookGrid.Element.DOCK, PAGE).opacityPercent);
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }
