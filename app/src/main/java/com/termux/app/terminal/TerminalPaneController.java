@@ -183,6 +183,12 @@ public class TerminalPaneController {
 
     /** Callbacks into the hosting activity. */
     public interface Host {
+        /**
+         * The window to keep live on {@code side} (-1 before, +1 after) of the window in front
+         * ({@link com.termux.app.wall.LiveNeighbourPolicy}), or null: none there, or Live windows
+         * while swiping is off.
+         */
+        @Nullable default Window liveNeighbourWindow(int side) { return null; }
         /** Spawn a new shell rooted at {@code cwd} (or default cwd if null); null on failure. */
         @Nullable TerminalSession createShell(@Nullable String cwd);
         /** Wire client + font + text size + keep-screen-on onto a freshly created pane view. */
@@ -1393,6 +1399,7 @@ public class TerminalPaneController {
             mSuppressNextCursorFlight = true;
         }
         boolean switched = mActiveWindow != w;
+        Window previous = mActiveWindow;
         mActiveWindow = w;
         if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
             // Stack lives in the foreground-presentation field, not the tree, so re-entering a
@@ -1401,6 +1408,9 @@ public class TerminalPaneController {
         } else if (mMaximizedLeaf != null && findLeafIn(w.root, mMaximizedLeaf.session) == null) {
             mMaximizedLeaf = null;
         }
+        // A live neighbour is promoted: its tree, already laid out at the host's size beside
+        // it, becomes the host's, and the window leaving takes its place on the other side.
+        if (switched) adoptNeighbourTree(w, previous);
         render();
         // The wall's travel cover belongs to the window in front: one taken while the window that
         // left was in front (a chip on Home starts the slide before it shows its window) stays on
@@ -1409,9 +1419,209 @@ public class TerminalPaneController {
         if (switched) moveTravelCoverToActiveWindow();
         // A hidden window's panes drop any resize that settled while they were off screen
         // (setAllPaneSizeUpdatesPaused), and coming back at the same pixel size raises no
-        // onSizeChanged. Re-measure them so the PTY matches what is on screen.
+        // onSizeChanged. Re-measure them so the PTY matches what is on screen. A promoted
+        // neighbour stood at this size all along, so the re-measure finds its grid fitting.
         if (switched) refreshPaneSizes();
         mHost.onActivePaneChanged();
+    }
+
+    // --- Live neighbour windows (LiveNeighbourPolicy) ---
+
+    /** The containers the adjacent windows' trees are kept in, previous then next. */
+    private final FrameLayout[] mNeighbourContainers = new FrameLayout[2];
+    /** The window each container holds the tree of, or null. */
+    private final Window[] mNeighbourWindows = new Window[2];
+
+    /**
+     * The container for the live neighbour on {@code side}; the wall owns where it stands
+     * ({@code PaneWallLayout#setInnerNeighbourViews}). It is never this host's child: the host's
+     * children past the first are rebuilt by every render.
+     */
+    @NonNull
+    public FrameLayout neighbourContainer(int side) {
+        int slot = com.termux.app.wall.LiveNeighbourPolicy.slotOf(side);
+        FrameLayout container = mNeighbourContainers[slot];
+        if (container == null) {
+            container = new FrameLayout(mHostView.getContext());
+            container.setClipChildren(false);
+            container.setClipToPadding(false);
+            container.setVisibility(View.GONE);
+            mNeighbourContainers[slot] = container;
+        }
+        return container;
+    }
+
+    /** Whether {@code w}'s tree stands ready in a neighbour container now. */
+    public boolean isLiveNeighbour(@Nullable Window w) {
+        return w != null && neighbourSlotOf(w) >= 0;
+    }
+
+    private int neighbourSlotOf(@NonNull Window w) {
+        for (int slot = 0; slot < 2; slot++) {
+            FrameLayout container = mNeighbourContainers[slot];
+            if (mNeighbourWindows[slot] == w && container != null
+                && container.getChildCount() > 0) return slot;
+        }
+        return -1;
+    }
+
+    /**
+     * Re-choose and rebuild the windows beside the one in front from the host's row
+     * ({@link Host#liveNeighbourWindow}): the wall asks as a drag begins, so a row reordered,
+     * a window closed or the setting switched since is caught before anything is shown.
+     */
+    public void refreshNeighbourWindows() {
+        syncNeighbours();
+    }
+
+    /** Let go of both neighbours' trees (memory pressure); the next drag builds them again. */
+    public void dropNeighbourWindows() {
+        for (int slot = 0; slot < 2; slot++) clearNeighbour(slot);
+    }
+
+    private void syncNeighbours() {
+        for (int slot = 0; slot < 2; slot++) {
+            if (mNeighbourContainers[slot] == null) continue;
+            Window w = mHost.liveNeighbourWindow(com.termux.app.wall.LiveNeighbourPolicy.sideOf(slot));
+            if (w == null || w == mActiveWindow || w.isHomeFloat() || w.root == null) {
+                clearNeighbour(slot);
+            } else {
+                buildNeighbour(slot, w);
+            }
+        }
+    }
+
+    /** What a window shows as its tiled tree: its focused pane alone under Stack. */
+    @NonNull
+    private static Node shownTreeOf(@NonNull Window w) {
+        return LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null ? w.active : w.root;
+    }
+
+    private void buildNeighbour(int slot, @NonNull Window w) {
+        FrameLayout container = mNeighbourContainers[slot];
+        int other = 1 - slot;
+        // A window never stands on both sides.
+        if (mNeighbourWindows[other] == w) clearNeighbour(other);
+        if (mNeighbourWindows[slot] != null && mNeighbourWindows[slot] != w) clearNeighbour(slot);
+        Node node = shownTreeOf(w);
+        // Held before anything is laid out: a neighbour's shells never hear its layout. The one
+        // size they are owed is sent when the window is in front (showWindow's re-measure).
+        for (Leaf leaf : leavesOf(node)) {
+            TerminalView view = mPaneViews.get(leaf.session);
+            if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
+        }
+        View existing = container.getChildCount() > 0 ? container.getChildAt(0) : null;
+        View built = reconcile(existing, node);
+        // The split containers this registered are not the host's; the host's dividers and
+        // hit tests read that map.
+        forgetSplitLayouts(node);
+        for (Leaf leaf : leavesOf(node)) {
+            TerminalView view = mPaneViews.get(leaf.session);
+            if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
+            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (frame != null) frame.setTravelBottomInsetPx(0);
+        }
+        if (built != existing) {
+            container.removeAllViews();
+            container.addView(built, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mNeighbourWindows[slot] = w;
+    }
+
+    private void forgetSplitLayouts(@NonNull Node node) {
+        if (!(node instanceof Split)) return;
+        mSplitLayouts.remove(node);
+        forgetSplitLayouts(((Split) node).a);
+        forgetSplitLayouts(((Split) node).b);
+    }
+
+    /**
+     * Empty a neighbour container. Its panes are left detached, as any window not in front
+     * holds them, and take size updates again without the size the container gave them.
+     */
+    private void clearNeighbour(int slot) {
+        FrameLayout container = mNeighbourContainers[slot];
+        Window w = mNeighbourWindows[slot];
+        mNeighbourWindows[slot] = null;
+        if (container != null && container.getChildCount() > 0) container.removeAllViews();
+        if (w == null || w == mActiveWindow) return;
+        resumeNeighbourSizeUpdates(w);
+    }
+
+    private void resumeNeighbourSizeUpdates(@NonNull Window w) {
+        // Under a host resize every pane is held; its end resumes them.
+        if (mHostSurfaceResizeDepth > 0) return;
+        for (Leaf leaf : leavesOf(w.root)) {
+            TerminalView view = mPaneViews.get(leaf.session);
+            if (view != null) view.resumeTerminalSizeUpdatesDiscardingPending();
+        }
+    }
+
+    /** Whether {@code view} shows a pane of a window kept ready beside the one in front. */
+    private boolean isNeighbourPaneView(@NonNull TerminalView view) {
+        for (Window w : mNeighbourWindows) {
+            if (w == null) continue;
+            for (Leaf leaf : leavesOf(w.root))
+                if (mPaneViews.get(leaf.session) == view) return true;
+        }
+        return false;
+    }
+
+    /** Whether {@code frame} sits in a neighbour container. */
+    private boolean isInNeighbourContainer(@NonNull View frame) {
+        android.view.ViewParent parent = frame.getParent();
+        while (parent instanceof View) {
+            if (parent == mNeighbourContainers[0] || parent == mNeighbourContainers[1]) return true;
+            if (parent == mHostView) return false;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * {@code arriving} was standing live beside the host: its tree moves into the host as it
+     * is, laid out at the same size, and the host's tree ({@code leaving}'s) moves into the
+     * container on the other side, where the leaving window now stands. False when
+     * {@code arriving} was not live; the render then builds it as before.
+     */
+    private boolean adoptNeighbourTree(@NonNull Window arriving, @Nullable Window leaving) {
+        int slot = neighbourSlotOf(arriving);
+        if (slot < 0) return false;
+        FrameLayout container = mNeighbourContainers[slot];
+        View tree = container.getChildAt(0);
+        container.removeView(tree);
+        mNeighbourWindows[slot] = null;
+        View old = mHostView.getChildCount() > 0 ? mHostView.getChildAt(0) : null;
+        int other = 1 - slot;
+        FrameLayout opposite = mNeighbourContainers[other];
+        Window displaced = mNeighbourWindows[other];
+        if (opposite != null && opposite.getChildCount() > 0) opposite.removeAllViews();
+        mNeighbourWindows[other] = null;
+        if (displaced != null && displaced != leaving) resumeNeighbourSizeUpdates(displaced);
+        if (old != null) {
+            mHostView.removeView(old);
+            if (opposite != null && leaving != null && !leaving.isHomeFloat() && leaving.root != null) {
+                for (Leaf leaf : leavesOf(leaving.root)) {
+                    TerminalView view = mPaneViews.get(leaf.session);
+                    if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
+                }
+                opposite.addView(old, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                mNeighbourWindows[other] = leaving;
+            }
+        }
+        mHostView.addView(tree, 0, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // In front now: its panes take size updates again, without the held one — they stood at
+        // this size, and showWindow's re-measure sends whatever is truly owed.
+        if (mHostSurfaceResizeDepth == 0) {
+            for (Leaf leaf : leavesOf(arriving.root)) {
+                TerminalView view = mPaneViews.get(leaf.session);
+                if (view != null) view.resumeTerminalSizeUpdatesDiscardingPending();
+            }
+        }
+        return true;
     }
 
     @Nullable public Window activeWindow() { return mActiveWindow; }
@@ -4664,6 +4874,9 @@ public class TerminalPaneController {
         updateActiveBorders();
         focusActiveView();
         animateMoveFromOrigins();
+        // The windows beside the one in front follow every render: a switch, a re-tile or a
+        // pane taken from them changes what stands there.
+        syncNeighbours();
         mHost.onPanesRendered();
     }
 
@@ -4737,6 +4950,8 @@ public class TerminalPaneController {
         for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
             FrameLayout frame = entry.getValue();
             if (!canAnimateView(frame)) continue;
+            // A promoted neighbour arrives where the wall's nudge carries it from, not by a FLIP.
+            if (isInNeighbourContainer(frame)) continue;
             frame.getLocationOnScreen(location);
             mMoveOrigins.put(entry.getKey(), new Rect(location[0], location[1],
                 location[0] + frame.getWidth(), location[1] + frame.getHeight()));
@@ -5928,6 +6143,8 @@ public class TerminalPaneController {
         // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
+            // A live neighbour stays held: its size is only ever sent once it is in front.
+            if (isNeighbourPaneView(view)) continue;
             if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
         }

@@ -33,6 +33,11 @@
             app:summary="@string/settings_performance_glass_refraction_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="live_windows_while_swiping"
+            app:title="@string/settings_performance_live_windows_title"
+            app:summary="@string/settings_performance_live_windows_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
             app:key="fancier_glass_motion_light"
             app:title="@string/settings_motion_light_title"
             app:summary="@string/settings_performance_living_glass_summary"

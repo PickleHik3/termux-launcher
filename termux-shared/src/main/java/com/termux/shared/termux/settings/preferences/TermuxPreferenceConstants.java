@@ -1343,6 +1343,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
 
         /**
+         * Live windows while swiping: the windows beside the one in front are kept ready and
+         * slide in live as the wall is dragged between windows. Off, a swipe shows them only
+         * once it lands.
+         */
+        public static final String KEY_LIVE_WINDOWS_WHILE_SWIPING = "live_windows_while_swiping";
+        public static final boolean DEFAULT_VALUE_LIVE_WINDOWS_WHILE_SWIPING = true;
+
+        /**
          * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
          * refraction knobs are global: one look for every glass surface, never per surface. Their
          * defaults are exactly the numbers the dock's refraction always used, so switching Fancier

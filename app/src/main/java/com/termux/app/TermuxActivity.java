@@ -10875,6 +10875,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pressure, and the second only means the UI went away — an animation that is merely
         // hidden already costs nothing, because the visibility gate has stopped it.
         if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
+        // The windows kept live beside the one in front let go of their trees; the next drag
+        // between windows builds them again.
+        if (level >= TRIM_MEMORY_RUNNING_LOW && mPaneController != null) {
+            mPaneController.dropNeighbourWindows();
+        }
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
@@ -13887,6 +13892,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
         createPaneWallController(paneHost);
+        // The windows beside the one in front stand beside the Workspace page on the wall; the
+        // wall asks for them to be re-chosen as each drag begins.
+        if (mPaneWallController != null) {
+            final com.termux.app.terminal.TerminalPaneController panes = mPaneController;
+            mPaneWallController.wall().setInnerNeighbourViews(panes.neighbourContainer(-1),
+                panes.neighbourContainer(1), panes::refreshNeighbourWindows);
+        }
         applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
         // font setup) have a non-null active view before the first session/tab is shown.
@@ -25850,8 +25862,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
                     if (MotionLog.enabled) MotionLog.log("inner-step-begin", "page=TERMINAL steps=" + steps);
                     mStatusCardHost.dismiss();
-                    // A terminal window leaving for another is pictured.
-                    captureTerminalDeparture();
+                    // A terminal window leaving for another is pictured, unless the one arriving
+                    // stands live beside it: then the leaving one stays live too and carries on.
+                    if (isLiveWindowStep(steps)) dropTerminalDepartureSnapshot();
+                    else captureTerminalDeparture();
                 }
                 @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
                                                   int steps, float fromPx) {
@@ -31698,6 +31712,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             rebuildDrawerSessions();
             return;
         }
+        // A live neighbour was already drawn where the drag left it: no first draw to wait for.
+        boolean live = isLiveWindowStep(steps);
         mCurrentWSession.current = target;
         mPaneController.showWindow(mCurrentWSession.currentWindow());
         rebuildDrawerSessions();
@@ -31710,7 +31726,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The window just shown lays out and draws for the first time on the next frame, which
         // can take as long as the whole step (#173): the step waits for that draw to start.
         animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining,
-            com.termux.app.wall.WallParallax.ADJACENT, true);
+            com.termux.app.wall.WallParallax.ADJACENT, !live);
+    }
+
+    /**
+     * Whether the window {@code steps} away on the row stands live beside the one in front
+     * (Live windows while swiping), so a step to it is a promotion rather than a swap.
+     */
+    private boolean isLiveWindowStep(int steps) {
+        if (mPaneController == null || isDisplayWindowInFront()) return false;
+        int target = rowCurrentIndex() + steps;
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> row = rowWindows();
+        return target >= 0 && target < row.size() && mPaneController.isLiveNeighbour(row.get(target));
     }
 
     /**
@@ -33181,6 +33208,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
+        // Live windows while swiping: the row's windows beside the one in front. None under
+        // reduced motion, where the wall never shows them, or with the display in front.
+        @Nullable @Override
+        public com.termux.app.terminal.TerminalPaneController.Window liveNeighbourWindow(int side) {
+            boolean enabled = mPreferences != null && mPreferences.isLiveWindowsWhileSwipingEnabled()
+                && !isReducedMotionEnabled() && !isDisplayWindowInFront();
+            int index = com.termux.app.wall.LiveNeighbourPolicy.neighbourIndex(enabled,
+                rowCurrentIndex(), rowWindowCount(), side);
+            return index == com.termux.app.wall.LiveNeighbourPolicy.NONE ? null
+                : rowWindows().get(index);
+        }
+
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd);
         }
