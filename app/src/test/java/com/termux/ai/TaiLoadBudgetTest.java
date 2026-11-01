@@ -771,6 +771,49 @@ public class TaiLoadBudgetTest {
             .withConditions(TaiLoadBudget.Conditions.UNRESTRICTED)).fits);
     }
 
+    /** A GPU load killed at the floor window: an explicit request still gets one try there. */
+    @Test
+    public void anExplicitAcceleratorIsTriedOnceAtTheFloorAfterACrash() {
+        TaiLoadBudget.Request crashed = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
+            PONG_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
+        TaiLoadBudget.Plan explicit = TaiLoadBudget.plan(crashed.withExplicitAccelerator(true));
+        assertTrue(explicit.fits);
+        assertEquals("gpu", explicit.accelerator);
+        assertEquals(4096, explicit.contextWindow);
+        assertTrue(explicit.compared);
+        assertTrue(explicit.skipped.isEmpty());
+    }
+
+    /** The same crash on an automatic load skips the GPU, and the refusal says nothing was compared. */
+    @Test
+    public void anAutomaticAcceleratorAfterTheSameCrashIsSkippedAndReported() {
+        TaiLoadBudget.Request crashed = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
+            PONG_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
+        TaiLoadBudget.Plan auto = TaiLoadBudget.plan(crashed.withExplicitAccelerator(false));
+        assertFalse(auto.fits);
+        assertFalse(auto.compared);
+        assertEquals(1, auto.skipped.size());
+        assertEquals("gpu", auto.skipped.get(0).accelerator);
+        assertEquals(TaiLoadBudget.Skipped.CRASHED, auto.skipped.get(0).reason);
+        assertEquals(4096, auto.skipped.get(0).crashedContext);
+        assertEquals(4096, auto.skipped.get(0).floorContext);
+    }
+
+    /** A held-back accelerator is reported with the stop's age; a plan that compared something says so. */
+    @Test
+    public void aHeldBackAcceleratorIsReportedAsSkipped() {
+        TaiLoadBudget.History typical = gpuMeasured(2588L * MIB);
+        TaiLoadBudget.Plan held = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
+            typical, NOTHING).withHeldBack("gpu", 30_000L));
+        assertFalse(held.fits);
+        assertFalse(held.compared);
+        assertEquals(1, held.skipped.size());
+        assertEquals(TaiLoadBudget.Skipped.HELD_BACK, held.skipped.get(0).reason);
+        assertEquals(30_000L, held.skipped.get(0).stoppedAgeMs);
+        assertTrue(TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
+            typical, NOTHING)).compared);
+    }
+
     private static TaiLoadBudget.Request request(long file, long total, long available, List<String> accelerators, int cap,
                                                  boolean explicitContext, TaiLoadBudget.History history,
                                                  List<TaiResidency.Entry> evictable) {

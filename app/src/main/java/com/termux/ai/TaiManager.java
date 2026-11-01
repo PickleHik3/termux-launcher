@@ -3414,11 +3414,13 @@ public final class TaiManager {
             .withConditions(gateConditions())
             .withKvBytesPerToken(kvBytesPerToken(spec))
             .withGpuless(!device.supportsAccelerator("gpu"))
-            .withHeldBack(heldBack));
+            .withHeldBack(heldBack, Math.max(0L, System.currentTimeMillis() - stoppedAtMs))
+            .withExplicitAccelerator(!"auto".equals(preflight.requestedAccelerator)));
         if (!plan.fits) {
             // The figures are the rung the ladder refused (accelerator, window, estimate), the floor
             // it kept and the free memory it compared against, the resident chat model credited.
-            String reason = heldBack == null ? "load refused: " + plan.needText()
+            String reason = !plan.compared && !plan.skipped.isEmpty() ? "load refused: " + skippedText(plan)
+                : heldBack == null ? "load refused: " + plan.needText()
                 : "load held back on " + heldBack + ": stopped for memory "
                     + Math.max(0L, System.currentTimeMillis() - stoppedAtMs) / 1000L + " s ago, automatic loads wait "
                     + TaiPressureWatch.PRESSURE_COOLDOWN_MS / 1000L + " s";
@@ -3934,6 +3936,17 @@ public final class TaiManager {
         return evicted;
     }
 
+    /** The skipped rungs of a plan that compared nothing, as one line for the log. */
+    @NonNull
+    private static String skippedText(@NonNull TaiLoadBudget.Plan plan) {
+        StringBuilder text = new StringBuilder();
+        for (TaiLoadBudget.Skipped skip : plan.skipped) {
+            if (text.length() > 0) text.append("; ");
+            text.append(skip.text());
+        }
+        return text.toString();
+    }
+
     /** The refusal every load path answers when the budget says no, chat and embedding alike. */
     @NonNull
     static JSONObject insufficientMemory(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
@@ -3976,6 +3989,21 @@ public final class TaiManager {
         JSONArray evicted = new JSONArray();
         for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
         json.put("evicted", evicted);
+        json.put("compared", plan.compared);
+        JSONArray skipped = new JSONArray();
+        for (TaiLoadBudget.Skipped skip : plan.skipped) {
+            JSONObject entry = new JSONObject();
+            entry.put("accelerator", skip.accelerator);
+            entry.put("reason", skip.reason);
+            if (TaiLoadBudget.Skipped.HELD_BACK.equals(skip.reason)) {
+                entry.put("stoppedAgeMs", skip.stoppedAgeMs);
+            } else {
+                entry.put("crashedContext", skip.crashedContext);
+                entry.put("floorContext", skip.floorContext);
+            }
+            skipped.put(entry);
+        }
+        json.put("skipped", skipped);
         return json;
     }
 
