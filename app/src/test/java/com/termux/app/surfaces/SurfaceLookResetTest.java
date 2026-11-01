@@ -166,4 +166,10 @@ public class SurfaceLookResetTest {
         assertEquals(clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE),
             preferences.getSurfaceGlassTintHue());
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }

@@ -199,6 +199,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         });
         pane.grid().setAppIconFactory(appIcons);
         widgets.setAddObserver(pinAddObserver);
+        widgets.setGeometrySource(this::orientationGeometry);
         // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
         pane.setOnDragListener(appDropListener);
         catalog.setBuiltinSource(builtins);
@@ -271,13 +272,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private int wantedRows, wantedColumns;
     /** The rows always on gives the keyboard, taken off the capped grid; 0 while it is off. */
     private int keyboardRows;
-    /**
-     * The largest the wall has measured in each orientation. The caps come from this, not from
-     * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
-     * grid and reflow the widgets, since a reflow is kept. A cap can only grow until the screen
-     * turns, and the two orientations keep their own.
-     */
-    private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
     @Nullable private WidgetGridCaps appliedCaps;
     /**
      * Home's Margin as last settled, in dp: the rim the caps are worked out with. The grid's live
@@ -292,10 +286,40 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * cells go, so this is the answer for the wheels and the apply.
      */
     @NonNull public WidgetGridCaps gridCaps() {
-        boolean landscape = isLandscape();
-        float density = pane.getResources().getDisplayMetrics().density;
-        return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
-            landscape ? landscapeWallHeight : portraitWallHeight, density, gridEdgeDp);
+        // The screen in its portrait form, not the wall as measured: one grid for both
+        // orientations (ADR 0020 §12), so neither a turn nor a keyboard or sheet shrinking the
+        // wall changes the caps, and nothing reflows. The cells get shorter or narrower instead.
+        // Nor does the icon step: the caps keep room for the largest step's dock.
+        android.content.res.Configuration config = pane.getResources().getConfiguration();
+        return WidgetGridCaps.forPortraitWall(config.screenWidthDp, config.screenHeightDp,
+            statusBarDp(), gridEdgeDp);
+    }
+
+    /** The system's status bar height, dp, or a fallback where it names none. */
+    private float statusBarDp() {
+        android.content.res.Resources res = pane.getResources();
+        float density = res.getDisplayMetrics().density;
+        @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
+        int statusId = res.getIdentifier("status_bar_height", "dimen", "android");
+        return statusId != 0 && density > 0f
+            ? res.getDimensionPixelSize(statusId) / density
+            : WidgetGridCaps.FALLBACK_STATUS_BAR_DP;
+    }
+
+    /**
+     * The grid's geometry for both orientations' widget sizes: the screen, the chrome at the one
+     * icon step, Home's Margin and the grid as applied (the rows given to an always-on keyboard
+     * still count, since the cells keep their size).
+     */
+    @Nullable private WidgetOrientationCells.Geometry orientationGeometry() {
+        android.content.res.Resources res = pane.getResources();
+        android.content.res.Configuration config = res.getConfiguration();
+        float density = res.getDisplayMetrics().density;
+        if (config.screenWidthDp <= 0 || config.screenHeightDp <= 0 || density <= 0f) return null;
+        WidgetGridDefinition grid = widgets.repository().gridDefinition();
+        return new WidgetOrientationCells.Geometry(config.screenWidthDp, config.screenHeightDp,
+            statusBarDp(), appIcons.style().iconDp, gridEdgeDp, grid.columns,
+            grid.rows + keyboardRows, density);
     }
 
     /**
@@ -347,7 +371,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         wantedRows = rows;
         wantedColumns = columns;
         keyboardRows = Math.max(0, takenRows);
-        rememberWall();
         WidgetGridCaps caps = gridCaps();
         appliedCaps = caps;
         // The rows given away stay part of the grid's height, so the cells keep their size.
@@ -365,28 +388,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
-    /**
-     * Folds the grid's measured size into its orientation's record. False when there is nothing
-     * to learn: unmeasured, or still the other orientation's size right after a turn.
-     */
-    private boolean rememberWall() {
-        WidgetGridView grid = pane.grid();
-        int width = grid.getWidth(), height = grid.getHeight();
-        if (width <= 0 || height <= 0) return false;
-        boolean landscape = isLandscape();
-        if (landscape != (width > height)) return false;
-        if (landscape) {
-            landscapeWallWidth = Math.max(landscapeWallWidth, width);
-            landscapeWallHeight = Math.max(landscapeWallHeight, height);
-        } else {
-            portraitWallWidth = Math.max(portraitWallWidth, width);
-            portraitWallHeight = Math.max(portraitWallHeight, height);
-        }
-        return true;
-    }
-
     private void onWallLayout() {
-        if (wantedRows <= 0 || !rememberWall()) return;
+        if (wantedRows <= 0) return;
         if (gridCaps().equals(appliedCaps)) return;
         // Never from inside the layout pass that reported the change.
         pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });

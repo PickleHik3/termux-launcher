@@ -90,7 +90,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 16;
+    @VisibleForTesting static final int MIGRATION_VERSION = 17;
+
+    /**
+     * The last version of the flat {@code layout.*} keys: steps 1 to 16 bring every older store to
+     * it, and step 17 ({@link #foldIntoLayoutsIfNeeded}) folds it into the {@code layouts} file of
+     * ADR 0020. The flat keys are left as they are for a downgrade (ADR 0020 §8).
+     */
+    @VisibleForTesting static final int FLAT_MIGRATION_VERSION = 16;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -404,7 +411,8 @@ public final class PlaceLayoutStore {
 
     public PlaceLayoutStore(@NonNull TermuxAppSharedPreferences preferences) {
         mPreferences = preferences;
-        mStore = preferences.getSharedPreferences();
+        SharedPreferences flat = preferences.getSharedPreferences();
+        mStore = flat == null ? null : new LayoutDocumentPrefs(flat);
         mRevision = new AtomicInteger();
         mFixedVariant = null;
         mMigrating = new java.util.concurrent.atomic.AtomicBoolean();
@@ -413,7 +421,33 @@ public final class PlaceLayoutStore {
         mShownPages = new java.util.concurrent.atomic.AtomicReference<>();
         migrateIfNeeded();
         resetPortraitKeyboardResizeOnce();
+        foldIntoLayoutsIfNeeded();
+        useLayoutDocumentsIfFolded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
+        // A document written outside this store (launcherctl layout set, another view) retires
+        // every cached read too: the documents live in their own file, which the listener above
+        // never hears.
+        com.termux.app.place.layout.LayoutStore documents = layouts();
+        if (documents != null) documents.addListener(new RevisionBump(documents, mRevision));
+    }
+
+    /** Bumps a store's revision on every layouts change; lets go once the store is gone. */
+    private static final class RevisionBump implements com.termux.app.place.layout.LayoutStore.Listener {
+        @NonNull private final com.termux.app.place.layout.LayoutStore mDocuments;
+        @NonNull private final java.lang.ref.WeakReference<AtomicInteger> mRevision;
+
+        RevisionBump(@NonNull com.termux.app.place.layout.LayoutStore documents,
+                     @NonNull AtomicInteger revision) {
+            mDocuments = documents;
+            mRevision = new java.lang.ref.WeakReference<>(revision);
+        }
+
+        @Override
+        public void onLayoutsChanged(@NonNull com.termux.app.place.layout.Layouts layouts) {
+            AtomicInteger revision = mRevision.get();
+            if (revision == null) mDocuments.removeListener(this);
+            else revision.incrementAndGet();
+        }
     }
 
     /** True while the migration runs: slots read what the arrangement keys held. */
@@ -446,6 +480,9 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
+        // No page layouts (ADR 0020 §2): once the documents are in use a page wears its kind's.
+        if (variant.isPage() && documentsInUse())
+            variant = LayoutVariant.ofKind(variant.kind(), false);
         if (mFixedVariant == variant) return this;
         PlaceLayoutStore view = mVariantViews.get(variant);
         if (view == null) {
@@ -622,103 +659,6 @@ public final class PlaceLayoutStore {
     @NonNull
     static String adoptHomeLayoutKey() {
         return PREFIX + KEY_PAGE_LAYOUT + "from_home";
-    }
-
-    /**
-     * Whether page {@code pageId} holds a page layout of its own (ADR 0015 §3): on, the page wears
-     * its own copy of where every bar stands, its Dock design and toggles; the sizes stay linked
-     * to the normal layout's and which elements show stays its kind's. Off, the page wears what
-     * its kind wears today.
-     */
-    public boolean hasPageLayout(int pageId) {
-        if (mStore == null || pageId < 0) return false;
-        adoptHomeLayoutIfPending();
-        return mStore.getBoolean(pageLayoutKey(pageId), false);
-    }
-
-    /**
-     * Gives page {@code pageId} a page layout or stops reading it. Turned on, the copy starts as
-     * what the page wears now, the normal layout and its design, so nothing on screen moves until
-     * the user edits it. Turned off, the page wears the shared layout again; its copy stays,
-     * unread, until {@link #dropPageLayout}.
-     */
-    public void setPageLayout(int pageId, @NonNull PageKind kind, boolean on) {
-        if (mStore == null || pageId < 0 || hasPageLayout(pageId) == on) return;
-        if (on) {
-            LayoutVariant layout = LayoutVariant.page(pageId, kind);
-            copyIntoLayout(LayoutVariant.NORMAL, layout);
-            showWhatTheKindShows(layout);
-        }
-        writeBoolean(pageLayoutKey(pageId), on);
-    }
-
-    /**
-     * {@code layout}'s slots shown or put away as its kind shows them, in every orientation: a
-     * page layout's visibility starts as what the page showed, so nothing moves when it opts in.
-     */
-    private void showWhatTheKindShows(@NonNull LayoutVariant layout) {
-        // Every orientation, an empty one included (seeded now, not on first use): the page's
-        // visibility is what the kind showed at this moment, and later kind edits never reach it.
-        for (PlaceOrientation orientation : PlaceOrientation.values())
-            showWhatTheKindShows(layout, orientation);
-    }
-
-    private void showWhatTheKindShows(@NonNull LayoutVariant layout,
-                                      @NonNull PlaceOrientation orientation) {
-        PlaceLayoutStore view = forVariant(layout);
-        for (Element element : Element.values()) {
-            boolean hide = !kindShows(layout.kind(), orientation, element);
-            Slot stored = view.storedSlot(orientation, element);
-            if (stored.hidden != hide) view.setSlot(orientation, element, stored.withHidden(hide));
-        }
-    }
-
-    /** Deletes page {@code pageId}'s layout and its flag: the page, of {@code kind}, is gone for good. */
-    public void dropPageLayout(int pageId, @NonNull PageKind kind) {
-        if (mStore == null || pageId < 0) return;
-        LayoutVariant layout = LayoutVariant.page(pageId, kind);
-        String scope = LAYOUT_PREFIX + layout.keyScope();
-        SharedPreferences.Editor editor = mStore.edit();
-        for (String key : mStore.getAll().keySet()) {
-            if (key.startsWith(scope)) editor.remove(key);
-        }
-        editor.remove(pageLayoutKey(pageId)).apply();
-        for (PlaceOrientation orientation : PlaceOrientation.values())
-            mSeeded.remove(seededKey(layout, orientation));
-        mRevision.incrementAndGet();
-    }
-
-    /** Whether version 16 left the old Home layout to be copied onto the Home pages. */
-    @VisibleForTesting
-    boolean hasHomeLayoutToAdopt() {
-        return mStore != null && mStore.getBoolean(adoptHomeLayoutKey(), false);
-    }
-
-    /** {@link #adoptHomeLayout} once the launcher has said which Home pages there are. */
-    private void adoptHomeLayoutIfPending() {
-        if (!hasHomeLayoutToAdopt()) return;
-        ShownPages pages = mShownPages.get();
-        if (pages != null) adoptHomeLayout(pages.homePageIds());
-    }
-
-    /**
-     * The second half of version 16: every Home page that holds no page layout yet gets one equal
-     * to the old Home layout, so nothing on screen moves. Waits while no Home page is known (the
-     * wall's pages are seeded after the store migrates); runs once.
-     */
-    @VisibleForTesting
-    synchronized void adoptHomeLayout(@NonNull java.util.List<Integer> homePageIds) {
-        if (!hasHomeLayoutToAdopt() || homePageIds.isEmpty()) return;
-        SharedPreferences.Editor flags = mStore.edit();
-        for (Integer id : homePageIds) {
-            if (id == null || id < 0 || mStore.getBoolean(pageLayoutKey(id), false)) continue;
-            LayoutVariant layout = LayoutVariant.page(id, PageKind.HOME);
-            copyIntoLayout(LayoutVariant.HOME, layout);
-            showWhatTheKindShows(layout);
-            flags.putBoolean(pageLayoutKey(id), true);
-        }
-        flags.remove(adoptHomeLayoutKey()).apply();
-        mRevision.incrementAndGet();
     }
 
     /** The key {@link #mSeeded} remembers one variant's orientation under. */
@@ -1036,7 +976,7 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public DockStyle homePageDockDesign(@NonNull LayoutVariant variant) {
-        return forVariant(DressResolver.dockLayoutOf(variant, PageKind.HOME)).dockStyle();
+        return forVariant(LayoutVariant.HOME).dockStyle();
     }
 
     /**
@@ -1049,8 +989,8 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     private LayoutVariant dockVariant() {
-        LayoutVariant variant = activeVariant();
-        return variant.isPage() && variant.isHomeKind() ? LayoutVariant.HOME : variant;
+        // A layout's dock is its own: Home's layout is the one Home pages wear (ADR 0020 §1).
+        return activeVariant();
     }
 
     /** The dock's per-orientation key {@code key}, in {@link #dockVariant}'s scope. */
@@ -1066,12 +1006,7 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     private String dockReadKey(@NonNull String ownKey) {
-        String key = readKey(ownKey);
-        if (mStore == null || activeVariant() != LayoutVariant.HOME || mStore.contains(key))
-            return key;
-        String scope = LAYOUT_PREFIX + LayoutVariant.HOME.keyScope();
-        if (!key.startsWith(scope)) return key;
-        return LAYOUT_PREFIX + LayoutVariant.NORMAL.keyScope() + key.substring(scope.length());
+        return ownKey;
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
@@ -1288,13 +1223,8 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     private String readKey(@NonNull String ownKey) {
-        LayoutVariant variant = activeVariant();
-        if (mStore == null || !variant.isPage() || !variant.isHomeKind()
-            || mStore.contains(ownKey)) return ownKey;
-        String scope = LAYOUT_PREFIX + variant.keyScope();
-        if (!ownKey.startsWith(scope)) return ownKey;
-        String home = LAYOUT_PREFIX + LayoutVariant.HOME.keyScope() + ownKey.substring(scope.length());
-        return mStore.contains(home) ? home : ownKey;
+        // A page no longer falls back to Home: there are no page layouts (ADR 0020 §2).
+        return ownKey;
     }
 
     /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
@@ -1752,14 +1682,15 @@ public final class PlaceLayoutStore {
      * back.
      */
     public boolean isStatusCompact(@NonNull PlaceOrientation orientation) {
-        String key = layoutKey(orientation, KEY_STATUS_COMPACT);
+        // The bar's rest belongs to each kind (ADR 0018 §4, ADR 0020 §6).
+        String key = variantKey(orientation, KEY_STATUS_COMPACT);
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, false);
         return orientation == PlaceOrientation.LANDSCAPE
             ? LANDSCAPE_RESTS_COMPACT : mPreferences.isTopPaneClockCollapsed();
     }
 
     public void setStatusCompact(@NonNull PlaceOrientation orientation, boolean compact) {
-        writeBoolean(layoutKey(orientation, KEY_STATUS_COMPACT), compact);
+        writeBoolean(variantKey(orientation, KEY_STATUS_COMPACT), compact);
     }
 
     /**
@@ -1924,8 +1855,10 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     private String gridKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        seedIfNeeded(LayoutVariant.HOME, orientation);
-        return layoutKey(LayoutVariant.HOME, orientation, key);
+        // One grid for both orientations (ADR 0020 §12): the portrait count, read and written
+        // whichever way the screen stands; the landscape copy is no longer read.
+        seedIfNeeded(LayoutVariant.HOME, PlaceOrientation.PORTRAIT);
+        return layoutKey(LayoutVariant.HOME, PlaceOrientation.PORTRAIT, key);
     }
 
     private int readGridInt(@NonNull PlaceOrientation orientation, @NonNull String key,
@@ -1947,11 +1880,17 @@ public final class PlaceLayoutStore {
      */
     private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
         if (mStore == null || variant == LayoutVariant.NORMAL
+            // With the documents in use only Terminal-minimal starts from another layout; the
+            // others were folded whole by step 17 or read their shipped defaults.
+            || (documentsInUse() && variant != LayoutVariant.MINIMAL)
             || !mSeeded.add(seededKey(variant, orientation))) return;
         // A Home page reads Home's keys until it is edited; seeding a copy would detach it.
         if (variant.isPage() && variant.isHomeKind() && holdsAnyKey(LayoutVariant.HOME, orientation))
             return;
         for (String key : ARRANGEMENT_KEYS) {
+            // With the documents in use the widget grid is Home's and the sizes are shared: a
+            // value there is no sign the minimal layout was ever used, so it must not skip the seed.
+            if (documentsInUse() && (isGridKey(key) || isLinkedKey(key))) continue;
             if (mStore.contains(layoutKey(variant, orientation, key))) return;
         }
         Map<String, ?> all = mStore.getAll();
@@ -1964,11 +1903,6 @@ public final class PlaceLayoutStore {
         }
         editor.apply();
         PlaceLayoutStore seededStore = forVariant(variant);
-        if (variant.isPage()) {
-            // A page layout starts showing what the page showed: its kind's visibility.
-            showWhatTheKindShows(variant, orientation);
-            return;
-        }
         // The Home layout's resolve already puts away what it does not offer.
         PlaceLayout seeded = variant == LayoutVariant.MINIMAL
             ? MinimalMode.apply(seededStore.resolve(orientation))
@@ -2027,7 +1961,7 @@ public final class PlaceLayoutStore {
     private void migrateIfNeeded() {
         if (mStore == null) return;
         int fromVersion = mStore.getInt(KEY_MIGRATED, 0);
-        if (fromVersion >= MIGRATION_VERSION) return;
+        if (fromVersion >= FLAT_MIGRATION_VERSION) return;
         boolean freshInstall = fromVersion == 0 && !holdsAnyPlaceKeys();
         mMigrating.set(true);
         try {
@@ -2077,7 +2011,65 @@ public final class PlaceLayoutStore {
         // A new install starts on the new default design; an install that ran this store before
         // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
         if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
-        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mStore.edit().putInt(KEY_MIGRATED, FLAT_MIGRATION_VERSION).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Step 17 (ADR 0020 §7): folds the version-16 flat keys into the five documents of the
+     * {@code layouts} file in one write, and the Start-in page's looks into its kind's cells.
+     * Runs after the portrait keyboard reset so the fold sees it. Touches no flat layout key.
+     */
+    private void useLayoutDocumentsIfFolded() {
+        if (!(mStore instanceof LayoutDocumentPrefs)
+            || mStore.getInt(KEY_MIGRATED, 0) < MIGRATION_VERSION) return;
+        Context context = mPreferences.getContext();
+        if (context == null) return;
+        com.termux.app.place.layout.LayoutStore layouts =
+            com.termux.app.place.layout.LayoutStore.shared(context);
+        ((LayoutDocumentPrefs) mStore).useDocuments(layouts);
+        // A document changed from outside this store (launcherctl, another store) retires the
+        // caches here too; the listener holds the counter only.
+        final AtomicInteger revision = mRevision;
+        layouts.addListener(changed -> revision.incrementAndGet());
+    }
+
+    /**
+     * The preferences as this store reads them: layout keys routed to the {@code layouts}
+     * documents once step 17 has run, everything else the launcher preferences. For tests that
+     * check what a write stored.
+     */
+    @VisibleForTesting
+    @Nullable
+    public SharedPreferences layoutPreferences() {
+        return mStore;
+    }
+
+    /** The five layout documents this store reads and writes, or null before step 17. */
+    @Nullable
+    public com.termux.app.place.layout.LayoutStore layouts() {
+        return mStore instanceof LayoutDocumentPrefs
+            ? ((LayoutDocumentPrefs) mStore).documents() : null;
+    }
+
+    private boolean documentsInUse() {
+        return layouts() != null;
+    }
+
+    private void foldIntoLayoutsIfNeeded() {
+        if (mStore == null || mStore.getInt(KEY_MIGRATED, 0) >= MIGRATION_VERSION) return;
+        Context context = mPreferences.getContext();
+        if (context == null) return;
+        String wall = context.getSharedPreferences(
+                com.termux.app.wall.WallPagesStore.PREFS, Context.MODE_PRIVATE)
+            .getString(com.termux.app.wall.WallPagesStore.KEY_STATE, null);
+        LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall,
+            context.getResources().getConfiguration().smallestScreenWidthDp);
+        com.termux.app.place.layout.LayoutStore.shared(context).replaceAll(fold.layouts());
+        SharedPreferences.Editor editor = mStore.edit();
+        for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())
+            put(editor, cell.getKey(), cell.getValue());
+        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
 

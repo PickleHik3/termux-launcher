@@ -38,16 +38,12 @@ public class PlaceLayoutStoreHomePageDockTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("home-page-dock-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        store = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
-        prefs.edit()
-            .putString("layout.home.dock_design", "peek_glass")
-            .putString("layout.page1.dock_design", "lens_beads")
-            .putBoolean("layout.home.search_field", false)
-            .putBoolean("layout.page1.search_field", true)
-            .putBoolean("layout.page1.drawer_tile", true)
-            .putFloat("layout.home.portrait.dock_height", 1.2f)
-            .putFloat("layout.page1.portrait.dock_height", 1.7f)
-            .commit();
+        store = routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null)));
+        // Home's own dock, in Home's document (ADR 0020 §5): the flat page keys are never read.
+        PlaceLayoutStore homeLayout = store.forVariant(LayoutVariant.HOME);
+        homeLayout.setDockStyle(DockStyle.PEEK_GLASS);
+        homeLayout.setSearchField(false);
+        homeLayout.setDrawerTile(false);
     }
 
     private PlaceLayoutStore home(int id) {
@@ -73,22 +69,31 @@ public class PlaceLayoutStoreHomePageDockTest {
         page.setSearchField(true);
         page.setDrawerTile(true);
         page.setAzRowShown(PlaceOrientation.PORTRAIT, false);
-        assertEquals("glass_tray", prefs.getString("layout.home.dock_design", null));
-        assertTrue(prefs.getBoolean("layout.home.search_field", false));
-        assertTrue(prefs.getBoolean("layout.home.drawer_tile", false));
-        assertEquals("lens_beads", prefs.getString("layout.page1.dock_design", null));
-        assertEquals(DockStyle.GLASS_TRAY, home(2).dockStyle());
-        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
+        PlaceLayoutStore homeLayout = store.forVariant(LayoutVariant.HOME);
+        assertEquals(DockStyle.GLASS_TRAY, homeLayout.dockStyle());
+        assertTrue(homeLayout.searchField());
+        assertTrue(homeLayout.drawerTile());
+        assertEquals("every Home page wears it", DockStyle.GLASS_TRAY, home(2).dockStyle());
+        assertTrue(home(2).searchField());
         assertFalse(home(2).azRowShown(PlaceOrientation.PORTRAIT));
+        assertFalse("the Terminal's layout is untouched",
+            store.forVariant(LayoutVariant.NORMAL).searchField());
     }
 
     @Test
-    public void aTerminalPageKeepsItsOwnDock() {
-        prefs.edit().putString("layout.page3.dock_design", "lens_beads").commit();
+    public void aTerminalPageWearsTheTerminalsDockAndHomeKeepsItsOwn() {
+        store.forVariant(LayoutVariant.NORMAL).setDockStyle(DockStyle.LENS_BEADS);
         PlaceLayoutStore terminal = store.forVariant(LayoutVariant.page(3, PageKind.TERMINAL));
         assertEquals(DockStyle.LENS_BEADS, terminal.dockStyle());
         terminal.setDockStyle(DockStyle.GLASS_TRAY);
-        assertEquals("glass_tray", prefs.getString("layout.page3.dock_design", null));
-        assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(DockStyle.PEEK_GLASS, store.forVariant(LayoutVariant.HOME).dockStyle());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

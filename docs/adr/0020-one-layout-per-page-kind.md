@@ -43,6 +43,15 @@ Keyboard height, keyboard chin, dock height and strip height live in one `sizes`
 orientation, shared by every kind. A page change never resizes them. This is what `LINKED_KEYS`
 did through NORMAL; it is now the plain shape of the data.
 
+**One icon size (amended 2026-11-01).** One global icon size, chosen from four steps (S, M, L,
+XL), one value for both orientations, drives the Home grid's icons and the dock's icons. Every
+dock design, docked or floating, draws its icons at that size: a design changes the frame, the
+glass, the spacing and the wall strip's extra row, never the icon. The dock's height follows from
+the icon size and the design's padding, so it is no longer stored. Today's free dock height
+(0.4–3.0, two icon curves, the beads' fit-to-slot) and the Home icon size (48/54/60 dp) fold into
+the nearest step at migration. The drawer, folders, the A–Z strip and the status bar keep their
+own fixed sizes.
+
 ## 4. Display gets its own layout
 
 The Display layout starts as a copy of the Terminal's at migration, so nothing changes on the
@@ -93,6 +102,24 @@ it and applies it live, through the one redress request of ADR 0018 §2.
 This ADR and its spec come first. After approval, one worker builds one branch, and it is
 verified on pong at the end. It lands before v2.0.0-pre.3, which waits for it.
 
+## 12. Home in landscape, the Launcher3 way (amended 2026-11-01)
+
+Home rotates with the device, as the Terminal does (they are one activity, so locking Home would
+rotate the screen mid-swipe). It lays out as Launcher3 does on a phone:
+
+- One grid, columns × rows, for both orientations, and one set of positions and spans. Every item
+  keeps its cell on rotation; only the cell size changes. Nothing reflows.
+- Widgets relayout for the size they get, never zoom: the built-in widgets have size steps in
+  place of the up-to-2× zoom, and app widgets are told both orientations' sizes up front
+  (`OPTION_APPWIDGET_SIZES` with portrait and landscape, min/max from their union), as
+  Launcher3's `WidgetSizes` does.
+- In landscape the dock is a vertical bar of icons on the long edge (right in landscape, left in
+  seascape), the page indicator beside it, the status bar at its compact rest, and icon labels
+  hidden where a cell is too short for them (Launcher3 `hideWorkspaceLabelsIfNotEnoughSpace`).
+  Icons keep the one icon size (§3) and shrink only when a cell cannot hold it.
+- Migration: the portrait grid count and arrangement win; landscape copies (grid counts, shelved
+  positions) are dropped. The wall-size memory that only grew per orientation goes.
+
 ## Considered options
 
 - **Fix the dock reads one more time.** Rejected: it is the third such patch, and the next bug
@@ -109,8 +136,9 @@ verified on pong at the end. It lands before v2.0.0-pre.3, which waits for it.
 - `PlaceLayoutStore` shrinks to a loader and writer of five documents. The cross-layout rules
   (`LINKED_KEYS`, `gridKey`, `readKey`, the dock rule, `kindShows`) become a lookup by kind.
 - About 120 call sites change from key reads to field reads on `Layouts`.
-- A Home page that wore its own layout now wears the Home one. Users who gave Home pages
-  different docks keep the Start-in page's.
+- A Home page that wore its own layout now wears the Home one. Where Home holds its own value
+  (as the dock does on any install that ran the 2026-11-01 one-dock fix), that value wins; the
+  Start-in page's layout fills only what Home never stored.
 - Display and Terminal diverge on purpose from the first edit after upgrade.
 - Preference storage doubles until the old keys are deleted.
 - The spec, fixtures and checks are in `project-docs/active/layouts-per-kind-2026-11-01.md`.

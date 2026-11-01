@@ -33,6 +33,8 @@ public final class ResolvedArrangement {
     @NonNull private final LayoutVariant mVariant;
     /** The page it is resolved for: Home's page in front, or the Terminal's for every window. */
     @NonNull private final PageRef mPage;
+    /** Home's dock forced to a side bar for a phone in landscape ({@link SideBarDock}). */
+    private boolean mSideBarDock;
 
     private final boolean mAppsShown;
     @NonNull private final Edge mAppsEdge;
@@ -77,6 +79,38 @@ public final class ResolvedArrangement {
         mDockShown = PlaceChromePolicy.dockShown(layout);
     }
 
+    /**
+     * The same arrangement with Home's dock as a side bar on {@code side} ({@link SideBarDock}):
+     * the pinned apps stand as the rail on that edge, and the dock draws the rail's icon at the
+     * one icon step. Pinned apps put away stay put away.
+     */
+    @NonNull
+    public ResolvedArrangement asSideBarDock(@NonNull Edge side) {
+        Slot apps = mLayout.slot(Element.APPS);
+        PlaceLayout moved = apps.hidden || apps.edge == side ? mLayout
+            : mLayout.withSlot(Element.APPS, apps.withEdge(side));
+        ResolvedArrangement out = new ResolvedArrangement(moved, mStyle, mDesign, mSearchField,
+            mDrawerTile, mOrientation, mVariant, mPage);
+        out.mSideBarDock = !apps.hidden;
+        return out;
+    }
+
+    /** Whether Home's dock stands as a side bar here ({@link #asSideBarDock}). */
+    public boolean sideBarDock() {
+        return mSideBarDock;
+    }
+
+    /** {@code other} carrying this one's side bar, for a reader that remade it. */
+    @NonNull
+    public ResolvedArrangement keepingSideBar(@NonNull ResolvedArrangement other) {
+        if (!mSideBarDock || other.mSideBarDock) return other;
+        ResolvedArrangement out = new ResolvedArrangement(other.mLayout, other.mStyle,
+            other.mDesign, other.mSearchField, other.mDrawerTile, other.mOrientation,
+            other.mVariant, other.mPage);
+        out.mSideBarDock = true;
+        return out;
+    }
+
     // ---- Resolving ----
 
     /**
@@ -109,13 +143,11 @@ public final class ResolvedArrangement {
                                               @NonNull PageRef page,
                                               @NonNull LayoutStyle style) {
         PlaceLayoutStore view = store.forVariant(variant);
-        // Home pages read the dock's toggles from Home's scope whichever layout they wear.
-        PlaceLayoutStore dock = store.forVariant(
-            DressResolver.dockLayoutOf(variant, DressResolver.kindOf(page.kind)));
+        // A Home page wears Home's layout, so its dock is that layout's (ADR 0020 §1).
+        PlaceLayoutStore dock = view;
         PlaceLayout layout = store.resolve(orientation, variant, page.kind);
-        // A Home page draws the design PlaceLayoutStore#homePageDockDesign answers, the dress's too.
-        DockStyle design = page.kind == PaneWallPage.WIDGETS
-            ? store.homePageDockDesign(variant) : view.dockStyle();
+        // Every page draws its own layout's design; a Home page's is Home's (ADR 0020 §1).
+        DockStyle design = view.dockStyle();
         return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(design),
             dock.searchField(), dock.drawerTile(), orientation, variant, page);
     }
@@ -140,8 +172,10 @@ public final class ResolvedArrangement {
     @NonNull
     public ResolvedArrangement standing(@NonNull PlaceLayout layout) {
         if (layout == mLayout) return this;
-        return new ResolvedArrangement(layout, mStyle, mDesign, mSearchField, mDrawerTile,
-            mOrientation, mVariant, mPage);
+        ResolvedArrangement out = new ResolvedArrangement(layout, mStyle, mDesign, mSearchField,
+            mDrawerTile, mOrientation, mVariant, mPage);
+        out.mSideBarDock = mSideBarDock;
+        return out;
     }
 
     // ---- What it was resolved from ----

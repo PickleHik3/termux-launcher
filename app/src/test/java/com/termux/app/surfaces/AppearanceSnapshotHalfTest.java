@@ -83,34 +83,47 @@ public class AppearanceSnapshotHalfTest {
     }
 
     @Test
-    public void aHomeOrDisplayPageOverrideWrittenInTheSessionGoesOnRestore() {
+    public void aHomeOrDisplayKindOverrideWrittenInTheSessionGoesOnRestore() {
         int home = 7;
         int display = 9;
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 31);
-        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-        // A page's own dock opacity is the dock's cell on that page.
-        String dockKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
-            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
-            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
-        String homeKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
-            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, home);
-        String displayKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
-            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, display);
-        assertNotEquals("the dock's opacity is a page key", dockKey, homeKey);
+        com.termux.shared.termux.settings.preferences.LookGrid.install(page ->
+            page == home ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
+                : page == display ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.DISPLAY
+                : page == com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID
+                    ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL : null,
+            null);
+        try {
+            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 31);
+            AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+            // A page's own dock opacity is the dock's cell on that page's kind (ADR 0020 §2).
+            String homeKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
+                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+                com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
+                com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME);
+            String displayKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
+                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+                com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
+                com.termux.shared.termux.settings.preferences.LookGrid.Kind.DISPLAY);
+            assertEquals("the Display page writes the Display kind's cell", 31,
+                store.getInt(displayKey, -1));
+            boolean homeHeld = store.contains(homeKey);
+            int homeAtOpen = store.getInt(homeKey, -1);
 
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, home, 15);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 60);
-        assertNotEquals("a Home page's own value is a change", entry.signature(),
-            AppearanceSnapshot.signatureOf(preferences));
+            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, home, 15);
+            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 60);
+            assertNotEquals("a Home page's own value is a change", entry.signature(),
+                AppearanceSnapshot.signatureOf(preferences));
 
-        entry.restore(preferences);
+            entry.restore(preferences);
 
-        assertFalse("Home's override written in the session is gone", store.contains(homeKey));
-        assertEquals("the Display page's override is put back", 31, store.getInt(displayKey, -1));
-        assertEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
+            assertEquals("Home's override written in the session is gone", homeHeld,
+                store.contains(homeKey));
+            assertEquals(homeAtOpen, store.getInt(homeKey, -1));
+            assertEquals("the Display kind's override is put back", 31, store.getInt(displayKey, -1));
+            assertEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
+        } finally {
+            com.termux.app.look.TerminalPageIdFixture.installKinds();
+        }
     }
 
     @Test
@@ -154,6 +167,11 @@ public class AppearanceSnapshotHalfTest {
     private boolean hasHalfKeys() {
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
+            // The Workspace's own grid values are the Terminal kind's cells (ADR 0020 §2).
+            if (key.endsWith("@" + com.termux.shared.termux.settings.preferences.LookGrid.KIND_PREFIX
+                    + com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL.key)
+                    && com.termux.shared.termux.settings.preferences.LookGrid.parse(key) != null)
+                return true;
             // The halves are pages: the Workspace's own values are the Terminal page's overrides.
             String page = "@" + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID;
             if (key.endsWith(page)) {
@@ -167,5 +185,11 @@ public class AppearanceSnapshotHalfTest {
             }
         }
         return false;
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

@@ -41,7 +41,7 @@ public final class KindFixtures {
 
     /** Home page 2's own layout: what the Home layout was before version 16. */
     public static final LayoutVariant HOME_PAGE =
-        LayoutVariant.page(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME);
+        LayoutVariant.HOME;
 
     /** {@code store} told Home page 2 is in front; the store, for chaining. */
     public static PlaceLayoutStore onHomePage(PlaceLayoutStore store) {
@@ -51,7 +51,7 @@ public final class KindFixtures {
 
     /** {@code store} on Home page 2, which holds a page layout of its own. */
     public static PlaceLayoutStore withHomePageLayout(PlaceLayoutStore store) {
-        onHomePage(store).setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        onHomePage(store);
         return store;
     }
 }

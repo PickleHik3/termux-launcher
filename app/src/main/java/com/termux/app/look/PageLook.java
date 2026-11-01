@@ -339,9 +339,18 @@ public final class PageLook {
         if (key != null && !LookKeys.isKnown(key)) return;
         int id = key == null ? -1 : LookKeys.pageIdOf(key);
         Set<Integer> touched = new HashSet<>();
+        LookGrid.Key cell = id < 0 && key != null ? LookGrid.parse(key) : null;
         if (id >= 0) {
             cache.remove(id);
             touched.add(id);
+        } else if (cell != null && cell.kind != null) {
+            // A kind's cell (ADR 0020 §2) touches only the pages of that kind.
+            for (java.util.Map.Entry<Integer, Snapshot> entry : cache.entrySet()) {
+                if (entry.getValue().kind.name().equals(cell.kind.name())) {
+                    touched.add(entry.getKey());
+                }
+            }
+            for (Integer touchedId : touched) cache.remove(touchedId);
         } else {
             touched.addAll(cache.keySet());
             cache.clear();

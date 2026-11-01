@@ -122,6 +122,8 @@ public final class DockLayout {
      * exactly this and works nothing out of its own. Zero while no half shows the row.
      */
     public final int slotIconPx;
+    /** The pinned icons do not fit at the one icon size with the least gap (spec §8a). */
+    public final boolean iconsOverflow;
 
     /**
      * The side inset of the row lying down on each side, as {@link #appsRowUsableWidthPx} was
@@ -275,6 +277,7 @@ public final class DockLayout {
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
         this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
         this.slotIconPx = Math.max(0, b.slotIconPx);
+        this.iconsOverflow = b.iconsOverflow;
         this.appsRowEdgeInsetPx = Math.max(0, b.appsRowEdgeInsetPx);
         this.peekRowSideInsetPx = Math.max(0, b.peekRowSideInsetPx);
         this.railAirPx = Math.max(0, b.railAirPx);
@@ -324,6 +327,9 @@ public final class DockLayout {
      * ({@link DockLayoutPolicy#appsRowSideInsetPx}).
      */
     public int appsRowSideInsetPx() {
+        // The row at the dock's foot stands in by the policy's inset, which holds the spec §8a
+        // rule (the grid's margin, 16 dp Docked, the grid's columns): the view applies this one.
+        if (!appsRowOnEdge) return appsRowEdgeInsetPx;
         return Math.max(peekRowSideInsetPx, DockLayoutPolicy.appsRowSideInsetPx(
             capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density));
     }
@@ -400,6 +406,7 @@ public final class DockLayout {
         int appsRowTickSideAirPx;
         int appsRowUsableWidthPx;
         int slotIconPx;
+        boolean iconsOverflow;
         int appsRowEdgeInsetPx;
         int peekRowSideInsetPx;
         int railAirPx;

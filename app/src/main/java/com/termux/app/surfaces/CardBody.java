@@ -497,6 +497,8 @@ final class CardBody {
         return new CardRowView(segmentRow.root, () -> {
             showRoot(segmentRow.root, row);
             segmentRow.select(mModel.value(row));
+            for (int i = 0; i < segmentRow.buttons.size(); i++)
+                segmentRow.buttons.get(i).setEnabled(mModel.choiceEnabled(row, i));
         });
     }
 

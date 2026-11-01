@@ -67,22 +67,24 @@ writes version 8; tag v1.3.0-pre.4 writes 14; v2 writes 16. No end-to-end upgrad
 
 `layouts` keys and values. `version` is the document's own version, 1 now.
 
+As built (2026-11-01). Field names, types and units are the flat keys' own, so step 17 copies
+rather than translates; the authoritative table is the comment at the head of
+`place/layout/LayoutsJson.java`.
+
 ```json
 // key "home"  (terminal, terminal_minimal and display have the same shape)
 {
   "version": 1,
-  "dock_design": "glass",
-  "search_field": true,
-  "drawer_tile": "tray",
-  "drawer_tile_position": "end",
-  "status_compact": false,
-  "keyboard_mode": "transient",
-  "keyboard_form": "docked",
+  "dock_design": "peek_glass", "search_field": true, "drawer_tile": false,
+  "drawer_tile_position": "end", "keyboard_shown": false, "keyboard_rows": 0,
+  "keyboard_open": false,
   "portrait": {
-    "placements": { "status_bar": "top", "apps_row": "dock", "az_row": "off",
-                    "az_bar": "off", "extra_keys": "above_keyboard" },
-    "bars": { "order": ["apps_row", "extra_keys"],
-              "under_keyboard": ["extra_keys"], "restore_edge": {} },
+    "status_bar": "top", "apps_row": "bottom", "az_bar": "bottom", "az_row": true,
+    "extra_keys": "hidden", "apps_row_order": 2, "extra_keys_under_keyboard": false,
+    "apps_row_restore_edge": "bottom", "keyboard_mode": "overlay", "keyboard_form": "docked",
+    "bar_order": "…", "status_compact": false,
+    "dress.status_bar": true, "dress.apps_row": true, "dress.az_bar": true,
+    "dress.extra_keys": false,
     "widget_columns": 4, "widget_rows": 6
   },
   "landscape": { "…": "same keys" }
@@ -93,17 +95,21 @@ writes version 8; tag v1.3.0-pre.4 writes 14; v2 writes 16. No end-to-end upgrad
 // key "sizes"
 {
   "version": 1,
-  "portrait":  { "keyboard_height": 0.42, "keyboard_chin": 0, "dock_height": 64, "wall_strip_height": 40 },
-  "landscape": { "keyboard_height": 0.55, "keyboard_chin": 0, "dock_height": 56, "wall_strip_height": 36 }
+  "portrait":  { "keyboard_height": 0.9, "keyboard_chin": 6, "dock_height": 1.25, "wall_strip_height": 44 },
+  "landscape": { "keyboard_height": 1.0, "keyboard_chin": 0, "dock_height": 1.1, "wall_strip_height": 40 }
 }
 ```
 
-The values above are examples; the builder takes names, types and units from the existing keys
-and writes them in the table at `LayoutsJson`'s head. `widget_columns` and `widget_rows` appear
-only in `home`. `keyboard_shown`, `keyboard_rows`, `keyboard_open` and `minimal` stay where they
-are unless the builder finds one is per layout (see §9, point 2). Unknown fields are kept on
-rewrite and ignored on read. A document that fails to parse is replaced by the shipped default
-for its kind and logged once; the other four are untouched.
+- Placements are the flat values: an edge or `"hidden"`; `az_row` is a boolean, `az_bar` an edge.
+- `dress.<element>` is the kind's visibility (was `place.dress.<kind>.<o>.<element>`);
+  Terminal-minimal holds none (its slots carry it).
+- `keyboard_height` and `dock_height` are scales (floats); `keyboard_chin` and
+  `wall_strip_height` are dp (ints).
+- An absent field reads the same shipped default as an absent flat key did (some defaults come
+  from global preferences), so shipped documents hold only the visibility.
+- `widget_columns` and `widget_rows` appear only in `home`. Unknown fields are kept on rewrite
+  and ignored on read. A document that fails to parse is replaced by the shipped default for its
+  kind and logged once; the other four are untouched.
 
 Global, outside `layouts`: `keyboard_float_x/y`, `voice_pill_x/y`, `app_launcher_dock_style`.
 
@@ -119,11 +125,15 @@ brought to the v16 flat shape. Step 17 reads the flat keys and writes the five d
 |---|---|---|---|
 | `home` | the `home.` value | the Start-in Home page's page layout | NORMAL, then shipped default |
 | `terminal` | the Terminal page's own page layout | NORMAL | shipped default |
-| `terminal_minimal` | the `minimal.` value | the `terminal` result | shipped default |
+| `terminal_minimal` | the `minimal.` value | the `terminal` result, only in an orientation where `minimal.` holds a value | left empty: the seed (the Terminal's layout with everything put away) runs on first read, as before |
 | `display` | a copy of the `terminal` result | | |
 | `sizes` | NORMAL (linked keys) | | shipped default |
 
-Notes. "Start-in Home page" is the page `Start in` names; if it is the Terminal, use the first
+Notes. The rule is the developer's "nothing looks different after the upgrade": a Terminal-minimal
+never used in an orientation stays empty there, so minimal mode still puts every element away.
+The Search field and the drawer tile come only from sources up to the one that holds the dock
+design (a layout on its own design derived them from it). Home's kind visibility
+(`place.dress.home.*`) folds into Home's document. "Start-in Home page" is the page `Start in` names; if it is the Terminal, use the first
 Home page. Widget grid keys come from the Home scope only. `status_compact` folds the same
 way. Layout-wide values follow the same order per kind.
 
@@ -175,6 +185,16 @@ changes no size).
 
 `seedIfNeeded`, `kindShows` and `holdsOwnVisibility` become fields of the shipped default per kind.
 
+
+**Chosen design (2026-11-01, accepted by the coordinator).** Callers keep `PlaceLayoutStore` as
+the typed accessor; the store gives kind semantics. Once step 17 has run, its preferences are a
+`LayoutDocumentPrefs` that routes every layout key to the kind's document (no scope = Terminal,
+`home.` = Home, `display.` = Display, `minimal.` = Terminal-minimal; the four sizes to `sizes`;
+the widget grid to Home; `place.dress.*` and a place's `keyboard_open` to the kind). Its views
+are `LayoutVariant.ofKind(kind, minimal)`; `DressResolver.layoutOf` is that lookup. The flat keys
+are never written. `LayoutSourceRulesTest` keeps flat key strings, page layouts and the dock rule
+out of every other file.
+
 ## 7. Acceptance checks
 
 **Unit (the builder's, run in CI):** the four classes in §5; `DressResolverTest` updated so no
@@ -211,6 +231,74 @@ migration code.
 - **Redress.** `Layouts` is immutable, so a reader that caches it past a redress shows stale
   chrome. Readers take `current()` per pass (ADR 0018 §2).
 
+## 8a. One icon size (step 5, added 2026-11-01)
+
+Developer's decisions: one global icon size for the Home grid and every dock design, docked or
+floating; four steps S, M, L, XL; one value for both orientations; built on this branch after
+`launcherctl layout`.
+
+- Today (scout map at v2-wave1): dock height = `dock_height` scale (0.4–3.0, default 2.18) ×
+  37.5 dp (DockLayoutPolicy.BASE_TOOLBAR_HEIGHT_DP); icon scale from two fitted curves
+  (Default and Capsule, DockLayoutPolicy.java:64-71), fill ratio in
+  AccessoryStackLayoutPolicy:111-113; beads fit icons to slot width (LensBeadGeometry,
+  MIN_FIT_SCALE 1.1); Home grid icons `app_launcher_home_icon_scale` 48/54/60 dp
+  (HomeIconSize.java:17-20); presets {1.72, 1.95, 2.18, 2.45} exist (DockLayoutPolicy.java:31).
+- Target: `sizes` holds `icon_size` (S|M|L|XL) once, in its layout-wide section
+  (`place/layout/IconSize`). Steps (developer, 2026-11-01): **S 40, M 48, L 54, XL 60 dp; the
+  default is M.** The dock's height = icon dp + the design's own padding/frame (+ the wall
+  strip's row); the old 0.4–3.0 scale limit does not apply on this path, so XL (60 dp) draws.
+  Floating and docked share one curve; beads stop fitting to slots. `dock_height` stops being
+  stored.
+- **Dock side insets (developer, 2026-11-01).** Seen on pong: the docked glass tray put the
+  first icon against the left screen edge and cut the last icon's badge on the right. Rule, for
+  every design and style:
+  - the dock's side inset is never less than the Home grid's side margin, and for a docked
+    (full-width) dock never less than 16 dp from the screen edge;
+  - with as many icons as the Home grid has columns, the icons stand on the grid's column
+    centres (as Launcher3's hotseat does);
+  - otherwise the icons are spaced evenly within the inset;
+  - when they do not fit at the step, the gaps shrink first, to a 4 dp minimum; icons never
+    shrink below the chosen step and nothing is clipped; a case that still does not fit is
+    reported, never overflowed.
+  - Test: every design × style × step with 4–8 icons at 360 and 412 dp: no icon clipped, insets
+    at least the minimum, icon px equal across designs.
+- Migration (part of step 17): nearest step to the user's Home icon size and dock height (Home
+  icon size wins when they disagree); the phone fixture (dock_height 2.994 portrait, about a
+  55 dp icon / 2.18 landscape) lands on L 54.
+- Editor: the dock height slider and the Home icon size row become one "Icon size" S/M/L/XL
+  control; settings pages are fragile, change only that row.
+- Acceptance: every design at each step draws the same icon px (unit test over DockSurfaceSpec
+  designs × styles); on pong, cycling designs keeps icon size; Home grid icons match the dock.
+
+## 8b. Home in landscape (step 6, added 2026-11-01)
+
+Developer's decisions (ADR 0020 §12): Home rotates; one grid and one arrangement for both
+orientations (portrait wins at migration); widgets relayout, never zoom; landscape dock as a side
+bar on the long edge. Built on this branch after step 5.
+
+- Today (scout map at v2-wave1): grid per orientation `layout.home.<o>.widget_columns/rows`
+  (PlaceLayoutStore ~:1626-1651, gridKey ~:1926); caps WidgetGridCaps (MIN_CELL_DP 55);
+  LauncherWidgetRepository keeps the on-screen orientation's records and shelves the other
+  (applyOrientation ~:697-745, first turn reflows); wall-size memory grows per orientation
+  (WidgetPaneController ~:372-384); BuiltinWidgetView zoom = min(2, height/design) (~:462);
+  WidgetSizeOptionsPolicy already reports portrait+landscape dp (~:40-71); no landscape branch in
+  DockLayoutPolicy; TermuxActivity has configChanges orientation|screenSize, no lock.
+- Launcher3 reference (AOSP main, read 2026-11-01): InvariantDeviceProfile one numRows/numColumns;
+  DeviceProfile transposeLayoutWithOrientation / isVerticalBarLayout (hotseat on the right in
+  ROTATION_90, left in seascape, padding = hotseatBarSizePx); legacy cell math in landscape;
+  updateIconSize shrinks icons to the cell; hideWorkspaceLabelsIfNotEnoughSpace; WidgetSizes
+  getWidgetSizesDp over supportedProfiles → OPTION_APPWIDGET_SIZES + min/max union.
+- Target: grid count one value in the `home` document (not per orientation); one record set,
+  no shelf; built-in widgets get size steps (each widget picks a layout for its cell px; no
+  scale transform above 1.0); dock side bar in landscape on phones (smallest width < 600 dp),
+  page indicator beside it; labels hidden by the Launcher3 rule; widget size options pushed only
+  when changed.
+- Migration (step 17): portrait grid + positions win; landscape records and counts dropped.
+- Acceptance: unit tests for cell math both orientations (same cells, no reflow), label hiding,
+  widget size options (both sizes, min/max union), built-in widget never scales above 1.0; pong:
+  rotate Home with the developer's widgets — every widget stays in its cell, no widget grows
+  past its cell, dock moves to the side, rotate back restores exactly.
+
 ## 9. Open points for the developer
 
 1. **Downgrade guard (settled).** `dev`'s `PlaceLayoutStore.migrateIfNeeded` (dev:895-898)
@@ -223,3 +311,18 @@ migration code.
 3. **Terminal-minimal is worn by Display too (settled).** While minimal is on, the Display layout
    is not worn; its own edits show with minimal off. Minimal is one look for every window.
 4. **Start-in on the Terminal (settled).** The fold rule then uses the first Home page on the wall.
+5. **Terminal keyboard_shown (deviation, 2026-11-01).** The Terminal's and the Display's
+   `keyboard_shown` stays the existing global keyboard-off preference; only Home's is in its
+   document. No settings page changed.
+6. **Callers keep the accessor (chosen design, 2026-11-01).** See §6: `PlaceLayoutStore` stays
+   the typed accessor over the documents instead of every caller reading `Layouts` fields.
+7. **Page looks (settled 2026-11-01).** The `@<page>` look tier is retired: a page's cells are its
+   kind's (`LookGrid.cellKey`), the Where chip offers Everywhere and the shown page's kind, and the
+   editor's page side writes through the shown page id into its kind's cells. The look-grid fold
+   (`LookGridMigration`) still writes an old page value to that page's `@<page>` cell, since the
+   wall's page kinds are installed only after it runs; step 17 then folds the Start-in Home page's
+   and the Terminal page's cells into `@kind:` cells. Vibrancy and Margin have no kind row; their
+   page cells are not folded.
+8. **Home's Style, Corners and Margin.** They are linked across both halves since #84
+   (`TermuxAppSharedPreferences#getLayoutStyle(boolean)` ignores the half), so there is no
+   Home-only value to fold. Home holds its own layout (`homeHoldsOwnLayout()` is true).

@@ -574,6 +574,14 @@ The history lives in `~/.launcherctl/launcher.db`, readable by anything running 
 that is why it is opt-in per app. The older `notifications.jsonl` mirror is gone and is deleted
 the first time the new store opens.
 
+### POST /v1/layout
+
+One layout document (ADR 0020). Body `{"op":"get","kind":"home"}` answers
+`{"ok":true,"kind":"home","layout":{...}}`. Body `{"op":"set","kind":"home","layout":{...}}`
+validates the document and writes it whole, then re-dresses the live chrome; a bad document
+answers 400 `invalid_layout` with the field named, an unknown kind 400 `bad_kind`. Kinds:
+`home`, `terminal`, `terminal_minimal`, `display`, `sizes`.
+
 ### Device routes: vibrate, torch, battery, volume, toast, wallpaper
 
 | Method | Path | Body | Answer |

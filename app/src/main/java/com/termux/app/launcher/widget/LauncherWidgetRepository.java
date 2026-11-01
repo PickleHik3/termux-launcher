@@ -734,7 +734,9 @@ public final class LauncherWidgetRepository {
         }
         if (pending != null) return false;
         LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>(layouts);
-        shelf.put(orientation, snapshot());
+        // One arrangement for both orientations (ADR 0020 §12): turning to the portrait one
+        // shelves nothing, so a landscape arrangement is never stored again.
+        if (!KEPT_ORIENTATION.equals(key)) shelf.put(orientation, snapshot());
         OrientationLayout incoming = shelf.remove(key);
         int[] pages = { pageCount };
         LinkedHashMap<Integer, LauncherWidgetRecord> desired = new LinkedHashMap<>();
@@ -752,6 +754,26 @@ public final class LauncherWidgetRepository {
             return false;
         }
         return true;
+    }
+
+    /** The orientation whose arrangement wins (ADR 0020 §12): the portrait one. */
+    static final String KEPT_ORIENTATION = "portrait";
+
+    /**
+     * The shelf as loaded, less every landscape copy (ADR 0020 §12, spec §8b): only the portrait
+     * arrangement is kept, and only while a non-portrait one is on screen, so the turn to the
+     * one grid restores it. A save with a landscape shelf writes none back.
+     */
+    @NonNull
+    static LinkedHashMap<String, OrientationLayout> keptShelf(
+            @NonNull LinkedHashMap<String, OrientationLayout> loaded,
+            @Nullable String onScreen) {
+        LinkedHashMap<String, OrientationLayout> kept = new LinkedHashMap<>();
+        OrientationLayout portrait = loaded.get(KEPT_ORIENTATION);
+        if (portrait != null && onScreen != null && !KEPT_ORIENTATION.equals(onScreen)) {
+            kept.put(KEPT_ORIENTATION, portrait);
+        }
+        return kept;
     }
 
     /** What the orientation on screen looks like right now, for the shelf. */
@@ -1450,7 +1472,8 @@ public final class LauncherWidgetRepository {
             orientation = loadedOrientation == null || loadedOrientation.isEmpty()
                 ? null : loadedOrientation;
             List<Integer> byPosition = idKeyed ? null : ids;
-            layouts = decodeLayouts(root.optJSONObject("layouts"), orientation, byPosition);
+            layouts = keptShelf(decodeLayouts(root.optJSONObject("layouts"), orientation,
+                byPosition), orientation);
             rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"), byPosition);
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException exception) {

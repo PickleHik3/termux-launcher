@@ -58,7 +58,7 @@ public class LayoutEditorHomeLayoutTest {
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
         // Home holds a Home layout of its own here; the shared layout is LayoutEditorSharedLayoutTest.
-        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        com.termux.app.place.KindFixtures.onHomePage(places);
     }
 
     @Test
@@ -190,7 +190,8 @@ public class LayoutEditorHomeLayoutTest {
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
             plan.setDockStyle(DockStyle.WALL_STRIP));
-        assertEquals("wall_strip", prefs().getString("layout.page2.dock_design", null));
+        assertEquals("Home's layout holds it", DockStyle.WALL_STRIP,
+            places.forVariant(LayoutVariant.HOME).dockStyle());
         assertEquals(DockStyle.WALL_STRIP, places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
         assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
             places.forVariant(LayoutVariant.NORMAL).dockStyle());
@@ -204,7 +205,8 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
             home.drawerTilePosition());
         home.setDrawerTilePosition(com.termux.app.dock.DrawerTilePolicy.Position.END);
-        assertEquals("end", prefs().getString("layout.page2.drawer_tile_position", null));
+        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
+            places.forVariant(LayoutVariant.HOME).drawerTilePosition());
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
             home.drawerTilePosition());
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,

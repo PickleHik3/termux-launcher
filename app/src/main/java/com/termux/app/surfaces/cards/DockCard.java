@@ -152,7 +152,7 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return com.termux.app.surfaces.GlassRows.card(offers, Row.HEIGHT, Row.DOCK_STYLE,
+        return com.termux.app.surfaces.GlassRows.card(offers, Row.HOME_ICON_SIZE, Row.DOCK_STYLE,
                 Row.DOCK_TYPE, Row.MARGIN, Row.REFLECTION, Row.DOCK_BARS, Row.DOCK_OPTIONS)
             .build();
     }

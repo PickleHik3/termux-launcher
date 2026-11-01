@@ -185,4 +185,10 @@ public class MistLightGlassTest {
             assertEquals(look.id, matchedId());
         }
     }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
+    }
 }
