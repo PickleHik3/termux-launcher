@@ -28188,6 +28188,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     return n;
                 }
+                // Display pages stand on the wall like any page: the overview lists them in order.
+                @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage>
+                        displayPages() {
+                    com.termux.app.wall.WallPages pages = wallPages();
+                    com.termux.app.wall.WallPages.Page terminal = pages.terminal();
+                    java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage> out =
+                        new java.util.ArrayList<>();
+                    int homes = 0;
+                    boolean afterTerminal = false;
+                    for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
+                        if (terminal != null && page.id == terminal.id) afterTerminal = true;
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) homes++;
+                        if (page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) continue;
+                        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
+                            ? null : displayCards().find(page.binding);
+                        out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
+                            com.termux.app.wall.DisplayPagePolicy.cardName(page,
+                                app == null ? null : app.name), homes, afterTerminal));
+                    }
+                    return out;
+                }
+                @Override public boolean displayPageHolds(int id) {
+                    return isDisplayUp() && mBoundDisplayPage == id;
+                }
+                @Override public void removeDisplayPage(int id) {
+                    editWallPages(pages -> pages.remove(id));
+                }
                 @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
                     java.util.List<com.termux.app.wall.WallPages.Page> homes =
                         wallPages().homePages();
