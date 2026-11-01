@@ -157,3 +157,37 @@ on each build:
 Follow-up wave (decided 2026-11-01): A no trail from resizes or pane moves; B the read-out's fade
 redraws only the pill (or no fade); C a held pane reuses its last render instead of re-rendering
 its text per frame. Re-measure with the same 10 drags and a paired trace.
+
+### After the follow-up wave (04b5921b1, 2026-11-01, 90 Hz)
+
+Same method, staging `2.0.0-pre.1+dev.04b5921b1`; all 10 drags landed (top rows 33 after up, 31
+after down; no missed press).
+
+| Per drag | Before (39f0faf4d) | After (b1628d923) | Follow-up (04b5921b1) |
+|---|---|---|---|
+| Frames | 135.4 | 161.8 | 145.4 |
+| Janky (missed deadline) | 5.8 (4.3%) | 10.9 (6.7%) | 10.0 (6.9%) |
+| p50 / p90 / p99 | 12.6 / 23.7 / 32.3 ms | 13.5 / 23.6 / 32.9 ms | 14.7 / 22.7 / 33.2 ms |
+
+Paired trace (one drag, 32 → 21 rows):
+
+- **A held:** no `Effect.cursorTrail.*` slice anywhere in the trace.
+- **B held:** no run of page redraws after release; frames return to ~3 ms `doFrame` within
+  ~200 ms of the settle.
+- **C held, and the open risk did not happen:** while held, `Terminal.scrollCache.record` runs 4×
+  (once per pane per pause, 2.1-2.7 ms) and `Terminal.scrollCache.draw` 20× (≤ 0.05 ms). It is not
+  re-recorded each move.
+- **What still misses the budget:**
+  1. *The per-move layout pass.* Every move frame runs `measure` + `layout` of 8-10 ms (13 passes
+     in the drag), giving 16-21 ms traversals. This is the stock `LinearLayout`
+     `setLayoutParams` → full `requestLayout` path (`TerminalPaneController.java` ~2802-2813,
+     ~5637), untouched by either wave.
+  2. *The settle frame.* At release both panes render at their new size in one frame
+     (`Terminal.render` 12.3 + 15.7 ms, traversal 31.4 ms, then a 19 ms RenderThread
+     `DrawFrames`). That is the drag's worst frame. Normal renders are 2-4 ms, so the first render
+     after a reflow is the expensive one.
+
+Gate result: jank is still above the before build (10.0 against 5.8 per drag), though no longer
+from A or B. The remaining cost is the layout pass and the settle frame, not the pause-resize. Whether the
+follow-up passes, and whether a wave D takes the layout pass (and the settle render), is the
+developer's decision.
