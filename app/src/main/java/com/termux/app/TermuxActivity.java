@@ -1611,6 +1611,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLastDispatchedImeBottomPx;
     private int mAppliedTerminalFlushPaddingPx;
     /**
+     * The flush padding the Terminal last rested with, keyboard down: kept while the wall stands
+     * on Home, where the applied one is 0, so the Terminal's rest reservation read from there
+     * (travelRestReservationPx) is the one its landing lays out, padding included (D11).
+     */
+    private int mTerminalRestFlushPaddingPx;
+    /**
      * The bottom stack the last geometry pass applied, as Stack layout answered it (ADR 0011):
      * the one record every reader of the stack's numbers reads, instead of a cache apiece. Null
      * until the first pass, so that pass always counts as a change.
@@ -17150,6 +17156,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The last pass's squeeze, an input to every snapshot asked between two passes.
         mDockSqueezePx = stack.squeezePx;
         mAppliedTerminalFlushPaddingPx = stack.flushPaddingPx;
+        if (terminalOnScreen && !state.keyboardShown && !mCrossing.crossing())
+            mTerminalRestFlushPaddingPx = stack.flushPaddingPx;
 
         boolean dockMoved = applyDockLayout(stack.dock, stackIn.dock.arrangement);
         dockMoved |= applyUnderKeyboardBandAir(stack.underKeyboardTopMarginPx,
@@ -24471,9 +24479,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // committed place, else its half's stored layout.
         in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, place == mLastWallPage
             ? arrangement().layout() : snapshot.half(side).layout);
-        in.flushPaddingPx = place == com.termux.app.wall.PaneWallPage.TERMINAL
-            && place == mLastWallPage && !keyboardShown && mAppliedStack != null
-            ? mAppliedStack.flushPaddingPx : 0;
+        // The Terminal's flush padding is part of its rest: the applied one while it is the place,
+        // else the one it last rested with, so Home's terminal page and the slide back are laid
+        // out at the height the landing settles at, not one padding taller.
+        in.flushPaddingPx = place != com.termux.app.wall.PaneWallPage.TERMINAL || keyboardShown ? 0
+            : place == mLastWallPage
+                ? (mAppliedStack != null ? mAppliedStack.flushPaddingPx : 0)
+                : mTerminalRestFlushPaddingPx;
         return com.termux.app.place.StackLayout.restReservationPx(in);
     }
 
