@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -208,7 +209,7 @@ public final class TerminalSession extends TerminalOutput {
                             return;
                         if (!mProcessToTerminalIOQueue.write(buffer, 0, read))
                             return;
-                        mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+                        onProcessOutputQueued();
                     }
                 } catch (Exception e) {
                     // Ignore, just shutting down.
@@ -644,6 +645,39 @@ public final class TerminalSession extends TerminalOutput {
         while (budget > 0 && drainProcessOutputSlice()) budget -= DRAIN_SLICE_BYTES;
     }
 
+    /**
+     * Whether a {@link #MSG_NEW_INPUT} is posted and not yet handled. At most one ever is: a link
+     * that delivers its stream in small segments makes every pty read a write here, and posting
+     * one message per write once queued ten thousand a second ahead of the frame clock.
+     *
+     * <p>The reader writes its bytes and then tries to set the flag; the handler clears the flag and
+     * then drains. So a write either lands before the clear, and the drain that follows reads it,
+     * or lands after it, and the reader finds the flag clear and posts the next turn itself.
+     */
+    final AtomicBoolean mNewInputPending = new AtomicBoolean();
+
+    /** Posts {@link #MSG_NEW_INPUT}; a test in this package counts the posts and runs them by hand. */
+    Runnable mNewInputPoster = () -> mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+
+    /** Reader thread: bytes were just written to {@link #mProcessToTerminalIOQueue}. */
+    void onProcessOutputQueued() {
+        requestNewInputTurn();
+    }
+
+    /** Post a {@link #MSG_NEW_INPUT} unless one is already waiting. Any thread. */
+    private void requestNewInputTurn() {
+        if (mNewInputPending.compareAndSet(false, true)) mNewInputPoster.run();
+    }
+
+    /** One {@link #MSG_NEW_INPUT} turn on the main thread. */
+    void handleNewInput() {
+        mNewInputPending.set(false);
+        if (drainProcessOutputSlice()) {
+            // More of the burst is waiting: let the frame clock run before the next slice.
+            requestNewInputTurn();
+        }
+    }
+
     @SuppressLint("HandlerLeak")
     class MainThreadHandler extends Handler {
 
@@ -666,9 +700,8 @@ public final class TerminalSession extends TerminalOutput {
                 mEmulator.append(bytesToWrite, bytesToWrite.length);
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
-            } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {
-                // More of the burst is waiting: let the frame clock run before the next slice.
-                sendEmptyMessage(MSG_NEW_INPUT);
+            } else {
+                handleNewInput();
             }
         }
     }
