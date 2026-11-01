@@ -33369,6 +33369,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
+        @Override public void onTreeGeometryChanged() {
+            // Sizes only: the drawer, wall pages, wallpaper pan, window bar and page overview
+            // are keyed by which windows and sessions exist, never by split weights.
+            android.os.Trace.beginSection("Drawer.geometryChanged");
+            try {
+                scheduleArrangementAutosave();
+            } finally {
+                android.os.Trace.endSection();
+            }
+        }
+
         @Override public void onHomeFloatsChanged() {
             onHomeFloatsChangedInActivity();
         }
