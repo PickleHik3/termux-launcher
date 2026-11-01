@@ -413,6 +413,15 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        android.os.Trace.beginSection("Pane.glass.layout");
+        try {
+            onLayoutImpl(changed, left, top, right, bottom);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onLayoutImpl(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         if (mVeilSource != null && mCornerMaskRadiusPx <= 0f
                 && (veilRectMoved() || veilGenerationMoved())) {

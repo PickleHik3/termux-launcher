@@ -612,6 +612,17 @@ public final class ChromeInk {
     public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @ColorInt int tint,
                                            @ColorInt int veilColor, @ColorInt int ink,
                                            @ColorInt int dimInk) {
+        android.os.Trace.beginSection("Ink.terminalPane");
+        try {
+            return terminalPaneImpl(rootRect, tint, veilColor, ink, dimInk);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private OnGlass.Resolution terminalPaneImpl(@NonNull Rect rootRect, @ColorInt int tint,
+                                       @ColorInt int veilColor, @ColorInt int ink,
+                                       @ColorInt int dimInk) {
         readMode();
         int dim = dimUnder(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
@@ -628,7 +639,13 @@ public final class ChromeInk {
             wallpaper = answer.wallpaper;
             sampled = true;
         } else {
-            int read = mCache.sampleUncached(rootRect);
+            int read;
+            android.os.Trace.beginSection("Ink.terminalPane.sample");
+            try {
+                read = mCache.sampleUncached(rootRect);
+            } finally {
+                android.os.Trace.endSection();
+            }
             sampled = Color.alpha(read) != 0;
             wallpaper = sampled ? read : mCache.fallbackWallpaper();
         }

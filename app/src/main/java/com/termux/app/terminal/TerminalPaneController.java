@@ -4533,6 +4533,15 @@ public class TerminalPaneController {
 
     /** Re-clamp {@code leaf}'s fractions against the live host size and lay its container out. */
     private void applyFloatBounds(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
+        android.os.Trace.beginSection("Pane.floatBounds");
+        try {
+            applyFloatBoundsImpl(leaf, container);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void applyFloatBoundsImpl(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
         Rect fullRoom = container.room();
         if (fullRoom.width() > 0 && fullRoom.height() > 0) {
             // A turn of the screen: the float takes the shape it last had in this orientation.

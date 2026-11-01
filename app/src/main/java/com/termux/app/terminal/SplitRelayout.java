@@ -32,8 +32,13 @@ final class SplitRelayout {
         pa.weight = weightA;
         pb.weight = weightB;
         if (!canRelayInPlace(split)) {
-            a.setLayoutParams(pa);
-            b.setLayoutParams(pb);
+            Trace.beginSection("Pane.splitRelayout.fallback");
+            try {
+                a.setLayoutParams(pa);
+                b.setLayoutParams(pb);
+            } finally {
+                Trace.endSection();
+            }
             return;
         }
         Trace.beginSection("Pane.splitRelayout");

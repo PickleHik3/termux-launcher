@@ -357,6 +357,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        android.os.Trace.beginSection("Pane.frame.sizeChanged");
+        try {
+            onSizeChangedImpl(w, h, oldw, oldh);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mBandClipPathDirty = true;
         mBezelPathDirty = true;
@@ -587,6 +596,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        android.os.Trace.beginSection("Pane.frame.measure");
+        try {
+            onMeasureImpl(widthMeasureSpec, heightMeasureSpec);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onMeasureImpl(int widthMeasureSpec, int heightMeasureSpec) {
         if (mContent != null && mContent.getLayoutParams() instanceof MarginLayoutParams) {
             int width = MeasureSpec.getSize(widthMeasureSpec);
             int height = MeasureSpec.getSize(heightMeasureSpec);

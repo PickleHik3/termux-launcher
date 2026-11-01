@@ -3176,6 +3176,15 @@ public final class TerminalView extends View {
      */
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        android.os.Trace.beginSection("Terminal.sizeChanged");
+        try {
+            onSizeChangedImpl(w, h, oldw, oldh);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
         if (mTerminalSizeUpdatesPaused) {
             // Held (ADR 0019): the grid is what it was, so its recording stays good and this
             // redraw does not count as new content; the resize that ends the hold retires it.

@@ -332,6 +332,15 @@ public final class PaneRim {
 
         @Override
         protected void onBoundsChange(@NonNull Rect bounds) {
+            android.os.Trace.beginSection("Pane.rim.resize");
+            try {
+                onBoundsChangeImpl(bounds);
+            } finally {
+                android.os.Trace.endSection();
+            }
+        }
+
+        private void onBoundsChangeImpl(@NonNull Rect bounds) {
             float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, bounds.width(),
                 bounds.height());
             if (mInner == null || radius != mInnerRadiusPx) {
