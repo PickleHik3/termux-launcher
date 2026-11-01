@@ -102,6 +102,24 @@ it and applies it live, through the one redress request of ADR 0018 §2.
 This ADR and its spec come first. After approval, one worker builds one branch, and it is
 verified on pong at the end. It lands before v2.0.0-pre.3, which waits for it.
 
+## 12. Home in landscape, the Launcher3 way (amended 2026-11-01)
+
+Home rotates with the device, as the Terminal does (they are one activity, so locking Home would
+rotate the screen mid-swipe). It lays out as Launcher3 does on a phone:
+
+- One grid, columns × rows, for both orientations, and one set of positions and spans. Every item
+  keeps its cell on rotation; only the cell size changes. Nothing reflows.
+- Widgets relayout for the size they get, never zoom: the built-in widgets have size steps in
+  place of the up-to-2× zoom, and app widgets are told both orientations' sizes up front
+  (`OPTION_APPWIDGET_SIZES` with portrait and landscape, min/max from their union), as
+  Launcher3's `WidgetSizes` does.
+- In landscape the dock is a vertical bar of icons on the long edge (right in landscape, left in
+  seascape), the page indicator beside it, the status bar at its compact rest, and icon labels
+  hidden where a cell is too short for them (Launcher3 `hideWorkspaceLabelsIfNotEnoughSpace`).
+  Icons keep the one icon size (§3) and shrink only when a cell cannot hold it.
+- Migration: the portrait grid count and arrangement win; landscape copies (grid counts, shelved
+  positions) are dropped. The wall-size memory that only grew per orientation goes.
+
 ## Considered options
 
 - **Fix the dock reads one more time.** Rejected: it is the third such patch, and the next bug

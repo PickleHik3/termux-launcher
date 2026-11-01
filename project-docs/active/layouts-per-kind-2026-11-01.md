@@ -251,6 +251,35 @@ floating; four steps S, M, L, XL; one value for both orientations; built on this
 - Acceptance: every design at each step draws the same icon px (unit test over DockSurfaceSpec
   designs × styles); on pong, cycling designs keeps icon size; Home grid icons match the dock.
 
+## 8b. Home in landscape (step 6, added 2026-11-01)
+
+Developer's decisions (ADR 0020 §12): Home rotates; one grid and one arrangement for both
+orientations (portrait wins at migration); widgets relayout, never zoom; landscape dock as a side
+bar on the long edge. Built on this branch after step 5.
+
+- Today (scout map at v2-wave1): grid per orientation `layout.home.<o>.widget_columns/rows`
+  (PlaceLayoutStore ~:1626-1651, gridKey ~:1926); caps WidgetGridCaps (MIN_CELL_DP 55);
+  LauncherWidgetRepository keeps the on-screen orientation's records and shelves the other
+  (applyOrientation ~:697-745, first turn reflows); wall-size memory grows per orientation
+  (WidgetPaneController ~:372-384); BuiltinWidgetView zoom = min(2, height/design) (~:462);
+  WidgetSizeOptionsPolicy already reports portrait+landscape dp (~:40-71); no landscape branch in
+  DockLayoutPolicy; TermuxActivity has configChanges orientation|screenSize, no lock.
+- Launcher3 reference (AOSP main, read 2026-11-01): InvariantDeviceProfile one numRows/numColumns;
+  DeviceProfile transposeLayoutWithOrientation / isVerticalBarLayout (hotseat on the right in
+  ROTATION_90, left in seascape, padding = hotseatBarSizePx); legacy cell math in landscape;
+  updateIconSize shrinks icons to the cell; hideWorkspaceLabelsIfNotEnoughSpace; WidgetSizes
+  getWidgetSizesDp over supportedProfiles → OPTION_APPWIDGET_SIZES + min/max union.
+- Target: grid count one value in the `home` document (not per orientation); one record set,
+  no shelf; built-in widgets get size steps (each widget picks a layout for its cell px; no
+  scale transform above 1.0); dock side bar in landscape on phones (smallest width < 600 dp),
+  page indicator beside it; labels hidden by the Launcher3 rule; widget size options pushed only
+  when changed.
+- Migration (step 17): portrait grid + positions win; landscape records and counts dropped.
+- Acceptance: unit tests for cell math both orientations (same cells, no reflow), label hiding,
+  widget size options (both sizes, min/max union), built-in widget never scales above 1.0; pong:
+  rotate Home with the developer's widgets — every widget stays in its cell, no widget grows
+  past its cell, dock moves to the side, rotate back restores exactly.
+
 ## 9. Open points for the developer
 
 1. **Downgrade guard (settled).** `dev`'s `PlaceLayoutStore.migrateIfNeeded` (dev:895-898)
