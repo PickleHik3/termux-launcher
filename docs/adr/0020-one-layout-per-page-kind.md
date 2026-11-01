@@ -109,8 +109,9 @@ verified on pong at the end. It lands before v2.0.0-pre.3, which waits for it.
 - `PlaceLayoutStore` shrinks to a loader and writer of five documents. The cross-layout rules
   (`LINKED_KEYS`, `gridKey`, `readKey`, the dock rule, `kindShows`) become a lookup by kind.
 - About 120 call sites change from key reads to field reads on `Layouts`.
-- A Home page that wore its own layout now wears the Home one. Users who gave Home pages
-  different docks keep the Start-in page's.
+- A Home page that wore its own layout now wears the Home one. Where Home holds its own value
+  (as the dock does on any install that ran the 2026-11-01 one-dock fix), that value wins; the
+  Start-in page's layout fills only what Home never stored.
 - Display and Terminal diverge on purpose from the first edit after upgrade.
 - Preference storage doubles until the old keys are deleted.
 - The spec, fixtures and checks are in `project-docs/active/layouts-per-kind-2026-11-01.md`.
