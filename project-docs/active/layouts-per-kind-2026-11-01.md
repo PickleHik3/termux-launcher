@@ -297,11 +297,13 @@ bar on the long edge. Built on this branch after step 5.
    document. No settings page changed.
 6. **Callers keep the accessor (chosen design, 2026-11-01).** See §6: `PlaceLayoutStore` stays
    the typed accessor over the documents instead of every caller reading `Layouts` fields.
-7. **The page look tier stays for now (2026-11-01).** The Workspace half's look lives in the
-   Terminal page's own cells (`detachSurfaceValue(..., terminalPageId())`), so `LookGrid` still
-   reads `@<page>` cells and the Where chip keeps "This page" until those writers move to
-   `@kind:` cells. Step 17 already folds the Start-in Home page's and the Terminal page's cells
-   into `@kind:` cells. Vibrancy and Margin have no kind row; their page cells are not folded.
+7. **Page looks (settled 2026-11-01).** The `@<page>` look tier is retired: a page's cells are its
+   kind's (`LookGrid.cellKey`), the Where chip offers Everywhere and the shown page's kind, and the
+   editor's page side writes through the shown page id into its kind's cells. The look-grid fold
+   (`LookGridMigration`) still writes an old page value to that page's `@<page>` cell, since the
+   wall's page kinds are installed only after it runs; step 17 then folds the Start-in Home page's
+   and the Terminal page's cells into `@kind:` cells. Vibrancy and Margin have no kind row; their
+   page cells are not folded.
 8. **Home's Style, Corners and Margin.** They are linked across both halves since #84
    (`TermuxAppSharedPreferences#getLayoutStyle(boolean)` ignores the half), so there is no
    Home-only value to fold. Home holds its own layout (`homeHoldsOwnLayout()` is true).
