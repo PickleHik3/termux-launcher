@@ -33,6 +33,8 @@ public final class ResolvedArrangement {
     @NonNull private final LayoutVariant mVariant;
     /** The page it is resolved for: Home's page in front, or the Terminal's for every window. */
     @NonNull private final PageRef mPage;
+    /** Home's dock forced to a side bar for a phone in landscape ({@link SideBarDock}). */
+    private boolean mSideBarDock;
 
     private final boolean mAppsShown;
     @NonNull private final Edge mAppsEdge;
@@ -75,6 +77,38 @@ public final class ResolvedArrangement {
         mExtraKeysRowShown = PlaceChromePolicy.extraKeysRowShown(layout);
         mExtraKeysColumnShown = PlaceChromePolicy.extraKeysColumnShown(layout);
         mDockShown = PlaceChromePolicy.dockShown(layout);
+    }
+
+    /**
+     * The same arrangement with Home's dock as a side bar on {@code side} ({@link SideBarDock}):
+     * the pinned apps stand as the rail on that edge, and the dock draws the rail's icon at the
+     * one icon step. Pinned apps put away stay put away.
+     */
+    @NonNull
+    public ResolvedArrangement asSideBarDock(@NonNull Edge side) {
+        Slot apps = mLayout.slot(Element.APPS);
+        PlaceLayout moved = apps.hidden || apps.edge == side ? mLayout
+            : mLayout.withSlot(Element.APPS, apps.withEdge(side));
+        ResolvedArrangement out = new ResolvedArrangement(moved, mStyle, mDesign, mSearchField,
+            mDrawerTile, mOrientation, mVariant, mPage);
+        out.mSideBarDock = !apps.hidden;
+        return out;
+    }
+
+    /** Whether Home's dock stands as a side bar here ({@link #asSideBarDock}). */
+    public boolean sideBarDock() {
+        return mSideBarDock;
+    }
+
+    /** {@code other} carrying this one's side bar, for a reader that remade it. */
+    @NonNull
+    public ResolvedArrangement keepingSideBar(@NonNull ResolvedArrangement other) {
+        if (!mSideBarDock || other.mSideBarDock) return other;
+        ResolvedArrangement out = new ResolvedArrangement(other.mLayout, other.mStyle,
+            other.mDesign, other.mSearchField, other.mDrawerTile, other.mOrientation,
+            other.mVariant, other.mPage);
+        out.mSideBarDock = true;
+        return out;
     }
 
     // ---- Resolving ----
@@ -138,8 +172,10 @@ public final class ResolvedArrangement {
     @NonNull
     public ResolvedArrangement standing(@NonNull PlaceLayout layout) {
         if (layout == mLayout) return this;
-        return new ResolvedArrangement(layout, mStyle, mDesign, mSearchField, mDrawerTile,
-            mOrientation, mVariant, mPage);
+        ResolvedArrangement out = new ResolvedArrangement(layout, mStyle, mDesign, mSearchField,
+            mDrawerTile, mOrientation, mVariant, mPage);
+        out.mSideBarDock = mSideBarDock;
+        return out;
     }
 
     // ---- What it was resolved from ----

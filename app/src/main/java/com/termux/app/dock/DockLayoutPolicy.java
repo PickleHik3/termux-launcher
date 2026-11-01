@@ -165,6 +165,8 @@ public final class DockLayoutPolicy {
         public final boolean appsRowOnEdge;
         /** Of those, the ones that stand as a column on a side edge: the rail. */
         public final boolean appsOnRail;
+        /** The rail's icon, dp; 0 for the rail's own {@link #DOCK_RAIL_ICON_SIZE_DP}. */
+        public final float railIconDp;
         /**
          * The row shares its container with nothing else — the only dock row on the bottom edge, or
          * the only bar on its plank off the dock, which a rail always is. The extra keys beside it
@@ -298,6 +300,7 @@ public final class DockLayoutPolicy {
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
             this.appsOnRail = b.appsOnRail;
+            this.railIconDp = b.railIconDp;
             this.appsRowAlone = b.appsRowAlone;
             this.appsRowNextToCanvas = b.appsRowNextToCanvas;
             this.appsRowPageStripShown = b.appsRowPageStripShown;
@@ -329,6 +332,7 @@ public final class DockLayoutPolicy {
             private boolean capsule;
             private boolean appsRowOnEdge;
             private boolean appsOnRail;
+            private float railIconDp;
             private boolean appsRowAlone;
             private boolean appsRowNextToCanvas;
             // Every row that lies down carries the ticks' band, whether or not it has a second
@@ -395,6 +399,8 @@ public final class DockLayoutPolicy {
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
+            /** The rail's icon, dp; 0 keeps {@link #DOCK_RAIL_ICON_SIZE_DP}. */
+            public Builder railIconDp(float v) { this.railIconDp = v; return this; }
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
             public Builder appsRowNextToCanvas(boolean v) { this.appsRowNextToCanvas = v; return this; }
             public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
@@ -621,16 +627,18 @@ public final class DockLayoutPolicy {
         // air either side of it, mirrored onto this axis (not the larger of the two, which left the
         // icons hard against the display edge). The floor is a column still worth aiming a thumb
         // at, which is what the air alone no longer guarantees.
+        int railIconPx = in.railIconDp > 0f ? Math.round(density * in.railIconDp)
+            : railIconSizePx(density);
         out.railWidthPx = out.railEdgeInsetPx
             + Math.max(Math.round(density * DOCK_RAIL_MIN_WIDTH_DP),
-                railIconSizePx(density) + 2 * loneAirPx);
+                railIconPx + 2 * loneAirPx);
 
         // The rail's own axis, so the vertical form of the pinned-apps row and the column it
         // stands in are sized from one place rather than each measuring its own icons.
         out.railBandPx = Math.max(0, out.railWidthPx - out.railEdgeInsetPx);
-        out.railIconSizePx = railIconSizePx(density);
+        out.railIconSizePx = railIconPx;
         out.railIconSpacingPx = railIconSpacingPx(density);
-        out.railSlotLengthPx = railSlotLengthPx(density);
+        out.railSlotLengthPx = railIconPx + 2 * out.railIconSpacingPx;
         // The rail is a lone row standing up: its own air on all four sides.
         out.railAirPx = loneAirPx;
 

@@ -173,9 +173,9 @@ public final class DockGeometry {
             private ResolvedArrangement arrangement() {
                 if (floating == base.floating() && design == base.design()
                     && searchField == base.searchField()) return base;
-                return ResolvedArrangement.of(base.layout(),
+                return base.keepingSideBar(ResolvedArrangement.of(base.layout(),
                     floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED, design, searchField,
-                    base.drawerTile(), base.orientation(), base.variant(), base.page());
+                    base.drawerTile(), base.orientation(), base.variant(), base.page()));
             }
 
             @NonNull
@@ -428,6 +428,9 @@ public final class DockGeometry {
             .capsule(prefs && rows.floating)
             .appsRowOnEdge(appsShown && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM)
             .appsOnRail(rail)
+            // Home's side bar on a phone in landscape draws the one icon step (ADR 0020 §12);
+            // a rail the user stood on a side keeps the rail's own icon.
+            .railIconDp(prefs && rail && rows.arrangement.sideBarDock() ? rows.iconDp : 0)
             .appsRowAlone(appsRowAlone(layout))
             .appsRowNextToCanvas(appsRowNextToCanvas(layout))
             // A row that lies down carries the ticks in its own air; a rail's stand in a column

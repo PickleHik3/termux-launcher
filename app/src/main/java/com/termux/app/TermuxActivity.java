@@ -15571,8 +15571,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store == null) return NO_PREFERENCES_ARRANGEMENT;
         PlaceOrientation orientation = currentPlaceOrientation();
         int revision = store.revision();
+        int rotation = displayRotation();
         if (store != mArrangedStore || orientation != mArrangedOrientation
-            || revision != mArrangedRevision) {
+            || revision != mArrangedRevision || rotation != mArrangedRotation) {
+            mArrangedRotation = rotation;
             mHomeArrangement = null;
             mWorkspaceArrangement = null;
             mArrangedStore = store;
@@ -15589,7 +15591,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (#173 slice E), is resolved for its own id and not kept: it is read as a crossing
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
-            return ResolvedArrangement.resolve(store, orientation, page);
+            return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -15602,11 +15604,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
             }
+            if (home) held = withSideBarDock(held);
             if (home) mHomeArrangement = held;
             else mWorkspaceArrangement = held;
         }
         mArrangedRevision = store.revision();
         return held;
+    }
+
+    /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
+    private int mArrangedRotation = -1;
+
+    /** The display's rotation, a {@code Surface.ROTATION_*}; 0 before there is a display. */
+    private int displayRotation() {
+        try {
+            android.view.Display display = android.os.Build.VERSION.SDK_INT >= 30
+                ? getDisplay() : getWindowManager().getDefaultDisplay();
+            return display != null ? display.getRotation() : android.view.Surface.ROTATION_0;
+        } catch (RuntimeException e) {
+            return android.view.Surface.ROTATION_0;
+        }
+    }
+
+    /**
+     * Home's arrangement with its dock as a side bar on a phone in landscape (ADR 0020 §12,
+     * {@link com.termux.app.place.SideBarDock}): on the long edge, right in landscape and left in
+     * seascape. Portrait and tablets wear the layout as stored.
+     */
+    @NonNull
+    private ResolvedArrangement withSideBarDock(@NonNull ResolvedArrangement home) {
+        PlaceLayout.Edge side = com.termux.app.place.SideBarDock.sideFor(true,
+            isLandscapeOrientation(), getResources().getConfiguration().smallestScreenWidthDp,
+            displayRotation());
+        return side == null ? home : home.asSideBarDock(side);
     }
 
     /** Whether the launcher is in minimal mode (CONTEXT.md), as its memory says. */
