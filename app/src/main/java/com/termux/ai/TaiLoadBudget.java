@@ -113,6 +113,14 @@ public final class TaiLoadBudget {
     /** Relaxed hold floor: what a load that stays resident keeps free, a quarter gigabyte above the peak floor. */
     public static final long HOLD_FLOOR_BYTES = 768L * MIB;
     /**
+     * The hold floor is at least this share of physical RAM, one sixth: on the 11.68 GB Solana Saga a
+     * 3.84 GB GPU load admitted at 5.55 GB available (the fixed floor needed 4.64) was followed by the
+     * low-memory killer taking the runtime and the launcher, so it now keeps 1.95 GB free and needs 5.78.
+     */
+    public static final long HOLD_FLOOR_DIVISOR = 6L;
+    /** The peak floor's share of physical RAM, one ninth (1.30 GB on the Saga), the hold floor's 2:3 ratio. */
+    public static final long PEAK_FLOOR_DIVISOR = 9L;
+    /**
      * Relaxed critical floor: where the runtime's watch stops a model that is loading or generating
      * ({@link TaiPressureWatch}). Under the peak floor, so idle residents are given up first; and one
      * fast poll ({@link TaiPressureWatch#POLL_BUSY_MS}) at the fastest load pong has shown — 5.7 to
@@ -187,11 +195,15 @@ public final class TaiLoadBudget {
     /**
      * What stays free for the rest of the phone: in {@link MemoryMode#RELAXED} the peak floor for a
      * momentary load and the hold floor for everything else; in {@link MemoryMode#UNRESTRICTED}
-     * nothing. Policy values, not derived limits.
+     * nothing. Each is a share of {@code physicalBytes} ({@link #HOLD_FLOOR_DIVISOR},
+     * {@link #PEAK_FLOOR_DIVISOR}) with the fixed value as the minimum, which is also what an unknown
+     * ({@code <= 0}) physical size gives. Policy values, not derived limits.
      */
-    public static long floorBytes(boolean momentary, @NonNull Conditions conditions) {
+    public static long floorBytes(boolean momentary, @NonNull Conditions conditions, long physicalBytes) {
         if (conditions.mode == MemoryMode.UNRESTRICTED) return 0L;
-        return momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
+        long fixed = momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
+        if (physicalBytes <= 0L) return fixed;
+        return Math.max(fixed, physicalBytes / (momentary ? PEAK_FLOOR_DIVISOR : HOLD_FLOOR_DIVISOR));
     }
 
     /**
@@ -639,7 +651,7 @@ public final class TaiLoadBudget {
     public static Plan plan(@NonNull Request r) {
         int floor = floor(r.capContext);
         int cap = Math.max(floor, r.capContext);
-        long reserve = floorBytes(r.momentary, r.conditions);
+        long reserve = floorBytes(r.momentary, r.conditions, r.physicalBytes);
         String first = r.accelerators.isEmpty() ? null : r.accelerators.get(0);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (r.availableBytes <= 0L || r.physicalBytes <= 0L || r.fileBytes <= 0L) {
@@ -756,7 +768,7 @@ public final class TaiLoadBudget {
     public static Plan planFixed(@NonNull Estimate estimate, @NonNull String accelerator, long physicalBytes,
                                  long availableBytes, @NonNull List<TaiResidency.Entry> evictable,
                                  @NonNull Conditions conditions) {
-        long reserve = floorBytes(false, conditions);
+        long reserve = floorBytes(false, conditions, physicalBytes);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (availableBytes <= 0L || physicalBytes <= 0L) {
             return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, false, none);

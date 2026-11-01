@@ -21,7 +21,8 @@ public class TaiLoadBudgetTest {
 
     private static final long MIB = 1024L * 1024L;
     private static final long GIB = 1024L * MIB;
-    private static final long PONG_TOTAL = 11_530_736L * 1024L;     // MemTotal on the phone
+    /** A phone small enough that the fixed floors apply (the share rule gives less), so the older plan tests' arithmetic holds. */
+    private static final long PONG_TOTAL = 4L * 1024L * MIB;
     private static final long E4B = 3_659_530_240L;                 // over 3 GB: never a CPU fallback
     private static final long E2B = 2_588_147_712L;
     private static final List<String> GPU_THEN_CPU = Arrays.asList("gpu", "cpu");
@@ -43,14 +44,49 @@ public class TaiLoadBudgetTest {
 
     // --- Floors: the memory limits ---
 
+    private static final long SAGA_TOTAL = 11_679_948_800L;         // Solana Saga, issue #191
+
+    @Test
+    public void aFourGigabytePhoneKeepsTheFixedFloors() {
+        long four = 4L * 1024L * MIB;
+        assertEquals(768L * MIB, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, four));
+        assertEquals(512L * MIB, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED, four));
+    }
+
+    @Test
+    public void aBigPhoneKeepsAShareOfItsRamFree() {
+        assertEquals(1_946_658_133L, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, SAGA_TOTAL));
+        assertEquals(1_297_772_088L, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED, SAGA_TOTAL));
+        assertEquals(0L, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED, SAGA_TOTAL));
+        assertEquals(0L, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED, SAGA_TOTAL));
+    }
+
+    @Test
+    public void anUnknownPhysicalSizeGivesTheFixedFloors() {
+        assertEquals(768L * MIB, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, 0L));
+        assertEquals(512L * MIB, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED, -1L));
+    }
+
+    /** Issue #191: 3,836,230,041 bytes admitted at 5.55 GB took the launcher down; 6.1 GB served. */
+    @Test
+    public void theSagaLoadAtFiveAndAHalfGigabytesIsRefusedAndAtSixFits() {
+        TaiLoadBudget.History gpu = gpuMeasured(3_487_481_855L);   // plus 10% is 3,836,230,041
+        TaiLoadBudget.Plan tight = TaiLoadBudget.plan(request(E4B, SAGA_TOTAL, 5_550_000_000L, GPU_THEN_CPU, 4096,
+            false, gpu, NOTHING));
+        assertFalse(tight.fits);
+        assertEquals(1_946_658_133L, tight.reserveBytes);
+        assertTrue(TaiLoadBudget.plan(request(E4B, SAGA_TOTAL, 6_100_000_000L, GPU_THEN_CPU, 4096,
+            false, gpu, NOTHING)).fits);
+    }
+
     @Test
     public void theFloorsFollowTheMemoryLimits() {
         // Relaxed: 0.75 GiB held free for a resident load, 0.5 GiB for a momentary one, on every RAM class.
-        assertEquals(768L * MIB, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED));
-        assertEquals(512L * MIB, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED));
+        assertEquals(768L * MIB, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, 0L));
+        assertEquals(512L * MIB, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED, 0L));
         // Unrestricted: none.
-        assertEquals(0L, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED));
-        assertEquals(0L, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED));
+        assertEquals(0L, TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED, 0L));
+        assertEquals(0L, TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED, 0L));
         assertSame(TaiLoadBudget.Conditions.UNRESTRICTED, TaiLoadBudget.Conditions.of(TaiLoadBudget.MemoryMode.UNRESTRICTED));
         assertSame(TaiLoadBudget.Conditions.RELAXED, TaiLoadBudget.Conditions.of(TaiLoadBudget.MemoryMode.RELAXED));
     }
@@ -172,12 +208,13 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void anEightGigabytePhoneRunsE2bOnTheGpuWhenItFits() {
-        // 8 GB class: the same 0.75 GiB hold floor as every class; E2B on the GPU at 4k is ~2.5 GB.
-        TaiLoadBudget.Plan plan = plan(E2B, (long) (7.3 * GIB), 4_000_000_000L, 32_768);
+        // 8 GB class: a sixth of its RAM held free (1.2 GiB); E2B on the GPU at 4k is ~2.5 GB.
+        long total = (long) (7.3 * GIB);
+        TaiLoadBudget.Plan plan = plan(E2B, total, 4_500_000_000L, 32_768);
         assertTrue(plan.fits);
         assertEquals("gpu", plan.accelerator);
         assertEquals(4096, plan.contextWindow);
-        assertEquals(HOLD, plan.reserveBytes);
+        assertEquals(TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, total), plan.reserveBytes);
     }
 
     @Test
@@ -628,7 +665,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void ramClassRoundsTheKernelsFigureUpToTheSizeThePhoneIsSoldAs() {
-        assertEquals(12L * GIB, TaiLoadBudget.ramClassBytes(PONG_TOTAL));
+        assertEquals(12L * GIB, TaiLoadBudget.ramClassBytes(11_530_736L * 1024L));
         assertEquals(8L * GIB, TaiLoadBudget.ramClassBytes((long) (7.3 * GIB)));
         assertEquals(6L * GIB, TaiLoadBudget.ramClassBytes((long) (5.5 * GIB)));
         assertEquals(0L, TaiLoadBudget.ramClassBytes(0L));
