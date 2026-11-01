@@ -288,9 +288,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // The screen in its portrait form, not the wall as measured: one grid for both
         // orientations (ADR 0020 §12), so neither a turn nor a keyboard or sheet shrinking the
         // wall changes the caps, and nothing reflows. The cells get shorter or narrower instead.
-        android.content.res.Configuration config = pane.getResources().getConfiguration();
-        return WidgetGridCaps.forPortraitScreen(config.screenWidthDp, config.screenHeightDp,
-            gridEdgeDp);
+        android.content.res.Resources res = pane.getResources();
+        android.content.res.Configuration config = res.getConfiguration();
+        float density = res.getDisplayMetrics().density;
+        @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
+        int statusId = res.getIdentifier("status_bar_height", "dimen", "android");
+        float statusDp = statusId != 0 && density > 0f
+            ? res.getDimensionPixelSize(statusId) / density
+            : WidgetGridCaps.FALLBACK_STATUS_BAR_DP;
+        return WidgetGridCaps.forPortraitWall(config.screenWidthDp, config.screenHeightDp,
+            statusDp, appIcons.style().iconDp, gridEdgeDp);
     }
 
     /**

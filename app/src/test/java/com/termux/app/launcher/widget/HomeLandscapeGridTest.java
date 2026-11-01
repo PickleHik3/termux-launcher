@@ -64,6 +64,26 @@ public class HomeLandscapeGridTest {
     }
 
     @Test
+    public void theLargestGridOfferedKeepsPortraitCellsAtLeast55Dp() {
+        for (float iconDp : new float[] {40f, 48f, 54f, 60f}) {
+            for (float statusDp : new float[] {24f, 33f}) {
+                WidgetGridCaps caps = WidgetGridCaps.forPortraitWall(WIDTH_DP, HEIGHT_DP,
+                    statusDp, iconDp, MARGIN_DP);
+                assertEquals("the same caps turned", caps, WidgetGridCaps.forPortraitWall(
+                    HEIGHT_DP, WIDTH_DP, statusDp, iconDp, MARGIN_DP));
+                int columns = caps.clampColumns(99), rows = caps.clampRows(99);
+                float wallH = HEIGHT_DP - statusDp - WidgetGridCaps.portraitDockChromeDp(iconDp);
+                float cellW = (WIDTH_DP - 2 * MARGIN_DP - WidgetGridMetrics.GAP_DP * (columns - 1))
+                    / columns;
+                float cellH = (wallH - 2 * MARGIN_DP - WidgetGridMetrics.GAP_DP * (rows - 1)) / rows;
+                String at = iconDp + "dp icon, " + statusDp + "dp status: " + columns + "x" + rows;
+                assertTrue(at + " cell width " + cellW, cellW >= WidgetGridCaps.MIN_CELL_DP);
+                assertTrue(at + " cell height " + cellH, cellH >= WidgetGridCaps.MIN_CELL_DP);
+            }
+        }
+    }
+
+    @Test
     public void launcher3sLabelRule() {
         // cellHeight - icon - padding - text < text hides.
         assertTrue(HomeAppIconMetrics.labelsCrowded(150, 126, 10, 42));

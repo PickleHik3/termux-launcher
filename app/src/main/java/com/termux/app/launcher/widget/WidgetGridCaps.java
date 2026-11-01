@@ -64,6 +64,34 @@ public final class WidgetGridCaps {
         return forWall(Math.min(widthDp, heightDp), Math.max(widthDp, heightDp), edgeDp);
     }
 
+    /** The status bar's height where the system names none, dp. */
+    public static final float FALLBACK_STATUS_BAR_DP = 24f;
+
+    /**
+     * The chrome the portrait wall gives up under the grid, dp: the dock's pinned row at the one
+     * icon step with its air either side, and the page indicator's band under it.
+     */
+    public static float portraitDockChromeDp(float iconDp) {
+        return Math.max(0f, iconDp) + 2f * com.termux.app.dock.DockLayoutPolicy.LONE_ROW_AIR_DP
+            + com.termux.app.launcher.paging.PageTickStrip.bandPx(1f);
+    }
+
+    /**
+     * The caps of the one grid (ADR 0020 §12), worked out once from the portrait wall: the
+     * screen's long side less the portrait status bar and the dock at the icon step
+     * ({@link #portraitDockChromeDp}), its short side across. The same in both orientations and
+     * stable: it never follows the wall last seen, so a keyboard, a sheet or a turn changes
+     * nothing, and no grid the caps offer has portrait cells under {@link #MIN_CELL_DP}.
+     */
+    @NonNull public static WidgetGridCaps forPortraitWall(float screenWidthDp, float screenHeightDp,
+                                                          float statusBarDp, float iconDp,
+                                                          float edgeDp) {
+        float across = Math.min(screenWidthDp, screenHeightDp);
+        float tall = Math.max(screenWidthDp, screenHeightDp) - Math.max(0f, statusBarDp)
+            - portraitDockChromeDp(iconDp);
+        return forWall(across, tall, edgeDp);
+    }
+
     /** The caps for a wall measured in pixels, with a rim of {@code edgeDp} round the grid. */
     @NonNull public static WidgetGridCaps forWallPx(int widthPx, int heightPx, float density,
                                                     float edgeDp) {
