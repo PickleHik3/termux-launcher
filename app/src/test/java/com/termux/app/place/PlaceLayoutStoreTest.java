@@ -1240,12 +1240,8 @@ public class PlaceLayoutStoreTest {
         assertFalse(PlaceLayoutStore.hasHomeLayout(launcher));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
 
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
-        assertTrue("every view answers alike",
-            store.forVariant(LayoutVariant.MINIMAL).hasPageLayout(HOME_ID));
         assertSame(HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
 
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, false);
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
         store.setHomeLayout(true);
         assertEquals("the old switch is read by no page", LayoutVariant.NORMAL,
@@ -1255,12 +1251,10 @@ public class PlaceLayoutStoreTest {
     @Test
     public void minimalModeDoesNotDressHome() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         store.setMinimal(true);
         assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.TERMINAL));
         assertEquals("Home keeps its own layout", HOME_PAGE,
             store.variantFor(PaneWallPage.WIDGETS));
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, false);
         assertEquals("and the shared layout a store before version 14 held", LayoutVariant.NORMAL,
             store.variantFor(PaneWallPage.WIDGETS));
     }
@@ -1576,7 +1570,6 @@ public class PlaceLayoutStoreTest {
     @Test
     public void aHomePagesLayoutResolvesAsThatLayout() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         store.forVariant(HOME_PAGE).setSlot(PORTRAIT, Element.APPS,
             Slot.on(Edge.TOP, Element.APPS));
         assertEquals(store.resolve(PORTRAIT, HOME_PAGE),
@@ -1832,14 +1825,12 @@ public class PlaceLayoutStoreTest {
     /** Home wears the shared layout: no page layout, the old switch off (version 16). */
     private static void assertHomeWearsTheSharedLayout(PlaceLayoutStore store) {
         assertFalse("the Home layout switch is off", store.hasHomeLayout());
-        assertFalse("nothing differed, so no page layout", store.hasPageLayout(HOME_ID));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
     }
 
     /** A Home layout that differed lives on as the Home page's own (version 16). */
     private static void assertHomeKeepsItsOwnLayout(PlaceLayoutStore store) {
         assertFalse("the Home layout switch is off", store.hasHomeLayout());
-        assertTrue("the Home page holds a copy", store.hasPageLayout(HOME_ID));
         assertSame(HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
     }
 

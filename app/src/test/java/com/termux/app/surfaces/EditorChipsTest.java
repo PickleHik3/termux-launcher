@@ -22,23 +22,25 @@ public class EditorChipsTest {
 
     @Test
     public void anElementsCardOpensEverywhereOnItsElement() {
-        EditorChips chips = EditorChips.openFor(EditorCard.DOCK, PAGE);
+        EditorChips chips = EditorChips.openFor(EditorCard.DOCK, LookGrid.Kind.HOME);
         assertEquals(LookGrid.NO_PAGE, chips.page);
         assertEquals(Element.DOCK, chips.element);
-        assertEquals(Element.TERMINAL, EditorChips.openFor(EditorCard.TERMINAL, PAGE).element);
+        assertEquals(Element.TERMINAL, EditorChips.openFor(EditorCard.TERMINAL, LookGrid.Kind.TERMINAL).element);
     }
 
     @Test
-    public void aPageCardOpensOnItsPageOnAllGlass() {
-        EditorChips chips = EditorChips.openFor(EditorCard.HOME, PAGE);
-        assertEquals(PAGE, chips.page);
+    public void aPageCardOpensOnItsPagesKindOnAllGlass() {
+        // No look is kept per page (ADR 0020 §2).
+        EditorChips chips = EditorChips.openFor(EditorCard.HOME, LookGrid.Kind.HOME);
+        assertEquals(LookGrid.NO_PAGE, chips.page);
+        assertEquals(LookGrid.Kind.HOME, chips.kind);
         assertNull(chips.element);
-        assertTrue(EditorChips.openFor(EditorCard.WORKSPACE, PAGE).onPage());
+        assertTrue(EditorChips.openFor(EditorCard.WORKSPACE, LookGrid.Kind.TERMINAL).onKind());
     }
 
     @Test
     public void theAppearanceCardOpensEverywhereOnAllGlassAndHasNoWhatChip() {
-        EditorChips chips = EditorChips.openFor(EditorCard.APPEARANCE, PAGE);
+        EditorChips chips = EditorChips.openFor(EditorCard.APPEARANCE, LookGrid.Kind.HOME);
         assertFalse(chips.onPage());
         assertNull(chips.element);
         assertTrue(EditorChips.whatOptions(EditorCard.APPEARANCE,
@@ -46,11 +48,11 @@ public class EditorChipsTest {
     }
 
     @Test
-    public void whereOffersEverywhereThenThePagesKindThenThePage() {
+    public void whereOffersEverywhereThenThePagesKindButNoPage() {
         assertEquals(Arrays.asList(EditorChips.Where.EVERYWHERE,
-                EditorChips.Where.kind(LookGrid.Kind.HOME), EditorChips.Where.page(PAGE)),
+                EditorChips.Where.kind(LookGrid.Kind.HOME)),
             EditorChips.whereOptions(PAGE, LookGrid.Kind.HOME));
-        assertEquals(Arrays.asList(EditorChips.Where.EVERYWHERE, EditorChips.Where.page(PAGE)),
+        assertEquals(Collections.singletonList(EditorChips.Where.EVERYWHERE),
             EditorChips.whereOptions(PAGE, null));
         assertEquals(Collections.singletonList(EditorChips.Where.EVERYWHERE),
             EditorChips.whereOptions(-1, null));
@@ -133,7 +135,7 @@ public class EditorChipsTest {
 
     @Test
     public void openingIsWhereTheCardOpens() {
-        assertTrue(EditorChips.openFor(EditorCard.DOCK, PAGE).isOpening(EditorCard.DOCK));
+        assertTrue(EditorChips.openFor(EditorCard.DOCK, LookGrid.Kind.HOME).isOpening(EditorCard.DOCK));
         assertFalse(new EditorChips(PAGE, Element.DOCK).isOpening(EditorCard.DOCK));
         assertFalse(new EditorChips(LookGrid.NO_PAGE, null).isOpening(EditorCard.DOCK));
     }

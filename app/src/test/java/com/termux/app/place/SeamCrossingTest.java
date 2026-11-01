@@ -115,7 +115,6 @@ public class SeamCrossingTest {
         @Override public int pageIdOf(@NonNull PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? 2 : 1;
         }
-        @Override public boolean pageLayout(int pageId) { return pageId == 2 && homeLayout; }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant variant) {
             return designs.getOrDefault(variant, DockStyle.GLASS_TRAY);
         }

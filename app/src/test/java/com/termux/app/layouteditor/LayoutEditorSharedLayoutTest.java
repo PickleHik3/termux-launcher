@@ -54,7 +54,7 @@ public class LayoutEditorSharedLayoutTest {
         places = new PlaceLayoutStore(launcher);
         // Home on the shared layout: what a store before version 14 held, which the plan still
         // handles until Layout mode is retired.
-        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, false);
+        com.termux.app.place.KindFixtures.onHomePage(places);
         places.setStatusBarEdge(PORTRAIT, Edge.TOP);
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setExtraKeys(PORTRAIT, RowPlacement.BOTTOM);
@@ -145,6 +145,5 @@ public class LayoutEditorSharedLayoutTest {
         // Only the one layout is snapshotted: since page layouts (ADR 0015 §3) the editor no
         // longer reaches the old Home layout, and showing Home never turns a page layout on.
         assertEquals(1, plan.entries().size());
-        assertFalse(places.hasPageLayout(com.termux.app.place.KindFixtures.HOME_ID));
     }
 }

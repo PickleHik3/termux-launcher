@@ -84,7 +84,6 @@ public class LayoutEditorPlanHomeDockTest {
 
     @Test
     public void aHomePageWithItsOwnLayoutEditsTheSameDock() {
-        places.setPageLayout(1, PageKind.HOME, true);
         places.setShownPages(KindFixtures.pages(1, 1, 1, 8));
         LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
         plan.setDockStyle(DockStyle.PEEK_GLASS);

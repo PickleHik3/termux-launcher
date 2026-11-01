@@ -108,7 +108,7 @@ public class GlassRowsTest {
     @Test
     public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsPage() {
         LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
-        EditorChips onPage = EditorChips.openFor(EditorCard.APPEARANCE, 4).withPage(4);
+        EditorChips onPage = EditorChips.openFor(EditorCard.APPEARANCE, (com.termux.shared.termux.settings.preferences.LookGrid.Kind) null).withPage(4);
         for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE, Row.VIBRANCY}) {
             LookGrid.Key cell = onPage.cell(GlassRows.cellProperty(row));
             grid.write(cell.property, cell.element, cell.page, GlassRows.toCell(row, 30));

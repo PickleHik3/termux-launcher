@@ -79,7 +79,6 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         // Version 14 copies the shared layout into Home's; version 16 finds the copy equal, so
         // Home goes back on the shared layout with no page layout: nothing moves either way.
         assertFalse(upgraded.hasHomeLayout());
-        assertFalse(upgraded.hasPageLayout(KindFixtures.HOME_ID));
         assertEquals(LayoutVariant.NORMAL,
             DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
         PlaceLayoutStore from = upgraded.forVariant(LayoutVariant.NORMAL);
@@ -111,7 +110,6 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
 
         // A Home layout that differs lives on as the Home page's own (version 16).
         assertFalse(upgraded.hasHomeLayout());
-        assertTrue(upgraded.hasPageLayout(KindFixtures.HOME_ID));
         assertEquals(KindFixtures.HOME_PAGE,
             DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
         assertEquals(Edge.BOTTOM, upgraded.forVariant(KindFixtures.HOME_PAGE)
@@ -137,7 +135,6 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
     public void aNewInstallStartsWithHomeOnTheSharedLayout() {
         PlaceLayoutStore fresh = KindFixtures.onHomePage(new PlaceLayoutStore(launcher));
         assertFalse(fresh.hasHomeLayout());
-        assertFalse(fresh.hasPageLayout(KindFixtures.HOME_ID));
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
         assertEquals(LayoutVariant.NORMAL, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));

@@ -51,7 +51,7 @@ public final class KindFixtures {
 
     /** {@code store} on Home page 2, which holds a page layout of its own. */
     public static PlaceLayoutStore withHomePageLayout(PlaceLayoutStore store) {
-        onHomePage(store).setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        onHomePage(store);
         return store;
     }
 }

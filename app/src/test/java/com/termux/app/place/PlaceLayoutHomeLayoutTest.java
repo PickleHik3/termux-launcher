@@ -171,7 +171,6 @@ public class PlaceLayoutHomeLayoutTest {
         PlaceLayoutStore store = KindFixtures.onHomePage(store());
         assertEquals("a Home page without a page layout wears the shared one (version 16)",
             LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
-        store.setPageLayout(KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
         store.setMinimal(true);

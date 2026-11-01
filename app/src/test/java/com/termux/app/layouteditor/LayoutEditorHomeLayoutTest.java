@@ -58,7 +58,7 @@ public class LayoutEditorHomeLayoutTest {
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
         // Home holds a Home layout of its own here; the shared layout is LayoutEditorSharedLayoutTest.
-        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        com.termux.app.place.KindFixtures.onHomePage(places);
     }
 
     @Test

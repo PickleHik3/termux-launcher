@@ -71,11 +71,6 @@ public class DressResolverTest {
         @Override public int pageIdOf(@NonNull PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homeInFront : TERMINAL_ID;
         }
-        @Override public boolean pageLayout(int pageId) {
-            if (pageId == HOME_ID) return homeLayout;
-            if (pageId == TERMINAL_ID) return terminalLayout;
-            return otherPageLayouts.contains(pageId);
-        }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
             return designs.getOrDefault(layout, DockStyle.GLASS_TRAY);
         }
