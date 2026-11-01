@@ -2061,7 +2061,8 @@ public final class PlaceLayoutStore {
         String wall = context.getSharedPreferences(
                 com.termux.app.wall.WallPagesStore.PREFS, Context.MODE_PRIVATE)
             .getString(com.termux.app.wall.WallPagesStore.KEY_STATE, null);
-        LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall);
+        LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall,
+            context.getResources().getConfiguration().smallestScreenWidthDp);
         com.termux.app.place.layout.LayoutStore.shared(context).replaceAll(fold.layouts());
         SharedPreferences.Editor editor = mStore.edit();
         for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())

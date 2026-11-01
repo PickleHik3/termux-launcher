@@ -50,8 +50,16 @@ final class LayoutsMigration {
     /** The first Terminal page; -1 when there is none or the wall is unknown. */
     final int terminalPageId;
 
+    /** The screen's smallest width, dp, the icon size's cap is measured at; 0 for no cap. */
+    private final int mWidthDp;
+
     LayoutsMigration(@NonNull Map<String, ?> all, @Nullable String wallPagesJson) {
+        this(all, wallPagesJson, 0);
+    }
+
+    LayoutsMigration(@NonNull Map<String, ?> all, @Nullable String wallPagesJson, int widthDp) {
         mAll = all;
+        mWidthDp = widthDp;
         int home = -1;
         int terminal = -1;
         if (wallPagesJson != null) {
@@ -268,7 +276,39 @@ final class LayoutsMigration {
             ? com.termux.app.surfaces.AppearanceLooks.iconSizeValueFor(false, false,
                 ((Number) height).floatValue(), 2.75f)
             : null;
-        return com.termux.app.place.layout.IconSize.fold(homeDp, dockDp);
+        com.termux.app.place.layout.IconSize folded =
+            com.termux.app.place.layout.IconSize.fold(homeDp, dockDp);
+        if (mWidthDp <= 0) return folded;
+        // Capped by the pinned apps (developer, 2026-11-01): the largest step no bigger than the
+        // folded one that they fit at, on the designs Home and the Terminal wear, both styles.
+        Object stored = mAll.get(com.termux.shared.termux.settings.preferences
+            .TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT);
+        int count = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT;
+        if (stored != null) {
+            try {
+                count = Integer.parseInt(stored.toString().trim());
+            } catch (NumberFormatException ignored) {
+                // The default count, as the dock reads a bad value.
+            }
+        }
+        count = Math.max(1, Math.min(20, count));
+        com.termux.app.place.layout.IconSize cap = com.termux.app.dock.IconSizeCap.largestFitting(
+            java.util.EnumSet.of(designOf(homeSources()), designOf(terminalSources())),
+            count, mWidthDp, 16f, 0);
+        return com.termux.app.dock.IconSizeCap.effective(folded, cap);
+    }
+
+    /** The dock design the first of {@code sources} that holds one holds, as the dock draws it. */
+    @NonNull
+    private com.termux.app.dock.DockStyle designOf(@NonNull LayoutVariant[] sources) {
+        for (LayoutVariant source : sources) {
+            Object design = mAll.get(PlaceLayoutStore.layoutWideKey(source, LayoutsJson.DOCK_DESIGN));
+            if (design instanceof String)
+                return com.termux.app.dock.DockStyle.effectiveStyle(
+                    com.termux.app.dock.DockStyle.parse((String) design));
+        }
+        return com.termux.app.dock.DockStyle.effectiveStyle(null);
     }
 
     /**
