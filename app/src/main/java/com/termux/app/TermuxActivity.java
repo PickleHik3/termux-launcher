@@ -2728,6 +2728,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
                             REQUEST_CODE_WALLPAPER_READ_PERMISSION);
                     }
+                    @Override public boolean isAppearanceEditorOpen() {
+                        return mAppearance.isOpen();
+                    }
                 });
         }
         return mSetupWizard;
@@ -22845,8 +22848,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
         Runnable open = () -> {
-            if (!isFinishing() && !isDestroyed())
-                mAppearance.open(com.termux.app.surfaces.EditorCard.forKey(section), place);
+            if (isFinishing() || isDestroyed()) return;
+            // The setup cards and the editor's card sheet never stand over each other.
+            if (mSetupWizard != null) mSetupWizard.stepAsideForEditor();
+            mAppearance.open(com.termux.app.surfaces.EditorCard.forKey(section), place);
         };
         if (root != null) root.post(open);
         else open.run();

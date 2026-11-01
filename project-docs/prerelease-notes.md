@@ -39,6 +39,7 @@ Latest stable: v1.2.1.
 - The terminal lands on its new size without a reflow when a window opens, closes or moves.
 - The terminal's More sheet holds Cursor trail, Effect, Split gap and its font.
 - Settings > Debugging > Motion log notes page changes and resizes, and launcherctl look reads and sets any look value from a shell.
+- Opening Appearance while the setup cards are showing no longer stacks the two sheets.
 
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
