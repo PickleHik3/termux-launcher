@@ -12,6 +12,8 @@ LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compat
 
 `tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
 
+A load that Android closes the runtime for (a `tai_runtime_crashed` error with `exitReason: "low_memory"`) is not held against the accelerator for good: automatic loads try it again once at the full window after a few minutes, and the load plan's `memoryBudget` reports that as `retriedAfterLowMemory: true`. A load that names its accelerator is tried right away at the smallest window.
+
 ## Files and Components
 
 - Server implementation:
