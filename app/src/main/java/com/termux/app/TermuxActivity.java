@@ -686,6 +686,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mDisplayRequested;
     /** The Display page the drawer routed a Linux app to, and when (A3c); -1 for none. */
     private int mRoutedLinuxPage = -1;
+    /** The Display page the latest Linux launch added itself (#192), -1 when it added none. */
+    private int mAddedLinuxPage = -1;
     private long mRoutedLinuxAtMs;
     /** True while a landing runs its bound app: the runner's show-display step must not slide. */
     private boolean mLandingRunsApp;
@@ -27244,10 +27246,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** {@code pageId}: the Display page to show the display on (A3c); -1 the bound one. */
-    private void openDisplayWindow(boolean start, int pageId) {
-        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+    private boolean openDisplayWindow(boolean start, int pageId) {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
         attachEmbeddedDisplay();
-        if (mPaneWallController.displayWindow() == null) return;
+        if (mPaneWallController.displayWindow() == null) return false;
         if (!isEmbeddedDisplayRunning()) {
             mDisplayRequested = true;
             if (start && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) {
@@ -27264,6 +27266,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayUpOnRow = isDisplayUp();
             onWallPlacesChanged();
         }
+        return true;
+    }
+
+    /**
+     * A Linux launch gave up before a display came up (#192): the Display page it added goes
+     * again, committed so it leaves the store. Only the page that launch added, and never one a
+     * display is up on.
+     */
+    private void dropAddedLinuxPage() {
+        int id = mAddedLinuxPage;
+        mAddedLinuxPage = -1;
+        if (id < 0 || (isDisplayUp() && mBoundDisplayPage == id)) return;
+        editWallPages(pages -> pages.remove(id));
+        wallPagesStore().commitRemoval(id);
     }
 
     /**
@@ -28629,7 +28645,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mLandingRunsApp) return;
                     boolean routed = android.os.SystemClock.uptimeMillis() - mRoutedLinuxAtMs
                         <= com.termux.app.wall.DisplayPagePolicy.ROUTED_LANDING_MS;
-                    openDisplayWindow(false, routed ? mRoutedLinuxPage : -1);
+                    if (!openDisplayWindow(false, routed ? mRoutedLinuxPage : -1))
+                        dropAddedLinuxPage();
+                }
+                @Override public void launchGaveUp() {
+                    dropAddedLinuxPage();
                 }
                 @Override public boolean raiseWindowFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
                     if (mX11Windows == null) return false;
@@ -28674,6 +28694,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 routedPage = added.ok() && added.page != null ? added.page.id : -1;
             }
             mRoutedLinuxPage = routedPage;
+            mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
             mRoutedLinuxAtMs = android.os.SystemClock.uptimeMillis();
             mLinuxApps.run(app);
             return true;
@@ -28966,6 +28987,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * names what runs in it, and wearing that app's icon once one resolves; Display, with the
      * chip's generic glyph, while no app is open (DisplayWindowName).
      */
+    @NonNull
+    private com.termux.app.chrome.DisplayAppChips displayAppChips() {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        for (com.termux.app.x11.X11WindowList.Window w : mDisplayWindows) ids.add(w.id);
+        return new com.termux.app.chrome.DisplayAppChips(ids,
+            com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
+                mDisplayActiveWindow));
+    }
+
+    /** One chip per app open on the display, named and iconed like the old single chip. */
+    @NonNull
+    private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem>
+            displayAppItems() {
+        String display = getString(R.string.launcher_entry_display);
+        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>();
+        for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
+            String name = com.termux.app.x11.DisplayWindowName.of(
+                apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
+            String spoken = name.equals(display) ? display
+                : getString(R.string.display_window_spoken_label, name, display);
+            items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(name, spoken)
+                .withIcon(apps == null ? null : apps.iconFor(window.wmClass)));
+        }
+        return items;
+    }
+
     @NonNull
     private com.termux.app.terminal.TerminalWindowBar.WindowItem displayWindowItem() {
         String display = getString(R.string.launcher_entry_display);
@@ -29996,6 +30045,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                               int index, boolean close) {
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
+        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && isDisplayWindowInFront()) {
+            // #192: on a Display page the bar's chips are the display's apps.
+            if (mX11Windows == null) return;
+            com.termux.app.chrome.DisplayAppChips apps = displayAppChips();
+            int id = close ? apps.closeWindowId(index) : apps.tapWindowId(index);
+            if (id < 0) return;
+            if (close) mX11Windows.close(id); else mX11Windows.activate(id);
+            return;
+        }
         if (mPaneController == null) return;
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips();
@@ -30746,14 +30804,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // On a Display page the bar shows no terminal window chips (A3c2): the status widgets
-        // beside them stay; the chips come back with the wall's return to the Terminal page.
+        // beside them stay; the terminal chips come back with the wall's return to the Terminal page.
+        // #192: the Display page's chips are the display's apps, one each; none when empty.
         if (isDisplayWindowInFront()) {
-            items = java.util.Collections.emptyList();
-            selected = -1;
+            items = displayAppItems();
+            selected = displayAppChips().selected();
         }
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
-        bar.setMovableChipCount(items.isEmpty() ? 0 : chips.rowCount());
+        bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);

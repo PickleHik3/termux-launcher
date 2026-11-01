@@ -76,7 +76,7 @@ Minimal mode covers the Terminal page and every Display page; Home pages ignore 
 The keyboard remembers open or closed per page kind: Home pages share the transient palette and
 keyboard (or Always on), the Terminal page remembers its own, and Display pages share the display's
 keyboard memory and Keyboard mode. Window chips are the Terminal page's windows (the current
-session's), one chip per Display page, and the Floats; Home pages have none.
+session's), and the Floats; a Display page's bar shows one chip per app open on the display (none for an empty display, #192); Home pages have none.
 
 ## 4. A crossing is any slide between neighbouring pages (amends 0012)
 
