@@ -15,13 +15,14 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class StatusBarDragHintTest {
+public class StatusBarTapFoldTest {
 
     private static void dispatch(View view, int action, float x, float y, long time) {
         MotionEvent event = MotionEvent.obtain(0, time, action, x, y, 0);
@@ -44,17 +45,43 @@ public class StatusBarDragHintTest {
         dispatch(layout, MotionEvent.ACTION_UP, x, y, 40);
     }
 
-    @Test public void tappingTheBarChromePlaysTheDragHint() {
+    @Test public void tappingTheFoldedBarChromeRequestsUnfold() {
         StatusBarSwipeLayout layout = layout(Robolectric.buildActivity(Activity.class).setup().get());
+        List<Boolean> requests = new ArrayList<>();
+        layout.setListener(requests::add);
 
         tap(layout, 540f, 40f);
 
-        assertEquals(1, layout.pullHintCount());
+        assertEquals(java.util.Collections.singletonList(false), requests);
     }
 
-    @Test public void tappingAnInteractiveChildStaysSilent() {
+    @Test public void tappingTheUnfoldedBarChromeRequestsFold() {
+        StatusBarSwipeLayout layout = layout(Robolectric.buildActivity(Activity.class).setup().get());
+        layout.setCollapsed(false);
+        List<Boolean> requests = new ArrayList<>();
+        layout.setListener(requests::add);
+
+        tap(layout, 540f, 40f);
+
+        assertEquals(java.util.Collections.singletonList(true), requests);
+    }
+
+    @Test public void tappingWhereExpansionIsNotAllowedDoesNothing() {
+        StatusBarSwipeLayout layout = layout(Robolectric.buildActivity(Activity.class).setup().get());
+        layout.setExpansionAllowed(false);
+        List<Boolean> requests = new ArrayList<>();
+        layout.setListener(requests::add);
+
+        tap(layout, 540f, 40f);
+
+        assertEquals(0, requests.size());
+    }
+
+    @Test public void tappingAnInteractiveChildDoesNotToggle() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarSwipeLayout layout = layout(activity);
+        List<Boolean> requests = new ArrayList<>();
+        layout.setListener(requests::add);
         Button chip = new Button(activity);
         chip.setOnClickListener(v -> { });
         layout.addView(chip, new FrameLayout.LayoutParams(200, 96));
@@ -64,6 +91,6 @@ public class StatusBarDragHintTest {
 
         tap(layout, 100f, 40f);
 
-        assertEquals(0, layout.pullHintCount());
+        assertEquals(0, requests.size());
     }
 }

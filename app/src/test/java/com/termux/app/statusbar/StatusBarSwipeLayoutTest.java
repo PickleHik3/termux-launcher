@@ -147,14 +147,6 @@ public class StatusBarSwipeLayoutTest {
         assertTrue(toggles.isEmpty());
     }
 
-    @Test
-    public void pullHintColorIsTheThemeAccentNotALiteralGrey() {
-        StatusBarSwipeLayout view = createView();
-        assertNotEquals(0xFFB0B0B0, view.pullHintColor());
-        assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
-            R.color.termux_primary), view.pullHintColor());
-    }
-
     private static StatusBarSwipeLayout createView() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarSwipeLayout view = new StatusBarSwipeLayout(
