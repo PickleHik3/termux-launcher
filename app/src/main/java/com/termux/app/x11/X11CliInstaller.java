@@ -43,8 +43,12 @@ public final class X11CliInstaller {
 
     private static final String LOG_TAG = "X11CliInstaller";
 
-    /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 15;
+    /**
+     * Bumped whenever the written files change, so an upgrade rewrites them once. The marker is
+     * compared for equality, so the 1.2.x stable line counts from 1016 (the pre-release line uses
+     * 16 to 22 and up): a swap between stable and a drop always rewrites the scripts.
+     */
+    @VisibleForTesting static final int VERSION = 1016;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
