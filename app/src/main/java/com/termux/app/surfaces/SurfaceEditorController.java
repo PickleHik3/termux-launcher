@@ -5820,7 +5820,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * to M"), or null while every step fits.
      */
     @Nullable
-    static CharSequence iconSizeCapHint(@Nullable Context context) {
+    public static CharSequence iconSizeCapHint(@Nullable Context context) {
         com.termux.app.place.layout.IconSize cap = com.termux.app.dock.IconSizeCap.published();
         if (context == null || cap == com.termux.app.place.layout.IconSize.XL) return null;
         return context.getString(R.string.editor_icon_size_cap,
