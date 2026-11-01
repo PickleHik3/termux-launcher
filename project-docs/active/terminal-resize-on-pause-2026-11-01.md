@@ -215,6 +215,21 @@ Paired trace (32 → 21 rows):
   `ChromeInk`'s per-pane wallpaper measurement (the emulator log showed it re-measuring on every
   geometry step) or a glass backdrop view's resize. Next: trace sections inside the pane frame's
   measure/layout and the per-pane ground measurement, one more pong trace, then the fix.
+- **Named (diagnostic build d8337be6b, trace sections kept as 4a95c7c02):** inside
+  `Pane.splitRelayout` (6.5-13.4 ms), `Pane.glass.layout` x2 takes 6-12 ms, almost all of it
+  `Ink.terminalPane` x2 (5-10 ms): each pane's glass re-asks `ChromeInk.terminalPane` for its
+  veil on every rect change (`PaneGlassBackdropView.onLayout` → `refreshVeil` →
+  `paneGlassVeil`). The wallpaper sample is only 0.4-1 ms of it; the rest is the ink resolve.
+- **Float corner drag** (same build, 640x1102 → 820x1402 with two pauses): `Pane.floatBounds`
+  is 0.2 ms, then a window `layout` of 5-9 ms per move: `Ink.terminalPane` 2.4-4.6 ms,
+  `FloatTitlebarView.onSizeChanged` 1.4-2 ms, the rest of the window ~1 ms. `Terminal.resize`
+  at each pause is ~8 ms (columns change, unlike a divider's rows).
+- **Float move** (handle, -120,+240 px): window layout ~1 ms, but `Ink.terminalPane` runs from
+  the draw pass ~2x per frame for the whole move (133 calls, 2.7 ms each, ~5 ms a frame) and
+  stops at rest.
+- One cause across all three: the pane's ink is resolved anew whenever its on-screen rect
+  changes. Next: hold the veil during a pane gesture and resolve once at each pause and at the
+  lift, like the grid (wave E).
 - Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
   `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
   to open a float without changing the developer's Home, so its trace needs a float opened by
