@@ -1,0 +1,12 @@
+{
+  "wall_pages": "{\"version\": 1, \"home\": 1, \"next\": 20, \"pages\": [{\"id\": 1, \"kind\": \"HOME\"}, {\"id\": 8, \"kind\": \"HOME\"}, {\"id\": 4, \"kind\": \"TERMINAL\"}], \"pending\": []}",
+  "prefs": {
+    "place.migrated": 16,
+    "look.opacity@1": 40,
+    "look.opacity@8": 10,
+    "look.corners.apps_row@1": 12,
+    "look.opacity@kind:home": 55,
+    "look.tint@1": 3,
+    "look.blur@4": 20
+  }
+}

@@ -90,7 +90,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 16;
+    @VisibleForTesting static final int MIGRATION_VERSION = 17;
+
+    /**
+     * The last version of the flat {@code layout.*} keys: steps 1 to 16 bring every older store to
+     * it, and step 17 ({@link #foldIntoLayoutsIfNeeded}) folds it into the {@code layouts} file of
+     * ADR 0020. The flat keys are left as they are for a downgrade (ADR 0020 §8).
+     */
+    @VisibleForTesting static final int FLAT_MIGRATION_VERSION = 16;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -413,6 +420,7 @@ public final class PlaceLayoutStore {
         mShownPages = new java.util.concurrent.atomic.AtomicReference<>();
         migrateIfNeeded();
         resetPortraitKeyboardResizeOnce();
+        foldIntoLayoutsIfNeeded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
     }
 
@@ -2027,7 +2035,7 @@ public final class PlaceLayoutStore {
     private void migrateIfNeeded() {
         if (mStore == null) return;
         int fromVersion = mStore.getInt(KEY_MIGRATED, 0);
-        if (fromVersion >= MIGRATION_VERSION) return;
+        if (fromVersion >= FLAT_MIGRATION_VERSION) return;
         boolean freshInstall = fromVersion == 0 && !holdsAnyPlaceKeys();
         mMigrating.set(true);
         try {
@@ -2077,7 +2085,30 @@ public final class PlaceLayoutStore {
         // A new install starts on the new default design; an install that ran this store before
         // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
         if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
-        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mStore.edit().putInt(KEY_MIGRATED, FLAT_MIGRATION_VERSION).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Step 17 (ADR 0020 §7): folds the version-16 flat keys into the five documents of the
+     * {@code layouts} file in one write, and the Start-in page's looks into its kind's cells.
+     * Runs after the portrait keyboard reset so the fold sees it. Touches no flat layout key.
+     */
+    private void foldIntoLayoutsIfNeeded() {
+        if (mStore == null || mStore.getInt(KEY_MIGRATED, 0) >= MIGRATION_VERSION) return;
+        Context context = mPreferences.getContext();
+        if (context == null) return;
+        String wall = context.getSharedPreferences(
+                com.termux.app.wall.WallPagesStore.PREFS, Context.MODE_PRIVATE)
+            .getString(com.termux.app.wall.WallPagesStore.KEY_STATE, null);
+        LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall);
+        new com.termux.app.place.layout.LayoutStore.PrefsStorage(
+                com.termux.app.place.layout.LayoutStore.prefs(context))
+            .write(com.termux.app.place.layout.LayoutStore.documents(fold.layouts()));
+        SharedPreferences.Editor editor = mStore.edit();
+        for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())
+            put(editor, cell.getKey(), cell.getValue());
+        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
 

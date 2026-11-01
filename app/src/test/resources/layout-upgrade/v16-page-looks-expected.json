@@ -1,0 +1,15 @@
+{
+  "prefs": {
+    "look.corners.apps_row@kind:home": 12,
+    "look.tint@kind:home": 3,
+    "look.blur@kind:terminal": 20,
+    "look.blur@kind:display": 20,
+    "look.opacity@kind:home": 55,
+    "look.opacity@8": 10,
+    "look.opacity@1": 40
+  },
+  "prefs_absent": [
+    "look.opacity@kind:terminal",
+    "look.opacity@kind:display"
+  ]
+}

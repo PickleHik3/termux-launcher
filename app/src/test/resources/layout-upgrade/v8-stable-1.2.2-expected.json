@@ -1,0 +1,63 @@
+{
+  "sizes": {
+    "portrait": {
+      "dock_height": 1.25,
+      "keyboard_height": 0.9,
+      "keyboard_chin": 6,
+      "wall_strip_height": 44
+    },
+    "landscape": {
+      "dock_height": 1.1
+    }
+  },
+  "terminal": {
+    "wide": {
+      "dock_design": "wall_strip"
+    },
+    "portrait": {
+      "status_bar": "bottom",
+      "apps_row": "hidden",
+      "keyboard_form": "floating",
+      "dress.apps_row": false
+    },
+    "landscape": {
+      "apps_row": "left",
+      "keyboard_mode": "resize"
+    }
+  },
+  "display": {
+    "wide": {
+      "dock_design": "wall_strip"
+    },
+    "portrait": {
+      "status_bar": "bottom",
+      "dress.apps_row": false
+    },
+    "landscape": {
+      "keyboard_mode": "resize"
+    }
+  },
+  "terminal_minimal": {
+    "wide": {
+      "dock_design": "wall_strip"
+    },
+    "landscape": {
+      "keyboard_mode": "resize"
+    }
+  },
+  "home": {
+    "wide": {
+      "dock_design": "wall_strip"
+    },
+    "portrait": {
+      "status_bar": "bottom"
+    }
+  },
+  "absent": [
+    "terminal.portrait.keyboard_mode",
+    "display.portrait.keyboard_mode"
+  ],
+  "prefs": {
+    "place.minimal": true
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "prefs": {
+    "place.migrated": 14,
+    "place.home_layout": true,
+    "layout.home.portrait.status_bar": "top",
+    "layout.portrait.status_bar": "bottom",
+    "layout.landscape.status_bar": "bottom",
+    "layout.home.dock_design": "lens_beads",
+    "layout.dock_design": "peek_glass",
+    "layout.minimal.portrait.status_bar": "hidden",
+    "layout.minimal.dock_design": "glass_tray",
+    "layout.portrait.dock_height": 1.3,
+    "layout.home.portrait.widget_columns": 5
+  }
+}
