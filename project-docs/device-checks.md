@@ -22,6 +22,17 @@ dropped; what follows is what still owes a look.
 
 ## Agent
 
+- **Live windows while swiping (11-01).** Three Workspace windows, each running something that
+  prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
+  slides in live beside it, its output moving, at the same size and glass as the current one.
+  Release past half: no blank frame, no flash, the arriving window is in front with its prompt
+  where it was; the motion log shows no `pty-resize` for either window. Release short: both
+  slide back and nothing changes. Repeat right, repeat with a split window and a Stacked window
+  as the neighbour, and with the keyboard up. A chip tap and a keyboard shortcut still switch at
+  once. Settings › Battery and performance › Live windows while swiping off: the swipe shows the
+  old empty slot then the slide at release (today's behaviour). At rest (`dumpsys gfxinfo`, no
+  touch) the idle frame count is unchanged from the setting off.
+
 - **Home → Terminal, one pane, keyboard closed: no bottom snap (11-01, flush padding).** On pong with
   a single pane and the keyboard closed, swipe Home → Terminal (after one Terminal → Home trip
   since the launcher started). The pane's bottom gap above the extra keys is there for the whole

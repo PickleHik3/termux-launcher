@@ -594,6 +594,79 @@ public final class PaneWallLayout extends ViewGroup {
         registerPageView(page, view);
     }
 
+    /**
+     * The live neighbour windows' views, previous then next ({@link LiveNeighbourPolicy}):
+     * containers the pane controller fills with the adjacent windows' pane trees. The wall adds
+     * them as its children, lays them out as the Workspace page and stands them one width either
+     * side of it while it moves; at rest they are {@code GONE}. An empty container is never shown.
+     *
+     * @param prepare run as a drag takes the wall from the Workspace, before anything moves, so
+     *                the containers hold the windows beside the one in front now
+     */
+    public void setInnerNeighbourViews(@Nullable View previous, @Nullable View next,
+                                       @Nullable Runnable prepare) {
+        View[] views = {previous, next};
+        for (int slot = 0; slot < 2; slot++) {
+            View old = mInnerNeighbours[slot];
+            View view = views[slot];
+            if (old == view) continue;
+            if (old != null && old.getParent() == this) removeView(old);
+            mInnerNeighbours[slot] = view;
+            if (view == null) continue;
+            if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+            view.setVisibility(GONE);
+            // Right after the Workspace page, so it draws as the page beside it would.
+            int at = mTerminalHost == null ? -1 : indexOfChild(mTerminalHost);
+            addView(view, at < 0 ? getChildCount() : at + 1);
+        }
+        mPrepareInnerNeighbours = prepare;
+        applyPagePositions();
+    }
+
+    /** See {@link #setInnerNeighbourViews}: previous, next. */
+    private final View[] mInnerNeighbours = new View[2];
+    @Nullable private Runnable mPrepareInnerNeighbours;
+    /** Between a released inner step's settle and its nudge (stepInside): the neighbours stay. */
+    private boolean mInnerStepping;
+    /** The nudge under way began inside an inner step, so the neighbours ride beside it. */
+    private boolean mNudgeCarriesNeighbours;
+
+    private boolean isInnerNeighbour(@NonNull View child) {
+        return child == mInnerNeighbours[0] || child == mInnerNeighbours[1];
+    }
+
+    /**
+     * Stands each live neighbour one width beside the Workspace page while the wall moves it,
+     * as the page beside it would stand, and puts it away ({@code GONE}) otherwise.
+     */
+    private void placeInnerNeighbours(int width) {
+        boolean workspaceInFront = mCurrent == PaneWallPage.TERMINAL && mTerminalHost != null
+            && mPageViews.get(PaneWallPage.TERMINAL) == mTerminalHost;
+        boolean shown = LiveNeighbourPolicy.shown(workspaceInFront, mDragging, mSliding,
+            mNudgePage == PaneWallPage.TERMINAL && mNudgeCarriesNeighbours, mInnerStepping);
+        float workspaceSlide = workspaceInFront ? slideOf(mTerminalHost)[0] : 0f;
+        for (int slot = 0; slot < 2; slot++) {
+            View view = mInnerNeighbours[slot];
+            if (view == null) continue;
+            int side = LiveNeighbourPolicy.sideOf(slot);
+            boolean filled = view instanceof ViewGroup && ((ViewGroup) view).getChildCount() > 0;
+            if (!shown || !filled || !hasInnerPage(side)) {
+                if (view.getVisibility() != GONE) {
+                    unpose(view);
+                    view.setVisibility(GONE);
+                }
+                continue;
+            }
+            float x = LiveNeighbourPolicy.slidePx(side, workspaceSlide, width);
+            poseOnWall(view, x, width);
+            view.setAlpha(mPose.alpha);
+            boolean onScreen = LiveNeighbourPolicy.onScreen(x, width);
+            boolean wasOnScreen = view.getVisibility() == VISIBLE;
+            view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+            if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
+        }
+    }
+
     private void registerPageView(@NonNull PaneWallPage page, @Nullable View view) {
         View previous = mPageViews.get(page);
         if (previous != null && previous == mSinkPage && previous != view) finishSink();
@@ -1234,6 +1307,9 @@ public final class PaneWallLayout extends ViewGroup {
         mNudgePage = page;
         mNudgePx = fromPx;
         mNudgeLeaving = leaving;
+        // Only a released drag's own nudge carries the live neighbours; a chip's or a
+        // shortcut's switch stays the picture it always was.
+        mNudgeCarriesNeighbours = mInnerStepping;
         applyPagePositions();
         ValueAnimator nudge = ValueAnimator.ofFloat(fromPx, 0f);
         nudge.setDuration(durationMs);
@@ -1248,6 +1324,7 @@ public final class PaneWallLayout extends ViewGroup {
                 mNudgePage = null;
                 mNudgePx = 0f;
                 mNudgeLeaving = null;
+                mNudgeCarriesNeighbours = false;
                 applyPagePositions();
                 if (onEnd != null) onEnd.run();
             }
@@ -1271,6 +1348,7 @@ public final class PaneWallLayout extends ViewGroup {
         mNudgePage = null;
         mNudgePx = 0f;
         mNudgeLeaving = null;
+        mNudgeCarriesNeighbours = false;
         if (nudge == null) return;
         // A nudge still held behind its gate has not started, and cancelling an animator that
         // never started tells nobody: started here, so its end listener runs on the cancel.
@@ -1421,6 +1499,10 @@ public final class PaneWallLayout extends ViewGroup {
                 applyPagePositions();
             }
             if (mListener != null) mListener.onWallDragBegin(mCurrent);
+            // The windows beside the one in front are made ready before the first move shows them.
+            if (mCurrent == PaneWallPage.TERMINAL && mPrepareInnerNeighbours != null) {
+                mPrepareInnerNeighbours.run();
+            }
             // Before the plank and the sink look: a surface page with a copy to hand is still at
             // once, and takes them from the first frame.
             holdStillAround();
@@ -1508,9 +1590,18 @@ public final class PaneWallLayout extends ViewGroup {
         float fromPx = mOffsetPx + steps * (float) width;
         PaneWallPage page = mCurrent;
         if (mListener != null) mListener.onInnerStepBegin(page, steps);
-        finishSink();
-        settleImmediately();
-        if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
+        // The live neighbours stay out through the settle: the arriving one is about to become
+        // the page, and the one leaving carries on beside it in the nudge.
+        mInnerStepping = true;
+        try {
+            finishSink();
+            settleImmediately();
+            if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
+        } finally {
+            mInnerStepping = false;
+        }
+        // No nudge followed (reduced motion, the display in front): they go away now.
+        applyPagePositions();
     }
 
     /**
@@ -3193,6 +3284,7 @@ public final class PaneWallLayout extends ViewGroup {
             placePage(card, position == HIDDEN ? 2f * Math.max(1, width)
                 : position * (float) width + mOffsetPx, width);
         }
+        placeInnerNeighbours(width);
         syncDrawingOrder(width);
         // The planks' angles are a function of where the pages stand, so the drag, the spring
         // back and the carry-out all read the same number and they are flat wherever they rest —
@@ -3424,7 +3516,7 @@ public final class PaneWallLayout extends ViewGroup {
      */
     @Nullable
     private PaneWallPage pageKindOf(@NonNull View child) {
-        return child == mTerminalHost ? PaneWallPage.TERMINAL
+        return child == mTerminalHost || isInnerNeighbour(child) ? PaneWallPage.TERMINAL
             : pageOf(child);
     }
 
@@ -3479,7 +3571,8 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** How far {@code child} ends above the wall's bottom, beyond its frame. */
     private int pageBottomInsetPx(@NonNull View child) {
-        return child == mTerminalHost ? mTerminalBottomInsetPx : 0;
+        // A live neighbour stands at the size the Workspace page does, so its shells never resize.
+        return child == mTerminalHost || isInnerNeighbour(child) ? mTerminalBottomInsetPx : 0;
     }
 
     /**
