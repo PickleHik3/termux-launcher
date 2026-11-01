@@ -22,6 +22,11 @@ final class DragResizePause {
     /** {@link #onMove}: the finger moved on after a pause applied the size; hold again, re-arm. */
     static final int MOVE_HOLD_AGAIN = 2;
 
+    /** The read-out's ceiling while a drag is under way; the lift takes it down sooner. */
+    static final long READOUT_CEILING_MS = 60_000L;
+    /** How long the read-out stays after the lift. */
+    static final long READOUT_LINGER_MS = 750L;
+
     private final float mSlop;
     private boolean mActive;
     private boolean mHeld;
@@ -80,6 +85,18 @@ final class DragResizePause {
         mActive = false;
         mHeld = false;
         return apply;
+    }
+
+    /** A divider's read-out: both panes in layout order, top/left first ({@code 80×12 · 80×20}). */
+    static String splitReadout(android.content.res.Resources res, int firstColumns, int firstRows,
+                               int secondColumns, int secondRows) {
+        return res.getString(com.termux.R.string.pane_resize_readout_split,
+            firstColumns, firstRows, secondColumns, secondRows);
+    }
+
+    /** A floating pane's read-out ({@code 80 × 24}). */
+    static String floatReadout(android.content.res.Resources res, int columns, int rows) {
+        return res.getString(com.termux.R.string.pane_resize_readout_float, columns, rows);
     }
 
     boolean isHeld() {

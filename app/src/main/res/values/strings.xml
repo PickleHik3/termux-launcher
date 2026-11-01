@@ -2319,6 +2319,9 @@
     <string name="tool_wall_display">Go to Display</string>
     <string name="tool_wall_go">Go to place</string>
     <string name="tool_mouse_toggle">Mouse mode</string>
+    <!-- The size in cells a pane drag will give its panes (ADR 0019): a divider's two panes, top/left first; a floating pane. -->
+    <string name="pane_resize_readout_split">%1$d×%2$d · %3$d×%4$d</string>
+    <string name="pane_resize_readout_float">%1$d × %2$d</string>
     <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
     <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
     <!-- The display touchpad's two buttons, read by a screen reader. The mode button's state is
