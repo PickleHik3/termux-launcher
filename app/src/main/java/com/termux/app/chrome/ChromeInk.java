@@ -620,6 +620,17 @@ public final class ChromeInk {
         }
     }
 
+    /** {@link GlassBackdropCache#sampleLightnessUncached}, named in traces. */
+    @Nullable
+    private GlassBackdropCache.Lightness sampleLightnessTraced(@NonNull Rect rootRect) {
+        android.os.Trace.beginSection("Ink.terminalPane.lightness");
+        try {
+            return mCache.sampleLightnessUncached(rootRect);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
     private OnGlass.Resolution terminalPaneImpl(@NonNull Rect rootRect, @ColorInt int tint,
                                        @ColorInt int veilColor, @ColorInt int ink,
                                        @ColorInt int dimInk) {
@@ -663,7 +674,7 @@ public final class ChromeInk {
         double shortDark = 0d;
         if (policy != null && sampled) {
             lightness = answer != null && answer.lightness != null
-                ? answer.lightness : mCache.sampleLightnessUncached(rootRect);
+                ? answer.lightness : sampleLightnessTraced(rootRect);
             if (lightness != null) {
                 // The limit is applied on the composited ground (after frost, dim and tint), and
                 // a side the chain cannot reach is not chosen over one it can.
@@ -689,8 +700,14 @@ public final class ChromeInk {
         // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
         // the user made thin stays glass, and the ink is reported as capped instead.
         int cap255 = veilCeiling255(tint);
-        OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
-            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
+        android.os.Trace.beginSection("Ink.terminalPane.resolve");
+        OnGlass.Resolution resolution;
+        try {
+            resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
+                target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
+        } finally {
+            android.os.Trace.endSection();
+        }
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {
