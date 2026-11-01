@@ -65,6 +65,8 @@ setting: the welcome sheet's choice only seeds the wall ([Home 1][Terminal] with
 
 ## 3. One chrome, dressed per page kind (amends 0009)
 
+> Amended 2026-11-01: page layouts ("any page may opt into a layout of its own") are superseded by ADR 0020, one layout per page kind.
+
 There is still one status bar, one dock and one keyboard, standing still while the wall moves.
 Each page kind has its own default **dress**: the dock is designed for Home pages and shown there;
 Terminal and Display pages show the status bar and the extra keys, with the dock off. Each element
