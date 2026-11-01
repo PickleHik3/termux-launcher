@@ -17647,6 +17647,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.WallShape shape = store.shape();
         float scale = sizes.dockHeightScale(orientation);
         int stripDp = sizes.wallStripHeightDp(orientation);
+        // The one icon size, and the Home grid the dock's side insets follow (spec §8a).
+        int iconDp = com.termux.app.place.layout.IconSize.of(
+            com.termux.app.place.layout.LayoutStore.shared(this).current().sizes()).dp;
+        float gridEdgeDp = homeMarginDp();
+        int gridColumns = store.widgetColumns(orientation);
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
         // no halves (docs/agents/performance.md rule 3) and the memo matches it by identity.
         com.termux.app.dock.DockGeometry.Half last = otherHome ? mDockOtherHomeHalf
@@ -17654,13 +17659,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (last != null && last.arrangement == arrangement
             && Float.compare(last.dockHeightScale, scale) == 0
             && last.marginDp == shape.marginDp && last.cornersDp == shape.cornersDp
-            && last.wallStripHeightDp == stripDp) return last;
+            && last.wallStripHeightDp == stripDp && last.iconDp == iconDp
+            && Float.compare(last.gridEdgeDp, gridEdgeDp) == 0
+            && last.gridColumns == gridColumns) return last;
         com.termux.app.dock.DockGeometry.Half half =
             com.termux.app.dock.DockGeometry.Half.builder(arrangement)
                 .dockHeightScale(scale)
                 .marginDp(shape.marginDp)
                 .cornersDp(shape.cornersDp)
                 .wallStripHeightDp(stripDp)
+                .iconDp(iconDp)
+                .grid(gridEdgeDp, gridColumns)
                 .build();
         if (otherHome) mDockOtherHomeHalf = half;
         else if (home) mDockHomeHalf = half;

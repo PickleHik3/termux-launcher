@@ -122,6 +122,8 @@ public final class DockLayout {
      * exactly this and works nothing out of its own. Zero while no half shows the row.
      */
     public final int slotIconPx;
+    /** The pinned icons do not fit at the one icon size with the least gap (spec §8a). */
+    public final boolean iconsOverflow;
 
     /**
      * The side inset of the row lying down on each side, as {@link #appsRowUsableWidthPx} was
@@ -275,6 +277,7 @@ public final class DockLayout {
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
         this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
         this.slotIconPx = Math.max(0, b.slotIconPx);
+        this.iconsOverflow = b.iconsOverflow;
         this.appsRowEdgeInsetPx = Math.max(0, b.appsRowEdgeInsetPx);
         this.peekRowSideInsetPx = Math.max(0, b.peekRowSideInsetPx);
         this.railAirPx = Math.max(0, b.railAirPx);
@@ -400,6 +403,7 @@ public final class DockLayout {
         int appsRowTickSideAirPx;
         int appsRowUsableWidthPx;
         int slotIconPx;
+        boolean iconsOverflow;
         int appsRowEdgeInsetPx;
         int peekRowSideInsetPx;
         int railAirPx;

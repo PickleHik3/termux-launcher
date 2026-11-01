@@ -198,6 +198,19 @@ public final class DockLayoutPolicy {
         public final float barHeightScale;
         /** Configured dock horizontal inset in dp, before clamping. */
         public final int dockHorizontalInsetDp;
+        /**
+         * The one icon size in dp (ADR 0020 §3), or 0 for the old height-scale curves. When set,
+         * the pinned row draws exactly this icon on every design and style, its band grows
+         * around it, and no slot fit shrinks it.
+         */
+        public final float iconDp;
+        /** The least distance in dp from the screen edge to the row's first slot (spec §8a). */
+        public final float minSideInsetDp;
+        /**
+         * Nonzero: the row holds as many slots as the Home grid has columns, and stands in by
+         * this inset (the grid's side margin, dp) so its icons sit on the grid's column centres.
+         */
+        public final float alignToGridDp;
         /** Configured dock corner radius in dp, negative for the follow-the-style radius. */
         public final int configuredCornerRadiusDp;
         /** Row switches as resolved for the place, before the edge gate. */
@@ -292,6 +305,9 @@ public final class DockLayoutPolicy {
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
+            this.iconDp = b.iconDp;
+            this.minSideInsetDp = b.minSideInsetDp;
+            this.alignToGridDp = b.alignToGridDp;
             this.configuredCornerRadiusDp = b.configuredCornerRadiusDp;
             this.appsRowEnabledPref = b.appsRowEnabledPref;
             this.azRowEnabledPref = b.azRowEnabledPref;
@@ -323,6 +339,9 @@ public final class DockLayoutPolicy {
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
+            private float iconDp;
+            private float minSideInsetDp;
+            private float alignToGridDp;
             private int configuredCornerRadiusDp =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
             private boolean appsRowEnabledPref;
@@ -383,6 +402,9 @@ public final class DockLayoutPolicy {
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
+            public Builder iconDp(float v) { this.iconDp = v; return this; }
+            public Builder minSideInsetDp(float v) { this.minSideInsetDp = v; return this; }
+            public Builder alignToGridDp(float v) { this.alignToGridDp = v; return this; }
             public Builder configuredCornerRadiusDp(int v) { this.configuredCornerRadiusDp = v; return this; }
             public Builder appsRowEnabledPref(boolean v) { this.appsRowEnabledPref = v; return this; }
             public Builder azRowEnabledPref(boolean v) { this.azRowEnabledPref = v; return this; }
@@ -503,6 +525,10 @@ public final class DockLayoutPolicy {
             out.appsRowIconPx = in.appsRowEnabledPref
                 ? rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density)
                 : hiddenRowIconPx(in, density);
+            // The one icon size: the same icon on every design and style, with no scale limit
+            // between it and the row (ADR 0020 §3); the band below grows around it.
+            if (in.iconDp > 0f && in.appsRowEnabledPref)
+                out.appsRowIconPx = Math.round(in.iconDp * density);
             // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
             // air either side of it, and nothing else. The dock's own height is that band while
             // the row is the dock's; a row standing along the top is the same band in another
@@ -619,6 +645,7 @@ public final class DockLayoutPolicy {
             out.peekRowSideInsetPx = PeekGlassGeometry.rowSideInsetPx(in.rowWidthPx, density);
             out.appsRowEdgeInsetPx = Math.max(out.appsRowEdgeInsetPx, out.peekRowSideInsetPx);
         }
+        if (!in.appsRowOnEdge) out.appsRowEdgeInsetPx = sideInsetPx(in, out, capsule, density);
         if (railActive) {
             out.slotIconPx = out.railIconSizePx;
         } else if (in.preferencesAvailable && !in.appsRowEnabledPref
@@ -628,8 +655,12 @@ public final class DockLayoutPolicy {
         } else {
             out.appsRowUsableWidthPx = in.rowWidthPx > 0
                 ? Math.max(0, in.rowWidthPx - 2 * out.appsRowEdgeInsetPx) : 0;
-            out.slotIconPx = slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
-                in.slotCount, in.surface.beads, density);
+            out.slotIconPx = in.iconDp > 0f
+                ? out.appsRowIconPx
+                : slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
+                    in.slotCount, in.surface.beads, density);
+            out.iconsOverflow = in.iconDp > 0f
+                && overflows(out.slotIconPx, out.appsRowUsableWidthPx, in.slotCount, density);
         }
 
         // The bar's own geometry owns this number in one place, for every edge and both styles;
@@ -862,6 +893,39 @@ public final class DockLayoutPolicy {
      * ({@link #slotFitIconPx}) and, under Lens beads, to what a bead covers in it
      * ({@link LensBeadGeometry#fitIconPx}). A row with no width yet is not held at all.
      */
+    /** The least gap between two pinned icons of the one icon size (spec §8a). */
+    public static final float MIN_ICON_GAP_DP = 4f;
+    /** The least side inset of a Docked (full-width) dock, from the screen edge (spec §8a). */
+    public static final float DOCKED_MIN_SIDE_INSET_DP = 16f;
+
+    /**
+     * The row's side inset under the spec §8a rule: the design's own, but never less than the
+     * least inset from the screen edge; on the grid's margin when the row holds as many slots as
+     * the grid has columns. A Floating capsule's own inset already stands between the screen
+     * edge and the row, so it counts toward the least.
+     */
+    private static int sideInsetPx(DockInputs in, DockLayout.Builder out, boolean capsule,
+                                   float density) {
+        int fromEdge = capsule ? out.horizontalInsetPx : 0;
+        int least = Math.max(0, Math.round(in.minSideInsetDp * density) - fromEdge);
+        if (in.alignToGridDp > 0f)
+            return Math.max(least, Math.round(in.alignToGridDp * density) - fromEdge);
+        return Math.max(out.appsRowEdgeInsetPx, least);
+    }
+
+    /**
+     * Whether {@code slotCount} icons of {@code iconPx} cannot stand in {@code usableWidthPx}
+     * with the least gap between them: the row shares its width evenly between its slots, each
+     * icon centred in its own, so two neighbours stand one slot less one icon apart. A slot
+     * narrower than the icon and that gap would clip or crowd it. Such a row is reported, never
+     * overflowed.
+     */
+    public static boolean overflows(int iconPx, int usableWidthPx, int slotCount, float density) {
+        if (usableWidthPx <= 0 || slotCount <= 0) return false;
+        int gapPx = Math.round(MIN_ICON_GAP_DP * Math.max(0f, density));
+        return usableWidthPx / slotCount - iconPx < gapPx;
+    }
+
     public static int slotIconPx(int iconPx, int usableWidthPx, int slotCount, boolean beads,
                                  float density) {
         int slots = Math.max(1, slotCount);
