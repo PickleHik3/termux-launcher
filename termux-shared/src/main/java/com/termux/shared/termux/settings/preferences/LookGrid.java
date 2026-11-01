@@ -364,7 +364,6 @@ public final class LookGrid {
      */
     public boolean holdsOwn(@NonNull Property property, @Nullable Element element, int page) {
         if (element == null || !property.perElement) return false;
-        if (page >= 0 && mStore.contains(key(property, element, page))) return true;
         Kind kind = kindOf(page);
         if (kind != null && mStore.contains(key(property, element, kind))) return true;
         return mStore.contains(key(property, element, NO_PAGE));
@@ -474,14 +473,8 @@ public final class LookGrid {
             element = null;
             kind = null;
         }
-        if (element != null && page >= 0) {
-            Resolved found = read(key(property, element, page), property, Cell.ELEMENT_ON_PAGE);
-            if (found != null) return found;
-        }
-        if (page >= 0) {
-            Resolved found = read(key(property, null, page), property, Cell.PAGE);
-            if (found != null) return found;
-        }
+        // The page tier is retired (ADR 0020 §2): a page reads its kind's cells, where its
+        // values are written and where step 17 folded the Start-in page's.
         if (element != null && kind != null) {
             Resolved found = read(key(property, element, kind), property, Cell.ELEMENT_ON_KIND);
             if (found != null) return found;
@@ -526,19 +519,30 @@ public final class LookGrid {
         return new Resolved(property.clamp(mStore.getInt(key, property.shipped)), cell);
     }
 
-    /** Whether the cell holds a value of its own. */
-    public boolean has(@NonNull Property property, @Nullable Element element, int page) {
-        return mStore.contains(key(property, element, page));
+    /**
+     * The cell a page's value lives in (ADR 0020 §2: no look is kept per page): the page's kind's
+     * cell; Base for a property with no kind row (Vibrancy, Margin) or a page of no known kind.
+     */
+    @NonNull
+    public String cellKey(@NonNull Property property, @Nullable Element element, int page) {
+        if (page < 0) return key(property, element, NO_PAGE);
+        Kind kind = property.perElement ? kindOf(page) : null;
+        return kind != null ? key(property, element, kind) : key(property, element, NO_PAGE);
     }
 
-    /** Sets one cell, clamped. */
+    /** Whether the cell holds a value of its own. */
+    public boolean has(@NonNull Property property, @Nullable Element element, int page) {
+        return mStore.contains(cellKey(property, element, page));
+    }
+
+    /** Sets one cell, clamped: a page's value goes to its kind's cell. */
     public void write(@NonNull Property property, @Nullable Element element, int page, int value) {
-        mStore.putInt(key(property, element, page), property.clamp(value));
+        mStore.putInt(cellKey(property, element, page), property.clamp(value));
     }
 
     /** Resets one cell: it follows again. */
     public void clear(@NonNull Property property, @Nullable Element element, int page) {
-        mStore.remove(key(property, element, page));
+        mStore.remove(cellKey(property, element, page));
     }
 
     /** Whether a kind's cell holds a value of its own. */

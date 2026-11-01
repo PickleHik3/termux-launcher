@@ -1313,25 +1313,22 @@ public class SeamCrossingTest {
             -fraction * WIDTH, WIDTH);
     }
 
+    /** One Home layout (ADR 0020 §1): two Home pages are dressed alike, so a swipe is a plain flip. */
     @Test
-    public void twoHomePagesCrossOnlyWhereTheirLayoutsDifferInWhatCanMorph() {
+    public void twoHomePagesWearOneLayoutSoTheyNeverMorph() {
+        for (PlaceLayout layout : new PlaceLayout[] {home(), homeWithoutBar()}) {
+            Stored stored = new Stored();
+            assertFalse("dressed alike: a plain flip", SeamCrossing.crosses(
+                homePage(stored, HOME_2, layout), homePage(stored, HOME_3, layout)));
+            Stored beads = new Stored();
+            beads.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
+            assertFalse("one design on both pages", SeamCrossing.crosses(
+                homePage(beads, HOME_2, layout), homePage(beads, HOME_3, layout)));
+        }
         Stored stored = new Stored();
-        SeamCrossing.Endpoint bare = homePage(stored, HOME_2, homeWithoutBar());
-        assertTrue("a bar one page wears", SeamCrossing.crosses(bare,
-            homePage(stored, HOME_3, home())));
-        assertFalse("dressed alike: a plain flip", SeamCrossing.crosses(bare,
-            homePage(stored, HOME_3, homeWithoutBar())));
-        PlaceLayout noIndex = homeWithoutBar().withSlot(Element.AZ,
-            Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true));
-        assertTrue("other dock rows", SeamCrossing.crosses(bare,
-            homePage(stored, HOME_3, noIndex)));
-        // Another Dock design changes at the landing, as it did before: no morph begins.
-        Stored beads = new Stored();
-        beads.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
-        assertFalse(SeamCrossing.crosses(bare, homePage(beads, HOME_3, home())));
-        // Home and the Workspace always cross.
-        assertTrue(SeamCrossing.crosses(bare, half(new DressResolver(stored),
-            PaneWallPage.TERMINAL, window(), false)));
+        // Home and the Workspace still cross.
+        assertTrue(SeamCrossing.crosses(homePage(stored, HOME_2, homeWithoutBar()),
+            half(new DressResolver(stored), PaneWallPage.TERMINAL, window(), false)));
     }
 
     /**

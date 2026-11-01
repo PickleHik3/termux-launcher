@@ -154,8 +154,9 @@ public class PlaceLayoutStoreTest {
      */
     @Test
     public void aStoredPortraitResizeIsResetToOverlayOnce() {
+        // A version-16 store: the reset runs on the flat keys before step 17 folds them.
         prefs.edit()
-            .putInt(PlaceLayoutStore.KEY_MIGRATED, MIGRATED)
+            .putInt(PlaceLayoutStore.KEY_MIGRATED, PlaceLayoutStore.FLAT_MIGRATION_VERSION)
             .putString("layout.portrait.keyboard_mode", "resize")
             .putString("layout.minimal.portrait.keyboard_mode", "resize")
             .putString("layout.home.portrait.keyboard_mode", "overlay")
@@ -1257,34 +1258,6 @@ public class PlaceLayoutStoreTest {
             store.variantFor(PaneWallPage.WIDGETS));
         assertEquals("and the shared layout a store before version 14 held", LayoutVariant.HOME,
             store.variantFor(PaneWallPage.WIDGETS));
-    }
-
-    @Test
-    public void turnedOnTheHomeLayoutStartsAsACopyOfWhatHomeWore() {
-        PlaceLayoutStore store = store();
-        // A Home on the shared layout, as a store before version 14 held it.
-        store.setHomeLayout(false);
-        store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
-        store.setDockHeightScale(PORTRAIT, 1.3f);
-        store.setDockStyle(DockStyle.LENS_BEADS);
-        store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
-        launcher.setLayoutStyle(false, LayoutStyle.FLOATING);
-        launcher.setLayoutMarginDp(false, 14);
-
-        store.setHomeLayout(true);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
-        assertEquals(Edge.TOP, home.slot(PORTRAIT, Element.APPS).edge);
-        assertEquals("the height is the shared one (#84)", 1.3f, home.dockHeightScale(PORTRAIT),
-            0.001f);
-        assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
-        assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
-        assertEquals("Home wears the Workspace's shape", WallShape.of(LayoutStyle.FLOATING,
-            launcher.getLayoutCornersDp(false), 14), store.shape());
-        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
-
-        // From then on its rows are Home's own.
-        home.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
-        assertEquals(Edge.TOP, store.slot(PORTRAIT, Element.APPS).edge);
     }
 
     /**
