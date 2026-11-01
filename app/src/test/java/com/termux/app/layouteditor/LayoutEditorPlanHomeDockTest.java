@@ -111,30 +111,6 @@ public class LayoutEditorPlanHomeDockTest {
     }
 
     @Test
-    public void aHomeDockNobodyEditedKeepsTheSharedLooksUntilTheFirstEdit() {
-        prefs.edit().putString("layout.dock_design", "peek_glass")
-            .putBoolean("layout.search_field", true).commit();
-        PlaceLayoutStore fresh = routed(new PlaceLayoutStore(
-            new TermuxAppSharedPreferences(RuntimeEnvironment.getApplication(), prefs, null)));
-        fresh.setShownPages(KindFixtures.pages(8, 1, 1, 8));
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(fresh, PaneWallPage.WIDGETS,
-            PlaceOrientation.PORTRAIT);
-
-        assertEquals(DockStyle.PEEK_GLASS, plan.dockStyle());
-        assertTrue(plan.searchField());
-        assertEquals(DockStyle.PEEK_GLASS,
-            DressResolver.of(fresh).dockDesignOf(PaneWallPage.WIDGETS));
-        assertTrue(DressResolver.of(fresh).searchFieldOf(PaneWallPage.WIDGETS));
-
-        plan.setDockStyle(DockStyle.GLASS_TRAY);
-        assertEquals("glass_tray", prefs.getString("layout.home.dock_design", null));
-        assertEquals("the Terminal keeps its own", "peek_glass",
-            prefs.getString("layout.dock_design", null));
-        assertEquals(DockStyle.GLASS_TRAY,
-            DressResolver.of(fresh).dockDesignOf(PaneWallPage.WIDGETS));
-    }
-
-    @Test
     public void discardingPutsHomesDockBack() {
         LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
         plan.setDockStyle(DockStyle.PEEK_GLASS);

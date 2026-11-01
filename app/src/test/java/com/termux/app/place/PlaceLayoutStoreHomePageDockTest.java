@@ -81,13 +81,13 @@ public class PlaceLayoutStoreHomePageDockTest {
     }
 
     @Test
-    public void aTerminalPageKeepsItsOwnDock() {
-        prefs.edit().putString("layout.page3.dock_design", "lens_beads").commit();
+    public void aTerminalPageWearsTheTerminalsDockAndHomeKeepsItsOwn() {
+        store.forVariant(LayoutVariant.NORMAL).setDockStyle(DockStyle.LENS_BEADS);
         PlaceLayoutStore terminal = store.forVariant(LayoutVariant.page(3, PageKind.TERMINAL));
         assertEquals(DockStyle.LENS_BEADS, terminal.dockStyle());
         terminal.setDockStyle(DockStyle.GLASS_TRAY);
-        assertEquals("glass_tray", prefs.getString("layout.page3.dock_design", null));
-        assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals(DockStyle.PEEK_GLASS, store.forVariant(LayoutVariant.HOME).dockStyle());
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

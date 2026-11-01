@@ -171,7 +171,17 @@ public class PlaceLayoutKindVisibilityTest {
             editor.putBoolean(PlaceLayoutStore.layoutKey(LayoutVariant.HOME, o, "az_row"), homeDock);
         }
         editor.commit();
+        // The wall the app has migrated before the store opens: Home 2 (Start in), the Terminal 1.
+        app().getSharedPreferences(com.termux.app.wall.WallPagesStore.PREFS,
+                android.content.Context.MODE_PRIVATE).edit()
+            .putString(com.termux.app.wall.WallPagesStore.KEY_STATE,
+                "{\"home\":2,\"pages\":[{\"id\":2,\"kind\":\"HOME\"},{\"id\":1,\"kind\":\"TERMINAL\"}]}")
+            .commit();
         return store();
+    }
+
+    private static android.app.Application app() {
+        return org.robolectric.RuntimeEnvironment.getApplication();
     }
 
     @Test
@@ -181,8 +191,12 @@ public class PlaceLayoutKindVisibilityTest {
                 prefs.edit().clear().commit();
                 PlaceLayoutStore store = upgrade(true, sharedDock, homeDock);
                 String why = "shared " + sharedDock + ", home " + homeDock;
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
+                // What Home showed: its own layout's slots (folded into Home's document whole).
+                PlaceLayout home = store.forVariant(LayoutVariant.HOME).resolve(PORTRAIT);
+                assertEquals(why, homeDock, !home.slot(Element.APPS).hidden
+                    && store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
+                assertEquals(why, homeDock, !home.slot(Element.AZ).hidden
+                    && store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
                 assertFalse(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
                 assertTrue(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
                 for (PageKind kind : new PageKind[] {PageKind.TERMINAL, PageKind.DISPLAY}) {

@@ -130,7 +130,8 @@ public class LayoutEditorHomeFilterTest {
         LayoutEditorPlan plan = open(PaneWallPage.DISPLAY);
         plan.showHome(true);
         assertEquals(PaneWallPage.DISPLAY, plan.showHome(false));
-        assertEquals(LayoutVariant.NORMAL, plan.variant());
+        assertEquals("the Display's own layout (ADR 0020 §4)", LayoutVariant.DISPLAY,
+            plan.variant());
 
         LayoutEditorPlan fromHome = open(PaneWallPage.WIDGETS);
         assertEquals("opened over Home, off is the terminal",

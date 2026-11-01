@@ -65,44 +65,12 @@ public class LayoutEditorSharedLayoutTest {
     }
 
     @Test
-    public void openedOnHomeItEditsTheSharedLayout() {
-        assertEquals(LayoutVariant.NORMAL, onHome().variant());
-        places.setMinimal(true);
-        assertEquals("Home ignores minimal", LayoutVariant.NORMAL, onHome().variant());
-    }
-
-    @Test
-    public void aMoveOnHomeLandsOnEveryWindow() {
-        LayoutEditorPlan plan = onHome();
-        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));
-        assertEquals(Edge.TOP, plan.shownLayout().slot(Element.APPS).edge);
-        assertEquals(Edge.TOP,
-            places.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).edge);
-    }
-
-    @Test
     public void theDocksHeightOnHomeIsTheSharedOne() {
         LayoutEditorPlan plan = onHome();
         float target = places.dockHeightScale(PORTRAIT) > 1f ? 0.9f : 1.2f;
         plan.setDockHeightScale(target);
         assertEquals(target, places.forVariant(LayoutVariant.NORMAL).dockHeightScale(PORTRAIT),
             0.001f);
-    }
-
-    @Test
-    public void homeIsDrawnAndOfferedWithTheBarAndWithoutTheExtraKeys() {
-        LayoutEditorPlan plan = onHome();
-        assertTrue(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
-        assertFalse("Home wears the bar (#90)", plan.shownLayout().slot(Element.STATUS).hidden);
-        assertFalse("nothing Home does not wear is in its tray",
-            plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.EXTRA_KEYS, Edge.BOTTOM));
-        // The bar moved on Home moves on every window: one layout.
-        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals(Edge.BOTTOM,
-            places.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.STATUS).edge);
-        assertFalse("the windows keep them",
-            places.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
     }
 
     @Test
@@ -121,29 +89,4 @@ public class LayoutEditorSharedLayoutTest {
         assertFalse(plan.isDirty());
     }
 
-    @Test
-    public void theDesignPickedOnHomeIsTheSharedLayouts() {
-        LayoutEditorPlan plan = onHome();
-        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
-        assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals(DockStyle.LENS_BEADS, plan.shownLayout().dockStyle);
-        assertEquals("the windows' dock wears it too", DockStyle.LENS_BEADS,
-            places.resolve(PORTRAIT, PaneWallPage.TERMINAL).dockStyle);
-
-        plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.NORMAL).dockStyle());
-    }
-
-    @Test
-    public void theHomeFilterStaysOnTheOneLayout() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
-        plan.showHome(true);
-        assertEquals(LayoutVariant.NORMAL, plan.variant());
-        assertTrue(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
-        plan.showHome(false);
-        assertFalse(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
-        // Only the one layout is snapshotted: since page layouts (ADR 0015 §3) the editor no
-        // longer reaches the old Home layout, and showing Home never turns a page layout on.
-        assertEquals(1, plan.entries().size());
-    }
 }
