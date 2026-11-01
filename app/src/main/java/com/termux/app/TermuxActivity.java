@@ -26846,6 +26846,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Removes a Display page from the wall for good (#193): the page is marked, then committed so
+     * it leaves the store and not only the wall. When the display is up on that page it stops the
+     * way the row close stops it: torn down if still starting, stopped at once with no apps, and
+     * asked first when an app is open. If the user cancels (or dismisses) that question the page
+     * is taken back from pending removal, so no page is left deleted while its display runs.
+     */
+    private void removeDisplayPageAndStop(int id) {
+        final boolean holds = isDisplayUp() && mBoundDisplayPage == id;
+        editWallPages(pages -> pages.remove(id));
+        final com.termux.app.wall.WallPagesStore store = wallPagesStore();
+        if (!holds) {
+            store.commitRemoval(id);
+            return;
+        }
+        if (!isEmbeddedDisplayRunning()) {
+            tearDownEmbeddedDisplay();
+            store.commitRemoval(id);
+            return;
+        }
+        if (mDisplayWindows.isEmpty()) {
+            stopEmbeddedDisplay();
+            store.commitRemoval(id);
+            return;
+        }
+        final boolean[] decided = new boolean[1];
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.termux_wall_display_stop_title)
+            .setMessage(R.string.termux_wall_display_stop_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.termux_wall_display_stop_confirm, (dialog, which) -> {
+                decided[0] = true;
+                stopEmbeddedDisplay();
+                store.commitRemoval(id);
+            })
+            .setOnDismissListener(dialog -> {
+                if (!decided[0]) editWallPages(pages -> pages.undo(id));
+            })
+            .show();
+    }
+
+    /**
      * The display window comes in front of the current row: joined at the row's end if another
      * session's row held it, and the wall brought to the Workspace.
      */
@@ -28228,7 +28269,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return isDisplayUp() && mBoundDisplayPage == id;
                 }
                 @Override public void removeDisplayPage(int id) {
-                    editWallPages(pages -> pages.remove(id));
+                    removeDisplayPageAndStop(id);
                 }
                 @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
                     java.util.List<com.termux.app.wall.WallPages.Page> homes =
