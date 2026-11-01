@@ -47,7 +47,7 @@ public class PlaceLayoutKindVisibilityTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     private static String dress(PageKind kind, PlaceOrientation o, Element element) {
@@ -260,5 +260,12 @@ public class PlaceLayoutKindVisibilityTest {
         assertTrue("written, so nothing moves",
             prefs.contains(dress(PageKind.TERMINAL, PORTRAIT, Element.APPS)));
         assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

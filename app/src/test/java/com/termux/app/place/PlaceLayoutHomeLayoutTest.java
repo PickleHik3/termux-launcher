@@ -48,7 +48,7 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     private PlaceLayoutStore store() {
-        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
+        return KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(launcher)));
     }
 
     @Test
@@ -215,5 +215,12 @@ public class PlaceLayoutHomeLayoutTest {
             reset.keyboardForm);
         assertFalse(reset.slot(Element.STATUS).hidden);
         assertTrue(reset.slot(Element.EXTRA_KEYS).hidden);
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

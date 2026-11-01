@@ -179,8 +179,7 @@ public final class EditorChips {
      * writes All glass and says so).
      */
     public boolean elementIgnored(@NonNull LookGrid.Property property) {
-        // A kind holds every property now that it stands for the page tier (ADR 0020 §2).
-        return element != null && !property.perElement;
+        return (element != null || kind != null) && !property.perElement;
     }
 
     /** Whether these chips stand where {@code card} opens: the editor's plain writes apply. */

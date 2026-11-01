@@ -2002,6 +2002,17 @@ public final class PlaceLayoutStore {
         layouts.addListener(changed -> revision.incrementAndGet());
     }
 
+    /**
+     * The preferences as this store reads them: layout keys routed to the {@code layouts}
+     * documents once step 17 has run, everything else the launcher preferences. For tests that
+     * check what a write stored.
+     */
+    @VisibleForTesting
+    @Nullable
+    public SharedPreferences layoutPreferences() {
+        return mStore;
+    }
+
     /** The five layout documents this store reads and writes, or null before step 17. */
     @Nullable
     public com.termux.app.place.layout.LayoutStore layouts() {

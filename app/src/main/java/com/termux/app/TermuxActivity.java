@@ -15624,9 +15624,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        // Page layouts are gone (ADR 0020 §2); Home wears the Workspace's Style, Corners and
-        // Margin, as every Home page without a page layout did since version 16.
-        return false;
+        // Home is a kind with its own layout (ADR 0020 §1). Its Style, Corners and Margin are the
+        // linked Workspace values since #84 (TermuxAppSharedPreferences#getLayoutStyle(boolean)).
+        return true;
     }
 
     /**

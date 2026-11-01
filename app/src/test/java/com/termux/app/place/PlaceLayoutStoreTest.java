@@ -44,7 +44,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 16;
+    private static final int MIGRATED = 17;
 
     private Application app;
     private SharedPreferences prefs;
@@ -64,7 +64,7 @@ public class PlaceLayoutStoreTest {
         LayoutVariant.page(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME);
 
     private PlaceLayoutStore store() {
-        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
+        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(launcher)));
         store.setShownPages(KindFixtures.pages(HOME_ID, 1, HOME_ID));
         return store;
     }
@@ -1844,5 +1844,12 @@ public class PlaceLayoutStoreTest {
         again.forVariant(LayoutVariant.HOME).setAzRowShown(PORTRAIT, false);
         assertTrue(store().hasHomeLayout());
         assertFalse(store().forVariant(LayoutVariant.HOME).azRowShown(PORTRAIT));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

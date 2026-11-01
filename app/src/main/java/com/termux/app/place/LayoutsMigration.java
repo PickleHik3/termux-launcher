@@ -242,6 +242,10 @@ final class LayoutsMigration {
             } catch (NumberFormatException notAPage) {
                 continue;
             }
+            // Vibrancy and Margin have no kind row; their page cells stay unread.
+            com.termux.shared.termux.settings.preferences.LookGrid.Key parsed =
+                com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+            if (parsed == null || !parsed.property.perElement) continue;
             String cell = key.substring(0, at + 1) + LOOK_KIND_PREFIX;
             if (page >= 0 && page == homePageId) {
                 putAbsent(out, cell + "home", e.getValue());

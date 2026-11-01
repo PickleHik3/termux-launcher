@@ -46,7 +46,7 @@ public class LayoutEditorPlanHomeDockTest {
         prefs = app.getSharedPreferences("layout-editor-home-dock-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
         places = KindFixtures.dockOnTheTerminal(
-            new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null)));
+            routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null))));
         // Home 8 in front holds no layout of its own; Home 1 may.
         places.setShownPages(KindFixtures.pages(8, 1, 1, 8));
     }
@@ -114,8 +114,8 @@ public class LayoutEditorPlanHomeDockTest {
     public void aHomeDockNobodyEditedKeepsTheSharedLooksUntilTheFirstEdit() {
         prefs.edit().putString("layout.dock_design", "peek_glass")
             .putBoolean("layout.search_field", true).commit();
-        PlaceLayoutStore fresh = new PlaceLayoutStore(
-            new TermuxAppSharedPreferences(RuntimeEnvironment.getApplication(), prefs, null));
+        PlaceLayoutStore fresh = routed(new PlaceLayoutStore(
+            new TermuxAppSharedPreferences(RuntimeEnvironment.getApplication(), prefs, null)));
         fresh.setShownPages(KindFixtures.pages(8, 1, 1, 8));
         LayoutEditorPlan plan = LayoutEditorPlan.enter(fresh, PaneWallPage.WIDGETS,
             PlaceOrientation.PORTRAIT);
@@ -141,5 +141,12 @@ public class LayoutEditorPlanHomeDockTest {
         assertTrue(plan.isDirty());
         plan.revert();
         assertEquals(DockStyle.GLASS_TRAY, dresses().dockDesignOf(PaneWallPage.WIDGETS));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

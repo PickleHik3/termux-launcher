@@ -49,7 +49,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
     private PlaceLayoutStore current() {
         prefs.edit().putInt(PlaceLayoutStore.KEY_MIGRATED, PlaceLayoutStore.MIGRATION_VERSION)
             .commit();
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     /** The store as a build before version 14 left it, with the switch as given, then upgraded. */
@@ -58,7 +58,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         if (homeLayoutOn) editor.putBoolean(PlaceLayoutStore.homeLayoutKey(), true);
         else editor.remove(PlaceLayoutStore.homeLayoutKey());
         editor.commit();
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     @Test
@@ -124,7 +124,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         upgraded.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
             Slot.on(Edge.TOP, 0));
 
-        PlaceLayoutStore again = new PlaceLayoutStore(launcher);
+        PlaceLayoutStore again = routed(new PlaceLayoutStore(launcher));
         assertEquals("Home's edit is not copied over again", Edge.TOP, again
             .forVariant(LayoutVariant.HOME).slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
         assertEquals(Edge.LEFT, again.forVariant(LayoutVariant.NORMAL)
@@ -133,10 +133,17 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
 
     @Test
     public void aNewInstallStartsWithHomeOnTheSharedLayout() {
-        PlaceLayoutStore fresh = KindFixtures.onHomePage(new PlaceLayoutStore(launcher));
+        PlaceLayoutStore fresh = KindFixtures.onHomePage(routed(new PlaceLayoutStore(launcher)));
         assertFalse(fresh.hasHomeLayout());
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
         assertEquals(LayoutVariant.NORMAL, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

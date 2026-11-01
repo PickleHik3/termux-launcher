@@ -38,7 +38,7 @@ public class PlaceLayoutStoreHomePageDockTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("home-page-dock-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        store = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        store = routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null)));
         prefs.edit()
             .putString("layout.home.dock_design", "peek_glass")
             .putString("layout.page1.dock_design", "lens_beads")
@@ -90,5 +90,12 @@ public class PlaceLayoutStoreHomePageDockTest {
         terminal.setDockStyle(DockStyle.GLASS_TRAY);
         assertEquals("glass_tray", prefs.getString("layout.page3.dock_design", null));
         assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }
