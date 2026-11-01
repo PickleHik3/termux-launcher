@@ -14311,7 +14311,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onSystemImeRequested() {
+            // As the Tasks widget's dialog asks for it: the in-app keyboard steps aside.
+            if (mInAppKeyboard != null && mInAppKeyboard.isEnabled())
+                mInAppKeyboard.beginExternalTextInput();
             TermuxActivity.this.onSystemImeRequested();
+        }
+
+        @Override public void onSystemImeReleased() {
+            View focus = getCurrentFocus();
+            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this,
+                focus != null ? focus : getWindow().getDecorView());
+            if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
         }
 
         @Override public void applyTerminalSurfaceAppearance() {

@@ -1691,6 +1691,10 @@ final class EditorCardSheet {
         chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         root.addView(chevron, new LinearLayout.LayoutParams(dp(24), dp(24)));
         root.setOnClickListener(v -> mModel.onAction(row, v));
+        // The label's long-press (the row menu) makes it long-clickable, which takes its taps
+        // from the row: a tap on the name opens the row as a tap beside it does.
+        if (views.label != null)
+            views.label.setOnClickListener(v -> root.performClick());
         return views;
     }
 
