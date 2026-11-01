@@ -1,0 +1,18 @@
+{
+  "prefs": {
+    "place.migrated": 8,
+    "layout.portrait.status_bar": "bottom",
+    "layout.portrait.apps_row": "hidden",
+    "layout.landscape.apps_row": "left",
+    "layout.portrait.dock_height": 1.25,
+    "layout.landscape.dock_height": 1.1,
+    "layout.portrait.keyboard_height": 0.9,
+    "layout.portrait.keyboard_chin": 6,
+    "layout.portrait.wall_strip_height": 44,
+    "place.minimal": true,
+    "layout.home.dock_style": "wall_strip",
+    "layout.portrait.keyboard_mode": "resize",
+    "layout.landscape.keyboard_mode": "resize",
+    "layout.portrait.keyboard_form": "floating"
+  }
+}

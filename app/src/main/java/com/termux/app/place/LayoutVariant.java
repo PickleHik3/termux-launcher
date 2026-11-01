@@ -26,6 +26,9 @@ public final class LayoutVariant {
     public static final LayoutVariant NORMAL = new LayoutVariant("NORMAL", "", -1, null);
     public static final LayoutVariant MINIMAL = new LayoutVariant("MINIMAL", "minimal.", -1, null);
     public static final LayoutVariant HOME = new LayoutVariant("HOME", "home.", -1, PageKind.HOME);
+    /** The Display's layout (ADR 0020 §4): Display pages wear it while minimal mode is off. */
+    public static final LayoutVariant DISPLAY =
+        new LayoutVariant("DISPLAY", "display.", -1, PageKind.DISPLAY);
 
     /** The fixed variants, in their old enum order: what the migrations walk. */
     private static final LayoutVariant[] FIXED = {NORMAL, MINIMAL, HOME};
@@ -66,7 +69,25 @@ public final class LayoutVariant {
     }
 
     /**
-     * The page layout of page {@code pageId}, a page of {@code kind}: one instance per id and
+     * The layout a page of {@code kind} wears (ADR 0020 §1): Home's, the Display's, or the
+     * Terminal's ({@link #NORMAL}); Terminal-minimal for the last two while {@code minimal}.
+     */
+    @NonNull
+    public static LayoutVariant ofKind(@NonNull PageKind kind, boolean minimal) {
+        if (kind == PageKind.HOME) return HOME;
+        if (minimal) return MINIMAL;
+        return kind == PageKind.DISPLAY ? DISPLAY : NORMAL;
+    }
+
+    /** The document in the {@code layouts} file this layout reads and writes. */
+    @NonNull
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        if (this == MINIMAL) return com.termux.app.place.layout.LayoutKind.TERMINAL_MINIMAL;
+        return com.termux.app.place.layout.LayoutKind.of(kind(), false);
+    }
+
+    /**
+     * MIGRATION ONLY (steps 16 and 17): the retired page layout of page {@code pageId}, a page of {@code kind}: one instance per id and
      * kind, so {@code ==} holds. A Display page's layout is tagged with its own kind, so its
      * visibility seeds from the Display kind's; otherwise it is a Terminal page's in all but name
      * (its sizes link, it holds its own visibility, it offers what a window's offers).

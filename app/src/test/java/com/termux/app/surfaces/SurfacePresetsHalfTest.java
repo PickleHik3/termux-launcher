@@ -81,8 +81,7 @@ public class SurfacePresetsHalfTest {
         // The dock follows Base: Home shows the wall's 15, the Terminal page keeps its 70.
         assertEquals(15, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(70, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        assertTrue(preferences.getSharedPreferences().contains("look.opacity.dock@"
-            + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID));
+        assertTrue(preferences.getSharedPreferences().contains("look.opacity.dock@kind:terminal"));
     }
 
     @Test
@@ -161,5 +160,11 @@ public class SurfacePresetsHalfTest {
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals(88, preferences.getTerminalBackgroundOpacity());
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

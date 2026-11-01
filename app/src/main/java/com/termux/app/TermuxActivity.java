@@ -686,6 +686,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mDisplayRequested;
     /** The Display page the drawer routed a Linux app to, and when (A3c); -1 for none. */
     private int mRoutedLinuxPage = -1;
+    /** The Display page the latest Linux launch added itself (#192), -1 when it added none. */
+    private int mAddedLinuxPage = -1;
     private long mRoutedLinuxAtMs;
     /** True while a landing runs its bound app: the runner's show-display step must not slide. */
     private boolean mLandingRunsApp;
@@ -1922,6 +1924,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setActivityThemeAndWindow();
         super.onCreate(savedInstanceState);
         sLiveActivity = new java.lang.ref.WeakReference<>(this);
+        registerRotationListener();
         setContentView(R.layout.activity_termux);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -10934,6 +10937,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
+        com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
+        mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
+        unregisterRotationListener();
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
@@ -15341,6 +15347,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
+        com.termux.app.place.layout.LayoutStore.shared(this).addListener(mLayoutsListener);
         bindShownPages(mPlaceLayoutStore);
         // The sizes are the layout's the stack is dressed for: the Home layout's on a Home page,
         // and mid-slide across the seam the half's whose rows the stack stands (SeamDress).
@@ -15364,18 +15371,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         int keyboardRows = store != null && store.isHomeKeyboardAlwaysOn()
             ? store.homeKeyboardRows() : 0;
+        // One grid and one arrangement for both orientations (ADR 0020 §12, spec §8b): the
+        // portrait grid, and the portrait record set whichever way the screen stands, so a turn
+        // moves no widget and shelves nothing; the landscape copies are no longer picked up.
+        int wantedRows = store != null ? store.widgetRows(PlaceOrientation.PORTRAIT)
+            : layout.widgetRows;
+        int wantedColumns = store != null ? store.widgetColumns(PlaceOrientation.PORTRAIT)
+            : layout.widgetColumns;
         boolean moved = mWidgetHostController.repository().applyOrientation(
-            currentPlaceOrientation().storageValue(), layout.widgetRows - keyboardRows,
-            layout.widgetColumns);
+            PlaceOrientation.PORTRAIT.storageValue(), wantedRows - keyboardRows, wantedColumns);
         // The stored count is the user's; the wall holds what fits of it, and the pane works that
         // out again whenever the wall changes size. Home's Margin is the grid's rim, so it is
         // part of what fits.
         if (mWidgetPaneController != null) {
-            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns,
+            mWidgetPaneController.applyWantedGrid(wantedRows, wantedColumns,
                 keyboardRows, homeMarginDp());
         } else {
-            mWidgetHostController.applyGrid(layout.widgetRows - keyboardRows,
-                layout.widgetColumns);
+            mWidgetHostController.applyGrid(wantedRows - keyboardRows, wantedColumns);
         }
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
@@ -15584,8 +15596,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store == null) return NO_PREFERENCES_ARRANGEMENT;
         PlaceOrientation orientation = currentPlaceOrientation();
         int revision = store.revision();
+        int rotation = displayRotation();
         if (store != mArrangedStore || orientation != mArrangedOrientation
-            || revision != mArrangedRevision) {
+            || revision != mArrangedRevision || rotation != mArrangedRotation) {
+            mArrangedRotation = rotation;
             mHomeArrangement = null;
             mWorkspaceArrangement = null;
             mArrangedStore = store;
@@ -15602,7 +15616,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (#173 slice E), is resolved for its own id and not kept: it is read as a crossing
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
-            return ResolvedArrangement.resolve(store, orientation, page);
+            return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -15615,11 +15629,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
             }
+            if (home) held = withSideBarDock(held);
             if (home) mHomeArrangement = held;
             else mWorkspaceArrangement = held;
         }
         mArrangedRevision = store.revision();
         return held;
+    }
+
+    /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
+    private int mArrangedRotation = -1;
+
+    /** The display's rotation, a {@code Surface.ROTATION_*}; 0 before there is a display. */
+    private int displayRotation() {
+        try {
+            android.view.Display display = android.os.Build.VERSION.SDK_INT >= 30
+                ? getDisplay() : getWindowManager().getDefaultDisplay();
+            return display != null ? display.getRotation() : android.view.Surface.ROTATION_0;
+        } catch (RuntimeException e) {
+            return android.view.Surface.ROTATION_0;
+        }
+    }
+
+    /**
+     * Home's arrangement with its dock as a side bar on a phone in landscape (ADR 0020 §12,
+     * {@link com.termux.app.place.SideBarDock}): on the long edge, right in landscape and left in
+     * seascape. Portrait and tablets wear the layout as stored.
+     */
+    @NonNull
+    private ResolvedArrangement withSideBarDock(@NonNull ResolvedArrangement home) {
+        PlaceLayout.Edge side = com.termux.app.place.SideBarDock.sideFor(true,
+            isLandscapeOrientation(), getResources().getConfiguration().smallestScreenWidthDp,
+            displayRotation());
+        return side == null ? home : home.asSideBarDock(side);
     }
 
     /** Whether the launcher is in minimal mode (CONTEXT.md), as its memory says. */
@@ -15645,8 +15687,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        // The Home page in front holds a page layout of its own (ADR 0015 §3).
-        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS).isPage();
+        // Home is a kind with its own layout (ADR 0020 §1). Its Style, Corners and Margin are the
+        // linked Workspace values since #84 (TermuxAppSharedPreferences#getLayoutStyle(boolean)).
+        return true;
     }
 
     /**
@@ -17667,6 +17710,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.WallShape shape = store.shape();
         float scale = sizes.dockHeightScale(orientation);
         int stripDp = sizes.wallStripHeightDp(orientation);
+        // The one icon size, and the Home grid the dock's side insets follow (spec §8a).
+        // The step drawn: the user's choice, capped by what the pinned apps fit at.
+        int iconDp = drawnIconSize(store).dp;
+        float gridEdgeDp = homeMarginDp();
+        int gridColumns = store.widgetColumns(orientation);
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
         // no halves (docs/agents/performance.md rule 3) and the memo matches it by identity.
         com.termux.app.dock.DockGeometry.Half last = otherHome ? mDockOtherHomeHalf
@@ -17674,13 +17722,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (last != null && last.arrangement == arrangement
             && Float.compare(last.dockHeightScale, scale) == 0
             && last.marginDp == shape.marginDp && last.cornersDp == shape.cornersDp
-            && last.wallStripHeightDp == stripDp) return last;
+            && last.wallStripHeightDp == stripDp && last.iconDp == iconDp
+            && Float.compare(last.gridEdgeDp, gridEdgeDp) == 0
+            && last.gridColumns == gridColumns) return last;
         com.termux.app.dock.DockGeometry.Half half =
             com.termux.app.dock.DockGeometry.Half.builder(arrangement)
                 .dockHeightScale(scale)
                 .marginDp(shape.marginDp)
                 .cornersDp(shape.cornersDp)
                 .wallStripHeightDp(stripDp)
+                .iconDp(iconDp)
+                .grid(gridEdgeDp, gridColumns)
                 .build();
         if (otherHome) mDockOtherHomeHalf = half;
         else if (home) mDockHomeHalf = half;
@@ -17704,6 +17756,126 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return Math.max(0, root.getWidth() - root.getPaddingLeft() - root.getPaddingRight());
         return Math.max(0, metrics.widthPixels - mLastDisplayCutoutInsetLeft
             - mLastDisplayCutoutInsetRight);
+    }
+
+    /**
+     * A layouts write from outside the editor (Settings, {@code launcherctl layout set}) runs the
+     * dock and geometry pass the editor's preview runs, once per frame however many documents
+     * changed, on the main thread. The editor's own writes are left to its preview, which
+     * already runs that pass per frame while it is open.
+     */
+    private final com.termux.app.place.layout.LayoutStore.Listener mLayoutsListener =
+        layouts -> scheduleLayoutsRelayout();
+    private final android.os.Handler mLayoutsRelayoutHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final java.util.concurrent.atomic.AtomicBoolean mLayoutsRelayoutPosted =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    private final Runnable mLayoutsRelayout = () -> {
+        mLayoutsRelayoutPosted.set(false);
+        if (isFinishing() || isDestroyed() || mSurfaceEditor.isOpen()) return;
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+    };
+
+    /**
+     * A turn straight from landscape to seascape (90 to 270) fires no configuration change, so
+     * Home's side bar (ADR 0020 §12) would stay on the old edge: the display's rotation is
+     * watched, and a change drops the held arrangements and relays the layouts out.
+     */
+    @Nullable private android.hardware.display.DisplayManager.DisplayListener mRotationListener;
+
+    private void registerRotationListener() {
+        android.hardware.display.DisplayManager displays =
+            getSystemService(android.hardware.display.DisplayManager.class);
+        if (displays == null || mRotationListener != null) return;
+        mRotationListener = new android.hardware.display.DisplayManager.DisplayListener() {
+            @Override public void onDisplayAdded(int displayId) { }
+            @Override public void onDisplayRemoved(int displayId) { }
+            @Override public void onDisplayChanged(int displayId) {
+                if (isFinishing() || isDestroyed()) return;
+                int rotation = displayRotation();
+                if (rotation == mArrangedRotation || mArrangedRotation < 0) return;
+                mHomeArrangement = null;
+                mWorkspaceArrangement = null;
+                scheduleLayoutsRelayout();
+            }
+        };
+        displays.registerDisplayListener(mRotationListener, mLayoutsRelayoutHandler);
+    }
+
+    private void unregisterRotationListener() {
+        android.hardware.display.DisplayManager displays =
+            getSystemService(android.hardware.display.DisplayManager.class);
+        if (displays != null && mRotationListener != null)
+            displays.unregisterDisplayListener(mRotationListener);
+        mRotationListener = null;
+    }
+
+    /** Posts {@link #mLayoutsRelayout} unless one is already waiting. */
+    private void scheduleLayoutsRelayout() {
+        if (mLayoutsRelayoutPosted.compareAndSet(false, true))
+            mLayoutsRelayoutHandler.post(mLayoutsRelayout);
+    }
+
+    /** What the last {@link #drawnIconSize} measured the cap for, so a frame measures nothing. */
+    private int mIconCapCount = -1;
+    private int mIconCapWidthDp = -1;
+    private float mIconCapEdgeDp = -1f;
+    private int mIconCapColumns = -1;
+    @Nullable private com.termux.app.dock.DockStyle mIconCapHomeDesign;
+    @Nullable private com.termux.app.dock.DockStyle mIconCapTerminalDesign;
+    @NonNull private com.termux.app.place.layout.IconSize mIconCap =
+        com.termux.app.place.layout.IconSize.XL;
+    /** The step Home's icons were last given, so a change re-dresses them once. */
+    private int mDrawnIconDp = -1;
+
+    /**
+     * The one icon size as it draws (ADR 0020 §3, developer 2026-11-01): the stored choice,
+     * capped by the largest step the pinned apps fit at on the designs Home and the Terminal
+     * wear, both styles ({@link com.termux.app.dock.IconSizeCap}). The stored choice is kept, so
+     * unpinning brings it back. Measured at the screen's smallest width, so a turn keeps it. A
+     * changed step re-dresses Home's icons, which read the published cap.
+     */
+    @NonNull
+    private com.termux.app.place.layout.IconSize drawnIconSize(@NonNull PlaceLayoutStore store) {
+        com.termux.app.place.layout.IconSize chosen = com.termux.app.place.layout.IconSize.of(
+            com.termux.app.place.layout.LayoutStore.shared(this).current().sizes());
+        int count = mPreferences == null ? 0 : mPreferences.getAppLauncherButtonCount();
+        int widthDp = getResources().getConfiguration().smallestScreenWidthDp;
+        float edgeDp = homeMarginDp();
+        int columns = store.widgetColumns(PlaceOrientation.PORTRAIT);
+        com.termux.app.dock.DockStyle home =
+            storeArrangementOf(com.termux.app.wall.PageRef.HOME).design();
+        com.termux.app.dock.DockStyle terminal =
+            storeArrangementOf(com.termux.app.wall.PageRef.TERMINAL).design();
+        if (count != mIconCapCount || widthDp != mIconCapWidthDp
+            || Float.compare(edgeDp, mIconCapEdgeDp) != 0 || columns != mIconCapColumns
+            || home != mIconCapHomeDesign || terminal != mIconCapTerminalDesign) {
+            mIconCapCount = count;
+            mIconCapWidthDp = widthDp;
+            mIconCapEdgeDp = edgeDp;
+            mIconCapColumns = columns;
+            mIconCapHomeDesign = home;
+            mIconCapTerminalDesign = terminal;
+            mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
+                java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns);
+            com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
+        }
+        com.termux.app.place.layout.IconSize drawn =
+            com.termux.app.dock.IconSizeCap.effective(chosen, mIconCap);
+        if (drawn.dp != mDrawnIconDp) {
+            mDrawnIconDp = drawn.dp;
+            // Out of the layout pass: Home's icons re-dress once for the new step.
+            if (mWidgetPaneController != null && mTerminalView != null) {
+                mTerminalView.post(() -> {
+                    if (mWidgetPaneController != null)
+                        mWidgetPaneController.setIconStyle(
+                            com.termux.app.launcher.home.HomeSettings.iconStyle(this));
+                });
+            }
+        }
+        return drawn;
     }
 
     /** The pinned slots a page of the row holds: the preference, or the width rule when unset. */
@@ -17891,6 +18063,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.wall.PaneWallPage page) {
         PlaceLayoutStore store = placeLayoutStore();
+        // A layout's dock is its own: each page wears its kind's layout (ADR 0020 §1).
         return store == null ? null : store.forVariant(mDresses.layoutOf(page));
     }
 
@@ -25963,9 +26136,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isBorderStatusSwipeEnabled() {
                     return isBorderStatusSwipeAvailable();
                 }
-                @Override public boolean isBorderStatusSwipeTwoFingers() {
-                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
-                }
                 @Override public void onBorderStatusSwipe(boolean expand) {
                     if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
                 }
@@ -26874,6 +27044,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Removes a Display page from the wall for good (#193): the page is marked, then committed so
+     * it leaves the store and not only the wall. When the display is up on that page it stops the
+     * way the row close stops it: torn down if still starting, stopped at once with no apps, and
+     * asked first when an app is open. If the user cancels (or dismisses) that question the page
+     * is taken back from pending removal, so no page is left deleted while its display runs.
+     */
+    private void removeDisplayPageAndStop(int id) {
+        final boolean holds = isDisplayUp() && mBoundDisplayPage == id;
+        editWallPages(pages -> pages.remove(id));
+        final com.termux.app.wall.WallPagesStore store = wallPagesStore();
+        if (!holds) {
+            store.commitRemoval(id);
+            return;
+        }
+        if (!isEmbeddedDisplayRunning()) {
+            tearDownEmbeddedDisplay();
+            store.commitRemoval(id);
+            return;
+        }
+        if (mDisplayWindows.isEmpty()) {
+            stopEmbeddedDisplay();
+            store.commitRemoval(id);
+            return;
+        }
+        final boolean[] decided = new boolean[1];
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.termux_wall_display_stop_title)
+            .setMessage(R.string.termux_wall_display_stop_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.termux_wall_display_stop_confirm, (dialog, which) -> {
+                decided[0] = true;
+                stopEmbeddedDisplay();
+                store.commitRemoval(id);
+            })
+            .setOnDismissListener(dialog -> {
+                if (!decided[0]) editWallPages(pages -> pages.undo(id));
+            })
+            .show();
+    }
+
+    /**
      * The display window comes in front of the current row: joined at the row's end if another
      * session's row held it, and the wall brought to the Workspace.
      */
@@ -27230,10 +27441,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** {@code pageId}: the Display page to show the display on (A3c); -1 the bound one. */
-    private void openDisplayWindow(boolean start, int pageId) {
-        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+    private boolean openDisplayWindow(boolean start, int pageId) {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
         attachEmbeddedDisplay();
-        if (mPaneWallController.displayWindow() == null) return;
+        if (mPaneWallController.displayWindow() == null) return false;
         if (!isEmbeddedDisplayRunning()) {
             mDisplayRequested = true;
             if (start && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) {
@@ -27250,6 +27461,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDisplayUpOnRow = isDisplayUp();
             onWallPlacesChanged();
         }
+        return true;
+    }
+
+    /**
+     * A Linux launch gave up before a display came up (#192): the Display page it added goes
+     * again, committed so it leaves the store. Only the page that launch added, and never one a
+     * display is up on.
+     */
+    private void dropAddedLinuxPage() {
+        int id = mAddedLinuxPage;
+        mAddedLinuxPage = -1;
+        if (id < 0 || (isDisplayUp() && mBoundDisplayPage == id)) return;
+        editWallPages(pages -> pages.remove(id));
+        wallPagesStore().commitRemoval(id);
     }
 
     /**
@@ -28104,8 +28329,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
-                PlaceLayoutStore places = placeLayoutStore();
-                if (places != null) places.dropPageLayout(page.id, page.kind);
                 if (mPaneController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
                     mPaneController.homePageRemoved(page.id);
                 }
@@ -28230,6 +28453,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
                     }
                     return n;
+                }
+                // Display pages stand on the wall like any page: the overview lists them in order.
+                @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage>
+                        displayPages() {
+                    com.termux.app.wall.WallPages pages = wallPages();
+                    com.termux.app.wall.WallPages.Page terminal = pages.terminal();
+                    java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage> out =
+                        new java.util.ArrayList<>();
+                    int homes = 0;
+                    boolean afterTerminal = false;
+                    for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
+                        if (terminal != null && page.id == terminal.id) afterTerminal = true;
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) homes++;
+                        if (page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) continue;
+                        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
+                            ? null : displayCards().find(page.binding);
+                        out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
+                            com.termux.app.wall.DisplayPagePolicy.cardName(page,
+                                app == null ? null : app.name), homes, afterTerminal));
+                    }
+                    return out;
+                }
+                @Override public boolean displayPageHolds(int id) {
+                    return isDisplayUp() && mBoundDisplayPage == id;
+                }
+                @Override public void removeDisplayPage(int id) {
+                    removeDisplayPageAndStop(id);
                 }
                 @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
                     java.util.List<com.termux.app.wall.WallPages.Page> homes =
@@ -28588,7 +28838,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mLandingRunsApp) return;
                     boolean routed = android.os.SystemClock.uptimeMillis() - mRoutedLinuxAtMs
                         <= com.termux.app.wall.DisplayPagePolicy.ROUTED_LANDING_MS;
-                    openDisplayWindow(false, routed ? mRoutedLinuxPage : -1);
+                    if (!openDisplayWindow(false, routed ? mRoutedLinuxPage : -1))
+                        dropAddedLinuxPage();
+                }
+                @Override public void launchGaveUp() {
+                    dropAddedLinuxPage();
                 }
                 @Override public boolean raiseWindowFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
                     if (mX11Windows == null) return false;
@@ -28633,6 +28887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 routedPage = added.ok() && added.page != null ? added.page.id : -1;
             }
             mRoutedLinuxPage = routedPage;
+            mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
             mRoutedLinuxAtMs = android.os.SystemClock.uptimeMillis();
             mLinuxApps.run(app);
             return true;
@@ -28925,6 +29180,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * names what runs in it, and wearing that app's icon once one resolves; Display, with the
      * chip's generic glyph, while no app is open (DisplayWindowName).
      */
+    @NonNull
+    private com.termux.app.chrome.DisplayAppChips displayAppChips() {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        for (com.termux.app.x11.X11WindowList.Window w : mDisplayWindows) ids.add(w.id);
+        return new com.termux.app.chrome.DisplayAppChips(ids,
+            com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
+                mDisplayActiveWindow));
+    }
+
+    /** One chip per app open on the display, named and iconed like the old single chip. */
+    @NonNull
+    private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem>
+            displayAppItems() {
+        String display = getString(R.string.launcher_entry_display);
+        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>();
+        for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
+            String name = com.termux.app.x11.DisplayWindowName.of(
+                apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
+            String spoken = name.equals(display) ? display
+                : getString(R.string.display_window_spoken_label, name, display);
+            items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(name, spoken)
+                .withIcon(apps == null ? null : apps.iconFor(window.wmClass)));
+        }
+        return items;
+    }
+
     @NonNull
     private com.termux.app.terminal.TerminalWindowBar.WindowItem displayWindowItem() {
         String display = getString(R.string.launcher_entry_display);
@@ -29955,6 +30238,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                               int index, boolean close) {
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
+        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && isDisplayWindowInFront()) {
+            // #192: on a Display page the bar's chips are the display's apps.
+            if (mX11Windows == null) return;
+            com.termux.app.chrome.DisplayAppChips apps = displayAppChips();
+            int id = close ? apps.closeWindowId(index) : apps.tapWindowId(index);
+            if (id < 0) return;
+            if (close) mX11Windows.close(id); else mX11Windows.activate(id);
+            return;
+        }
         if (mPaneController == null) return;
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips();
@@ -30069,9 +30361,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onFoldDragCancelled() {
                     // Back to the form the bar had, from wherever the finger left it.
                     if (mStatusBarFoldDragging) setTopStatusBarCollapsed(isStatusBarCompact(), true, 0f);
-                }
-                @Override public boolean isTwoFingerOnly() {
-                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
                 }
                 @Override public boolean isStatusGestureBlocked() {
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
@@ -30708,14 +30997,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // On a Display page the bar shows no terminal window chips (A3c2): the status widgets
-        // beside them stay; the chips come back with the wall's return to the Terminal page.
+        // beside them stay; the terminal chips come back with the wall's return to the Terminal page.
+        // #192: the Display page's chips are the display's apps, one each; none when empty.
         if (isDisplayWindowInFront()) {
-            items = java.util.Collections.emptyList();
-            selected = -1;
+            items = displayAppItems();
+            selected = displayAppChips().selected();
         }
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
-        bar.setMovableChipCount(items.isEmpty() ? 0 : chips.rowCount());
+        bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);

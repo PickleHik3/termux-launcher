@@ -580,6 +580,10 @@ public class EditorCardSheetFitTest {
                 case DESIGN: return strings(R.string.layout_editor_dock_style_glass_tray,
                     R.string.layout_editor_dock_style_lens_beads,
                     R.string.layout_editor_dock_style_wall_strip);
+                // The one icon size, as the controller names its four steps.
+                case HOME_ICON_SIZE: return strings(R.string.editor_icon_size_s,
+                    R.string.editor_icon_size_m, R.string.editor_icon_size_l,
+                    R.string.editor_icon_size_xl);
                 case CONTRAST: return strings(R.string.appearance_contrast_softer,
                     R.string.appearance_contrast_default, R.string.appearance_contrast_harder);
                 case LABEL_SIZE: return strings(R.string.appearance_size_small,

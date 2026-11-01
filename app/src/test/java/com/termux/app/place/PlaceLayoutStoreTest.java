@@ -44,7 +44,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 16;
+    private static final int MIGRATED = 17;
 
     private Application app;
     private SharedPreferences prefs;
@@ -61,10 +61,10 @@ public class PlaceLayoutStoreTest {
     /** The Home page in front (the only one) and its own layout, where HOME stood before v16. */
     private static final int HOME_ID = 2;
     private static final LayoutVariant HOME_PAGE =
-        LayoutVariant.page(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME);
+        LayoutVariant.HOME;
 
     private PlaceLayoutStore store() {
-        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
+        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(launcher)));
         store.setShownPages(KindFixtures.pages(HOME_ID, 1, HOME_ID));
         return store;
     }
@@ -154,8 +154,9 @@ public class PlaceLayoutStoreTest {
      */
     @Test
     public void aStoredPortraitResizeIsResetToOverlayOnce() {
+        // A version-16 store: the reset runs on the flat keys before step 17 folds them.
         prefs.edit()
-            .putInt(PlaceLayoutStore.KEY_MIGRATED, MIGRATED)
+            .putInt(PlaceLayoutStore.KEY_MIGRATED, PlaceLayoutStore.FLAT_MIGRATION_VERSION)
             .putString("layout.portrait.keyboard_mode", "resize")
             .putString("layout.minimal.portrait.keyboard_mode", "resize")
             .putString("layout.home.portrait.keyboard_mode", "overlay")
@@ -990,7 +991,7 @@ public class PlaceLayoutStoreTest {
             store.forVariant(LayoutVariant.NORMAL).wallStripHeightDp(PlaceOrientation.PORTRAIT));
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         store.forVariant(LayoutVariant.MINIMAL).setWallStripHeightDp(PlaceOrientation.PORTRAIT, 96);
-        assertEquals("the minimal layout keeps its own", 64,
+        assertEquals("one size shared by every kind (ADR 0020 §3)", 96,
             home.wallStripHeightDp(PlaceOrientation.PORTRAIT));
     }
 
@@ -1238,59 +1239,25 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         assertFalse(store.hasHomeLayout());
         assertFalse(PlaceLayoutStore.hasHomeLayout(launcher));
-        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
 
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
-        assertTrue("every view answers alike",
-            store.forVariant(LayoutVariant.MINIMAL).hasPageLayout(HOME_ID));
         assertSame(HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
 
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, false);
-        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
         store.setHomeLayout(true);
-        assertEquals("the old switch is read by no page", LayoutVariant.NORMAL,
+        assertEquals("the old switch is read by no page", LayoutVariant.HOME,
             store.variantFor(PaneWallPage.WIDGETS));
     }
 
     @Test
     public void minimalModeDoesNotDressHome() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         store.setMinimal(true);
         assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.TERMINAL));
         assertEquals("Home keeps its own layout", HOME_PAGE,
             store.variantFor(PaneWallPage.WIDGETS));
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, false);
-        assertEquals("and the shared layout a store before version 14 held", LayoutVariant.NORMAL,
+        assertEquals("and the shared layout a store before version 14 held", LayoutVariant.HOME,
             store.variantFor(PaneWallPage.WIDGETS));
-    }
-
-    @Test
-    public void turnedOnTheHomeLayoutStartsAsACopyOfWhatHomeWore() {
-        PlaceLayoutStore store = store();
-        // A Home on the shared layout, as a store before version 14 held it.
-        store.setHomeLayout(false);
-        store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
-        store.setDockHeightScale(PORTRAIT, 1.3f);
-        store.setDockStyle(DockStyle.LENS_BEADS);
-        store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
-        launcher.setLayoutStyle(false, LayoutStyle.FLOATING);
-        launcher.setLayoutMarginDp(false, 14);
-
-        store.setHomeLayout(true);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
-        assertEquals(Edge.TOP, home.slot(PORTRAIT, Element.APPS).edge);
-        assertEquals("the height is the shared one (#84)", 1.3f, home.dockHeightScale(PORTRAIT),
-            0.001f);
-        assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
-        assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
-        assertEquals("Home wears the Workspace's shape", WallShape.of(LayoutStyle.FLOATING,
-            launcher.getLayoutCornersDp(false), 14), store.shape());
-        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
-
-        // From then on its rows are Home's own.
-        home.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
-        assertEquals(Edge.TOP, store.slot(PORTRAIT, Element.APPS).edge);
     }
 
     /**
@@ -1441,7 +1408,7 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         assertEquals(DockStyle.LENS_BEADS, store.dockStyle());
         assertFalse(store.drawerTile());
-        assertFalse(prefs.contains("layout.minimal.drawer_tile"));
+        assertFalse(store.forVariant(LayoutVariant.MINIMAL).drawerTile());
     }
 
     /** Prompt line users land on the Tray with the Search field on (#96). */
@@ -1539,44 +1506,8 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void aHomeOnTheSharedLayoutResolvesItLessTheExtraKeys() {
-        PlaceLayoutStore store = store();
-        // The shared layout, as a store before version 14 held it.
-        store.setHomeLayout(false);
-        store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
-        store.setDockStyle(DockStyle.LENS_BEADS);
-        PlaceLayout window = store.resolve(PORTRAIT, PaneWallPage.TERMINAL);
-        PlaceLayout home = store.resolve(PORTRAIT, PaneWallPage.WIDGETS);
-
-        assertEquals("a window wears the layout whole", store.resolve(PORTRAIT), window);
-        assertFalse(window.slot(Element.EXTRA_KEYS).hidden);
-        assertFalse(window.slot(Element.STATUS).hidden);
-        assertEquals("a window wears the layout's design too (#93)", DockStyle.LENS_BEADS,
-            window.dockStyle);
-
-        assertTrue(home.slot(Element.EXTRA_KEYS).hidden);
-        assertEquals("Home wears the window's bar (#90)", window.slot(Element.STATUS),
-            home.slot(Element.STATUS));
-        assertFalse(home.slot(Element.STATUS).hidden);
-        assertEquals(window.slot(Element.APPS), home.slot(Element.APPS));
-        assertEquals(window.slot(Element.AZ), home.slot(Element.AZ));
-        assertEquals(DockStyle.LENS_BEADS, home.dockStyle);
-        assertFalse("Home's keyboard is up only while always on", home.keyboardShown);
-        store.setHomeKeyboardAlwaysOn(true);
-        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).keyboardShown);
-        assertTrue("the Workspace's switch is not touched",
-            store.resolve(PORTRAIT, PaneWallPage.TERMINAL).keyboardShown);
-
-        store.setMinimal(true);
-        assertEquals("minimal is the windows' alone: Home keeps the normal layout",
-            window.slot(Element.APPS),
-            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS));
-    }
-
-    @Test
     public void aHomePagesLayoutResolvesAsThatLayout() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
         store.forVariant(HOME_PAGE).setSlot(PORTRAIT, Element.APPS,
             Slot.on(Edge.TOP, Element.APPS));
         assertEquals(store.resolve(PORTRAIT, HOME_PAGE),
@@ -1602,39 +1533,6 @@ public class PlaceLayoutStoreTest {
                 .putInt("layout.home." + o + ".widget_columns", 5);
         }
         return editor;
-    }
-
-    @Test
-    public void anUpgradeWhoseHomeMatchesWearsTheSharedLayoutAndHomesKeysGo() {
-        version8WithHomeAsTheWorkspace()
-            .putString("layout.home.dock_style", "lens_beads")
-            .putString("layout.home.taskbar_home_tile", "end")
-            .commit();
-        PlaceLayoutStore store = store();
-
-        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
-        // The design alone is no difference: version 9 put Home on the shared layout, version
-        // 14 gave it a copy of that layout back, and version 16 put it on the shared one again.
-        assertHomeWearsTheSharedLayout(store);
-        for (PlaceOrientation orientation : PlaceOrientation.values()) {
-            String o = orientation.storageValue();
-            assertEquals(prefs.getString("layout." + o + ".apps_row", null),
-                prefs.getString("layout.home." + o + ".apps_row", null));
-            assertFalse(prefs.contains("layout.home." + o + ".dock_height"));
-            assertEquals("the bar it wore, not its seed's", "top",
-                prefs.getString("layout.home." + o + ".status_bar", null));
-            assertEquals("the widget grid stays Home's", 5,
-                prefs.getInt("layout.home." + o + ".widget_columns", 0));
-        }
-        // Home's pick dresses the shared layout, both its variants, and the old keys go.
-        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.MINIMAL).dockStyle());
-        assertEquals(DockStyle.LENS_BEADS, store.forVariant(LayoutVariant.HOME).dockStyle());
-        assertEquals(DrawerTilePolicy.Position.END, store.drawerTilePosition());
-        assertFalse(prefs.contains("layout.home.dock_style"));
-        assertFalse(prefs.contains("layout.home.taskbar_home_tile"));
-        assertEquals(DockStyle.LENS_BEADS,
-            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).dockStyle);
     }
 
     @Test
@@ -1725,10 +1623,11 @@ public class PlaceLayoutStoreTest {
         version8WithHomeAsTheWorkspace().putFloat("layout.home.landscape.dock_height", 0.8f)
             .commit();
         PlaceLayoutStore store = store();
-        assertHomeWearsTheSharedLayout(store);
+        // One size for every kind (ADR 0020 §3): Home wears the shared height.
         assertEquals(1.1f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
             0.001f);
-        assertFalse(prefs.contains("layout.home.landscape.dock_height"));
+        assertEquals(1.1f, store.forVariant(LayoutVariant.NORMAL).dockHeightScale(LANDSCAPE),
+            0.001f);
     }
 
     @Test
@@ -1832,14 +1731,12 @@ public class PlaceLayoutStoreTest {
     /** Home wears the shared layout: no page layout, the old switch off (version 16). */
     private static void assertHomeWearsTheSharedLayout(PlaceLayoutStore store) {
         assertFalse("the Home layout switch is off", store.hasHomeLayout());
-        assertFalse("nothing differed, so no page layout", store.hasPageLayout(HOME_ID));
-        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
     }
 
     /** A Home layout that differed lives on as the Home page's own (version 16). */
     private static void assertHomeKeepsItsOwnLayout(PlaceLayoutStore store) {
         assertFalse("the Home layout switch is off", store.hasHomeLayout());
-        assertTrue("the Home page holds a copy", store.hasPageLayout(HOME_ID));
         assertSame(HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
     }
 
@@ -1853,5 +1750,12 @@ public class PlaceLayoutStoreTest {
         again.forVariant(LayoutVariant.HOME).setAzRowShown(PORTRAIT, false);
         assertTrue(store().hasHomeLayout());
         assertFalse(store().forVariant(LayoutVariant.HOME).azRowShown(PORTRAIT));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

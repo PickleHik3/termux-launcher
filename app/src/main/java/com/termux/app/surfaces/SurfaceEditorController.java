@@ -435,12 +435,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return null;
     }
 
-    /** Where {@code card}'s look rows read and write: the Where chip's page, else the wall. */
+    /**
+     * Where {@code card}'s look rows read and write: the page the editor shows when the Where chip
+     * stands on its kind (a page's cells are its kind's, ADR 0020 §2), else the wall.
+     */
     @NonNull
     private com.termux.app.look.PageLook.Scope scopeFor(@Nullable EditorCard card) {
-        return card != null && mChips.onPage()
-            ? com.termux.app.look.PageLook.Scope.page(mChips.page)
-            : com.termux.app.look.PageLook.Scope.GLOBAL;
+        if (card == null || !onPageSide()) return com.termux.app.look.PageLook.Scope.GLOBAL;
+        return com.termux.app.look.PageLook.Scope.page(mChips.onPage() ? mChips.page : mScopePageId);
+    }
+
+    /** Whether the Where chip stands on the shown page's kind rather than Everywhere. */
+    private boolean onPageSide() {
+        return mChips.onPage() || (mChips.onKind() && mScopePageId >= 0);
     }
 
     /**
@@ -448,7 +455,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * write as they always have (an element's own value, or Base on the Appearance card).
      */
     private boolean chipsPlain(@Nullable EditorCard card) {
-        return !mChips.onPage() && mChips.isOpening(card);
+        return !onPageSide() && mChips.isOpening(card);
     }
 
     /** The value of a surface property the chips' cell shows, in the property's old unit. */
@@ -801,7 +808,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
         mScopePageId = hostPageId >= 0 ? hostPageId
             : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
-        mChips = EditorChips.openFor(null, mScopePageId);
+        mChips = EditorChips.openFor(null, scopeKind());
         mHeldCustomPages.clear();
         mPageCustoms.clear();
         mCard = null;
@@ -973,7 +980,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mScreen = screen;
         if (pageId >= 0 && pageId != mScopePageId) {
             mScopePageId = pageId;
-            mChips = EditorChips.openFor(mCard, pageId);
+            mChips = EditorChips.openFor(mCard, scopeKind());
         }
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
@@ -1125,7 +1132,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (sheet == null || cardRefusal(card) != null)
             return;
         if (mCard != card)
-            mChips = EditorChips.openFor(card, mScopePageId);
+            mChips = EditorChips.openFor(card, scopeKind());
         mCard = card;
         mSubcardParent = null;
         mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
@@ -1882,34 +1889,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
         @NonNull private final DockHost mDock = new DockHost();
 
+        // The "<kind> | <page>" chip is gone with page layouts (ADR 0020 §2): every page of a
+        // kind wears its kind's layout.
         @Nullable @Override public CharSequence[] chipLabels() {
+            return null;
+        }
+
+        @Nullable @Override public String layoutTitle() {
             LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null || !layout.offersPageLayout())
-                return null;
-            com.termux.app.wall.WallPages.PageKind kind = layout.pageLayoutKind();
-            String kindLabel = mHost.context().getString(
-                kind == com.termux.app.wall.WallPages.PageKind.HOME
-                    ? R.string.editor_elements_kind_home
-                    : kind == com.termux.app.wall.WallPages.PageKind.DISPLAY
-                        ? R.string.editor_elements_kind_display
-                        : R.string.editor_elements_kind_terminal);
-            String page = layout.pageLayoutPageName();
-            return page == null ? null : new CharSequence[] {kindLabel, page};
+            return layout == null ? null : layout.layoutTitle();
         }
 
         @Override public boolean pageSide() {
-            LayoutEditorController layout = mHost.layoutEditor();
-            return layout != null && layout.pageLayoutSide();
+            return false;
         }
 
         @Override public void setPageSide(boolean pageSide) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return;
-            layout.setPageLayoutSide(pageSide);
-            if (mElements != null)
-                mElements.restate();
-            positionTargets();
         }
 
         @Override public boolean offers(
@@ -2796,7 +2791,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean scopeOnPage() {
-            return mChips.onPage();
+            return onPageSide();
         }
 
         @NonNull @Override public RowSource source(@NonNull Row row) {
@@ -2862,7 +2857,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void setScopeOnPage(boolean onPage) {
             // Nothing is written here: the cell shows what it follows until a value is set on it.
-            mChips = mChips.withPage(onPage ? mScopePageId : -1);
+            // "On page" stands on the page's kind now: no look is kept per page (ADR 0020 §2).
+            mChips = mChips.withWhere(onPage
+                ? EditorChips.Where.kind(scopeKind()) : EditorChips.Where.EVERYWHERE);
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -2876,6 +2873,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (GlassRows.allGlassOnly(row))
                 return getString(R.string.editor_row_all_glass_only);
             switch (row) {
+                case HOME_ICON_SIZE:
+                    return iconSizeCapHint(mHost.context());
                 case CURSOR_TRAIL:
                     return optionLabel(R.array.appearance_editor_cursor_trail_entries,
                         R.array.appearance_editor_cursor_trail_values,
@@ -2948,6 +2947,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
             return row == Row.DESIGN ? DESIGN_ICONS.clone() : cardRowGlyphs(row);
+        }
+
+        @Override public boolean choiceEnabled(@NonNull Row row, int index) {
+            // The pinned apps cap the one icon size (ADR 0020 §3): a step they do not fit at
+            // is greyed, and the row's summary names the limit.
+            if (row != Row.HOME_ICON_SIZE) return true;
+            com.termux.app.place.layout.IconSize[] steps =
+                com.termux.app.place.layout.IconSize.values();
+            return index < 0 || index >= steps.length
+                || steps[index].dp <= com.termux.app.dock.IconSizeCap.published().dp;
         }
 
         @Nullable @Override public View expanderContent(@NonNull Row row) {
@@ -3113,7 +3122,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
         // keeps its own writer (the same cell, Base).
         if (row == Row.MARGIN)
-            return mChips.onPage();
+            return onPageSide();
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;
@@ -5887,8 +5896,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return row == Row.HOME_COLUMNS ? grid[0] : grid[1];
             }
             case HOME_ICON_SIZE:
-                return com.termux.app.launcher.widget.HomeIconSize.fromStored(
-                    AppearanceSettingsStore.getString(context, HomeSettings.KEY_ICON_SCALE, null))
+                // The one icon size (ADR 0020 §3): the Home grid's and every dock design's.
+                return com.termux.app.place.layout.IconSize.of(
+                    com.termux.app.place.layout.LayoutStore.shared(context).current().sizes())
                     .ordinal();
             case SHOW_WALLPAPER:
                 return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
@@ -5922,6 +5932,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case HOME_ROWS:
                 return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS;
             case HOME_ICON_SIZE:
+                return com.termux.app.place.layout.IconSize.values().length - 1;
             case TINT_HUE:
                 return 2;
             default:
@@ -5962,13 +5973,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String[] cardRowChoices(@NonNull Row row) {
         switch (row) {
             case HOME_ICON_SIZE:
-                return strings(R.string.editor_home_icon_small, R.string.editor_home_icon_default,
-                    R.string.editor_home_icon_large);
+                return strings(R.string.editor_icon_size_s, R.string.editor_icon_size_m,
+                    R.string.editor_icon_size_l, R.string.editor_icon_size_xl);
             case TINT_HUE:
                 return getResources().getStringArray(R.array.appearance_editor_tint_hue_entries);
             default:
                 return new String[0];
         }
+    }
+
+    /**
+     * The one line under the Icon size row while the pinned apps cap it ("7 pinned apps fit up
+     * to M"), or null while every step fits.
+     */
+    @Nullable
+    public static CharSequence iconSizeCapHint(@Nullable Context context) {
+        com.termux.app.place.layout.IconSize cap = com.termux.app.dock.IconSizeCap.published();
+        if (context == null || cap == com.termux.app.place.layout.IconSize.XL) return null;
+        return context.getString(R.string.editor_icon_size_cap,
+            com.termux.app.dock.IconSizeCap.publishedCount(), cap.name());
     }
 
     /** The glyphs a choice row shows instead of its words; null for words. */
@@ -5981,9 +6004,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LABEL_SIZE:
                 return new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
                     EditorGlyphs.LABEL_LARGE};
+            // The one icon size reads its four short words (S, M, L, XL): four glyphs stood the
+            // row under its label on the Dock card, and three glyphs cannot name four steps.
             case HOME_ICON_SIZE:
-                return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
-                    EditorGlyphs.ICON_LARGE};
+                return null;
             case FOLDERS:
                 return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
                     EditorGlyphs.FOLDER_ROOMY};
@@ -6096,10 +6120,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             }
             case HOME_ICON_SIZE: {
-                com.termux.app.launcher.widget.HomeIconSize[] sizes =
-                    com.termux.app.launcher.widget.HomeIconSize.values();
-                writeHomeString(HomeSettings.KEY_ICON_SCALE,
-                    sizes[clamp(value, 0, sizes.length - 1)].value);
+                com.termux.app.place.layout.IconSize[] sizes =
+                    com.termux.app.place.layout.IconSize.values();
+                com.termux.app.place.layout.IconSize size = sizes[clamp(value, 0, sizes.length - 1)];
+                com.termux.app.place.layout.LayoutStore.shared(context).updateSizes(size::into);
+                requestGeometryPreview();
+                syncDirty();
                 break;
             }
             case SHOW_WALLPAPER:

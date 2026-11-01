@@ -54,6 +54,54 @@ public final class WidgetGridCaps {
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
 
+    /**
+     * The caps for the screen in its portrait form, {@code widthDp} by {@code heightDp} either
+     * way round, with a rim of {@code edgeDp}: one grid for both orientations (ADR 0020 §12), so
+     * a turn of the screen, a keyboard or a sheet never changes the caps and never reflows.
+     */
+    @NonNull public static WidgetGridCaps forPortraitScreen(float widthDp, float heightDp,
+                                                            float edgeDp) {
+        return forWall(Math.min(widthDp, heightDp), Math.max(widthDp, heightDp), edgeDp);
+    }
+
+    /** The status bar's height where the system names none, dp. */
+    public static final float FALLBACK_STATUS_BAR_DP = 24f;
+
+    /**
+     * The chrome the portrait wall gives up under the grid, dp: the dock's pinned row at the one
+     * icon step with its air either side, and the page indicator's band under it.
+     */
+    public static float portraitDockChromeDp(float iconDp) {
+        return Math.max(0f, iconDp) + 2f * com.termux.app.dock.DockLayoutPolicy.LONE_ROW_AIR_DP
+            + com.termux.app.launcher.paging.PageTickStrip.bandPx(1f);
+    }
+
+    /** The largest icon step, dp: the dock the caps always leave room for. */
+    public static int largestIconStepDp() {
+        int largest = 0;
+        for (com.termux.app.place.layout.IconSize size
+                : com.termux.app.place.layout.IconSize.values()) {
+            largest = Math.max(largest, size.dp);
+        }
+        return largest;
+    }
+
+    /**
+     * The caps of the one grid (ADR 0020 §12), worked out once from the portrait wall: the
+     * screen's long side less the portrait status bar and the dock at the largest icon step
+     * ({@link #portraitDockChromeDp} of {@link #largestIconStepDp}), its short side across. The
+     * same in both orientations and at every icon step: it never follows the wall last seen or
+     * the step, so a keyboard, a sheet, a turn or a step change cuts no row and reflows nothing,
+     * and no grid the caps offer has portrait cells under {@link #MIN_CELL_DP} at any step.
+     */
+    @NonNull public static WidgetGridCaps forPortraitWall(float screenWidthDp, float screenHeightDp,
+                                                          float statusBarDp, float edgeDp) {
+        float across = Math.min(screenWidthDp, screenHeightDp);
+        float tall = Math.max(screenWidthDp, screenHeightDp) - Math.max(0f, statusBarDp)
+            - portraitDockChromeDp(largestIconStepDp());
+        return forWall(across, tall, edgeDp);
+    }
+
     /** The caps for a wall measured in pixels, with a rim of {@code edgeDp} round the grid. */
     @NonNull public static WidgetGridCaps forWallPx(int widthPx, int heightPx, float density,
                                                     float edgeDp) {

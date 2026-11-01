@@ -3744,6 +3744,24 @@ public class LauncherCtlApiServer {
             "    *) echo 'usage: launcherctl torch on|off' >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "layout_cmd() {\n" +
+            "  sub=\"${1:-}\"; kind=\"${2:-}\"\n" +
+            "  case \"$sub\" in\n" +
+            "    get)\n" +
+            "      [ -n \"$kind\" ] || { echo \"usage: launcherctl layout get <home|terminal|terminal_minimal|display|sizes>\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"get\\\",\\\"kind\\\":\\\"$kind\\\"}\"\n" +
+            "      ;;\n" +
+            "    set)\n" +
+            "      file=\"${3:-}\"\n" +
+            "      [ -n \"$kind\" ] && [ -n \"$file\" ] || { echo \"usage: launcherctl layout set <kind> FILE\" >&2; exit 2; }\n" +
+            "      [ -r \"$file\" ] || { echo \"launcherctl layout: cannot read $file\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"set\\\",\\\"kind\\\":\\\"$kind\\\",\\\"layout\\\":$(cat \"$file\")}\"\n" +
+            "      ;;\n" +
+            "    *)\n" +
+            "      echo \"usage: launcherctl layout get <kind> | layout set <kind> FILE\" >&2; exit 2\n" +
+            "      ;;\n" +
+            "  esac\n" +
+            "}\n" +
             "look_cmd() {\n" +
             "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
             "  op=\"${1:-}\"\n" +
@@ -3898,6 +3916,9 @@ public class LauncherCtlApiServer {
             "      clear) api POST /v1/motion-log/clear '{}' ;;\n" +
             "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
             "    esac\n" +
+            "    ;;\n" +
+            "  layout)\n" +
+            "    shift || true; layout_cmd \"$@\"\n" +
             "    ;;\n" +
             "  look)\n" +
             "    shift || true\n" +

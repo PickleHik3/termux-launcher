@@ -36,6 +36,8 @@ public class PlaceLayoutKindVisibilityTest {
     private static final PlaceOrientation LANDSCAPE = PlaceOrientation.LANDSCAPE;
 
     private SharedPreferences prefs;
+    /** The launcher's own file: {@link #prefs} becomes the routed view once a store opens. */
+    private SharedPreferences raw;
     private TermuxAppSharedPreferences launcher;
 
     @Before
@@ -43,11 +45,12 @@ public class PlaceLayoutKindVisibilityTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("place-layout-kind-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
+        raw = prefs;
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     private static String dress(PageKind kind, PlaceOrientation o, Element element) {
@@ -159,7 +162,9 @@ public class PlaceLayoutKindVisibilityTest {
 
     /** A store at version 14 with a shared layout and a Home layout as given. */
     private PlaceLayoutStore upgrade(boolean homeLayout, boolean sharedDock, boolean homeDock) {
-        SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 14)
+        // Each call is another device: no layouts document from the one before.
+        com.termux.app.place.layout.LayoutStore.prefs(app()).edit().clear().commit();
+        SharedPreferences.Editor editor = raw.edit().putInt("place.migrated", 14)
             .putBoolean("place.home_layout", homeLayout);
         for (PlaceOrientation o : PlaceOrientation.values()) {
             editor.putString(PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL, o, "apps_row"),
@@ -171,18 +176,32 @@ public class PlaceLayoutKindVisibilityTest {
             editor.putBoolean(PlaceLayoutStore.layoutKey(LayoutVariant.HOME, o, "az_row"), homeDock);
         }
         editor.commit();
+        // The wall the app has migrated before the store opens: Home 2 (Start in), the Terminal 1.
+        app().getSharedPreferences(com.termux.app.wall.WallPagesStore.PREFS,
+                android.content.Context.MODE_PRIVATE).edit()
+            .putString(com.termux.app.wall.WallPagesStore.KEY_STATE,
+                "{\"home\":2,\"pages\":[{\"id\":2,\"kind\":\"HOME\"},{\"id\":1,\"kind\":\"TERMINAL\"}]}")
+            .commit();
         return store();
+    }
+
+    private static android.app.Application app() {
+        return org.robolectric.RuntimeEnvironment.getApplication();
     }
 
     @Test
     public void theHomeLayoutsVisibilityBecomesTheHomeKindsAndTheSharedOnesTheTerminals() {
         for (boolean sharedDock : new boolean[] {true, false}) {
             for (boolean homeDock : new boolean[] {true, false}) {
-                prefs.edit().clear().commit();
+                raw.edit().clear().commit();
                 PlaceLayoutStore store = upgrade(true, sharedDock, homeDock);
                 String why = "shared " + sharedDock + ", home " + homeDock;
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
+                // What Home showed: its own layout's slots (folded into Home's document whole).
+                PlaceLayout home = store.forVariant(LayoutVariant.HOME).resolve(PORTRAIT);
+                assertEquals(why, homeDock, !home.slot(Element.APPS).hidden
+                    && store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
+                assertEquals(why, homeDock, !home.slot(Element.AZ).hidden
+                    && store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
                 assertFalse(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
                 assertTrue(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
                 for (PageKind kind : new PageKind[] {PageKind.TERMINAL, PageKind.DISPLAY}) {
@@ -260,5 +279,12 @@ public class PlaceLayoutKindVisibilityTest {
         assertTrue("written, so nothing moves",
             prefs.contains(dress(PageKind.TERMINAL, PORTRAIT, Element.APPS)));
         assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

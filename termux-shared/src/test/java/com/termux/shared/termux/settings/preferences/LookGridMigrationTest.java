@@ -41,6 +41,31 @@ public class LookGridMigrationTest {
         return new LookGrid(store);
     }
 
+    /** The wall of the upgrade tests: page 5 the Start-in Home page, 0 Home too, 3 Terminal. */
+    private static final int HOME_PAGE = 5;
+    private static final int TERMINAL_PAGE = 3;
+
+    /**
+     * The migration, then the layouts upgrade (step 17, ADR 0020 §2): the Start-in Home page's
+     * and the Terminal page's cells become their kinds' cells, the only cells a page reads now.
+     * The grid reads with the wall's page kinds.
+     */
+    private static LookGrid migrateThroughStep17(LookGrid.MemoryStore store) {
+        LookGridMigration.run(store, PAGES);
+        java.util.Map<String, Object> all = new java.util.LinkedHashMap<>();
+        for (String key : store.keys()) {
+            if (key.startsWith(LookGrid.PREFIX)) all.put(key, store.getInt(key, 0));
+        }
+        for (java.util.Map.Entry<String, Object> cell
+                : LookGrid.foldedPageCells(all, HOME_PAGE, TERMINAL_PAGE).entrySet())
+            store.putInt(cell.getKey(), (Integer) cell.getValue());
+        java.util.Map<Integer, LookGrid.Kind> kinds = new java.util.HashMap<>();
+        kinds.put(0, LookGrid.Kind.HOME);
+        kinds.put(HOME_PAGE, LookGrid.Kind.HOME);
+        kinds.put(TERMINAL_PAGE, LookGrid.Kind.TERMINAL);
+        return new LookGrid(store, kinds::get, null);
+    }
+
     @Test
     public void aFreshInstallStaysFresh() {
         LookGrid.MemoryStore store = bare();
@@ -79,7 +104,7 @@ public class LookGridMigrationTest {
         store.putInt("surface_base_opacity", 34);
         store.putInt(TERMUX_APP.KEY_STATUS_BAR_OPACITY + "@5", 12);
         store.putInt(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY + "@3", 80);
-        LookGrid grid = migrate(store);
+        LookGrid grid = migrateThroughStep17(store);
         assertEquals(12, store.getInt("look.opacity.status@5", -1));
         assertEquals(12, grid.value(Property.OPACITY, Element.STATUS, 5));
         assertEquals(34, grid.value(Property.OPACITY, Element.STATUS, 3));
@@ -172,7 +197,7 @@ public class LookGridMigrationTest {
         store.putBoolean("surface_inherit_dock_blur", false);
         store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 30);
         store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS + "@3", 12);
-        LookGrid grid = migrate(store);
+        LookGrid grid = migrateThroughStep17(store);
         assertEquals(FrostStops.nearestStopByBlur(12), store.getInt("look.frost.dock@3", -1));
         assertEquals(12, FrostStops.blurDpFor(grid.value(Property.FROST, Element.DOCK, 3)));
         assertEquals(31, FrostStops.blurDpFor(grid.value(Property.FROST, Element.DOCK, 0)));

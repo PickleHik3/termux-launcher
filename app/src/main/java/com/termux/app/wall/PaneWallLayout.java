@@ -159,8 +159,6 @@ public final class PaneWallLayout extends ViewGroup {
          * the top grabber on every frame the wall draws, so it has to be cheap.
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
-        /** Whether that swipe, opening and folding, needs two fingers on the top border. */
-        default boolean isBorderStatusSwipeTwoFingers() { return false; }
         /**
          * A swipe off the top border asked for the status bar unfolded ({@code expand}, down) or
          * folded (up): the release-only path, for a swipe the bar did not follow
@@ -1993,7 +1991,6 @@ public final class PaneWallLayout extends ViewGroup {
             && mBorderZone.seamAt(event.getX(), event.getY()) == SeamSwipe.Start.PANE
             && (bodySwipe
                 || mListener.isSeamSwipePaging(mCurrent, event.getRawX(), event.getRawY()));
-        mBorderDrag.setTwoFingerStatus(statusSwipe && mListener.isBorderStatusSwipeTwoFingers());
         boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
             statusSwipe, topGestureLimit(), bodySwipe, seamSwipe);

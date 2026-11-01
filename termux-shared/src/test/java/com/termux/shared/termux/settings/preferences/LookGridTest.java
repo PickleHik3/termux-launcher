@@ -18,33 +18,34 @@ public class LookGridTest {
     private static final int PAGE = 4;
 
     /**
-     * Every combination of the four cells present, opacity on the dock on page 4: the first
-     * present in read order wins, and with none the shipped value answers.
+     * Every combination of the four cells present, opacity on the dock on Home page 4: the first
+     * present in read order wins (ADR 0020 §2: the page reads its kind's cells), and with none
+     * the shipped value answers.
      */
     @Test
     public void theFirstPresentCellWinsInReadOrder() {
         for (int mask = 0; mask < 16; mask++) {
-            LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
-            boolean elementOnPage = (mask & 1) != 0;
-            boolean page = (mask & 2) != 0;
+            LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+            boolean elementOnKind = (mask & 1) != 0;
+            boolean kind = (mask & 2) != 0;
             boolean element = (mask & 4) != 0;
             boolean base = (mask & 8) != 0;
-            if (elementOnPage) grid.write(Property.OPACITY, Element.DOCK, PAGE, 11);
-            if (page) grid.write(Property.OPACITY, null, PAGE, 22);
+            if (elementOnKind) grid.write(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME, 11);
+            if (kind) grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 22);
             if (element) grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 33);
             if (base) grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 44);
             Resolved resolved = grid.resolve(Property.OPACITY, Element.DOCK, PAGE);
             int expectedValue;
             Cell expectedCell;
-            if (elementOnPage) { expectedValue = 11; expectedCell = Cell.ELEMENT_ON_PAGE; }
-            else if (page) { expectedValue = 22; expectedCell = Cell.PAGE; }
+            if (elementOnKind) { expectedValue = 11; expectedCell = Cell.ELEMENT_ON_KIND; }
+            else if (kind) { expectedValue = 22; expectedCell = Cell.KIND; }
             else if (element) { expectedValue = 33; expectedCell = Cell.ELEMENT; }
             else if (base) { expectedValue = 44; expectedCell = Cell.BASE; }
             else { expectedValue = Property.OPACITY.shipped; expectedCell = Cell.SHIPPED; }
             assertEquals("mask " + mask, expectedValue, resolved.value);
             assertEquals("mask " + mask, expectedCell, resolved.cell);
 
-            // Everywhere (no page): the page row is never read.
+            // Everywhere (no page): the kind row is never read.
             Resolved wall = grid.resolve(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE);
             if (element) assertEquals(Cell.ELEMENT, wall.cell);
             else if (base) assertEquals(Cell.BASE, wall.cell);
@@ -52,20 +53,33 @@ public class LookGridTest {
 
             // All glass on the page: the element column is never read.
             Resolved all = grid.resolve(Property.OPACITY, null, PAGE);
-            if (page) assertEquals(Cell.PAGE, all.cell);
+            if (kind) assertEquals(Cell.KIND, all.cell);
             else if (base) assertEquals(Cell.BASE, all.cell);
             else assertEquals(Cell.SHIPPED, all.cell);
+
+            // Another kind's page never reads the Home row.
+            Resolved terminal = grid.resolve(Property.OPACITY, Element.DOCK, TERMINAL_PAGE);
+            if (element) assertEquals(Cell.ELEMENT, terminal.cell);
+            else if (base) assertEquals(Cell.BASE, terminal.cell);
+            else assertEquals(Cell.SHIPPED, terminal.cell);
         }
     }
 
     @Test
-    public void anotherPageAndAnotherElementDoNotLeak() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
-        grid.write(Property.TINT, Element.STATUS, 7, 50);
-        grid.write(Property.TINT, null, 8, 60);
-        assertEquals(Cell.SHIPPED, grid.resolve(Property.TINT, Element.DOCK, 7).cell);
-        assertEquals(Cell.SHIPPED, grid.resolve(Property.TINT, Element.STATUS, PAGE).cell);
-        assertEquals(60, grid.value(Property.TINT, Element.STATUS, 8));
+    public void anotherKindAndAnotherElementDoNotLeak() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        grid.write(Property.TINT, Element.STATUS, TERMINAL_PAGE, 50);
+        grid.write(Property.TINT, null, DISPLAY_PAGE, 60);
+        // Another element on the same kind's page.
+        assertEquals(Cell.SHIPPED, grid.resolve(Property.TINT, Element.DOCK, TERMINAL_PAGE).cell);
+        // The same element on another kind's page.
+        assertEquals(Cell.SHIPPED, grid.resolve(Property.TINT, Element.STATUS, HOME_PAGE).cell);
+        assertEquals(Cell.SHIPPED,
+            grid.resolve(Property.TINT, Element.STATUS, LookGrid.NO_PAGE).cell);
+        assertEquals(50, grid.value(Property.TINT, Element.STATUS, TERMINAL_PAGE));
+        assertEquals(60, grid.value(Property.TINT, Element.STATUS, DISPLAY_PAGE));
+        // One kind, one cell: the other Display page wears it too.
+        assertEquals(60, grid.value(Property.TINT, Element.STATUS, UNBOUND_DISPLAY_PAGE));
     }
 
     @Test
@@ -144,28 +158,34 @@ public class LookGridTest {
 
     @Test
     public void clearPageAndClearElementDropOnlyTheirCells() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        LookGrid.MemoryStore store = (LookGrid.MemoryStore) grid.store();
         grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 1);
         grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 2);
-        grid.write(Property.OPACITY, null, PAGE, 3);
-        grid.write(Property.OPACITY, Element.DOCK, PAGE, 4);
-        grid.write(Property.TINT, Element.STATUS, PAGE, 5);
-        grid.write(Property.TINT, Element.STATUS, 9, 6);
-        grid.store().putInt("unrelated@4", 7);
+        grid.write(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME, 8);
+        // Leftover @<page> cells from before step 17 (no writer makes them now).
+        store.putInt(LookGrid.key(Property.OPACITY, null, PAGE), 3);
+        store.putInt(LookGrid.key(Property.OPACITY, Element.DOCK, PAGE), 4);
+        store.putInt(LookGrid.key(Property.TINT, Element.STATUS, PAGE), 5);
+        store.putInt(LookGrid.key(Property.TINT, Element.STATUS, 9), 6);
+        store.putInt("unrelated@4", 7);
 
         grid.clearPage(PAGE);
         assertTrue(grid.has(Property.OPACITY, null, LookGrid.NO_PAGE));
         assertTrue(grid.has(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE));
-        assertFalse(grid.has(Property.OPACITY, null, PAGE));
-        assertFalse(grid.has(Property.OPACITY, Element.DOCK, PAGE));
-        assertFalse(grid.has(Property.TINT, Element.STATUS, PAGE));
-        assertTrue(grid.has(Property.TINT, Element.STATUS, 9));
-        assertTrue(grid.store().contains("unrelated@4"));
+        assertTrue("the kind's cell is no page's",
+            grid.has(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME));
+        assertFalse(store.contains(LookGrid.key(Property.OPACITY, null, PAGE)));
+        assertFalse(store.contains(LookGrid.key(Property.OPACITY, Element.DOCK, PAGE)));
+        assertFalse(store.contains(LookGrid.key(Property.TINT, Element.STATUS, PAGE)));
+        assertTrue(store.contains(LookGrid.key(Property.TINT, Element.STATUS, 9)));
+        assertTrue(store.contains("unrelated@4"));
 
         grid.clearElement(Element.STATUS);
-        assertFalse(grid.has(Property.TINT, Element.STATUS, 9));
+        assertFalse(store.contains(LookGrid.key(Property.TINT, Element.STATUS, 9)));
         grid.clearElement(Element.DOCK);
         assertFalse(grid.has(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE));
+        assertFalse(grid.has(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME));
         assertTrue(grid.has(Property.OPACITY, null, LookGrid.NO_PAGE));
 
         grid.clear(Property.OPACITY, null, LookGrid.NO_PAGE);
@@ -194,16 +214,16 @@ public class LookGridTest {
     /** Every combination of the six cells, opacity on the keyboard on a Home page. */
     @Test
     public void theKindRowSitsBetweenThePageAndEverywhere() {
-        Cell[] order = {Cell.ELEMENT_ON_PAGE, Cell.PAGE, Cell.ELEMENT_ON_KIND, Cell.KIND,
-            Cell.ELEMENT, Cell.BASE};
-        for (int mask = 0; mask < 64; mask++) {
+        // The page tier is retired (ADR 0020 §2): a Home page reads the Home row, then everywhere.
+        Cell[] order = {Cell.ELEMENT_ON_KIND, Cell.KIND, Cell.ELEMENT, Cell.BASE};
+        for (int mask = 0; mask < 16; mask++) {
             LookGrid grid = kindGrid(new LookGrid.MemoryStore());
-            if ((mask & 1) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, HOME_PAGE, 11);
-            if ((mask & 2) != 0) grid.write(Property.OPACITY, null, HOME_PAGE, 12);
-            if ((mask & 4) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 13);
-            if ((mask & 8) != 0) grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 14);
-            if ((mask & 16) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 15);
-            if ((mask & 32) != 0) grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 16);
+            if ((mask & 1) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 11);
+            if ((mask & 2) != 0) grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 12);
+            if ((mask & 4) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 13);
+            if ((mask & 8) != 0) grid.write(Property.OPACITY, null, LookGrid.NO_PAGE, 14);
+            // A leftover @<page> cell of the page itself is never read.
+            grid.store().putInt(LookGrid.key(Property.OPACITY, Element.KEYBOARD, HOME_PAGE), 99);
             Resolved got = grid.resolve(Property.OPACITY, Element.KEYBOARD, HOME_PAGE);
             int first = Integer.numberOfTrailingZeros(mask);
             if (mask == 0) {

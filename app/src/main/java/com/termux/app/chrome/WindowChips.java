@@ -121,8 +121,9 @@ public final class WindowChips<W> {
 
     /**
      * The chips of the row {@code rowWindows} (the terminal windows, in order) with row place
-     * {@code rowCurrent} in front, seen from Home when {@code home}. The display is never a chip:
-     * since ADR 0015 A3b it stands on Display pages of its own. Without {@code rowShown} (no
+     * {@code rowCurrent} in front, seen from Home when {@code home}. The display window is never a chip
+     * here: since ADR 0015 A3b it stands on Display pages of its own, whose bar shows one chip per
+     * app open on the display (none for an empty display), see {@link DisplayAppChips}. Without {@code rowShown} (no
      * session is current) there is no row, and only the floats are chips. Floats follow with
      * {@link #addFloat}.
      */

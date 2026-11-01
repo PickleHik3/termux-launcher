@@ -39,6 +39,13 @@ public final class ElementsList {
 
     /** Where the list reads its elements and writes what is done to them. */
     public interface Host {
+        /**
+         * The layout being edited, named for the heading ("Home layout", ADR 0020 §9); null keeps
+         * the plain Elements heading.
+         */
+        @androidx.annotation.Nullable
+        default String layoutTitle() { return null; }
+
         /** Whether the page being edited wears {@code item}; its row stands only if it does. */
         boolean offers(@NonNull Item item);
         boolean shown(@NonNull Item item);
@@ -62,6 +69,8 @@ public final class ElementsList {
     @NonNull public final LinearLayout root;
     @NonNull private final Context mContext;
     @NonNull private final Host mHost;
+    private final boolean mDivider;
+    @NonNull private String mTitle;
     @NonNull private final Map<Item, Views> mRows = new EnumMap<>(Item.class);
     /** Where the chip stands, under the header; the chip itself, and the words it was built with. */
     @NonNull private final FrameLayout mChipSlot;
@@ -95,8 +104,9 @@ public final class ElementsList {
         root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(0, 0, 0, RowKit.dp(context, 8));
-        root.addView(SectionHeader.build(context,
-            context.getString(R.string.editor_section_elements), null, divider).root);
+        mDivider = divider;
+        mTitle = heading();
+        root.addView(SectionHeader.build(context, mTitle, null, divider).root);
         mChipSlot = new FrameLayout(context);
         root.addView(mChipSlot, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -132,9 +142,25 @@ public final class ElementsList {
 
     /** Every row read again: which stand, which are hidden. Compares before it sets. */
     public void restate() {
+        restateHeading();
         restateChip();
         for (Map.Entry<Item, Views> entry : mRows.entrySet())
             restate(entry.getKey(), entry.getValue());
+    }
+
+    @NonNull
+    private String heading() {
+        String title = mHost.layoutTitle();
+        return title != null ? title : mContext.getString(R.string.editor_section_elements);
+    }
+
+    /** The heading follows the layout being edited: another kind's page, minimal mode. */
+    private void restateHeading() {
+        String title = heading();
+        if (title.equals(mTitle)) return;
+        mTitle = title;
+        root.removeViewAt(0);
+        root.addView(SectionHeader.build(mContext, title, null, mDivider).root, 0);
     }
 
     /**

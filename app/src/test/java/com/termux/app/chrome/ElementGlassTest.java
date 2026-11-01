@@ -31,8 +31,12 @@ public class ElementGlassTest {
     private static final int PAGE = 7;
     private static final int OTHER_PAGE = 8;
 
+    /** PAGE is the Terminal page and OTHER_PAGE a Home page: a page's cells are its kind's. */
+    private static final LookGrid.PageKinds KINDS = page -> page == PAGE ? LookGrid.Kind.TERMINAL
+        : page == OTHER_PAGE ? LookGrid.Kind.HOME : null;
+
     private static LookGrid baseOnly() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(), KINDS, null);
         grid.write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE, FrostStops.MIST);
         grid.write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, 52);
         grid.write(LookGrid.Property.TINT, null, LookGrid.NO_PAGE, 15);
@@ -103,6 +107,8 @@ public class ElementGlassTest {
         store.edit().clear().commit();
         TermuxAppSharedPreferences preferences = new TermuxAppSharedPreferences(context, store, null);
         preferences.migrateLookGrid(java.util.Collections.emptyList());
+        LookGrid.install(KINDS, null);
+        try {
         for (LookGrid.Element element : LookGrid.Element.values()) {
             assertSame(FANCIER, ElementGlass.refraction(preferences, element, PAGE, FANCIER));
             assertNull(ElementGlass.refraction(preferences, element, PAGE, null));
@@ -114,6 +120,9 @@ public class ElementGlassTest {
             OTHER_PAGE, FANCIER));
         assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.DOCK, PAGE,
             FANCIER));
+        } finally {
+            LookGrid.install(null, null);
+        }
     }
 
     @Test
@@ -146,7 +155,7 @@ public class ElementGlassTest {
     }
 
     @Test
-    public void pageCell_changesOnlyThatPage() {
+    public void kindCell_changesOnlyThatKindsPages() {
         LookGrid grid = baseOnly();
         grid.write(LookGrid.Property.TINT, null, PAGE, 60);
         grid.write(LookGrid.Property.EDGE, null, PAGE, 45);
@@ -172,5 +181,11 @@ public class ElementGlassTest {
         assertEquals(0, widgets.blurDp);
         assertNotEquals(widgets.opacityPercent,
             ElementGlass.resolve(grid, LookGrid.Element.DOCK, PAGE).opacityPercent);
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

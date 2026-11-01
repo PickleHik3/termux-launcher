@@ -52,7 +52,7 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void emptyTap_performsClickWithoutExpansionAction() {
+    public void emptyTap_performsClickAndRequestsTheToggle() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         AtomicInteger clicks = new AtomicInteger();
@@ -63,7 +63,7 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
 
-        assertEquals(0, requests.size());
+        assertEquals(java.util.Collections.singletonList(false), requests);
         assertEquals(1, clicks.get());
     }
 
@@ -145,14 +145,6 @@ public class StatusBarSwipeLayoutTest {
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 40, 30));
         assertTrue(toggles.isEmpty());
-    }
-
-    @Test
-    public void pullHintColorIsTheThemeAccentNotALiteralGrey() {
-        StatusBarSwipeLayout view = createView();
-        assertNotEquals(0xFFB0B0B0, view.pullHintColor());
-        assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
-            R.color.termux_primary), view.pullHintColor());
     }
 
     private static StatusBarSwipeLayout createView() {

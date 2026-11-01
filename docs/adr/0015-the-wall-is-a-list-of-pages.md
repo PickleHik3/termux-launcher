@@ -65,6 +65,8 @@ setting: the welcome sheet's choice only seeds the wall ([Home 1][Terminal] with
 
 ## 3. One chrome, dressed per page kind (amends 0009)
 
+> Amended 2026-11-01: page layouts ("any page may opt into a layout of its own") are superseded by ADR 0020, one layout per page kind.
+
 There is still one status bar, one dock and one keyboard, standing still while the wall moves.
 Each page kind has its own default **dress**: the dock is designed for Home pages and shown there;
 Terminal and Display pages show the status bar and the extra keys, with the dock off. Each element
@@ -76,7 +78,7 @@ Minimal mode covers the Terminal page and every Display page; Home pages ignore 
 The keyboard remembers open or closed per page kind: Home pages share the transient palette and
 keyboard (or Always on), the Terminal page remembers its own, and Display pages share the display's
 keyboard memory and Keyboard mode. Window chips are the Terminal page's windows (the current
-session's), one chip per Display page, and the Floats; Home pages have none.
+session's), and the Floats; a Display page's bar shows one chip per app open on the display (none for an empty display, #192); Home pages have none.
 
 ## 4. A crossing is any slide between neighbouring pages (amends 0012)
 

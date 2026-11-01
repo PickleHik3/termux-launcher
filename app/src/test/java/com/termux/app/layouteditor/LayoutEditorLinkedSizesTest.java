@@ -47,7 +47,7 @@ public class LayoutEditorLinkedSizesTest {
         prefs.edit().clear().commit();
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
         places.setDockHeightScale(PORTRAIT, 1.0f);
-        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        com.termux.app.place.KindFixtures.onHomePage(places);
     }
 
     private LayoutEditorPlan open(PaneWallPage place) {

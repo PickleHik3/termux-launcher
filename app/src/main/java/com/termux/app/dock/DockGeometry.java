@@ -68,6 +68,11 @@ public final class DockGeometry {
         public final boolean searchField;
         /** The Wall strip's row height its layout keeps, dp; zero or less for the shipped one. */
         public final int wallStripHeightDp;
+        /** The one icon size in dp (ADR 0020 §3); 0 for the old height-scale curves. */
+        public final int iconDp;
+        /** The Home grid's side margin in dp and its column count (spec §8a); 0 where unknown. */
+        public final float gridEdgeDp;
+        public final int gridColumns;
 
         private Half(@NonNull Builder b) {
             arrangement = b.arrangement();
@@ -79,6 +84,9 @@ public final class DockGeometry {
             design = arrangement.design();
             searchField = arrangement.searchField();
             wallStripHeightDp = b.wallStripHeightDp;
+            iconDp = b.iconDp;
+            gridEdgeDp = b.gridEdgeDp;
+            gridColumns = b.gridColumns;
         }
 
         /** A half of {@code arrangement}: its layout, Style, design and Search field as resolved. */
@@ -102,7 +110,8 @@ public final class DockGeometry {
         @NonNull
         public Builder toBuilder() {
             return new Builder(arrangement).dockHeightScale(dockHeightScale)
-                .marginDp(marginDp).cornersDp(cornersDp).wallStripHeightDp(wallStripHeightDp);
+                .marginDp(marginDp).cornersDp(cornersDp).wallStripHeightDp(wallStripHeightDp)
+                .iconDp(iconDp).grid(gridEdgeDp, gridColumns);
         }
 
         /** Equal on what the dock measures; the Drawer tile and where it was resolved are not. */
@@ -138,6 +147,9 @@ public final class DockGeometry {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
             private int cornersDp = -1;
             private int wallStripHeightDp;
+            private int iconDp;
+            private float gridEdgeDp;
+            private int gridColumns;
 
             private Builder(@NonNull ResolvedArrangement arrangement) {
                 base = arrangement;
@@ -153,15 +165,17 @@ public final class DockGeometry {
             public Builder design(@NonNull DockStyle v) { design = v; return this; }
             public Builder searchField(boolean v) { searchField = v; return this; }
             public Builder wallStripHeightDp(int v) { wallStripHeightDp = v; return this; }
+            public Builder iconDp(int v) { iconDp = v; return this; }
+            public Builder grid(float edgeDp, int columns) { gridEdgeDp = edgeDp; gridColumns = columns; return this; }
 
             /** The arrangement as handed in, or remade where the builder changed its dress. */
             @NonNull
             private ResolvedArrangement arrangement() {
                 if (floating == base.floating() && design == base.design()
                     && searchField == base.searchField()) return base;
-                return ResolvedArrangement.of(base.layout(),
+                return base.keepingSideBar(ResolvedArrangement.of(base.layout(),
                     floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED, design, searchField,
-                    base.drawerTile(), base.orientation(), base.variant(), base.page());
+                    base.drawerTile(), base.orientation(), base.variant(), base.page()));
             }
 
             @NonNull
@@ -414,6 +428,9 @@ public final class DockGeometry {
             .capsule(prefs && rows.floating)
             .appsRowOnEdge(appsShown && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM)
             .appsOnRail(rail)
+            // Home's side bar on a phone in landscape draws the one icon step (ADR 0020 §12);
+            // a rail the user stood on a side keeps the rail's own icon.
+            .railIconDp(prefs && rail && rows.arrangement.sideBarDock() ? rows.iconDp : 0)
             .appsRowAlone(appsRowAlone(layout))
             .appsRowNextToCanvas(appsRowNextToCanvas(layout))
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
@@ -426,6 +443,13 @@ public final class DockGeometry {
             .wallStripHeightDp(prefs ? rows.wallStripHeightDp : 0)
             .density(s.density)
             .barHeightScale(prefs ? rows.dockHeightScale : DockLayoutPolicy.sizePreset(2))
+            // The one icon size and the side-inset rule (ADR 0020 §3, spec §8a).
+            .iconDp(prefs ? rows.iconDp : 0)
+            .minSideInsetDp(prefs ? Math.max(rows.gridEdgeDp,
+                rows.floating ? 0f : DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP) : 0f)
+            .alignToGridDp(prefs && rows.gridColumns > 0 && s.pinnedSlotCount == rows.gridColumns
+                ? Math.max(rows.gridEdgeDp,
+                    rows.floating ? 0f : DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP) : 0f)
             .dockHorizontalInsetDp(prefs
                 ? TermuxAppSharedPreferences.clampSurfaceHorizontalInset(rows.marginDp)
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET)

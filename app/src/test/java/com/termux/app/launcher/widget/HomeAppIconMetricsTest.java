@@ -24,11 +24,12 @@ public class HomeAppIconMetricsTest {
         assertTrue(metrics.showLabel);
     }
 
-    @Test public void aShortCellShrinksTheIconAboveTheLabel() {
-        // 120 tall: 16 of insets, 26 of label, 8 of gap leave 70.
+    @Test public void aShortCellHidesTheLabelAndKeepsTheIcon() {
+        // 120 tall: 120 - 96 icon - 8 gap - 26 label is under one label (Launcher3's rule), so
+        // the label goes and the icon keeps its 48 dp (ADR 0020 §12); it was shrunk to 70 before.
         HomeAppIconMetrics metrics = HomeAppIconMetrics.of(300, 120, LABEL, DENSITY);
-        assertEquals(70, metrics.iconPx);
-        assertTrue(metrics.showLabel);
+        assertEquals(96, metrics.iconPx);
+        assertFalse(metrics.showLabel);
     }
 
     @Test public void aCellTooShortForBothGivesTheLabelsLineToTheIcon() {

@@ -33,9 +33,10 @@ public final class HomeIconStyle {
         }
     }
 
-    /** The style of a Home nobody styled: an unset icon size reads as {@link HomeIconSize#UNSET}. */
+    /** The style of a Home nobody styled: the one icon size's default step (ADR 0020 §3). */
     public static final HomeIconStyle DEFAULT =
-        new HomeIconStyle(HomeIconSize.UNSET, LabelSize.DEFAULT, false, true);
+        new HomeIconStyle(HomeIconSize.UNSET, LabelSize.DEFAULT, false, true,
+            com.termux.app.place.layout.IconSize.DEFAULT.dp);
 
     /** The icon's size: one of the three presets ({@link HomeIconSize}). */
     @NonNull public final HomeIconSize iconSize;
@@ -45,24 +46,33 @@ public final class HomeIconStyle {
     /** The label's soft shadow. */
     public final boolean shadow;
 
+    /** The icon in dp: the one icon size's step (ADR 0020 §3), which the dock draws too. */
+    public final int iconDp;
+
     public HomeIconStyle(@NonNull HomeIconSize iconSize, @NonNull LabelSize labelSize,
                          boolean twoLines, boolean shadow) {
+        this(iconSize, labelSize, twoLines, shadow, iconSize.dp);
+    }
+
+    public HomeIconStyle(@NonNull HomeIconSize iconSize, @NonNull LabelSize labelSize,
+                         boolean twoLines, boolean shadow, int iconDp) {
         this.iconSize = iconSize;
         this.labelSize = labelSize;
         this.twoLines = twoLines;
         this.shadow = shadow;
+        this.iconDp = iconDp;
     }
 
     /** The icon's size as a multiple of 48 dp. */
     public float iconScale() {
-        return iconSize.scale();
+        return iconDp / (float) HomeIconSize.DOCK_ICON_DP;
     }
 
     @Override public boolean equals(Object other) {
         if (this == other) return true;
         if (!(other instanceof HomeIconStyle)) return false;
         HomeIconStyle that = (HomeIconStyle) other;
-        return iconSize == that.iconSize && labelSize == that.labelSize
+        return iconSize == that.iconSize && iconDp == that.iconDp && labelSize == that.labelSize
             && twoLines == that.twoLines && shadow == that.shadow;
     }
 

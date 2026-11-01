@@ -108,9 +108,6 @@ public final class LayoutEditorPlan {
      * Every page the session has dressed, by id, and whether it held a page layout when the
      * session first reached it: the flags Discard puts back too (ADR 0015 §3).
      */
-    @NonNull private final Map<Integer, Boolean> mEntryPageLayouts = new java.util.LinkedHashMap<>();
-    @NonNull private final Map<Integer, com.termux.app.wall.WallPages.PageKind> mEntryPageKinds =
-        new java.util.LinkedHashMap<>();
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
                              @NonNull PlaceOrientation deviceOrientation,
@@ -134,24 +131,48 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
+        enterVariant(dockLayout());
         // What the session may touch: the layout the page wears and the Workspace layout the
         // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
         // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
         // remembered so Discard puts it back (ADR 0015 §3).
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
-        rememberPage(places.shownPageId(place), DressResolver.kindOf(place));
     }
 
-    /** Keeps {@code pageId}'s page-layout flag as the session first found it. */
-    private void rememberPage(int pageId, @NonNull com.termux.app.wall.WallPages.PageKind kind) {
-        if (pageId < 0 || mEntryPageLayouts.containsKey(pageId))
-            return;
-        mEntryPageLayouts.put(pageId, mRoot.hasPageLayout(pageId));
-        mEntryPageKinds.put(pageId, kind);
+    /**
+     * The view the dock's keys are read and written through: Home's on every Home page, whether it
+     * wears a page layout of its own or the shared one the Terminal shares (ADR 0018 section 4),
+     * else the edited layout's. Both sides read the dock through {@link DressResolver#dockLayoutOf}.
+     */
+    @NonNull
+    private PlaceLayoutStore dockPlaces() {
+        return mRoot.forVariant(dockLayout());
     }
 
-    // ------------------------------------------------------------------ the page-layout chip
+    @NonNull
+    private LayoutVariant dockLayout() {
+        // A layout's dock is its own; Home pages wear Home's layout (ADR 0020 §1).
+        return mVariant;
+    }
+
+
+    // ------------------------------------------------------------------ the layout it edits
+
+    /**
+     * The layout this session edits, by the kind of page it was opened on (ADR 0020 §9):
+     * Terminal-minimal while minimal mode dresses a window.
+     */
+    @NonNull
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        return mVariant.layoutKind();
+    }
+
+    /** The editor's title: "Home layout", "Terminal layout", ... */
+    @NonNull
+    public String layoutTitle() {
+        return layoutKind().title;
+    }
 
     /** The page being dressed, by id; -1 where the launcher has not named it. */
     public int pageId() {
@@ -164,48 +185,9 @@ public final class LayoutEditorPlan {
         return DressResolver.kindOf(mDressedPage);
     }
 
-    /**
-     * Whether the "<kind> | <page>" chip is offered: the page is known and the session is not on
-     * the minimal layout, which is one switch for every window.
-     */
-    public boolean offersPageLayout() {
-        return pageId() >= 0 && mVariant != LayoutVariant.MINIMAL;
-    }
 
-    /** The chip's page side: whether the page being dressed wears a layout of its own. */
-    public boolean pageLayoutSide() {
-        int id = pageId();
-        return id >= 0 && mRoot.hasPageLayout(id);
-    }
 
-    /**
-     * The chip: the page side gives the page a layout of its own, seeded from what it showed,
-     * and the session edits it from then on; the kind side puts the page back on its kind's.
-     * Either way the flag and the page layout are in the session, so Discard puts them back.
-     */
-    public void setPageLayoutSide(boolean pageSide) {
-        int id = pageId();
-        if (id < 0 || mVariant == LayoutVariant.MINIMAL || pageLayoutSide() == pageSide)
-            return;
-        com.termux.app.wall.WallPages.PageKind kind = pageKind();
-        rememberPage(id, kind);
-        // The page layout as it stood is kept before the seed writes over it.
-        if (pageSide)
-            enterVariant(LayoutVariant.page(id, kind));
-        mRoot.setPageLayout(id, kind, pageSide);
-        mVariant = dress().layout();
-        mPlaces = mRoot.forVariant(mVariant);
-        enterVariant(mVariant);
-    }
 
-    /** Whether any page's layout flag differs from what the session found. */
-    private boolean pageFlagsMoved() {
-        for (Map.Entry<Integer, Boolean> entry : mEntryPageLayouts.entrySet()) {
-            if (mRoot.hasPageLayout(entry.getKey()) != entry.getValue())
-                return true;
-        }
-        return false;
-    }
 
     private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
         mEntries.put(entry.variant(), entry);
@@ -319,7 +301,7 @@ public final class LayoutEditorPlan {
 
     /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
     public float dockHeightScale() {
-        return mPlaces.dockHeightScale(mShownOrientation);
+        return dockPlaces().dockHeightScale(mShownOrientation);
     }
 
     /** The keyboard's height in the shown orientation, as a multiple of its unscaled height. */
@@ -340,7 +322,7 @@ public final class LayoutEditorPlan {
     /** The dock's handle dragged. */
     @NonNull
     public Drop setDockHeightScale(float scale) {
-        mPlaces.setDockHeightScale(mShownOrientation, scale);
+        dockPlaces().setDockHeightScale(mShownOrientation, scale);
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
@@ -434,7 +416,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public DockStyle dockStyle() {
-        return mPlaces.dockStyle();
+        return dockPlaces().dockStyle();
     }
 
     /**
@@ -448,7 +430,7 @@ public final class LayoutEditorPlan {
         // the Drawer tile (#97).
         if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
-        mPlaces.setDockStyle(style);
+        dockPlaces().setDockStyle(style);
         return Drop.LIVE;
     }
 
@@ -456,7 +438,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Search field on: what the toggle shows. */
     public boolean searchField() {
-        return mPlaces.searchField();
+        return dockPlaces().searchField();
     }
 
     /**
@@ -467,7 +449,7 @@ public final class LayoutEditorPlan {
     public Drop setSearchField(boolean on) {
         if (on == searchField())
             return Drop.NONE;
-        mPlaces.setSearchField(on);
+        dockPlaces().setSearchField(on);
         return Drop.LIVE;
     }
 
@@ -475,7 +457,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
     public boolean drawerTile() {
-        return mPlaces.drawerTile();
+        return dockPlaces().drawerTile();
     }
 
     /**
@@ -487,7 +469,7 @@ public final class LayoutEditorPlan {
     public Drop setDrawerTile(boolean on) {
         if (on == drawerTile())
             return Drop.NONE;
-        mPlaces.setDrawerTile(on);
+        dockPlaces().setDrawerTile(on);
         return Drop.LIVE;
     }
 
@@ -579,10 +561,10 @@ public final class LayoutEditorPlan {
         PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
         mPlace = place;
         mDressedPage = place;
-        rememberPage(pageId(), pageKind());
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
+        enterVariant(dockLayout());
         return place;
     }
 
@@ -666,8 +648,6 @@ public final class LayoutEditorPlan {
      * — the unsaved-changes question.
      */
     public boolean isDirty() {
-        if (pageFlagsMoved())
-            return true;
         for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
             if (!entry.getValue().equals(
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
@@ -681,23 +661,11 @@ public final class LayoutEditorPlan {
      * nothing moved is left unwritten.
      */
     public void revert() {
-        boolean switchMoved = pageFlagsMoved();
-        for (Map.Entry<Integer, Boolean> entry : mEntryPageLayouts.entrySet()) {
-            int id = entry.getKey();
-            if (mRoot.hasPageLayout(id) != entry.getValue())
-                mRoot.setPageLayout(id, mEntryPageKinds.get(id), entry.getValue());
-        }
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
             if (atOpen == null || !atOpen.equals(
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
                 entry.getValue().restore(mRoot);
-        }
-        // The edited layout only changes if Home's switch did; minimal mode toggled under the
-        // open editor does not move what it edits.
-        if (switchMoved) {
-            mVariant = dress().layout();
-            mPlaces = mRoot.forVariant(mVariant);
         }
     }
 

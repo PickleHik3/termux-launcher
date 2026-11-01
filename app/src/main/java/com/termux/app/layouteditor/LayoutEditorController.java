@@ -215,12 +215,14 @@ public final class LayoutEditorController {
         return mPlan != null && !mPlan.shownLayout().slot(element).hidden;
     }
 
-    // ---------------------------------------------------------------------- the page-layout chip
+    // ---------------------------------------------------------------------- the layout it edits
 
-    /** Whether the Elements card offers the "<kind> | <page>" chip (ADR 0015 §3). */
-    public boolean offersPageLayout() {
-        return mPlan != null && mPlan.offersPageLayout();
+    /** The editor's title, naming the layout it edits ("Home layout"), or null with no session. */
+    @Nullable
+    public String layoutTitle() {
+        return mPlan == null ? null : mPlan.layoutTitle();
     }
+
 
     /** The kind of the page the chip is about, or null with no session. */
     @Nullable
@@ -235,19 +237,7 @@ public final class LayoutEditorController {
         return mPlan == null || places == null ? null : places.pageName(mPlan.pageId());
     }
 
-    /** The chip's page side: whether the page wears a layout of its own. */
-    public boolean pageLayoutSide() {
-        return mPlan != null && mPlan.pageLayoutSide();
-    }
 
-    /** Picks a side of the chip; the live place follows and Discard covers it. */
-    public void setPageLayoutSide(boolean pageSide) {
-        LayoutEditorPlan plan = mPlan;
-        if (plan == null || plan.pageLayoutSide() == pageSide)
-            return;
-        plan.setPageLayoutSide(pageSide);
-        afterWrite(LayoutEditorPlan.Drop.LIVE);
-    }
 
     /** Whether the page being edited wears {@code element} at all. */
     public boolean offers(@NonNull Element element) {

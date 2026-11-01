@@ -42,6 +42,17 @@
     <string name="editor_home_icon_small">Small (48 dp)</string>
     <string name="editor_home_icon_default">Default (54 dp)</string>
     <string name="editor_home_icon_large">Large (60 dp)</string>
+    <!-- The one icon size (ADR 0020 §3): Home's icons and every dock design's. -->
+    <string name="editor_icon_size_s">S</string>
+    <string name="editor_icon_size_m">M</string>
+    <string name="editor_icon_size_l">L</string>
+    <string name="editor_icon_size_xl">XL</string>
+    <!-- Under the Icon size row while the pinned apps cap it: count, then the largest step. -->
+    <string name="editor_icon_size_cap">%1$d pinned apps fit up to %2$s</string>
+    <!-- Settings › Home › Icon size: a step, and its size. -->
+    <string name="settings_icon_size_step">%1$s, %2$d dp</string>
+    <!-- Settings › Home › Icon size while the pinned apps cap it: the step drawn, then why. -->
+    <string name="settings_icon_size_capped">%1$s. %2$s</string>
     <string-array name="editor_home_icon_size_entries">
         <item>@string/editor_home_icon_small</item>
         <item>@string/editor_home_icon_default</item>

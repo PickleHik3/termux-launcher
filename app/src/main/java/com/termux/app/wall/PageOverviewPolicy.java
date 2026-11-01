@@ -100,7 +100,7 @@ public final class PageOverviewPolicy {
         int first = -1;
         int last = -1;
         for (int i = 0; i < strip.size(); i++) {
-            if (strip.get(i) == Kind.HOME_PAGE) continue;
+            if (strip.get(i) != Kind.TERMINAL) continue;
             if (first < 0) first = i;
             last = i;
         }
@@ -122,6 +122,7 @@ public final class PageOverviewPolicy {
         int count = strip.size();
         if (from < 0 || from >= count || over < 0 || over >= count) return NONE;
         int[] block = blockBounds(strip);
+        if (strip.get(from) == Kind.DISPLAY) return NONE;
         if (!isHome(from, strip)) {
             return block != null && over >= block[0] && over <= block[1] ? over : NONE;
         }
@@ -180,6 +181,9 @@ public final class PageOverviewPolicy {
             for (int i = 0; i < position; i++) if (strip.get(i) == Kind.HOME_PAGE) n++;
             return WallRow.homePage(n);
         }
+        if (position >= 0 && position < strip.size() && strip.get(position) == Kind.DISPLAY) {
+            return new WallRow.Position(PaneWallPage.DISPLAY, 0);
+        }
         int[] block = blockBounds(strip);
         return WallRow.window(block == null ? 0 : Math.max(0, position - block[0]));
     }
@@ -217,6 +221,37 @@ public final class PageOverviewPolicy {
     /** Whether "+ Add display" is offered: only while no display is open, as only one can exist. */
     public static boolean canAddDisplay(boolean displayOpen) {
         return !displayOpen;
+    }
+
+    /** Marks the window block's place in {@link #wallOrder}. */
+    public static final int BLOCK = Integer.MIN_VALUE;
+
+    /**
+     * The strip in wall order (ADR 0015: Display pages are wall pages): Home page {@code i} is
+     * {@code i}, Display page {@code j} (of {@code displays}, in wall order) is {@code -(j + 1)},
+     * the window block is {@link #BLOCK}. {@code homesBefore[j]} is how many Home pages stand
+     * before Display page {@code j} on the wall; {@code afterTerminal[j]} whether it stands after
+     * the Terminal page. {@code beforeTerminal} is how many Home pages stand before the Terminal
+     * page; {@code hasTerminal} false puts no block in the strip.
+     */
+    @NonNull
+    public static java.util.List<Integer> wallOrder(int pages, boolean hasTerminal,
+            int beforeTerminal, @NonNull int[] homesBefore, @NonNull boolean[] afterTerminal) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        int before = hasTerminal ? Math.max(0, Math.min(pages, beforeTerminal)) : -1;
+        for (int gap = 0; gap <= pages; gap++) {
+            for (int j = 0; j < homesBefore.length; j++) {
+                if (homesBefore[j] == gap && !(gap == before && afterTerminal[j])) out.add(-(j + 1));
+            }
+            if (gap == before) {
+                out.add(BLOCK);
+                for (int j = 0; j < homesBefore.length; j++) {
+                    if (homesBefore[j] == gap && afterTerminal[j]) out.add(-(j + 1));
+                }
+            }
+            if (gap < pages) out.add(gap);
+        }
+        return out;
     }
 
     /** Whether a card of {@code kind} shows the delete button: every card but the last Home page. */

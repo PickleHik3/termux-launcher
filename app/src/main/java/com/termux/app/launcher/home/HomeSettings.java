@@ -117,7 +117,12 @@ public final class HomeSettings {
             com.termux.app.launcher.widget.HomeIconStyle.LabelSize.fromValue(
                 getString(context, KEY_LABEL_SIZE, null)),
             getBoolean(context, KEY_LABEL_TWO_LINES, false),
-            getBoolean(context, KEY_LABEL_SHADOW, true));
+            getBoolean(context, KEY_LABEL_SHADOW, true),
+            // The one icon size (ADR 0020 §3): the Home grid and the dock draw the same icon,
+            // the choice capped by what the pinned apps fit at (the dock publishes the cap).
+            com.termux.app.dock.IconSizeCap.effective(com.termux.app.place.layout.IconSize.of(
+                    com.termux.app.place.layout.LayoutStore.shared(context).current().sizes()),
+                com.termux.app.dock.IconSizeCap.published()).dp);
     }
 
     /** What {@code gesture} on a Home page's free area does (Settings › Home › Gestures). */

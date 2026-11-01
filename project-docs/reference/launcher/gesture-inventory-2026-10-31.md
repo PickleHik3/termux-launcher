@@ -23,7 +23,7 @@ module name.
 | Keyboard swipe (up opens, down closes, from the bottom border) | `wall/PaneWallLayout.java` via `BorderDrag`; grabber `wall/BorderGrabber.java:70` | none | The keyboard key (extra keys); Alt up-right on the keyboard hides it (Keyboard.md:47-56) | Grabber pill, `wall/BorderGrabber.java:70` | Keyboard.md:15 |
 | Status swipe (down unfolds, up folds, from the top border) | same; grabber `wall/BorderGrabber.java:75` | none | Status bar long-press menu "Expand status bar" / "Compact status bar" (`res/values/strings_surface_popup.xml:7-8`, `surfaces/SurfaceLongPress.java`) | Grabber pill, only while the bar can unfold | Status_Bar.md:21 |
 | Status bar drag across the bar | `statusbar/StatusBarSwipeLayout.java:284,296` | none | The same menu item | The bar itself; no extra cue | Status_Bar.md:23 |
-| Two-finger status pull | `statusbar/StatusBarSwipeLayout.java:284,296` (two-pointer branch unverified) | `status_swipe_two_fingers` (`SettingsRowIcons.java:230`) | The same menu item | none | Status_Bar.md (unverified) |
+| Tap on the status bar's own chrome (unfolds a folded bar, folds an open one; replaced the removed two-finger pull) | `statusbar/StatusBarSwipeLayout.java` (`finish`) | none | The same menu item | The bar itself; no extra cue | none |
 | Window chip hold then drag (reorder windows) | `terminal/TerminalWindowBar.java:669,712` | none | none found | The chip lifts (docs); no resting cue | Panes_Windows_And_Sessions.md:62 |
 | Corner hold (pane buttons; a hold then drag) | `chrome/CornerHold.java:55-66`, `chrome/CornerHoldArbiter.java`, `terminal/TerminalPaneController.java:5850` | none | The corner tab on tap: unverified | The corner tab / bracket (`chrome/CornerBracket.java`) | Panes_Windows_And_Sessions.md:123 |
 | Pane two-finger flick (swap with the pane across the edge) | `terminal/TerminalPaneController.java:5330-5338` (`PaneFlick`) | none | The pane's Move icon and the pane actions in the palette (Panes_Windows_And_Sessions.md:107) | none | Panes_Windows_And_Sessions.md:118 |
@@ -79,7 +79,7 @@ was not opened and may turn out to exist.
 | # | Gap |
 |---|---|
 | 1 | The app drawer's pull has no visible cue and no on-screen button |
-| 2 | The two-finger status pull has no cue |
+| 2 | A tap on the status bar's chrome folds or unfolds it, with no cue |
 | 3 | Home's swipe up, swipe down, double tap and two-finger swipes have no cue and no direct tap path |
 | 4 | The notification card swipe has no cue (the Hold menu is its tap path) |
 | 5 | The quick-reply swipe has no tap path |

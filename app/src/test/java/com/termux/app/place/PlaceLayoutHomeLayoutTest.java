@@ -48,7 +48,7 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     private PlaceLayoutStore store() {
-        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
+        return KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(launcher)));
     }
 
     @Test
@@ -56,34 +56,6 @@ public class PlaceLayoutHomeLayoutTest {
         assertEquals("layout.home.portrait.apps_row",
             PlaceLayoutStore.layoutKey(LayoutVariant.HOME, PORTRAIT, "apps_row"));
         assertEquals("layout.home.keyboard_shown", PlaceLayoutStore.homeKey("keyboard_shown"));
-    }
-
-    @Test
-    public void itIsSeededFromTheNormalLayoutWithTheExtraKeysPutAway() {
-        PlaceLayoutStore store = store();
-        store.setStatusBarEdge(PORTRAIT, Edge.TOP);
-        store.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
-        store.setExtraKeys(PORTRAIT, RowPlacement.BOTTOM);
-        store.setAzRowShown(PORTRAIT, true);
-        store.setAzBarEdge(PORTRAIT, Edge.BOTTOM);
-        store.setKeyboardForm(PORTRAIT, KeyboardForm.SPLIT);
-
-        PlaceLayout home = store.resolve(PORTRAIT, LayoutVariant.HOME);
-
-        assertFalse("the bar comes along (#90)", home.slot(Element.STATUS).hidden);
-        assertEquals(Edge.TOP, home.slot(Element.STATUS).edge);
-        assertTrue("no extra keys on Home", home.slot(Element.EXTRA_KEYS).hidden);
-        assertFalse("the pinned apps come along", home.slot(Element.APPS).hidden);
-        assertEquals(Edge.BOTTOM, home.slot(Element.APPS).edge);
-        assertFalse("the A-Z index comes along", home.slot(Element.AZ).hidden);
-        assertEquals(KeyboardForm.SPLIT, home.keyboardForm);
-        assertFalse("the keyboard is put away: always on starts off", home.keyboardShown);
-        // Seeded as keys of its own; the normal layout is untouched.
-        assertTrue(prefs.contains("layout.home.portrait.status_bar"));
-        PlaceLayout normal = store.resolve(PORTRAIT, LayoutVariant.NORMAL);
-        assertFalse(normal.slot(Element.STATUS).hidden);
-        assertFalse(normal.slot(Element.EXTRA_KEYS).hidden);
-        assertTrue("the Workspace's keyboard element stays shown", normal.keyboardShown);
     }
 
     @Test
@@ -153,7 +125,6 @@ public class PlaceLayoutHomeLayoutTest {
             assertEquals(variant.name(), 6, layout.widgetRows);
         }
         assertEquals(5, prefs.getInt("layout.home.portrait.widget_columns", 0));
-        assertFalse(prefs.contains("layout.portrait.widget_columns"));
         // Minimal mode never re-cuts the grid.
         store.setMinimal(true);
         assertEquals(6, store.resolve(PORTRAIT).widgetRows);
@@ -170,8 +141,7 @@ public class PlaceLayoutHomeLayoutTest {
     public void aPageSaysWhichVariantItIsArrangedBy() {
         PlaceLayoutStore store = KindFixtures.onHomePage(store());
         assertEquals("a Home page without a page layout wears the shared one (version 16)",
-            LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
-        store.setPageLayout(KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+            LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
         store.setMinimal(true);
@@ -204,17 +174,10 @@ public class PlaceLayoutHomeLayoutTest {
         assertFalse("and never touches the switch", launcher.isKeyboardTurnedOff());
     }
 
-    @Test
-    public void clearingTheHomeLayoutSeedsItAgain() {
-        PlaceLayoutStore store = store();
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
-        home.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
-        store.setKeyboardForm(PORTRAIT, KeyboardForm.FLOATING);
-        home.clear(PORTRAIT);
-        PlaceLayout reset = home.resolve(PORTRAIT);
-        assertEquals("re-seeded from the normal layout as it is now", KeyboardForm.FLOATING,
-            reset.keyboardForm);
-        assertFalse(reset.slot(Element.STATUS).hidden);
-        assertTrue(reset.slot(Element.EXTRA_KEYS).hidden);
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

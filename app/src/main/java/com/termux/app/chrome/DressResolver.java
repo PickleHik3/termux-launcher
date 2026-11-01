@@ -56,21 +56,9 @@ public final class DressResolver {
          */
         default int pageIdOf(@NonNull PaneWallPage page) { return -1; }
 
-        /** Whether page {@code pageId} holds a page layout of its own (ADR 0015 §3). */
-        default boolean pageLayout(int pageId) { return false; }
-
         /** The Dock design picked on one layout, whether or not it is built yet. */
         @NonNull
         DockStyle dockDesign(@NonNull LayoutVariant layout);
-
-        /**
-         * The Dock design a Home page draws on {@code layout}: the Home kind's own when the page
-         * is on the shared layout and Home holds one, else {@link #dockDesign}.
-         */
-        @NonNull
-        default DockStyle homePageDockDesign(@NonNull LayoutVariant layout) {
-            return dockDesign(layout);
-        }
 
         /** Whether one layout turns the Search field on, beside its design (#96). */
         boolean searchField(@NonNull LayoutVariant layout);
@@ -142,15 +130,7 @@ public final class DressResolver {
                 return store != null ? store.shownPageId(page) : -1;
             }
 
-            @Override public boolean pageLayout(int pageId) {
-                PlaceLayoutStore store = places.get();
-                return store != null && store.hasPageLayout(pageId);
-            }
 
-            @NonNull @Override public DockStyle homePageDockDesign(@NonNull LayoutVariant layout) {
-                PlaceLayoutStore store = places.get();
-                return store != null ? store.homePageDockDesign(layout) : DockStyle.GLASS_TRAY;
-            }
 
             @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
                 PlaceLayoutStore store = places.get();
@@ -178,12 +158,6 @@ public final class DressResolver {
                     : PlaceLayoutStore.kindShowsByDefault(kind, element);
             }
 
-            @Override public boolean layoutShows(@NonNull LayoutVariant layout,
-                                                 @NonNull PageKind kind, @NonNull Element element) {
-                PlaceLayoutStore store = places.get();
-                if (store == null || !layout.isPage()) return shows(kind, element);
-                return store.forVariant(layout).showsAny(element);
-            }
         });
     }
 
@@ -209,7 +183,7 @@ public final class DressResolver {
 
     @NonNull
     private DockStyle dockDesignFor(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
-        return kind == PageKind.HOME ? mSource.homePageDockDesign(layout) : mSource.dockDesign(layout);
+        return mSource.dockDesign(layout);
     }
 
     @NonNull
@@ -219,7 +193,8 @@ public final class DressResolver {
             if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
         }
         return new Dress(layout, leftOut,
-            DockStyle.effectiveStyle(dockDesignFor(layout, kind)), mSource.searchField(layout),
+            DockStyle.effectiveStyle(dockDesignFor(layout, kind)),
+            mSource.searchField(layout),
             mSource.drawerTile(layout), mSource.shape());
     }
 
@@ -248,11 +223,8 @@ public final class DressResolver {
 
     @NonNull
     private LayoutVariant layoutOf(@NonNull PaneWallPage page, int id) {
-        boolean home = page == PaneWallPage.WIDGETS;
-        if (!home && mSource.minimal()) return LayoutVariant.MINIMAL;
-        if (id >= 0 && mSource.pageLayout(id))
-            return LayoutVariant.page(id, kindOf(page));
-        return LayoutVariant.NORMAL;
+        // One layout per page kind (ADR 0020 §1); the page id no longer chooses anything.
+        return LayoutVariant.ofKind(kindOf(page), mSource.minimal());
     }
 
     /**

@@ -28,7 +28,8 @@ import java.util.Set;
  *   <li>A stream with no MPRIS player cannot be paused, so on a loss the server is muted
  *       instead, until focus comes back or nothing plays any more.</li>
  *   <li>After a lasting loss, something new starting to play — a stream more, or a player that
- *       was not playing before — asks for focus again: that is the user choosing this sound.</li>
+ *       was not playing before — asks for focus again, the duckable one first like any sound
+ *       from quiet; the full focus follows only if it is still playing after the grace.</li>
  * </ul>
  * Pure and single-threaded: the caller feeds it events and carries out the {@link Actions}.
  */
@@ -136,8 +137,11 @@ final class FocusPolicy {
                     restore(actions);
                     state = State.IDLE;
                 } else if (streams > previousStreams || !previousPlaying.containsAll(playing)) {
-                    // The user choosing this sound: the full focus, as before.
-                    ask(actions, Kind.FULL);
+                    // Something new plays: the same road as from quiet, the duckable focus first
+                    // and the full one only if it outlives the grace, so a short sound ducks the
+                    // app that took the focus instead of pausing it (#179).
+                    ask(actions, Kind.TRANSIENT_DUCK);
+                    actions.startGrace = true;
                 }
                 break;
         }

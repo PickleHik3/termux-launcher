@@ -56,7 +56,7 @@ public class LayoutEditorHomeFilterTest {
         places.setAppsRow(LANDSCAPE, RowPlacement.BOTTOM);
         // The filter moves between two layouts only while Home holds one of its own; on the
         // shared layout see LayoutEditorSharedLayoutTest.
-        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        com.termux.app.place.KindFixtures.onHomePage(places);
     }
 
     private PlaceLayoutStore home() {
@@ -130,7 +130,8 @@ public class LayoutEditorHomeFilterTest {
         LayoutEditorPlan plan = open(PaneWallPage.DISPLAY);
         plan.showHome(true);
         assertEquals(PaneWallPage.DISPLAY, plan.showHome(false));
-        assertEquals(LayoutVariant.NORMAL, plan.variant());
+        assertEquals("the Display's own layout (ADR 0020 §4)", LayoutVariant.DISPLAY,
+            plan.variant());
 
         LayoutEditorPlan fromHome = open(PaneWallPage.WIDGETS);
         assertEquals("opened over Home, off is the terminal",
