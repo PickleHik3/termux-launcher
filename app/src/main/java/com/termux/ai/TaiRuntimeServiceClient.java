@@ -366,8 +366,9 @@ public final class TaiRuntimeServiceClient {
     private JSONObject runtimeDied(@NonNull String operation) {
         String message;
         if (TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation) || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)) {
-            message = "AI runtime process died while loading the model; the load was not retried. "
-                + "Load again to try once more, on CPU or with a smaller model.";
+            message = "AI runtime process died while loading the model (Android may have closed it for memory); "
+                + "the load was not retried. The next automatic load uses a smaller window or another accelerator; "
+                + "ask for this accelerator again to try it once at the smallest window.";
         } else if (TaiRuntimeService.isStatusOperation(operation)) {
             message = "AI runtime process died while answering a status request.";
         } else {
