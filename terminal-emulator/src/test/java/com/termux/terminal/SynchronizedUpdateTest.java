@@ -89,4 +89,17 @@ public class SynchronizedUpdateTest extends TerminalTestCase {
         mTerminal.reset();
         assertFalse(mTerminal.isScreenUpdateHeld());
     }
+
+    /** A resize ends the hold and draws, as kitty and Ghostty do (ADR 0019). */
+    public void testAResizeEndsTheHold() {
+        withTerminalSized(5, 3);
+        enterString("\033[?2026h");
+        assertTrue(mTerminal.isScreenUpdateHeld());
+        mTerminal.resize(7, 4, 10, 20);
+        assertFalse("the resize ended the hold", mTerminal.isScreenUpdateHeld());
+        // Only an actual resize does: the same size is no resize.
+        enterString("\033[?2026h");
+        mTerminal.resize(7, 4, 10, 20);
+        assertTrue(mTerminal.isScreenUpdateHeld());
+    }
 }

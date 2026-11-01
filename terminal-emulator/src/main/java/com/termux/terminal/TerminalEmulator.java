@@ -1055,8 +1055,10 @@ public final class TerminalEmulator {
         if (mRows == rows && mColumns == columns) {
             // A font size change moves the pixel size without moving the grid, and mode 2048 reports
             // pixels too, so it is still a resize as far as the program is concerned.
-            if (cellSizeChanged)
+            if (cellSizeChanged) {
+                endSynchronizedUpdateForResize();
                 sendInBandResizeReport();
+            }
             return;
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
@@ -1077,8 +1079,21 @@ public final class TerminalEmulator {
             mLeftMargin = 0;
             mRightMargin = mColumns;
         }
+        endSynchronizedUpdateForResize();
         resizeScreen();
         sendInBandResizeReport();
+    }
+
+    /**
+     * A resize ends an open synchronized update (mode 2026) and lets the screen draw, as kitty and
+     * Ghostty do: the frame the program was holding was drawn for the old size, and its repaint
+     * for the new one must not wait out the hold's timeout behind it.
+     */
+    private void endSynchronizedUpdateForResize() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE)) return;
+        setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
+        mSynchronizedUpdateDeadline = 0;
+        mKittyGraphics.synchronizedHoldEnded();
     }
 
     /**
