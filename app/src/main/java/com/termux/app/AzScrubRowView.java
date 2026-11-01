@@ -302,16 +302,14 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     /**
      * The x a letter's glyph is centred on. A row centres it on its slot along the width; a column
-     * centres it across the visible band and lets the wave carry it away from the edge, which is
-     * sideways there rather than up.
+     * centres it across the whole bar, so the letters stand on the pill's middle line, and lets the
+     * wave carry it away from the edge, which is sideways there rather than up.
      */
     private float letterDrawX(float alongCenterPx, float waveLiftPx) {
         if (!isVerticalBar())
             return alongCenterPx;
-        float band = Math.max(1f, getWidth() - getPaddingLeft() - getPaddingRight());
-        return barEdge == Edge.LEFT
-            ? getPaddingLeft() + (band * 0.5f) + waveLiftPx
-            : getWidth() - getPaddingRight() - (band * 0.5f) - waveLiftPx;
+        return com.termux.app.launcher.az.AzBarHostGeometry.columnLetterCentrePx(getWidth(),
+            waveLiftPx, barEdge == Edge.LEFT);
     }
 
     /**

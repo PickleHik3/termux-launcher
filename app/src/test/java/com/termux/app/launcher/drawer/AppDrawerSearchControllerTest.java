@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.os.Build;
+import android.view.KeyEvent;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,6 +45,27 @@ public class AppDrawerSearchControllerTest {
         assertTrue(
             search.interceptKeyValue(KeyValue.getKeyByName("selectAll"), false, false, false));
         assertEquals("gr", search.query());
+    }
+
+    /**
+     * With the Android-keyboard search on, a stroke reaching the terminal's key channel was never
+     * the text field's: it is typed into the query, not declined into the shell behind the drawer.
+     */
+    @Test public void theAndroidKeyboardSearchStillTypesAStrokeTheTerminalReceived() {
+        AppDrawerSearchController search = activeSearch(() -> null);
+        search.setTextFieldOwnsInput(true);
+
+        assertTrue(search.handleKeyDown(KeyEvent.KEYCODE_F,
+            new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F)));
+        assertTrue(search.handleKeyDown(KeyEvent.KEYCODE_F,
+            new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_F)));
+        assertTrue(search.handleKeyDown(KeyEvent.KEYCODE_I,
+            new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_I)));
+        assertEquals("fi", search.query());
+
+        assertTrue(search.handleKeyDown(KeyEvent.KEYCODE_DEL,
+            new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)));
+        assertEquals("f", search.query());
     }
 
     private static AppDrawerSearchController activeSearch(ClipboardText clipboardText) {

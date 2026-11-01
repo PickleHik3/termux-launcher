@@ -66,7 +66,13 @@ public final class TaiRuntimeCrashMarker {
         }
         if (value.trim().isEmpty()) return null;
         JSONObject marker = new JSONObject(value);
-        marker.put("suggestedFallback", "Try CPU or a smaller model, then disable AI auto-load if it repeats.");
+        String reason = TaiRuntimeExitReason.lookup(context, marker.optLong("startedAtMs", 0L));
+        if (TaiRuntimeExitReason.LOW_MEMORY.equals(reason)) {
+            marker.put("exitReason", reason);
+            marker.put("suggestedFallback", "Close other apps, or try CPU or a smaller model.");
+        } else {
+            marker.put("suggestedFallback", "Try CPU or a smaller model, then disable AI auto-load if it repeats.");
+        }
         return marker;
     }
 
