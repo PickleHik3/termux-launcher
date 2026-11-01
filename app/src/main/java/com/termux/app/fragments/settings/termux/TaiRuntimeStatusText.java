@@ -211,7 +211,9 @@ final class TaiRuntimeStatusText {
     private static String crashLine(@NonNull JSONObject crash) {
         String model = crash.optString("modelId", "");
         String accelerator = crash.optString("accelerator", "");
-        return "AI runtime crashed while loading " + (model.isEmpty() ? "a model" : model)
+        boolean lowMemory = "low_memory".equals(crash.optString("exitReason", ""));
+        return (lowMemory ? "AI runtime was closed by Android to free memory while loading "
+            : "AI runtime crashed while loading ") + (model.isEmpty() ? "a model" : model)
             + (accelerator.isEmpty() ? "" : " on " + accelerator);
     }
 
