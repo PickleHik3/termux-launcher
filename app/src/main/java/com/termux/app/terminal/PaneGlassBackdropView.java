@@ -421,10 +421,32 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         }
     }
 
+    private boolean mVeilHeld;
+
+    /**
+     * Hold the veil while a gesture moves this slab: a move or resize alone no longer asks the
+     * source for a veil, so the ink is not re-solved per move. A generation move still refreshes
+     * at once. Releasing asks once if the slab moved meanwhile. The glass itself keeps tracking.
+     */
+    public void setVeilHeld(boolean held) {
+        if (mVeilHeld == held) return;
+        mVeilHeld = held;
+        if (!held && mVeilSource != null && mCornerMaskRadiusPx <= 0f
+                && getWidth() > 0 && getHeight() > 0
+                && (veilRectMoved() || veilGenerationMoved())) {
+            refreshVeil();
+            invalidate();
+        }
+    }
+
+    /** True when the veil is due: the generation moved, or the rect did and it is not held. */
+    private boolean veilDue() {
+        return veilGenerationMoved() || (!mVeilHeld && veilRectMoved());
+    }
+
     private void onLayoutImpl(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        if (mVeilSource != null && mCornerMaskRadiusPx <= 0f
-                && (veilRectMoved() || veilGenerationMoved())) {
+        if (mVeilSource != null && mCornerMaskRadiusPx <= 0f && veilDue()) {
             if (refreshVeil()) invalidate();
         }
     }
@@ -821,8 +843,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (width <= 0 || height <= 0) return;
         // Before the frame is drawn, so a pane moved or newly shown draws its first frame with
         // the even-out matrix its rect already has.
-        if (mCornerMaskRadiusPx <= 0f && mVeilSource != null
-                && (veilRectMoved() || veilGenerationMoved())) {
+        if (mCornerMaskRadiusPx <= 0f && mVeilSource != null && veilDue()) {
             refreshVeil();
         }
         int save = canvas.save();
