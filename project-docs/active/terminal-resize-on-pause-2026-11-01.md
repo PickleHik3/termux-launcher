@@ -260,6 +260,20 @@ Paired trace (32 → 21 rows):
   solved them), the haptic 1.4 ms, the hold release 0.7 ms.
 - **Measuring note:** App Deadline Missed per single traced gesture is noisy (4 vs 7 on two
   traces of the same divider drag); compare main-thread section costs, not one-trace counts.
+- **Lift fixed (abb3bdf73, pong, not charging):** a geometry-only tree change only saves the
+  arrangement (`Drawer.geometryChanged` 0.03 ms instead of `Drawer.rebuildSessions` 12 ms), and
+  the divider snaps to the cell grid at each pause (developer's call), so a lift after a pause
+  re-lays out and re-solves nothing: the divider's ACTION_UP is 1.7 ms (was 27 ms;
+  `Pane.lift.snap` 0.14 ms). Veil solves now sit at the pauses (~7 + 2 ms per pause, two panes).
+  10 drags: 142.0 frames, **5.3 janky** per drag (before ADR 0019: 5.8), p50/p90/p99
+  13.3/20.7/29.0 ms (before: 12.6/23.7/32.3). **The gate passes.**
+- **First move after a pause:** with the finger held, pause, then +8 px, +8 px: the bottom pane's
+  edge follows exactly (1146 → 1138 → 1130), no hop back by the snap. The top pane's visible
+  edge sits ~12 px higher while the finger moves than at the pause (gap 18 → ~30 px); likely the
+  held pane drawing its saved grid, not yet compared with an older build. Crop:
+  `~/reports/adr0019-hop/divider-after-pause.png`. Developer to judge on pong.
+- Known edge: at the 18% clamp a second snap can move the split by a cell at the lift
+  (`clampFirstWeight` leaves the weight off the grid); left as is.
 - Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
   `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
   to open a float without changing the developer's Home, so its trace needs a float opened by
