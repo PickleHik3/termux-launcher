@@ -1918,6 +1918,8 @@ public class TerminalPaneController {
         @Nullable private DragResizePause mPause;
         /** The session whose veil the drag holds; null holds every pane's. */
         @Nullable private TerminalSession mVeilOnly;
+        /** Run at each pause, before the hold is released, so the resize lands on its result. */
+        @Nullable private Runnable mOnPause;
         private final Runnable mPauseCheck = this::onPauseCheck;
         /**
          * The panes the read-out names: a divider's two, top/left first; a floating pane's one
@@ -1948,7 +1950,14 @@ public class TerminalPaneController {
         void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
                    @Nullable TerminalView second, boolean pastSlop,
                    @Nullable TerminalSession veilOnly) {
+            start(host, x, y, first, second, pastSlop, veilOnly, null);
+        }
+
+        void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
+                   @Nullable TerminalView second, boolean pastSlop,
+                   @Nullable TerminalSession veilOnly, @Nullable Runnable onPause) {
             end();
+            mOnPause = onPause;
             mVeilOnly = veilOnly;
             mReadFirst = first;
             mReadSecond = second;
@@ -2061,7 +2070,10 @@ public class TerminalPaneController {
         }
 
         private void onPauseCheck() {
-            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) releaseHold();
+            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) {
+                if (mOnPause != null) mOnPause.run();
+                releaseHold();
+            }
         }
 
         private void releaseHold() {
@@ -6597,7 +6609,7 @@ public class TerminalPaneController {
                         mDownY = y;
                         if (mDraggingDivider) {
                             mDividerDrag.start(this, x, y, dividerReadoutPane(true),
-                                dividerReadoutPane(false), true, null);
+                                dividerReadoutPane(false), true, null, this::settleDividerAtPause);
                         }
                         mHandleX = x;
                         mHandleY = y;
@@ -6959,6 +6971,27 @@ public class TerminalPaneController {
             split.weightA = clampFirstWeight(total, candidate);
             split.weightB = total - split.weightA;
             applyWeightsToRenderedLayout(split);
+        }
+
+        /**
+         * The finger paused mid-drag: the split settles on the cell grid under it, in the same
+         * pass as the held panes' resize, and the drag carries on from the settled weights and
+         * the finger's place, so the next move neither jumps nor re-adds the snap.
+         */
+        private void settleDividerAtPause() {
+            if (!mDraggingDivider) return;
+            snapSplitToCellGrid(mXSplit);
+            snapSplitToCellGrid(mYSplit);
+            if (mXSplit != null) {
+                mXWeightA = mXSplit.weightA;
+                mXWeightB = mXSplit.weightB;
+            }
+            if (mYSplit != null) {
+                mYWeightA = mYSplit.weightA;
+                mYWeightB = mYSplit.weightB;
+            }
+            mDownX = mHandleX;
+            mDownY = mHandleY;
         }
 
         private void snapSplitToCellGrid(@Nullable Split split) {
