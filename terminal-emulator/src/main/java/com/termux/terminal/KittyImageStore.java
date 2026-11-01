@@ -18,9 +18,12 @@ import java.util.Map;
  * bitmap arrives. A placement command later in the stream can therefore resolve the image and its
  * dimensions synchronously even though the pixels may still be in flight.</p>
  *
- * <p>The store is bounded in both image count and decoded bytes, and a full store answers
- * {@code ENOSPC} rather than evicting: escape sequences are untrusted input, and a client that
- * wants space back has the delete forms. Animation frames are the one exception — see
+ * <p>The store is bounded in both image count and decoded bytes. A transmission that does not
+ * fit first evicts older images nothing displays — no classic and no virtual placement — oldest
+ * first, as the graphics protocol asks of a full store ({@link #makeRoomForImage}); only when it
+ * still does not fit is it answered {@code ENOSPC}. An image something displays is never evicted:
+ * escape sequences are untrusted input, and one client's uploads must not blank another's picture.
+ * Animation frames have their own budget — see
  * {@link #reclaimFrameBudget} — because they are the only content whose loss degrades an image
  * instead of removing it. Byte accounting uses explicit counts so the bookkeeping is testable on
  * the JVM, where {@link Bitmap} methods return defaults.</p>
@@ -284,6 +287,31 @@ final class KittyImageStore {
         long newTotal = totalBytes - (replaced == null ? 0 : replaced.byteCount) + byteCount;
         int newCount = images.size() + (replaced == null ? 1 : 0);
         return newTotal > MAX_STORED_BYTES || newCount > MAX_STORED_IMAGES;
+    }
+
+    /**
+     * Makes room for a transmission of {@code byteCount} bytes under {@code id}: when it would not
+     * fit, evicts older images that have no placement, classic ({@code probe}) or virtual, oldest
+     * transmission first, until it does. Returns whether it fits now. When even every such image
+     * would not make room, nothing is evicted and the caller refuses with {@code ENOSPC}.
+     */
+    boolean makeRoomForImage(long id, int byteCount, PlacementProbe probe) {
+        if (!wouldExceedLimits(id, byteCount)) return true;
+        Entry replaced = images.get(id);
+        long bytes = totalBytes - (replaced == null ? 0 : replaced.byteCount) + byteCount;
+        int count = images.size() + (replaced == null ? 1 : 0);
+        List<Long> victims = new ArrayList<>();
+        for (Entry entry : images.values()) {
+            if (bytes <= MAX_STORED_BYTES && count <= MAX_STORED_IMAGES) break;
+            if (entry.id == id || !entry.virtualPlacements.isEmpty()
+                || (probe != null && probe.isPlaced(entry.id))) continue;
+            victims.add(entry.id);
+            bytes -= entry.byteCount + (entry.standIn == null ? 0 : entry.standIn.byteCount);
+            count--;
+        }
+        if (bytes > MAX_STORED_BYTES || count > MAX_STORED_IMAGES) return false;
+        for (Long victim : victims) remove(victim);
+        return !wouldExceedLimits(id, byteCount);
     }
 
     /**
