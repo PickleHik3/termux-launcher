@@ -128,7 +128,9 @@ public class PlaceLayoutSharedMigrationTest {
         seedThreeDifferentPlaces();
         PlaceLayoutStore store = store();
         assertEquals(6, store.widgetColumns(PlaceOrientation.PORTRAIT));
-        assertEquals(3, store.widgetRows(PlaceOrientation.LANDSCAPE));
+        // One grid for both orientations (ADR 0020 §12): landscape reads the portrait count.
+        assertEquals(store.widgetRows(PlaceOrientation.PORTRAIT),
+            store.widgetRows(PlaceOrientation.LANDSCAPE));
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
     }
 

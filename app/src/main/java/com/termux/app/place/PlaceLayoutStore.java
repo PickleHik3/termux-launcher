@@ -1855,8 +1855,10 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     private String gridKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        seedIfNeeded(LayoutVariant.HOME, orientation);
-        return layoutKey(LayoutVariant.HOME, orientation, key);
+        // One grid for both orientations (ADR 0020 §12): the portrait count, read and written
+        // whichever way the screen stands; the landscape copy is no longer read.
+        seedIfNeeded(LayoutVariant.HOME, PlaceOrientation.PORTRAIT);
+        return layoutKey(LayoutVariant.HOME, PlaceOrientation.PORTRAIT, key);
     }
 
     private int readGridInt(@NonNull PlaceOrientation orientation, @NonNull String key,

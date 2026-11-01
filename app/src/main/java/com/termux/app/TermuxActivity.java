@@ -15343,18 +15343,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         int keyboardRows = store != null && store.isHomeKeyboardAlwaysOn()
             ? store.homeKeyboardRows() : 0;
+        // One grid and one arrangement for both orientations (ADR 0020 §12, spec §8b): the
+        // portrait grid, and the portrait record set whichever way the screen stands, so a turn
+        // moves no widget and shelves nothing; the landscape copies are no longer picked up.
+        int wantedRows = store != null ? store.widgetRows(PlaceOrientation.PORTRAIT)
+            : layout.widgetRows;
+        int wantedColumns = store != null ? store.widgetColumns(PlaceOrientation.PORTRAIT)
+            : layout.widgetColumns;
         boolean moved = mWidgetHostController.repository().applyOrientation(
-            currentPlaceOrientation().storageValue(), layout.widgetRows - keyboardRows,
-            layout.widgetColumns);
+            PlaceOrientation.PORTRAIT.storageValue(), wantedRows - keyboardRows, wantedColumns);
         // The stored count is the user's; the wall holds what fits of it, and the pane works that
         // out again whenever the wall changes size. Home's Margin is the grid's rim, so it is
         // part of what fits.
         if (mWidgetPaneController != null) {
-            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns,
+            mWidgetPaneController.applyWantedGrid(wantedRows, wantedColumns,
                 keyboardRows, homeMarginDp());
         } else {
-            mWidgetHostController.applyGrid(layout.widgetRows - keyboardRows,
-                layout.widgetColumns);
+            mWidgetHostController.applyGrid(wantedRows - keyboardRows, wantedColumns);
         }
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
