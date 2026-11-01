@@ -145,9 +145,12 @@ final class LayoutsMigration {
             LayoutFields.EMPTY, LayoutFields.EMPTY);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             Map<String, Object> fields = new LinkedHashMap<>();
+            // A Terminal-minimal never used in this orientation stays empty there, so its seed
+            // (the Terminal's layout with everything put away) runs on first read, as it did.
+            boolean fallBack = fallback != null && holdsAny(sources, orientation);
             for (String field : LayoutsJson.ORIENTATION_FIELDS) {
                 Object value = first(sources, orientation, field);
-                if (value == null && fallback != null)
+                if (value == null && fallBack)
                     value = fallback.orientation(orientation).get(field);
                 if (value != null) fields.put(field, value);
             }
@@ -187,6 +190,14 @@ final class LayoutsMigration {
                 return java.util.Arrays.copyOf(sources, i + 1);
         }
         return sources;
+    }
+
+    /** Whether any source holds a field of its own in {@code orientation}. */
+    private boolean holdsAny(@NonNull LayoutVariant[] sources, @NonNull PlaceOrientation orientation) {
+        for (String field : LayoutsJson.ORIENTATION_FIELDS) {
+            if (first(sources, orientation, field) != null) return true;
+        }
+        return false;
     }
 
     private Object first(@NonNull LayoutVariant[] sources, @Nullable PlaceOrientation orientation,

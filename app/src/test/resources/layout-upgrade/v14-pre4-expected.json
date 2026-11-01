@@ -22,9 +22,6 @@
     },
     "portrait": {
       "status_bar": "hidden"
-    },
-    "landscape": {
-      "status_bar": "bottom"
     }
   },
   "display": {
@@ -42,6 +39,7 @@
   },
   "absent": [
     "terminal.portrait.widget_columns",
-    "display.portrait.widget_columns"
+    "display.portrait.widget_columns",
+    "terminal_minimal.landscape.status_bar"
   ]
 }

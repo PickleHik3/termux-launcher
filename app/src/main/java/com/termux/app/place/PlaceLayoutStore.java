@@ -1862,6 +1862,9 @@ public final class PlaceLayoutStore {
         if (variant.isPage() && variant.isHomeKind() && holdsAnyKey(LayoutVariant.HOME, orientation))
             return;
         for (String key : ARRANGEMENT_KEYS) {
+            // With the documents in use the widget grid is Home's and the sizes are shared: a
+            // value there is no sign the minimal layout was ever used, so it must not skip the seed.
+            if (documentsInUse() && (isGridKey(key) || isLinkedKey(key))) continue;
             if (mStore.contains(layoutKey(variant, orientation, key))) return;
         }
         Map<String, ?> all = mStore.getAll();

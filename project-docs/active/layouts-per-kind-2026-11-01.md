@@ -125,11 +125,15 @@ brought to the v16 flat shape. Step 17 reads the flat keys and writes the five d
 |---|---|---|---|
 | `home` | the `home.` value | the Start-in Home page's page layout | NORMAL, then shipped default |
 | `terminal` | the Terminal page's own page layout | NORMAL | shipped default |
-| `terminal_minimal` | the `minimal.` value | the `terminal` result | shipped default |
+| `terminal_minimal` | the `minimal.` value | the `terminal` result, only in an orientation where `minimal.` holds a value | left empty: the seed (the Terminal's layout with everything put away) runs on first read, as before |
 | `display` | a copy of the `terminal` result | | |
 | `sizes` | NORMAL (linked keys) | | shipped default |
 
-Notes. "Start-in Home page" is the page `Start in` names; if it is the Terminal, use the first
+Notes. The rule is the developer's "nothing looks different after the upgrade": a Terminal-minimal
+never used in an orientation stays empty there, so minimal mode still puts every element away.
+The Search field and the drawer tile come only from sources up to the one that holds the dock
+design (a layout on its own design derived them from it). Home's kind visibility
+(`place.dress.home.*`) folds into Home's document. "Start-in Home page" is the page `Start in` names; if it is the Terminal, use the first
 Home page. Widget grid keys come from the Home scope only. `status_compact` folds the same
 way. Layout-wide values follow the same order per kind.
 

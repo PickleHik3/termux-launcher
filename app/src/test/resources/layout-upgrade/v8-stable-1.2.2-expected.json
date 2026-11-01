@@ -40,9 +40,6 @@
   "terminal_minimal": {
     "wide": {
       "dock_design": "wall_strip"
-    },
-    "landscape": {
-      "keyboard_mode": "resize"
     }
   },
   "home": {
@@ -55,7 +52,8 @@
   },
   "absent": [
     "terminal.portrait.keyboard_mode",
-    "display.portrait.keyboard_mode"
+    "display.portrait.keyboard_mode",
+    "terminal_minimal.landscape.keyboard_mode"
   ],
   "prefs": {
     "place.minimal": true

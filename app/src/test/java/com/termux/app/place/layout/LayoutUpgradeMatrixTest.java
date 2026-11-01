@@ -72,6 +72,35 @@ public class LayoutUpgradeMatrixTest {
 
     @Test public void v2PageLooks() throws Exception { check("v16-page-looks"); }
 
+    /** 1.3.0-pre.4 with the shared dock on and Home's own layout's dock off: Home keeps it off. */
+    @Test public void pre4HomeDockOff() throws Exception {
+        check("v14-home-dock-off");
+        com.termux.app.place.PlaceLayoutStore store = new com.termux.app.place.PlaceLayoutStore(
+            new com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences(app, prefs, null));
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            assertFalse(orientation + ": Home shows no apps row",
+                store.kindShows(com.termux.app.wall.WallPages.PageKind.HOME, orientation,
+                    com.termux.app.place.Element.APPS));
+            assertTrue(orientation + ": the Terminal keeps its dock",
+                store.kindShows(com.termux.app.wall.WallPages.PageKind.TERMINAL, orientation,
+                    com.termux.app.place.Element.APPS));
+        }
+    }
+
+    /** An install that never used minimal mode: minimal still puts every element away. */
+    @Test public void v2WithoutMinimalKeys() throws Exception {
+        check("v16-no-minimal");
+        com.termux.app.place.PlaceLayoutStore store = new com.termux.app.place.PlaceLayoutStore(
+            new com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences(app, prefs, null));
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            com.termux.app.place.PlaceLayout minimal = store.resolve(orientation,
+                com.termux.app.place.LayoutVariant.MINIMAL);
+            for (com.termux.app.place.Element element : com.termux.app.place.Element.values())
+                assertTrue(orientation + " " + element + " is put away in minimal",
+                    minimal.slot(element).hidden);
+        }
+    }
+
     /** Step 17 reads the flat keys and leaves every one of them as it was (ADR 0020 §8). */
     @Test
     public void theFlatKeysAreLeftAlone() throws Exception {

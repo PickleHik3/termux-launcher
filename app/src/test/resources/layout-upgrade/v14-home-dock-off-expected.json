@@ -1,0 +1,16 @@
+{
+  "home": {
+    "portrait": {
+      "dress.apps_row": false
+    },
+    "landscape": {
+      "dress.apps_row": false
+    }
+  },
+  "terminal": {
+    "portrait": {
+      "apps_row": "bottom",
+      "dress.apps_row": true
+    }
+  }
+}
