@@ -10927,6 +10927,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
+        com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
+        mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
@@ -15320,6 +15322,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
+        com.termux.app.place.layout.LayoutStore.shared(this).addListener(mLayoutsListener);
         bindShownPages(mPlaceLayoutStore);
         // The sizes are the layout's the stack is dressed for: the Home layout's on a Home page,
         // and mid-slide across the seam the half's whose rows the stack stands (SeamDress).
@@ -17700,7 +17703,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             - mLastDisplayCutoutInsetRight);
     }
 
-    /** The pinned slots a page of the row holds: the preference, or the width rule when unset. */
+    /**
+     * A layouts write from outside the editor (Settings, {@code launcherctl layout set}) runs the
+     * dock and geometry pass the editor's preview runs, once per frame however many documents
+     * changed, on the main thread. The editor's own writes are left to its preview, which
+     * already runs that pass per frame while it is open.
+     */
+    private final com.termux.app.place.layout.LayoutStore.Listener mLayoutsListener =
+        layouts -> scheduleLayoutsRelayout();
+    private final android.os.Handler mLayoutsRelayoutHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final java.util.concurrent.atomic.AtomicBoolean mLayoutsRelayoutPosted =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    private final Runnable mLayoutsRelayout = () -> {
+        mLayoutsRelayoutPosted.set(false);
+        if (isFinishing() || isDestroyed() || mSurfaceEditor.isOpen()) return;
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight(true);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+    };
+
+    /** Posts {@link #mLayoutsRelayout} unless one is already waiting. */
+    private void scheduleLayoutsRelayout() {
+        if (mLayoutsRelayoutPosted.compareAndSet(false, true))
+            mLayoutsRelayoutHandler.post(mLayoutsRelayout);
+    }
+
     /** What the last {@link #drawnIconSize} measured the cap for, so a frame measures nothing. */
     private int mIconCapCount = -1;
     private int mIconCapWidthDp = -1;
@@ -17761,6 +17789,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return drawn;
     }
 
+    /** The pinned slots a page of the row holds: the preference, or the width rule when unset. */
     private int dockSlotCount(@NonNull DisplayMetrics metrics) {
         int count = mPreferences == null ? 0 : mPreferences.getAppLauncherButtonCount();
         return count > 0 ? count : calculateSuggestionBarMaxButtons(metrics);
