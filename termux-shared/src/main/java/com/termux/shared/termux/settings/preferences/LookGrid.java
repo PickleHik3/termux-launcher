@@ -470,18 +470,10 @@ public final class LookGrid {
     @NonNull
     private Resolved resolveAt(@NonNull Property property, @Nullable Element element, int page,
                                @Nullable Kind kind) {
-        if (!property.perElement) {
-            element = null;
-            kind = null;
-        }
-        if (element != null && page >= 0) {
-            Resolved found = read(key(property, element, page), property, Cell.ELEMENT_ON_PAGE);
-            if (found != null) return found;
-        }
-        if (page >= 0) {
-            Resolved found = read(key(property, null, page), property, Cell.PAGE);
-            if (found != null) return found;
-        }
+        // The page tier is retired (ADR 0020 §2): a page reads its kind's cells, which step 17
+        // folded the Start-in page's into; other pages' @<page> cells are left unread. A property
+        // that is not per element still reads its kind's cell, where its page value went.
+        if (!property.perElement) element = null;
         if (element != null && kind != null) {
             Resolved found = read(key(property, element, kind), property, Cell.ELEMENT_ON_KIND);
             if (found != null) return found;
