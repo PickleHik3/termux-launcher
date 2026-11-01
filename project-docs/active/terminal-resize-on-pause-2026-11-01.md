@@ -245,6 +245,21 @@ Paired trace (32 → 21 rows):
 - **Floats are not held yet:** float move and corner drag still run `Ink.terminalPane` ~2x
   per frame from `PaneGlassBackdropView.onDraw` with a fresh rect each call; the divider hold
   works. Cause unknown from reading; a `TLVeil` diagnostic log is next.
+- **Floats fixed (a60acdf3e):** the `TLVeil` log showed `ChromeInk` keyed pane answers by
+  rect and `pruneResized` dropped any answer a new rect overlapped by half: a float inside a
+  tiled pane and the pane itself evicted each other on every frame either redrew (126 fresh
+  measures of the unchanged tiled rect in one gesture). Answers are now keyed by the asking
+  slab, parked while detached, forgotten on teardown. Pong: `Ink.terminalPane` per float
+  corner drag 123 → 3, per float move 136 → 2; the window layout per corner step 0.9 ms; float
+  move frames 1.6 ms on the main thread. The late frames left are render/GPU side (moving
+  glass re-blurs its region).
+- **The lift, named (27 ms in the divider's up handler):** `Drawer.rebuildSessions` 12.0 ms
+  (`onTreesChanged` runs the whole drawer/wall/window-bar/overview funnel for a resize; only the
+  arrangement autosave needs it; fix in flight), the snap re-layout 12.1 ms (snapping to the
+  cell grid moves both panes a few px, so both veils are solved again after the pause already
+  solved them), the haptic 1.4 ms, the hold release 0.7 ms.
+- **Measuring note:** App Deadline Missed per single traced gesture is noisy (4 vs 7 on two
+  traces of the same divider drag); compare main-thread section costs, not one-trace counts.
 - Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
   `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
   to open a float without changing the developer's Home, so its trace needs a float opened by
