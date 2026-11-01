@@ -73,9 +73,12 @@ the subcard (the line already carries drag and resize).
 2. The subcard: Terminal card row, Elements shortcut, the preview strip, the chooser (reused for
    border, focus and glow colour), the hex field, Reset, Undo/Done/dirty integration.
 
-## Verification owed
+## Verification
 
-- pong: a crimson custom border, Primary focus, steady glow on, single pane and a split, light and
-  dark theme, scheme chrome on and off; Reset restores today's look.
-- Emulator: the subcard at font scale 1.3 and 360 × 640 (no clipped chooser, hex field usable).
-- The reporter's device (Solana Saga) after pre.3.
+- Emulator (2026-11-01, emu2, 9a8e5683c): the subcard, the label tap, the back route, the Custom
+  colour dialog with the keyboard, garbage rejection, Glow Steady on the live float, Undo via
+  Unsaved changes › Discard, and the 360 × 640 / font 1.3 layout (choosers stack vertically, nothing
+  clipped) were seen by the main session; screenshots in its scratchpad, items recorded in
+  `project-docs/device-checks.md`.
+- Owed: pong (single pane and split, light and dark, scheme chrome on and off, in-app keyboard
+  back after the dialog, Reset), Docked edges, and the reporter's Saga after pre.3.
