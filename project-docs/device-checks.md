@@ -26,7 +26,10 @@ dropped; what follows is what still owes a look.
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
   Release past half: no blank frame, no flash, the arriving window is in front with its prompt
-  where it was; the motion log shows no `pty-resize` for either window. Release short: both
+  where it was; the motion log shows no `pty-resize` at the landing. Open a window with the
+  keyboard down, go to another, raise the keyboard, then drag toward the first: its one
+  `pty-resize` comes as the drag begins, its rows fit its pane as it slides in (text the same
+  size as the current window's), and none comes at the landing. Release short: both
   slide back and nothing changes. Repeat right, repeat with a split window and a Stacked window
   as the neighbour, and with the keyboard up. A chip tap and a keyboard shortcut still switch at
   once. Settings › Battery and performance › Live windows while swiping off: the swipe shows the

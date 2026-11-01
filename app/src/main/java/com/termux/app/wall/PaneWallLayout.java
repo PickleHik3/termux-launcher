@@ -631,6 +631,16 @@ public final class PaneWallLayout extends ViewGroup {
     /** The nudge under way began inside an inner step, so the neighbours ride beside it. */
     private boolean mNudgeCarriesNeighbours;
 
+    /**
+     * Whether this pass measures and lays out {@code child}: a page on screen, and a live
+     * neighbour out beside the Workspace page even while it is off screen (INVISIBLE), so both
+     * neighbours take the host's size as a drag begins rather than one of them mid-way.
+     */
+    private boolean isLaidOutNow(@NonNull View child) {
+        int visibility = child.getVisibility();
+        return visibility == VISIBLE || (visibility == INVISIBLE && isInnerNeighbour(child));
+    }
+
     private boolean isInnerNeighbour(@NonNull View child) {
         return child == mInnerNeighbours[0] || child == mInnerNeighbours[1];
     }
@@ -3610,7 +3620,7 @@ public final class PaneWallLayout extends ViewGroup {
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
-            if (child.getVisibility() != VISIBLE) continue;
+            if (!isLaidOutNow(child)) continue;
             int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
                 - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
                 - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
@@ -3633,7 +3643,7 @@ public final class PaneWallLayout extends ViewGroup {
         MarginLayoutParams margins = pageMargins();
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
-            if (child.getVisibility() != VISIBLE) continue;
+            if (!isLaidOutNow(child)) continue;
             int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin);
             int top = getPaddingTop() + pageTopInsetPx(child)
                 + frameMarginPx(child, margins.topMargin);

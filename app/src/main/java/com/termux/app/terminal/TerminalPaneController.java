@@ -1504,20 +1504,20 @@ public class TerminalPaneController {
         if (mNeighbourWindows[other] == w) clearNeighbour(other);
         if (mNeighbourWindows[slot] != null && mNeighbourWindows[slot] != w) clearNeighbour(slot);
         Node node = shownTreeOf(w);
-        // Held before anything is laid out: a neighbour's shells never hear its layout. The one
-        // size they are owed is sent when the window is in front (showWindow's re-measure).
-        for (Leaf leaf : leavesOf(node)) {
-            TerminalView view = mPaneViews.get(leaf.session);
-            if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
-        }
         View existing = container.getChildCount() > 0 ? container.getChildAt(0) : null;
         View built = reconcile(existing, node);
         // The split containers this registered are not the host's; the host's dividers and
         // hit tests read that map.
         forgetSplitLayouts(node);
+        // A neighbour's panes follow the size its container is laid out at, as the window in
+        // front does: the container is GONE at rest, so nothing is laid out or sent then, and the
+        // wall lays it out at the host's size as a drag begins. A window that missed a keyboard
+        // or chrome change while away is resized then, before it slides on screen, so its grid
+        // already fits when it is promoted. Under a host resize every pane is held; its end
+        // resumes these with the panes on screen (setAllPaneSizeUpdatesPaused).
         for (Leaf leaf : leavesOf(node)) {
             TerminalView view = mPaneViews.get(leaf.session);
-            if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
+            if (view != null && mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true, false);
             PaneContentFrame frame = mPaneFrames.get(leaf.session);
             if (frame != null) frame.setTravelBottomInsetPx(0);
         }
@@ -1527,6 +1527,7 @@ public class TerminalPaneController {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
         mNeighbourWindows[slot] = w;
+        dressNeighbourFrames(w, container);
     }
 
     private void forgetSplitLayouts(@NonNull Node node) {
@@ -1558,14 +1559,16 @@ public class TerminalPaneController {
         }
     }
 
-    /** Whether {@code view} shows a pane of a window kept ready beside the one in front. */
-    private boolean isNeighbourPaneView(@NonNull TerminalView view) {
-        for (Window w : mNeighbourWindows) {
+    /** The container holding {@code view}'s pane, when it is a live neighbour's; else null. */
+    @Nullable
+    private FrameLayout neighbourContainerOf(@NonNull TerminalView view) {
+        for (int slot = 0; slot < 2; slot++) {
+            Window w = mNeighbourWindows[slot];
             if (w == null) continue;
             for (Leaf leaf : leavesOf(w.root))
-                if (mPaneViews.get(leaf.session) == view) return true;
+                if (mPaneViews.get(leaf.session) == view) return mNeighbourContainers[slot];
         }
-        return false;
+        return null;
     }
 
     /** Whether {@code frame} sits in a neighbour container. */
@@ -1602,10 +1605,6 @@ public class TerminalPaneController {
         if (old != null) {
             mHostView.removeView(old);
             if (opposite != null && leaving != null && !leaving.isHomeFloat() && leaving.root != null) {
-                for (Leaf leaf : leavesOf(leaving.root)) {
-                    TerminalView view = mPaneViews.get(leaf.session);
-                    if (view != null) view.setTerminalSizeUpdatesPaused(true, false);
-                }
                 opposite.addView(old, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 mNeighbourWindows[other] = leaving;
@@ -1613,8 +1612,9 @@ public class TerminalPaneController {
         }
         mHostView.addView(tree, 0, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        // In front now: its panes take size updates again, without the held one — they stood at
-        // this size, and showWindow's re-measure sends whatever is truly owed.
+        // In front now. Its panes were laid out at the host's size in their container and already
+        // sent it, so showWindow's re-measure finds the grid fitting; a held size (none outside a
+        // host resize) is dropped rather than sent at the landing.
         if (mHostSurfaceResizeDepth == 0) {
             for (Leaf leaf : leavesOf(arriving.root)) {
                 TerminalView view = mPaneViews.get(leaf.session);
@@ -5907,33 +5907,8 @@ public class TerminalPaneController {
             // attention takes the frame's own border instead, so the glow can show.
             boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
-            // Otherwise the pane's shape, and with it the clearance the terminal is laid out
-            // inside. One radius for every pane, whatever is edging it — the glass slab, the
-            // float's card, the border's own arc — since all of them round the same corners over
-            // the same cells. Only glass clips here: a float clips on its own wrapper and a
-            // stroke does not clip at all. The frame also learns how wide the border it is about
-            // to wear is, so the band it fills behind the grid stops at the border's inner edge.
-            frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
-            frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
-            frame.setBezelFill(bezelFill());
-            if (bare) {
-                PaneRim gone = mBorderStates.remove(paneSession);
-                if (gone != null) gone.clear(frame);
-                else frame.setForeground(null);
-                continue;
-            }
-            // The decision is PaneBorderStyle's; this only renders it. A lone pane and every
-            // unfocused pane wear the shared rim, the focused pane of a split the Material active
-            // colour, and a pane asking for the user the attention glow.
-            PaneRim rim = mBorderStates.get(paneSession);
-            if (rim == null) rim = new PaneRim();
-            if (rim.apply(frame, glassShape, paneRadiusPx(), border, mSurfaceStyle)) {
-                // A rim built mid-slide (a split made while the wall moves) fades like the rest.
-                rim.setTravelAlpha(mRimTravelAlpha);
-                mBorderStates.put(paneSession, rim);
-            } else {
-                mBorderStates.remove(paneSession);
-            }
+            dressPaneFrame(frame, paneSession, border, bare, glassShape, density);
+            if (bare) continue;
             // A float's titlebar wears the border its pane wears: the focused float's strip
             // carries the active rim with it.
             if (floating) {
@@ -5950,6 +5925,77 @@ public class TerminalPaneController {
         // The resize chevrons dim with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
         updateHomeFloatBorders();
+    }
+
+    /**
+     * One tiled pane's shape and rim, as {@link PaneBorderStyle} decided them. {@code bare}: a
+     * lone plain pane wearing the shared rim carries no border and no clip of its own — the
+     * terminal host draws the same rim around this one frame and rounds the corners, and pads the
+     * arc's clearance itself (TermuxActivity.applyPaneHostCornerPadding). So the frame is told it
+     * is square; handing it the radius as well made the terminal pay that clearance twice.
+     */
+    private void dressPaneFrame(@NonNull PaneContentFrame frame, @NonNull TerminalSession session,
+                                @NonNull PaneBorderStyle.Decision border, boolean bare,
+                                boolean glassShape, float density) {
+        // Otherwise the pane's shape, and with it the clearance the terminal is laid out
+        // inside. One radius for every pane, whatever is edging it — the glass slab, the
+        // float's card, the border's own arc — since all of them round the same corners over
+        // the same cells. Only glass clips here: a float clips on its own wrapper and a
+        // stroke does not clip at all. The frame also learns how wide the border it is about
+        // to wear is, so the band it fills behind the grid stops at the border's inner edge.
+        frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
+        frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
+        frame.setBezelFill(bezelFill());
+        if (bare) {
+            PaneRim gone = mBorderStates.remove(session);
+            if (gone != null) gone.clear(frame);
+            else frame.setForeground(null);
+            return;
+        }
+        // The decision is PaneBorderStyle's; this only renders it. A lone pane and every
+        // unfocused pane wear the shared rim, the focused pane of a split the Material active
+        // colour, and a pane asking for the user the attention glow.
+        PaneRim rim = mBorderStates.get(session);
+        if (rim == null) rim = new PaneRim();
+        if (rim.apply(frame, glassShape, paneRadiusPx(), border, mSurfaceStyle)) {
+            // A rim built mid-slide (a split made while the wall moves) fades like the rest.
+            rim.setTravelAlpha(mRimTravelAlpha);
+            mBorderStates.put(session, rim);
+        } else {
+            mBorderStates.remove(session);
+        }
+    }
+
+    /**
+     * A live neighbour's panes dressed as {@link #updateActiveBordersLocked} dresses them when
+     * that window is in front: the same shape (and with it the same clearance the terminal is
+     * laid out inside), the same rim and the same glass clip, so the window that slides in is the
+     * window that lands. Its container takes the host's padding for the same reason.
+     */
+    private void dressNeighbourFrames(@NonNull Window w, @NonNull FrameLayout container) {
+        if (container.getPaddingLeft() != mHostView.getPaddingLeft()
+            || container.getPaddingTop() != mHostView.getPaddingTop()
+            || container.getPaddingRight() != mHostView.getPaddingRight()
+            || container.getPaddingBottom() != mHostView.getPaddingBottom()) {
+            container.setPadding(mHostView.getPaddingLeft(), mHostView.getPaddingTop(),
+                mHostView.getPaddingRight(), mHostView.getPaddingBottom());
+        }
+        boolean stacked = LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null;
+        List<Leaf> tiled = leavesOf(w.root);
+        boolean split = tiled.size() > 1;
+        int paneCount = tiled.size() + w.floating.size();
+        PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
+        float density = mHostView.getResources().getDisplayMetrics().density;
+        boolean glassShape = paneGlassActive();
+        for (Leaf leaf : stacked ? java.util.Collections.singletonList(w.active) : tiled) {
+            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (frame == null) continue;
+            PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount, leaf == w.active,
+                mPaneAttention.isSet(leaf.session.getPid()), palette);
+            boolean bare = !split && !stacked && !glassShape
+                && border.kind == PaneBorderStyle.Kind.RIM;
+            dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
+        }
     }
 
     @Nullable
@@ -6143,8 +6189,17 @@ public class TerminalPaneController {
         // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
-            // A live neighbour stays held: its size is only ever sent once it is in front.
-            if (isNeighbourPaneView(view)) continue;
+            // A live neighbour laid out beside the host is owed its size like a pane on screen; a
+            // put-away one (GONE, not laid out) holds the size it had, as a hidden window does.
+            FrameLayout neighbour = neighbourContainerOf(view);
+            if (neighbour != null) {
+                if (neighbour.getVisibility() != View.GONE) {
+                    view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
+                } else {
+                    view.resumeTerminalSizeUpdatesDiscardingPending();
+                }
+                continue;
+            }
             if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
