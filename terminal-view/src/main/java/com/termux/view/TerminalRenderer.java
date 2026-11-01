@@ -909,10 +909,6 @@ public final class TerminalRenderer {
      */
     public void setContrastBackdrop(int color) {
         final int backdrop = (color >>> 24) == 0 ? 0 : color | 0xFF000000;
-        android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
-            + " backdrop " + String.format("#%08X", mContrastBackdrop) + " -> "
-            + String.format("#%08X", backdrop) + " invalidate=" + (mContrastBackdrop != backdrop)
-            + " view=" + Integer.toHexString(System.identityHashCode(this)));
         if (mContrastBackdrop == backdrop) return;
         mContrastBackdrop = backdrop;
         Trace.beginSection("Terminal.contrastInvalidate");
@@ -931,9 +927,6 @@ public final class TerminalRenderer {
      */
     public void setContrastFloor(double floor) {
         final double text = floor > 0d ? floor : ContrastFloor.TEXT;
-        android.util.Log.i("TLGround", "t=" + android.os.SystemClock.uptimeMillis()
-            + " floor " + mContrastFloor + " -> " + text + " invalidate=" + (mContrastFloor != text)
-            + " view=" + Integer.toHexString(System.identityHashCode(this)));
         if (mContrastFloor == text) return;
         mContrastFloor = text;
         mContrastMemo.setTextFloor(text);
