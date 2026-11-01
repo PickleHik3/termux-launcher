@@ -43,6 +43,15 @@ Keyboard height, keyboard chin, dock height and strip height live in one `sizes`
 orientation, shared by every kind. A page change never resizes them. This is what `LINKED_KEYS`
 did through NORMAL; it is now the plain shape of the data.
 
+**One icon size (amended 2026-11-01).** One global icon size, chosen from four steps (S, M, L,
+XL), one value for both orientations, drives the Home grid's icons and the dock's icons. Every
+dock design, docked or floating, draws its icons at that size: a design changes the frame, the
+glass, the spacing and the wall strip's extra row, never the icon. The dock's height follows from
+the icon size and the design's padding, so it is no longer stored. Today's free dock height
+(0.4–3.0, two icon curves, the beads' fit-to-slot) and the Home icon size (48/54/60 dp) fold into
+the nearest step at migration. The drawer, folders, the A–Z strip and the status bar keep their
+own fixed sizes.
+
 ## 4. Display gets its own layout
 
 The Display layout starts as a copy of the Terminal's at migration, so nothing changes on the

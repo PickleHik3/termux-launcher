@@ -217,6 +217,30 @@ migration code.
 - **Redress.** `Layouts` is immutable, so a reader that caches it past a redress shows stale
   chrome. Readers take `current()` per pass (ADR 0018 §2).
 
+## 8a. One icon size (step 5, added 2026-11-01)
+
+Developer's decisions: one global icon size for the Home grid and every dock design, docked or
+floating; four steps S, M, L, XL; one value for both orientations; built on this branch after
+`launcherctl layout`.
+
+- Today (scout map at v2-wave1): dock height = `dock_height` scale (0.4–3.0, default 2.18) ×
+  37.5 dp (DockLayoutPolicy.BASE_TOOLBAR_HEIGHT_DP); icon scale from two fitted curves
+  (Default and Capsule, DockLayoutPolicy.java:64-71), fill ratio in
+  AccessoryStackLayoutPolicy:111-113; beads fit icons to slot width (LensBeadGeometry,
+  MIN_FIT_SCALE 1.1); Home grid icons `app_launcher_home_icon_scale` 48/54/60 dp
+  (HomeIconSize.java:17-20); presets {1.72, 1.95, 2.18, 2.45} exist (DockLayoutPolicy.java:31).
+- Target: `sizes` holds `icon_size` (S|M|L|XL) once. Each step maps to one icon dp (pick the four
+  from today's Home 48/54/60 and the dock's default so M looks like today's default dock); the
+  dock's height = icon dp + the design's own padding/frame (+ wall strip's row). Floating and
+  docked share one curve; beads stop fitting to slots. `dock_height` stops being stored.
+- Migration (part of step 17): nearest step to the user's Home icon size and dock height (Home
+  icon size wins when they disagree); test fixtures assert the step for the phone fixture
+  (dock_height 2.994 portrait / 2.18 landscape).
+- Editor: the dock height slider and the Home icon size row become one "Icon size" S/M/L/XL
+  control; settings pages are fragile, change only that row.
+- Acceptance: every design at each step draws the same icon px (unit test over DockSurfaceSpec
+  designs × styles); on pong, cycling designs keeps icon size; Home grid icons match the dock.
+
 ## 9. Open points for the developer
 
 1. **Downgrade guard (settled).** `dev`'s `PlaceLayoutStore.migrateIfNeeded` (dev:895-898)
