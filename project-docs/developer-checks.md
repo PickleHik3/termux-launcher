@@ -315,3 +315,11 @@ cut the developer works this list or accepts what is left (recorded as in
 - 2026-10-31 · a04acf498 · the terminal More sheet and Home's long-press card both wrap long labels onto two lines at pong's width ("Command palette", "Share transcript", "Kill process (8944)", "Launcher settings"): keep, shorten the labels, or drop to one column · pong, taste; shots `02-terminal-more-sheet.png`, `20-home-longpress-card.png`.
 - 2026-10-31 · 0f2cf4a04 · a sound longer than the 3 s grace (the checker's 5 s clip) ducks the music for 3 s and then pauses it, and VLC does not resume afterwards (its own choice on a permanent loss). Is 3 s the right grace, and should a short-sound stream ever be promoted? · pong, policy.
 - 2026-10-31 · f2b4cc385 · Home → Terminal swipe: Home's dock rides out with its page (gone at 0.43 s), the band under the arriving terminal stays empty until the landing (0.89 s), then the strip row and keyboard rise over about 0.16 s. One resize, invariants clean (pong, `~/reports/device-checks-2026-10-31/29-swipe2-dock-frames.png`). Does the half-second empty band before the rise read as a pause? If so, the rise could start on the settle's last stretch instead of at the landing. Also: a swipe turned back before landing, and Terminal → Home, by hand · pong.
+
+## AI low-memory retry (2026-11-01)
+- 2026-11-01 · 1ac2f4ef6 (#191 follow-up) · a GPU load that Android's low-memory killer ends
+  (503 `tai_runtime_crashed`, `exitReason: "low_memory"`) is tried again by the next automatic
+  load five minutes later at the full window, with `memoryBudget.retriedAfterLowMemory: true`;
+  within the five minutes an automatic load reports the GPU skipped for memory and loads on CPU.
+  Only a real kill shows it: the Saga reporter on #191 is the device, or pong with memory filled
+  by other apps during a cold GPU load · pong or the reporter's reply on #191.

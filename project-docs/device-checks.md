@@ -794,3 +794,12 @@ Agent
 - 2026-10-31 · editor wallpaper page rise · Wallpaper in the editor bar: the page rises from the bottom over the card; Back: it falls and the card is at the detent it had (watch for a flash at the end of the fall) · not run on a device.
 - 2026-10-31 · editor reset motion · Long-press a slider row's name, Reset this row: the slider springs to its value with a small overshoot and the dot fades out and back (or stays off); Reset card: the rows move one after another, quickly, top to bottom · not run on a device.
 - 2026-10-31 · Appearance ring and bar drop · Open the editor: the bar fades in dropping into place; tap Appearance: the ring grows to stand around the whole frame, 4dp out with round corners, not clipped at the frame's edges · not run on a device.
+
+## AI memory floor (2026-11-01)
+- 2026-11-01 · 1ac2f4ef6 (#191 follow-up) · on pong (11.5 GB MemTotal), with the launcher in
+  front, `tai status` then `POST /v1/ai/runtime/load` of the usual E4B model on `gpu`: the
+  response's `memoryBudget.reserveBytes` reads about 1,970,000,000 (a sixth of MemTotal, up from
+  805,306,368) and `neededFreeBytes` = `estimatedBytes` + that; the load still fits when
+  `availableBytes` clears it, and a refusal shows those three numbers in agreement (no
+  `fits:false` while available exceeds needed). Record the three numbers either way · pong, go-ahead,
+  curl from a shell on the phone with `~/.launcherctl/endpoint` and `token`.
