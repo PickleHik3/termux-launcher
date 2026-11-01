@@ -72,6 +72,12 @@ public class LayoutUpgradeMatrixTest {
 
     @Test public void v2PageLooks() throws Exception { check("v16-page-looks"); }
 
+    /** The developer's phone: a dock at 2.994 (about a 55 dp icon) lands on L 54 (spec §8a). */
+    @Test public void v2PhoneIconSize() throws Exception { check("v16-phone-icon-size"); }
+
+    /** Home's own icon size wins over the dock's at the fold (spec §8a). */
+    @Test public void v2HomeIconWins() throws Exception { check("v16-home-icon-wins"); }
+
     /** 1.3.0-pre.4 with the shared dock on and Home's own layout's dock off: Home keeps it off. */
     @Test public void pre4HomeDockOff() throws Exception {
         check("v14-home-dock-off");

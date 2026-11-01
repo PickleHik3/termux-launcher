@@ -249,7 +249,26 @@ final class LayoutsMigration {
                 if (value != null) sizes = sizes.with(orientation, field, value);
             }
         }
-        return sizes;
+        return iconSize().into(sizes);
+    }
+
+    /**
+     * The one icon size (ADR 0020 §3, spec §8a): the step nearest the Home icon size the user
+     * chose, else nearest the icon the stored portrait dock height drew (Docked's curve, read at
+     * a reference density: the icon in dp barely moves with it), else the default.
+     */
+    @NonNull
+    private com.termux.app.place.layout.IconSize iconSize() {
+        Object home = mAll.get(com.termux.app.launcher.home.HomeSettings.KEY_ICON_SCALE);
+        Integer homeDp = home instanceof String
+            ? com.termux.app.launcher.widget.HomeIconSize.fromStored((String) home).dp : null;
+        Object height = mAll.get(PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL,
+            PlaceOrientation.PORTRAIT, LayoutsJson.DOCK_HEIGHT));
+        Integer dockDp = height instanceof Number
+            ? com.termux.app.surfaces.AppearanceLooks.iconSizeValueFor(false, false,
+                ((Number) height).floatValue(), 2.75f)
+            : null;
+        return com.termux.app.place.layout.IconSize.fold(homeDp, dockDp);
     }
 
     /**
