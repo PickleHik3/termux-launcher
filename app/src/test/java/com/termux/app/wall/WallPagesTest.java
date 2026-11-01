@@ -324,6 +324,19 @@ public class WallPagesTest {
     }
 
     @Test
+    public void aLaunchThatGivesUpTakesOnlyItsOwnAddedPageBack() {
+        // #192: the page a launch added is removed and committed; an existing Display page stays.
+        WallPages p = three();
+        WallPages withExisting = ok(p.add(PageKind.DISPLAY, 3, "gimp"));
+        Result added = withExisting.routeLinuxApp("krita", 3).addTo(withExisting);
+        int addedId = added.page.id;
+        WallPages gone = ok(added.pages.remove(addedId));
+        WallPages committed = ok(gone.commitRemoval(addedId));
+        assertEquals(ids(withExisting), ids(committed));
+        assertTrue(ids(committed).contains(withExisting.routeLinuxApp("gimp", 1).pageId));
+    }
+
+    @Test
     public void startInIsDerivedFromWhereHomeIs() {
         assertEquals("home", three().startIn());
         assertEquals("workspace", ok(three().setHome(3)).startIn());
