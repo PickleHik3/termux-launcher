@@ -165,6 +165,19 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     @NonNull public LauncherAppWidgetHost host() { return host; }
     public void setListener(@Nullable Listener value) { listener = value; }
 
+    /** Where the grid's geometry for both orientations comes from; null while it is unknown. */
+    public interface GeometrySource {
+        @Nullable WidgetOrientationCells.Geometry geometry();
+    }
+
+    @Nullable private GeometrySource geometrySource;
+
+    /**
+     * Lets a size report tell the provider both orientations' sizes at once (ADR 0020 §12);
+     * without it only the orientation on screen is reported.
+     */
+    public void setGeometrySource(@Nullable GeometrySource value) { geometrySource = value; }
+
     /** Told how an add ends, for a caller that owes another app an answer (a pin request). */
     public interface AddObserver {
         /** The widget {@code appWidgetId} is on Home. */
@@ -643,9 +656,22 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         // A built-in widget reads its own size; its options bundle is its settings, not a
         // size report, and there is no provider process to wake.
         if (!record.hasPlatformId()) return false;
-        WidgetSizeOptionsPolicy.Result result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(),
-            widthPx, heightPx, activity.getResources().getDisplayMetrics().density,
-            orientation, Build.VERSION.SDK_INT);
+        float density = activity.getResources().getDisplayMetrics().density;
+        WidgetOrientationCells.Geometry geometry = geometrySource != null
+            ? geometrySource.geometry() : null;
+        WidgetSizeOptionsPolicy.Result result;
+        if (geometry != null) {
+            // One grid for both orientations: the provider hears the turned size up front too,
+            // so a turn of the screen asks it for nothing new.
+            int[] both = WidgetOrientationCells.bothFromMeasured(geometry,
+                record.cell.columnSpan(), record.cell.rowSpan(), widthPx, heightPx,
+                orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE);
+            result = WidgetSizeOptionsPolicy.calculateBoth(record.sizeOptions(), both[0], both[1],
+                both[2], both[3], density, Build.VERSION.SDK_INT);
+        } else {
+            result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(), widthPx, heightPx,
+                density, orientation, Build.VERSION.SDK_INT);
+        }
         if (!result.valid) return false;
         if (result.changed) {
             LauncherWidgetRecord changed = record.withSizeOptions(result.options);

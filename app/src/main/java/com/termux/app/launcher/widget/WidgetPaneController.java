@@ -199,6 +199,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         });
         pane.grid().setAppIconFactory(appIcons);
         widgets.setAddObserver(pinAddObserver);
+        widgets.setGeometrySource(this::orientationGeometry);
         // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
         pane.setOnDragListener(appDropListener);
         catalog.setBuiltinSource(builtins);
@@ -289,16 +290,36 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // orientations (ADR 0020 §12), so neither a turn nor a keyboard or sheet shrinking the
         // wall changes the caps, and nothing reflows. The cells get shorter or narrower instead.
         // Nor does the icon step: the caps keep room for the largest step's dock.
+        android.content.res.Configuration config = pane.getResources().getConfiguration();
+        return WidgetGridCaps.forPortraitWall(config.screenWidthDp, config.screenHeightDp,
+            statusBarDp(), gridEdgeDp);
+    }
+
+    /** The system's status bar height, dp, or a fallback where it names none. */
+    private float statusBarDp() {
         android.content.res.Resources res = pane.getResources();
-        android.content.res.Configuration config = res.getConfiguration();
         float density = res.getDisplayMetrics().density;
         @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
         int statusId = res.getIdentifier("status_bar_height", "dimen", "android");
-        float statusDp = statusId != 0 && density > 0f
+        return statusId != 0 && density > 0f
             ? res.getDimensionPixelSize(statusId) / density
             : WidgetGridCaps.FALLBACK_STATUS_BAR_DP;
-        return WidgetGridCaps.forPortraitWall(config.screenWidthDp, config.screenHeightDp,
-            statusDp, gridEdgeDp);
+    }
+
+    /**
+     * The grid's geometry for both orientations' widget sizes: the screen, the chrome at the one
+     * icon step, Home's Margin and the grid as applied (the rows given to an always-on keyboard
+     * still count, since the cells keep their size).
+     */
+    @Nullable private WidgetOrientationCells.Geometry orientationGeometry() {
+        android.content.res.Resources res = pane.getResources();
+        android.content.res.Configuration config = res.getConfiguration();
+        float density = res.getDisplayMetrics().density;
+        if (config.screenWidthDp <= 0 || config.screenHeightDp <= 0 || density <= 0f) return null;
+        WidgetGridDefinition grid = widgets.repository().gridDefinition();
+        return new WidgetOrientationCells.Geometry(config.screenWidthDp, config.screenHeightDp,
+            statusBarDp(), appIcons.style().iconDp, gridEdgeDp, grid.columns,
+            grid.rows + keyboardRows, density);
     }
 
     /**
