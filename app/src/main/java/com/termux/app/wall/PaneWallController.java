@@ -164,8 +164,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * wall draws its grabbers; see {@link PaneWallLayout.Listener#isBorderStatusSwipeEnabled}.
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
-        /** Whether the top border's status swipe needs two fingers. */
-        default boolean isBorderStatusSwipeTwoFingers() { return false; }
         /**
          * A swipe off the top border asked for the bar unfolded ({@code expand}) or folded, for a
          * swipe the fold did not follow ({@link #onStatusFoldBegin} answered 0, or reduced motion).
@@ -1287,11 +1285,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public boolean isBorderStatusSwipeEnabled() {
         return mHost.isBorderStatusSwipeEnabled();
-    }
-
-    @Override
-    public boolean isBorderStatusSwipeTwoFingers() {
-        return mHost.isBorderStatusSwipeTwoFingers();
     }
 
     @Override

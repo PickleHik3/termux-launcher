@@ -348,8 +348,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
      * terminal I/O store, whoever asks this one.
      */
     private static boolean isTerminalIoToggle(String key) {
-        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key)
-            || "status_swipe_two_fingers".equals(key);
+        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key);
     }
 
     @Override

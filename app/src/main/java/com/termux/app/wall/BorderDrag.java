@@ -528,8 +528,6 @@ public final class BorderDrag {
     private boolean mKeyboardEligible;
     /** Whether this press may become the status bar's swipe: it landed in the top zone. */
     private boolean mStatusEligible;
-    /** Whether the status bar's swipe needs a second finger (set before {@link #down}). */
-    private boolean mTwoFingerStatus;
     /**
      * Whether a sideways start pages from inside the page, on its text: the terminal there gives
      * the swipe away ({@link TerminalBodySwipe}), and the finger has to set off clearly sideways
@@ -725,15 +723,6 @@ public final class BorderDrag {
     }
 
     /**
-     * Whether the status bar's swipe needs two fingers: with it on, one finger that sets off
-     * vertically from the top zone never claims {@link Claim#STATUS}, and a second finger landing
-     * on the still pending press does. Set before {@link #down}; off is the default.
-     */
-    public void setTwoFingerStatus(boolean twoFingers) {
-        mTwoFingerStatus = twoFingers;
-    }
-
-    /**
      * The finger landed at {@code (x, y)} on the dock, which has it: arms the drag only where the
      * point lies on the dock's top in the seam band ({@link Zone#seamAt}) and the wall has another
      * place to go. Only a clearly sideways start then pages ({@link SeamSwipe#decide}); a tap, a
@@ -776,7 +765,7 @@ public final class BorderDrag {
         boolean vertical = Math.abs(dy) > Math.abs(dx);
         if (vertical) {
             mClaim = mKeyboardEligible ? Claim.KEYBOARD
-                : mStatusEligible && !mTwoFingerStatus ? Claim.STATUS : Claim.ABANDONED;
+                : mStatusEligible ? Claim.STATUS : Claim.ABANDONED;
         } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))
             || (mSeamSlides && SeamSwipe.decide(mSeamStart, dx, dy, mSlop, true, false)
                 == SeamSwipe.Decision.BORDER_DRAG)) {
@@ -818,8 +807,7 @@ public final class BorderDrag {
     @NonNull
     public Claim secondPointer() {
         if (mClaim == Claim.PENDING) {
-            mClaim = mTwoFingerStatus && mStatusEligible && !mSetOff
-                ? Claim.STATUS : Claim.ABANDONED;
+            mClaim = Claim.ABANDONED;
         }
         return mClaim;
     }
