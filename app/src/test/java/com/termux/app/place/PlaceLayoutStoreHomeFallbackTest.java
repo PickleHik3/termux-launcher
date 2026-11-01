@@ -69,7 +69,7 @@ public class PlaceLayoutStoreHomeFallbackTest {
                 .dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS));
         assertEquals("a window is unchanged", DockStyle.GLASS_TRAY,
             drawn(s, LayoutVariant.NORMAL, com.termux.app.wall.PaneWallPage.TERMINAL));
-        assertEquals("the page's own keys are unchanged", DockStyle.PEEK_GLASS,
+        assertEquals("the page's own dock key is ignored", DockStyle.PEEK_GLASS,
             drawn(s, LayoutVariant.page(1, PageKind.HOME),
                 com.termux.app.wall.PaneWallPage.WIDGETS));
     }
@@ -94,15 +94,15 @@ public class PlaceLayoutStoreHomeFallbackTest {
     public void editingThePageDetachesOnlyThatPage() {
         assertEquals(DockStyle.PEEK_GLASS, page(8, PageKind.HOME).dockStyle());
         page(8, PageKind.HOME).setDockStyle(DockStyle.GLASS_TRAY);
+        // The dock is the Home kind's rest: a write from a Home page lands on Home's key.
         assertEquals(DockStyle.GLASS_TRAY, page(8, PageKind.HOME).dockStyle());
-        assertEquals(DockStyle.PEEK_GLASS, page(1, PageKind.HOME).dockStyle());
-        assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.GLASS_TRAY, page(1, PageKind.HOME).dockStyle());
+        assertEquals("glass_tray", prefs.getString("layout.home.dock_design", null));
     }
 
     @Test
     public void clearingThePagesKeysReturnsHomes() {
-        page(8, PageKind.HOME).setDockStyle(DockStyle.GLASS_TRAY);
-        assertEquals(DockStyle.GLASS_TRAY, page(8, PageKind.HOME).dockStyle());
+        prefs.edit().putString("layout.page8.dock_design", "glass_tray").commit();
         store.dropPageLayout(8, PageKind.HOME);
         assertEquals(DockStyle.PEEK_GLASS, page(8, PageKind.HOME).dockStyle());
     }

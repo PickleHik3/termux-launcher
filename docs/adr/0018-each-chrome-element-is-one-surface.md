@@ -111,7 +111,9 @@ translations and lays out nothing; the landing finds every element at its rest. 
 PTY size follows the Terminal kind's rest alone, so the motion invariant becomes no resize per
 crossing (amends `project-docs/active/motion-invariants-2026-10-30.md`). The dock over the
 keyboard on a Home page is Home's dock, in Home's design, for every combination of style, design,
-keyboard form and orientation (the developer, 2026-10-31).
+keyboard form and orientation (the developer, 2026-10-31). A Home page's own layout never carries
+a dock of its own: the dock is the Home kind's rest, read and written there from every Home page
+(the developer, 2026-11-01).
 
 ## Consequences
 
