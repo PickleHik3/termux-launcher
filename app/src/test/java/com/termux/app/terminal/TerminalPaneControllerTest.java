@@ -215,6 +215,32 @@ public class TerminalPaneControllerTest {
         assertFalse(TerminalPaneController.isLonePane(0, false));
     }
 
+    /**
+     * The divider settles on the grid at a pause and again at the lift; the second pass must give
+     * back the very same weight (bit for bit), so SplitRelayout.applyWeights returns early and the
+     * lift moves, lays out and solves nothing.
+     */
+    @Test
+    public void snapFirstWeightToCell_isIdempotentBitForBit() {
+        float[] cells = {7.3f, 12f, 17.77f, 31.5f};
+        float[] availables = {640f, 1013f, 1079.5f, 2231f};
+        float[] totals = {2f, 1f, 3.37f};
+        for (float cell : cells) {
+            for (float available : availables) {
+                for (float total : totals) {
+                    for (int step = 1; step < 40; step++) {
+                        float raw = total * (0.3f + step * 0.0097f); // inside the 18% clamp
+                        float once = TerminalPaneController.snapFirstWeightToCell(
+                            total, available, raw, cell);
+                        float twice = TerminalPaneController.snapFirstWeightToCell(
+                            total, available, once, cell);
+                        assertEquals(Float.floatToIntBits(once), Float.floatToIntBits(twice));
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     public void snapFirstWeightToCell_alignsFinalDividerAndKeepsMinimumPaneSize() {
         assertEquals(1.0f,
