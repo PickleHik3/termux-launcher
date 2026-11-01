@@ -210,6 +210,11 @@ public class TerminalPaneController {
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /**
+         * Only pane sizes or split weights changed: no window, pane or session came or went. The
+         * arrangement still has to be saved; the drawer, wall and overview rebuild is not needed.
+         */
+        default void onTreeGeometryChanged() { onTreesChanged(); }
+        /**
          * The pane tree was just laid into the host view. Fires for every structural change —
          * split, close, maximize, layout change, window switch — so anything keyed off how many
          * panes are on screen can refresh from one place.
@@ -846,7 +851,7 @@ public class TerminalPaneController {
                 if (w.root != null) equalizeNode(w.root);
             }
             render();
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -908,7 +913,7 @@ public class TerminalPaneController {
                 }
                 if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
                 hold.release();
-                mHost.onTreesChanged();
+                mHost.onTreeGeometryChanged();
             }
         });
         mFocusGrowAnimator = animator;
@@ -2403,7 +2408,7 @@ public class TerminalPaneController {
         target.weightB = total - target.weightA;
         if (!isDwindleManaged(window)) clearLayoutPolicy(window);
         if (window == mActiveWindow) render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2860,7 +2865,7 @@ public class TerminalPaneController {
             mPendingKeyResizeSplit = null;
             if (mPendingKeyResizeHold != null) mPendingKeyResizeHold.release();
             mPendingKeyResizeHold = null;
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -2873,7 +2878,7 @@ public class TerminalPaneController {
         if (!transformToLayout(mActiveWindow, layout)) return false;
         mActiveWindow.layoutPolicy = layout;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2998,7 +3003,7 @@ public class TerminalPaneController {
         forgetFocusShares(mActiveWindow);
         equalizeNode(mActiveWindow.root);
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -3010,7 +3015,7 @@ public class TerminalPaneController {
         rotateNode(mActiveWindow.root, clockwise);
         mActiveWindow.root.parent = null;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -6687,7 +6692,7 @@ public class TerminalPaneController {
                         invalidate();
                         if (resized) {
                             android.os.Trace.beginSection("Pane.lift.treesChanged");
-                            mHost.onTreesChanged();
+                            mHost.onTreeGeometryChanged();
                             android.os.Trace.endSection();
                         }
                         return true;

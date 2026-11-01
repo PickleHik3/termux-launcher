@@ -1193,6 +1193,23 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void geometryOnlyChanges_tellTheHostGeometryNotStructure() {
+        PaneFixture fixture = splittableFourPaneFixture();
+        sTreesChanged = 0;
+        sGeometryChanged = 0;
+
+        assertTrue(fixture.controller.equalizeLayout());
+        assertTrue(fixture.controller.rotateLayout(true));
+        assertEquals("equalize and rotate move panes, none come or go", 0, sTreesChanged);
+        assertEquals(2, sGeometryChanged);
+
+        // A structural change still takes the full funnel.
+        fixture.controller.split(LinearLayout.VERTICAL);
+        assertEquals(1, sTreesChanged);
+        assertEquals(2, sGeometryChanged);
+    }
+
+    @Test
     public void savedWindow_restoresRetainedLayoutAndRejectsAnUnknownName() {
         PaneFixture fixture = fourPaneFixture();
         assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_FAT));
@@ -1928,6 +1945,9 @@ public class TerminalPaneControllerTest {
         host.layout(0, 0, width, height);
     }
 
+    private static int sTreesChanged;
+    private static int sGeometryChanged;
+
     private static TerminalPaneController newSplittingController(@NonNull FrameLayout hostView) {
         Context context = RuntimeEnvironment.getApplication();
         return new TerminalPaneController(new TerminalPaneController.Host() {
@@ -1935,7 +1955,8 @@ public class TerminalPaneControllerTest {
             @Override public void configurePaneView(TerminalView view) {}
             @Override public void removeShell(TerminalSession session) {}
             @Override public void onActivePaneChanged() {}
-            @Override public void onTreesChanged() {}
+            @Override public void onTreesChanged() { sTreesChanged++; }
+            @Override public void onTreeGeometryChanged() { sGeometryChanged++; }
             @Override public String defaultCwd() { return "/"; }
         }, hostView, LayoutInflater.from(context));
     }
