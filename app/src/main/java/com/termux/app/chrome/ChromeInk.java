@@ -1370,22 +1370,43 @@ public final class ChromeInk {
             ? new EvenOut.BandEnds(low, high) : new EvenOut.BandEnds(high, low);
     }
 
-    /** {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass. */
+    /**
+     * {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass, weighted by
+     * the area each pane covers: moving a divider trades area between panes over the same
+     * wallpaper, so it must not move the mean, and a count-weighted mean drifted with it.
+     */
     @ColorInt
     private int meanPaneSurface(@ColorInt int tint) {
-        long red = 0, green = 0, blue = 0;
-        int count = 0;
+        int[] surfaces = new int[mPanes.size()];
+        long[] areas = new long[mPanes.size()];
+        int n = 0;
         for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
             PaneAnswer pane = entry.getValue();
-            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
-            int surface = pane.resolution.surface;
-            red += Color.red(surface);
-            green += Color.green(surface);
-            blue += Color.blue(surface);
-            count++;
+            Rect rect = entry.getKey();
+            if (pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+            long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
+            if (area == 0) continue;
+            surfaces[n] = pane.resolution.surface;
+            areas[n] = area;
+            n++;
         }
-        count = Math.max(1, count);
-        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+        return areaWeightedMean(surfaces, areas, n);
+    }
+
+    /** The mean of {@code colors[0..n)} weighted by {@code areas}; black when nothing counts. */
+    @VisibleForTesting
+    @ColorInt
+    static int areaWeightedMean(@NonNull int[] colors, @NonNull long[] areas, int n) {
+        double red = 0, green = 0, blue = 0, total = 0;
+        for (int i = 0; i < n; i++) {
+            red += (double) Color.red(colors[i]) * areas[i];
+            green += (double) Color.green(colors[i]) * areas[i];
+            blue += (double) Color.blue(colors[i]) * areas[i];
+            total += areas[i];
+        }
+        if (total == 0) return Color.rgb(0, 0, 0);
+        return Color.rgb((int) Math.round(red / total), (int) Math.round(green / total),
+            (int) Math.round(blue / total));
     }
 
     /** The user's legibility control as this answers by it. */

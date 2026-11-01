@@ -706,4 +706,35 @@ public class ChromeInkTest {
         }
         assertTrue(ink.inkAnswerCountForTests() <= ChromeInk.MAX_INK_ANSWERS);
     }
+
+    /** Grey value of a vertical gradient, 0 at y 0 to 200 at y 100. */
+    private static int gradientMean(int top, int bottom) {
+        int mid = (top + bottom) / 2 * 2;
+        return android.graphics.Color.rgb(mid, mid, mid);
+    }
+
+    @Test
+    public void paneSurfaceMeanIsAreaWeightedSoADividerMoveLeavesItAlone() {
+        // Two stacked panes over one gradient: the divider at y 40, then at y 60.
+        int[] before = {gradientMean(0, 40), gradientMean(40, 100)};
+        long[] beforeAreas = {40L * 1000, 60L * 1000};
+        int[] after = {gradientMean(0, 60), gradientMean(60, 100)};
+        long[] afterAreas = {60L * 1000, 40L * 1000};
+        int a = ChromeInk.areaWeightedMean(before, beforeAreas, 2);
+        int b = ChromeInk.areaWeightedMean(after, afterAreas, 2);
+        assertEquals(android.graphics.Color.red(a), android.graphics.Color.red(b), 1);
+        // The unweighted mean this replaces moved by ten levels.
+        assertTrue(Math.abs((before[0] + before[1]) / 2 - (after[0] + after[1]) / 2) >= 5);
+    }
+
+    @Test
+    public void paneSurfaceMeanMovesWhenThePanesCoverAnotherRegion() {
+        int[] top = {gradientMean(0, 50), gradientMean(50, 100)};
+        int[] lower = {gradientMean(40, 70), gradientMean(70, 100)};
+        long[] areas = {1000L, 1000L};
+        int a = ChromeInk.areaWeightedMean(top, areas, 2);
+        int b = ChromeInk.areaWeightedMean(lower, areas, 2);
+        assertTrue(Math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) > 10);
+        assertEquals(android.graphics.Color.rgb(0, 0, 0), ChromeInk.areaWeightedMean(top, areas, 0));
+    }
 }

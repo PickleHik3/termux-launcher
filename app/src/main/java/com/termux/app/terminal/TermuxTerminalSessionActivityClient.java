@@ -1321,7 +1321,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /**
      * Hand every pane what its default-background text really stands on, so the renderer holds it
      * to its contrast floor there ({@code TerminalRenderer#setContrastBackdrop}). A pane re-records
-     * its rows only when the backdrop moved.
+     * its rows only when the backdrop moved past {@code ContrastFloor.BACKDROP_TOLERANCE}.
      */
     private void applyTextBackdropToPanes() {
         int backdrop = mHost.terminalTextSurface();
@@ -1346,7 +1346,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     private void onTerminalTextGroundSettled() {
-        if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        android.os.Trace.beginSection("Terminal.groundSettled");
+        try {
+            if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        } finally {
+            android.os.Trace.endSection();
+        }
     }
 
     /**
