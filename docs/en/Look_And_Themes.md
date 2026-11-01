@@ -153,7 +153,6 @@ Both are on the Terminal card under More, and under **Settings → Terminal → 
 returns to the Terminal card. Three small frames at the top show a pane as it rests, as the focused
 pane of a split, and asking for attention (which always wears the error colour). Below them:
 
-- **Rim**: the same Rim as under More, **None**, **Hairline** or **Bright**.
 - **Border colour**: **Theme outline**, **Primary**, **Secondary**, **Tertiary** or **Custom**.
   Custom opens a **Custom colour** field that takes `#RRGGBB`, or `#AARRGGBB` for a see-through
   colour.

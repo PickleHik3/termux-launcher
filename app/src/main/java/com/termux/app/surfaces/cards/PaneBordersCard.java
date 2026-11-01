@@ -59,7 +59,7 @@ public final class PaneBordersCard {
     /** Every row of the card, in the order it shows them. */
     @NonNull
     public static List<Spec> rows() {
-        return new EditorRows.CardRows().tier(1, Row.PANE_PREVIEW, Row.RIM,
+        return new EditorRows.CardRows().tier(1, Row.PANE_PREVIEW,
             Row.PANE_BORDER_COLOUR, Row.PANE_BORDER_CUSTOM,
             Row.PANE_FOCUS_COLOUR, Row.PANE_FOCUS_CUSTOM,
             Row.PANE_GLOW, Row.PANE_GLOW_COLOUR, Row.PANE_GLOW_CUSTOM,
