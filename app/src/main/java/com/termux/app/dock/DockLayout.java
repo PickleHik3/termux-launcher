@@ -327,6 +327,9 @@ public final class DockLayout {
      * ({@link DockLayoutPolicy#appsRowSideInsetPx}).
      */
     public int appsRowSideInsetPx() {
+        // The row at the dock's foot stands in by the policy's inset, which holds the spec §8a
+        // rule (the grid's margin, 16 dp Docked, the grid's columns): the view applies this one.
+        if (!appsRowOnEdge) return appsRowEdgeInsetPx;
         return Math.max(peekRowSideInsetPx, DockLayoutPolicy.appsRowSideInsetPx(
             capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density));
     }

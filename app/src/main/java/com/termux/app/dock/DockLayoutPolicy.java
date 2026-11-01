@@ -911,7 +911,11 @@ public final class DockLayoutPolicy {
      */
     private static int sideInsetPx(DockInputs in, DockLayout.Builder out, boolean capsule,
                                    float density) {
-        int fromEdge = capsule ? out.horizontalInsetPx : 0;
+        // The row is not inside the capsule's glass: it stands in the row stack beside it, as
+        // wide as the screen, and the view applies this inset from the screen edge
+        // (DockLayout#appsRowSideInsetPx, TermuxActivity#applyDockRowHorizontalInsets). So nothing
+        // of the capsule's own margin counts toward the least.
+        int fromEdge = 0;
         int least = Math.max(0, Math.round(in.minSideInsetDp * density) - fromEdge);
         // On the grid's column centres: the grid shares its width less the gaps between its
         // columns, so its column pitch is a column and a gap; slots of that pitch start half a

@@ -42,7 +42,10 @@ public class DockIconSizeRuleTest {
                                 + ")", l.appsRowIconPx <= l.appsRowBandHintPx);
                             float leastDp = capsule ? GRID_EDGE_DP
                                 : Math.max(GRID_EDGE_DP, DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP);
-                            int fromEdge = l.appsRowEdgeInsetPx + (capsule ? l.horizontalInsetPx : 0);
+                            // What the view stands the row in by, from the screen edge.
+                            int fromEdge = l.appsRowSideInsetPx();
+                            assertEquals(at + ": the view's inset is the policy's",
+                                l.appsRowEdgeInsetPx, fromEdge);
                             // The first icon's edge, centred in its slot: never inside the least
                             // inset (a row on the grid's columns starts its slots half a gap out).
                             int slot = count > 0 ? l.appsRowUsableWidthPx / count : 0;
