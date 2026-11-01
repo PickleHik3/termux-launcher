@@ -578,8 +578,12 @@ the first time the new store opens.
 
 One layout document (ADR 0020). Body `{"op":"get","kind":"home"}` answers
 `{"ok":true,"kind":"home","layout":{...}}`. Body `{"op":"set","kind":"home","layout":{...}}`
-validates the document and writes it whole, then re-dresses the live chrome; a bad document
-answers 400 `invalid_layout` with the field named, an unknown kind 400 `bad_kind`. Kinds:
+validates the document and writes it whole, then re-dresses the live chrome. `set` replaces the
+document: fields left out fall back to their defaults. A known field whose value the launcher
+cannot read (unknown `dock_design`, a bad placement edge, `icon_size` not s/m/l/xl, a negative
+`*_order`, a size outside its range) answers 400 `invalid_layout` with the field named and the
+stored document unchanged; fields this build does not know are accepted. An unknown kind
+answers 400 `bad_kind`. Kinds:
 `home`, `terminal`, `terminal_minimal`, `display`, `sizes`.
 
 ### Device routes: vibrate, torch, battery, volume, toast, wallpaper

@@ -69,4 +69,51 @@ public class LayoutCommandTest {
         assertNotNull(LayoutCommand.refusal("sizes", "not json"));
         assertNull(LayoutCommand.set(store, "sizes", LayoutCommand.get(store, "sizes")));
     }
+
+    private void assertRefusedNaming(String name, String json, String field) {
+        String refused = LayoutCommand.refusal(name, json);
+        assertNotNull(json, refused);
+        assertTrue(refused, refused.contains(field));
+        assertTrue(refused, refused.contains("replaces the whole document"));
+    }
+
+    @Test
+    public void unreadableValuesAreRefusedWithTheFieldNamedAndNothingIsStored() {
+        store.load();
+        assertRefusedNaming("home", "{\"version\":1,\"dock_design\":\"nope\"}", "dock_design");
+        assertRefusedNaming("home", "{\"version\":1,\"drawer_tile_position\":\"left\"}",
+            "drawer_tile_position");
+        assertRefusedNaming("home", "{\"version\":1,\"portrait\":{\"status_bar\":\"middle\"}}",
+            "status_bar");
+        assertRefusedNaming("home", "{\"version\":1,\"landscape\":{\"keyboard_form\":\"big\"}}",
+            "keyboard_form");
+        assertRefusedNaming("home", "{\"version\":1,\"portrait\":{\"apps_row_restore_edge\":\"hidden\"}}",
+            "apps_row_restore_edge");
+        assertRefusedNaming("home", "{\"version\":1,\"portrait\":{\"extra_keys_order\":-1}}",
+            "extra_keys_order");
+        assertRefusedNaming("home", "{\"version\":1,\"portrait\":{\"extra_keys_order\":1.5}}",
+            "extra_keys_order");
+        assertRefusedNaming("sizes", "{\"version\":1,\"icon_size\":\"huge\"}", "icon_size");
+        assertRefusedNaming("sizes", "{\"version\":1,\"portrait\":{\"dock_height\":99}}",
+            "dock_height");
+        assertNotNull(LayoutCommand.set(store, "home", "{\"version\":1,\"dock_design\":\"nope\"}"));
+        assertTrue(written.isEmpty());
+    }
+
+    @Test
+    public void aFullValidDocumentAndLegacyDockIdsAreAccepted() throws Exception {
+        store.load();
+        assertNull(LayoutCommand.refusal("home", LayoutCommand.get(store, "home")));
+        assertNull(LayoutCommand.refusal("home",
+            "{\"version\":1,\"dock_design\":\"peek_glass\",\"drawer_tile_position\":\"end\","
+                + "\"future_field\":\"anything\",\"portrait\":{\"status_bar\":\"hidden\","
+                + "\"az_bar\":\"left\",\"keyboard_mode\":\"resize\",\"keyboard_form\":\"split\","
+                + "\"apps_row_order\":2,\"apps_row_restore_edge\":\"top\"}}"));
+        assertNull(LayoutCommand.refusal("sizes",
+            "{\"version\":1,\"icon_size\":\"xl\",\"portrait\":{\"dock_height\":1.0,"
+                + "\"keyboard_chin\":8,\"wall_strip_height\":80}}"));
+        for (com.termux.app.dock.DockStyle style : com.termux.app.dock.DockStyle.values())
+            assertNull(style.storageValue(), LayoutCommand.refusal("home",
+                "{\"version\":1,\"dock_design\":\"" + style.storageValue() + "\"}"));
+    }
 }

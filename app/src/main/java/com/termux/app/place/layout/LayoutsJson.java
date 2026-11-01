@@ -7,6 +7,8 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -263,7 +265,7 @@ public final class LayoutsJson {
 
     /**
      * Checks a document handed in from outside ({@code launcherctl layout set}): known fields
-     * must have their type. Null when it is fine, else the message naming the field.
+     * must have their type and, where the set is closed, a value the launcher reads; unknown fields are not checked. Null when it is fine, else the message naming the field.
      */
     @Nullable
     public static String validate(@NonNull LayoutKind kind, @NonNull String json) {
@@ -309,8 +311,130 @@ public final class LayoutsJson {
         } else {
             return null;
         }
-        return wanted.isInstance(value) ? null
-            : key + ": expected " + wanted.getSimpleName().toLowerCase(java.util.Locale.ROOT)
+        if (!wanted.isInstance(value))
+            return key + ": expected " + wanted.getSimpleName().toLowerCase(java.util.Locale.ROOT)
                 + ", found " + value;
+        return valueError(key, value);
+    }
+
+    /**
+     * The closed sets and ranges a known field reads (the type is already right). Each set is
+     * what the store's own reader accepts: {@code DockStyle.parse} (every id, legacy ones too),
+     * {@code DrawerTilePolicy.Position.parse}, {@code Edge.parse} (plus "hidden" for the rows'
+     * own key), {@code KeyboardMode.parse}, {@code KeyboardForm.parse}, {@code IconSize.forKey}.
+     * A key this build does not know is not checked, so a newer document still loads.
+     */
+    @Nullable
+    private static String valueError(@NonNull String key, @NonNull Object value) {
+        if (DOCK_DESIGN.equals(key)) {
+            for (com.termux.app.dock.DockStyle style : com.termux.app.dock.DockStyle.values())
+                if (style.storageValue().equals(value)) return null;
+            return badValue(key, value, dockDesigns());
+        }
+        if (DRAWER_TILE_POSITION.equals(key)) {
+            String v = ((String) value).trim().toLowerCase(java.util.Locale.ROOT);
+            for (com.termux.app.dock.DrawerTilePolicy.Position p
+                : com.termux.app.dock.DrawerTilePolicy.Position.values())
+                if (p.value.equals(v)) return null;
+            return badValue(key, value, "start, middle, end");
+        }
+        if (IconSize.FIELD.equals(key)) {
+            if (value instanceof String && IconSize.forKey((String) value) != null) return null;
+            return badValue(key, value, "s, m, l, xl");
+        }
+        if (KEYBOARD_MODE.equals(key)) {
+            for (com.termux.app.place.PlaceLayout.KeyboardMode m
+                : com.termux.app.place.PlaceLayout.KeyboardMode.values())
+                if (m.storageValue().equals(value)) return null;
+            return badValue(key, value, "resize, overlay");
+        }
+        if (KEYBOARD_FORM.equals(key)) {
+            for (com.termux.app.place.PlaceLayout.KeyboardForm f
+                : com.termux.app.place.PlaceLayout.KeyboardForm.values())
+                if (f.storageValue().equals(value)) return null;
+            return badValue(key, value, "docked, floating, split");
+        }
+        boolean restore = key.endsWith(RESTORE_EDGE_SUFFIX);
+        if (restore || isElementKey(key)) {
+            if (!restore && "hidden".equals(value)) return null;
+            for (com.termux.app.place.PlaceLayout.Edge e
+                : com.termux.app.place.PlaceLayout.Edge.values())
+                if (e.storageValue().equals(value)) return null;
+            return badValue(key, value, restore ? "top, bottom, left, right"
+                : "top, bottom, left, right, hidden");
+        }
+        if (!BAR_ORDER.equals(key) && key.endsWith(ORDER_SUFFIX)) {
+            double d = ((Number) value).doubleValue();
+            if (d >= 0 && d == Math.rint(d) && !Double.isInfinite(d)) return null;
+            return key + ": expected a non-negative integer, found " + value;
+        }
+        if (DOCK_HEIGHT.equals(key)) return rangeError(key, value,
+            TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT);
+        if (KEYBOARD_HEIGHT.equals(key)) return rangeError(key, value,
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE, TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE);
+        if (KEYBOARD_CHIN.equals(key)) return rangeError(key, value,
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING, TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
+        if (WALL_STRIP_HEIGHT.equals(key)) return rangeError(key, value,
+            com.termux.app.dock.WallStripRowPolicy.MIN_HEIGHT_DP,
+            com.termux.app.dock.WallStripRowPolicy.MAX_HEIGHT_DP);
+        return null;
+    }
+
+    private static boolean isElementKey(@NonNull String key) {
+        for (Element element : Element.values())
+            if (element.storageKey().equals(key)) return true;
+        return false;
+    }
+
+    @NonNull
+    private static String dockDesigns() {
+        StringBuilder out = new StringBuilder();
+        for (com.termux.app.dock.DockStyle style : com.termux.app.dock.DockStyle.values()) {
+            if (out.length() > 0) out.append(", ");
+            out.append(style.storageValue());
+        }
+        return out.toString();
+    }
+
+    @NonNull
+    private static String badValue(@NonNull String key, @NonNull Object value, @NonNull String allowed) {
+        return key + ": unknown value \"" + value + "\"; one of: " + allowed;
+    }
+
+    @Nullable
+    private static String rangeError(@NonNull String key, @NonNull Object value, double min, double max) {
+        double d = ((Number) value).doubleValue();
+        if (!Double.isNaN(d) && !Double.isInfinite(d) && d >= min && d <= max) return null;
+        return key + ": " + value + " is outside " + min + " to " + max;
+    }
+
+    /**
+     * Checks a {@code sizes} document: the same type and value rules as a kind document's size
+     * fields, and {@code icon_size} one of s, m, l, xl. Null when fine.
+     */
+    @Nullable
+    public static String validateSizes(@NonNull String json) {
+        KindLayout layout;
+        try {
+            layout = parseKind(json);
+        } catch (JSONException e) {
+            return "not a sizes document: " + e.getMessage();
+        }
+        Object icon = layout.wide().get(IconSize.FIELD);
+        if (icon != null) {
+            String error = valueError(IconSize.FIELD, icon);
+            if (error != null) return error;
+        }
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            LayoutFields fields = layout.orientation(orientation);
+            for (String key : SIZE_FIELDS) {
+                Object v = fields.get(key);
+                if (v == null) continue;
+                String error = v instanceof Number ? valueError(key, v)
+                    : key + ": expected number, found " + v;
+                if (error != null) return orientation.storageValue() + "." + error;
+            }
+        }
+        return null;
     }
 }

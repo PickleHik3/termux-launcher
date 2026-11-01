@@ -53,14 +53,15 @@ public final class LayoutCommand {
     public static String refusal(@Nullable String name, @NonNull String json) {
         if (!isName(name)) return "unknown layout \"" + name + "\"; one of: " + names();
         if (SIZES.equals(name)) {
-            try {
-                LayoutsJson.parseSizes(json);
-                return null;
-            } catch (JSONException e) {
-                return "not a sizes document: " + e.getMessage();
-            }
+            return withReplaceNote(LayoutsJson.validateSizes(json));
         }
-        return LayoutsJson.validate(LayoutKind.forKey(name), json);
+        return withReplaceNote(LayoutsJson.validate(LayoutKind.forKey(name), json));
+    }
+
+    @Nullable
+    private static String withReplaceNote(@Nullable String error) {
+        return error == null ? null : error
+            + " (set replaces the whole document; fields left out fall back to defaults)";
     }
 
     /**
