@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+import com.termux.app.wall.WallPages.PageKind;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.Test;
@@ -47,5 +48,47 @@ public class PageOverviewDisplayCardsTest {
     @Test public void blockBoundsNullWithoutTerminal() {
         assertNull(PageOverviewPolicy.blockBounds(Arrays.asList(PageOverviewPolicy.Kind.HOME_PAGE,
             PageOverviewPolicy.Kind.DISPLAY)));
+    }
+
+    private static WallPagesStore storeWithDisplay() {
+        WallPages p = WallPagesMigration.seed("workspace", 1, "home", 3);
+        p = p.add(PageKind.DISPLAY, 1, "gimp").pages;
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        store.replace(p);
+        return store;
+    }
+
+    private static boolean has(WallPagesStore store, int id) {
+        for (WallPages.Page pg : store.current().allPages()) if (pg.id == id) return true;
+        return false;
+    }
+
+    private static int displayId(WallPagesStore store) {
+        for (WallPages.Page pg : store.current().allPages()) {
+            if (pg.kind == PageKind.DISPLAY) return pg.id;
+        }
+        throw new AssertionError("no display page");
+    }
+
+    /** #193: a removed Display page ends gone from the store, not left pending. */
+    @Test public void removalCommitLeavesNoPendingDisplayPage() {
+        WallPagesStore store = storeWithDisplay();
+        int id = displayId(store);
+        store.edit(pages -> pages.remove(id));
+        assertEquals(java.util.Collections.singletonList(id), store.current().pendingIds());
+        store.commitRemoval(id);
+        assertEquals(0, store.current().pendingIds().size());
+        assertEquals(false, has(store, id));
+    }
+
+    /** Cancelling the stop question takes the page back from pending. */
+    @Test public void undoRestoresTheDisplayPage() {
+        WallPagesStore store = storeWithDisplay();
+        int id = displayId(store);
+        store.edit(pages -> pages.remove(id));
+        store.edit(pages -> pages.undo(id));
+        assertEquals(0, store.current().pendingIds().size());
+        assertEquals(true, has(store, id));
+        assertEquals(true, store.current().pages().stream().anyMatch(pg -> pg.id == id));
     }
 }
