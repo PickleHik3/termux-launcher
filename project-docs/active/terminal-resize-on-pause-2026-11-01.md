@@ -230,6 +230,21 @@ Paired trace (32 → 21 rows):
 - One cause across all three: the pane's ink is resolved anew whenever its on-screen rect
   changes. Next: hold the veil during a pane gesture and resolve once at each pause and at the
   lift, like the grid (wave E).
+- **Wave E (ce5688cbf, veil held per gesture; 2026-11-01, phone charging):** divider drags
+  146.8 frames, 9.7 janky, p50/p90/p99 12.3/20.7/31.5 ms. `Pane.splitRelayout` 10 → ~1 ms;
+  `Ink.terminalPane` only at pauses and the lift (11 per drag). Per call: sample 0.5 ms,
+  lightness 0.8 ms, resolve 0.02 ms, ~1.2 ms other, so faster sampling alone would halve a
+  call that now runs only at pauses: the summed-area sampler is not worth building for drags.
+- **The janky count is mostly Buffer Stuffing**, not app lateness: in the wave E trace 62 of
+  68 flagged frames are Buffer Stuffing, 4 are App Deadline Missed. App Deadline Missed per
+  traced divider drag: 6 (04b5921b1, worst 52 ms) → 5 (wave D, 32 ms) → 4 (wave E, 30.5 ms).
+  The four left are the gesture's edges: the press (5 ms input), the first move after a pause
+  (both held panes record their cache, 15.8 ms), the lift (22 ms in the up handler: the
+  snap re-layout with the veil solve 7.8 ms, `Chrome.requestSync` 4.2 ms), and a render-side
+  frame ~750 ms after.
+- **Floats are not held yet:** float move and corner drag still run `Ink.terminalPane` ~2x
+  per frame from `PaneGlassBackdropView.onDraw` with a fresh rect each call; the divider hold
+  works. Cause unknown from reading; a `TLVeil` diagnostic log is next.
 - Floating pane corner drag: same propagation (`applyFloatBounds` → `container.setLayoutParams`,
   `TerminalPaneController.java` ~4592); not measured yet. Pong's Home has no free Terminal entry
   to open a float without changing the developer's Home, so its trace needs a float opened by
