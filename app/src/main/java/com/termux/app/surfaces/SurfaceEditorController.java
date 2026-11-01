@@ -792,7 +792,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
         mScopePageId = hostPageId >= 0 ? hostPageId
             : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
-        mChips = EditorChips.openFor(null, mScopePageId);
+        mChips = EditorChips.openFor(null, scopeKind());
         mHeldCustomPages.clear();
         mPageCustoms.clear();
         mCard = null;
@@ -964,7 +964,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mScreen = screen;
         if (pageId >= 0 && pageId != mScopePageId) {
             mScopePageId = pageId;
-            mChips = EditorChips.openFor(mCard, pageId);
+            mChips = EditorChips.openFor(mCard, scopeKind());
         }
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
@@ -1116,7 +1116,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (sheet == null || cardRefusal(card) != null)
             return;
         if (mCard != card)
-            mChips = EditorChips.openFor(card, mScopePageId);
+            mChips = EditorChips.openFor(card, scopeKind());
         mCard = card;
         mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
         mTappedWidget = null;
@@ -2693,7 +2693,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void setScopeOnPage(boolean onPage) {
             // Nothing is written here: the cell shows what it follows until a value is set on it.
-            mChips = mChips.withPage(onPage ? mScopePageId : -1);
+            // "On page" stands on the page's kind now: no look is kept per page (ADR 0020 §2).
+            mChips = mChips.withWhere(onPage
+                ? EditorChips.Where.kind(scopeKind()) : EditorChips.Where.EVERYWHERE);
         }
 
         @Override public boolean enabled(@NonNull Row row) {
