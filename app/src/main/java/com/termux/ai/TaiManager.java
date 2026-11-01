@@ -3388,10 +3388,15 @@ public final class TaiManager {
             || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
         String crashedAccelerator = null;
         int crashedContext = 0;
+        boolean lowMemoryCrash = false;
+        long crashAgeMs = 0L;
         JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
         if (marker != null && spec.id.equals(marker.optString("modelId"))) {
             crashedAccelerator = TaiLoadPreflight.normalizeAccelerator(marker.optString("accelerator", null));
             crashedContext = marker.optInt("contextWindow", 0);
+            lowMemoryCrash = TaiRuntimeExitReason.LOW_MEMORY.equals(marker.optString("exitReason", null));
+            long startedAtMs = marker.optLong("startedAtMs", 0L);
+            crashAgeMs = startedAtMs > 0L ? Math.max(0L, System.currentTimeMillis() - startedAtMs) : 0L;
         }
         // A load the runtime's watch stopped for memory left no crash marker; for a little while an
         // automatic load does not go straight back to the accelerator it was stopped on.
@@ -3416,7 +3421,8 @@ public final class TaiManager {
             .withKvBytesPerToken(kvBytesPerToken(spec))
             .withGpuless(!device.supportsAccelerator("gpu"))
             .withHeldBack(heldBack, Math.max(0L, System.currentTimeMillis() - stoppedAtMs))
-            .withExplicitAccelerator(!"auto".equals(preflight.requestedAccelerator)));
+            .withExplicitAccelerator(!"auto".equals(preflight.requestedAccelerator))
+            .withLowMemoryCrash(lowMemoryCrash, crashAgeMs));
         if (!plan.fits) {
             // The figures are the rung the ladder refused (accelerator, window, estimate), the floor
             // it kept and the free memory it compared against, the resident chat model credited.
@@ -3987,6 +3993,7 @@ public final class TaiManager {
         json.put("neededFreeBytes", plan.neededFreeBytes());
         json.put("measured", plan.measured);
         json.put("overcommitted", plan.overcommitted);
+        json.put("retriedAfterLowMemory", plan.retriedAfterLowMemory);
         JSONArray evicted = new JSONArray();
         for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
         json.put("evicted", evicted);

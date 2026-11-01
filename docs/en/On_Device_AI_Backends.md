@@ -248,6 +248,8 @@ The isolated `:tai_runtime` process is bound with `BIND_IMPORTANT`, so while a m
 inherits the launcher's foreground priority and Android's low-memory killer reaps other background
 apps before the runtime — preventing the GPU load from being SIGKILLed mid initialization.
 
+If Android still closes the runtime to free memory during a load, the request fails with `tai_runtime_crashed` and `exitReason: "low_memory"`. Automatic loads keep off that accelerator for a few minutes, then try it again once at the full window on their own; the load plan reports it as `retriedAfterLowMemory: true`. Naming the accelerator tries it right away at the smallest window.
+
 You can force GPU for validation:
 
 ```sh

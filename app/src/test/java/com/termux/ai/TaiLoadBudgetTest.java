@@ -22,7 +22,7 @@ public class TaiLoadBudgetTest {
     private static final long MIB = 1024L * 1024L;
     private static final long GIB = 1024L * MIB;
     /** A phone small enough that the fixed floors apply (the share rule gives less), so the older plan tests' arithmetic holds. */
-    private static final long PONG_TOTAL = 4L * 1024L * MIB;
+    private static final long SMALL_TOTAL = 4L * 1024L * MIB;
     private static final long E4B = 3_659_530_240L;                 // over 3 GB: never a CPU fallback
     private static final long E2B = 2_588_147_712L;
     private static final List<String> GPU_THEN_CPU = Arrays.asList("gpu", "cpu");
@@ -105,7 +105,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void aPlanCarriesItsFloorWithTheConditionsTheCallerRead() {
         TaiLoadBudget.Request request = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
-            PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 4096, null, 0);
+            SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 4096, null, 0);
         assertEquals(HOLD, TaiLoadBudget.plan(request).reserveBytes);
         assertEquals(0L, TaiLoadBudget.plan(request.withConditions(TaiLoadBudget.Conditions.UNRESTRICTED)).reserveBytes);
     }
@@ -115,7 +115,7 @@ public class TaiLoadBudgetTest {
     /** The freeze: auto chose 32k on this phone. With its usual free memory it gets the GPU at 4k. */
     @Test
     public void aTwelveGigabytePhoneWithItsUsualFreeMemoryRunsE4bOnTheGpuAt4k() {
-        TaiLoadBudget.Plan plan = plan(E4B, PONG_TOTAL, 5_800_000_000L, 32_768);
+        TaiLoadBudget.Plan plan = plan(E4B, SMALL_TOTAL, 5_800_000_000L, 32_768);
         assertTrue(plan.fits);
         assertEquals("gpu", plan.accelerator);
         assertEquals(4096, plan.contextWindow);
@@ -128,7 +128,7 @@ public class TaiLoadBudgetTest {
      */
     @Test
     public void aTwelveGigabytePhoneShortOfMemoryRefusesE4bInsteadOfFallingToTheCpu() {
-        TaiLoadBudget.Plan plan = plan(E4B, PONG_TOTAL, 4_000_000_000L, 32_768);
+        TaiLoadBudget.Plan plan = plan(E4B, SMALL_TOTAL, 4_000_000_000L, 32_768);
         assertFalse(plan.fits);
         assertEquals("gpu", plan.accelerator);
         assertEquals(4096, plan.contextWindow);
@@ -138,17 +138,17 @@ public class TaiLoadBudgetTest {
     @Test
     public void theOtherAcceleratorIsTakenOnlyWithAMeasuredCostBelowTheRefusedOne() {
         // E2B on the GPU needs ~2.5 GB; free here is 3.0 GB less the 0.8 GB hold floor.
-        TaiLoadBudget.Plan unmeasured = plan(E2B, PONG_TOTAL, 3_000_000_000L, 32_768);
+        TaiLoadBudget.Plan unmeasured = plan(E2B, SMALL_TOTAL, 3_000_000_000L, 32_768);
         assertFalse(unmeasured.fits);
 
-        TaiLoadBudget.Plan cheaper = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan cheaper = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
             32_768, false, cpuMeasured(1_000_000_000L), NOTHING));
         assertTrue(cheaper.fits);
         assertEquals("cpu", cheaper.accelerator);
         assertEquals(TaiLoadBudget.SOURCE_MEASURED, cheaper.estimateSource);
 
         // A measured CPU cost above what the GPU was refused for is no reason to move.
-        TaiLoadBudget.Plan dearer = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan dearer = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
             32_768, false, cpuMeasured(3_000_000_000L), NOTHING));
         assertFalse(dearer.fits);
         assertEquals("gpu", dearer.accelerator);
@@ -156,7 +156,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void aDeviceWithoutAGpuMayTryTheCpuUnmeasured() {
-        TaiLoadBudget.Request request = request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, false,
+        TaiLoadBudget.Request request = request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, false,
             TaiLoadBudget.NO_HISTORY, NOTHING);
         assertFalse(TaiLoadBudget.plan(request).fits);
         TaiLoadBudget.Plan gpuless = TaiLoadBudget.plan(request.withGpuless(true));
@@ -168,7 +168,7 @@ public class TaiLoadBudgetTest {
     /** E4B (3.66 GB) is over the 3 GB line: no CPU step, measured or not, GPU-less or not. */
     @Test
     public void aLiteRtFileOverThreeGigabytesIsNeverTakenToTheCpuAsAFallback() {
-        TaiLoadBudget.Request request = request(E4B, PONG_TOTAL, 4_000_000_000L, GPU_THEN_CPU, 32_768, false,
+        TaiLoadBudget.Request request = request(E4B, SMALL_TOTAL, 4_000_000_000L, GPU_THEN_CPU, 32_768, false,
             cpuMeasured(500_000_000L), NOTHING);
         TaiLoadBudget.Plan measured = TaiLoadBudget.plan(request);
         assertFalse(measured.fits);
@@ -177,13 +177,13 @@ public class TaiLoadBudgetTest {
 
         // The same history on a file under the line does take it, where its GPU load does not fit.
         assertTrue(E2B < TaiLoadBudget.LITERT_CPU_FALLBACK_MAX_FILE_BYTES);
-        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, false,
+        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, false,
             cpuMeasured(500_000_000L), NOTHING));
         assertTrue(e2b.fits);
         assertEquals("cpu", e2b.accelerator);
 
         // The rule is about the fallback step: a caller that asks for the CPU alone gets it planned.
-        TaiLoadBudget.Plan only = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L,
+        TaiLoadBudget.Plan only = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L,
             Collections.singletonList("cpu"), 4096, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertTrue(only.fits);
         assertEquals("cpu", only.accelerator);
@@ -192,7 +192,7 @@ public class TaiLoadBudgetTest {
     /** The CPU fallback never takes a larger window: 8k on the CPU took the phone's network down. */
     @Test
     public void theFallbackAcceleratorIsHeldToTheFloor() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
             32_768, true, cpuMeasured(1_000_000_000L), NOTHING));
         assertEquals("cpu", plan.accelerator);
         assertEquals(4096, plan.contextWindow);
@@ -201,7 +201,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void measuredLoadsThatFroze_areNeverPlanned() {
         for (long free = 4_000_000_000L; free <= 7_000_000_000L; free += 250_000_000L) {
-            TaiLoadBudget.Plan plan = plan(E4B, PONG_TOTAL, free, 32_768);
+            TaiLoadBudget.Plan plan = plan(E4B, SMALL_TOTAL, free, 32_768);
             assertTrue("free=" + free, plan.contextWindow < 16_384);
         }
     }
@@ -240,12 +240,12 @@ public class TaiLoadBudgetTest {
     /** pong after LiteRT-LM 0.17.1: 8k cost ~0.8 GB more than 4k and decoded slower, so auto picks 4k on the GPU. */
     @Test
     public void anAutomaticGpuLoadIsCappedAt4kAndAnExplicit8kIsHonoured() {
-        TaiLoadBudget.Plan auto = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan auto = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
             16_384, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals("gpu", auto.accelerator);
         assertEquals(4096, auto.contextWindow);
 
-        TaiLoadBudget.Plan explicit = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan explicit = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
             8192, true, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals("gpu", explicit.accelerator);
         assertEquals(8192, explicit.contextWindow);
@@ -255,7 +255,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void theGpuCapDoesNotHandTheCpuALargerWindow() {
         // GPU 4k does not fit here (~2.5 GB against 2.2 GB to spend); a measured CPU takes it at the floor.
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
             16_384, false, cpuMeasured(800_000_000L), NOTHING));
         assertTrue(plan.fits);
         assertEquals("cpu", plan.accelerator);
@@ -264,13 +264,13 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void aSmallRequestIsNotGrown() {
-        assertEquals(2048, plan(E4B, PONG_TOTAL, 9_000_000_000L, 2048).contextWindow);
+        assertEquals(2048, plan(E4B, SMALL_TOTAL, 9_000_000_000L, 2048).contextWindow);
     }
 
     @Test
     public void aLoadKilledMidwayIsNotRepeatedAsItWas() {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E4B, false, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 16_384));
+            E4B, false, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 16_384));
         assertEquals("gpu", plan.accelerator);
         assertTrue(plan.contextWindow <= 8192);
     }
@@ -279,24 +279,24 @@ public class TaiLoadBudgetTest {
     @Test
     public void aLoadKilledAtTheFloorMovesToTheNextAcceleratorWithoutAMeasurement() {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E2B, false, PONG_TOTAL, 5_800_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096));
+            E2B, false, SMALL_TOTAL, 5_800_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096));
         assertEquals("cpu", plan.accelerator);
         // Not for a file over 3 GB: the caller walks its fallback model.
         assertFalse(TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E4B, false, PONG_TOTAL, 5_800_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)).fits);
+            E4B, false, SMALL_TOTAL, 5_800_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)).fits);
     }
 
     @Test
     public void anExplicitAcceleratorIsTheOnlyOneTried() {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E4B, false, PONG_TOTAL, 4_000_000_000L, Collections.singletonList("gpu"), 32_768, null, 0));
+            E4B, false, SMALL_TOTAL, 4_000_000_000L, Collections.singletonList("gpu"), 32_768, null, 0));
         assertFalse(plan.fits);
         assertEquals("gpu", plan.accelerator);
     }
 
     @Test
     public void unknownFreeMemoryFallsBackToTheFloorRatherThanTheTier() {
-        TaiLoadBudget.Plan plan = plan(E4B, PONG_TOTAL, 0L, 32_768);
+        TaiLoadBudget.Plan plan = plan(E4B, SMALL_TOTAL, 0L, 32_768);
         assertTrue(plan.fits);
         assertFalse(plan.measured);
         assertEquals(4096, plan.contextWindow);
@@ -308,7 +308,7 @@ public class TaiLoadBudgetTest {
     public void aMeasuredDropReplacesTheSeedEstimateWithTenPercentHeadroom() {
         long worst = 3_200_000_000L;
         TaiLoadBudget.History history = (accelerator, context) -> "gpu".equals(accelerator) && context == 4096 ? worst : 0L;
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
             4096, false, history, NOTHING));
         assertEquals(TaiLoadBudget.SOURCE_MEASURED, plan.estimateSource);
         assertEquals(worst + worst / 10L, plan.estimatedBytes);
@@ -318,7 +318,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void withoutHistoryTheSeedEstimateIsUsedAndSaysSo() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
             4096, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals(TaiLoadBudget.SOURCE_RATIO, plan.estimateSource);
         assertEquals(TaiLoadBudget.estimateBytes(TaiModelSpec.BACKEND_LITERT_LM, "gpu", E4B, false, 4096), plan.estimatedBytes);
@@ -377,7 +377,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void anMnnPlanUsesTheArchitectureSlopeWhenTheRequestCarriesIt() {
         TaiLoadBudget.Request request = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_MNN_LLM, 451_000_000L, false,
-            PONG_TOTAL, 9_000_000_000L, Collections.singletonList("cpu"), 8192, null, 0);
+            SMALL_TOTAL, 9_000_000_000L, Collections.singletonList("cpu"), 8192, null, 0);
         long file = 451_000_000L;
         assertEquals(file + (file / 19_000L) * 8192L, TaiLoadBudget.plan(request).estimatedBytes);
         assertEquals(file + 114_688L * 8192L, TaiLoadBudget.plan(request.withKvBytesPerToken(114_688L)).estimatedBytes);
@@ -399,7 +399,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void aSeedEstimateCarriesNoMarginOverTheFloor() {
-        TaiLoadBudget.Plan seed = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan seed = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU,
             4096, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals(TaiLoadBudget.SOURCE_RATIO, seed.estimateSource);
         assertEquals(HOLD, seed.reserveBytes);
@@ -412,13 +412,13 @@ public class TaiLoadBudgetTest {
      */
     @Test
     public void atFiveGigabytesFreeOnPongE4bAndE2bBothGetTheGpu() {
-        TaiLoadBudget.Plan e4b = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 5_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan e4b = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 5_000_000_000L, GPU_THEN_CPU,
             4096, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertTrue(e4b.fits);
         assertEquals("gpu", e4b.accelerator);
         assertEquals(4096, e4b.contextWindow);
 
-        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 5_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 5_000_000_000L, GPU_THEN_CPU,
             4096, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals("gpu", e2b.accelerator);
         assertTrue(e2b.fits);
@@ -430,7 +430,7 @@ public class TaiLoadBudgetTest {
     public void theDirectorsMeasuredE4bGpuLoadFitsWithFourGigabytesFree() {
         TaiLoadBudget.History measured = (accelerator, context) -> "gpu".equals(accelerator) ? 3_200_000_000L : 0L;
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
-            PONG_TOTAL, 4_100_000_000L, GPU_THEN_CPU, 4096, null, 0, false, measured, NOTHING, true));
+            SMALL_TOTAL, 4_100_000_000L, GPU_THEN_CPU, 4096, null, 0, false, measured, NOTHING, true));
         assertTrue(plan.fits);
         assertEquals("gpu", plan.accelerator);
         assertEquals(3_520_000_000L + PEAK, plan.neededFreeBytes());
@@ -443,7 +443,7 @@ public class TaiLoadBudgetTest {
     }
 
     private static TaiLoadBudget.Plan cleanupOnPong(long available, TaiLoadBudget.History history) {
-        return TaiLoadBudget.plan(request(E4B, PONG_TOTAL, available, GPU_THEN_CPU, 2048, false, history, NOTHING));
+        return TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, available, GPU_THEN_CPU, 2048, false, history, NOTHING));
     }
 
     /**
@@ -472,7 +472,7 @@ public class TaiLoadBudgetTest {
     /** With both rungs tried and refused, the report is the one that needed less. */
     @Test
     public void aRefusalAfterBothAcceleratorsReportsTheCheaperOne() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 1_500_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 1_500_000_000L, GPU_THEN_CPU,
             4096, false, cpuMeasured(1_000_000_000L), NOTHING));
         assertFalse(plan.fits);
         assertEquals("cpu", plan.accelerator);
@@ -509,7 +509,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void aHeldBackAcceleratorIsSkippedWithoutHalvingTheWindow() {
         TaiLoadBudget.History typical = gpuMeasured(2588L * MIB);
-        TaiLoadBudget.Request cleanup = request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false, typical, NOTHING);
+        TaiLoadBudget.Request cleanup = request(E4B, SMALL_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false, typical, NOTHING);
         TaiLoadBudget.Plan held = TaiLoadBudget.plan(cleanup.withHeldBack("gpu"));
         assertFalse(held.fits);
         assertEquals("gpu", held.accelerator);
@@ -521,10 +521,10 @@ public class TaiLoadBudgetTest {
 
         // A crash at the same window halves it, under the floor: the rule a stop no longer triggers.
         assertFalse(TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
-            PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, "gpu", 2048, false, typical, NOTHING)).fits);
+            SMALL_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, "gpu", 2048, false, typical, NOTHING)).fits);
 
         // A smaller file with a measured CPU cost takes the CPU while its GPU is held back.
-        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 4096, false,
+        TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 4500L * MIB, GPU_THEN_CPU, 4096, false,
             cpuMeasured(800_000_000L), NOTHING).withHeldBack("gpu"));
         assertTrue(e2b.fits);
         assertEquals("cpu", e2b.accelerator);
@@ -537,11 +537,11 @@ public class TaiLoadBudgetTest {
     public void aLoadThatDoesNotFitEvictsIdleResidentsBeforeShrinkingTheWindow() {
         TaiResidency.Entry embedding = resident("emb", TaiResidency.Kind.EMBEDDING, 300_000_000L, false);
         TaiResidency.Entry stt = resident("whisper", TaiResidency.Kind.STT, 400_000_000L, false);
-        TaiLoadBudget.Plan without = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 9_000_000_000L, Collections.singletonList("gpu"),
+        TaiLoadBudget.Plan without = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 9_000_000_000L, Collections.singletonList("gpu"),
             8192, true, TaiLoadBudget.NO_HISTORY, NOTHING));
         long available = without.neededFreeBytes() - 200_000_000L;
 
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, available, Collections.singletonList("gpu"),
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, available, Collections.singletonList("gpu"),
             8192, true, TaiLoadBudget.NO_HISTORY, Arrays.asList(embedding, stt)));
         assertTrue(plan.fits);
         assertEquals(8192, plan.contextWindow);
@@ -550,7 +550,7 @@ public class TaiLoadBudgetTest {
         assertEquals(300_000_000L, plan.evictedBytes());
 
         // Nothing to evict: the window shrinks instead.
-        TaiLoadBudget.Plan shrunk = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, available, Collections.singletonList("gpu"),
+        TaiLoadBudget.Plan shrunk = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, available, Collections.singletonList("gpu"),
             8192, true, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertTrue(shrunk.fits);
         assertEquals(4096, shrunk.contextWindow);
@@ -581,13 +581,13 @@ public class TaiLoadBudgetTest {
     @Test
     public void whenEvictionIsNotEnoughTheLadderStillRunsAndThenRefuses() {
         TaiResidency.Entry embedding = resident("emb", TaiResidency.Kind.EMBEDDING, 100_000_000L, false);
-        TaiLoadBudget.Plan cpu = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan cpu = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU,
             4096, false, cpuMeasured(800_000_000L), Collections.singletonList(embedding)));
         assertTrue(cpu.fits);
         assertEquals("cpu", cpu.accelerator);
         assertTrue(cpu.evicted.isEmpty());
 
-        TaiLoadBudget.Plan refused = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 1_000_000_000L, GPU_THEN_CPU,
+        TaiLoadBudget.Plan refused = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 1_000_000_000L, GPU_THEN_CPU,
             4096, false, TaiLoadBudget.NO_HISTORY, Collections.singletonList(embedding)));
         assertFalse(refused.fits);
         assertTrue(refused.evicted.isEmpty());
@@ -597,18 +597,18 @@ public class TaiLoadBudgetTest {
     public void aFixedLoadEvictsIdleResidentsToo() {
         TaiResidency.Entry chat = resident("qwen", TaiResidency.Kind.CHAT, 1_000_000_000L, false);
         TaiLoadBudget.Estimate estimate = TaiLoadBudget.Estimate.ratio(240_000_000L, 0L);
-        TaiLoadBudget.Plan refused = TaiLoadBudget.planFixed(estimate, "cpu", PONG_TOTAL, HOLD + 100_000_000L,
+        TaiLoadBudget.Plan refused = TaiLoadBudget.planFixed(estimate, "cpu", SMALL_TOTAL, HOLD + 100_000_000L,
             NOTHING, TaiLoadBudget.Conditions.RELAXED);
         assertFalse(refused.fits);
         assertEquals(TaiLoadBudget.SOURCE_RATIO, refused.estimateSource);
         assertEquals(HOLD, refused.reserveBytes);
 
-        TaiLoadBudget.Plan evicting = TaiLoadBudget.planFixed(estimate, "cpu", PONG_TOTAL, HOLD + 100_000_000L,
+        TaiLoadBudget.Plan evicting = TaiLoadBudget.planFixed(estimate, "cpu", SMALL_TOTAL, HOLD + 100_000_000L,
             Collections.singletonList(chat), TaiLoadBudget.Conditions.RELAXED);
         assertTrue(evicting.fits);
         assertEquals(Collections.singletonList(chat), evicting.evicted);
 
-        TaiLoadBudget.Plan measured = TaiLoadBudget.planFixed(TaiLoadBudget.Estimate.measured(200_000_000L), "cpu", PONG_TOTAL,
+        TaiLoadBudget.Plan measured = TaiLoadBudget.planFixed(TaiLoadBudget.Estimate.measured(200_000_000L), "cpu", SMALL_TOTAL,
             HOLD + 220_000_000L, NOTHING, TaiLoadBudget.Conditions.RELAXED);
         assertTrue(measured.fits);
         assertEquals(220_000_000L, measured.estimatedBytes);
@@ -618,14 +618,14 @@ public class TaiLoadBudgetTest {
     @Test
     public void aFixedLoadFitsWhenItLeavesTheHoldFloorFree() {
         long reserve = HOLD;
-        TaiLoadBudget.Plan fits = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, reserve + 240_000_000L);
+        TaiLoadBudget.Plan fits = TaiLoadBudget.planFixed(240_000_000L, "cpu", SMALL_TOTAL, reserve + 240_000_000L);
         assertTrue(fits.fits);
         assertTrue(fits.measured);
         assertEquals("cpu", fits.accelerator);
         assertEquals(0, fits.contextWindow);
         assertEquals(240_000_000L, fits.estimatedBytes);
 
-        TaiLoadBudget.Plan refused = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, reserve + 239_999_999L);
+        TaiLoadBudget.Plan refused = TaiLoadBudget.planFixed(240_000_000L, "cpu", SMALL_TOTAL, reserve + 239_999_999L);
         assertFalse(refused.fits);
         assertFalse(refused.overcommitted);
         assertTrue(refused.neededFreeBytes() > refused.availableBytes);
@@ -635,21 +635,21 @@ public class TaiLoadBudgetTest {
     @Test
     public void anUnrestrictedFixedLoadAlwaysGoesAhead() {
         TaiLoadBudget.Estimate estimate = TaiLoadBudget.Estimate.ratio(240_000_000L, 0L);
-        TaiLoadBudget.Plan outright = TaiLoadBudget.planFixed(estimate, "cpu", PONG_TOTAL, 240_000_000L,
+        TaiLoadBudget.Plan outright = TaiLoadBudget.planFixed(estimate, "cpu", SMALL_TOTAL, 240_000_000L,
             NOTHING, TaiLoadBudget.Conditions.UNRESTRICTED);
         assertTrue(outright.fits);
         assertFalse(outright.overcommitted);
         assertEquals(0L, outright.reserveBytes);
 
         TaiResidency.Entry stt = resident("whisper", TaiResidency.Kind.STT, 200_000_000L, false);
-        TaiLoadBudget.Plan evicting = TaiLoadBudget.planFixed(estimate, "cpu", PONG_TOTAL, 100_000_000L,
+        TaiLoadBudget.Plan evicting = TaiLoadBudget.planFixed(estimate, "cpu", SMALL_TOTAL, 100_000_000L,
             Collections.singletonList(stt), TaiLoadBudget.Conditions.UNRESTRICTED);
         assertTrue(evicting.fits);
         assertFalse(evicting.overcommitted);
         assertEquals(Collections.singletonList(stt), evicting.evicted);
 
         TaiResidency.Entry small = resident("emb", TaiResidency.Kind.EMBEDDING, 50_000_000L, false);
-        TaiLoadBudget.Plan past = TaiLoadBudget.planFixed(estimate, "cpu", PONG_TOTAL, 100_000_000L,
+        TaiLoadBudget.Plan past = TaiLoadBudget.planFixed(estimate, "cpu", SMALL_TOTAL, 100_000_000L,
             Collections.singletonList(small), TaiLoadBudget.Conditions.UNRESTRICTED);
         assertTrue(past.fits);
         assertTrue(past.overcommitted);
@@ -658,7 +658,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void aFixedLoadWithUnknownFreeMemoryGoesAheadUnmeasured() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, 0L);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(240_000_000L, "cpu", SMALL_TOTAL, 0L);
         assertTrue(plan.fits);
         assertFalse(plan.measured);
     }
@@ -677,7 +677,7 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void anImplicitWindowOnLiteRtCpuIsHeldToTheFloor() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 9_000_000_000L, CPU_ONLY,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 9_000_000_000L, CPU_ONLY,
             32_768, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertTrue(plan.fits);
         assertEquals("cpu", plan.accelerator);
@@ -686,14 +686,14 @@ public class TaiLoadBudgetTest {
 
     @Test
     public void anExplicitWindowOnLiteRtCpuIsHonoured() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 10_000_000_000L, CPU_ONLY,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 10_000_000_000L, CPU_ONLY,
             32_768, true, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals(32_768, plan.contextWindow);
     }
 
     @Test
     public void aModelLimitBelowTheFloorStillWinsOnLiteRtCpu() {
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 9_000_000_000L, CPU_ONLY,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, SMALL_TOTAL, 9_000_000_000L, CPU_ONLY,
             2048, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals(2048, plan.contextWindow);
     }
@@ -701,7 +701,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void theCpuCapDoesNotApplyToMnn() {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_MNN_LLM, 500_000_000L, false,
-            PONG_TOTAL, 9_000_000_000L, CPU_ONLY, 16_384, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING));
+            SMALL_TOTAL, 9_000_000_000L, CPU_ONLY, 16_384, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING));
         assertEquals(16_384, plan.contextWindow);
     }
 
@@ -709,7 +709,7 @@ public class TaiLoadBudgetTest {
 
     private static TaiLoadBudget.Plan momentaryPlan(long available, boolean momentary) {
         return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
-            PONG_TOTAL, available, GPU_THEN_CPU, 4096, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING,
+            SMALL_TOTAL, available, GPU_THEN_CPU, 4096, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING,
             momentary));
     }
 
@@ -730,7 +730,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void anUnrestrictedMomentaryLoadKeepsNoFloorEither() {
         TaiLoadBudget.Request request = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
-            PONG_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 4096, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING, true);
+            SMALL_TOTAL, 9_000_000_000L, GPU_THEN_CPU, 4096, null, 0, false, TaiLoadBudget.NO_HISTORY, NOTHING, true);
         assertEquals(PEAK, TaiLoadBudget.plan(request).reserveBytes);
         assertEquals(0L, TaiLoadBudget.plan(request.withConditions(TaiLoadBudget.Conditions.UNRESTRICTED)).reserveBytes);
     }
@@ -750,7 +750,7 @@ public class TaiLoadBudgetTest {
     /** E4B with 3 GB free: relaxed refuses it; unrestricted loads it on the GPU at the floor and lets Android make room. */
     @Test
     public void unrestrictedLimitsLoadWhatRelaxedRefusesOnTheFirstAcceleratorAtTheFloor() {
-        TaiLoadBudget.Request request = request(E4B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, true,
+        TaiLoadBudget.Request request = request(E4B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768, true,
             TaiLoadBudget.NO_HISTORY, NOTHING);
         assertFalse(TaiLoadBudget.plan(request).fits);
 
@@ -765,7 +765,7 @@ public class TaiLoadBudgetTest {
         // Past the budget, every idle resident is given up first; a busy one stays.
         TaiResidency.Entry idle = resident("emb", TaiResidency.Kind.EMBEDDING, 50_000_000L, false);
         TaiResidency.Entry busy = resident("whisper", TaiResidency.Kind.STT, 200_000_000L, true);
-        TaiLoadBudget.Plan clearing = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768,
+        TaiLoadBudget.Plan clearing = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768,
             true, TaiLoadBudget.NO_HISTORY, Arrays.asList(idle, busy)).withConditions(TaiLoadBudget.Conditions.UNRESTRICTED));
         assertTrue(clearing.overcommitted);
         assertEquals(Collections.singletonList(idle), clearing.evicted);
@@ -776,7 +776,7 @@ public class TaiLoadBudgetTest {
     public void unrestrictedLimitsStillEvictAndShrinkBeforeGoingPastTheBudget() {
         TaiResidency.Entry embedding = resident("emb", TaiResidency.Kind.EMBEDDING, 300_000_000L, false);
         long at8k = TaiLoadBudget.estimateBytes(TaiModelSpec.BACKEND_LITERT_LM, "gpu", E4B, false, 8192);
-        TaiLoadBudget.Plan evicting = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, at8k - 200_000_000L,
+        TaiLoadBudget.Plan evicting = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, at8k - 200_000_000L,
             Collections.singletonList("gpu"), 8192, true, TaiLoadBudget.NO_HISTORY, Collections.singletonList(embedding))
             .withConditions(TaiLoadBudget.Conditions.UNRESTRICTED));
         assertTrue(evicting.fits);
@@ -784,7 +784,7 @@ public class TaiLoadBudgetTest {
         assertEquals(8192, evicting.contextWindow);
         assertEquals(Collections.singletonList(embedding), evicting.evicted);
 
-        TaiLoadBudget.Plan shrunk = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, at8k - 200_000_000L,
+        TaiLoadBudget.Plan shrunk = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, at8k - 200_000_000L,
             Collections.singletonList("gpu"), 8192, true, TaiLoadBudget.NO_HISTORY, NOTHING)
             .withConditions(TaiLoadBudget.Conditions.UNRESTRICTED));
         assertTrue(shrunk.fits);
@@ -797,14 +797,14 @@ public class TaiLoadBudgetTest {
     public void unrestrictedLimitsKeepTheCrashRecord() {
         // E2B killed on the GPU at the floor: the CPU is the way left, and it goes ahead past the budget.
         TaiLoadBudget.Plan e2b = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E2B, false, PONG_TOTAL, 1_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)
+            E2B, false, SMALL_TOTAL, 1_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)
             .withConditions(TaiLoadBudget.Conditions.UNRESTRICTED));
         assertTrue(e2b.fits);
         assertTrue(e2b.overcommitted);
         assertEquals("cpu", e2b.accelerator);
         // E4B has no CPU step (over 3 GB), so with its GPU held back there is nothing to load.
         assertFalse(TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM,
-            E4B, false, PONG_TOTAL, 1_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)
+            E4B, false, SMALL_TOTAL, 1_000_000_000L, GPU_THEN_CPU, 32_768, "gpu", 4096)
             .withConditions(TaiLoadBudget.Conditions.UNRESTRICTED)).fits);
     }
 
@@ -812,7 +812,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void anExplicitAcceleratorIsTriedOnceAtTheFloorAfterACrash() {
         TaiLoadBudget.Request crashed = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
-            PONG_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
+            SMALL_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
         TaiLoadBudget.Plan explicit = TaiLoadBudget.plan(crashed.withExplicitAccelerator(true));
         assertTrue(explicit.fits);
         assertEquals("gpu", explicit.accelerator);
@@ -825,7 +825,7 @@ public class TaiLoadBudgetTest {
     @Test
     public void anAutomaticAcceleratorAfterTheSameCrashIsSkippedAndReported() {
         TaiLoadBudget.Request crashed = new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
-            PONG_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
+            SMALL_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 4096, "gpu", 4096);
         TaiLoadBudget.Plan auto = TaiLoadBudget.plan(crashed.withExplicitAccelerator(false));
         assertFalse(auto.fits);
         assertFalse(auto.compared);
@@ -836,18 +836,93 @@ public class TaiLoadBudgetTest {
         assertEquals(4096, auto.skipped.get(0).floorContext);
     }
 
+    // --- A low-memory kill is retried once memory has had time to recover ---
+
+    private static TaiLoadBudget.Request gpuCrashedAt4096(long available) {
+        return new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B, false,
+            SMALL_TOTAL, available, Collections.singletonList("gpu"), 4096, "gpu", 4096);
+    }
+
+    @Test
+    public void aLowMemoryKillYoungerThanTheRecoveryPeriodSkipsTheAcceleratorAndNamesMemory() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(gpuCrashedAt4096(6_330_000_000L)
+            .withLowMemoryCrash(true, TaiLoadBudget.LOW_MEMORY_RECOVERY_MS - 1L));
+        assertFalse(plan.fits);
+        assertFalse(plan.retriedAfterLowMemory);
+        assertEquals(1, plan.skipped.size());
+        assertEquals(TaiLoadBudget.Skipped.CRASHED_LOW_MEMORY, plan.skipped.get(0).reason);
+        assertTrue(plan.skipped.get(0).text().contains("for memory"));
+        assertTrue(plan.skipped.get(0).text().contains("try it again after 5 min"));
+    }
+
+    @Test
+    public void aLowMemoryKillYoungerThanTheRecoveryPeriodStillHalvesTheWindow() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B,
+            false, SMALL_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 32_768, "gpu", 8192)
+            .withLowMemoryCrash(true, 1000L));
+        assertTrue(plan.fits);
+        assertEquals(4096, plan.contextWindow);
+        assertFalse(plan.retriedAfterLowMemory);
+    }
+
+    @Test
+    public void aLowMemoryKillOlderThanTheRecoveryPeriodIsTriedAgainAtTheFullWindow() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B,
+            false, SMALL_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 32_768, "gpu", 8192)
+            .withLowMemoryCrash(true, TaiLoadBudget.LOW_MEMORY_RECOVERY_MS));
+        assertTrue(plan.fits);
+        assertEquals("gpu", plan.accelerator);
+        assertEquals(4096, plan.contextWindow);   // the automatic GPU cap, not halved from 8192
+        assertTrue(plan.retriedAfterLowMemory);
+        assertTrue(plan.skipped.isEmpty());
+        TaiLoadBudget.Plan floorCrash = TaiLoadBudget.plan(gpuCrashedAt4096(6_330_000_000L)
+            .withLowMemoryCrash(true, TaiLoadBudget.LOW_MEMORY_RECOVERY_MS));
+        assertTrue(floorCrash.fits);
+        assertEquals("gpu", floorCrash.accelerator);
+        assertTrue(floorCrash.retriedAfterLowMemory);
+    }
+
+    @Test
+    public void aRetriedLowMemoryKillThatDoesNotFitIsRefusedWithoutTheRetryFlag() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(gpuCrashedAt4096(1_000_000_000L)
+            .withLowMemoryCrash(true, TaiLoadBudget.LOW_MEMORY_RECOVERY_MS * 2L));
+        assertFalse(plan.fits);
+        assertFalse(plan.retriedAfterLowMemory);
+        assertTrue(plan.compared);
+        assertTrue(plan.skipped.isEmpty());
+    }
+
+    @Test
+    public void anExplicitAcceleratorIsUnaffectedByTheRecoveryPeriod() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E2B,
+            false, SMALL_TOTAL, 6_330_000_000L, Collections.singletonList("gpu"), 32_768, "gpu", 8192)
+            .withExplicitAccelerator(true).withLowMemoryCrash(true, TaiLoadBudget.LOW_MEMORY_RECOVERY_MS * 2L));
+        assertTrue(plan.fits);
+        assertEquals(4096, plan.contextWindow);
+        assertFalse(plan.retriedAfterLowMemory);
+    }
+
+    @Test
+    public void aCrashThatIsNotALowMemoryKillNeverExpires() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(gpuCrashedAt4096(6_330_000_000L)
+            .withLowMemoryCrash(false, 24L * 60L * 60L * 1000L));
+        assertFalse(plan.fits);
+        assertFalse(plan.retriedAfterLowMemory);
+        assertEquals(TaiLoadBudget.Skipped.CRASHED, plan.skipped.get(0).reason);
+    }
+
     /** A held-back accelerator is reported with the stop's age; a plan that compared something says so. */
     @Test
     public void aHeldBackAcceleratorIsReportedAsSkipped() {
         TaiLoadBudget.History typical = gpuMeasured(2588L * MIB);
-        TaiLoadBudget.Plan held = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
+        TaiLoadBudget.Plan held = TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
             typical, NOTHING).withHeldBack("gpu", 30_000L));
         assertFalse(held.fits);
         assertFalse(held.compared);
         assertEquals(1, held.skipped.size());
         assertEquals(TaiLoadBudget.Skipped.HELD_BACK, held.skipped.get(0).reason);
         assertEquals(30_000L, held.skipped.get(0).stoppedAgeMs);
-        assertTrue(TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
+        assertTrue(TaiLoadBudget.plan(request(E4B, SMALL_TOTAL, 4500L * MIB, GPU_THEN_CPU, 2048, false,
             typical, NOTHING)).compared);
     }
 

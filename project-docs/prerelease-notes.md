@@ -43,7 +43,8 @@ Latest stable: v1.2.1.
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
 
 ### On-device AI
-- The AI runtime keeps a share of your phone's RAM free before it loads a model, so a large GPU model no longer takes the launcher down with it.
+- The AI runtime now keeps a share of your phone's RAM free when it loads a model, sized to the phone, so a large model that would starve the rest of the phone is refused up front.
+- A model load that Android closed to free memory is tried again on its own once memory has recovered, instead of staying off that accelerator until you ask for it by name.
 
 ### Linux apps
 - A display you start from a shell with termux-x11 gets a window manager, so apps open with window frames instead of unmanaged at their own size.
