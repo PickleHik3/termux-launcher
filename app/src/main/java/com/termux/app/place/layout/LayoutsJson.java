@@ -144,20 +144,14 @@ public final class LayoutsJson {
     }
 
     /**
-     * The shipped document for {@code kind}: what a fresh install wears. Everything is absent and
-     * reads its default but the kind's visibility, which Home, Terminal and Display each ship
-     * with; Terminal-minimal holds its own visibility in its slots.
+     * The shipped document for {@code kind}: what a fresh install wears. Every field is absent
+     * and reads its default, the kind's visibility included
+     * ({@link PlaceLayoutStore#kindShowsByDefault}), so a fresh install writes nothing and "holds
+     * a value" keeps meaning the user (or a migration) set one.
      */
     @NonNull
     public static KindLayout shippedDefault(@NonNull LayoutKind kind) {
-        if (kind == LayoutKind.TERMINAL_MINIMAL) return KindLayout.EMPTY;
-        Map<String, Object> dress = new LinkedHashMap<>();
-        for (Element element : Element.values()) {
-            dress.put(dressField(element),
-                PlaceLayoutStore.kindShowsByDefault(kind.pageKind(), element));
-        }
-        LayoutFields fields = LayoutFields.of(dress);
-        return new KindLayout(KindLayout.VERSION, LayoutFields.EMPTY, fields, fields);
+        return KindLayout.EMPTY;
     }
 
     /** Reads all five documents; a missing one is its shipped default, a bad one too, logged. */

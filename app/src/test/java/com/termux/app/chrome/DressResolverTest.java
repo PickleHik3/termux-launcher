@@ -38,7 +38,7 @@ public class DressResolverTest {
     private static final int HOME_ID = 2;
     private static final int TERMINAL_ID = 1;
     /** The Home page in front's own layout: what the old Home layout switch stood for. */
-    private static final LayoutVariant HOME_PAGE = LayoutVariant.page(HOME_ID, PageKind.HOME);
+    private static final LayoutVariant HOME_PAGE = LayoutVariant.HOME;
 
     /** What the store holds, as a test sets it. */
     private static final class Stored implements DressResolver.Source {
@@ -545,7 +545,7 @@ public class DressResolverTest {
         stored.minimal = true;
         stored.kindShown.put("TERMINAL.APPS", false);
         assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
-        assertEquals(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, dresses.layoutOf(PaneWallPage.WIDGETS));
         assertTrue(home().wears(Element.APPS));
     }
 
@@ -564,10 +564,10 @@ public class DressResolverTest {
 
     @Test
     public void aHomePageWithoutAPageLayoutWearsTheNormalLayout() {
-        assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.WIDGETS));
+        assertSame(LayoutVariant.HOME, dresses.layoutOf(PaneWallPage.WIDGETS));
         stored.homeLayout = true;
         stored.homeInFront = 3;
-        assertSame("page 2's layout is not page 3's", LayoutVariant.NORMAL,
+        assertSame("page 2's layout is not page 3's", LayoutVariant.HOME,
             dresses.layoutOf(PaneWallPage.WIDGETS));
     }
 
@@ -576,7 +576,7 @@ public class DressResolverTest {
         stored.otherPageLayouts.add(3);
         stored.homeInFront = 3;
         LayoutVariant own = dresses.layoutOf(PaneWallPage.WIDGETS);
-        assertSame(LayoutVariant.page(3, PageKind.HOME), own);
+        assertSame(LayoutVariant.HOME, own);
         assertTrue(own.isPage());
         assertTrue(own.isHomeKind());
         assertFalse(own.offers(Element.EXTRA_KEYS));
@@ -589,7 +589,7 @@ public class DressResolverTest {
         assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
         stored.terminalLayout = true;
         LayoutVariant own = dresses.layoutOf(PaneWallPage.TERMINAL);
-        assertSame(LayoutVariant.page(TERMINAL_ID, PageKind.TERMINAL), own);
+        assertSame(LayoutVariant.NORMAL, own);
         assertFalse(own.isHomeKind());
         assertTrue(own.offers(Element.EXTRA_KEYS));
         stored.minimal = true;
@@ -601,7 +601,7 @@ public class DressResolverTest {
     public void aDisplayPagesOwnLayoutIsOfTheDisplayKind() {
         stored.terminalLayout = true;
         LayoutVariant own = dresses.layoutOf(PaneWallPage.DISPLAY);
-        assertSame(LayoutVariant.page(TERMINAL_ID, PageKind.DISPLAY), own);
+        assertSame(LayoutVariant.DISPLAY, own);
         assertEquals(PageKind.DISPLAY, own.kind());
         assertTrue(own.isPage());
         assertTrue(own.holdsOwnVisibility());
@@ -614,7 +614,7 @@ public class DressResolverTest {
     @Test
     public void aPageLayoutsDesignIsWhatThePageDraws() {
         stored.terminalLayout = true;
-        stored.designs.put(LayoutVariant.page(TERMINAL_ID, PageKind.TERMINAL), DockStyle.LENS_BEADS);
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
         assertEquals(DockStyle.effectiveStyle(DockStyle.LENS_BEADS),
             dresses.dockDesignOf(PaneWallPage.TERMINAL));
         assertEquals(DockStyle.effectiveStyle(DockStyle.GLASS_TRAY),

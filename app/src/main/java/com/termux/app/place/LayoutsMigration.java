@@ -139,7 +139,6 @@ final class LayoutsMigration {
             if (value == null && fallback != null) value = fallback.wide().get(field);
             if (value != null) wide.put(field, value);
         }
-        KindLayout shipped = LayoutsJson.shippedDefault(kind);
         KindLayout out = new KindLayout(KindLayout.VERSION, LayoutFields.of(wide),
             LayoutFields.EMPTY, LayoutFields.EMPTY);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
@@ -158,8 +157,8 @@ final class LayoutsMigration {
                     if (value != null) fields.put(field, value);
                 }
                 for (Element element : Element.values()) {
-                    fields.put(LayoutsJson.dressField(element),
-                        dress(PageKind.HOME, orientation, element, shipped));
+                    Object stored = dress(PageKind.HOME, orientation, element);
+                    if (stored != null) fields.put(LayoutsJson.dressField(element), stored);
                 }
             }
             out = out.withOrientation(orientation, LayoutFields.of(fields));
@@ -182,24 +181,22 @@ final class LayoutsMigration {
     /** A Terminal or Display document with that kind's own visibility (was {@code place.dress.*}). */
     @NonNull
     private KindLayout withDress(@NonNull KindLayout layout, @NonNull PageKind kind) {
-        KindLayout shipped = LayoutsJson.shippedDefault(LayoutKind.of(kind, false));
         KindLayout out = layout;
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             for (Element element : Element.values()) {
+                // Absent stays absent: the kind's shipped visibility is read, not written.
                 out = out.with(orientation, LayoutsJson.dressField(element),
-                    dress(kind, orientation, element, shipped));
+                    dress(kind, orientation, element));
             }
         }
         return out;
     }
 
-    @NonNull
+    @Nullable
     private Boolean dress(@NonNull PageKind kind, @NonNull PlaceOrientation orientation,
-                          @NonNull Element element, @NonNull KindLayout shipped) {
+                          @NonNull Element element) {
         Object stored = mAll.get(PlaceLayoutStore.kindKey(kind, orientation, element));
-        if (stored instanceof Boolean) return (Boolean) stored;
-        return shipped.orientation(orientation).bool(LayoutsJson.dressField(element),
-            PlaceLayoutStore.kindShowsByDefault(kind, element));
+        return stored instanceof Boolean ? (Boolean) stored : null;
     }
 
     @NonNull

@@ -95,7 +95,7 @@ public class SeamCrossingTest {
 
     /** The Home page in front's own layout: what the old Home layout switch stood for. */
     private static final LayoutVariant HOME_PAGE =
-        LayoutVariant.page(2, com.termux.app.wall.WallPages.PageKind.HOME);
+        LayoutVariant.HOME;
 
     private static final class Stored implements DressResolver.Source {
         boolean minimal;

@@ -8,7 +8,6 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.os.Build;
 
-import com.termux.app.place.Element;
 import com.termux.app.place.PlaceOrientation;
 
 import org.json.JSONObject;
@@ -90,13 +89,9 @@ public class LayoutsJsonTest {
     }
 
     @Test
-    public void theShippedKindsShowWhatTheirKindShows() {
-        KindLayout home = LayoutsJson.shippedDefault(LayoutKind.HOME);
-        KindLayout terminal = LayoutsJson.shippedDefault(LayoutKind.TERMINAL);
-        assertTrue(home.portrait().bool(LayoutsJson.dressField(Element.APPS), false));
-        assertTrue(!home.portrait().bool(LayoutsJson.dressField(Element.EXTRA_KEYS), true));
-        assertTrue(terminal.landscape().bool(LayoutsJson.dressField(Element.EXTRA_KEYS), false));
-        assertTrue(LayoutsJson.shippedDefault(LayoutKind.TERMINAL_MINIMAL).portrait().keys().isEmpty());
+    public void theShippedDocumentsHoldNothingSoEveryFieldReadsItsDefault() {
+        for (LayoutKind kind : LayoutKind.values())
+            assertEquals(KindLayout.EMPTY, LayoutsJson.shippedDefault(kind));
     }
 
     @Test

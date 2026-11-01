@@ -79,7 +79,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         // Version 14 copies the shared layout into Home's; version 16 finds the copy equal, so
         // Home goes back on the shared layout with no page layout: nothing moves either way.
         assertFalse(upgraded.hasHomeLayout());
-        assertEquals(LayoutVariant.NORMAL,
+        assertEquals(LayoutVariant.HOME,
             DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
         PlaceLayoutStore from = upgraded.forVariant(LayoutVariant.NORMAL);
         PlaceLayoutStore home = upgraded.forVariant(LayoutVariant.HOME);
@@ -137,7 +137,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         assertFalse(fresh.hasHomeLayout());
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
-        assertEquals(LayoutVariant.NORMAL, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

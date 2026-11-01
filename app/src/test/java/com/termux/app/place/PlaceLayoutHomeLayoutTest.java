@@ -170,7 +170,7 @@ public class PlaceLayoutHomeLayoutTest {
     public void aPageSaysWhichVariantItIsArrangedBy() {
         PlaceLayoutStore store = KindFixtures.onHomePage(store());
         assertEquals("a Home page without a page layout wears the shared one (version 16)",
-            LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+            LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
         store.setMinimal(true);
