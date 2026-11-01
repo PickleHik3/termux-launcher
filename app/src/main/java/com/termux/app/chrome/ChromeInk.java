@@ -171,6 +171,8 @@ public final class ChromeInk {
     private static final class PaneAnswer {
         /** The root-space rect this answer was measured at. */
         @NonNull Rect rect = new Rect();
+        /** Detached: kept for its return at the same rect, but not counted in the band. */
+        boolean parked;
         int wallpaper;
         boolean sampled;
         int dim;
@@ -303,13 +305,31 @@ public final class ChromeInk {
     }
 
     /**
-     * Forgets the answer of the pane {@code key} (its slab detached or stopped being measured),
-     * and re-publishes the band's ground from the panes that remain.
+     * Forgets the answer of the pane {@code key} for good (its slab stopped being measured or the
+     * pane closed), and re-publishes the band's ground from the panes that remain.
      */
     public void forgetPane(@NonNull Object key) {
         PaneAnswer gone = mPanes.remove(key);
         if (gone == null || mPanes.isEmpty()) return;
         publishPaneBand(gone.tint);
+    }
+
+    /**
+     * Parks or unparks the pane {@code key}: a detached pane keeps its answer but stops counting in
+     * the band (means, polarity, ground, count); unparked it counts again with no new measure. The
+     * band's ground is re-published, and tells its listener only if the published values moved.
+     */
+    public void parkPane(@NonNull Object key, boolean parked) {
+        PaneAnswer answer = mPanes.get(key);
+        if (answer == null || answer.parked == parked) return;
+        answer.parked = parked;
+        if (liveCount() > 0) publishPaneBand(answer.tint);
+    }
+
+    private int liveCount() {
+        int n = 0;
+        for (PaneAnswer pane : mPanes.values()) if (!pane.parked) n++;
+        return n;
     }
 
     /** Panes a window can hold at once, and then some; an older rect is dropped, not an error. */
@@ -681,6 +701,7 @@ public final class ChromeInk {
         if (answer != null && answer.sampled
                 && answer.matches(dim, tint, veilColor, ink, dimInk, target)
                 && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
+            if (answer.parked) parkPane(key, false);
             return answer.resolution;
         }
         int wallpaper;
@@ -757,6 +778,7 @@ public final class ChromeInk {
             answer.rect.set(rootRect);
             mPanes.put(key, answer);
         }
+        answer.parked = false;
         answer.resolution = resolution;
         answer.wallpaper = wallpaper;
         answer.sampled = sampled;
@@ -867,7 +889,7 @@ public final class ChromeInk {
 
     /** Terminal panes remembered right now, for tests. */
     int paneAnswerCountForTests() {
-        return mPanes.size();
+        return liveCount();
     }
 
     // ------------------------------------------------------------------ the widget band
@@ -1034,7 +1056,7 @@ public final class ChromeInk {
         long red = 0, green = 0, blue = 0;
         int count = 0;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -1055,7 +1077,7 @@ public final class ChromeInk {
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -1103,7 +1125,7 @@ public final class ChromeInk {
         }
         for (java.util.Map.Entry<Object, PaneAnswer> e : mPanes.entrySet()) {
             PaneAnswer pane = e.getValue();
-            if (fresh != null && e.getKey().equals(fresh)) continue;
+            if (pane.parked || (fresh != null && e.getKey().equals(fresh))) continue;
             if (pane.evenOutPolicy == null || pane.evenOutPolarity == null) continue;
             totalPale += pane.shortPale;
             totalDark += pane.shortDark;
@@ -1442,7 +1464,7 @@ public final class ChromeInk {
         int n = 0;
         for (PaneAnswer pane : mPanes.values()) {
             Rect rect = pane.rect;
-            if (pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(rect)) continue;
             long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
             if (area == 0) continue;
             surfaces[n] = pane.resolution.surface;

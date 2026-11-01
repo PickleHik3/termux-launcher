@@ -50,7 +50,7 @@ public class ChromeInkPaneIdentityTest {
         ink.backdrops().setSampler(new GlassBackdropCache.Sampler() {
             @Override public int sampleWallpaper(@NonNull Rect screenRect) {
                 samples++;
-                return 0xFFB7C9E9;
+                return screenRect.left >= 200 ? 0xFF202020 : 0xFFB7C9E9;
             }
         });
     }
@@ -110,6 +110,35 @@ public class ChromeInkPaneIdentityTest {
         ink.forgetPane(floating);
         assertEquals(1, ink.paneAnswerCountForTests());
         ink.forgetPane(floating);
+        assertEquals(1, ink.paneAnswerCountForTests());
+    }
+
+    @Test
+    public void aParkedPaneKeepsItsAnswerAndComesBackWithoutAMeasure() {
+        OnGlass.Resolution first = ask(FLOAT, floating);
+        ask(TILED, tiled);
+        int both = ink.terminalPaneSurface(TINT);
+        ink.parkPane(floating, true);
+        assertEquals(1, ink.paneAnswerCountForTests());
+        int tiledAlone = ink.terminalPaneSurface(TINT);
+        org.junit.Assert.assertNotEquals("the parked pane is out of the mean", both, tiledAlone);
+        int samplesBefore = samples;
+        int generation = ink.evenOutGeneration();
+        ink.parkPane(floating, false);
+        assertEquals(2, ink.paneAnswerCountForTests());
+        assertEquals(both, ink.terminalPaneSurface(TINT));
+        assertSame(first, ask(FLOAT, floating));
+        assertEquals(samplesBefore, samples);
+        assertEquals(generation, ink.evenOutGeneration());
+    }
+
+    @Test
+    public void aClosedPaneIsGoneEvenWhileParked() {
+        ask(TILED, tiled);
+        ask(FLOAT, floating);
+        ink.parkPane(floating, true);
+        ink.forgetPane(floating);
+        ink.parkPane(floating, false);
         assertEquals(1, ink.paneAnswerCountForTests());
     }
 }

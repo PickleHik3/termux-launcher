@@ -179,10 +179,11 @@ public final class PaneGlass {
         if (sForgetWired.put(frame, Boolean.TRUE) == null) {
             frame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(@NonNull View v) {
+                    style.paneGlassPark(v, false);
                 }
 
                 @Override public void onViewDetachedFromWindow(@NonNull View v) {
-                    style.paneGlassForget(v);
+                    style.paneGlassPark(v, true);
                 }
             });
         }

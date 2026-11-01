@@ -3903,6 +3903,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mChrome.ink().evenOutMatrix(rootRect, key);
             }
 
+            @Override public void paneGlassPark(@NonNull Object key, boolean parked) {
+                if (mChrome != null) mChrome.ink().parkPane(key, parked);
+            }
+
             @Override public void paneGlassForget(@NonNull Object key) {
                 if (mChrome != null) mChrome.ink().forgetPane(key);
             }

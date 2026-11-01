@@ -64,6 +64,9 @@ public interface PaneSurfaceStyle {
                                                           @NonNull Object key) {
         return paneGlassEvenOut(rootRect);
     }
+    /** The pane {@code key} names detached ({@code true}) or came back: it stops or resumes counting. */
+    default void paneGlassPark(@NonNull Object key, boolean parked) {
+    }
     /** The pane {@code key} names is gone (detached, or no longer measured): drop its answer. */
     default void paneGlassForget(@NonNull Object key) {
     }

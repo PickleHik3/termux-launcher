@@ -5904,7 +5904,12 @@ public class TerminalPaneController {
     private void detachPaneView(TerminalSession session) {
         PaneRim rim = mBorderStates.remove(session);
         FrameLayout frame = mPaneFrames.remove(session);
-        mPaneGlassViews.remove(session);
+        PaneGlassBackdropView glass = mPaneGlassViews.remove(session);
+        // The pane is closed or rebuilt: its slab and frame keys are never asked again.
+        if (mSurfaceStyle != null) {
+            if (glass != null) mSurfaceStyle.paneGlassForget(glass);
+            if (frame != null) mSurfaceStyle.paneGlassForget(frame);
+        }
         if (rim != null && frame != null) rim.clear(frame);
         else if (rim != null) rim.cancel();
         releasePanePlank(frame);

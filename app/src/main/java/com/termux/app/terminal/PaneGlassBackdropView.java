@@ -746,15 +746,17 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        // A slab that detached lost its answer; ask again so it is counted before any layout.
-        if (mVeilSource != null && refreshVeil()) invalidate();
+        if (mVeilSource == null) return;
+        mVeilSource.paneGlassPark(this, false);
+        // Asked again only when its rect or the generation moved; else the kept answer stands.
+        if (getWidth() > 0 && veilDue() && refreshVeil()) invalidate();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        // The pane's answer goes with it; a slab that comes back is asked again (onAttachedToWindow).
-        if (mVeilSource != null) mVeilSource.paneGlassForget(this);
+        // The pane stops counting but keeps its answer for its return (onAttachedToWindow).
+        if (mVeilSource != null) mVeilSource.paneGlassPark(this, true);
         // A slab that comes back starts from rest, never from the bend it left with.
         if (mMotionLight != null) mMotionLight.reset();
         mTilt[0] = 0f;
