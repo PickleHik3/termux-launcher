@@ -19,12 +19,11 @@ under twenty items; past that, the oldest are re-judged first.
   memory…"; if the first 503 lacks it, note that, then check that the next status read's
   `lastRuntimeCrash` has it. The Settings AI status reads "closed by Android to free memory". A
   plain `kill -9` of the runtime still reads as before · emulator with little RAM, or pong by hand.
-- 2026-11-01 · rel/1.2.2 backport · Fresh install and upgrade over v1.2.1 (Termux and Nix
-  editions): the Nix build fetches the Nix bootstrap; Settings segmented pills show one check on the
-  selected segment; dock pin long-press holds still without running a menu row, unpin keeps the
-  other pins; a pull on an open drawer folder's empty part closes only the folder; hardware-keyboard
-  letters reach the drawer search; Chromium opens from the drawer and a missing command toasts;
-  a GPU load the #191 guard skips refuses with the skip reason · emulator tl16.
+- 2026-11-01 · rel/1.2.2 backport · Seen on emulator tl16 2026-11-01: fresh 1.2.1 to 1.2.2 upgrade,
+  Nix fresh bootstrap, segmented pills, dock hold and unpin, drawer folder pull, hardware keys in
+  search, punctuation-free selection. Still owed: two extra-key pages turn one page per swipe;
+  Chromium opens from the drawer and a missing command toasts (needs a distro); a GPU load the
+  #191 guard skips refuses with the skip reason (needs a GPU and a model) · emulator, or pong by hand.
 - 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
   · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
   Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
