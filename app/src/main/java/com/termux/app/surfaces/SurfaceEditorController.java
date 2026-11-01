@@ -791,6 +791,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
+        // On disk until the session ends, so a launcher killed before Done starts on this state.
+        AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom);
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
         com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
@@ -2416,6 +2418,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void commitSession() {
         commitLook();
         commitThemePreview();
+        AppearanceEntryStore.clear(prefs());
     }
 
     @Override
@@ -4910,6 +4913,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
+        AppearanceEntryStore.clear(prefs());
         closePageLook();
         mHost.retainGlassCapture(false);
         mFramed = false;

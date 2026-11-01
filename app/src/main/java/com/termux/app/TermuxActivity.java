@@ -1911,6 +1911,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Load preferences BEFORE setting theme (needed to check wallpaper preference)
         mPreferences = buildPlaceScopedPreferences(false);
+        // An Appearance editor session the process died in leaves its entry state behind: it is
+        // put back before anything reads the look, unless a relaunch carries that session on.
+        com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+            mAppearanceHandover.pending() != null);
         // Before any chrome is built: every label reads the shared Text size as it is made.
         com.termux.app.theme.TextScale.sync(mPreferences);
 
@@ -1929,6 +1933,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
             mPreferences = buildPlaceScopedPreferences(true);
+            com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+                mAppearanceHandover.pending() != null);
             com.termux.app.theme.TextScale.sync(mPreferences);
         }
         if (mPreferences == null) {
@@ -2727,6 +2733,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
                             new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
                             REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+                    }
+                    @Override public boolean isAppearanceEditorOpen() {
+                        return mAppearance.isOpen();
                     }
                 });
         }
@@ -22845,8 +22854,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
         Runnable open = () -> {
-            if (!isFinishing() && !isDestroyed())
-                mAppearance.open(com.termux.app.surfaces.EditorCard.forKey(section), place);
+            if (isFinishing() || isDestroyed()) return;
+            // The setup cards and the editor's card sheet never stand over each other.
+            if (mSetupWizard != null) mSetupWizard.stepAsideForEditor();
+            mAppearance.open(com.termux.app.surfaces.EditorCard.forKey(section), place);
         };
         if (root != null) root.post(open);
         else open.run();

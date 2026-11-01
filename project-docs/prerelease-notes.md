@@ -27,7 +27,7 @@ Latest stable: v1.2.1.
 
 ### Appearance editor
 - You can give terminal panes a border colour of your own, a focus colour and a steady glow: Appearance › Terminal › Pane borders.
-- Where it applies now offers Home pages, Terminal or Display pages between Everywhere and This page, and each kind ships its own keyboard: lifted on Home pages, nearly clear on Display pages.
+- Where it applies now offers Home pages, Terminal pages or Display pages between Everywhere and This page, and each kind ships its own keyboard: lifted on Home pages, nearly clear on Display pages.
 - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
 - A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
 - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
@@ -39,6 +39,9 @@ Latest stable: v1.2.1.
 - The terminal lands on its new size without a reflow when a window opens, closes or moves.
 - The terminal's More sheet holds Cursor trail, Effect, Split gap and its font.
 - Settings > Debugging > Motion log notes page changes and resizes, and launcherctl look reads and sets any look value from a shell.
+- Opening Appearance while the setup cards are showing no longer stacks the two sheets.
+- The Where chip names Terminal pages and the Terminal page apart.
+- Changes in the Appearance editor are no longer kept if the launcher is closed before Done.
 
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.

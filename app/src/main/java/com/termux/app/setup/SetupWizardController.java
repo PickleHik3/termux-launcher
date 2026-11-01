@@ -73,6 +73,9 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
         /** Asks for POST_NOTIFICATIONS; the host calls {@link #onNotificationPermissionResult}. */
         void requestNotificationPermission();
+
+        /** The Appearance editor is open: the card sheet waits for the next start. */
+        boolean isAppearanceEditorOpen();
     }
 
     private static final String SHIZUKU_GUIDE_URL =
@@ -491,10 +494,22 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     public boolean openCardsIfDue() {
         if (mOpen)
             return true;
+        if (mHost.isAppearanceEditorOpen())
+            return false;
         if (!isCardSheetDue())
             return false;
         openCards();
         return true;
+    }
+
+    /**
+     * The Appearance editor is opening: a card sheet that is up steps aside for this start. No
+     * card is marked dismissed, so the sheet comes back on the next start while any is due. The
+     * wizard's own sheet is left alone.
+     */
+    public void stepAsideForEditor() {
+        if (isCardSheetShowing())
+            close(false);
     }
 
     /** Opens the card sheet whatever is due (Settings' Setup row). */
