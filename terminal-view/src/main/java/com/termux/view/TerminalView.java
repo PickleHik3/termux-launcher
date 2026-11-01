@@ -4091,6 +4091,21 @@ public final class TerminalView extends View {
         return Math.round((cy - mTopRow) * mRenderer.mFontLineSpacing + getVerticalContentOffset());
     }
 
+    /**
+     * The columns this view's present size holds, whatever the session is sized to now: during a
+     * held resize, the columns the resize will give it. 0 before a font is set.
+     */
+    public int getColumnsForViewSize() {
+        if (mRenderer == null) return 0;
+        return Math.max(4, (int) (getWidth() / mRenderer.mFontWidth));
+    }
+
+    /** As {@link #getColumnsForViewSize}, for rows. */
+    public int getRowsForViewSize() {
+        if (mRenderer == null) return 0;
+        return rowsForHeight(getHeight());
+    }
+
     public float getHorizontalContentOffset() {
         if (mEmulator == null || mRenderer == null) {
             return 0f;
