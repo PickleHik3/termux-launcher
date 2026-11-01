@@ -428,12 +428,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return null;
     }
 
-    /** Where {@code card}'s look rows read and write: the Where chip's page, else the wall. */
+    /**
+     * Where {@code card}'s look rows read and write: the page the editor shows when the Where chip
+     * stands on its kind (a page's cells are its kind's, ADR 0020 §2), else the wall.
+     */
     @NonNull
     private com.termux.app.look.PageLook.Scope scopeFor(@Nullable EditorCard card) {
-        return card != null && mChips.onPage()
-            ? com.termux.app.look.PageLook.Scope.page(mChips.page)
-            : com.termux.app.look.PageLook.Scope.GLOBAL;
+        if (card == null || !onPageSide()) return com.termux.app.look.PageLook.Scope.GLOBAL;
+        return com.termux.app.look.PageLook.Scope.page(mChips.onPage() ? mChips.page : mScopePageId);
+    }
+
+    /** Whether the Where chip stands on the shown page's kind rather than Everywhere. */
+    private boolean onPageSide() {
+        return mChips.onPage() || (mChips.onKind() && mScopePageId >= 0);
     }
 
     /**
@@ -441,7 +448,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * write as they always have (an element's own value, or Base on the Appearance card).
      */
     private boolean chipsPlain(@Nullable EditorCard card) {
-        return !mChips.onPage() && mChips.isOpening(card);
+        return !onPageSide() && mChips.isOpening(card);
     }
 
     /** The value of a surface property the chips' cell shows, in the property's old unit. */
@@ -2627,7 +2634,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean scopeOnPage() {
-            return mChips.onPage();
+            return onPageSide();
         }
 
         @NonNull @Override public RowSource source(@NonNull Row row) {
@@ -2944,7 +2951,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
         // keeps its own writer (the same cell, Base).
         if (row == Row.MARGIN)
-            return mChips.onPage();
+            return onPageSide();
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;

@@ -142,10 +142,12 @@ public class EditorChipsTest {
 
     @Test
     public void aWriteAtTheChipsCellIsReadBackFromThatCell() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
-        LookGrid.Key cell = new EditorChips(PAGE, Element.DOCK).cell(Property.OPACITY);
-        grid.write(cell.property, cell.element, cell.page, 40);
-        assertEquals(LookGrid.Cell.ELEMENT_ON_PAGE,
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
+            page -> page == PAGE ? LookGrid.Kind.HOME : null, null);
+        LookGrid.Key cell = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.DOCK)
+            .cell(Property.OPACITY);
+        grid.write(cell, 40);
+        assertEquals("a Home page reads the Home kind's cell", LookGrid.Cell.ELEMENT_ON_KIND,
             grid.resolve(Property.OPACITY, Element.DOCK, PAGE).cell);
         assertFalse("the element everywhere holds nothing",
             grid.has(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE));

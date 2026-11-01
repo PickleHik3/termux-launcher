@@ -106,13 +106,15 @@ public class GlassRowsTest {
     }
 
     @Test
-    public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsPage() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
-        EditorChips onPage = EditorChips.openFor(EditorCard.APPEARANCE, (com.termux.shared.termux.settings.preferences.LookGrid.Kind) null).withPage(4);
-        for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE, Row.VIBRANCY}) {
-            LookGrid.Key cell = onPage.cell(GlassRows.cellProperty(row));
-            grid.write(cell.property, cell.element, cell.page, GlassRows.toCell(row, 30));
-            assertEquals(row + " is the page's", LookGrid.Cell.PAGE,
+    public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsKind() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
+            page -> page == 4 ? LookGrid.Kind.HOME : null, null);
+        EditorChips onKind = EditorChips.openFor(EditorCard.APPEARANCE,
+            (LookGrid.Kind) null).withWhere(EditorChips.Where.kind(LookGrid.Kind.HOME));
+        for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE}) {
+            LookGrid.Key cell = onKind.cell(GlassRows.cellProperty(row));
+            grid.write(cell, GlassRows.toCell(row, 30));
+            assertEquals(row + " is the kind's", LookGrid.Cell.KIND,
                 grid.resolve(cell.property, null, 4).cell);
             assertFalse(row + " leaves the wall", grid.has(cell.property, null, LookGrid.NO_PAGE));
         }

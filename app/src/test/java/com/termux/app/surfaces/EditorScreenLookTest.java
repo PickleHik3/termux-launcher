@@ -154,7 +154,7 @@ public class EditorScreenLookTest {
 
     private int pageValue(SurfaceSlot slot, SurfaceProperty property, int pageId) {
         // A page's own value is the element's cell on that page.
-        String key = com.termux.shared.termux.settings.preferences.LookGrid.key(property.grid, slot.element, pageId);
+        String key = preferences.lookGrid().cellKey(property.grid, slot.element, pageId);
         SharedPreferences store = preferences.getSharedPreferences();
         assertTrue(key + " is the page's own", store.contains(key));
         return preferences.getSurfaceValue(slot, property, pageId);
