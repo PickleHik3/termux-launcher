@@ -157,6 +157,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void refreshPaneLayout();
         /** The system keyboard is about to show for a field in the editor. */
         default void onSystemImeRequested() {}
+        /** The field's window is gone: the system keyboard goes with it. */
+        default void onSystemImeReleased() {}
         /** Hold the pane wall's gestures while the editor is up, or hand them back. */
         void holdPaneWall(boolean held);
         void applyTerminalSurfaceAppearance();
@@ -1421,6 +1423,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
             @Override public void onSystemImeRequested() {
                 mHost.onSystemImeRequested();
+            }
+
+            @Override public void onSystemImeReleased() {
+                mHost.onSystemImeReleased();
             }
         };
 

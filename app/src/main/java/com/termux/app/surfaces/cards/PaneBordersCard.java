@@ -8,11 +8,10 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -21,8 +20,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.appcompat.app.AlertDialog;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -46,7 +47,7 @@ import java.util.List;
  * The Pane borders card under the Terminal card (#206, pane-borders-2026-11-01): a strip of
  * three frames in the panes' own drawables, the Rim (the Terminal card's own row), the border
  * colour, the focus colour, the glow and its colour, a Custom colour field under each chooser
- * set to Custom, and Reset. The editor shows it in the Terminal card's place; its header's back
+ * set to Custom (its field in a dialog), and Reset. The editor shows it in the Terminal card's place; its header's back
  * arrow and system Back return to the Terminal card.
  *
  * <p>{@link #rows} and the choosers' lists are pure; {@link #view} builds the rows over a
@@ -154,6 +155,8 @@ public final class PaneBordersCard {
         @NonNull PaneBorderStyle.Palette palette();
         /** The system keyboard is about to show for the Custom colour field. */
         void onSystemImeRequested();
+        /** The Custom colour dialog is gone: the system keyboard goes with it. */
+        void onSystemImeReleased();
     }
 
     /** The card's row for {@code row}, {@code widthPx} wide, or null for a row it does not draw. */
@@ -333,89 +336,109 @@ public final class PaneBordersCard {
         return dot;
     }
 
-    /** A Custom colour row: its live swatch, the name, and the hex field at the end. */
+    /**
+     * A Custom colour row: its swatch, the name and the stored hex. A tap anywhere on it opens
+     * the field in a dialog of its own: the system keyboard serves only a window that asks for
+     * it, never the launcher's own (stateAlwaysHidden), so a field inline in the sheet would
+     * never get one.
+     */
     @NonNull
     private static CardRowView custom(@NonNull Context context, @NonNull Row row,
                                       @NonNull Host host) {
         Row chooser = chooserOf(row);
         LinearLayout root = RowKit.line(context);
+        root.setMinimumHeight(RowKit.dp(context, RowKit.TOUCH_DP));
+        TypedValue ripple = new TypedValue();
+        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple,
+                true) && ripple.resourceId != 0)
+            root.setBackgroundResource(ripple.resourceId);
         View swatch = new View(context);
+        swatch.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         root.addView(swatch, RowKit.glyphParams(context));
         TextView title = RowKit.title(context, context.getString(row.labelRes));
         root.addView(title, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        EditText field = new EditText(context);
-        field.setTypeface(Typeface.MONOSPACE);
-        field.setSingleLine(true);
-        field.setHint(R.string.appearance_pane_custom_hint);
-        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
-        field.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-        field.setFilters(new InputFilter[] {new InputFilter.LengthFilter(9)});
-        field.setMinWidth(RowKit.dp(context, 120));
-        field.setMinHeight(RowKit.dp(context, RowKit.TOUCH_DP));
-        field.setContentDescription(context.getString(row.labelRes));
-        root.addView(field, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        TextView value = RowKit.caption(context, null);
+        value.setTypeface(Typeface.MONOSPACE);
+        value.setSingleLine(true);
+        value.setPadding(RowKit.dp(context, RowKit.EDGE_DP), 0, 0, 0);
+        root.addView(value, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Runnable showStored = () -> {
             int stored = chooser == null ? 0 : host.choice(chooser).custom;
             swatch.setBackground(swatch(context, stored, RowKit.GLYPH_DP));
-            String text = stored == 0 ? "#" : PaneBorderHex.format(stored);
-            if (!field.hasFocus() && !text.contentEquals(field.getText()))
-                field.setText(text);
+            String text = stored == 0 ? "" : PaneBorderHex.format(stored);
+            if (!text.contentEquals(value.getText()))
+                value.setText(text);
         };
-        Runnable commit = () -> {
-            if (chooser == null)
-                return;
-            Integer argb = PaneBorderHex.parse(field.getText().toString());
-            if (argb == null) {
-                // Garbage gives the last good colour back.
-                int stored = host.choice(chooser).custom;
-                field.setText(stored == 0 ? "#" : PaneBorderHex.format(stored));
-                return;
-            }
-            field.setText(PaneBorderHex.format(argb));
-            if (argb != host.choice(chooser).custom)
-                host.setCustom(row, argb);
-        };
-        // The editor's keyboard rule: the system keyboard is announced before it shows.
-        field.setOnTouchListener((v, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !v.hasFocus())
-                host.onSystemImeRequested();
-            return false;
-        });
-        field.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                host.onSystemImeRequested();
-                if (field.length() == 0)
-                    field.setText("#");
-                field.setSelection(field.length());
-            } else
-                commit.run();
-        });
-        field.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId != EditorInfo.IME_ACTION_DONE)
-                return false;
-            commit.run();
-            field.clearFocus();
-            InputMethodManager ime = context.getSystemService(InputMethodManager.class);
-            if (ime != null)
-                ime.hideSoftInputFromWindow(field.getWindowToken(), 0);
-            return true;
-        });
-        // The swatch follows the typing once the text names a colour.
-        field.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void afterTextChanged(android.text.Editable s) {
-                Integer argb = PaneBorderHex.parse(s.toString());
-                if (argb != null)
-                    swatch.setBackground(swatch(context, argb, RowKit.GLYPH_DP));
-            }
+        root.setOnClickListener(v -> {
+            if (chooser != null)
+                editCustom(context, row, host.choice(chooser).custom, host);
         });
         showStored.run();
         return new CardRowView(root, showStored);
+    }
+
+    /**
+     * The Custom colour dialog, built as the Tasks widget's: the field prefilled with
+     * {@code stored} ({@code #} for none), Done or OK commits through {@link PaneBorderHex},
+     * and a colour it cannot read keeps the dialog open with the text selected.
+     */
+    private static void editCustom(@NonNull Context context, @NonNull Row row, int stored,
+                                   @NonNull Host host) {
+        EditText input = new EditText(context);
+        input.setTypeface(Typeface.MONOSPACE);
+        input.setSingleLine(true);
+        input.setHint(R.string.appearance_pane_custom_hint);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(9)});
+        input.setText(stored == 0 ? "#" : PaneBorderHex.format(stored));
+        input.setSelection(input.length());
+        FrameLayout holder = new FrameLayout(context);
+        int pad = RowKit.dp(context, 24);
+        holder.setPadding(pad, pad / 3, pad, 0);
+        holder.addView(input, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        host.onSystemImeRequested();
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
+            .setTitle(row.labelRes)
+            .setView(holder)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok, null)
+            .create();
+        // True once the colour is taken and the dialog may close.
+        java.util.function.BooleanSupplier commit = () -> {
+            Integer argb = PaneBorderHex.parse(input.getText().toString());
+            if (argb == null) {
+                input.selectAll();
+                return false;
+            }
+            if (argb != stored)
+                host.setCustom(row, argb);
+            return true;
+        };
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_DONE)
+                return false;
+            if (commit.getAsBoolean())
+                dialog.dismiss();
+            return true;
+        });
+        // OK is wired after show, so a colour it cannot read leaves the dialog up.
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            .setOnClickListener(v -> {
+                if (commit.getAsBoolean())
+                    dialog.dismiss();
+            }));
+        if (dialog.getWindow() != null)
+            dialog.getWindow().setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        input.requestFocus();
+        dialog.setOnDismissListener(d -> host.onSystemImeReleased());
+        dialog.show();
     }
 
     @NonNull
