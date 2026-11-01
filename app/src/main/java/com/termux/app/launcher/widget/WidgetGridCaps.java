@@ -76,19 +76,29 @@ public final class WidgetGridCaps {
             + com.termux.app.launcher.paging.PageTickStrip.bandPx(1f);
     }
 
+    /** The largest icon step, dp: the dock the caps always leave room for. */
+    public static int largestIconStepDp() {
+        int largest = 0;
+        for (com.termux.app.place.layout.IconSize size
+                : com.termux.app.place.layout.IconSize.values()) {
+            largest = Math.max(largest, size.dp);
+        }
+        return largest;
+    }
+
     /**
      * The caps of the one grid (ADR 0020 §12), worked out once from the portrait wall: the
-     * screen's long side less the portrait status bar and the dock at the icon step
-     * ({@link #portraitDockChromeDp}), its short side across. The same in both orientations and
-     * stable: it never follows the wall last seen, so a keyboard, a sheet or a turn changes
-     * nothing, and no grid the caps offer has portrait cells under {@link #MIN_CELL_DP}.
+     * screen's long side less the portrait status bar and the dock at the largest icon step
+     * ({@link #portraitDockChromeDp} of {@link #largestIconStepDp}), its short side across. The
+     * same in both orientations and at every icon step: it never follows the wall last seen or
+     * the step, so a keyboard, a sheet, a turn or a step change cuts no row and reflows nothing,
+     * and no grid the caps offer has portrait cells under {@link #MIN_CELL_DP} at any step.
      */
     @NonNull public static WidgetGridCaps forPortraitWall(float screenWidthDp, float screenHeightDp,
-                                                          float statusBarDp, float iconDp,
-                                                          float edgeDp) {
+                                                          float statusBarDp, float edgeDp) {
         float across = Math.min(screenWidthDp, screenHeightDp);
         float tall = Math.max(screenWidthDp, screenHeightDp) - Math.max(0f, statusBarDp)
-            - portraitDockChromeDp(iconDp);
+            - portraitDockChromeDp(largestIconStepDp());
         return forWall(across, tall, edgeDp);
     }
 

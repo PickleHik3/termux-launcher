@@ -64,23 +64,37 @@ public class HomeLandscapeGridTest {
     }
 
     @Test
-    public void theLargestGridOfferedKeepsPortraitCellsAtLeast55Dp() {
-        for (float iconDp : new float[] {40f, 48f, 54f, 60f}) {
-            for (float statusDp : new float[] {24f, 33f}) {
-                WidgetGridCaps caps = WidgetGridCaps.forPortraitWall(WIDTH_DP, HEIGHT_DP,
-                    statusDp, iconDp, MARGIN_DP);
-                assertEquals("the same caps turned", caps, WidgetGridCaps.forPortraitWall(
-                    HEIGHT_DP, WIDTH_DP, statusDp, iconDp, MARGIN_DP));
-                int columns = caps.clampColumns(99), rows = caps.clampRows(99);
-                float wallH = HEIGHT_DP - statusDp - WidgetGridCaps.portraitDockChromeDp(iconDp);
-                float cellW = (WIDTH_DP - 2 * MARGIN_DP - WidgetGridMetrics.GAP_DP * (columns - 1))
-                    / columns;
-                float cellH = (wallH - 2 * MARGIN_DP - WidgetGridMetrics.GAP_DP * (rows - 1)) / rows;
-                String at = iconDp + "dp icon, " + statusDp + "dp status: " + columns + "x" + rows;
+    public void theLargestGridOfferedKeepsPortraitCellsAtLeast55DpAtEveryStep() {
+        for (float statusDp : new float[] {24f, 33f}) {
+            WidgetGridCaps caps = WidgetGridCaps.forPortraitWall(WIDTH_DP, HEIGHT_DP,
+                statusDp, MARGIN_DP);
+            assertEquals("the same caps turned", caps, WidgetGridCaps.forPortraitWall(
+                HEIGHT_DP, WIDTH_DP, statusDp, MARGIN_DP));
+            int columns = caps.clampColumns(99), rows = caps.clampRows(99);
+            // At every step the dock is no taller than at the largest, so the cells hold.
+            for (com.termux.app.place.layout.IconSize step
+                    : com.termux.app.place.layout.IconSize.values()) {
+                float wallH = HEIGHT_DP - statusDp - WidgetGridCaps.portraitDockChromeDp(step.dp);
+                float cellW = (WIDTH_DP - 2 * MARGIN_DP
+                    - WidgetGridMetrics.GAP_DP * (columns - 1)) / columns;
+                float cellH = (wallH - 2 * MARGIN_DP - WidgetGridMetrics.GAP_DP * (rows - 1))
+                    / rows;
+                String at = step + ", " + statusDp + "dp status: " + columns + "x" + rows;
                 assertTrue(at + " cell width " + cellW, cellW >= WidgetGridCaps.MIN_CELL_DP);
                 assertTrue(at + " cell height " + cellH, cellH >= WidgetGridCaps.MIN_CELL_DP);
             }
         }
+    }
+
+    @Test
+    public void theCapsNeverFollowTheIconStep() {
+        // The caps take no step at all: they keep room for the largest step's dock, so a step
+        // change cuts no row and reflows nothing.
+        assertEquals(60, WidgetGridCaps.largestIconStepDp());
+        WidgetGridCaps caps = WidgetGridCaps.forPortraitWall(WIDTH_DP, HEIGHT_DP, 24f, MARGIN_DP);
+        WidgetGridCaps atXl = WidgetGridCaps.forWall(WIDTH_DP, HEIGHT_DP - 24f
+            - WidgetGridCaps.portraitDockChromeDp(60f), MARGIN_DP);
+        assertEquals(atXl, caps);
     }
 
     @Test
