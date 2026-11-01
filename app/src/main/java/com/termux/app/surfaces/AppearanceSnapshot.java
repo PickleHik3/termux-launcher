@@ -3,12 +3,17 @@ package com.termux.app.surfaces;
 import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.List;
 
@@ -29,6 +34,9 @@ import java.util.List;
  * wrong orientation.</p>
  */
 final class AppearanceSnapshot {
+
+    /** How many switches {@link #statusSwitches} reads. */
+    private static final int STATUS_SWITCH_COUNT = 8;
 
     private final String mLinks;
     private final int[] mBase;
@@ -161,6 +169,63 @@ final class AppearanceSnapshot {
         mGridCells = gridCells(prefs);
     }
 
+    /** A snapshot read back from {@link #toJson}; throws when it does not fit this build. */
+    private AppearanceSnapshot(@NonNull JSONObject in) throws JSONException {
+        mLinks = string(in, "links");
+        mBase = ints(in, "base");
+        mRaws = ints(in, "raws");
+        mMaterial = string(in, "material");
+        mIntensity = in.getInt("intensity");
+        mDockStyle = string(in, "dockStyle");
+        mBorder = in.getBoolean("border");
+        mTerminalRadius = in.getInt("terminalRadius");
+        mPaneGap = in.getInt("paneGap");
+        mPaneBorderColour = string(in, "paneBorderColour");
+        mPaneBorderCustom = in.getInt("paneBorderCustom");
+        mPaneFocusColour = string(in, "paneFocusColour");
+        mPaneFocusCustom = in.getInt("paneFocusCustom");
+        mPaneGlow = in.getBoolean("paneGlow");
+        mPaneGlowColour = string(in, "paneGlowColour");
+        mPaneGlowCustom = in.getInt("paneGlowCustom");
+        mWallpaperTerminalOpacity = in.getInt("wallpaperTerminalOpacity");
+        mTint = string(in, "tint");
+        mRim = string(in, "rim");
+        mMotion = string(in, "motion");
+        mTintHue = string(in, "tintHue");
+        mVibrancy = in.getInt("vibrancy");
+        mTextSize = in.getInt("textSize");
+        mGlassPositions = ints(in, "glassPositions");
+        mBend = in.getInt("bend");
+        mEdgeWidth = in.getInt("edgeWidth");
+        mEdgeLight = in.getInt("edgeLight");
+        mSpecular = in.getInt("specular");
+        mDispersion = in.getInt("dispersion");
+        mClarity = in.getInt("clarity");
+        mKeyboardBlurRaw = in.getInt("keyboardBlurRaw");
+        mKeyOpacity = in.getInt("keyOpacity");
+        mOpacityLinked = in.getBoolean("opacityLinked");
+        mKeyRadiusRaw = floatOf(in, "keyRadiusRaw");
+        mKeySpacingRaw = floatOf(in, "keySpacingRaw");
+        mDockButtonCount = in.getInt("dockButtonCount");
+        mDim = in.getInt("dim");
+        mSoft = in.getBoolean("soft");
+        mContrast = string(in, "contrast");
+        mTrailStyle = string(in, "trailStyle");
+        mTrailEnabled = in.getBoolean("trailEnabled");
+        mRetroEffect = string(in, "retroEffect");
+        mClockStyle = string(in, "clockStyle");
+        mClockAlignment = string(in, "clockAlignment");
+        mStatusSwitches = booleans(in, "statusSwitches");
+        mHalfKeys = halfKeysOf(in.getJSONObject("halfKeys"));
+        mGridCells = gridCellsOf(in.getJSONObject("gridCells"));
+        // Restore writes by position: a snapshot from a build with other rows or slots is refused.
+        if (mBase.length != SurfaceProperty.values().length
+            || mRaws.length != SurfaceEditorRows.rows().size()
+            || mGlassPositions.length != SurfaceSlot.values().length + 1
+            || mStatusSwitches.length != STATUS_SWITCH_COUNT)
+            throw new JSONException("appearance snapshot from another build");
+    }
+
     /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
     @NonNull
     private static boolean[] statusSwitches(@NonNull TermuxAppSharedPreferences prefs) {
@@ -284,6 +349,175 @@ final class AppearanceSnapshot {
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
             .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
+    }
+
+    /**
+     * Every field as JSON, so the entry snapshot outlives a killed process
+     * ({@link AppearanceEntryStore}). Floats go as strings, which keeps NaN (an absent key).
+     */
+    @NonNull
+    JSONObject toJson() throws JSONException {
+        JSONObject out = new JSONObject();
+        putString(out, "links", mLinks);
+        out.put("base", intArray(mBase));
+        out.put("raws", intArray(mRaws));
+        putString(out, "material", mMaterial);
+        out.put("intensity", mIntensity);
+        putString(out, "dockStyle", mDockStyle);
+        out.put("border", mBorder);
+        out.put("terminalRadius", mTerminalRadius);
+        out.put("paneGap", mPaneGap);
+        putString(out, "paneBorderColour", mPaneBorderColour);
+        out.put("paneBorderCustom", mPaneBorderCustom);
+        putString(out, "paneFocusColour", mPaneFocusColour);
+        out.put("paneFocusCustom", mPaneFocusCustom);
+        out.put("paneGlow", mPaneGlow);
+        putString(out, "paneGlowColour", mPaneGlowColour);
+        out.put("paneGlowCustom", mPaneGlowCustom);
+        out.put("wallpaperTerminalOpacity", mWallpaperTerminalOpacity);
+        putString(out, "tint", mTint);
+        putString(out, "rim", mRim);
+        putString(out, "motion", mMotion);
+        putString(out, "tintHue", mTintHue);
+        out.put("vibrancy", mVibrancy);
+        out.put("textSize", mTextSize);
+        out.put("glassPositions", intArray(mGlassPositions));
+        out.put("bend", mBend);
+        out.put("edgeWidth", mEdgeWidth);
+        out.put("edgeLight", mEdgeLight);
+        out.put("specular", mSpecular);
+        out.put("dispersion", mDispersion);
+        out.put("clarity", mClarity);
+        out.put("keyboardBlurRaw", mKeyboardBlurRaw);
+        out.put("keyOpacity", mKeyOpacity);
+        out.put("opacityLinked", mOpacityLinked);
+        out.put("keyRadiusRaw", Float.toString(mKeyRadiusRaw));
+        out.put("keySpacingRaw", Float.toString(mKeySpacingRaw));
+        out.put("dockButtonCount", mDockButtonCount);
+        out.put("dim", mDim);
+        out.put("soft", mSoft);
+        putString(out, "contrast", mContrast);
+        putString(out, "trailStyle", mTrailStyle);
+        out.put("trailEnabled", mTrailEnabled);
+        putString(out, "retroEffect", mRetroEffect);
+        putString(out, "clockStyle", mClockStyle);
+        putString(out, "clockAlignment", mClockAlignment);
+        out.put("statusSwitches", booleanArray(mStatusSwitches));
+        out.put("halfKeys", halfKeysJson(mHalfKeys));
+        out.put("gridCells", new JSONObject(mGridCells));
+        return out;
+    }
+
+    /** The snapshot {@link #toJson} wrote; throws when it is malformed or from another build. */
+    @NonNull
+    static AppearanceSnapshot fromJson(@NonNull JSONObject in) throws JSONException {
+        return new AppearanceSnapshot(in);
+    }
+
+    private static void putString(@NonNull JSONObject out, @NonNull String key,
+                                  @Nullable String value) throws JSONException {
+        out.put(key, value == null ? JSONObject.NULL : value);
+    }
+
+    @Nullable
+    private static String string(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        if (!in.has(key))
+            throw new JSONException("missing " + key);
+        return in.isNull(key) ? null : in.getString(key);
+    }
+
+    private static float floatOf(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        try {
+            return Float.parseFloat(in.getString(key));
+        } catch (NumberFormatException e) {
+            throw new JSONException("bad float " + key);
+        }
+    }
+
+    @NonNull
+    private static JSONArray intArray(@NonNull int[] values) {
+        JSONArray out = new JSONArray();
+        for (int value : values) out.put(value);
+        return out;
+    }
+
+    @NonNull
+    private static int[] ints(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        JSONArray array = in.getJSONArray(key);
+        int[] out = new int[array.length()];
+        for (int i = 0; i < out.length; i++) out[i] = array.getInt(i);
+        return out;
+    }
+
+    @NonNull
+    private static JSONArray booleanArray(@NonNull boolean[] values) {
+        JSONArray out = new JSONArray();
+        for (boolean value : values) out.put(value);
+        return out;
+    }
+
+    @NonNull
+    private static boolean[] booleans(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        JSONArray array = in.getJSONArray(key);
+        boolean[] out = new boolean[array.length()];
+        for (int i = 0; i < out.length; i++) out[i] = array.getBoolean(i);
+        return out;
+    }
+
+    /** Each page key as {@code [type, value]}, so an Integer comes back an Integer, not a Long. */
+    @NonNull
+    private static JSONObject halfKeysJson(@NonNull java.util.Map<String, Object> keys)
+            throws JSONException {
+        JSONObject out = new JSONObject();
+        for (java.util.Map.Entry<String, Object> entry : keys.entrySet()) {
+            Object value = entry.getValue();
+            JSONArray typed = new JSONArray();
+            if (value instanceof Integer) typed.put("i").put(value);
+            else if (value instanceof Boolean) typed.put("b").put(value);
+            else if (value instanceof String) typed.put("s").put(value);
+            else if (value instanceof Float) typed.put("f").put(Float.toString((Float) value));
+            else if (value instanceof Long) typed.put("l").put(Long.toString((Long) value));
+            else continue; // restoreHalfKeys writes no other type either
+            out.put(entry.getKey(), typed);
+        }
+        return out;
+    }
+
+    @NonNull
+    private static java.util.TreeMap<String, Object> halfKeysOf(@NonNull JSONObject in)
+            throws JSONException {
+        java.util.TreeMap<String, Object> out = new java.util.TreeMap<>();
+        java.util.Iterator<String> keys = in.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            JSONArray typed = in.getJSONArray(key);
+            String type = typed.getString(0);
+            try {
+                switch (type) {
+                    case "i": out.put(key, typed.getInt(1)); break;
+                    case "b": out.put(key, typed.getBoolean(1)); break;
+                    case "s": out.put(key, typed.getString(1)); break;
+                    case "f": out.put(key, Float.parseFloat(typed.getString(1))); break;
+                    case "l": out.put(key, Long.parseLong(typed.getString(1))); break;
+                    default: throw new JSONException("bad type " + type + " for " + key);
+                }
+            } catch (NumberFormatException e) {
+                throw new JSONException("bad number for " + key);
+            }
+        }
+        return out;
+    }
+
+    @NonNull
+    private static java.util.TreeMap<String, Integer> gridCellsOf(@NonNull JSONObject in)
+            throws JSONException {
+        java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+        java.util.Iterator<String> keys = in.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            out.put(key, in.getInt(key));
+        }
+        return out;
     }
 
     /** The live state's signature, for the dirty test, without holding a snapshot of it. */

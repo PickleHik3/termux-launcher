@@ -41,6 +41,7 @@ Latest stable: v1.2.1.
 - Settings > Debugging > Motion log notes page changes and resizes, and launcherctl look reads and sets any look value from a shell.
 - Opening Appearance while the setup cards are showing no longer stacks the two sheets.
 - The Where chip names Terminal pages and the Terminal page apart.
+- Changes in the Appearance editor are no longer kept if the launcher is closed before Done.
 
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
