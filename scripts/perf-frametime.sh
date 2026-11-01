@@ -12,6 +12,10 @@
 #   swipe  x1 y1 x2 y2 [ms]   a straight swipe (adb input swipe)
 #   hold   x  y  x2 y2 ms     press, hold ms, then drag to x2,y2 (for the border drag's hold)
 #   tap    x  y
+#   down   x  y               put a finger down and keep it there
+#   move   x  y [n]           glide the finger to x,y in n steps (default 8); a sleep between
+#                             moves holds it still, which is how a scenario pauses mid-drag
+#   up     [x y]              lift the finger (where it is, unless given)
 #   sleep  seconds
 #   repeat n                  play the lines up to the matching "end" n times
 #   end
@@ -78,6 +82,16 @@ play() {
         done
         sh_ input motionevent UP "$(px "$c")" "$(py "$d")" >/dev/null
         ;;
+      down) sh_ input motionevent DOWN "$(px "$a")" "$(py "$b")" >/dev/null; FX=$a FY=$b ;;
+      move)
+        # Glide from the finger's last point to x,y in n steps (default 8); the finger stays down.
+        for ((n = 1; n <= ${c:-8}; n++)); do
+          sh_ input motionevent MOVE "$(px $((FX + (a - FX) * n / ${c:-8})))" \
+            "$(py $((FY + (b - FY) * n / ${c:-8})))" >/dev/null
+        done
+        FX=$a FY=$b
+        ;;
+      up) sh_ input motionevent UP "$(px "${a:-$FX}")" "$(py "${b:-$FY}")" >/dev/null ;;
       tap) sh_ input tap "$(px "$a")" "$(py "$b")" ;;
       sleep) sleep "$a" ;;
       repeat)
