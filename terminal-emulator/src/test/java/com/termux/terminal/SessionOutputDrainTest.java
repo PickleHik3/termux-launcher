@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Locale;
 
 import org.junit.Test;
@@ -132,5 +133,38 @@ public class SessionOutputDrainTest {
         TerminalSession session = sessionWithEmulator();
         session.onScreenChanged();
         assertEquals(1, mTextChanges);
+    }
+
+    /** A stand-in for the main looper: posts land here and the test runs them in order. */
+    private final ArrayDeque<Runnable> mLooper = new ArrayDeque<>();
+    private int mPosts;
+
+    private TerminalSession sessionOnTestLooper() {
+        TerminalSession session = sessionWithEmulator();
+        session.mNewInputPoster = () -> {
+            mPosts++;
+            mLooper.add(session::handleNewInput);
+        };
+        return session;
+    }
+
+    @Test
+    public void aBurstOfTinyWritesPostsOneNotification() {
+        // ssh hands a stream over in small segments, and each pty read used to post its own
+        // message: thousands a second queued ahead of the frame clock.
+        TerminalSession session = sessionOnTestLooper();
+        byte[] bytes = burst();
+        int writes = 4000;
+        int size = 16;
+        for (int i = 0; i < writes; i++) {
+            assertTrue(session.mProcessToTerminalIOQueue.write(bytes, i * size, size));
+            session.onProcessOutputQueued();
+        }
+        assertEquals("One notification stands for every write before it is handled", 1, mPosts);
+
+        while (!mLooper.isEmpty()) mLooper.poll().run();
+        String[] lines = session.mEmulator.getScreen().getTranscriptText().split("\n");
+        int written = writes * size / 8;
+        for (int i = 0; i < written; i++) assertEquals(lastLine(i), lines[i]);
     }
 }
