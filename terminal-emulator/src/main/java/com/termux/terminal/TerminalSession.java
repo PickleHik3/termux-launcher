@@ -17,6 +17,8 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.LongSupplier;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -209,7 +211,7 @@ public final class TerminalSession extends TerminalOutput {
                             return;
                         if (!mProcessToTerminalIOQueue.write(buffer, 0, read))
                             return;
-                        mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+                        onProcessOutputQueued();
                     }
                 } catch (Exception e) {
                     // Ignore, just shutting down.
@@ -613,22 +615,35 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * How much shell output one main-thread message hands the emulator. A burst is parsed in slices
-     * this size, each its own message, so the frame clock gets a turn between them instead of
-     * waiting behind a whole 64 KB queue.
+     * How much shell output the emulator takes in one go. A turn hands over slices until its time
+     * budget is spent, so the slice is the granularity of that budget: a turn overruns it by at most
+     * one slice's parsing.
      */
     static final int DRAIN_SLICE_BYTES = 16 * 1024;
 
+    /**
+     * How long one main-thread turn may spend parsing shell output before it yields to the frame
+     * clock and input: half a frame at 120 Hz, so even the fastest panel keeps half of every frame
+     * for drawing while a flood lasts.
+     */
+    static final long DRAIN_BUDGET_NANOS = 4_000_000L;
+
     private final byte[] mReceiveBuffer = new byte[DRAIN_SLICE_BYTES];
 
+    /** The clock a turn's budget is read from; a test in this package steps it by hand. */
+    LongSupplier mNanoClock = System::nanoTime;
+
+    /** How many bytes the last {@link #handleNewInput} turn parsed; a test hook. */
+    int mLastTurnBytes;
+
     /**
-     * Move at most one slice of waiting shell output into the emulator. Main thread only.
+     * Parse at most one slice of waiting shell output, without telling the client. Main thread only.
      *
-     * @return whether the slice came back full, so more output may still be waiting
+     * @return the bytes parsed, 0 when nothing was waiting
      */
-    boolean drainProcessOutputSlice() {
+    private int appendProcessOutputSlice() {
         int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
-        if (bytesRead <= 0) return false;
+        if (bytesRead <= 0) return 0;
         // Named in system traces so the parsing's share of the UI thread can be read next to
         // Terminal.render and the frame clock: this is the emulator's only entry point for shell
         // output, and it runs on the main thread by design.
@@ -640,9 +655,46 @@ public final class TerminalSession extends TerminalOutput {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
+        return bytesRead;
+    }
+
+    /**
+     * Move at most one slice of waiting shell output into the emulator and tell the client. Main
+     * thread only.
+     *
+     * @return whether the slice came back full, so more output may still be waiting
+     */
+    boolean drainProcessOutputSlice() {
+        int bytesRead = appendProcessOutputSlice();
+        if (bytesRead <= 0) return false;
         LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
+    }
+
+    /**
+     * One main-thread turn of shell output: slices until the queue runs dry or
+     * {@link #DRAIN_BUDGET_NANOS} is spent, then one screen update for the lot. The update goes
+     * through {@link #notifyScreenUpdate}, so a synchronized update still holds it exactly as it
+     * held a per-slice one: only the state after the turn's last byte counts either way.
+     *
+     * @return whether the turn stopped on its budget with more output still waiting
+     */
+    private boolean drainProcessOutputTurn() {
+        long start = mNanoClock.getAsLong();
+        int total = 0;
+        boolean more;
+        do {
+            int bytesRead = appendProcessOutputSlice();
+            total += bytesRead;
+            more = bytesRead == mReceiveBuffer.length;
+        } while (more && mNanoClock.getAsLong() - start < DRAIN_BUDGET_NANOS);
+        mLastTurnBytes = total;
+        if (total > 0) {
+            LatencyProbe.outputArrived();
+            notifyScreenUpdate();
+        }
+        return more;
     }
 
     /**
@@ -655,6 +707,39 @@ public final class TerminalSession extends TerminalOutput {
     void drainProcessOutputBeforeExit() {
         int budget = PROCESS_OUTPUT_QUEUE_BYTES;
         while (budget > 0 && drainProcessOutputSlice()) budget -= DRAIN_SLICE_BYTES;
+    }
+
+    /**
+     * Whether a {@link #MSG_NEW_INPUT} is posted and not yet handled. At most one ever is: a link
+     * that delivers its stream in small segments makes every pty read a write here, and posting
+     * one message per write once queued ten thousand a second ahead of the frame clock.
+     *
+     * <p>The reader writes its bytes and then tries to set the flag; the handler clears the flag and
+     * then drains. So a write either lands before the clear, and the drain that follows reads it,
+     * or lands after it, and the reader finds the flag clear and posts the next turn itself.
+     */
+    final AtomicBoolean mNewInputPending = new AtomicBoolean();
+
+    /** Posts {@link #MSG_NEW_INPUT}; a test in this package counts the posts and runs them by hand. */
+    Runnable mNewInputPoster = () -> mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+
+    /** Reader thread: bytes were just written to {@link #mProcessToTerminalIOQueue}. */
+    void onProcessOutputQueued() {
+        requestNewInputTurn();
+    }
+
+    /** Post a {@link #MSG_NEW_INPUT} unless one is already waiting. Any thread. */
+    private void requestNewInputTurn() {
+        if (mNewInputPending.compareAndSet(false, true)) mNewInputPoster.run();
+    }
+
+    /** One {@link #MSG_NEW_INPUT} turn on the main thread. */
+    void handleNewInput() {
+        mNewInputPending.set(false);
+        if (drainProcessOutputTurn()) {
+            // More of the burst is waiting: let the frame clock and input run before the next turn.
+            requestNewInputTurn();
+        }
     }
 
     @SuppressLint("HandlerLeak")
@@ -681,9 +766,8 @@ public final class TerminalSession extends TerminalOutput {
                 }
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
-            } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {
-                // More of the burst is waiting: let the frame clock run before the next slice.
-                sendEmptyMessage(MSG_NEW_INPUT);
+            } else {
+                handleNewInput();
             }
         }
     }
