@@ -3049,10 +3049,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public boolean shown(@NonNull Row row) {
             if (com.termux.app.surfaces.cards.PaneBordersCard.owns(row))
                 return com.termux.app.surfaces.cards.PaneBordersCard.shown(row, mPaneBordersHost);
-            // All surfaces is the Custom stop's, as the Look page's Custom row was.
-            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
-                && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
-                return AppearanceLooks.isCustomStop(lookStop(lookScreen()));
             // Reflection is Peek glass's own knob: it stands only while that is the design.
             if (row == Row.REFLECTION) {
                 LayoutEditorController layout = mHost.layoutEditor();

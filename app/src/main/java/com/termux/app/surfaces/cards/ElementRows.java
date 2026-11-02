@@ -68,7 +68,7 @@ public final class ElementRows {
             EditorCard.TERMINAL, null, Row.PANE_BORDERS, Visibility.NONE),
         /** The widget grid: Home's own card, at its Grid section. */
         WIDGETS(R.string.editor_elements_widgets, R.drawable.ic_ms_widgets,
-            EditorCard.HOME, null, Row.SECTION_GRID, Visibility.NONE);
+            EditorCard.HOME, null, Row.HOME_COLUMNS, Visibility.NONE);
 
         @StringRes public final int nameRes;
         @DrawableRes public final int glyphRes;
