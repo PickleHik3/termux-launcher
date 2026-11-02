@@ -953,6 +953,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+    /** True while the travel pre-rolls the keyboard, which opens below the screen. */
+    private boolean mKeyboardOpensBelowScreen;
 
     /**
      * The panes' grid is held from the stop until the layout the launcher returns to has settled,
@@ -14968,7 +14970,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // visible for the reveal gate to observe destination layout at all.
             if (mFloatingKeyboard != null)
                 mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
-            mKeyboardGeometry.onVisibilityRequested(visible);
+            // A keyboard the travel brings up below the screen opens without the reveal gate.
+            mKeyboardGeometry.onVisibilityRequested(visible, visible && mKeyboardOpensBelowScreen);
         }
 
         @Override
@@ -23988,7 +23991,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
         // finger frames included, so a slide never carries on from a stale one.
         mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
+            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE
+                && !wall.slidesAcrossSeam(),
             currentWallPlace() == mLastWallPage);
         // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
         // rest writes nothing over it. A gesture that carries on past the last Home page into the
@@ -24966,6 +24970,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void preRoll(@NonNull com.termux.app.wall.PaneWallPage target) {
             if (mInAppKeyboard == null) return;
             mQuietKeyboardChange = true;
+            // Held below the screen by the travel until the wall brings it up: its reveal is not
+            // gated on its backdrop (KeyboardGeometryChoreographer#onVisibilityRequested).
+            mKeyboardOpensBelowScreen = true;
             try {
                 // The place keeps the system IME until the wall lands: the flag change that takes
                 // it back relayouts the whole window, and the settle's applyPlaceSystemImeOwner
@@ -24977,6 +24984,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         .KEYBOARD_ACTION);
             } finally {
                 mQuietKeyboardChange = false;
+                mKeyboardOpensBelowScreen = false;
             }
         }
 
