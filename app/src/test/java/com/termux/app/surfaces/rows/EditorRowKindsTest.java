@@ -84,6 +84,52 @@ public class EditorRowKindsTest {
     }
 
     @Test
+    public void theRowTitleIsNeverCutBesideWordsWithGlyphs() {
+        // tl16, 411dp, 1.0x: "Label ...", "Defau...", "Clock po..." stood cut beside their groups.
+        // The build is told a width twice the real one: the layout decides with what it gets.
+        Object[][] rows = {
+            {"Label size", new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
+                EditorGlyphs.LABEL_LARGE}, new String[] {"Small", "Medium", "Large"}},
+            {"Default type", new int[] {EditorGlyphs.KB_DOCKED, EditorGlyphs.KB_FLOATING,
+                EditorGlyphs.KB_SPLIT}, new String[] {"Docked", "Floating", "Split"}},
+            {"Clock position", new int[] {EditorGlyphs.CLOCK_ALIGN_LEFT,
+                EditorGlyphs.CLOCK_ALIGN_CENTER, EditorGlyphs.CLOCK_ALIGN_RIGHT},
+                new String[] {"Left", "Centre", "Right"}}};
+        for (float scale : new float[] {1f, 1.3f}) {
+            Fixture f = new Fixture(scale);
+            for (Object[] spec : rows) {
+                String title = (String) spec[0];
+                int[] glyphs = (int[]) spec[1];
+                String[] words = (String[]) spec[2];
+                java.util.List<SegmentRow.Segment> segments = new java.util.ArrayList<>();
+                for (int i = 0; i < words.length; i++)
+                    segments.add(SegmentRow.Segment.both(glyphs[i], words[i]));
+                SegmentRow row = SegmentRow.build(f.themed, R.drawable.ic_symbol_tune, title,
+                    segments, 0, f.width * 2, index -> {});
+                f.layOut(row.root);
+                String at = title + " at " + scale;
+                android.text.Layout layout = row.title.getLayout();
+                assertNotNull(at, layout);
+                for (int line = 0; line < layout.getLineCount(); line++)
+                    assertEquals(at + ": the title is cut", 0, layout.getEllipsisCount(line));
+                assertEquals(at + ": the title reads on one line", 1, layout.getLineCount());
+                assertTrue(at + ": the title stands whole", row.title.getWidth() + 1
+                    >= row.title.getPaint().measureText(title));
+                for (MaterialButton button : row.buttons) {
+                    assertNotCut(button, at);
+                    assertInsideGutter(f, button, at);
+                }
+                if (row.inline)
+                    assertTrue(at + ": the pills start after the title",
+                        row.group.getLeft() >= row.title.getRight());
+                else
+                    assertTrue(at + ": stacked pills stand under the title",
+                        top(f, row.group) >= top(f, row.title) + row.title.getHeight() - 1);
+            }
+        }
+    }
+
+    @Test
     public void aWordSegmentRowNeverCutsAWordAndStacksWhenItMust() {
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);

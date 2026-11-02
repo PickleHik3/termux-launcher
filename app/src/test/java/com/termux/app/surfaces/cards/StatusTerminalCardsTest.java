@@ -179,9 +179,8 @@ public class StatusTerminalCardsTest {
             for (MaterialButton b : pills)
                 said.append(b.getText()).append('=').append(b.getWidth()).append(' ');
             android.view.ViewParent group = pills.get(0).getParent();
-            assertEquals(row + " inline (row " + f.width + "px, " + said + ")",
-                android.widget.LinearLayout.HORIZONTAL,
-                ((android.widget.LinearLayout) group.getParent()).getOrientation());
+            assertTrue(row + " inline (row " + f.width + "px, " + said + ")",
+                com.termux.app.surfaces.rows.SegmentRow.standsInline((View) group));
         }
     }
 

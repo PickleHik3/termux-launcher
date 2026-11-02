@@ -531,7 +531,9 @@ public class EditorCardSheetFitTest {
                 assertEquals(card + ": " + group.getContentDescription() + " stands label and"
                         + " control on one line (row " + holder.getWidth() + "px, parent "
                         + fixture.parent.getWidth() + "px, control " + group.getWidth() + "px)",
-                    LinearLayout.HORIZONTAL, ((LinearLayout) group.getParent()).getOrientation());
+                    true, holder instanceof LinearLayout
+                        ? ((LinearLayout) holder).getOrientation() == LinearLayout.HORIZONTAL
+                        : com.termux.app.surfaces.rows.SegmentRow.standsInline(group));
                 for (MaterialButton button : buttons(group))
                     assertTrue("the touch target is 48dp", button.getHeight() >= fixture.dp(48) - 1);
             }
