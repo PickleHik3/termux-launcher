@@ -503,13 +503,6 @@ public final class ChromeRenderer {
     }
 
     private void runRenderSync(@NonNull ChromeSpec spec) {
-        // TEMP diag(seam): SeamTime2 logs a chrome render sync of 2 ms or more.
-        long s2 = com.termux.app.place.SeamTime2.begin("chrome:renderSync");
-        runRenderSyncS2(spec);
-        com.termux.app.place.SeamTime2.endIfSlow("chrome:renderSync", s2, 2f);
-    }
-
-    private void runRenderSyncS2(@NonNull ChromeSpec spec) {
         mRenderSyncPending = false;
         mRenderSyncAskedForItself = false;
         // What the pass is for is re-cutting the crops that went stale under settled geometry.

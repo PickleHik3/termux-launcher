@@ -2072,15 +2072,6 @@ public class Keyboard2View extends View
   @Override
   protected void onLayout(boolean changed, int left, int top, int right, int bottom)
   {
-    // TEMP diag(seam): SeamTime2 logs a keyboard layout of 1 ms or more.
-    android.os.Trace.beginSection("Seam2:kbView:onLayout");
-    long s2 = System.nanoTime();
-    onLayoutS2(changed, left, top, right, bottom);
-    seamTime2("kbView:onLayout", s2, 1f);
-  }
-
-  private void onLayoutS2(boolean changed, int left, int top, int right, int bottom)
-  {
     super.onLayout(changed, left, top, right, bottom);
     if (Build.VERSION.SDK_INT < 29 || !changed)
       return;
@@ -2095,24 +2086,6 @@ public class Keyboard2View extends View
 
   @Override
   public void onMeasure(int wSpec, int hSpec)
-  {
-    // TEMP diag(seam): SeamTime2 logs a keyboard measure of 1 ms or more.
-    android.os.Trace.beginSection("Seam2:kbView:onMeasure");
-    long s2 = System.nanoTime();
-    onMeasureS2(wSpec, hSpec);
-    seamTime2("kbView:onMeasure", s2, 1f);
-  }
-
-  private static void seamTime2(String step, long t0, float minMs)
-  {
-    android.os.Trace.endSection();
-    float ms = (System.nanoTime() - t0) / 1e6f;
-    if (ms >= minMs)
-      android.util.Log.d("SeamTime2", "t=" + SystemClock.uptimeMillis() + " step=" + step
-          + " ms=" + String.format(java.util.Locale.ROOT, "%.2f", ms));
-  }
-
-  private void onMeasureS2(int wSpec, int hSpec)
   {
     if (_keyboard == null)
     {
@@ -2191,15 +2164,6 @@ public class Keyboard2View extends View
 
   @Override
   protected void onDraw(Canvas canvas)
-  {
-    // TEMP diag(seam): SeamTime2 logs a keyboard draw of 2 ms or more.
-    android.os.Trace.beginSection("Seam2:kbView:onDraw");
-    long s2 = System.nanoTime();
-    onDrawS2(canvas);
-    seamTime2("kbView:onDraw", s2, 2f);
-  }
-
-  private void onDrawS2(Canvas canvas)
   {
     if (_keyboard == null || _tc == null)
       return;

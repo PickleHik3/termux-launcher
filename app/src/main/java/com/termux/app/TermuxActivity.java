@@ -23974,12 +23974,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncChromeTravel(float offsetPx) {
         Trace.beginSection("Wall.chromeTravel");
-        // TEMP diag(seam): only the outermost travel call times the move.
-        boolean seamTimeOuter = !com.termux.app.place.SeamTime.inMove();
         try {
             doSyncChromeTravel(offsetPx);
         } finally {
-            if (seamTimeOuter) com.termux.app.place.SeamTime.moveEnd();
             Trace.endSection();
         }
     }
@@ -24036,37 +24033,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
-        // TEMP diag(seam): a cross-kind move is timed (SeamTime), anything else stays off.
-        if (!com.termux.app.place.SeamTime.inMove()) {
-            com.termux.app.place.SeamTime.on = mCrossing.crossing()
-                || com.termux.app.place.SeamTravel.otherHalfPage(frame, mLastWallPage) != null;
-            if (com.termux.app.place.SeamTime.on) {
-                com.termux.app.place.SeamTime.fraction = frame.fraction;
-                com.termux.app.place.SeamTime.otherProgress =
-                    com.termux.app.place.SeamTravel.otherHalfProgress(frame, mLastWallPage);
-            }
-            com.termux.app.place.SeamTime.moveStart();
-        }
-        long seamT = com.termux.app.place.SeamTime.begin("readSeamTravel");
         readSeamTravel(frame);
-        com.termux.app.place.SeamTime.sub("readSeamTravel", seamT);
-        com.termux.app.place.SeamTime.crossing = mCrossing.crossing();
         // Every answer the seam has for this frame, from what the crossing read as it began, and
         // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
         // the wall's own way (SeamCrossing#pictured).
-        seamT = com.termux.app.place.SeamTime.begin("crossingFrame");
         com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
             mPreferences != null && mChrome != null, mPromptFieldEase != null,
             mPromptFieldUnderPalette);
-        com.termux.app.place.SeamTime.sub("crossingFrame", seamT);
         // A band only one half's dock carries follows its page across the seam.
-        seamT = com.termux.app.place.SeamTime.begin("syncSeamBandShare");
         syncSeamBandShare(seam);
-        com.termux.app.place.SeamTime.sub("syncSeamBandShare", seamT);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
-        seamT = com.termux.app.place.SeamTime.begin("syncSeamBeadMelt");
         syncSeamBeadMelt(seam);
-        com.termux.app.place.SeamTime.sub("syncSeamBeadMelt", seamT);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         // A keyboard a pictured dip put away travels in the picture, never in the stack again.
@@ -24074,9 +24051,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
                 isInAppKeyboardShown())
             && canPreRollTravelKeyboard()) {
-            seamT = com.termux.app.place.SeamTime.begin("keyboardPreRoll");
             preRollTravelKeyboard(frame);
-            com.termux.app.place.SeamTime.once("keyboardPreRoll", seamT);
         }
         // Toward a place whose chrome takes less room from the content than this one's, the
         // content gets that room now rather than at settle, so no band of wallpaper opens between
@@ -24085,11 +24060,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.place.PlaceChromeTravel.arriving(frame, mLastWallPage);
         if (!mCrossing.contentPreRolled() && arriving != null) {
             int givenBack = travelRoomChangePx(arriving);
-            if (givenBack > 0) {
-                seamT = com.termux.app.place.SeamTime.begin("contentPreRoll");
-                preRollTravelContent(givenBack);
-                com.termux.app.place.SeamTime.once("contentPreRoll", seamT);
-            }
+            if (givenBack > 0) preRollTravelContent(givenBack);
         }
         // Toward the terminal, whose chrome takes more room than this place's (its keyboard), its
         // page is laid out at the size it lands at in this frame, while it is still arriving, and
@@ -24100,60 +24071,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (MotionLog.enabled) {
                 MotionLog.log("presize", "taken=" + taken + " reservationPx=" + appliedContentReservationPx());
             }
-            if (taken > 0) {
-                seamT = com.termux.app.place.SeamTime.begin("terminalPreSize");
-                mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
-                com.termux.app.place.SeamTime.once("terminalPreSize", seamT);
-            }
+            if (taken > 0) mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
         }
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
-        seamT = com.termux.app.place.SeamTime.begin("syncSeamTravel");
         float dockReveal = syncSeamTravel(seam);
-        com.termux.app.place.SeamTime.sub("syncSeamTravel", seamT);
-        seamT = com.termux.app.place.SeamTime.begin("travelLaidOutPx");
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
-        com.termux.app.place.SeamTime.sub("travelLaidOutPx", seamT);
         // The stack as the crossing answers it (Crossing#stack): with a keyboard in the stack the
         // rows sink into its top edge, since the stack's own translation carries the keyboard
         // too; or only the extra keys fold, the rows on the canvas's side of them sinking by its
         // hidden part (#94); and between halves that dress the stack differently the keyboard
         // dips with the rows (SeamDress.wholeStack), both moved by the translation.
         boolean wasMoved = mDockTravelTranslationPx != 0f;
-        seamT = com.termux.app.place.SeamTime.begin("crossingStack");
         float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
             travelDockRowsPx(keyboardPx));
-        com.termux.app.place.SeamTime.sub("crossingStack", seamT);
         if (translation != 0f || wasMoved) mChromeTravelMoved = true;
         // A keyboard up on both places crosses from one material to the other with the wall.
-        seamT = com.termux.app.place.SeamTime.begin("keyboardMaterialTravel");
         syncKeyboardMaterialTravel(frame);
-        com.termux.app.place.SeamTime.sub("keyboardMaterialTravel", seamT);
         // The terminal's rows are drawn where the settle's resize is going to put them, and the
         // pane's own edge ends where the chrome's live edge begins rather than under it.
         if (mCrossing.holdsContent()) {
-            seamT = com.termux.app.place.SeamTime.begin("terminalTravelDisplacement");
             syncTerminalTravelDisplacement(frame, arriving);
-            com.termux.app.place.SeamTime.sub("terminalTravelDisplacement", seamT);
             // The cover the pane controller holds for the window in front, under whichever edge
             // stands higher: the stack's, or the picture of the committed half's stack.
-            seamT = com.termux.app.place.SeamTime.begin("coverAt");
             mCrossing.coverAt(translation, stackPictureCoverPx());
-            com.termux.app.place.SeamTime.sub("coverAt", seamT);
         }
         // The status bar travels with the Workspace's page wherever the frame reaches Home; it
         // fades in place only where it cannot ride (a bar on a side or the bottom edge).
-        seamT = com.termux.app.place.SeamTime.begin("syncStatusTravel");
         boolean barRides = syncStatusTravel(wallFrame, seam);
-        com.termux.app.place.SeamTime.sub("syncStatusTravel", seamT);
         float statusAlpha = barRides ? 1f : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
-        seamT = com.termux.app.place.SeamTime.begin("crossingFade");
         mCrossing.fade(statusAlpha, frame.dockReveal);
-        com.termux.app.place.SeamTime.sub("crossingFade", seamT);
     }
 
     // ---- The chrome between two Home pages (#173 slice E) -------------------------------------
@@ -24445,11 +24396,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.dock.DockLayout thereRest;
         com.termux.app.dock.DockGeometry.Snapshot rests = null;
         if (begins) {
-            long seamT = com.termux.app.place.SeamTime.begin("dockRests");
             rests = dockSnapshot(committed, mLastWallPage);
             hereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
             thereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
-            com.termux.app.place.SeamTime.once("dockRests", seamT);
         } else {
             hereRest = mCrossing.heldRest(herePage);
             thereRest = mCrossing.heldRest(therePage);
@@ -24478,32 +24427,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stackDressOf(otherDress, therePage, orientation),
                 mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
                 otherRowsPx);
-        // TEMP diag(seam): SeamTime2 watches every slow frame from the first crossing on.
-        com.termux.app.place.SeamTime2.watch(this);
-        com.termux.app.place.SeamTime2.mark(begins ? "crossingBegin" : "crossingReBegin");
-        long seamT = com.termux.app.place.SeamTime.begin(begins ? "crossingBegin" : "crossingReBegin");
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
                 isSplitPanesEnabled()),
             hereRest, thereRest, arrangementRevision());
-        com.termux.app.place.SeamTime.once(begins ? "crossingBegin" : "crossingReBegin", seamT);
         if (!begins) return;
         // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
         // out at its final size for the slide rather than re-measured at the landing.
-        if (otherHome && rests != null) {
-            seamT = com.termux.app.place.SeamTime.begin("homeGridReserve");
+        if (otherHome && rests != null)
             applyArrivingHomeGridReserve(rests, therePage, thereRest, otherArrangement);
-            com.termux.app.place.SeamTime.once("homeGridReserve", seamT);
-        }
         // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
         // before any pass lays it out over Home.
         if (mCrossing.seam().barTakesWorkspaceDressFirst()) {
-            seamT = com.termux.app.place.SeamTime.begin("barDressRefresh");
             refreshTerminalWindowBar();
-            com.termux.app.place.SeamTime.once("barDressRefresh", seamT);
-            seamT = com.termux.app.place.SeamTime.begin("topPaneFrostSync");
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
-            com.termux.app.place.SeamTime.once("topPaneFrostSync", seamT);
         }
     }
 
@@ -24586,38 +24523,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float syncSeamTravel(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
         if (seam.relayout()) {
             Trace.beginSection("Wall.seamLayout");
-            long seamAll = com.termux.app.place.SeamTime.begin("seamRelayout");
             try {
                 // The content keeps the room it was committed with: a stack that grows or shrinks
                 // here, or a bar that comes, moves nothing it holds.
-                long seamT = com.termux.app.place.SeamTime.begin("travelHold+standLayout");
                 beginTravelHold();
                 mCrossing.seam().standLayout();
-                com.termux.app.place.SeamTime.once("travelHold+standLayout", seamT);
                 // A pictured dip toward a half without a keyboard: the keyboard leaves with the
                 // picture, so the stack is laid out in this pass as the other half rests — its
                 // rows, its glass and its foot measured without a keyboard under them, as the
                 // settle would lay them out — instead of over a keyboard pushed below the screen.
-                seamT = com.termux.app.place.SeamTime.begin("keyboardAwayWithPicture");
                 putKeyboardAwayWithPicture();
-                com.termux.app.place.SeamTime.once("keyboardAwayWithPicture", seamT);
                 mChromeTravelMoved = true;
                 // The stack changes halves with its rows, so it is dressed for the half it now
                 // stands in this same pass, while none of it shows (SeamDress). The sizes follow
                 // through the pass below (applyPlaceSizes).
-                if (seam.restyle()) {
-                    seamT = com.termux.app.place.SeamTime.begin("dressSwap:restyleStack");
-                    restyleStackForDress(seam.restyleShape());
-                    com.termux.app.place.SeamTime.once("dressSwap:restyleStack", seamT);
-                }
-                seamT = com.termux.app.place.SeamTime.begin("syncPlaceLayout");
+                if (seam.restyle()) restyleStackForDress(seam.restyleShape());
                 syncPlaceLayout();
-                com.termux.app.place.SeamTime.once("syncPlaceLayout", seamT);
                 // The rows it now stands carry their own half's Drawer tile, laid in while none
                 // of them shows.
-                seamT = com.termux.app.place.SeamTime.begin("syncDrawerTile");
                 syncDrawerTile();
-                com.termux.app.place.SeamTime.once("syncDrawerTile", seamT);
                 // The slab's Dock design goes with the stack's dress, on the frame it changes
                 // halves while none of it shows — a pictured dip's first, a dip's swap, either way
                 // round — so the dock rises as it rests and the settle has nothing to re-dress
@@ -24627,18 +24551,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mCrossing.seam().stackDesignApart() ? mCrossing.seam().other() : null;
                     if (wears != mDockDesignTravelledTo) {
                         mDockDesignTravelledTo = wears;
-                        seamT = com.termux.app.place.SeamTime.begin("dressSwap:dockSurface");
                         restyleDockSurface();
-                        com.termux.app.place.SeamTime.once("dressSwap:dockSurface", seamT);
                     }
                 }
                 // In this frame, so the stack's height the translation below reads is the new one.
-                seamT = com.termux.app.place.SeamTime.begin("geometryRequestNow");
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
                     GeometryScheduler.ResizePolicy.AT_SETTLE);
-                com.termux.app.place.SeamTime.once("geometryRequestNow", seamT);
             } finally {
-                com.termux.app.place.SeamTime.once("seamRelayout", seamAll);
                 Trace.endSection();
             }
         }
@@ -25243,12 +25162,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public boolean picture() {
-            long seamT = com.termux.app.place.SeamTime.begin("stackPicture");
             View stack = hotView(R.id.accessory_stack_container);
             com.termux.app.place.StackPicture picture = stackPicture(stack);
-            boolean taken = picture != null && stack != null && picture.capture(stack);
-            com.termux.app.place.SeamTime.once("stackPicture", seamT);
-            return taken;
+            return picture != null && stack != null && picture.capture(stack);
         }
 
         @Override
@@ -25427,11 +25343,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // translation, sink and alphas, the bar's ride, a fold's and a melt's shares, and the
             // dock's morph, the row laying out the landed rest its last frame already drew. From
             // here the chrome reads the store's arrangements again.
-            long s2 = com.termux.app.place.SeamTime2.begin("settle:crossingLand");
             com.termux.app.place.Crossing.Landing crossingLanding =
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
-            com.termux.app.place.SeamTime2.end("settle:crossingLand", s2);
             storeMoved = crossingLanding.storeMoved();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
@@ -25473,20 +25387,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // settle-time show the pre-roll stood in for would have told it.
                 mX11Display.onUserKeyboardIntent(true);
             }
-            s2 = com.termux.app.place.SeamTime2.begin("settle:syncPlaceState");
             syncPlaceState(page, leavingKeyboardUp);
-            com.termux.app.place.SeamTime2.end("settle:syncPlaceState", s2);
-            s2 = com.termux.app.place.SeamTime2.begin("settle:terminalAway+beads+bands");
             syncTerminalAway(page);
             if (beadsMelted) applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-            com.termux.app.place.SeamTime2.end("settle:terminalAway+beads+bands", s2);
-            s2 = com.termux.app.place.SeamTime2.begin("settle:crossingEnd");
             mCrossing.end();
-            com.termux.app.place.SeamTime2.end("settle:crossingEnd", s2);
-            s2 = com.termux.app.place.SeamTime2.begin("settle:redress+canvas+layout+bar");
             // A slide that came back to Home committed nothing, so no commit dressed the status
             // bar back out of the Workspace's look it slid in. Its glass and the strip behind the
             // system status bar are glazed again here, together, in Home's, or the strip alone
@@ -25522,7 +25429,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     GeometryScheduler.ResizePolicy.NOW);
             }
             if (seamLanding.barTravelled()) syncPlaceBar();
-            com.termux.app.place.SeamTime2.end("settle:redress+canvas+layout+bar", s2);
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
             // gave the room back in its first frame finds it already right, and only the grid's
@@ -25530,17 +25436,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
                 GeometryScheduler.ResizePolicy.NOW);
         } finally {
-            long s2End = com.termux.app.place.SeamTime2.begin("settle:geometryEndBatch");
             mGeometry.endBatch();
-            com.termux.app.place.SeamTime2.end("settle:geometryEndBatch", s2End);
         }
-        long s2 = com.termux.app.place.SeamTime2.begin("settle:contentResize+displacement+crops");
         if (contentPreRolled) finishTravelContentResizeAfterLayout(gridHold);
         if (held) settleTerminalTravelDisplacement();
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        com.termux.app.place.SeamTime2.end("settle:contentResize+displacement+crops", s2);
     }
 
     /**
@@ -26337,12 +26239,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The place the Workspace's page shows: the display's while the display
                     // window is in front of it.
                     com.termux.app.wall.PaneWallPage page = placeOf(wallPage);
-                    // TEMP diag(seam): SeamTime2 times the landing's steps.
-                    com.termux.app.place.SeamTime2.mark("wallPageSettled page=" + page);
-                    long s2All = com.termux.app.place.SeamTime2.begin("settled:all");
-                    long s2 = com.termux.app.place.SeamTime2.begin("settled:refreshGroundStrip");
                     refreshGroundStrip();
-                    com.termux.app.place.SeamTime2.end("settled:refreshGroundStrip", s2);
                     // Everything a place change moves apart from the bar runs here, once the wall
                     // has stopped: the layout and the look are every place's, so the slide never
                     // has anything to re-lay, and what is left — the keyboard, the touchpad, who
@@ -26351,35 +26248,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
                     mSettledWallPage = page;
-                    s2 = com.termux.app.place.SeamTime2.begin("settled:settlePlaceChrome");
                     settlePlaceChrome(page);
-                    com.termux.app.place.SeamTime2.end("settled:settlePlaceChrome", s2);
-                    s2 = com.termux.app.place.SeamTime2.begin("settled:noteTerminalVisible");
                     noteTerminalPlaceMayBeVisible();
-                    com.termux.app.place.SeamTime2.end("settled:noteTerminalVisible", s2);
-                    s2 = com.termux.app.place.SeamTime2.begin("settled:widgetsPageShown");
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
                     }
-                    com.termux.app.place.SeamTime2.end("settled:widgetsPageShown", s2);
-                    s2 = com.termux.app.place.SeamTime2.begin("settled:displayAttachment");
                     Trace.beginSection("Wall.displayAttachment");
                     try {
                         syncDisplayAttachment(page);
                     } finally {
                         Trace.endSection();
                     }
-                    com.termux.app.place.SeamTime2.end("settled:displayAttachment", s2);
                     // A display window left before its display came up goes, once the wall has
                     // finished settling rather than inside it.
-                    s2 = com.termux.app.place.SeamTime2.begin("settled:dropDisplay+help");
                     if (page != com.termux.app.wall.PaneWallPage.DISPLAY) {
                         dropUnstartedDisplayWhenSettled(0L);
                     }
                     dismissHelpOverlay();
-                    com.termux.app.place.SeamTime2.end("settled:dropDisplay+help", s2);
-                    com.termux.app.place.SeamTime2.end("settled:all", s2All);
                     // The "Go to …" read-out lands with the page (showTerminalActionHint).
                     if (mWallReadoutShowing) {
                         mWallReadoutShowing = false;
@@ -26399,20 +26285,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // a trace shows whether the chrome lands with the wall or after it.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
-                    // TEMP diag(seam): SeamTime2 logs any per-offset step of 2 ms or more.
-                    long s2 = com.termux.app.place.SeamTime2.begin("offset:placeBar+groundStrip");
                     syncPlaceBarOffset(offsetPx);
                     syncGroundStrip(offsetPx);
-                    com.termux.app.place.SeamTime2.endIfSlow("offset:placeBar+groundStrip", s2, 2f);
                     // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
                     // page stands at its own top from this frame on (PageTopInsets).
-                    s2 = com.termux.app.place.SeamTime2.begin("offset:canvasTopReach");
                     syncCanvasTopReach();
-                    com.termux.app.place.SeamTime2.endIfSlow("offset:canvasTopReach", s2, 2f);
                     // The terminal's own frame line stays put while its page leaves: it fades.
-                    s2 = com.termux.app.place.SeamTime2.begin("offset:terminalFrameLine");
                     syncTerminalFrameLineTravel();
-                    com.termux.app.place.SeamTime2.endIfSlow("offset:terminalFrameLine", s2, 2f);
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     syncChromeTravel(offsetPx);
@@ -26420,11 +26299,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
                     // on moved over a wallpaper that did not go with it. Aimed once: the wall's
                     // controller has re-aimed the other pages already, and the slabs are here.
-                    s2 = com.termux.app.place.SeamTime2.begin("offset:wallpaperParallax+glass");
                     syncWallpaperParallax(true);
                     if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
-                    com.termux.app.place.SeamTime2.endIfSlow("offset:wallpaperParallax+glass", s2, 2f);
-                    s2 = com.termux.app.place.SeamTime2.begin("offset:noteTerminalVisibleMoving");
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the
                     // first frame of the slide, rather than one stale frame later. The panes'
@@ -26432,7 +26308,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // (onTerminalOffScreenChanged), not per frame; per frame only the
                     // acknowledgement is taken, which repaints them itself when it lands.
                     noteTerminalPlaceMayBeVisibleWhileMoving();
-                    com.termux.app.place.SeamTime2.endIfSlow("offset:noteTerminalVisibleMoving", s2, 2f);
                 }
                 @Override public void onTerminalOffScreenChanged(boolean offScreen) {
                     // Every pane the terminal place holds, tiled and floating alike, has to hear
@@ -26440,21 +26315,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // 707920f7 and the alpha-based fix after it), so each one is told by hand to
                     // pause what INVISIBLE used to pause for free.
                     if (mPaneController == null) return;
-                    // TEMP diag(seam): SeamTime2 times the terminal page coming on or off screen.
-                    long s2 = com.termux.app.place.SeamTime2.begin("terminalOffScreen:" + offScreen);
                     // The attention glow's endless pulse is one of those: held while away.
                     mPaneController.setTerminalOffScreen(offScreen);
                     for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
                         view.setWallPageOffScreen(offScreen);
                     }
-                    com.termux.app.place.SeamTime2.end("terminalOffScreen:" + offScreen, s2);
                     // The one frame of a slide the borders are re-dressed in: the page's first
                     // frame back on screen.
-                    if (!offScreen) {
-                        s2 = com.termux.app.place.SeamTime2.begin("terminalPlaceShown");
-                        mPaneController.onTerminalPlaceShown();
-                        com.termux.app.place.SeamTime2.end("terminalPlaceShown", s2);
-                    }
+                    if (!offScreen) mPaneController.onTerminalPlaceShown();
                 }
                 @Override public void onWallOutlineAlphaChanged(float alpha) {
                     // The terminal page's outline is its panes' rims; they fade with the other

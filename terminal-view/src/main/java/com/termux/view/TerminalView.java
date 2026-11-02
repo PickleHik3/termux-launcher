@@ -3749,18 +3749,6 @@ public final class TerminalView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        // TEMP diag(seam): SeamTime2 logs a terminal draw of 3 ms or more.
-        android.os.Trace.beginSection("Seam2:terminal:onDraw");
-        long s2 = System.nanoTime();
-        onDrawS2(canvas);
-        android.os.Trace.endSection();
-        float s2Ms = (System.nanoTime() - s2) / 1e6f;
-        if (s2Ms >= 3f) android.util.Log.d("SeamTime2", "t=" + android.os.SystemClock.uptimeMillis()
-            + " step=terminal:onDraw ms=" + String.format(java.util.Locale.ROOT, "%.2f", s2Ms)
-            + " " + getWidth() + "x" + getHeight());
-    }
-
-    private void onDrawS2(Canvas canvas) {
         if (mEmulator == null) {
             // Nothing to draw yet, and nothing painted: the launcher's panes sit on glass and the
             // wallpaper, and a black fill here was a black frame each time a pane was rebuilt
