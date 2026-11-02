@@ -263,6 +263,10 @@ public final class PreviewTilesRow {
         @Override
         protected void onLayout(boolean changed, int l, int t, int r, int b) {
             boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            // The pixels the tile width's rounding leaves over are split between both sides, so
+            // the row stands centred rather than a few pixels left.
+            int room = (r - l) - getPaddingLeft() - getPaddingRight();
+            int spare = Math.max(0, room - mColumns * mTileWidth - (mColumns - 1) * mGap) / 2;
             int slot = 0;
             for (int i = 0; i < getChildCount(); i++) {
                 View child = getChildAt(i);
@@ -270,7 +274,7 @@ public final class PreviewTilesRow {
                     continue;
                 int column = slot % mColumns;
                 int line = slot / mColumns;
-                int start = column * (mTileWidth + mGap);
+                int start = spare + column * (mTileWidth + mGap);
                 int left = rtl ? (r - l) - getPaddingRight() - start - mTileWidth
                     : getPaddingLeft() + start;
                 int top = getPaddingTop() + line * (mTileHeight + mGap);

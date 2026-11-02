@@ -85,6 +85,39 @@ public class CustomizationLayoutWriteTest {
     }
 
     @Test
+    public void anElementHiddenInBothOrientationsStaysListedAndComesBack() {
+        // Customization hides A–Z on Home in both orientations; Home's own list must still offer
+        // it (switch off) and its switch must bring it back (the row once vanished).
+        LayoutEditorPlan customization = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL,
+            PlaceOrientation.PORTRAIT);
+        customization.setShownOnLayout(LayoutVariant.HOME, Element.AZ, false);
+        assertFalse(places.kindShowsAny(PageKind.HOME, Element.AZ));
+
+        LayoutEditorPlan home = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS,
+            PlaceOrientation.PORTRAIT);
+        assertTrue("the Home list keeps the row",
+            com.termux.app.chrome.DressResolver.wornOn(home.variant(), Element.AZ));
+        assertTrue(home.trayItems().contains(LayoutEditorPlan.TrayItem.AZ_INDEX));
+        assertTrue(home.restore(LayoutEditorPlan.TrayItem.AZ_INDEX)
+            != LayoutEditorPlan.Drop.NONE);
+        assertTrue(places.kindShows(PageKind.HOME, PlaceOrientation.PORTRAIT, Element.AZ));
+        assertFalse("Home never lists the extra keys",
+            com.termux.app.chrome.DressResolver.wornOn(home.variant(), Element.EXTRA_KEYS));
+    }
+
+    @Test
+    public void theEditedOrientationIsWhatTheListsRead() {
+        // Home's list hides A–Z in portrait only: Customization reads the edited orientation
+        // (hidden), not "shown in either orientation" (which still said shown).
+        LayoutEditorPlan home = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS,
+            PlaceOrientation.PORTRAIT);
+        home.drop(com.termux.app.fragments.settings.MiniatureDragPolicy.Bar.of(Element.AZ), null);
+        assertTrue(places.forVariant(LayoutVariant.HOME)
+            .slot(PlaceOrientation.PORTRAIT, Element.AZ).hidden);
+        assertTrue(places.kindShowsAny(PageKind.HOME, Element.AZ));
+    }
+
+    @Test
     public void doneKeepsBothKinds() {
         hideAzEverywhere();
         // Done ends the session without writing; the next session opens on what was kept.

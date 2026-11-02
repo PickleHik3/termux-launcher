@@ -117,8 +117,8 @@ public final class ElementsList {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(0, 0, 0, RowKit.dp(context, 8));
         mDivider = divider;
+        // The card's Layout section header is the list's only heading (no "Home layout" under it).
         mTitle = heading();
-        root.addView(SectionHeader.build(context, mTitle, null, divider).root);
         mChipSlot = new FrameLayout(context);
         root.addView(mChipSlot, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -166,13 +166,9 @@ public final class ElementsList {
         return title != null ? title : mContext.getString(R.string.editor_section_elements);
     }
 
-    /** The heading follows the layout being edited: another kind's page, minimal mode. */
+    /** The list stands under its card's Layout header and draws no heading of its own. */
     private void restateHeading() {
-        String title = heading();
-        if (title.equals(mTitle)) return;
-        mTitle = title;
-        root.removeViewAt(0);
-        root.addView(SectionHeader.build(mContext, title, null, mDivider).root, 0);
+        mTitle = heading();
     }
 
     /**
