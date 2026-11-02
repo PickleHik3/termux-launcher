@@ -21,7 +21,8 @@ public class PaneRetroEffectAgslInstrumentationTest {
 
     private static final String[] FLOAT_UNIFORMS = {
         "uDensity", "uRadius", "uBend", "uVignette", "uScreenRadius",
-        "uAberr", "uAberrFlat", "uRecess", "uDim", "uEvent", "uEventT", "uSeed"
+        "uAberr", "uAberrFlat", "uRecess", "uDim", "uEvent", "uEventT", "uSeed",
+        "uFlicker", "uTime"
     };
 
     @Test
@@ -46,6 +47,12 @@ public class PaneRetroEffectAgslInstrumentationTest {
             .screen(16f, 20f, 224f, 300f, 20f, 300f)
             .surface(RetroUniforms.PANE_ABERR_PX, 0f, 1f, 0f)
             .event(PaneScreenEvent.Kind.BELL_TEAR.id, 0.5f, 0.3f);
+        RetroUniforms ambient = new RetroUniforms().set(240f, 320f, 0f, 0f, 1f, 1f, 2f,
+                0f, 0f, 240f, 320f, 24f, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE)
+            .screen(16f, 20f, 224f, 300f, 20f, 300f)
+            .surface(RetroUniforms.PANE_ABERR_PX, 0f, 1f, 1f)
+            .event(PaneScreenEvent.Kind.AMBIENT_TEAR.id, 0.5f, 0.3f)
+            .ambient(PaneAmbient.FLICKER_MAX, 3.2f);
         RetroUniforms chrome = new RetroUniforms().set(240f, 120f, 0f, 0f, 1f, 1f, 2f,
                 0f, 0f, 240f, 120f, 0f, 0f, 0f)
             .surface(RetroUniforms.CHROME_ABERR_PX, 1f, 0f, 0f);
@@ -53,6 +60,7 @@ public class PaneRetroEffectAgslInstrumentationTest {
             if (style == PaneRetroStyle.NONE) continue;
             assertNotNull(style.name(), new PaneRetroEffect().effectFor(style, pane));
             assertNotNull(style.name(), new PaneRetroEffect().effectFor(style, chrome));
+            assertNotNull(style.name(), new PaneRetroEffect().effectFor(style, ambient));
         }
     }
 }

@@ -1,7 +1,9 @@
 package com.termux.app.terminal;
 
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewParent;
@@ -9,6 +11,10 @@ import android.view.ViewParent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import java.util.Random;
 
 /**
  * Keeps one view drawn through the retro effect. Before every frame the view's window draws it
@@ -80,6 +86,19 @@ public final class RetroEffectBinder {
     /** Whether this surface plays screen events: a pane does, the chrome never. */
     private boolean mScreenEvents;
     @NonNull private final PaneScreenEvent.Slot mEvent = new PaneScreenEvent.Slot();
+    /** 0..1: how far the picture is dimmed ({@link #setDim}); a pane out of focus is 1. */
+    private float mDim;
+    /** The Idle animations switch as last told ({@link #setAmbient}). */
+    private boolean mAmbientSwitch;
+    /** Whether the ambient loop is scheduled; false means nothing of it is posted. */
+    private boolean mAmbientRunning;
+    /** The flicker clock's origin and the next ambient tear, in uptime ms. */
+    private long mAmbientOrigin;
+    private long mNextAmbientTear;
+    /** The flicker depth written into the uniforms: 0 unless the loop is playing. */
+    private float mFlicker;
+    @NonNull private final Random mAmbientRandom = new Random();
+    @NonNull private final Runnable mAmbientTick = this::ambientTick;
 
     /**
      * @param bend     the CRT's barrel bend: {@link PaneRetroEffect#CRT_BEND} on a pane card, 0 on
@@ -155,11 +174,110 @@ public final class RetroEffectBinder {
         if (next != PaneRetroStyle.NONE) RetroEffectPrewarm.request(next);
         mHook.setOn(next != PaneRetroStyle.NONE);
         refresh();
+        refreshAmbient();
+    }
+
+    /**
+     * How far the picture is dimmed, 0..1 (an unfocused pane is 1, {@link PaneDimPolicy}): one
+     * uniform, wrapped again only when it changes. CRT only; the TFT program has no dim.
+     */
+    public void setDim(float dim) {
+        float next = Math.max(0f, Math.min(1f, dim));
+        if (next == mDim) return;
+        mDim = next;
+        refresh();
+    }
+
+    /**
+     * The Idle animations switch: on lets a CRT pane play its ambient flicker and tear
+     * ({@link PaneAmbient}) whenever the gate holds; off stops them and posts nothing at all.
+     */
+    public void setAmbient(boolean switchOn) {
+        mAmbientSwitch = switchOn;
+        refreshAmbient();
+    }
+
+    /**
+     * Re-checks the ambient gate now: starts the loop if it may play and is not running, stops it
+     * if it may not. For an owner whose visibility, window or screen state just changed.
+     */
+    public void refreshAmbient() {
+        if (!mScreenEvents) return;
+        if (ambientStanding()) {
+            if (!mAmbientRunning) startAmbient();
+        } else {
+            stopAmbient();
+        }
+    }
+
+    /** Every gate of {@link PaneAmbient#ambientAllowed} but the typing hold, which only pauses. */
+    private boolean ambientStanding() {
+        if (!mAmbientSwitch || !mStyle.usesCrt() || !PaneRetroEffect.available()
+            || !mView.isAttachedToWindow())
+            return false;
+        Context context = mView.getContext();
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+        PowerManager power = context.getSystemService(PowerManager.class);
+        return PaneAmbient.ambientAllowed(true, true, ValueAnimator.areAnimatorsEnabled(),
+            prefs != null && prefs.isLazyModeEnabled(),
+            power != null && power.isPowerSaveMode(),
+            power == null || power.isInteractive(),
+            mView.isShown(), mView.getWindowVisibility() == View.VISIBLE, true);
+    }
+
+    private void startAmbient() {
+        long now = SystemClock.uptimeMillis();
+        mAmbientRunning = true;
+        mAmbientOrigin = now;
+        mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+        mView.removeCallbacks(mAmbientTick);
+        mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);
+    }
+
+    private void stopAmbient() {
+        if (!mAmbientRunning) return;
+        mAmbientRunning = false;
+        mView.removeCallbacks(mAmbientTick);
+        if (mFlicker != 0f) {
+            mFlicker = 0f;
+            refresh();
+        }
+    }
+
+    /**
+     * One tick of the ambient loop: stops for good once a gate fails, holds (flicker off, one
+     * re-check after {@link PaneScreenEvent#INPUT_QUIET_MS}) after a key or a scroll, else
+     * advances the flicker and fires the tear when it is due.
+     */
+    private void ambientTick() {
+        if (!mAmbientRunning) return;
+        if (!ambientStanding()) {
+            stopAmbient();
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (!InputQuiet.isQuiet()) {
+            if (mFlicker != 0f) {
+                mFlicker = 0f;
+                refresh();
+            }
+            mView.postDelayed(mAmbientTick, PaneScreenEvent.INPUT_QUIET_MS);
+            return;
+        }
+        mFlicker = PaneAmbient.flickerAmplitude(true);
+        // A tear never cuts into an event already playing; it waits for the next tick.
+        if (now >= mNextAmbientTear && mEvent.live(now) == null) {
+            mEvent.fire(PaneScreenEvent.Kind.AMBIENT_TEAR, now, mAmbientRandom.nextFloat());
+            mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+        }
+        refresh();
+        mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);
     }
 
     /** Off for good: the effect comes off and the view keeps no reference to this binder. */
     public void release() {
         setStyle(PaneRetroStyle.NONE);
+        stopAmbient();
         mHook.release();
     }
 
@@ -202,8 +320,10 @@ public final class RetroEffectBinder {
         mScratch.set(width, height, mLocation[0], mLocation[1], scaleX, scaleY,
             mView.getResources().getDisplayMetrics().density,
             mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette)
-            .surface(mAberr, mAberrFlat, mRecess, 0f);
+            .surface(mAberr, mAberrFlat, mRecess, mStyle.usesCrt() ? mDim : 0f);
         long now = SystemClock.uptimeMillis();
+        if (mScreenEvents && mFlicker > 0f && mStyle.usesCrt())
+            mScratch.ambient(mFlicker, PaneAmbient.clockSeconds(now - mAmbientOrigin));
         PaneScreenEvent live = mScreenEvents ? mEvent.live(now) : null;
         if (live != null) {
             mScratch.event(live.kind.id, live.progress(now), live.seed);

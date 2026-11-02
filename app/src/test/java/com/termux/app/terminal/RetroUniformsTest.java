@@ -126,6 +126,17 @@ public class RetroUniformsTest {
         b.copyFrom(a);
         b.seed = 0f;
         assertNotEquals(a, b);
+        a.ambient(PaneAmbient.FLICKER_MAX, 12.5f);
+        assertEquals(PaneAmbient.FLICKER_MAX, a.flicker, 0f);
+        assertEquals(12.5f, a.time, 0f);
+        b.copyFrom(a);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        b.flicker = 0f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.time = 0f;
+        assertNotEquals(a, b);
         // A fresh set starts every surface part at nothing; prewarm and old callers draw plain.
         a.set(1080f, 300f, 0f, 0f, 1f, 1f, DENSITY, 0f, 0f, 1080f, 300f, 0f, 0f, 0f);
         assertEquals(0f, a.aberr, 0f);
@@ -135,5 +146,7 @@ public class RetroUniformsTest {
         assertEquals(0f, a.event, 0f);
         assertEquals(0f, a.eventT, 0f);
         assertEquals(0f, a.seed, 0f);
+        assertEquals(0f, a.flicker, 0f);
+        assertEquals(0f, a.time, 0f);
     }
 }

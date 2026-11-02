@@ -231,6 +231,62 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /**
+     * Re-reads the Idle animations switch and re-checks the ambient gate
+     * ({@link RetroEffectBinder#setAmbient}): run on attach, on every style, and whenever the
+     * pane's window, visibility or the screen changes. With the switch off it posts nothing.
+     */
+    public void refreshAmbient() {
+        // Null while the super constructor runs: FrameLayout may report visibility that early.
+        if (mRetroEffect == null) return;
+        boolean on = false;
+        if (mRetroEffect.style().usesCrt()) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                    .build(getContext(), false);
+            on = prefs != null && prefs.isIdleAnimationsEnabled();
+        }
+        mRetroEffect.setAmbient(on);
+    }
+
+    /**
+     * Draws the CRT picture dimmed (an unfocused pane of a window with more than one, spec
+     * decision 8): one uniform, snapped, no frames.
+     */
+    public void setDimmed(boolean dimmed) {
+        mRetroEffect.setDim(dimmed ? 1f : 0f);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    public void onScreenStateChanged(int screenState) {
+        super.onScreenStateChanged(screenState);
+        refreshAmbient();
+    }
+
+    /**
      * The child that owes the shape its clearance. A terminal pane finds its own on inflation; a
      * page whose content arrives later — the wall's widget grid — names it here.
      */
@@ -349,6 +405,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         boolean wornBefore = bezelWorn();
         float bendBefore = bezelBend();
         mRetroEffect.setStyle(style);
+        refreshAmbient();
         // The bezel comes and goes with the effect: the one relayout is the terminal taking its
         // new margins, and only when the bezel or the bend it clears actually changed.
         if (bezelWorn() != wornBefore || (wornBefore && bezelBend() != bendBefore)) {

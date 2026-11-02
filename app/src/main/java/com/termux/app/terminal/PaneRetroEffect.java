@@ -119,14 +119,19 @@ public final class PaneRetroEffect {
         + "uniform float uAberrFlat;\n"
         // 1 draws the glass's recess and sheen (a pane), 0 leaves them out (the chrome).
         + "uniform float uRecess;\n"
-        // 0..1: how far the picture loses brightness and colour (an unfocused pane, later).
+        // 0..1: how far the picture loses brightness and colour (an unfocused pane).
         + "uniform float uDim;\n"
         // The live screen event (PaneScreenEvent): its kind id (0 none, 1 bell tear, 2 power on,
-        // 3 power off, 4 focus wobble, 5 death snow), its progress 0..1 and a random 0..1.
+        // 3 power off, 4 focus wobble, 5 death snow, 6 ambient tear), its progress 0..1 and a
+        // random 0..1.
         // Always 0 on the chrome and on TFT, which never play events.
         + "uniform float uEvent;\n"
         + "uniform float uEventT;\n"
         + "uniform float uSeed;\n"
+        // The ambient flicker (PaneAmbient, under Idle animations): its depth 0..0.03 and its
+        // clock in seconds. Always 0 on the chrome and on TFT.
+        + "uniform float uFlicker;\n"
+        + "uniform float uTime;\n"
         // Signed distance from the rounded rect r's edge, negative inside.
         + "float roundDist(float2 p, float4 r, float radius) {\n"
         + "    float2 h = (r.zw - r.xy) * 0.5;\n"
@@ -170,15 +175,17 @@ public final class PaneRetroEffect {
         + "    float evShift = 0.0;\n"
         + "    float evSplit = 0.0;\n"
         // Bell tear: one band 4.5 rows tall at a y from the seed, shifted sideways (direction
-        // from the seed too) and split red/blue, both fading out.
-        + "    if (uEvent > 0.5 && uEvent < 1.5) {\n"
+        // from the seed too) and split red/blue, both fading out. The ambient tear (6) is the
+        // same band at half the shift and a 1 px split.
+        + "    if ((uEvent > 0.5 && uEvent < 1.5) || (uEvent > 5.5 && uEvent < 6.5)) {\n"
+        + "        float amb = uEvent > 5.5 ? 1.0 : 0.0;\n"
         + "        float bandH = 4.5 * " + PERIOD + ";\n"
         + "        float bandY = uScreen.y + fract(uSeed * 7.13) * max(scr.y - bandH, 0.0);\n"
         + "        float inBand = step(bandY, p.y) * step(p.y, bandY + bandH);\n"
         + "        float fade = 1.0 - uEventT;\n"
         + "        float dir = uSeed < 0.5 ? -1.0 : 1.0;\n"
-        + "        evShift = inBand * dir * 6.0 * uDensity * fade;\n"
-        + "        evSplit = inBand * 1.5 * fade;\n"
+        + "        evShift = inBand * dir * mix(6.0, 3.0, amb) * uDensity * fade;\n"
+        + "        evSplit = inBand * mix(1.5, 1.0, amb) * fade;\n"
         + "    }\n"
         // Focus wobble: a damped sideways shear, nothing on the centre row, full at the edges.
         + "    if (uEvent > 3.5 && uEvent < 4.5) {\n"
@@ -222,6 +229,9 @@ public final class PaneRetroEffect {
         + "    float off = (along - " + SHEEN_AT + ") / " + SHEEN_SIGMA + ";\n"
         + "    float sheen = uRecess * " + SHEEN_PEAK + " * exp(-0.5 * off * off);\n"
         + "    float a = float(col.a);\n"
+        // Ambient flicker: two slow sines (1.3 Hz and 0.37 Hz), never a flash.
+        + "    float flick = sin(uTime * 2.0 * PI * 1.3) * 0.6 + sin(uTime * 2.0 * PI * 0.37 + 1.7) * 0.4;\n"
+        + "    rgb *= 1.0 - uFlicker * (0.5 + 0.5 * flick);\n"
         + "    float dimLum = dot(rgb, float3(0.299, 0.587, 0.114));\n"
         + "    rgb = mix(rgb, float3(dimLum), " + DIM_SATURATION + " * uDim)\n"
         + "        * (1.0 - " + DIM_BRIGHTNESS + " * uDim);\n"
@@ -333,6 +343,8 @@ public final class PaneRetroEffect {
             shader.setFloatUniform("uEvent", u.event);
             shader.setFloatUniform("uEventT", u.eventT);
             shader.setFloatUniform("uSeed", u.seed);
+            shader.setFloatUniform("uFlicker", u.flicker);
+            shader.setFloatUniform("uTime", u.time);
             // The effect keeps the uniforms it was made with; the next write starts a new copy.
             return RenderEffect.createRuntimeShaderEffect(shader, "content");
         }

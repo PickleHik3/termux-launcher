@@ -2630,7 +2630,25 @@ public class TerminalPaneController {
             screenEvent(now, PaneScreenEvent.Kind.FOCUS_WOBBLE);
         mFocusEventSession = now;
         mFocusEventWindow = window;
+        refreshPaneDims();
         mHost.onActivePaneChanged();
+    }
+
+    /**
+     * Dims every pane of the window on screen but its focused one when it holds more than one
+     * ({@link PaneDimPolicy}); panes of other windows are off screen and stay undimmed. Snaps.
+     */
+    private void refreshPaneDims() {
+        Window window = mActiveWindow;
+        List<TerminalSession> leaves = new ArrayList<>();
+        TerminalSession active = null;
+        if (window != null) {
+            for (Leaf leaf : allLeavesOf(window)) leaves.add(leaf.session);
+            if (window.active != null) active = window.active.session;
+        }
+        Set<TerminalSession> dimmed = PaneDimPolicy.dimmed(active, leaves);
+        for (Map.Entry<TerminalSession, PaneContentFrame> e : mPaneFrames.entrySet())
+            e.getValue().setDimmed(dimmed.contains(e.getKey()));
     }
 
     /** Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}). */
@@ -4904,6 +4922,7 @@ public class TerminalPaneController {
         Trace.beginSection("Panes.render");
         try {
             doRender();
+            refreshPaneDims();
         } finally {
             Trace.endSection();
         }

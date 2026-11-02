@@ -64,6 +64,11 @@
             app:title="@string/settings_terminal_screen_events_title"
             app:summary="@string/settings_terminal_screen_events_summary"
             app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="idle_animations"
+            app:title="@string/settings_idle_animations_title"
+            app:summary="@string/settings_idle_animations_summary"
+            app:defaultValue="false" />
     </PreferenceCategory>
 
 </PreferenceScreen>

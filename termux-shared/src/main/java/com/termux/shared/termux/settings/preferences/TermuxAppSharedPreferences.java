@@ -1141,6 +1141,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SCREEN_EVENTS, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_ANIMATIONS}. */
+    public boolean isIdleAnimationsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IDLE_ANIMATIONS, TERMUX_APP.DEFAULT_VALUE_IDLE_ANIMATIONS);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_ANIMATIONS}. */
+    public void setIdleAnimationsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IDLE_ANIMATIONS, value, false);
+    }
+
     public boolean isOsc52ClipboardReadEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, TERMUX_APP.DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED);

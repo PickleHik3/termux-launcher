@@ -749,6 +749,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_SCREEN_EVENTS = "terminal_screen_events";
         public static final boolean DEFAULT_VALUE_TERMINAL_SCREEN_EVENTS = true;
 
+        /**
+         * Whether CRT panes play their ambient parts (a gentle flicker, a tear every few
+         * minutes) while nothing happens. Costs battery. Default false.
+         */
+        public static final String KEY_IDLE_ANIMATIONS = "idle_animations";
+        public static final boolean DEFAULT_VALUE_IDLE_ANIMATIONS = false;
+
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;

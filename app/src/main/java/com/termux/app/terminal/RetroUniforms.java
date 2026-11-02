@@ -75,6 +75,10 @@ public final class RetroUniforms {
     public float eventT;
     /** The live screen event's random, 0..1. */
     public float seed;
+    /** The ambient flicker's depth, 0..{@link PaneAmbient#FLICKER_MAX}; 0 for none (chrome, TFT). */
+    public float flicker;
+    /** The ambient flicker's clock in seconds, wrapping at {@link PaneAmbient#TIME_WRAP_S}. */
+    public float time;
 
     /** The screen's period in px. */
     public static float periodPx(float density) {
@@ -136,6 +140,21 @@ public final class RetroUniforms {
         this.event = 0f;
         this.eventT = 0f;
         this.seed = 0f;
+        this.flicker = 0f;
+        this.time = 0f;
+        return this;
+    }
+
+    /**
+     * The ambient flicker, after {@link #set} (which clears it): its depth {@code flicker} and
+     * its clock {@code time} in seconds.
+     *
+     * @return this, for chaining
+     */
+    @NonNull
+    public RetroUniforms ambient(float flicker, float time) {
+        this.flicker = flicker;
+        this.time = time;
         return this;
     }
 
@@ -232,6 +251,8 @@ public final class RetroUniforms {
         event = other.event;
         eventT = other.eventT;
         seed = other.seed;
+        flicker = other.flicker;
+        time = other.time;
     }
 
     @Override
@@ -258,7 +279,8 @@ public final class RetroUniforms {
             && Float.compare(aberr, u.aberr) == 0 && Float.compare(aberrFlat, u.aberrFlat) == 0
             && Float.compare(recess, u.recess) == 0 && Float.compare(dim, u.dim) == 0
             && Float.compare(event, u.event) == 0 && Float.compare(eventT, u.eventT) == 0
-            && Float.compare(seed, u.seed) == 0;
+            && Float.compare(seed, u.seed) == 0
+            && Float.compare(flicker, u.flicker) == 0 && Float.compare(time, u.time) == 0;
     }
 
     @Override
@@ -290,6 +312,8 @@ public final class RetroUniforms {
         h = 31 * h + Float.floatToIntBits(dim);
         h = 31 * h + Float.floatToIntBits(event);
         h = 31 * h + Float.floatToIntBits(eventT);
-        return 31 * h + Float.floatToIntBits(seed);
+        h = 31 * h + Float.floatToIntBits(seed);
+        h = 31 * h + Float.floatToIntBits(flicker);
+        return 31 * h + Float.floatToIntBits(time);
     }
 }

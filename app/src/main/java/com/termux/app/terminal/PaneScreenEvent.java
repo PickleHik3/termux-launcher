@@ -27,7 +27,12 @@ public final class PaneScreenEvent {
         /** The pane took focus: a damped sideways shear. */
         FOCUS_WOBBLE(4, 300L),
         /** The pane's process died: a burst of snow. */
-        DEATH_SNOW(5, 300L);
+        DEATH_SNOW(5, 300L),
+        /**
+         * An ambient glitch under Idle animations ({@link PaneAmbient}): the bell tear at half its
+         * shift, every 2 to 5 minutes.
+         */
+        AMBIENT_TEAR(6, 200L);
 
         public final int id;
         public final long durationMs;

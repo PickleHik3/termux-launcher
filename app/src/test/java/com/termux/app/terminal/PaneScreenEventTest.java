@@ -28,6 +28,8 @@ public class PaneScreenEventTest {
         assertEquals(3, PaneScreenEvent.Kind.POWER_OFF.id);
         assertEquals(4, PaneScreenEvent.Kind.FOCUS_WOBBLE.id);
         assertEquals(5, PaneScreenEvent.Kind.DEATH_SNOW.id);
+        assertEquals(6, PaneScreenEvent.Kind.AMBIENT_TEAR.id);
+        assertTrue(PaneScreenEvent.Kind.AMBIENT_TEAR.durationMs <= 200L);
     }
 
     @Test public void progressRunsZeroToOneAndHolds() {
