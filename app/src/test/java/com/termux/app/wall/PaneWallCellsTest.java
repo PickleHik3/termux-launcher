@@ -520,17 +520,20 @@ public class PaneWallCellsTest {
         assertEquals(2, on());
     }
 
-    @Test public void wallWidgetsWithTwoHomeRunsPicksTheHomePageThenTheNearest() {
+    @Test public void wallWidgetsWithTwoHomeRunsPicksTheHomePageThenTheFirst() {
         start(twoHomeRuns());
         assertTrue(controller.goToDisplayPage(4, false));
         assertTrue(controller.goTo("widgets"));
         assertEquals("the home page", 1, on());
-        // The Terminal page made home: the Home page nearest by cells.
+        // The Terminal page made home: the first Home page, though Home 2 stands nearer.
         host.pages = host.pages.setHome(3).pages;
         controller.refreshPages();
         assertTrue(controller.goToDisplayPage(4, false));
         assertTrue(controller.goTo("widgets"));
-        assertEquals("the nearest Home page", 2, on());
+        assertEquals("the first Home page", 1, on());
+        assertTrue(controller.goToDisplayPage(4, false));
+        assertTrue(controller.goTo("home"));
+        assertEquals("the first Home page", 1, on());
     }
 
     @Test public void addingAPageLeavesTheWallOnThePageItIsOn() {

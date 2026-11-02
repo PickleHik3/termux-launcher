@@ -914,16 +914,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Where the Home key and {@code wall.widgets} go, one answer for both: while the home page is
-     * a Home page, the home press's Home page (Start in honoured, W9); else the Home page nearest
-     * the current cell (ADR 0016 section 5). {@link PaneWallLayout#NO_PAGE} when there is none.
+     * Where the Home key and {@code wall.widgets} go, one answer for both: while Start in is a
+     * Home page, that page (the home press's, W9); while it is the Terminal or a Display page,
+     * the first Home page (ADR 0016 section 5, amended 2026-11-02). {@link PaneWallLayout#NO_PAGE}
+     * when there is none.
      */
     private int homeKeyPage(@NonNull WallPages pages, int current) {
         WallPages.Page home = pages.home();
-        if (home != null && home.kind == WallPages.PageKind.HOME) {
-            int id = homeIdAt(Math.max(0, mHost.homePressPage()));
-            if (id != PaneWallLayout.NO_PAGE) return id;
-        }
+        boolean homeIsHome = home != null && home.kind == WallPages.PageKind.HOME;
+        int id = homeIdAt(homeIsHome ? Math.max(0, mHost.homePressPage()) : 0);
+        if (id != PaneWallLayout.NO_PAGE) return id;
         WallPages.Page target = pages.homeTarget(current);
         return target == null ? PaneWallLayout.NO_PAGE : target.id;
     }

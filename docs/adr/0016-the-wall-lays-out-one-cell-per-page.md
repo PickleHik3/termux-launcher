@@ -40,7 +40,8 @@ nobody else's to read.
 4. **Far jumps by name keep W3**: a one-width slide from a stand-off, the pages in between never
    announced or started.
 5. **Named targets with several pages of a kind**: the Home key and `wall.widgets` go to the home
-   page when it is a Home page, else the nearest Home page by cell distance; the Display key and
+   page when it is a Home page, else (Start in is the Terminal or a Display page) the first Home
+   page (amended 2026-11-02; it was the nearest Home page by cell distance); the Display key and
    `wall.display` to the bound (last used) Display page, else the nearest; the Terminal key to the
    one Terminal page; `wall.go left/right` to the adjacent cell whatever its kind.
 6. **The empty Terminal page is always a stop** (0015 §1 as written): the slide onto it shows its
