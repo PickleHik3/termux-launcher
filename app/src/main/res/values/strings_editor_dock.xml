@@ -30,6 +30,10 @@
     <string name="editor_dock_most_used">Most used row</string>
     <string name="editor_dock_icon_pack">Icon pack</string>
     <string name="editor_dock_icon_pack_global">Same as Home</string>
+    <!-- The Dock section's stepper: how many pinned apps a dock page shows. -->
+    <string name="editor_dock_apps_in_dock">Apps in the dock</string>
+    <!-- Under Apps in the dock while + is out at the fit; %2$s is S, M, L or XL. -->
+    <string name="editor_dock_apps_fit_hint">At most %1$d fit at size %2$s.</string>
     <!-- The Dock card's More options row: the pinned apps' icon pack. -->
     <string name="editor_dock_icon_pack_row">Dock icon pack</string>
     <!-- Icon pack ›'s subtitle: what the subcard holds. -->

@@ -55,7 +55,8 @@ public class EditorRowsTest {
 
     @Test
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
-        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE),
+        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE,
+            Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
             Row.DOCK_MONOCHROME,

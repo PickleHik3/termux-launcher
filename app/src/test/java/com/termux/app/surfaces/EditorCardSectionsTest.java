@@ -121,7 +121,8 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE),
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE,
+                Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
             "SECTION_LAYOUT", Arrays.asList(Row.DOCK_BARS),

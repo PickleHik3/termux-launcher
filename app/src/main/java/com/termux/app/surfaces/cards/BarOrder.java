@@ -46,7 +46,7 @@ public final class BarOrder {
 
     /** What a bar's sliders glyph opens, in the order its settings stand. */
     public enum Setting {
-        POSITION, APP_ICONS, MOST_USED, ICON_PACK, GLASS_BACKGROUND, SHOW, EXTRA_KEYS_EDITOR
+        POSITION, MOST_USED, GLASS_BACKGROUND, SHOW, EXTRA_KEYS_EDITOR
     }
 
     /** Whether {@code element} is one of the Dock's bars (the status bar is not). */
@@ -290,8 +290,9 @@ public final class BarOrder {
     public static List<Setting> settingsOf(@NonNull Element bar) {
         switch (bar) {
             case APPS:
+                // Apps in the dock and Dock icon pack stand in the Dock card itself.
                 return Collections.unmodifiableList(Arrays.asList(Setting.POSITION,
-                    Setting.APP_ICONS, Setting.MOST_USED, Setting.ICON_PACK));
+                    Setting.MOST_USED));
             case AZ:
                 return Collections.unmodifiableList(Arrays.asList(Setting.POSITION,
                     Setting.GLASS_BACKGROUND, Setting.SHOW));

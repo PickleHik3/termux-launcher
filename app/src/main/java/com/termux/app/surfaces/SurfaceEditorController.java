@@ -3022,8 +3022,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (GlassRows.allGlassOnly(row))
                 return getString(R.string.editor_row_all_glass_only);
             switch (row) {
-                case HOME_ICON_SIZE:
-                    return iconSizeCapHint(mHost.context());
                 case CURSOR_TRAIL:
                     return optionLabel(R.array.appearance_editor_cursor_trail_entries,
                         R.array.appearance_editor_cursor_trail_values,
@@ -4329,6 +4327,43 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** How many app buttons the dock shows, rebuilt live. */
+    /** The one icon size as the user chose it (ADR 0020 §3). */
+    @NonNull
+    private com.termux.app.place.layout.IconSize chosenIconSize() {
+        return com.termux.app.place.layout.IconSize.of(com.termux.app.place.layout.LayoutStore
+            .shared(mHost.context()).current().sizes());
+    }
+
+    /** Whether the dock wears its Floating style, as the launcher's fit reads it. */
+    private boolean dockFloating() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs != null && TermuxPreferenceConstants.TERMUX_APP
+            .APP_LAUNCHER_DOCK_STYLE_FLOATING.equals(prefs.getAppLauncherDockStyle());
+    }
+
+    /** The most apps the dock row holds at {@code size} in the style {@code floating}. */
+    private int appIconsFit(@NonNull com.termux.app.place.layout.IconSize size, boolean floating) {
+        return com.termux.app.dock.IconSizeCap.publishedMostFitting(size, floating,
+            AppearanceLooks.APP_ICONS_MAX);
+    }
+
+    /**
+     * Apps in the dock kept to the most that fit at {@code size} in the style {@code floating}
+     * (overhaul §5), never under its least.
+     */
+    private void reclampAppIcons(@NonNull com.termux.app.place.layout.IconSize size,
+                                 boolean floating) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int count = prefs.getAppLauncherButtonCount();
+        int kept = com.termux.app.surfaces.cards.DockCard.clampAppIcons(count,
+            AppearanceLooks.APP_ICONS_MIN, appIconsFit(size, floating));
+        if (kept < count)
+            writeAppIcons(kept);
+        if (mSheet != null) mSheet.restate(Row.DOCK_APP_ICONS);
+    }
+
     private void writeAppIcons(int count) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -5783,6 +5818,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void setFloating(boolean floating) {
             writeStyle(floating);
+            // Fewer apps may fit in the other style: Apps in the dock keeps to the fit.
+            reclampAppIcons(chosenIconSize(), floating);
             // The Height strip's range follows the style.
             if (mSheet != null) mSheet.restate();
         }
@@ -5871,6 +5908,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void setAppIcons(int count) {
             writeAppIcons(count);
+        }
+
+        @Override public int appIconsMostFitting() {
+            return appIconsFit(chosenIconSize(), dockFloating());
+        }
+
+        @NonNull @Override public CharSequence iconSizeName() {
+            return chosenIconSize().name();
         }
 
         @Override public boolean mostUsed() {
@@ -6360,6 +6405,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     com.termux.app.place.layout.IconSize.values();
                 com.termux.app.place.layout.IconSize size = sizes[clamp(value, 0, sizes.length - 1)];
                 com.termux.app.place.layout.LayoutStore.shared(context).updateSizes(size::into);
+                // Fewer apps fit at a larger size: Apps in the dock keeps to the fit.
+                reclampAppIcons(size, dockFloating());
                 requestGeometryPreview();
                 syncDirty();
                 break;

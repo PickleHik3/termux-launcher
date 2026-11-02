@@ -17879,6 +17879,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
                 java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns, floating);
             com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
+            com.termux.app.dock.IconSizeCap.publishFit(java.util.EnumSet.of(home, terminal),
+                widthDp, edgeDp, columns);
         }
         com.termux.app.place.layout.IconSize drawn =
             com.termux.app.dock.IconSizeCap.effective(chosen, mIconCap);

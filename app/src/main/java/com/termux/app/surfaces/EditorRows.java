@@ -133,6 +133,12 @@ public final class EditorRows {
          * The Dock card's Dock icon pack: the pinned apps' pack, "Same as Home" or a pack; drawn
          * by cards/DockCard, the Kind is the stand-in.
          */
+        /**
+         * The Dock card's Apps in the dock (overhaul §5): how many pinned apps a dock page shows,
+         * a stepper stopped at the most that fit at the icon size and style; drawn by
+         * cards/DockCard, the Kind is the stand-in.
+         */
+        DOCK_APP_ICONS(Kind.MENU, R.string.editor_dock_apps_in_dock, R.drawable.ic_ms_tag),
         DOCK_ICON_PACK(Kind.MENU, R.string.editor_dock_icon_pack_row, R.drawable.ic_symbol_icon_pack),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
             R.drawable.ic_ed_wallpaper_colours),
