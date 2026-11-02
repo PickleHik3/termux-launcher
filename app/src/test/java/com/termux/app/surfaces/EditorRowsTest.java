@@ -55,7 +55,7 @@ public class EditorRowsTest {
 
     @Test
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
-        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE,
+        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
             Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
@@ -161,7 +161,7 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
             Row.WALLPAPER_COLOURS, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
-            Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
+            Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
             Row.TOOL_COLOURS),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);

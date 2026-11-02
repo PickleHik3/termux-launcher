@@ -78,7 +78,7 @@ public class EditorCardSectionsTest {
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
+            "SECTION_MORE_OPTIONS", Arrays.asList(Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.TOOL_COLOURS)));
     }
 
@@ -122,7 +122,7 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE,
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
                 Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),

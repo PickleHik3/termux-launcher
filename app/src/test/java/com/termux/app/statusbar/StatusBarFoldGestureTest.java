@@ -96,9 +96,9 @@ public class StatusBarFoldGestureTest {
         float endX = vertical ? point[0] + delta : point[0];
         float endY = vertical ? point[1] : point[1] + delta;
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, point[0], point[1]));
-        // The fold is hold, buzz, drag: the finger rests until the bar is armed.
+        // Even after a long rest, no drag folds the bar: only its long-press menu does.
         org.robolectric.shadows.ShadowLooper.idleMainLooper(
-            StatusBarSwipeLayout.ARM_MS + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+            300, java.util.concurrent.TimeUnit.MILLISECONDS);
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, endX, endY));
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_UP, endX, endY));
         return mRequests;
@@ -114,35 +114,21 @@ public class StatusBarFoldGestureTest {
         return TRAVEL_PX * StatusBarGesturePolicy.expandSign(edge);
     }
 
-    @Test public void anOpenRowBarFoldsFromItsPanelAndFromItsRowOnBothEdges() {
+    @Test public void noDragFoldsOrOpensTheBarOnEitherEdge() {
         for (Edge edge : new Edge[]{Edge.TOP, Edge.BOTTOM}) {
-            stand(edge, false);
-            assertEquals(edge + ": the fold starts in the panel",
-                java.util.Collections.singletonList(true),
-                dragAcross(edge, panelPoint(), foldDelta(edge)));
-
-            stand(edge, false);
-            assertEquals(edge + ": and on the row, over the window strip",
-                java.util.Collections.singletonList(true),
-                dragAcross(edge, rowPoint(), foldDelta(edge)));
-
-            // Pushed further open there is nothing to do, from either place.
-            stand(edge, false);
-            assertTrue(edge + ": an already open bar cannot open further",
-                dragAcross(edge, panelPoint(), openDelta(edge)).isEmpty());
-        }
-    }
-
-    @Test public void aFoldedRowBarOpensFromItsRowAndNotBackwards() {
-        for (Edge edge : new Edge[]{Edge.TOP, Edge.BOTTOM}) {
-            stand(edge, true);
-            assertEquals(edge + ": the folded bar opens away from its edge",
-                java.util.Collections.singletonList(false),
-                dragAcross(edge, rowPoint(), openDelta(edge)));
-
-            stand(edge, true);
-            assertTrue(edge + ": and has nothing to fold",
-                dragAcross(edge, rowPoint(), foldDelta(edge)).isEmpty());
+            for (boolean folded : new boolean[]{true, false}) {
+                stand(edge, folded);
+                assertTrue(edge + " folded=" + folded + ": panel, towards the edge",
+                    dragAcross(edge, rowPoint(), foldDelta(edge)).isEmpty());
+                stand(edge, folded);
+                assertTrue(edge + " folded=" + folded + ": row, away from the edge",
+                    dragAcross(edge, rowPoint(), openDelta(edge)).isEmpty());
+                if (!folded) {
+                    stand(edge, folded);
+                    assertTrue(edge + ": the open panel, towards the edge",
+                        dragAcross(edge, panelPoint(), foldDelta(edge)).isEmpty());
+                }
+            }
         }
     }
 

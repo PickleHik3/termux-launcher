@@ -74,7 +74,8 @@
     <string name="appearance_row_tint">Tint</string>
     <string name="appearance_row_height">Height</string>
     <string name="appearance_row_visible">Visible</string>
-    <string name="appearance_row_style">Style</string>
+    <string name="appearance_row_style">Layout style</string>
+    <string name="appearance_row_tint_colour">Tint colour</string>
     <string name="appearance_row_design">Design</string>
     <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
     <string name="appearance_row_frost">Blur</string>
