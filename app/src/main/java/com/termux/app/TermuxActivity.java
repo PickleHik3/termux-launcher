@@ -23991,7 +23991,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
         // finger frames included, so a slide never carries on from a stale one.
         mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
+            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE
+                && !wall.slidesAcrossSeam(),
             currentWallPlace() == mLastWallPage);
         // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
         // rest writes nothing over it. A gesture that carries on past the last Home page into the

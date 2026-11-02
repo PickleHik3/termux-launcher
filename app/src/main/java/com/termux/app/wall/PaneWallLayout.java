@@ -503,6 +503,8 @@ public final class PaneWallLayout extends ViewGroup {
     private final List<View> mPosedPages = new ArrayList<>(3);
     /** Whether a page or window waits on the side the wall is moving toward, this frame. */
     private boolean mTurning;
+    /** Whether the wall is moving across the seam between Home and the Workspace, this frame. */
+    private boolean mSeamSlide;
     /**
      * Two children whose drawing is swapped while they share the screen, so the page the effect
      * puts on top is drawn over the other ({@link WallPageTransition#topSide}); -1 while none are.
@@ -848,6 +850,30 @@ public final class PaneWallLayout extends ViewGroup {
         List<Cell> cells = mCells;
         for (int i = 0; i < cells.size(); i++) if (cells.get(i).pageId == pageId) return i;
         return -1;
+    }
+
+    /**
+     * Whether a wall {@code offsetPx} from its rest is moving across the seam: toward a page, not
+     * a window inside this one, of the other half (Home on one side, the Workspace or the
+     * display on the other).
+     */
+    boolean seamAhead(float offsetPx) {
+        if (offsetPx == 0f || Float.isNaN(offsetPx)) return false;
+        int heading = offsetPx > 0f ? -1 : 1;
+        if (hasInnerPage(heading)) return false;
+        int there = neighbourId(heading);
+        if (there == NO_PAGE) return false;
+        PaneWallPage toward = kindOf(there);
+        return toward != null
+            && (mCurrent == PaneWallPage.WIDGETS) != (toward == PaneWallPage.WIDGETS);
+    }
+
+    /**
+     * Whether the wall slides flat across the seam this frame, the page transition set aside, so
+     * the chrome follows the wall there as it does under the slide.
+     */
+    public boolean slidesAcrossSeam() {
+        return mSeamSlide;
     }
 
     /** The kind of page {@code pageId}; null when the wall has no such page. */
@@ -3256,7 +3282,10 @@ public final class PaneWallLayout extends ViewGroup {
         // A turn has a page to turn to: a window arriving, or a place or window on the side the
         // wall is moving toward. A pull into either end of the row only slides. The slide asks
         // nothing, so its frames cost what they always did.
-        mTurning = mTransition != HomePageTransition.SLIDE && (mNudgePage != null
+        // Across the seam between Home and the Workspace the pages turn as Home's pages are
+        // seen to: side by side with the finger, whatever the effect (decided 2026-11-02).
+        mSeamSlide = seamAhead(mOffsetPx);
+        mTurning = mTransition != HomePageTransition.SLIDE && !mSeamSlide && (mNudgePage != null
             || (mOffsetPx != 0f && canStep(mOffsetPx > 0f ? -1 : 1)));
         int current = indexOfCell(mCurrentId);
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
