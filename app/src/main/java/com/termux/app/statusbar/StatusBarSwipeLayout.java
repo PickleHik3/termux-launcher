@@ -44,7 +44,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         default boolean isStatusGestureBlocked() { return false; }
     }
 
+    /** How long the finger holds still on the bar before the fold is armed. */
+    public static final long ARM_MS = 250L;
+
     private final int mTouchSlop;
+    /** The hold has passed and buzzed: a drag across the bar now folds it. */
+    private boolean mFoldArmed;
+    private final Runnable mArmRunnable = this::armFold;
+    /** Not the view's own queue: a bar not yet attached still arms. */
+    private final android.os.Handler mArmHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final NestedScrollingParentHelper mNestedParentHelper;
     @Nullable private Listener mListener;
     @Nullable private StatusBarGesturePolicy mGesture;
@@ -181,7 +189,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 begin(event);
                 break;
             case MotionEvent.ACTION_MOVE:
-                if (mGesture != null) {
+                if (mGesture != null && !mFoldArmed) {
+                    // Moving before the hold has passed is not the fold's: the stream goes to
+                    // whoever else would take it, and is not consumed here.
+                    if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING
+                        && movedPastSlop(event)) {
+                        mArmHandler.removeCallbacks(mArmRunnable);
+                        mGesture.nestedScrollStarted();
+                    }
+                } else if (mGesture != null) {
                     StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
                     if (isFoldClaim(after) && mListener != null) {
                         // The fold is the finger's while the finger is down: the bar stands
@@ -240,6 +256,24 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
         mVelocityTracker.clear();
         mVelocityTracker.addMovement(event);
+        if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING && formEligible) {
+            mArmHandler.postDelayed(mArmRunnable, ARM_MS);
+        }
+    }
+
+    private boolean movedPastSlop(MotionEvent event) {
+        StatusBarGesturePolicy.Down d = mGesture.down();
+        float dx = event.getX() - d.localX;
+        float dy = event.getY() - d.localY;
+        return dx * dx + dy * dy > (float) mTouchSlop * mTouchSlop;
+    }
+
+    /** The finger held still long enough: one light tick, and the drag now folds the bar. */
+    private void armFold() {
+        StatusBarGesturePolicy gesture = mGesture;
+        if (gesture == null || gesture.claim() != StatusBarGesturePolicy.Claim.PENDING) return;
+        mFoldArmed = true;
+        com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
     }
 
     private void finish(MotionEvent event) {
@@ -253,13 +287,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 mListener.onCollapsedStateRequested(collapsed, foldVelocityTowardOpen());
             }
         } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
-            // eligible() is the "this touch was the bar's own, not a child's" test — the
-            // form drag alone keeps a chip's stream PENDING too, and a chip tap must not
-            // toggle the fold. A bar that may not change form ignores the tap as it ignores
-            // the swipe.
-            if (gesture.down().eligible() && gesture.down().formEligible && mListener != null) {
-                mListener.onCollapsedStateRequested(mState == TopStatusBarState.EXPANDED, 0f);
-            }
+            // A tap on the bar does not fold it: the fold is hold, buzz, drag.
             performClick();
         }
         requestStructuralReset();
@@ -275,6 +303,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     private void clearTracking() {
+        mArmHandler.removeCallbacks(mArmRunnable);
+        mFoldArmed = false;
         mGesture = null;
         mFoldDragActive = false;
         if (mVelocityTracker != null) {
