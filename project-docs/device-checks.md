@@ -22,34 +22,22 @@ dropped; what follows is what still owes a look.
 
 ## Agent
 
-- **Layouts per kind: the upgrade keeps every page's look (11-02, ADR 0020, 69c68661e).** On pong
-  (upgraded from +dev.9c9ccc5f4, Home 1 had a page layout with beads, Home holds wall_strip, 7 pins):
-  Home 1 and Home 2 show the same dock (Home's, wall_strip) and nothing else moved; the Terminal
-  and a Display page look as before; minimal mode still puts every element away; `launcherctl
-  layout get home|terminal|display|sizes` reads documents; `icon_size` is `m` (7 pins cap at M).
-- **One icon size (11-02, ADR 0020 §3).** Appearance › Home › Icon size and the Dock card's first
-  row are one S/M/L/XL control; with 7 pins L and XL are greyed with "7 pinned apps fit up to M";
-  pin an 8th: the dock drops to S, unpin: M returns. Home grid icons equal the dock's on every
-  design, Docked and Floating; no icon touches the screen edge or clips a badge; 4 pins stand on
-  the grid's columns. Settings › Home › Icon size lists only the allowed steps.
-- **Home in landscape (11-02, ADR 0020 §12).** Emulator 11-02: the pinned icon moves to a side bar
-  on the right (ROTATION_90) and the left (270), the grid is padded by it, nothing reflows. Owed
-  on pong with real widgets: rotate both ways and back, every widget keeps its cell and size, no
-  widget zooms, labels hide where cells are short, a direct 90→270 turn moves the bar. Found on
-  the emulator (to decide): the dock's round button at the right of the portrait dock is not in
-  the landscape bar, and the A–Z row stays full width at the bottom with no glass behind the bar.
-- **Display page chips (11-02, #192).** `launcherctl launch firefox` from Home: a Firefox chip on
-  the Display page, selected; a tap raises it, its × closes the app; an empty display shows no
-  chip; a launch that gives up leaves no Display page in `wall_pages.xml`.
+- **Home key with Start in on the Terminal (11-02, 1d7506c51).** With two Home pages and Start in
+  set to the Terminal page (then to a Display page), the extra keys' house key from the Terminal
+  goes to Home 1, not the nearer Home 2; with Start in on Home 2 it goes to Home 2.
+- **One icon size (11-02, ADR 0020 §3; cap rule a6f81e3c3).** Pong 11-02: Dock card reads "7 pinned
+  apps fit up to M", L/XL off (Docked). Still owed: pin an 8th (drops to S), unpin (choice returns);
+  Floating with Lens beads on the Terminal caps 7 pins at S; Home grid icons equal the dock's; no
+  icon touches the edge. Pong's stored choice is S from the old migration: pick M once.
+- **Home in landscape (11-02, ADR 0020 §12; turn fix a364a4624).** Pong 11-02 on +dev.19df39d42: a
+  turn cut the grid to 5 columns and saved the reflow (fixed; emulator with pong's store: no write
+  through 90/270/0). Owed on pong with real widgets: rotate both ways and back, widget store
+  revision unchanged, every widget keeps its cell, no widget zooms. Pong's landscape keeps its own
+  dock setting (hidden there, developer 11-02), so no side bar on pong is expected.
 - **Removing a Display card (11-02, #193).** Edit pages › Display card × with Firefox on it: after
   the Undo window a stop question (an app is open); Confirm: `wall_pages.xml` has no page 9 and no
   `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
   expiry leaves the display untouched.
-- **Status bar tap folds (11-02).** Emulator 11-02: a tap on bare chrome folds the open bar and the
-  next unfolds it. Owed on pong: taps on chips, clock and widgets still do their own thing; the
-  two-finger setting is gone from Gestures.
-- **Home 2 dock editor (11-02).** The Appearance editor opened on any Home page edits Home's dock:
-  change the design on Home 2, both Home pages follow, the Terminal's dock does not.
 
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
