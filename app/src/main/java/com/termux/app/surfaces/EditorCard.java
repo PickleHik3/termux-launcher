@@ -26,7 +26,7 @@ public enum EditorCard {
      * the Workspace wear while they follow it), and Match Home styling.
      */
     WORKSPACE("workspace", null, R.string.appearance_card_workspace,
-        R.drawable.ic_symbol_desktop_windows),
+        R.drawable.ic_editor_workspace),
     STATUS("status", SurfaceSlot.STATUS, R.string.appearance_card_status,
         R.drawable.ic_editor_status_bar),
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,

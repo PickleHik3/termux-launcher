@@ -29,6 +29,22 @@
     <string name="editor_st_unit">Temperature</string>
     <string name="editor_st_unit_c">°C</string>
     <string name="editor_st_unit_f">°F</string>
+    <!-- Link rows (overhaul §4): a one-fact line for a card (›), the page's path for Settings (↗). -->
+    <string name="editor_link_global_summary">Glass and colours for the whole app</string>
+    <string name="editor_link_sheets_summary">Glass for the palette, drawer and dialogs</string>
+    <string name="editor_link_widgets_summary">Glass for the widgets on Home</string>
+    <string name="editor_link_pages_summary">Add, remove and reorder pages</string>
+    <string name="editor_link_pane_borders_summary">Frames, focus and glow around panes</string>
+    <string name="editor_link_gestures_summary">Settings › Home › Gestures</string>
+    <string name="editor_link_layouts_summary">Settings › Keyboard › Layouts</string>
+    <string name="editor_link_keyboard_theme_summary">Settings › Keyboard › Keyboard theme</string>
+    <string name="editor_link_font_summary">Settings › Terminal › Font</string>
+    <string name="editor_link_tool_colours_summary">Settings › Appearance</string>
+    <string name="editor_link_camera_cutout_summary">Settings › Status bar</string>
+    <string name="editor_link_opens_card">Opens a card</string>
+    <string name="editor_link_opens_settings">Opens Settings</string>
+    <!-- Layout rows: the card a row opens, where it is not the element's own. -->
+    <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
     <string name="editor_note_workspace_only">Workspace only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>

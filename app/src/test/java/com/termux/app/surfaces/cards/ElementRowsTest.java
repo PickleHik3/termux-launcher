@@ -77,8 +77,9 @@ public class ElementRowsTest {
             assertTrue("the Dock card holds the Options " + tile + " scrolls to",
                 rowsOf(EditorCard.DOCK).contains(Row.DOCK_OPTIONS));
         }
-        assertEquals(EditorCard.HOME, Item.WIDGETS.card);
-        assertTrue(rowsOf(EditorCard.HOME).contains(Item.WIDGETS.section));
+        // The Widgets row opens the Widgets card (overhaul §4), at its top.
+        assertEquals(EditorCard.WIDGETS, Item.WIDGETS.card);
+        assertNull(Item.WIDGETS.section);
     }
 
     @Test

@@ -478,6 +478,46 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void theMainPillAndAppliesToShowEveryWordWhole() {
+        // Overhaul §4: "Customiza…" and "Workspa…" no more, at 1.0× and 1.3× on 411dp.
+        boolean chips = sChips;
+        sChips = true;
+        try {
+            for (float scale : new float[] {1f, 1.3f}) {
+                for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.STATUS}) {
+                    Fixture fixture = new Fixture(card, scale);
+                    for (int frame = 0; frame < 4; frame++) {
+                        fixture.layOut();
+                        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+                    }
+                    List<MaterialButton> group = new ArrayList<>();
+                    if (card == EditorCard.HOME) {
+                        group.addAll(fixture.sheet.mainPillButtons());
+                    } else {
+                        ViewGroup applies = fixture.sheet.appliesToGroup();
+                        for (int i = 0; i < applies.getChildCount(); i++)
+                            group.add((MaterialButton) applies.getChildAt(i));
+                    }
+                    assertEquals(card + " at " + scale, 3, group.size());
+                    for (MaterialButton button : group) {
+                        String which = card + " at " + scale + ": " + button.getText();
+                        assertTrue(which + " shows", button.isShown());
+                        Layout layout = button.getLayout();
+                        assertEquals(which + " is not cut", 0,
+                            layout.getEllipsisCount(layout.getLineCount() - 1));
+                        assertTrue(which + " stands whole (" + button.getWidth() + "px, needs "
+                                + com.termux.app.surfaces.rows.SegmentRow.neededPx(button) + ")",
+                            button.getWidth() + 1
+                                >= com.termux.app.surfaces.rows.SegmentRow.neededPx(button));
+                    }
+                }
+            }
+        } finally {
+            sChips = chips;
+        }
+    }
+
+    @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))

@@ -217,7 +217,8 @@ public class StatusTerminalCardsTest {
         f.layOut(position.view);
         List<MaterialButton> segments = buttons(position.view);
         assertEquals("Top and Bottom", 2, segments.size());
-        assertEquals("Top", String.valueOf(segments.get(0).getContentDescription()));
+        // Position reads in words (overhaul §4/§7), the glyph before them.
+        assertEquals("Top", String.valueOf(segments.get(0).getText()));
         segments.get(1).performClick();
         assertEquals(1, host.position);
         host.position = 0;
@@ -322,11 +323,13 @@ public class StatusTerminalCardsTest {
 
         CardRowView more = TerminalCard.view(f.themed, Row.LINK_FONT, f.width, host);
         f.layOut(more.view);
-        List<com.google.android.material.chip.Chip> chips = new ArrayList<>();
-        collect(more.view, com.google.android.material.chip.Chip.class, chips);
-        assertEquals(1, chips.size());
-        assertEquals("Font", chips.get(0).getText().toString());
-        chips.get(0).performClick();
+        // Font ↗ is a list row naming the page it opens (overhaul §4); the row is the target.
+        List<android.widget.TextView> fontWords = new ArrayList<>();
+        collect(more.view, android.widget.TextView.class, fontWords);
+        assertEquals("Font", fontWords.get(0).getText().toString());
+        assertEquals(f.themed.getString(com.termux.R.string.editor_link_font_summary),
+            fontWords.get(1).getText().toString());
+        more.view.performClick();
         assertEquals(1, host.fontOpened);
     }
 

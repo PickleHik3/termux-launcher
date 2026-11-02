@@ -10,7 +10,7 @@
     <string name="editor_st_section_clock">Clock</string>
     <string name="editor_st_clock_position">Clock position</string>
     <string name="editor_st_clock_left">Left</string>
-    <string name="editor_st_clock_center">Center</string>
+    <string name="editor_st_clock_center">Centre</string>
     <string name="editor_st_clock_right">Right</string>
     <string name="editor_st_clock_flip">Flip</string>
     <string name="editor_st_clock_lcd">LCD</string>

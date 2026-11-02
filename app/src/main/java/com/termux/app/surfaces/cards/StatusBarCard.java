@@ -215,9 +215,9 @@ public final class StatusBarCard {
         SegmentRow row = SegmentRow.build(context, R.drawable.ic_editor_position,
             context.getString(R.string.editor_st_position),
             Arrays.asList(
-                SegmentRow.Segment.glyph(EditorGlyphs.POS_TOP,
+                SegmentRow.Segment.both(EditorGlyphs.POS_TOP,
                     context.getString(R.string.editor_st_position_top)),
-                SegmentRow.Segment.glyph(EditorGlyphs.POS_BOTTOM,
+                SegmentRow.Segment.both(EditorGlyphs.POS_BOTTOM,
                     context.getString(R.string.editor_st_position_bottom))),
             host.position(), widthPx, host::setPosition);
         return new CardRowView(row.root, () -> row.select(host.position()));
@@ -259,11 +259,11 @@ public final class StatusBarCard {
         SegmentRow row = SegmentRow.build(context, R.drawable.ic_editor_clock,
             context.getString(R.string.editor_st_clock_position),
             Arrays.asList(
-                SegmentRow.Segment.glyph(EditorGlyphs.CLOCK_ALIGN_LEFT,
+                SegmentRow.Segment.both(EditorGlyphs.CLOCK_ALIGN_LEFT,
                     context.getString(R.string.editor_st_clock_left)),
-                SegmentRow.Segment.glyph(EditorGlyphs.CLOCK_ALIGN_CENTER,
+                SegmentRow.Segment.both(EditorGlyphs.CLOCK_ALIGN_CENTER,
                     context.getString(R.string.editor_st_clock_center)),
-                SegmentRow.Segment.glyph(EditorGlyphs.CLOCK_ALIGN_RIGHT,
+                SegmentRow.Segment.both(EditorGlyphs.CLOCK_ALIGN_RIGHT,
                     context.getString(R.string.editor_st_clock_right))),
             host.clockPosition(), widthPx, host::setClockPosition);
         return new CardRowView(row.root, () -> row.select(host.clockPosition()));
@@ -317,9 +317,10 @@ public final class StatusBarCard {
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */
     @NonNull
     private static CardRowView cameraCutout(@NonNull Context context, @NonNull Host host) {
-        com.termux.app.surfaces.rows.ActionRow row = com.termux.app.surfaces.rows.ActionRow.build(
+        com.termux.app.surfaces.rows.LinkRow row = com.termux.app.surfaces.rows.LinkRow.build(
             context, R.drawable.ic_ms_crop_free,
-            context.getString(R.string.editor_st_option_camera_gap), null,
+            context.getString(R.string.editor_st_option_camera_gap),
+            context.getString(R.string.editor_link_camera_cutout_summary), true,
             v -> host.openCameraGap());
         return new CardRowView(row.root, () -> {});
     }
