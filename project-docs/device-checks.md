@@ -11,9 +11,10 @@ Verified items are **deleted**, never ticked; the PR, the commit or a bug is the
 lands here in the same commit or PR as the change it belongs to, whenever a hand-over still owes
 a device check. Before a drop or a cut, work through this list; an item two releases old is
 re-judged and dropped if nothing rides on it. The file stays under twenty items; past that, the
+oldest are re-judged first.
 
 The 2026-10-23/24 and 10-26 emulator sweeps were worked and pruned on 2026-11-02; their
-unfixed findings went to issues, not this file.
+unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
