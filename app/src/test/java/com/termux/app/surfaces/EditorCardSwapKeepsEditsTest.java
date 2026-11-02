@@ -16,6 +16,8 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.FrostStops;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 
@@ -33,6 +35,7 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 
 /**
+ * (Workspace edits are its Terminal and Display pages' cells, overhaul §1.)
  * Edits live in the editing session until Done stores them or Discard reverts them: a screen card
  * that follows the page swipe, a card collapsed to peek, or a card raised by the page label
  * never puts a value back, and the bar keeps showing the session dirty.
@@ -88,20 +91,23 @@ public class EditorCardSwapKeepsEditsTest {
         swipe(editor, PaneWallPage.WIDGETS);
         moveStrip(editor, Row.OPACITY, 33);
         swipe(editor, PaneWallPage.TERMINAL);
-        // Base is wall-wide: Home's 33 is the wall's opacity, which the Workspace wears too.
-        assertWorkspaceKept(editor, 33);
-        assertEquals("Home's edit is kept too", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        // Home's 33 is Home pages' own cell; the Workspace keeps its 65 (overhaul §1).
+        assertWorkspaceKept(editor);
+        assertEquals("Home's edit is kept too", 33, kindValue(LookGrid.Property.OPACITY,
+            LookGrid.Kind.HOME));
 
         boolean[] done = {false};
         editor.setOnDone(() -> done[0] = true);
         editor.done();
         assertTrue(done[0]);
-        assertEquals("Base is wall-wide: Home's 33 stands", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70))),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        for (LookGrid.Kind kind : WORKSPACE) {
+            assertEquals(kind.key, 65, kindValue(LookGrid.Property.OPACITY, kind));
+            assertEquals(kind.key, FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70)),
+                kindValue(LookGrid.Property.FROST, kind));
+        }
+        assertEquals(33, kindValue(LookGrid.Property.OPACITY, LookGrid.Kind.HOME));
+        assertEquals("Base is Customization's: neither screen card wrote it", 40,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
     }
 
     @Test
@@ -150,13 +156,23 @@ public class EditorCardSwapKeepsEditsTest {
         assertWorkspaceKept(editor, 65);
     }
 
+    /** The Workspace's kinds: its writes land on Terminal and Display pages together. */
+    private static final LookGrid.Kind[] WORKSPACE = {LookGrid.Kind.TERMINAL, LookGrid.Kind.DISPLAY};
+
+    private int kindValue(LookGrid.Property property, LookGrid.Kind kind) {
+        LookGrid grid = preferences.lookGrid();
+        assertTrue(property.key + "@" + kind.key + " is set", grid.has(property, null, kind));
+        return grid.value(property, null, kind);
+    }
+
     private void assertWorkspaceKept(SurfaceEditorController editor, int opacity) {
-        assertEquals(opacity,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70))),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(GlassControls.grainForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId()));
+        for (LookGrid.Kind kind : WORKSPACE) {
+            assertEquals(kind.key, opacity, kindValue(LookGrid.Property.OPACITY, kind));
+            assertEquals(kind.key, FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70)),
+                kindValue(LookGrid.Property.FROST, kind));
+            assertEquals(kind.key, AppearanceLooks.grainPercent(GlassControls.grainForGlass(70)),
+                kindValue(LookGrid.Property.GRAIN, kind));
+        }
         assertTrue("the session is dirty",
             (Boolean) ReflectionHelpers.callInstanceMethod(editor, "isDirty"));
         EditorBar bar = ReflectionHelpers.getField(editor, "mBar");

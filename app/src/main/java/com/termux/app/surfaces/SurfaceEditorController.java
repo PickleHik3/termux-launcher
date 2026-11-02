@@ -3517,9 +3517,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * still that position's ({@link GlassControls#readBack}).
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
-        PaneWallPage half = readScreen(Row.FROST);
-        if (isScreenCard(card) && half != null) {
-            Integer held = mScreenFrostPosition.get(half);
+        if (isScreenCard(card)) {
+            // Each screen card holds its own position: Home's and the Workspace's cells differ.
+            Integer held = mScreenFrostPosition.get(screenOf(card));
             return GlassControls.readBack(held == null ? -1 : held,
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
@@ -3552,11 +3552,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int blur = GlassControls.blurForGlass(glass);
         int grain = GlassControls.grainForGlass(glass);
         PaneWallPage half = writeScreen(Row.FROST);
-        // The position key is one for every card that holds none of its own (the Appearance
-        // card's); a screen card keeps its position for the session, per half, and writes its
-        // own half's Base only.
-        if (isScreenCard(card) && half != null)
-            mScreenFrostPosition.put(half, glass);
+        // The position key is one for every card that holds none of its own (Customization's);
+        // a screen card keeps its position for the session, per card, never Customization's.
+        if (isScreenCard(card))
+            mScreenFrostPosition.put(screenOf(card), glass);
         else
             prefs.setSurfaceGlassPosition(card.slot, glass);
         if (card.slot == null) {
@@ -4602,6 +4601,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         outline.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
             .setDuration(EditorMotion.Use.RING_MOVE.durationMs(false))
             .setInterpolator(EditorMotion.Use.RING_MOVE.curve(false)).start();
+    }
+
+    /** The screen a screen card stands for: Home's page for Home, the Terminal's else. */
+    @NonNull
+    private static PaneWallPage screenOf(@NonNull EditorCard card) {
+        return card == EditorCard.HOME ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
     }
 
     /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */

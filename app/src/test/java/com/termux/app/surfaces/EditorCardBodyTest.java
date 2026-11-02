@@ -78,6 +78,9 @@ public class EditorCardBodyTest {
             assertNotNull(card + " is drawn by the card body", body);
             for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
                 assertTrue(card + " holds " + spec.row, body.holds(spec.row));
+                // Section headings are the sheet's collapsible titles (W1b), not the body's.
+                if (EditorCardSheet.isSectionHeading(spec.row))
+                    continue;
                 assertTrue(card + " draws " + spec.row + " itself",
                     f.model.asked.contains(spec.row));
             }
@@ -131,10 +134,9 @@ public class EditorCardBodyTest {
             R.string.editor_section_options, R.string.editor_section_more})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
-        assertTrue(texts.contains(home.themed.getString(R.string.editor_note_home_only)));
+        // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
         Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
         List<String> globalTexts = texts(global.sheet.rows());
-        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_note_both_screens)));
         assertTrue(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
     }
@@ -264,6 +266,8 @@ public class EditorCardBodyTest {
         }
 
         void layOut() {
+            // Closed sections are not laid out: every section open, as a user would read them.
+            sheet.openAllSections();
             parent.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(mHeight, View.MeasureSpec.EXACTLY));
             parent.layout(0, 0, width, mHeight);
