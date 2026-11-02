@@ -1034,22 +1034,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The page spring's settle (spec 6: omega 18, critically damped): the ring comes back then. */
     static final long PAGE_SETTLE_MS = EditorMotion.settle(1.0, 18.0);
 
-    /**
-     * The orientation chip names the orientation being edited, which is the phone's: the other
-     * one is edited by turning the phone (editor-redesign §1), and a tap says so.
-     */
-    private void hintOtherOrientation() {
-        LayoutEditorController layout = mHost.layoutEditor();
-        if (!mOpen || layout == null || layout.shownOrientation() == null)
-            return;
-        boolean landscape = layout.shownOrientation() == PlaceOrientation.LANDSCAPE;
-        // In the theme hint's bubble over the page label, not a toast across it.
-        if (mBar != null)
-            mBar.showNote(landscape ? R.string.appearance_bar_turn_for_portrait
-                : R.string.appearance_bar_turn_for_landscape);
-    }
-
-    /** The chip follows the orientation the session edits, which turns with the phone. */
+    /** The bar keeps the orientation the session edits, which turns with the phone. */
     private void restateOrientation() {
         LayoutEditorController layout = mHost.layoutEditor();
         if (mBar != null && layout != null && layout.shownOrientation() != null)
@@ -1057,10 +1042,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     private final class BarListener implements EditorBar.Listener {
-        @Override public void onOrientation() {
-            hintOtherOrientation();
-        }
-
         @Override public void onUndo() {
             undo();
         }
