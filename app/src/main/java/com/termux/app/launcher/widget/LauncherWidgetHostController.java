@@ -152,12 +152,22 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
      * pane to redraw. Out-of-range values are pulled into the grid's bounds rather than refused.
      */
     public boolean applyGrid(int rows, int columns) {
+        return applyGrid(rows, columns, false);
+    }
+
+    /**
+     * The same, saying whether the grid is the user's cut by what the wall can hold
+     * ({@code capped}): a capped grid keeps the wall it reflowed, and the next grid that is the
+     * one before the cut puts it back as it was
+     * ({@link LauncherWidgetRepository#setGridDefinition(WidgetGridDefinition, boolean)}).
+     */
+    public boolean applyGrid(int rows, int columns, boolean capped) {
         WidgetGridDefinition next = new WidgetGridDefinition(
             Math.max(WidgetGridDefinition.MIN_ROWS, Math.min(WidgetGridDefinition.MAX_ROWS, rows)),
             Math.max(WidgetGridDefinition.MIN_COLUMNS,
                 Math.min(WidgetGridDefinition.MAX_COLUMNS, columns)));
         if (next.equals(repository.gridDefinition())) return true;
-        boolean applied = repository.setGridDefinition(next);
+        boolean applied = repository.setGridDefinition(next, capped);
         if (applied) notifyChanged(AddResult.IGNORED);
         return applied;
     }
