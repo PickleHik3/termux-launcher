@@ -18546,6 +18546,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         row.setClockFace(mPreferences.getTopPaneClockStyle(),
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
         row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
+        // The Status bar card's Clock toggle hides the strip's clock with the bar's.
+        row.setClockAllowed(isStatusClockShown());
     }
 
     /**

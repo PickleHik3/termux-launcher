@@ -413,6 +413,29 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
         mClock.setSeconds(seconds);
     }
 
+    /**
+     * Whether the clock stands in the row at all: the status bar's Clock toggle
+     * ({@code status_clock_shown}). Hidden, the row is as it is with three or more terminals:
+     * the clock slid out and the tiles across the row.
+     */
+    private boolean mClockAllowed = true;
+
+    /** Shows or hides the clock as the bar's own clock follows {@code status_clock_shown}. */
+    public void setClockAllowed(boolean allowed) {
+        if (mClockAllowed == allowed) return;
+        mClockAllowed = allowed;
+        if (mSlide != null) mSlide.cancel();
+        mSlide = null;
+        mClockShare = clockShareNow(mTiles.size());
+        relayout();
+        syncClockShown();
+    }
+
+    /** The clock's rest share with {@code terminals} open, none while the clock is hidden. */
+    private float clockShareNow(int terminals) {
+        return mClockAllowed ? WallStripRowPolicy.clockShare(terminals) : 0f;
+    }
+
     /** The clock, for tests. */
     @NonNull View clockView() {
         return mClock;
@@ -456,10 +479,10 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
             }
         }
         mTiles = new ArrayList<>(tiles);
-        float target = WallStripRowPolicy.clockShare(mTiles.size());
+        float target = clockShareNow(mTiles.size());
         // The row's first tiles land where they belong; only a change the user sees slides. A
         // count change while the clock is still sliding (2 to 1, say) retargets the slide.
-        boolean slides = mBound && isAttachedToWindow() && getWidth() > 0
+        boolean slides = mBound && isAttachedToWindow() && getWidth() > 0 && mClockAllowed
             && (WallStripRowPolicy.slidesClock(before, mTiles.size()) || mSlide != null);
         mBound = true;
         if (slides) {
@@ -700,7 +723,8 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
      * slid out, which stops its ticking too.
      */
     private void syncClockShown() {
-        boolean shown = WallStripRowPolicy.showsClock(mTiles.size()) || mSlide != null;
+        boolean shown = mClockAllowed
+            && (WallStripRowPolicy.showsClock(mTiles.size()) || mSlide != null);
         int visibility = shown ? VISIBLE : INVISIBLE;
         if (mClock.getVisibility() != visibility) mClock.setVisibility(visibility);
     }
@@ -785,7 +809,7 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
             ValueAnimator slide = mSlide;
             mSlide = null;
             slide.cancel();
-            mClockShare = WallStripRowPolicy.clockShare(mTiles.size());
+            mClockShare = clockShareNow(mTiles.size());
             relayout();
             syncClockShown();
         }
