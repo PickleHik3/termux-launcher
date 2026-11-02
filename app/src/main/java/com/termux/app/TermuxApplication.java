@@ -97,8 +97,14 @@ public class TermuxApplication extends Application {
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
+        // Read before the wall migration stores its version: an earlier build ran it already.
+        boolean wallMigrationStoredBefore = false;
         if (surfacePreferences != null) {
             // An install from before the wall rework takes Start in from its usage mode, once.
+            android.content.SharedPreferences nudgeStore = surfacePreferences.getSharedPreferences();
+            wallMigrationStoredBefore = nudgeStore != null && nudgeStore.contains(
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_WALL_MIGRATION_VERSION);
             WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
             // The wall's pages are seeded from Start in, the default Home page, Use as and the
             // widget repository's page count, once; the count is read before anything changes it.
@@ -159,6 +165,9 @@ public class TermuxApplication extends Application {
         TermuxShellManager shellManager = TermuxShellManager.init(context);
         // Set NightMode.APP_NIGHT_MODE
         TermuxThemeUtils.setAppNightMode(properties.getNightMode());
+        // The upgrade nudge (appearance overhaul §6) is decided once, after the migrations.
+        com.termux.app.setup.GlassResetNudgeCard.decideAtStart(context, surfacePreferences,
+            properties.getNightMode(), wallMigrationStoredBefore);
         // Check and create termux files directory. If failed to access it like in case of secondary
         // user or external sd card installation, then don't run files directory related code
         Error error = TermuxFileUtils.isTermuxFilesDirectoryAccessible(this, true, true);

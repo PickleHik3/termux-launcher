@@ -125,7 +125,21 @@ public final class EditorRows {
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_ed_look),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
-        ICON_PACK(Kind.EXPANDER, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** Icon pack ›: opens the Icon pack subcard (overhaul §2, Home); it expanded in place. */
+        ICON_PACK(Kind.LINK, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** The Icon pack subcard's one row: the pack tiles, as the Icon pack row expanded them. */
+        ICON_PACK_PAGE(Kind.MENU, R.string.appearance_row_icon_pack, 0),
+        /**
+         * The Dock card's Dock icon pack: the pinned apps' pack, "Same as Home" or a pack; drawn
+         * by cards/DockCard, the Kind is the stand-in.
+         */
+        /**
+         * The Dock card's Apps in the dock (overhaul §5): how many pinned apps a dock page shows,
+         * a stepper stopped at the most that fit at the icon size and style; drawn by
+         * cards/DockCard, the Kind is the stand-in.
+         */
+        DOCK_APP_ICONS(Kind.MENU, R.string.editor_dock_apps_in_dock, R.drawable.ic_ms_tag),
+        DOCK_ICON_PACK(Kind.MENU, R.string.editor_dock_icon_pack_row, R.drawable.ic_symbol_icon_pack),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
             R.drawable.ic_ed_wallpaper_colours),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
@@ -153,6 +167,14 @@ public final class EditorRows {
         CLOCK_POSITION(Kind.MENU, R.string.editor_st_clock_position, R.drawable.ic_editor_clock),
         /** The status bar's Options tiles: 12-hour, Seconds, °F weather, Camera gap. */
         STATUS_OPTIONS(Kind.SWITCH, R.string.editor_st_section_options, R.drawable.ic_ms_tune),
+        /** The status clock's seconds, a switch row (the Seconds option). */
+        STATUS_SECONDS(Kind.SWITCH, R.string.editor_st_option_seconds, R.drawable.ic_ms_timer),
+        /** 12 h · 24 h, a connected group bound to the 12-hour option. */
+        STATUS_HOURS(Kind.SEGMENTS, R.string.editor_st_hours, R.drawable.ic_ms_schedule),
+        /** °C · °F, a connected group bound to the °F option. */
+        STATUS_UNIT(Kind.SEGMENTS, R.string.editor_st_unit, R.drawable.ic_ms_thermostat),
+        /** Camera cutout ↗: opens the cutout setting the Camera gap tile opened. */
+        CAMERA_CUTOUT(Kind.LINK, R.string.editor_st_option_camera_gap, R.drawable.ic_ms_crop_free),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
         STATUS_INDICATORS(Kind.SWITCH, R.string.editor_st_section_indicators,
             R.drawable.ic_symbol_weather),
@@ -164,8 +186,11 @@ public final class EditorRows {
         DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
-        /** The dock's Options tiles. */
+        /** The dock's Show/hide tiles. */
         DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune),
+        /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
+        DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
+            R.drawable.ic_ed_monochrome),
         // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
@@ -198,6 +223,16 @@ public final class EditorRows {
         SECTION_WALLPAPER(Kind.MENU, R.string.editor_section_wallpaper, 0),
         SECTION_COLOUR(Kind.MENU, R.string.editor_section_colour, 0),
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
+        // The overhaul's sections (appearance-cards-overhaul §2): [card name] · More options ·
+        // Layout · Appearance · Links, plus Colours (Customization) and Clock & Weather (Status
+        // bar). A card's first section is named for the card where it is not one of these; the
+        // headings above stay only as EditorSectionStore keys of earlier builds, no card lists them.
+        SECTION_MORE_OPTIONS(Kind.MENU, R.string.editor_section_more_options, 0),
+        SECTION_LAYOUT(Kind.MENU, R.string.editor_section_layout, 0),
+        SECTION_APPEARANCE(Kind.MENU, R.string.editor_section_appearance, 0),
+        SECTION_LINKS(Kind.MENU, R.string.editor_section_links, 0),
+        SECTION_COLOURS(Kind.MENU, R.string.editor_section_colours, 0),
+        SECTION_CLOCK_WEATHER(Kind.MENU, R.string.editor_section_clock_weather, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
         /**
@@ -208,6 +243,17 @@ public final class EditorRows {
         ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
         /** The Terminal card's way to its Pane borders card (#206). */
         PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
+        /**
+         * The Terminal card's pane switches (appearance-cards overhaul §2, Terminal), the setup
+         * wizard's Panes choices: Multiplexer is compatibility mode off; Auto tiling and Enlarge
+         * focused pane stand only while it is on.
+         */
+        MULTIPLEXER(Kind.SWITCH, R.string.setup_panes_multiplexer, R.drawable.ic_ms_vertical_split),
+        AUTO_TILING(Kind.SWITCH, R.string.setup_panes_autotiling, R.drawable.ic_ms_view_quilt),
+        FOCUS_GROWS(Kind.SWITCH, R.string.setup_panes_grows, R.drawable.ic_ms_open_in_full),
+        /** The Status bar card's Pinned notifications ↗: the Settings page of the pinning rules. */
+        PINNED_NOTIFICATIONS(Kind.LINK, R.string.settings_essential_notifications_title,
+            R.drawable.ic_ms_push_pin),
         // The Pane borders card's rows (cards/PaneBordersCard), drawn by that card through
         // EditorCardSheet.Model#rowView; the Kind is the stand-in. Rim is RIM itself.
         /** The three frames, Normal, Focused and Attention, in the panes' own drawables. */
@@ -325,7 +371,7 @@ public final class EditorRows {
             case KEYBOARD: return KeyboardCard.rows(offers);
             case WIDGETS:
             case SHEETS:
-                return GlassRows.card(offers).build();
+                return GlassRows.appearance(new CardRows(), offers, 1).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);

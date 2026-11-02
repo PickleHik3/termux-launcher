@@ -30,15 +30,15 @@ public class RowSourceTest {
     @Test
     public void aRowsDotFollowsWhereTheChipsReadIt() {
         LookGrid grid = homeGrid();
-        EditorChips dock = new EditorChips(LookGrid.NO_PAGE, Element.DOCK);
-        EditorChips onHome = dock.withWhere(EditorChips.Where.kind(LookGrid.Kind.HOME));
+        EditorChips dock = new EditorChips(EditorChips.AppliesTo.GLOBAL, Element.DOCK);
+        EditorChips onHome = dock.withAppliesTo(EditorChips.AppliesTo.HOME);
         assertFalse(source(grid, dock, Row.OPACITY).marked());
         grid.write(Property.OPACITY, null, PAGE, 40);
         assertEquals("a page's value is its kind's (ADR 0020 §2)", RowSource.KIND,
             source(grid, onHome, Row.OPACITY));
         grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 50);
-        assertEquals("the kind wins over the element everywhere", RowSource.KIND,
-            source(grid, onHome, Row.OPACITY));
+        assertEquals("the element everywhere beats the kind's all glass (element beats page)",
+            RowSource.ELEMENT, source(grid, onHome, Row.OPACITY));
         assertEquals(RowSource.ELEMENT, source(grid, dock, Row.OPACITY));
         grid.write(Property.OPACITY, Element.DOCK, PAGE, 60);
         assertEquals(RowSource.ELEMENT_ON_KIND, source(grid, onHome, Row.OPACITY));
@@ -47,7 +47,7 @@ public class RowSourceTest {
     @Test
     public void resetThisRowClearsTheChipsCellAlone() {
         LookGrid grid = homeGrid();
-        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.DOCK);
+        EditorChips chips = new EditorChips(EditorChips.AppliesTo.HOME, Element.DOCK);
         grid.write(Property.GRAIN, Element.DOCK, PAGE, 30);
         grid.write(Property.GRAIN, Element.DOCK, LookGrid.NO_PAGE, 20);
         LookGrid.Key cell = chips.cell(GlassRows.gridProperty(Row.GRAIN));

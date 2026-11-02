@@ -22,10 +22,11 @@ import java.util.Set;
  *   this page     look.&lt;p&gt;@&lt;page&gt;          look.&lt;p&gt;.&lt;element&gt;@&lt;page&gt;
  * </pre>
  *
- * <p>A value is read from the first cell that holds one: the element on this page, all glass on
- * this page, the element on this page's kind, all glass on that kind, the element everywhere,
- * Base, then the value shipped for that kind. A key present at a cell is that cell's value; an
- * absent key follows; Reset deletes the key. Vibrancy and Margin have only the all-glass column
+ * <p>A value is read from the first cell that holds one: the element on this page's kind, the
+ * element everywhere, all glass on that kind, Base, then the value shipped for that kind (an
+ * element beats a page). A page reads its kind's cells: the page row is retired (ADR 0020 §2)
+ * and its keys are no longer read. A key present at a cell is that cell's value; an absent key
+ * follows; Reset deletes the key. Vibrancy and Margin have only the all-glass column
  * and no kind row. A key names a page or a kind, never both. Clamps live here, once.</p>
  *
  * <p>The kind of a page comes from {@link PageKinds} and a kind's shipped value from
@@ -479,12 +480,13 @@ public final class LookGrid {
             Resolved found = read(key(property, element, kind), property, Cell.ELEMENT_ON_KIND);
             if (found != null) return found;
         }
-        if (kind != null) {
-            Resolved found = read(key(property, null, kind), property, Cell.KIND);
-            if (found != null) return found;
-        }
+        // An element beats a page (11-02): its everywhere value wins over all glass on the kind.
         if (element != null) {
             Resolved found = read(key(property, element, NO_PAGE), property, Cell.ELEMENT);
+            if (found != null) return found;
+        }
+        if (kind != null) {
+            Resolved found = read(key(property, null, kind), property, Cell.KIND);
             if (found != null) return found;
         }
         Resolved found = read(key(property, null, NO_PAGE), property, Cell.BASE);

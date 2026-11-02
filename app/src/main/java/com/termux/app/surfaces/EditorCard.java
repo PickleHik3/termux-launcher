@@ -26,7 +26,7 @@ public enum EditorCard {
      * the Workspace wear while they follow it), and Match Home styling.
      */
     WORKSPACE("workspace", null, R.string.appearance_card_workspace,
-        R.drawable.ic_symbol_desktop_windows),
+        R.drawable.ic_editor_workspace),
     STATUS("status", SurfaceSlot.STATUS, R.string.appearance_card_status,
         R.drawable.ic_editor_status_bar),
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,
@@ -35,7 +35,7 @@ public enum EditorCard {
         R.drawable.ic_symbol_dock_glass_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
-    APPEARANCE("appearance", null, R.string.appearance_row_global,
+    APPEARANCE("appearance", null, R.string.appearance_card_customization,
         R.drawable.ic_symbol_palette),
     /** The Card-form widgets' glass: a plain glass card (ADR 0017). */
     WIDGETS("widgets", SurfaceSlot.WIDGETS, R.string.editor_element_widgets,
@@ -123,6 +123,9 @@ public enum EditorCard {
                 return TERMINAL;
             case "sessions":
                 return STATUS;
+            case "display":
+                // The Display card is gone: Display pages are the Workspace's (overhaul §1).
+                return WORKSPACE;
             default:
                 break;
         }

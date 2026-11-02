@@ -21,33 +21,48 @@ public class GlassRowsTest {
     private static final Offers ALL = new Offers(true, true);
     private static final Offers NO_EDGE = new Offers(false, true);
 
+    /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
+    private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM,
+        Row.GLASS_EDGE, Row.DEPTH);
+
     @Test
-    public void everyGlassCardWearsTheRowSetInTouchOrder() {
+    public void everyGlassCardWearsTheAppearanceBlock() {
         for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
-                EditorCard.KEYBOARD, EditorCard.TERMINAL}) {
-            assertEquals(card.toString(), Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY,
-                Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE),
-                EditorRows.tier(card, ALL, 1));
-            assertEquals(card.toString(), Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM),
-                EditorRows.tier(card, ALL, 3).subList(0, 3));
+                EditorCard.TERMINAL, EditorCard.HOME, EditorCard.WORKSPACE, EditorCard.WIDGETS,
+                EditorCard.SHEETS}) {
+            java.util.List<Row> rows = rowsOf(card, ALL);
+            int at = rows.indexOf(Row.SECTION_APPEARANCE);
+            assertTrue(card.toString(), at >= 0);
+            assertEquals(card.toString(), BLOCK, rows.subList(at, at + BLOCK.size()));
         }
     }
 
     @Test
     public void widgetsAndSheetsArePlainGlassCards() {
         for (EditorCard card : new EditorCard[] {EditorCard.WIDGETS, EditorCard.SHEETS}) {
-            assertEquals(card.toString(), GlassRows.card(ALL).build(), EditorRows.rows(card, ALL));
+            assertEquals(card.toString(), BLOCK, rowsOf(card, ALL));
             assertFalse(card.hasEye());
         }
         assertEquals(LookGrid.Element.SHEETS, EditorChips.elementOf(EditorCard.SHEETS));
-        assertTrue(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
+        assertFalse(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
         assertTrue(EditorRows.rows(EditorCard.APPEARANCE, ALL).toString().contains("LINK_SHEETS"));
     }
 
     @Test
-    public void depthAndEdgeOnlyWhereTheDeviceDrawsThem() {
-        assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.DEPTH));
-        assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.GLASS_EDGE));
+    public void depthAndEdgeStayWhereTheDeviceCannotDrawThem() {
+        assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, NO_EDGE));
+        assertTrue(rowsOf(EditorCard.APPEARANCE, NO_EDGE).contains(Row.DEPTH));
+        assertTrue(GlassRows.needsGlassEdge(Row.GLASS_EDGE));
+        assertTrue(GlassRows.needsGlassEdge(Row.DEPTH));
+        assertFalse(GlassRows.needsGlassEdge(Row.FROST));
+    }
+
+    private static java.util.List<Row> rowsOf(EditorCard card, Offers offers) {
+        java.util.List<Row> out = new java.util.ArrayList<>();
+        for (EditorRows.Spec spec : EditorRows.rows(card, offers))
+            out.add(spec.row);
+        return out;
     }
 
     @Test
@@ -95,22 +110,34 @@ public class GlassRowsTest {
     }
 
     @Test
+    public void pictureGridLinesAreBalanced() {
+        // A phone card: room for five 64dp tiles 8dp apart (379 px at 1x).
+        assertEquals(3, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 6));
+        assertEquals(4, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 7));
+        assertEquals(5, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 5));
+        assertEquals(4, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 4));
+        // Large text: three fit, so seven is 3 + 3 + 1 at worst, never wider than the fit.
+        assertEquals(3, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 120, 8, 7));
+        assertEquals(1, com.termux.app.surfaces.rows.PreviewTilesRow.columns(60, 120, 8, 5));
+    }
+
+    @Test
     public void marginAndVibrancyAreTheWhereChipsAllGlassWhateverWhatNames() {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
         assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
         assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
-        EditorChips dockOnPage = new EditorChips(4, LookGrid.Element.DOCK);
-        LookGrid.Key margin = dockOnPage.cell(GlassRows.cellProperty(Row.MARGIN));
+        EditorChips dockOnHome = new EditorChips(EditorChips.AppliesTo.HOME, LookGrid.Element.DOCK);
+        LookGrid.Key margin = dockOnHome.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
-        assertEquals(4, margin.page);
+        assertNull("no kind row", margin.kind);
+        assertEquals(LookGrid.NO_PAGE, margin.page);
     }
 
     @Test
-    public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsKind() {
+    public void theHomeCardsDepthAndEdgeLandOnHomesKind() {
         LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
             page -> page == 4 ? LookGrid.Kind.HOME : null, null);
-        EditorChips onKind = EditorChips.openFor(EditorCard.APPEARANCE,
-            (LookGrid.Kind) null).withWhere(EditorChips.Where.kind(LookGrid.Kind.HOME));
+        EditorChips onKind = EditorChips.openFor(EditorCard.HOME, null);
         for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE}) {
             LookGrid.Key cell = onKind.cell(GlassRows.cellProperty(row));
             grid.write(cell, GlassRows.toCell(row, 30));

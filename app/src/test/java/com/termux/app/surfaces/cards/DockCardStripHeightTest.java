@@ -51,6 +51,111 @@ public class DockCardStripHeightTest {
     }
 
     @Test
+    public void dockIconPackNamesThePinnedPackAndOpensItsChooser() {
+        View row = mCard.view(Row.DOCK_ICON_PACK, 1000);
+        assertNotNull(row);
+        List<String> words = new java.util.ArrayList<>();
+        collectTexts(row, words);
+        assertEquals(true, words.contains("Dock icon pack"));
+        assertEquals("the current choice", true, words.contains("System"));
+        com.google.android.material.button.MaterialButton action = findButton(row);
+        assertNotNull(action);
+        action.performClick();
+        assertEquals(1, mHost.iconPackPicks);
+    }
+
+    private static void collectTexts(View view, List<String> out) {
+        if (view instanceof TextView) out.add(String.valueOf(((TextView) view).getText()));
+        if (view instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
+                collectTexts(((ViewGroup) view).getChildAt(i), out);
+    }
+
+    @Nullable
+    private static com.google.android.material.button.MaterialButton findButton(View view) {
+        if (view instanceof com.google.android.material.button.MaterialButton)
+            return (com.google.android.material.button.MaterialButton) view;
+        if (view instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) {
+                com.google.android.material.button.MaterialButton found =
+                    findButton(((ViewGroup) view).getChildAt(i));
+                if (found != null) return found;
+            }
+        return null;
+    }
+
+    @Test
+    public void appsInTheDockStopsAtTheFitAndSaysSo() {
+        mHost.mostFitting = 8;
+        View row = mCard.view(Row.DOCK_APP_ICONS, 1000);
+        assertNotNull(row);
+        com.termux.app.surfaces.rows.StepperRow stepper = null;
+        List<String> words = new java.util.ArrayList<>();
+        collectTexts(row, words);
+        assertEquals(true, words.contains("Apps in the dock"));
+        TextView hint = hintOf(row);
+        assertEquals("no hint while + still moves", View.GONE, hint.getVisibility());
+        List<com.google.android.material.button.MaterialButton> buttons = buttonsOf(row);
+        com.google.android.material.button.MaterialButton plus = buttons.get(1);
+        plus.performClick();
+        assertEquals(8, mHost.appIcons);
+        assertEquals("+ is out at the fit", false, plus.isEnabled());
+        assertEquals(View.VISIBLE, hint.getVisibility());
+        assertEquals("At most 8 fit at size M.", String.valueOf(hint.getText()));
+        // A larger icon size: fewer fit, the stored count was re-clamped by the editor.
+        mHost.mostFitting = 6;
+        mHost.appIcons = DockCard.clampAppIcons(mHost.appIcons, 3, mHost.mostFitting);
+        mCard.restate(Row.DOCK_APP_ICONS);
+        assertEquals(6, mHost.appIcons);
+        assertEquals("At most 6 fit at size M.", String.valueOf(hint.getText()));
+        // Back to room for every app: + moves again, the hint goes.
+        mHost.mostFitting = 10;
+        mCard.restate(Row.DOCK_APP_ICONS);
+        assertEquals(true, plus.isEnabled());
+        assertEquals(View.GONE, hint.getVisibility());
+    }
+
+    @Test
+    public void theClampKeepsTheLeastAndTheFit() {
+        assertEquals(6, DockCard.clampAppIcons(9, 3, 6));
+        assertEquals(5, DockCard.clampAppIcons(5, 3, 6));
+        assertEquals("the least wins where not even three fit", 3,
+            DockCard.clampAppIcons(5, 3, 2));
+        assertEquals(true, DockCard.fitHintShown(6, 6, 10));
+        assertEquals(false, DockCard.fitHintShown(5, 6, 10));
+        assertEquals("the hard top is no fit", false, DockCard.fitHintShown(10, 10, 10));
+    }
+
+    @Nullable
+    private static TextView hintOf(View view) {
+        if (view instanceof TextView && String.valueOf(((TextView) view).getText()).startsWith("At most"))
+            return (TextView) view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            // The hint is the last child of the row's column.
+            View last = group.getChildAt(group.getChildCount() - 1);
+            if (last instanceof TextView && !(last instanceof com.google.android.material.button.MaterialButton))
+                return (TextView) last;
+        }
+        return null;
+    }
+
+    private static List<com.google.android.material.button.MaterialButton> buttonsOf(View view) {
+        List<com.google.android.material.button.MaterialButton> out = new java.util.ArrayList<>();
+        collectButtons(view, out);
+        return out;
+    }
+
+    private static void collectButtons(View view,
+                                       List<com.google.android.material.button.MaterialButton> out) {
+        if (view instanceof com.google.android.material.button.MaterialButton)
+            out.add((com.google.android.material.button.MaterialButton) view);
+        if (view instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
+                collectButtons(((ViewGroup) view).getChildAt(i), out);
+    }
+
+    @Test
     public void stripTypeIsTheWallStrip() {
         assertEquals(DockStyle.WALL_STRIP, DockStyle.CHOICES.get(DockCard.STRIP_TYPE));
     }
@@ -154,14 +259,19 @@ public class DockCardStripHeightTest {
         }
         @Override public void setPosition(@NonNull Element bar,
                                           @NonNull BarOrder.Position position) {}
-        @Override public int appIcons() { return 7; }
+        int appIcons = 7;
+        int mostFitting = 10;
+        @Override public int appIcons() { return appIcons; }
         @Override public int appIconsFrom() { return 3; }
         @Override public int appIconsTo() { return 10; }
-        @Override public void setAppIcons(int count) {}
+        @Override public void setAppIcons(int count) { appIcons = count; }
+        @Override public int appIconsMostFitting() { return mostFitting; }
+        @NonNull @Override public CharSequence iconSizeName() { return "M"; }
         @Override public boolean mostUsed() { return true; }
         @Override public void setMostUsed(boolean on) {}
         @NonNull @Override public CharSequence iconPack() { return "System"; }
-        @Override public void pickIconPack() {}
+        int iconPackPicks;
+        @Override public void pickIconPack() { iconPackPicks++; }
         @Override public boolean azGlass() { return false; }
         @Override public void setAzGlass(boolean on) {}
         @Override public int azShow() { return 0; }

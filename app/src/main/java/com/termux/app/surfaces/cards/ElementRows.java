@@ -66,9 +66,9 @@ public final class ElementRows {
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.COMMAND_PALETTE_BUTTON),
         TERMINAL(R.string.editor_elements_terminal, R.drawable.ic_symbol_terminal,
             EditorCard.TERMINAL, null, Row.PANE_BORDERS, Visibility.NONE),
-        /** The widget grid: Home's own card, at its Grid section. */
+        /** The widgets: their own card (the widgets' glass on Home). */
         WIDGETS(R.string.editor_elements_widgets, R.drawable.ic_ms_widgets,
-            EditorCard.HOME, null, Row.SECTION_GRID, Visibility.NONE);
+            EditorCard.WIDGETS, null, null, Visibility.NONE);
 
         @StringRes public final int nameRes;
         @DrawableRes public final int glyphRes;
@@ -127,6 +127,18 @@ public final class ElementRows {
     public static List<Item> rows(@NonNull PaneWallPage screen) {
         List<Item> out = new ArrayList<>(SHARED);
         out.add(screen == PaneWallPage.WIDGETS ? Item.WIDGETS : Item.TERMINAL);
+        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * Customization's list, for the whole app: the shared rows, then the terminal and the
+     * widgets (no switch; › opens their cards).
+     */
+    @NonNull
+    public static List<Item> wholeApp() {
+        List<Item> out = new ArrayList<>(SHARED);
+        out.add(Item.TERMINAL);
+        out.add(Item.WIDGETS);
         return Collections.unmodifiableList(out);
     }
 

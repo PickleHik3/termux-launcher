@@ -18,8 +18,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * A grid of toggle tiles (editor-redesign §2: Options, Indicators, Show wallpaper): each tile a
- * glyph over a word, on or off by itself, on the secondary container when on. The tiles wrap onto
+ * A grid of toggle buttons (editor-redesign §2: Options, Indicators, Show wallpaper; appearance-
+ * cards overhaul §4): each a Material 3 Expressive tonal button with its word, on or off by
+ * itself, round and tonal when off, filled with the primary and square when on; a tile's glyph
+ * is no longer drawn. The tiles wrap onto
  * as many lines as they need, as many to a line as fit their widest word (four at most), every
  * tile as wide as its line's share so the grid keeps its columns.
  */
@@ -141,10 +143,13 @@ public final class TileGrid {
 
     @NonNull
     private static MaterialButton tile(@NonNull Context context, @NonNull Tile tile) {
-        MaterialButton button = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        // A Material 3 Expressive toggle button (appearance-cards overhaul §4): tonal and round
+        // when off, filled with the primary and square when on, the word alone. The glyph that
+        // stood over the word is gone: above the word it would not sit inside a round button,
+        // and the word says it. No check mark.
+        MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
+            .inflate(com.termux.R.layout.editor_toggle_button, null, false);
         button.setText(tile.word);
-        RowKit.textAppearance(button, com.google.android.material.R.attr.textAppearanceLabelMedium);
         button.setAllCaps(false);
         button.setMaxLines(2);
         button.setEllipsize(TextUtils.TruncateAt.END);
@@ -153,28 +158,12 @@ public final class TileGrid {
         button.setPaddingRelative(padH, padV, padH, padV);
         button.setMinWidth(0);
         button.setMinimumWidth(0);
-        // The outline is drawn inside the insets; without them the glyph and word stand inside it.
+        button.setMinHeight(RowKit.dp(context, RowKit.TOUCH_DP));
+        // The tile is the whole 48dp target: no insets above and below the container.
         button.setInsetTop(0);
         button.setInsetBottom(0);
-        button.setCornerRadius(RowKit.dp(context, CORNER_DP));
         button.setCheckable(true);
-        // Gravity before the glyph, so the word is measured under it rather than beside it.
-        button.setIconGravity(MaterialButton.ICON_GRAVITY_TOP);
-        button.setIconPadding(RowKit.dp(context, ICON_GAP_DP));
-        button.setIconResource(tile.glyph);
-        int[][] states = {{android.R.attr.state_checked}, {}};
-        int onSurface = RowKit.color(context, com.google.android.material.R.attr.colorOnSurface);
-        button.setBackgroundTintList(new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorSecondaryContainer),
-            0}));
-        ColorStateList content = new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorOnSecondaryContainer),
-            onSurface});
-        button.setTextColor(content);
-        button.setIconTint(content);
-        button.setStrokeColor(new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorSecondaryContainer),
-            RowKit.color(context, com.google.android.material.R.attr.colorOutline)}));
+        button.setIcon(null);
         GlyphNames.name(button, tile.hint != null ? tile.hint : tile.word);
         return button;
     }
@@ -266,16 +255,12 @@ public final class TileGrid {
     /** A tile's height: its padding, its glyph, the gap and {@code lines} lines of its word. */
     private static int tileHeightPx(@NonNull Context context, @Nullable MaterialButton probe,
                                     int lines) {
-        int touch = RowKit.dp(context, 56);
+        int touch = RowKit.dp(context, RowKit.TOUCH_DP);
         if (probe == null)
             return touch;
-        int glyph = probe.getIconSize() > 0 ? probe.getIconSize()
-            : (probe.getIcon() != null ? probe.getIcon().getIntrinsicHeight()
-                : RowKit.dp(context, RowKit.GLYPH_DP));
         Paint.FontMetricsInt metrics = probe.getPaint().getFontMetricsInt();
         int line = Math.max(probe.getLineHeight(), metrics.bottom - metrics.top);
-        int need = 2 * RowKit.dp(context, PAD_V_DP) + glyph + probe.getIconPadding()
-            + line * lines;
+        int need = 2 * RowKit.dp(context, PAD_V_DP) + line * lines;
         return Math.max(touch, need);
     }
 }

@@ -20,7 +20,7 @@ import com.termux.R;
 
 /**
  * The editor bar and the half line over it (appearance-and-settings-rework §7, wireframe 01):
- * at the foot of the resting editor, a 48dp pill with the orientation chip, Undo, Done and the
+ * at the foot of the resting editor, a 48dp pill with Undo, Done and the
  * palette glyph that opens the Appearance card; under the frame, two dots and the name of the
  * half the frame shows. Views only: what a press means is {@link Listener}'s.
  *
@@ -33,7 +33,6 @@ final class EditorBar {
 
     /** What the bar reports. */
     interface Listener {
-        void onOrientation();
         void onUndo();
         void onDone();
         void onPalette();
@@ -60,7 +59,6 @@ final class EditorBar {
 
     @NonNull private final Context mContext;
     @NonNull private final LinearLayout mBar;
-    @NonNull private final MaterialButton mOrientation;
     @NonNull private final MaterialButton mUndo;
     @NonNull private final MaterialButton mDone;
     @NonNull private final MaterialButton mPalette;
@@ -96,14 +94,8 @@ final class EditorBar {
         mBar.setElevation(dp(3));
         mBar.setClickable(true);
 
-        mOrientation = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonTonalStyle);
-        mOrientation.setIconResource(R.drawable.ic_symbol_phone_portrait);
-        mOrientation.setSingleLine(true);
-        mOrientation.setEllipsize(TextUtils.TruncateAt.END);
-        mOrientation.setOnClickListener(v -> { if (mListener != null) mListener.onOrientation(); });
-        addItem(mOrientation, ViewGroup.LayoutParams.WRAP_CONTENT);
-
+        // No orientation chip (appearance-cards overhaul): the other orientation is edited by
+        // turning the phone, which needs no button.
         mUndo = iconButton(R.drawable.ic_symbol_undo, R.string.appearance_editor_undo);
         mUndo.setOnClickListener(v -> { if (mListener != null) mListener.onUndo(); });
         addItem(mUndo, dp(48));
@@ -116,7 +108,9 @@ final class EditorBar {
         mDone.setOnClickListener(v -> { if (mListener != null) mListener.onDone(); });
         addItem(mDone, ViewGroup.LayoutParams.WRAP_CONTENT);
 
-        mPalette = iconButton(R.drawable.ic_symbol_palette, R.string.appearance_card_appearance);
+        mPalette = iconButton(R.drawable.ic_symbol_palette, R.string.appearance_card_customization);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mPalette,
+            context.getString(R.string.appearance_card_customization));
         mPalette.setOnClickListener(v -> {
             dismissThemeHint();
             if (mListener != null) mListener.onPalette();
@@ -127,7 +121,8 @@ final class EditorBar {
         EditorViews.textAppearance(mHint, com.google.android.material.R.attr.textAppearanceLabelLarge);
         mHint.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
-        mHint.setText(R.string.appearance_theme_hint);
+        // The bubble names the card the pill opens: Customization.
+        mHint.setText(EditorCard.APPEARANCE.titleRes);
         mHint.setSingleLine(true);
         mHint.setEllipsize(TextUtils.TruncateAt.END);
         mHint.setGravity(Gravity.CENTER);
@@ -239,15 +234,9 @@ final class EditorBar {
         }
     }
 
-    /** The orientation the frame shows: the chip names it. */
+    /** The orientation the frame shows (the bar no longer names it). */
     void setOrientation(boolean landscape) {
         mLandscape = landscape;
-        mOrientation.setIconResource(landscape ? R.drawable.ic_symbol_phone_landscape
-            : R.drawable.ic_symbol_phone_portrait);
-        CharSequence text = mContext.getString(landscape ? R.string.appearance_bar_landscape
-            : R.string.appearance_bar_portrait);
-        if (!TextUtils.equals(mOrientation.getText(), text))
-            mOrientation.setText(text);
     }
 
     boolean isLandscape() {

@@ -67,6 +67,12 @@ public class EditorCardSheetScrollTest {
         int half = Math.round(mHeight * 0.4f);
         mSheet.attach(mParent);
         mSheet.setGeometry(half, full, nav);
+        // Overhaul §3 opens only a card's first section on a first visit; open them all, so the
+        // content stands taller than its viewport as a well-used card's does.
+        EditorSectionStore sections = new EditorSectionStore(themed);
+        for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true)))
+            if (EditorCardSheet.isSectionHeading(spec.row))
+                sections.setOpen(card.name(), spec.row.name(), true);
         mSheet.show(card, EditorRows.rows(card,
             new EditorRows.Offers(true, true)), "Reset", false);
         layOut();

@@ -161,7 +161,11 @@ public class SurfaceEditorCardsTest {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         assertEquals(PaneWallPage.TERMINAL, editor.screen());
         EditorCardSheet.Model model = model(editor);
-        assertFalse("a Look stop shows no strip", model.shown(Row.FROST));
+        // Overhaul §2: Customization's Appearance shows every slider at every preset stop.
+        assertTrue("a Look stop shows its sliders", model.shown(Row.FROST));
+        assertTrue(model.shown(Row.GRAIN));
+        if (!model.enabled(Row.GLASS_EDGE))
+            assertEquals("Not on this phone.", model.readout(Row.GLASS_EDGE, 0));
 
         model.onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
         model.onReleased(Row.LOOK);
@@ -188,7 +192,7 @@ public class SurfaceEditorCardsTest {
 
         model.onValue(Row.LOOK, 1, false);
         model.onReleased(Row.LOOK);
-        assertFalse("back on a Look, the strip goes", model.shown(Row.FROST));
+        assertTrue("back on a Look, the sliders stay (overhaul §2)", model.shown(Row.FROST));
     }
 
     @Test

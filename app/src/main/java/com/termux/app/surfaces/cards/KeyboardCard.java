@@ -22,9 +22,14 @@ public final class KeyboardCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return com.termux.app.surfaces.GlassRows.card(offers, Row.KEY_OPACITY,
-                Row.OPACITY_LINK, Row.KEY_CORNERS, Row.KEY_SPACING, Row.FORM, Row.HEIGHT,
-                Row.MARGIN, Row.BOTTOM_PADDING, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
+        // The opacity link stands between the two opacities it moves together.
+        return new EditorRows.CardRows()
+            .tier(1, Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN, Row.KEY_CORNERS,
+                Row.BOTTOM_PADDING)
+            .tier(3, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
+                Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                Row.RIM, Row.GLASS_EDGE, Row.DEPTH)
+            .tier(3, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
             .build();
     }
 }

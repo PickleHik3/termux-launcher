@@ -31,7 +31,7 @@ public final class StepperRow {
     @NonNull public final MaterialButton plus;
     @NonNull public final TextView value;
     private final int mFrom;
-    private final int mTo;
+    private int mTo;
     private final int mStep;
     @NonNull private final SliderRow.Readout mReadout;
     private int mValue;
@@ -103,6 +103,24 @@ public final class StepperRow {
             minus.setEnabled(clamped > mFrom);
         if (plus.isEnabled() != (clamped < mTo))
             plus.setEnabled(clamped < mTo);
+    }
+
+    /**
+     * Moves the top to {@code to} (no lower than the bottom); the value shown is clamped to it
+     * and + is out while the value stands there. Nothing is reported.
+     */
+    public void setTo(int to) {
+        int top = Math.max(mFrom, to);
+        if (top == mTo)
+            return;
+        mTo = top;
+        int value = mValue;
+        mValue = Integer.MIN_VALUE;
+        setValue(value);
+    }
+
+    public int to() {
+        return mTo;
     }
 
     public int value() {

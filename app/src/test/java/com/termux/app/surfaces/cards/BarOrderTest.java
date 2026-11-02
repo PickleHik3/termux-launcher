@@ -225,8 +225,8 @@ public class BarOrderTest {
 
     @Test
     public void eachBarOpensItsOwnSettings() {
-        assertEquals(Arrays.asList(Setting.POSITION, Setting.APP_ICONS, Setting.MOST_USED,
-            Setting.ICON_PACK), BarOrder.settingsOf(APPS));
+        assertEquals("Apps in the dock and Dock icon pack moved into the Dock card",
+            Arrays.asList(Setting.POSITION, Setting.MOST_USED), BarOrder.settingsOf(APPS));
         assertEquals(Arrays.asList(Setting.POSITION, Setting.GLASS_BACKGROUND, Setting.SHOW),
             BarOrder.settingsOf(AZ));
         assertEquals(Arrays.asList(Setting.POSITION, Setting.EXTRA_KEYS_EDITOR),

@@ -49,7 +49,6 @@ public class EditorBarThemeHintTest {
             Math.round(411 * density), Math.round(914 * density)));
         EditorBar bar = new EditorBar(themed);
         bar.setListener(new EditorBar.Listener() {
-            @Override public void onOrientation() {}
             @Override public void onUndo() {}
             @Override public void onDone() { mDone++; }
             @Override public void onPalette() { mPalette++; }

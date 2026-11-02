@@ -953,6 +953,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+    /** True while the travel pre-rolls the keyboard, which opens below the screen. */
+    private boolean mKeyboardOpensBelowScreen;
 
     /**
      * The panes' grid is held from the stop until the layout the launcher returns to has settled,
@@ -2113,6 +2115,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 if (openSetupWizardIfDue()) return;
                 setupWizard().openCardsIfDue();
+                showGlassResetNudgeIfDue();
             });
         } else {
             resumeFirstRunAfterRestart();
@@ -2578,6 +2581,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         reopenAppearanceAfterRelaunch();
+        View nudgeContent = findViewById(android.R.id.content);
+        if (nudgeContent != null && com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences))
+            nudgeContent.post(this::showGlassResetNudgeIfDue);
         // A permission page the setup cards sent the person to may have been answered.
         if (mSetupWizard != null) mSetupWizard.onActivityResumed();
         // A distro installed in a shell while we were away still needs its sound drop-in.
@@ -2767,6 +2773,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         if (root != null) root.post(resume);
         else resume.run();
+    }
+
+    /**
+     * The upgrade nudge (appearance overhaul §6), once it is due: only on a Home page, after the
+     * setup wizard and its cards, never over a terminal; else it waits for the next resume.
+     */
+    private void showGlassResetNudgeIfDue() {
+        if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        if (!com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences)) return;
+        if (setupWizardComesFirst()) return;
+        if (mSetupWizard != null && mSetupWizard.isCardSheetShowing()) return;
+        if (currentWallPage() != com.termux.app.wall.PaneWallPage.WIDGETS) return;
+        com.termux.app.setup.GlassResetNudgeCard.showIfDue(this, mPreferences, () -> {
+            // Mode back to System, then the window restyled for the new glass and colours.
+            String mode = com.termux.app.surfaces.GlassReset.NIGHT_MODE_DEFAULT;
+            if (mProperties == null || !mode.equals(mProperties.getNightMode()))
+                com.termux.app.settings.TermuxPropertiesFile.write(
+                    com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+                        .KEY_NIGHT_MODE, mode);
+            recreate();
+        });
     }
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */
@@ -6926,7 +6953,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View stackedClock = findViewById(R.id.terminal_status_column_clock);
             if (stackedClock != null && !isStatusBarFoldInteractive()) {
                 stackedClock.setAlpha(1f);
-                stackedClock.setVisibility(vertical && !collapsed ? View.VISIBLE : View.GONE);
+                stackedClock.setVisibility(vertical && !collapsed && isStatusClockShown()
+                    ? View.VISIBLE : View.GONE);
                 // The column's glass starts where the canvas does, so its clock starts at the top
                 // of the column itself — the system status bar is already above all of it.
                 if (stackedClock.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
@@ -7094,7 +7122,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * column whose height is type, and type is what a raised font scale grows.
      */
     private int statusColumnClockHeightPx(boolean collapsed) {
-        if (collapsed) return 0;
+        if (collapsed || !isStatusClockShown()) return 0;
         View clock = findViewById(R.id.terminal_status_column_clock);
         if (clock == null) return 0;
         int width = targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), false);
@@ -14942,7 +14970,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // visible for the reveal gate to observe destination layout at all.
             if (mFloatingKeyboard != null)
                 mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
-            mKeyboardGeometry.onVisibilityRequested(visible);
+            // A keyboard the travel brings up below the screen opens without the reveal gate.
+            mKeyboardGeometry.onVisibilityRequested(visible, visible && mKeyboardOpensBelowScreen);
         }
 
         @Override
@@ -17878,6 +17907,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
                 java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns, floating);
             com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
+            com.termux.app.dock.IconSizeCap.publishFit(java.util.EnumSet.of(home, terminal),
+                widthDp, edgeDp, columns);
         }
         com.termux.app.place.layout.IconSize drawn =
             com.termux.app.dock.IconSizeCap.effective(chosen, mIconCap);
@@ -18545,6 +18576,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         row.setClockFace(mPreferences.getTopPaneClockStyle(),
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
         row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
+        // The Status bar card's Clock toggle hides the strip's clock with the bar's.
+        row.setClockAllowed(isStatusClockShown());
     }
 
     /**
@@ -23958,7 +23991,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
         // finger frames included, so a slide never carries on from a stale one.
         mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
+            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE
+                && !wall.slidesAcrossSeam(),
             currentWallPlace() == mLastWallPage);
         // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
         // rest writes nothing over it. A gesture that carries on past the last Home page into the
@@ -24936,6 +24970,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void preRoll(@NonNull com.termux.app.wall.PaneWallPage target) {
             if (mInAppKeyboard == null) return;
             mQuietKeyboardChange = true;
+            // Held below the screen by the travel until the wall brings it up: its reveal is not
+            // gated on its backdrop (KeyboardGeometryChoreographer#onVisibilityRequested).
+            mKeyboardOpensBelowScreen = true;
             try {
                 // The place keeps the system IME until the wall lands: the flag change that takes
                 // it back relayouts the whole window, and the settle's applyPlaceSystemImeOwner
@@ -24947,6 +24984,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         .KEYBOARD_ACTION);
             } finally {
                 mQuietKeyboardChange = false;
+                mKeyboardOpensBelowScreen = false;
             }
         }
 
@@ -30445,7 +30483,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (stackedClock != null && vertical) {
             // The column's clock arrives with the width that makes room for it, rather than
             // sliding: there is nothing above it in a column for it to slide out from under.
-            stackedClock.setVisibility(expansion > 0.02f ? View.VISIBLE : View.GONE);
+            stackedClock.setVisibility(expansion > 0.02f && isStatusClockShown()
+                ? View.VISIBLE : View.GONE);
             stackedClock.setAlpha(expansion);
         }
         if (topWidgets != null && !vertical) {
@@ -30891,6 +30930,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
             ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockAlignment(
                 mPreferences == null ? null : mPreferences.getTopPaneClockAlignment());
+            // The Status bar card's Clock toggle; the collapsed bar hides the whole slot anyway.
+            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockShown(
+                isStatusClockShown());
         }
         com.termux.app.statusbar.StatusBarStackedClockView stackedClock =
             findViewById(R.id.terminal_status_column_clock);
@@ -32666,6 +32708,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (v.getCurrentSession() != null) v.onScreenUpdated();
         rebuildDrawerSessions();
         return previousFocused != session;
+    }
+
+    /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
+    private boolean isStatusClockShown() {
+        return mPreferences == null || mPreferences.isStatusClockShown();
     }
 
     /** Whether custom window/pane splitting is active (disabled by compatibility mode). */

@@ -105,15 +105,17 @@ public class EditorCardSheetFitTest {
                     android.view.View.MeasureSpec.EXACTLY);
                 int free = android.view.View.MeasureSpec.makeMeasureSpec(0,
                     android.view.View.MeasureSpec.UNSPECIFIED);
-                LinearLayout rows = fixture.sheet.rows();
-                for (int i = 0; i < rows.getChildCount(); i++) {
-                    View child = rows.getChildAt(i);
+                // The rows as the sections stand them: a section's title row counts with the
+                // rows under it, and is not itself the control the walk stops at.
+                for (View child : fixture.sheet.flatRowsForTest()) {
                     if (child.getVisibility() == View.GONE)
                         continue;
                     child.measure(spec, free);
                     rowsPx += child.getMeasuredHeight();
-                    counted++;
-                    if (child.getMeasuredHeight() >= target)
+                    boolean title = fixture.sheet.isSectionTitleForTest(child);
+                    if (!title)
+                        counted++;
+                    if (!title && child.getMeasuredHeight() >= target)
                         break;
                 }
                 if (counted == 1)
@@ -131,23 +133,34 @@ public class EditorCardSheetFitTest {
     public void aShortHeadingFirstIsCountedWithTheControlUnderIt() {
         for (float scale : new float[] {1f, 1.3f}) {
             EditorCard card = EditorCard.HOME;
-            sShortRow = EditorRows.rows(card, new EditorRows.Offers(true, true)).get(0).row;
+            // The first drawn row (a section heading is the section's title, not a row).
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
+                if (!EditorCardSheet.isSectionHeading(spec.row)) {
+                    sShortRow = spec.row;
+                    break;
+                }
+            }
             try {
                 Fixture fixture = new Fixture(card, scale);
                 fixture.layOut();
                 int width = fixture.parent.getWidth();
-                LinearLayout rows = fixture.sheet.rows();
                 int spec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
                 int free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-                View heading = rows.getChildAt(0);
-                View control = rows.getChildAt(1);
+                List<View> flat = fixture.sheet.flatRowsForTest();
+                View title = flat.get(0);
+                assertTrue("the first section's title row",
+                    fixture.sheet.isSectionTitleForTest(title));
+                View heading = flat.get(1);
+                View control = flat.get(2);
+                title.measure(spec, free);
                 heading.measure(spec, free);
                 control.measure(spec, free);
                 assertTrue("a heading under 48dp", heading.getMeasuredHeight() < fixture.dp(48));
                 assertTrue("a control of 48dp or more",
                     control.getMeasuredHeight() >= fixture.dp(48));
                 int expected = fixture.dp(72) + fixture.navPx + fixture.dp(16)
-                    + heading.getMeasuredHeight() + control.getMeasuredHeight();
+                    + title.getMeasuredHeight() + heading.getMeasuredHeight()
+                    + control.getMeasuredHeight();
                 int got = fixture.sheet.minHalfHeightPx(width);
                 assertTrue("heading + control + chrome at " + scale + ": " + expected + " vs " + got,
                     Math.abs(expected - got) <= 2);
@@ -210,69 +223,171 @@ public class EditorCardSheetFitTest {
                 slider.getLocationInWindow(at);
                 int[] parentAt = new int[2];
                 fixture.parent.getLocationInWindow(parentAt);
+                int[] box = containerSpan(fixture, slider);
                 int left = at[0] - parentAt[0];
                 int trackStart = left + slider.getTrackSidePadding();
                 int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
                 int radius = slider.getThumbWidth() / 2;
-                assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
-                    + " vs " + (width - fixture.dp(16)),
-                    trackEnd + radius <= width - fixture.dp(16) + 1);
-                assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
+                assertTrue("the thumb at the end clears the section's 16dp gutter: "
+                    + (trackEnd + radius) + " vs " + (box[1] - fixture.dp(16)),
+                    trackEnd + radius <= box[1] - fixture.dp(16) + 1);
+                assertEquals("the track starts at the text column", box[0] + fixture.dp(56),
+                    trackStart, 1);
                 checked++;
+            }
+            // The Presets were this card's slider; they are picture tiles now (overhaul §4),
+            // every one inside the 16dp margins, none clipped.
+            int[] parentAt = new int[2];
+            fixture.parent.getLocationInWindow(parentAt);
+            for (ViewGroup grid : presetGrids(fixture.sheet.rows())) {
+                int[] box = containerSpan(fixture, grid);
+                for (int i = 0; i < grid.getChildCount(); i++) {
+                    View tile = grid.getChildAt(i);
+                    int[] at = new int[2];
+                    tile.getLocationInWindow(at);
+                    int left = at[0] - parentAt[0];
+                    assertTrue(card + ": a Presets tile inside the section's gutter " + left,
+                        left >= box[0] + fixture.dp(16) - 1
+                            && left + tile.getWidth() <= box[1] - fixture.dp(16) + 1);
+                    assertTrue(card + ": a Presets tile is laid out", tile.getWidth() > 0);
+                    // All five on one line at 411dp.
+                    assertEquals(card + ": the Presets stand five across",
+                        grid.getChildAt(0).getTop(), tile.getTop());
+                    checked++;
+                }
             }
         }
         assertTrue(!anyLook || checked > 0);
     }
 
+    /**
+     * The left and right edges (in the parent's frame) of the section container holding
+     * {@code view} (overhaul §3), or the parent's own where none does.
+     */
+    @NonNull
+    private static int[] containerSpan(@NonNull Fixture fixture, @NonNull View view) {
+        int[] parentAt = new int[2];
+        fixture.parent.getLocationInWindow(parentAt);
+        for (EditorCardSheet.Section section : fixture.sheet.sections()) {
+            for (View at = view; at != null;
+                    at = at.getParent() instanceof View ? (View) at.getParent() : null) {
+                if (at == section.root) {
+                    int[] box = new int[2];
+                    section.root.getLocationInWindow(box);
+                    int left = box[0] - parentAt[0];
+                    return new int[] {left, left + section.root.getWidth()};
+                }
+            }
+        }
+        return new int[] {0, fixture.parent.getWidth()};
+    }
+
+    /** The Presets rows' picture grids (PreviewTilesRow's grid). */
+    @NonNull
+    private static List<ViewGroup> presetGrids(@NonNull View view) {
+        List<ViewGroup> out = new ArrayList<>();
+        if (!(view instanceof ViewGroup))
+            return out;
+        ViewGroup group = (ViewGroup) view;
+        if (group.getClass().getName().endsWith("PreviewTilesRow$Grid")) {
+            out.add(group);
+            return out;
+        }
+        for (int i = 0; i < group.getChildCount(); i++)
+            out.addAll(presetGrids(group.getChildAt(i)));
+        return out;
+    }
+
     @Test
-    public void theDesignTilesHoldTheirGlyphAndWordInsideTheirOutline() {
+    public void theDockOptionsAreToggleButtonsHoldingTheirWordWhole() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
             fixture.layOut();
             int tiles = 0;
-            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
-                if (tile.getIcon() == null || tile.getLayout() == null)
-                    continue;
-                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
-                    continue;
+            for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
                 tiles++;
-                assertEquals("no inset under the outline", 0, tile.getInsetBottom());
+                String which = tile.getText() + " at " + scale;
+                // Expressive toggle buttons (overhaul §4): the word alone, no check mark.
+                assertTrue(which + ": no glyph, no check mark", tile.getIcon() == null);
+                assertTrue(which + ": a 48dp target", tile.getHeight() >= fixture.dp(48) - 1);
+                assertTrue(which + ": laid out", tile.getLayout() != null);
                 int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
-                assertTrue(tile.getText() + " at " + scale + ": the word ends at " + textBottom
-                        + " inside " + tile.getHeight(),
+                assertTrue(which + ": the word ends at " + textBottom + " inside "
+                        + tile.getHeight(),
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
+                android.text.Layout layout = tile.getLayout();
+                assertTrue(which + ": no word is cut",
+                    layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
             }
-            // The Dock types are a picker rail now (the row set's picker rows): six Options.
-            assertEquals("six Dock options", 6, tiles);
+            assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
         }
     }
 
     @Test
-    public void theDesignTilesCentreTheirWordUnderTheGlyph() {
-        for (float scale : new float[] {1f, 1.3f}) {
-            Fixture fixture = new Fixture(EditorCard.DOCK, scale);
-            fixture.layOut();
-            int tiles = 0;
-            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
-                if (tile.getIcon() == null || tile.getLayout() == null)
-                    continue;
-                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
-                    continue;
-                tiles++;
-                android.graphics.drawable.Drawable[] sides = tile.getCompoundDrawablesRelative();
-                assertTrue("the glyph stands on top, not at the start", sides[0] == null
-                    && sides[1] != null);
-                assertEquals(tile.getText() + " at " + scale + ": the word is laid out across the"
-                        + " whole tile", tile.getWidth() - tile.getCompoundPaddingLeft()
-                        - tile.getCompoundPaddingRight(), tile.getLayout().getWidth());
-                float wordCentre = tile.getCompoundPaddingLeft()
-                    + (tile.getLayout().getLineLeft(0) + tile.getLayout().getLineRight(0)) / 2f;
-                assertEquals(tile.getText() + " at " + scale + ": under the glyph's centre",
-                    tile.getWidth() / 2f, wordCentre, 2f);
-            }
-            // The Dock types are a picker rail now (the row set's picker rows): six Options.
-            assertEquals("six Dock options", 6, tiles);
+    public void theDockOptionsWearThePrimaryWhenOnAndTheTonalWhenOff() {
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        fixture.layOut();
+        int tiles = 0;
+        for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
+            tiles++;
+            int[] state = tile.getDrawableState();
+            int fill = tile.getBackgroundTintList().getColorForState(state, 0);
+            int ink = tile.getTextColors().getColorForState(state, 0);
+            int primary = com.google.android.material.color.MaterialColors.getColor(tile,
+                androidx.appcompat.R.attr.colorPrimary);
+            int onPrimary = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorOnPrimary);
+            int tonal = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorSecondaryContainer);
+            int onTonal = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorOnSecondaryContainer);
+            String which = tile.getText() + (tile.isChecked() ? " (on)" : " (off)");
+            assertEquals(which + ": its container", tile.isChecked() ? primary : tonal, fill);
+            assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
+            assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
         }
+        assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
+    }
+
+    @Test
+    public void aSheetConnectedGroupShowsEveryButtonWhole() {
+        // Emulator W1a: the Status bar's Rim (None / Thin / Bright beside its title) was cut
+        // flat at the bottom. Every connected button keeps its 48dp target, inside its row.
+        for (EditorCard card : new EditorCard[] {EditorCard.STATUS, EditorCard.DOCK,
+                EditorCard.TERMINAL}) {
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+            fixture.layOut();
+            for (com.google.android.material.button.MaterialButtonToggleGroup group
+                    : toggleGroups(fixture.sheet.rows())) {
+                if (!group.isShown())
+                    continue;
+                View row = (View) group.getParent();
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    View button = group.getChildAt(i);
+                    String which = card + " " + ((MaterialButton) button).getText()
+                        + " " + group.getContentDescription();
+                    assertTrue(which + ": a 48dp target, " + button.getHeight(),
+                        button.getHeight() >= fixture.dp(48) - 1);
+                    assertTrue(which + ": the group holds it whole",
+                        group.getHeight() >= button.getBottom());
+                    assertTrue(which + ": the row holds the group whole",
+                        row.getHeight() >= group.getBottom());
+                }
+            }
+        }
+    }
+
+    /** The Dock's Show/hide toggles: the buttons of its TileGrid. */
+    @NonNull
+    private static List<MaterialButton> dockOptions(@NonNull View rows) {
+        List<MaterialButton> out = new ArrayList<>();
+        for (MaterialButton button : buttons(rows)) {
+            if (button.isShown() && button.getParent() != null
+                    && button.getParent().getClass().getName().endsWith("TileGrid$Lines"))
+                out.add(button);
+        }
+        return out;
     }
 
     @Test
@@ -296,7 +411,9 @@ public class EditorCardSheetFitTest {
         icon.getLocationInWindow(at);
         int[] parentAt = new int[2];
         fixture.parent.getLocationInWindow(parentAt);
-        assertTrue("the icon stands 16dp in", at[0] - parentAt[0] >= fixture.dp(16) - 1);
+        int[] box = containerSpan(fixture, icon);
+        assertTrue("the icon stands 16dp inside its section",
+            at[0] - parentAt[0] >= box[0] + fixture.dp(16) - 1);
         // Rim's segments are words with no check mark.
         for (int i = 0; i < style.getChildCount(); i++) {
             MaterialButton button = (MaterialButton) style.getChildAt(i);
@@ -361,6 +478,46 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void theMainPillAndAppliesToShowEveryWordWhole() {
+        // Overhaul §4: "Customiza…" and "Workspa…" no more, at 1.0× and 1.3× on 411dp.
+        boolean chips = sChips;
+        sChips = true;
+        try {
+            for (float scale : new float[] {1f, 1.3f}) {
+                for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.STATUS}) {
+                    Fixture fixture = new Fixture(card, scale);
+                    for (int frame = 0; frame < 4; frame++) {
+                        fixture.layOut();
+                        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+                    }
+                    List<MaterialButton> group = new ArrayList<>();
+                    if (card == EditorCard.HOME) {
+                        group.addAll(fixture.sheet.mainPillButtons());
+                    } else {
+                        ViewGroup applies = fixture.sheet.appliesToGroup();
+                        for (int i = 0; i < applies.getChildCount(); i++)
+                            group.add((MaterialButton) applies.getChildAt(i));
+                    }
+                    assertEquals(card + " at " + scale, 3, group.size());
+                    for (MaterialButton button : group) {
+                        String which = card + " at " + scale + ": " + button.getText();
+                        assertTrue(which + " shows", button.isShown());
+                        Layout layout = button.getLayout();
+                        assertEquals(which + " is not cut", 0,
+                            layout.getEllipsisCount(layout.getLineCount() - 1));
+                        assertTrue(which + " stands whole (" + button.getWidth() + "px, needs "
+                                + com.termux.app.surfaces.rows.SegmentRow.neededPx(button) + ")",
+                            button.getWidth() + 1
+                                >= com.termux.app.surfaces.rows.SegmentRow.neededPx(button));
+                    }
+                }
+            }
+        } finally {
+            sChips = chips;
+        }
+    }
+
+    @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))
@@ -374,7 +531,9 @@ public class EditorCardSheetFitTest {
                 assertEquals(card + ": " + group.getContentDescription() + " stands label and"
                         + " control on one line (row " + holder.getWidth() + "px, parent "
                         + fixture.parent.getWidth() + "px, control " + group.getWidth() + "px)",
-                    LinearLayout.HORIZONTAL, ((LinearLayout) group.getParent()).getOrientation());
+                    true, holder instanceof LinearLayout
+                        ? ((LinearLayout) holder).getOrientation() == LinearLayout.HORIZONTAL
+                        : com.termux.app.surfaces.rows.SegmentRow.standsInline(group));
                 for (MaterialButton button : buttons(group))
                     assertTrue("the touch target is 48dp", button.getHeight() >= fixture.dp(48) - 1);
             }
@@ -442,13 +601,9 @@ public class EditorCardSheetFitTest {
             for (LegendSlider legend : legends)
                 assertTrue(card + ": " + legend.getContentDescription() + " stands open, no More",
                     legend.isShown() && legend.getWidth() > 0);
+            // The Presets are picture tiles now (overhaul §4), so no horizontal slider is left.
             List<com.google.android.material.slider.Slider> sliders = sliders(fixture.sheet.rows());
-            int looks = 0;
-            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
-                if (spec.row == EditorRows.Row.LOOK)
-                    looks++;
-            }
-            assertEquals(card + ": the Look's is the one horizontal slider", looks,
+            assertEquals(card + ": no horizontal slider; the Presets are tiles", 0,
                 sliders.size());
             // The row set has a More header by the spec (§3), so the old "no More" rule is gone.
         }
@@ -609,6 +764,8 @@ public class EditorCardSheetFitTest {
         }
 
         void layOut() {
+            // Every section open (overhaul §3), so every row is there to measure.
+            sheet.openAllSections();
             parent.measure(View.MeasureSpec.makeMeasureSpec(mWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(mHeight, View.MeasureSpec.EXACTLY));
             parent.layout(0, 0, mWidth, mHeight);
@@ -625,8 +782,9 @@ public class EditorCardSheetFitTest {
             mDock = new com.termux.app.surfaces.cards.DockCard(new FakeDockHost(context));
         }
 
-        @Nullable @Override public EditorCardSheet.Chip whereChip() {
-            return sChips ? new EditorCardSheet.Chip("Where", new CharSequence[] {"All", "Home"}, 0)
+        @Nullable @Override public EditorCardSheet.Chip appliesToChip() {
+            return sChips ? new EditorCardSheet.Chip("Applies to",
+                new CharSequence[] {"Global", "Home", "Workspace"}, 0)
                 : null;
         }
 
@@ -710,6 +868,11 @@ public class EditorCardSheetFitTest {
                 case LOOK: return strings(R.string.termux_surface_preset_minimal,
                     R.string.termux_surface_preset_frost, R.string.termux_surface_preset_stock,
                     R.string.termux_surface_preset_solid, R.string.termux_surface_preset_custom);
+                // The Status bar's pairs, as StatusBarCard words them.
+                case STATUS_HOURS: return strings(R.string.editor_st_hours_12,
+                    R.string.editor_st_hours_24);
+                case STATUS_UNIT: return strings(R.string.editor_st_unit_c,
+                    R.string.editor_st_unit_f);
                 default: return new String[0];
             }
         }

@@ -87,4 +87,21 @@ public class IconSizeCapTest {
         // A smaller choice is never raised by a roomier cap.
         assertEquals(IconSize.S, IconSizeCap.effective(IconSize.S, cap(TRAY, 4, 412)));
     }
+
+    @Test
+    public void theMostThatFitShrinksAsTheIconsGrowAndAgreesWithTheCap() {
+        int small = IconSizeCap.mostFitting(TRAY, com.termux.app.place.layout.IconSize.S, 10, 412,
+            GRID_EDGE_DP, GRID_COLUMNS, false);
+        int large = IconSizeCap.mostFitting(TRAY, com.termux.app.place.layout.IconSize.XL, 10,
+            412, GRID_EDGE_DP, GRID_COLUMNS, false);
+        org.junit.Assert.assertTrue(small + " at S, " + large + " at XL", small >= large);
+        org.junit.Assert.assertTrue(large > 0);
+        // The most that fit at a step fits it; one more is the cap's step down.
+        org.junit.Assert.assertTrue(IconSizeCap.fits(TRAY, com.termux.app.place.layout.IconSize.XL,
+            large, 412, GRID_EDGE_DP, GRID_COLUMNS, false));
+        if (large < 10)
+            org.junit.Assert.assertFalse(IconSizeCap.fits(TRAY,
+                com.termux.app.place.layout.IconSize.XL, large + 1, 412, GRID_EDGE_DP,
+                GRID_COLUMNS, false));
+    }
 }

@@ -35,8 +35,8 @@ import java.util.List;
  */
 final class AppearanceSnapshot {
 
-    /** How many switches {@link #statusSwitches} reads. */
-    private static final int STATUS_SWITCH_COUNT = 8;
+    /** How many switches {@link #statusSwitches} reads: the status bar's and the panes'. */
+    private static final int STATUS_SWITCH_COUNT = 12;
 
     private final String mLinks;
     private final int[] mBase;
@@ -232,7 +232,9 @@ final class AppearanceSnapshot {
         return new boolean[] {prefs.isTopPaneClockAmPmEnabled(), prefs.isStatusClockSecondsEnabled(),
             prefs.isStatusWidgetWeatherFahrenheit(), prefs.isStatusWidgetCpuEnabled(),
             prefs.isStatusWidgetRamEnabled(), prefs.isStatusWidgetWeatherEnabled(),
-            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled()};
+            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled(),
+            prefs.isStatusClockShown(), prefs.isCompatibilityModeEnabled(),
+            prefs.isDwindleDefaultLayoutEnabled(), prefs.isFocusedPaneGrowsEnabled()};
     }
 
     /** Writes back the status bar's switches that differ from the store's now. */
@@ -247,6 +249,11 @@ final class AppearanceSnapshot {
         if (now[5] != kept[5]) prefs.setStatusWidgetWeatherEnabled(kept[5]);
         if (now[6] != kept[6]) prefs.setStatusWidgetMediaEnabled(kept[6]);
         if (now[7] != kept[7]) prefs.setStatusWidgetNotificationsEnabled(kept[7]);
+        if (now[8] != kept[8]) prefs.setStatusClockShown(kept[8]);
+        // The Terminal card's pane switches, plain prefs as the setup wizard writes them.
+        if (now[9] != kept[9]) prefs.setCompatibilityModeEnabled(kept[9]);
+        if (now[10] != kept[10]) prefs.setDwindleDefaultLayoutEnabled(kept[10]);
+        if (now[11] != kept[11]) prefs.setFocusedPaneGrowsEnabled(kept[11]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {

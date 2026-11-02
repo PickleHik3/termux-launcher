@@ -380,13 +380,22 @@ public final class SurfaceLongPress {
     @NonNull
     private AppMenuCard.Item foldItem(@NonNull Context context) {
         final boolean compact = mHost.statusBarCompact();
-        return new AppMenuCard.Item(context.getString(compact
-                ? R.string.surface_popup_status_expand : R.string.surface_popup_status_compact),
+        return new AppMenuCard.Item(foldLabel(context, compact),
             compact ? R.drawable.ic_ms_status_bar_expand : R.drawable.ic_ms_status_bar_compact,
-            () -> {
-                dismiss();
-                mHost.setStatusBarCompact(!compact);
-            });
+            () -> foldTo(mHost, compact, this::dismiss));
+    }
+
+    /** The fold item's words: Expand on a compact bar, Compact on an expanded one. */
+    @NonNull
+    static String foldLabel(@NonNull Context context, boolean compact) {
+        return context.getString(compact
+            ? R.string.surface_popup_status_expand : R.string.surface_popup_status_compact);
+    }
+
+    /** The fold item's action: the menu goes away and the bar lands in the other form. */
+    static void foldTo(@NonNull Host host, boolean wasCompact, @NonNull Runnable dismiss) {
+        dismiss.run();
+        host.setStatusBarCompact(!wasCompact);
     }
 
     /** The card's caption: what was pressed, by the name its card or its bar goes by. */

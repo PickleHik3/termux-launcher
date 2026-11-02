@@ -408,6 +408,49 @@ public final class LayoutEditorPlan {
         return Drop.LIVE;
     }
 
+    // ------------------------------------------------- Customization › Layout (overhaul §2)
+
+    /**
+     * Shows or puts away {@code element} on {@code variant}'s layout, in both orientations,
+     * whichever page the session is on: Customization's whole-app list. The variant is entered
+     * first, so Undo, Discard and the unsaved question cover it as they cover the edited one.
+     */
+    @NonNull
+    public Drop setShownOnLayout(@NonNull LayoutVariant variant, @NonNull Element element,
+                                 boolean shown) {
+        enterVariant(variant);
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        boolean wrote = false;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            Slot slot = layout.slot(orientation, element);
+            if (slot.hidden == !shown)
+                continue;
+            layout.setSlot(orientation, element, slot.withHidden(!shown));
+            wrote = true;
+        }
+        return wrote ? Drop.LIVE : Drop.NONE;
+    }
+
+    /**
+     * The keyboard element on {@code variant}'s layout: Home's always-on on the Home layout, the
+     * keyboard switch elsewhere ({@link #setKeyboardShown}), entered first as above.
+     */
+    @NonNull
+    public Drop setKeyboardShownOnLayout(@NonNull LayoutVariant variant, boolean shown) {
+        enterVariant(variant);
+        if (variant.isHomeKind()) {
+            if (mRoot.isHomeKeyboardAlwaysOn() == shown)
+                return Drop.NONE;
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+            return Drop.LIVE;
+        }
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        if (layout.isKeyboardShown() == shown)
+            return Drop.NONE;
+        layout.setKeyboardShown(shown);
+        return Drop.LIVE;
+    }
+
     // ------------------------------------------------------------------------ the Dock design
 
     /**
@@ -501,11 +544,11 @@ public final class LayoutEditorPlan {
     public List<TrayItem> trayItems() {
         List<TrayItem> items = new ArrayList<>(5);
         PlaceLayout layout = shownLayout();
-        Dress dress = dress();
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (dress.wears(item.element) && layout.slot(item.element).hidden) {
+            } else if (DressResolver.wornOn(mVariant, item.element)
+                    && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -521,7 +564,9 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
-        if (!dress().wears(item.element))
+        // What the kind can wear, not what it wears now: an element put away in both
+        // orientations is no longer in the dress, and must still come back.
+        if (!DressResolver.wornOn(mVariant, item.element))
             return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)

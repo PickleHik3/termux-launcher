@@ -18,6 +18,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.surfaces.EditorRows.Kind;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -114,6 +115,12 @@ final class CardBody {
             case SECTION_WALLPAPER:
             case SECTION_COLOUR:
             case SECTION_GLASS_MATERIAL:
+            case SECTION_MORE_OPTIONS:
+            case SECTION_LAYOUT:
+            case SECTION_APPEARANCE:
+            case SECTION_LINKS:
+            case SECTION_COLOURS:
+            case SECTION_CLOCK_WEATHER:
                 return Shape.SECTION;
             case HINT_GLASS_MATERIAL:
                 return Shape.HINT;
@@ -353,6 +360,11 @@ final class CardBody {
                 strip.setShown(i, shown);
                 any |= shown;
                 strip.setValue(i, mModel.value(row));
+                boolean enabled = mModel.enabled(row);
+                SliderRow.Item item = strip.items.get(i);
+                if (item.slider.isEnabled() != enabled)
+                    item.slider.setEnabled(enabled);
+                item.root.setAlpha(enabled ? 1f : 0.5f);
                 // The source dot: where the value comes from, and Reset would take it back.
                 strip.setSource(i, mModel.source(row).ink(mContext), spokenSource(row));
             }
@@ -372,43 +384,94 @@ final class CardBody {
             : mContext.getString(R.string.editor_source_from, name(row), from);
     }
 
-    /** A run of switches as one grid of tiles; a tile's long-press is its row's summary. */
+    /**
+     * A run of single on/off settings as switch rows (appearance-cards overhaul §4): each a 56dp
+     * row with its glyph, its name over a one-line summary, and a {@link MaterialSwitch}. Change
+     * wallpaper is a shortcut, not a switch: its row has no switch and opens the picker.
+     */
     @NonNull
     private CardRowView tiles(@NonNull List<Row> rows, int widthPx) {
-        List<TileGrid.Tile> tiles = new ArrayList<>(rows.size());
-        boolean[] on = new boolean[rows.size()];
-        for (int i = 0; i < rows.size(); i++) {
-            Row row = rows.get(i);
-            tiles.add(new TileGrid.Tile(glyph(row), name(row), mModel.summary(row)));
-            on[i] = mModel.value(row) != 0;
+        LinearLayout column = new LinearLayout(mContext);
+        column.setOrientation(LinearLayout.VERTICAL);
+        List<LinearLayout> lines = new ArrayList<>(rows.size());
+        List<TextView> summaries = new ArrayList<>(rows.size());
+        List<MaterialSwitch> switches = new ArrayList<>(rows.size());
+        boolean[] restating = new boolean[1];
+        for (Row row : rows) {
+            LinearLayout line = RowKit.line(mContext);
+            line.setMinimumHeight(RowKit.dp(mContext, RowKit.ROW_MIN_DP));
+            line.addView(RowKit.glyph(mContext, glyph(row), name(row)),
+                RowKit.glyphParams(mContext));
+            LinearLayout words = new LinearLayout(mContext);
+            words.setOrientation(LinearLayout.VERTICAL);
+            words.addView(RowKit.title(mContext, name(row)));
+            TextView summary = RowKit.caption(mContext, mModel.summary(row));
+            // The whole summary, up to three lines, never cut.
+            summary.setMaxLines(3);
+            summary.setEllipsize(null);
+            summary.setVisibility(isEmpty(mModel.summary(row)) ? View.GONE : View.VISIBLE);
+            words.addView(summary);
+            line.addView(words, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            MaterialSwitch toggle = null;
+            if (row == Row.CHANGE_WALLPAPER) {
+                line.setOnClickListener(v -> mModel.onAction(row, v));
+            } else {
+                MaterialSwitch made = new MaterialSwitch(mContext);
+                made.setContentDescription(name(row));
+                made.setChecked(mModel.value(row) != 0);
+                made.setOnCheckedChangeListener((button, checked) -> {
+                    if (!restating[0])
+                        mModel.onValue(row, checked ? 1 : 0, false);
+                });
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                params.setMarginStart(RowKit.dp(mContext, 8));
+                line.addView(made, params);
+                line.setOnClickListener(v -> { if (made.isEnabled()) made.toggle(); });
+                toggle = made;
+            }
+            column.addView(line, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            lines.add(line);
+            summaries.add(summary);
+            switches.add(toggle);
         }
-        TileGrid[] built = new TileGrid[1];
-        built[0] = TileGrid.build(mContext, tiles, on, widthPx,
-            (index, checked) -> {
-                Row row = rows.get(index);
-                if (row == Row.CHANGE_WALLPAPER) {
-                    // A shortcut, not a switch: it never reads on, and opens the picker.
-                    View tile = built[0].tiles.get(index);
-                    tile.post(() -> built[0].setOn(index, false));
-                    mModel.onAction(row, tile);
-                    return;
+        return new CardRowView(column, () -> {
+            restating[0] = true;
+            try {
+                for (int i = 0; i < rows.size(); i++) {
+                    Row row = rows.get(i);
+                    LinearLayout line = lines.get(i);
+                    boolean enabled = mModel.enabled(row);
+                    MaterialSwitch toggle = switches.get(i);
+                    if (toggle != null) {
+                        boolean on = mModel.value(row) != 0;
+                        if (toggle.isChecked() != on)
+                            toggle.setChecked(on);
+                        if (toggle.isEnabled() != enabled)
+                            toggle.setEnabled(enabled);
+                    }
+                    if (line.isEnabled() != enabled)
+                        line.setEnabled(enabled);
+                    line.setAlpha(enabled ? 1f : 0.5f);
+                    CharSequence said = mModel.summary(row);
+                    RowKit.setText(summaries.get(i), said);
+                    int saidShown = isEmpty(said) ? View.GONE : View.VISIBLE;
+                    if (summaries.get(i).getVisibility() != saidShown)
+                        summaries.get(i).setVisibility(saidShown);
+                    int visibility = mModel.shown(row) ? View.VISIBLE : View.GONE;
+                    if (line.getVisibility() != visibility)
+                        line.setVisibility(visibility);
                 }
-                mModel.onValue(row, checked ? 1 : 0, false);
-            });
-        TileGrid grid = built[0];
-        return new CardRowView(grid.root, () -> {
-            for (int i = 0; i < rows.size(); i++) {
-                Row row = rows.get(i);
-                grid.setOn(i, mModel.value(row) != 0);
-                MaterialButton tile = grid.tiles.get(i);
-                boolean enabled = mModel.enabled(row);
-                if (tile.isEnabled() != enabled)
-                    tile.setEnabled(enabled);
-                int visibility = mModel.shown(row) ? View.VISIBLE : View.INVISIBLE;
-                if (tile.getVisibility() != visibility)
-                    tile.setVisibility(visibility);
+            } finally {
+                restating[0] = false;
             }
         });
+    }
+
+    private static boolean isEmpty(@Nullable CharSequence text) {
+        return text == null || text.length() == 0;
     }
 
     /**
@@ -472,13 +535,17 @@ final class CardBody {
     private CardRowView segments(@NonNull Row row, int widthPx) {
         String[] choices = mModel.choices(row);
         int[] glyphs = mModel.chipIcons(row);
+        // Five named transitions do not fit one connected group: picture tiles with names.
+        if (row == Row.PAGE_TRANSITION && glyphs != null)
+            return pictureTiles(row, choices, glyphs);
         int[] swatches = mLooks.swatches(row);
         List<SegmentRow.Segment> segments = new ArrayList<>(choices.length);
         for (int i = 0; i < choices.length; i++) {
             if (swatches != null)
                 segments.add(SegmentRow.Segment.glyph(R.drawable.ic_editor_tint, choices[i]));
             else if (glyphs != null && i < glyphs.length)
-                segments.add(SegmentRow.Segment.glyph(glyphs[i], choices[i]));
+                // Words carry the choice, the glyph before them (overhaul §4/§7).
+                segments.add(SegmentRow.Segment.both(glyphs[i], choices[i]));
             else
                 segments.add(SegmentRow.Segment.word(choices[i]));
         }
@@ -499,6 +566,28 @@ final class CardBody {
             segmentRow.select(mModel.value(row));
             for (int i = 0; i < segmentRow.buttons.size(); i++)
                 segmentRow.buttons.get(i).setEnabled(mModel.choiceEnabled(row, i));
+        });
+    }
+
+    /** A one-of choice as named picture tiles, each its glyph; the chosen one filled. */
+    @NonNull
+    private CardRowView pictureTiles(@NonNull Row row, @NonNull String[] choices,
+                                     @NonNull int[] glyphs) {
+        List<com.termux.app.surfaces.rows.PreviewTilesRow.Tile> tiles = new ArrayList<>();
+        for (int i = 0; i < choices.length; i++) {
+            android.widget.ImageView preview = new android.widget.ImageView(mContext);
+            if (i < glyphs.length)
+                preview.setImageResource(glyphs[i]);
+            preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            tiles.add(new com.termux.app.surfaces.rows.PreviewTilesRow.Tile(choices[i], preview));
+        }
+        com.termux.app.surfaces.rows.PreviewTilesRow picker =
+            com.termux.app.surfaces.rows.PreviewTilesRow.build(mContext, tiles, mModel.value(row),
+                index -> mModel.onValue(row, index, false));
+        LinearLayout column = picker.picker(mContext, name(row));
+        return new CardRowView(column, () -> {
+            showRoot(column, row);
+            picker.select(mModel.value(row));
         });
     }
 
@@ -582,7 +671,7 @@ final class CardBody {
         String[] names = mModel.choices(row);
         List<PreviewTilesRow.Tile> tiles = new ArrayList<>(names.length);
         for (int i = 0; i < names.length; i++)
-            tiles.add(new PreviewTilesRow.Tile(names[i], lookPreview(i)));
+            tiles.add(new PreviewTilesRow.Tile(names[i], lookPreview(mContext, i)));
         PreviewTilesRow looks = PreviewTilesRow.build(mContext, tiles, mModel.value(row), index -> {
             mModel.onValue(row, index, false);
             mModel.onReleased(row);
@@ -595,34 +684,34 @@ final class CardBody {
 
     /** A Look tile's preview: glass at the stop's opacity over a tinted ground; Custom's tune. */
     @NonNull
-    private View lookPreview(int stop) {
+    static View lookPreview(@NonNull Context context, int stop) {
         boolean custom = AppearanceLooks.isCustomStop(stop);
         float fill = custom ? CUSTOM_FILL : LOOK_FILL[Math.max(0, Math.min(stop,
             LOOK_FILL.length - 1))];
-        FrameLayout box = new FrameLayout(mContext);
-        int radius = RowKit.dp(mContext, 8);
+        FrameLayout box = new FrameLayout(context);
+        int radius = RowKit.dp(context, 8);
         GradientDrawable ground = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[] {RowKit.color(mContext, androidx.appcompat.R.attr.colorPrimary),
-                RowKit.color(mContext, com.google.android.material.R.attr.colorTertiary)});
+            new int[] {RowKit.color(context, androidx.appcompat.R.attr.colorPrimary),
+                RowKit.color(context, com.google.android.material.R.attr.colorTertiary)});
         ground.setCornerRadius(radius);
         box.setBackground(ground);
-        View glass = new View(mContext);
+        View glass = new View(context);
         GradientDrawable pane = new GradientDrawable();
-        int surface = RowKit.color(mContext, com.google.android.material.R.attr.colorSurface);
+        int surface = RowKit.color(context, com.google.android.material.R.attr.colorSurface);
         pane.setColor((Math.round(fill * 255) << 24) | (surface & 0x00FFFFFF));
         pane.setCornerRadius(radius);
         glass.setBackground(pane);
-        int inset = RowKit.dp(mContext, 4);
+        int inset = RowKit.dp(context, 4);
         FrameLayout.LayoutParams paneParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         paneParams.setMargins(inset, inset, inset, inset);
         box.addView(glass, paneParams);
         if (custom) {
-            ImageView tune = new ImageView(mContext);
+            ImageView tune = new ImageView(context);
             tune.setImageResource(R.drawable.ic_ms_tune);
-            tune.setImageTintList(ColorStateList.valueOf(RowKit.color(mContext,
+            tune.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
                 com.google.android.material.R.attr.colorOnSurface)));
-            int size = RowKit.dp(mContext, 18);
+            int size = RowKit.dp(context, 18);
             box.addView(tune, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
         }
         return box;

@@ -690,6 +690,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_CLOCK_SECONDS = "status_clock_seconds";
         public static final boolean DEFAULT_STATUS_CLOCK_SECONDS = true;
 
+        /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
+        public static final String KEY_STATUS_CLOCK_SHOWN = "status_clock_shown";
+        public static final boolean DEFAULT_STATUS_CLOCK_SHOWN = true;
+
         /**
          * Whose box the status row leaves its camera gap for when it shares the camera's band
          * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
