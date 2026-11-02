@@ -10,14 +10,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
 /**
- * An additive glow around kitty's trail quad for the Default and Comet styles: about one cell
- * wide, brightest at the cursor end and fading to {@link #TAIL_FACTOR} at the far end. Below
+ * An additive glow around kitty's trail quad for the Default and Comet styles: a bright core
+ * within a cell of the quad over a faint skirt {@link #SKIRT} cells out, brightest at the cursor
+ * end and fading to {@link #TAIL_FACTOR} at the far end. Below
  * Android 13 it draws nothing. The shader compiles once, lazily; per frame only uniforms change.
  */
 public final class CursorTrailHalo {
 
     /** Peak alpha of the halo at the quad's edge nearest the cursor. */
-    public static final float PEAK_ALPHA = 0.55f;
+    public static final float PEAK_ALPHA = 0.28f;
+    /**
+     * How many widths (cells) the halo's skirt reaches past the quad: the glow is a bright core
+     * close to the quad over a wide faint skirt, and the skirt is drawn out to where it is well
+     * under 1 % of the peak, so its edge never shows as a box.
+     */
+    public static final float SKIRT = 2f;
     /** Glow strength at the far (tail) end of the quad relative to the cursor end. */
     public static final float TAIL_FACTOR = 0.35f;
 
@@ -44,7 +51,8 @@ public final class CursorTrailHalo {
         + "                   max(s * edgeDist(p, uP2, uP3), s * edgeDist(p, uP3, uP0)));\n"
         + "    float d = max(sd, 0.0);\n"
         + "    float q = d / max(uWidth, 0.001);\n"
-        + "    float fall = exp(-2.0 * q * q);\n"
+        // Core and skirt: 14 % of the peak one cell out, 0.6 % two cells out (the clip).
+        + "    float fall = 0.65 * exp(-4.0 * q * q) + 0.35 * exp(-q * q);\n"
         + "    float2 ht = uHead - uTail;\n"
         + "    float hh = dot(ht, ht);\n"
         + "    float along = hh < 0.0001 ? 1.0\n"
@@ -152,7 +160,7 @@ public final class CursorTrailHalo {
         shader.setFloatUniform("uColor", ((color >> 16) & 0xff) / 255f,
             ((color >> 8) & 0xff) / 255f, (color & 0xff) / 255f, PEAK_ALPHA);
         shader.setFloatUniform("uOpacity", opacity);
-        inflatedBounds(pts, width, mBounds);
+        inflatedBounds(pts, width * SKIRT, mBounds);
         canvas.drawRect(mBounds[0], mBounds[1], mBounds[2], mBounds[3], mPaint);
     }
 }

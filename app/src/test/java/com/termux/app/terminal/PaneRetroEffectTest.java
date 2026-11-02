@@ -90,11 +90,28 @@ public class PaneRetroEffectTest {
         assertTrue(crt.contains("rgb *= 1.0 - uFlicker * (0.5 + 0.5 * flick);"));
         String main = crt.substring(crt.indexOf("half4 main(")).replace(flickLine, "");
         assertFalse(main.contains("uTime"));
-        // Bend, vignette, glow and scanline depth stay as they were.
+        // Bend, vignette, glow radius and scanline depth stay as they were.
         assertTrue(crt.contains("float g = 1.5 * uDensity;"));
-        assertTrue(crt.contains("+ 0.35 * float3(glow.rgb)"));
+        assertTrue(crt.contains("rgb = rgb + 0.35 * bloom;"));
         assertTrue(crt.contains("float scan = mix(0.70, 1.0,"));
         assertTrue(crt.contains("float vig = 1.0 - uVignette * dot(c, c);"));
+    }
+
+    @Test public void textIsSharpenedOnTheBentScreenAndTheGlowBloomsFromBrightPixelsOnly() {
+        String crt = PaneRetroEffect.CRT_AGSL;
+        // A 1 px unsharp mask, gated by the bend: the flat chrome (uBend 0) gets none.
+        assertTrue(crt.contains("float k = " + PaneRetroEffect.SHARPEN + " * step(0.001, uBend);"));
+        assertTrue(crt.contains("clamp(float3(col.rgb) * (1.0 + 4.0 * k) - k * nb, 0.0, a)"));
+        assertTrue(crt.contains("content.eval(clamp(at + float2(1.0, 0.0), inMin, inMax))"));
+        assertTrue(crt.contains("content.eval(clamp(at - float2(0.0, 1.0), inMin, inMax))"));
+        assertTrue(PaneRetroEffect.SHARPEN > 0f && PaneRetroEffect.SHARPEN <= 0.3f);
+        // The glow's floor: anti-aliased edges and faint pixels add nothing.
+        assertTrue(crt.contains("max(float3(glow.rgb) - " + PaneRetroEffect.BLOOM_FLOOR + ", 0.0)"));
+        assertTrue(PaneRetroEffect.BLOOM_FLOOR > 0.3f && PaneRetroEffect.BLOOM_FLOOR < 0.6f);
+        // The Material CRT keeps a pixel's own colour by its saturation; the others tint all.
+        assertTrue(crt.contains("uniform float uTintKeep;"));
+        assertTrue(crt.contains("float tw = float(uTint.a) * (1.0 - uTintKeep * smoothstep(0.15, 0.5, sat));"));
+        assertTrue(crt.contains("rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, tw);"));
     }
 
     @Test public void thePaneAndTheChromeEachSetTheirOwnSurfaceParts() {
