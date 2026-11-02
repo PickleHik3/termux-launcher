@@ -147,7 +147,8 @@
     <string name="appearance_pane_custom_hint">#RRGGBB</string>
     <string name="appearance_pane_borders_reset">Reset pane borders</string>
     <string name="appearance_pane_borders_reset_action">Reset</string>
-    <string name="appearance_pane_borders_back">Back to Terminal</string>
+    <!-- A subcard's back arrow; %1$s is the card it returns to (Home, Terminal). -->
+    <string name="appearance_subcard_back">Back to %1$s</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
     <string name="appearance_row_glass_edge">Edge</string>
     <string name="appearance_row_tool_colours">TUI app themes</string>

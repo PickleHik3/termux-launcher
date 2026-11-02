@@ -758,8 +758,11 @@ final class EditorCardSheet {
         EditorViews.setVisible(mMainPill, main);
         EditorViews.setVisible(mPhone, main);
         EditorViews.setVisible(mEye, !main && subcardTitle == 0 && card.hasEye());
-        mHeaderIcon.setContentDescription(mContext.getString(back != null
-            ? R.string.appearance_pane_borders_back : R.string.appearance_header_back));
+        // A subcard's back names the card it returns to: "Back to Home", "Back to Terminal".
+        mHeaderIcon.setContentDescription(back != null
+            ? mContext.getString(R.string.appearance_subcard_back,
+                mContext.getString(card.titleRes))
+            : mContext.getString(R.string.appearance_header_back));
         if (main)
             restateMainPill(card);
         if (!sameRows) {
