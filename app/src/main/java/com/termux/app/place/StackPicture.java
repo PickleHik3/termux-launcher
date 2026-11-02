@@ -208,7 +208,12 @@ public final class StackPicture extends View {
     protected void onDraw(@NonNull Canvas canvas) {
         Bitmap bitmap = mBitmap;
         if (bitmap == null) return;
+        // TEMP diag(seam): SeamTime2 logs every draw of the picture (UI-thread part only).
+        long s2 = SeamTime2.begin("stackPicture:onDraw");
         canvas.drawBitmap(bitmap, mStackX, mStackY - mMarginTopPx, null);
+        SeamTime2.end("stackPicture:onDraw hw=" + (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            && bitmap.getConfig() == Bitmap.Config.HARDWARE) + " " + bitmap.getWidth() + "x"
+            + bitmap.getHeight(), s2);
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)

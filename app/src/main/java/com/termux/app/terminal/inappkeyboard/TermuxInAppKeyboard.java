@@ -594,7 +594,10 @@ public final class TermuxInAppKeyboard {
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
             showInternal();
+            // TEMP diag(seam): SeamTime2 times what hears the travel show.
+            long s2 = com.termux.app.place.SeamTime2.begin("kbShowForTravel:notifyVisible");
             if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
+            com.termux.app.place.SeamTime2.end("kbShowForTravel:notifyVisible", s2);
         } finally {
             Trace.endSection();
         }
@@ -1462,15 +1465,28 @@ public final class TermuxInAppKeyboard {
         }
         Trace.beginSection("Keyboard.showInternal");
         try {
+            // TEMP diag(seam): SeamTime2 splits the keyboard's show into its steps.
+            long s2 = com.termux.app.place.SeamTime2.begin("kbShow:ensureKeyboardView");
             ensureKeyboardView();
+            com.termux.app.place.SeamTime2.end("kbShow:ensureKeyboardView", s2);
             // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while
             // the keyboard was off screen is applied on the way back on.
+            s2 = com.termux.app.place.SeamTime2.begin("kbShow:refreshPalette");
             refreshMaterialPaletteIfSignatureMoved();
+            com.termux.app.place.SeamTime2.end("kbShow:refreshPalette", s2);
+            s2 = com.termux.app.place.SeamTime2.begin("kbShow:setContainerVisible");
             setContainerVisible(true);
+            com.termux.app.place.SeamTime2.end("kbShow:setContainerVisible", s2);
+            s2 = com.termux.app.place.SeamTime2.begin("kbShow:watchClipboard+screenshots");
             watchClipboard();
             watchScreenshots();
+            com.termux.app.place.SeamTime2.end("kbShow:watchClipboard+screenshots", s2);
+            s2 = com.termux.app.place.SeamTime2.begin("kbShow:accessoryGeometrySync");
             mHost.requestAccessoryGeometrySync();
+            com.termux.app.place.SeamTime2.end("kbShow:accessoryGeometrySync", s2);
+            s2 = com.termux.app.place.SeamTime2.begin("kbShow:recheckLayout");
             recheckLayout();
+            com.termux.app.place.SeamTime2.end("kbShow:recheckLayout", s2);
         } finally {
             Trace.endSection();
         }

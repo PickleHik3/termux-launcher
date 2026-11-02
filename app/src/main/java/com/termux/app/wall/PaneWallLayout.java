@@ -2709,6 +2709,13 @@ public final class PaneWallLayout extends ViewGroup {
      */
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
+        // TEMP diag(seam): SeamTime2 logs a wall draw of 3 ms or more.
+        long s2 = com.termux.app.place.SeamTime2.begin("wall:dispatchDraw");
+        dispatchDrawS2(canvas);
+        com.termux.app.place.SeamTime2.endIfSlow("wall:dispatchDraw", s2, 3f);
+    }
+
+    private void dispatchDrawS2(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
         drawBorderGlow(canvas);
         mGrabberDrawnOffsetPx = mOffsetPx;
@@ -3610,6 +3617,13 @@ public final class PaneWallLayout extends ViewGroup {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // TEMP diag(seam): SeamTime2 logs a wall measure of 2 ms or more.
+        long s2 = com.termux.app.place.SeamTime2.begin("wall:onMeasure");
+        onMeasureS2(widthMeasureSpec, heightMeasureSpec);
+        com.termux.app.place.SeamTime2.endIfSlow("wall:onMeasure", s2, 2f);
+    }
+
+    private void onMeasureS2(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
@@ -3631,6 +3645,13 @@ public final class PaneWallLayout extends ViewGroup {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        // TEMP diag(seam): SeamTime2 logs a wall layout of 2 ms or more.
+        long s2 = com.termux.app.place.SeamTime2.begin("wall:onLayout");
+        onLayoutS2(changed, l, t, r, b);
+        com.termux.app.place.SeamTime2.endIfSlow("wall:onLayout", s2, 2f);
+    }
+
+    private void onLayoutS2(boolean changed, int l, int t, int r, int b) {
         // Positions first, so the pages this pass lays out are the ones on screen once the wall
         // has put them where the offset says. A slide cut short (the wall left the window
         // mid-way) leaves the pages displaced and the record ahead of them; the layout puts both
