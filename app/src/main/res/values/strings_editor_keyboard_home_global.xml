@@ -56,6 +56,9 @@
     <string name="editor_row_background_opacity">Keyboard opacity</string>
     <string name="editor_row_bottom_padding">Bottom padding</string>
     <string name="editor_row_opacity_link">Move both opacities together</string>
+    <!-- The Linked toggle between Keyboard opacity and Keys opacity. -->
+    <string name="editor_opacity_linked">Linked</string>
+    <string name="editor_opacity_not_linked">Not linked</string>
     <string name="editor_chip_keyboard_theme">Theme</string>
 
     <!-- Home card. -->
