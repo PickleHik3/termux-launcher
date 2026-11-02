@@ -48,6 +48,18 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   kitty.conf colours the halo too; the other four styles are unchanged. Typing feel at the
   0.15/0.60 s app decays: the streak outlives a newline move but settles within a second and never
   reads as lag; a `cursor_trail_decay` line in kitty.conf still wins.
+- **CRT screen events on pong (11-02, 2b7484ebd).** Terminal effect CRT (also green, amber), more
+  than 1.5 s after the last key or scroll: a bell (`sleep 2; printf '\a'`) tears one 4–5 row band
+  sideways with a red/blue split for about 150 ms and nothing else moves (emulator: seen); a pane
+  opened by touch or `launcherctl pane open` powers on from a bright centre line over about 400 ms
+  (emulator: seen); tapping the other pane of a two-pane window shears it sideways for about
+  300 ms, strongest at the top and bottom (emulator: not resolvable at 4 fps); a shell killed from
+  outside (`kill -9 <pid>`) shows about 300 ms of grey snow before "[Process completed (signal 9)]"
+  (emulator: seen). Nothing within 1.5 s of a key or a scroll, nothing with Remove animations on,
+  nothing with Settings › Terminal › Text & display › Screen events off, nothing on TFT or on the
+  chrome. A pane at rest after an event draws no further frames (gfxinfo frame count flat).
+  Known gaps, not bugs: a plain `exit` closes the pane before the snow; power-off is unwired; a
+  split or focus change started from the keyboard is held by the typing rule.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
