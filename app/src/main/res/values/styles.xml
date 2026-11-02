@@ -71,4 +71,35 @@
         <item name="shapeAppearance">@style/ShapeAppearance.Termux.Segment</item>
         <item name="checkedIconVisible">false</item>
     </style>
+
+    <!-- The appearance editor's controls (appearance-cards overhaul §4, Material 3 Expressive).
+         Editor only: Settings keep Widget.Termux.Button.Segment and Widget.Termux.SegmentGroup. -->
+
+    <!-- A one-of row: the connected button group, 2dp apart, inner corners 8dp / 4dp pressed /
+         round on the chosen one. -->
+    <style name="Widget.Termux.Editor.ConnectedGroup" parent="Widget.Material3Expressive.MaterialButtonToggleGroup">
+        <item name="innerCornerSize">@xml/editor_connected_inner_corner</item>
+        <item name="android:spacing">2dp</item>
+    </style>
+
+    <!-- A connected group's button: tonal, the chosen one filled with the primary. No check
+         mark, no outline. -->
+    <style name="Widget.Termux.Editor.ConnectedButton" parent="Widget.Material3Expressive.Button.TonalButton">
+        <item name="backgroundTint">@color/editor_choice_container</item>
+        <item name="android:textColor">@color/editor_choice_content</item>
+        <item name="iconTint">@color/editor_choice_content</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- An on/off button of a group (Elements, Show/hide): tonal and round when off, filled with
+         the primary and square (12dp) when on, the expressive button's own shape list. -->
+    <style name="Widget.Termux.Editor.ToggleButton" parent="Widget.Material3Expressive.Button.TonalButton">
+        <item name="backgroundTint">@color/editor_choice_container</item>
+        <item name="android:textColor">@color/editor_choice_content</item>
+        <item name="iconTint">@color/editor_choice_content</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="android:minWidth">0dp</item>
+    </style>
 </resources>

@@ -22,9 +22,9 @@ import java.util.List;
 
 /**
  * A segment row (editor-redesign §2: Position, Style, Type, Clock position, Contrast, Theme): an
- * outline glyph, a 16 sp title, and one choice of a few as segment pills in the app's pill style
- * ({@code Widget.Termux.Button.Segment}: white, no outline, the choice on the primary container,
- * no check mark). A segment shows a glyph alone (its name on long-press and to a screen reader)
+ * outline glyph, a 16 sp title, and one choice of a few as a Material 3 Expressive connected
+ * button group ({@code Widget.Termux.Editor.ConnectedGroup}: tonal buttons 2dp apart, the choice
+ * filled with the primary and fully round, no outline, no check mark). A segment shows a glyph alone (its name on long-press and to a screen reader)
  * or a word. The pills stand beside the title when they fit, and under it, across the width,
  * when they do not.
  */
@@ -112,8 +112,8 @@ public final class SegmentRow {
         int controlPx = 0;
         int widestPx = 0;
         for (Segment segment : segments) {
-            MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
-                null, false);
+            MaterialButton button = (MaterialButton) inflater.inflate(
+                R.layout.editor_connected_button, null, false);
             button.setId(View.generateViewId());
             button.setMinWidth(0);
             button.setMinimumWidth(RowKit.dp(context, RowKit.TOUCH_DP));
@@ -172,7 +172,7 @@ public final class SegmentRow {
         root.addView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
+        MaterialButtonToggleGroup group = connectedGroup(context);
         group.setSingleSelection(true);
         group.setSelectionRequired(true);
         group.setSpacing(RowKit.dp(context, GAP_DP));
@@ -220,6 +220,24 @@ public final class SegmentRow {
             }
         });
         return row;
+    }
+
+    /**
+     * The editor's connected button group (appearance-cards overhaul §4): Material 3 Expressive,
+     * 2dp apart, inner corners 8dp / 4dp pressed / round on the chosen one. Its buttons come from
+     * {@link #connectedButton}. Settings pages keep their own segment styles.
+     */
+    @NonNull
+    public static MaterialButtonToggleGroup connectedGroup(@NonNull Context context) {
+        return (MaterialButtonToggleGroup) LayoutInflater.from(context).inflate(
+            R.layout.editor_connected_group, null, false);
+    }
+
+    /** One button of a {@link #connectedGroup}: tonal, filled when chosen, no check mark. */
+    @NonNull
+    public static MaterialButton connectedButton(@NonNull Context context) {
+        return (MaterialButton) LayoutInflater.from(context).inflate(
+            R.layout.editor_connected_button, null, false);
     }
 
     /** A row of word segments ({@link Segment#word}), as {@link #build} lays any row. */
