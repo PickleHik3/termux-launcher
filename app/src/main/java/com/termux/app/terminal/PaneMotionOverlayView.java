@@ -89,6 +89,8 @@ public final class PaneMotionOverlayView extends View {
     private final CursorTrailRailgun mRailgun = new CursorTrailRailgun();
     private final CursorTrailTorpedo mTorpedo = new CursorTrailTorpedo();
     private final CursorTrailComet mComet = new CursorTrailComet();
+    private final CursorTrailHalo mHalo = new CursorTrailHalo();
+    private final float[] mHaloPts = new float[8];
     private final float[] mParticleBuf = new float[CursorTrailParticles.OUT_SIZE];
     private boolean mParticlesWereAlive;
     private boolean mEffectWasAlive;
@@ -312,10 +314,15 @@ public final class PaneMotionOverlayView extends View {
             // quad could show differently — a frame asked for, a corner or opacity that moved —
             // still repaints the union of where it was and where it is. A style that draws its
             // own effect instead of the quad repaints that effect's bounds below.
-            if (effectFor(mCursorTrailStyle) == null
+            boolean haloed = haloStyle(mCursorTrailStyle);
+            if ((effectFor(mCursorTrailStyle) == null || haloed)
                 && (needsFrame || previousRender != mCursorTrail.needsRender()
                 || previousOpacity != mCursorTrail.opacity() || !previous.equals(current))) {
                 previous.union(current);
+                if (haloed) {
+                    float w = haloWidth();
+                    previous.inset(-w, -w);
+                }
                 invalidateRect(previous);
             }
         } else if (mCursorTargetValid) {
@@ -457,11 +464,13 @@ public final class PaneMotionOverlayView extends View {
         CursorTrailEffect effect = effectFor(style);
         if (effect != null) {
             // Like the quad it stands in for, an effect may cross the gap between two panes.
+            if (style == CursorTrailStyle.COMET) drawHalo(canvas, color, opacity);
             effect.draw(canvas, color, opacity, mFrameMs);
         } else if (mCursorTargetValid && opacity > 0f && mCursorTrail.needsRender()) {
             // kitty draws its trail only while needs_render holds (shaders.c draw_cursor_trail
             // call; cursor_trail_color.a is zero for custom shaders otherwise): a settled trail
             // leaves nothing behind, however much opacity it still has.
+            if (style == CursorTrailStyle.DEFAULT) drawHalo(canvas, color, opacity);
             drawQuad(canvas, color, baseAlpha, opacity);
         }
         if (maskCursor) canvas.restore();
@@ -481,6 +490,29 @@ public final class PaneMotionOverlayView extends View {
         canvas.clipRect(mCursorTarget.clipLeft, mCursorTarget.clipTop,
             mCursorTarget.clipRight, mCursorTarget.clipBottom);
         return true;
+    }
+
+    private static boolean haloStyle(@NonNull CursorTrailStyle style) {
+        return CursorTrailHalo.available()
+            && (style == CursorTrailStyle.DEFAULT || style == CursorTrailStyle.COMET);
+    }
+
+    /** One cell: the larger side of the live cursor cell. */
+    private float haloWidth() {
+        return Math.max(mCursorTarget.right - mCursorTarget.left,
+            mCursorTarget.bottom - mCursorTarget.top);
+    }
+
+    /** The additive glow under kitty's quad, drawn only while the quad itself would be. */
+    private void drawHalo(@NonNull Canvas canvas, int color, float opacity) {
+        if (!haloStyle(mCursorTrailStyle) || !mCursorTargetValid || opacity <= 0f
+            || !mCursorTrail.needsRender()) return;
+        for (int i = 0; i < 4; i++) {
+            mHaloPts[i * 2] = mCursorTrail.cornerX(i);
+            mHaloPts[i * 2 + 1] = mCursorTrail.cornerY(i);
+        }
+        mHalo.draw(canvas, mHaloPts, (mCursorTarget.left + mCursorTarget.right) / 2f,
+            (mCursorTarget.top + mCursorTarget.bottom) / 2f, haloWidth(), color, opacity);
     }
 
     private void drawQuad(@NonNull Canvas canvas, int color, int baseAlpha, float opacity) {
