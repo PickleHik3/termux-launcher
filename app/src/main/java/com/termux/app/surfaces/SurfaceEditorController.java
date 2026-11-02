@@ -2006,9 +2006,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return null;
         }
 
+        // No "Home layout" under the card's Layout header (overhaul §2).
         @Nullable @Override public String layoutTitle() {
-            LayoutEditorController layout = mHost.layoutEditor();
-            return layout == null ? null : layout.layoutTitle();
+            return null;
         }
 
         @Override public boolean pageSide() {
@@ -2021,8 +2021,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public boolean offers(
                 @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
             LayoutEditorController layout = mHost.layoutEditor();
+            // A hidden element keeps its row, switch off: only what the kind never wears goes.
             if (item.element != null)
-                return layout != null && layout.offers(item.element);
+                return layout != null && layout.canWear(item.element);
             if (item.ridesTheDock())
                 return layout != null && layout.offers(Element.APPS);
             return true;
@@ -2190,23 +2191,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             boolean home = side == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
             if (!byKind(item))
                 return item.hasEye() ? mOne.shown(item) : Boolean.TRUE;
-            com.termux.app.place.PlaceLayoutStore places = scopePlaces();
-            if (places == null)
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
                 return null;
+            com.termux.app.place.LayoutVariant variant = home
+                ? com.termux.app.place.LayoutVariant.HOME
+                : com.termux.app.place.LayoutVariant.NORMAL;
             if (item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD) {
-                TermuxAppSharedPreferences prefs = prefs();
-                if (home) return places.isHomeKeyboardAlwaysOn();
-                return prefs == null || !prefs.isKeyboardTurnedOff();
-            }
+                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD)
+                return layout.isShownOn(variant, null);
             Element element = item.element;
             if (element == null)
                 return null;
-            // Home never wears the extra keys (DressResolver.wornBy).
-            if (home && element == Element.EXTRA_KEYS)
+            // Home never wears the extra keys (DressResolver.wornOn).
+            if (!com.termux.app.chrome.DressResolver.wornOn(variant, element))
                 return null;
-            return places.kindShowsAny(home ? com.termux.app.wall.WallPages.PageKind.HOME
-                : com.termux.app.wall.WallPages.PageKind.TERMINAL, element);
+            // The session's layouts in the edited orientation: what Home's and the Workspace's
+            // own lists read, unsaved changes included.
+            return layout.isShownOn(variant, element);
         }
 
         /** Writes {@code shown} for {@code item} on {@code sides}, then restates the editor. */
@@ -6070,8 +6072,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean offers(@NonNull Element bar) {
+            // A bar put away in both orientations keeps its row, switch off.
             LayoutEditorController layout = mHost.layoutEditor();
-            return layout != null && layout.offers(bar);
+            return layout != null && layout.canWear(bar);
         }
 
         @Override public boolean barShown(@NonNull Element bar) {

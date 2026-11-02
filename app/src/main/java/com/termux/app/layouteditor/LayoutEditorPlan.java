@@ -544,11 +544,11 @@ public final class LayoutEditorPlan {
     public List<TrayItem> trayItems() {
         List<TrayItem> items = new ArrayList<>(5);
         PlaceLayout layout = shownLayout();
-        Dress dress = dress();
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (dress.wears(item.element) && layout.slot(item.element).hidden) {
+            } else if (DressResolver.wornOn(mVariant, item.element)
+                    && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -564,7 +564,9 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
-        if (!dress().wears(item.element))
+        // What the kind can wear, not what it wears now: an element put away in both
+        // orientations is no longer in the dress, and must still come back.
+        if (!DressResolver.wornOn(mVariant, item.element))
             return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)

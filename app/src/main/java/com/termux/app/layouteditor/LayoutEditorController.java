@@ -246,6 +246,32 @@ public final class LayoutEditorController {
             && com.termux.app.chrome.DressResolver.of(places).dressOf(mPlan.place()).wears(element);
     }
 
+    /**
+     * Whether the edited page's kind can wear {@code element} at all, shown or put away: the
+     * Layout lists keep a hidden element's row (switch off) and drop only what the kind never
+     * wears (Home and the extra keys). {@link #offers} is whether it is worn now.
+     */
+    public boolean canWear(@NonNull Element element) {
+        return mPlan != null
+            && com.termux.app.chrome.DressResolver.wornOn(mPlan.variant(), element);
+    }
+
+    /**
+     * Whether {@code variant}'s layout shows {@code element} (the keyboard for null) in the
+     * orientation being edited, as the session's writes left it: what that kind's own Layout
+     * list reads. False with no session.
+     */
+    public boolean isShownOn(@NonNull com.termux.app.place.LayoutVariant variant,
+                             @Nullable Element element) {
+        PlaceLayoutStore places = mHost.places();
+        if (mPlan == null || places == null)
+            return false;
+        if (element == null)
+            return variant.isHomeKind() ? places.isHomeKeyboardAlwaysOn()
+                : places.forVariant(variant).isKeyboardShown();
+        return !places.forVariant(variant).slot(mPlan.shownOrientation(), element).hidden;
+    }
+
     /** Puts {@code element} away, or brings it back to the edge it left. */
     public void setShown(@NonNull Element element, boolean shown) {
         LayoutEditorPlan plan = mPlan;
