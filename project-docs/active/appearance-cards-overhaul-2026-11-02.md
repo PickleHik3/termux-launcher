@@ -77,8 +77,9 @@ No item in a card's Links repeats an item in that card's Layout list.
   the Accent swatches grey out while it is on).
 - **Layout**: the full elements list, for the whole app. If Home or Workspace has its own layout
   that differs, changing an element here asks first:
-  title "Home has its own layout" (or "Workspace…" / "Home and Workspace…"), one line naming
-  what differs ("The A–Z row is hidden on Home."), buttons **Cancel · Keep Home's · Override**.
+  title "Home has its own layout" (or "Workspace…"), one line naming what differs ("The A–Z row
+  is hidden on Home."), buttons **Cancel · Override** (decided 11-02: with show/hide switches a
+  "Keep Home's" button can never differ from Cancel, so it was dropped).
 - **More options**: Full screen ("Hides Android's status and navigation bars."), Show wallpaper.
 - **Links**: Menus and dialogs ›, TUI app themes ↗ (was "Tool colours"; opens the terminal tool
   colours setting in Settings).
@@ -240,6 +241,19 @@ kept. Decline never asks again. The same reset stays on Customization › ⋮ �
 | Portrait chip | phone glyph in the header |
 | ↻ | ⋮ › Reset … |
 | ✓ on any chosen control | none: fill and shape carry the choice |
+
+## 7a. Decisions made during the build (11-02)
+
+- **Apps in the dock** is the existing "App icons" stepper (`app_launcher_button_count`, 3–10)
+  moved from the Apps row's bar settings into Dock › Dock. Pinned apps past it already page over.
+  "+" stops at the most that fit at the current icon size and style (IconSizeCap), with the hint
+  "At most N fit at size X." while it is stopped. The Apps row loses App icons and its own Icon
+  pack row (Dock › More options › Dock icon pack is the one place).
+- **Customization shows all its sliders at every preset**; moving one reads as Custom.
+- **Home › More options keeps Glass widgets** (the list in §2 omitted it; no control is dropped).
+- **Section notes** ("Home only", "Both screens") are dropped: the card names its pages.
+- **One-of rows decide beside or under their title at layout time**; a title is never cut.
+- **Icon pack** is its own sub-card; its ← reads "Back to Home".
 
 ## 8. Bugs this removes
 
