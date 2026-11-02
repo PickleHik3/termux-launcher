@@ -111,11 +111,29 @@ public class RetroUniformsTest {
         b.copyFrom(a);
         b.dim = 0f;
         assertNotEquals(a, b);
+        a.event(PaneScreenEvent.Kind.BELL_TEAR.id, 0.25f, 0.75f);
+        assertEquals(1f, a.event, 0f);
+        assertEquals(0.25f, a.eventT, 0f);
+        assertEquals(0.75f, a.seed, 0f);
+        b.copyFrom(a);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        b.event = 0f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.eventT = 0.5f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.seed = 0f;
+        assertNotEquals(a, b);
         // A fresh set starts every surface part at nothing; prewarm and old callers draw plain.
         a.set(1080f, 300f, 0f, 0f, 1f, 1f, DENSITY, 0f, 0f, 1080f, 300f, 0f, 0f, 0f);
         assertEquals(0f, a.aberr, 0f);
         assertEquals(0f, a.aberrFlat, 0f);
         assertEquals(0f, a.recess, 0f);
         assertEquals(0f, a.dim, 0f);
+        assertEquals(0f, a.event, 0f);
+        assertEquals(0f, a.eventT, 0f);
+        assertEquals(0f, a.seed, 0f);
     }
 }

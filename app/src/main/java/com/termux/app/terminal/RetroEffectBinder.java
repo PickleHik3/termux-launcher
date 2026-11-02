@@ -1,6 +1,8 @@
 package com.termux.app.terminal;
 
+import android.animation.ValueAnimator;
 import android.os.Build;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewParent;
 
@@ -75,6 +77,9 @@ public final class RetroEffectBinder {
     @NonNull private final int[] mLocation = new int[2];
     @NonNull private final float[] mCard = new float[4];
     @NonNull private final float[] mScreen = new float[5];
+    /** Whether this surface plays screen events: a pane does, the chrome never. */
+    private boolean mScreenEvents;
+    @NonNull private final PaneScreenEvent.Slot mEvent = new PaneScreenEvent.Slot();
 
     /**
      * @param bend     the CRT's barrel bend: {@link PaneRetroEffect#CRT_BEND} on a pane card, 0 on
@@ -102,8 +107,28 @@ public final class RetroEffectBinder {
      */
     @NonNull
     public static RetroEffectBinder pane(@NonNull View view, @NonNull ScreenShape shape) {
-        return new RetroEffectBinder(view, shape, PaneRetroEffect.CRT_BEND,
+        RetroEffectBinder binder = new RetroEffectBinder(view, shape, PaneRetroEffect.CRT_BEND,
             PaneRetroEffect.PANE_VIGNETTE, RetroUniforms.PANE_ABERR_PX, 0f, 1f);
+        binder.mScreenEvents = true;
+        return binder;
+    }
+
+    /**
+     * Plays one screen event ({@link PaneScreenEvent}) on this pane, replacing any live one, and
+     * draws frames only until it ends. Nothing on the chrome, on a style that is not CRT, while
+     * Android's animations are off, within {@link PaneScreenEvent#INPUT_QUIET_MS} of a key or a
+     * scroll, or with the Screen events switch ({@code switchOn}) off.
+     *
+     * @return whether the event started
+     */
+    public boolean fire(@NonNull PaneScreenEvent.Kind kind, boolean switchOn) {
+        if (!mScreenEvents || kind == PaneScreenEvent.Kind.NONE) return false;
+        if (!PaneScreenEvent.mayFire(mStyle.usesCrt(), ValueAnimator.areAnimatorsEnabled(),
+            InputQuiet.isQuiet(), switchOn))
+            return false;
+        mEvent.fire(kind, SystemClock.uptimeMillis(), (float) Math.random());
+        mView.postInvalidateOnAnimation();
+        return true;
     }
 
     /** A flat card cut to the view's bounds: what every chrome surface is drawn through. */
@@ -178,6 +203,14 @@ public final class RetroEffectBinder {
             mView.getResources().getDisplayMetrics().density,
             mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette)
             .surface(mAberr, mAberrFlat, mRecess, 0f);
+        long now = SystemClock.uptimeMillis();
+        PaneScreenEvent live = mScreenEvents ? mEvent.live(now) : null;
+        if (live != null) {
+            mScratch.event(live.kind.id, live.progress(now), live.seed);
+            // The next frame of the event; once it is done the slot is empty, the uniforms go
+            // back to 0 and the plain effect is wrapped once more, and the frames stop.
+            mView.postInvalidateOnAnimation();
+        }
         if (mShape instanceof ScreenShape) {
             float screenRadius = ((ScreenShape) mShape).screen(mView, mScreen);
             mScratch.screen(mScreen[0], mScreen[1], mScreen[2], mScreen[3], screenRadius,
@@ -192,6 +225,7 @@ public final class RetroEffectBinder {
     }
 
     private void clear() {
+        mEvent.clear();
         if (!mApplied) return;
         mApplied = false;
         mOnScreenStyle = PaneRetroStyle.NONE;

@@ -575,6 +575,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.noteShellAttention(session);
         if (!mHost.isVisible())
             return;
+        // Whatever the bell behaviour, ignore included: the tear is the pane's, not a sound.
+        TerminalPaneController bellPanes = mHost.paneController();
+        if (bellPanes != null) bellPanes.screenEvent(session, PaneScreenEvent.Kind.BELL_TEAR);
         raiseAttentionNotice(session);
         switch(mHost.properties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:

@@ -69,6 +69,12 @@ public final class RetroUniforms {
     public float recess;
     /** 0..1: how far the picture loses brightness and colour; 0 for none. */
     public float dim;
+    /** The live screen event's {@link PaneScreenEvent.Kind#id}, 0 for none (always 0 on chrome). */
+    public float event;
+    /** The live screen event's progress, 0..1. */
+    public float eventT;
+    /** The live screen event's random, 0..1. */
+    public float seed;
 
     /** The screen's period in px. */
     public static float periodPx(float density) {
@@ -127,6 +133,23 @@ public final class RetroUniforms {
         this.aberrFlat = 0f;
         this.recess = 0f;
         this.dim = 0f;
+        this.event = 0f;
+        this.eventT = 0f;
+        this.seed = 0f;
+        return this;
+    }
+
+    /**
+     * The live screen event, after {@link #set} (which clears it): its kind {@code id}, its
+     * {@code progress} 0..1 and its {@code seed} 0..1.
+     *
+     * @return this, for chaining
+     */
+    @NonNull
+    public RetroUniforms event(int id, float progress, float seed) {
+        this.event = id;
+        this.eventT = progress;
+        this.seed = seed;
         return this;
     }
 
@@ -206,6 +229,9 @@ public final class RetroUniforms {
         aberrFlat = other.aberrFlat;
         recess = other.recess;
         dim = other.dim;
+        event = other.event;
+        eventT = other.eventT;
+        seed = other.seed;
     }
 
     @Override
@@ -230,7 +256,9 @@ public final class RetroUniforms {
             && Float.compare(bendRight, u.bendRight) == 0
             && Float.compare(bendBottom, u.bendBottom) == 0
             && Float.compare(aberr, u.aberr) == 0 && Float.compare(aberrFlat, u.aberrFlat) == 0
-            && Float.compare(recess, u.recess) == 0 && Float.compare(dim, u.dim) == 0;
+            && Float.compare(recess, u.recess) == 0 && Float.compare(dim, u.dim) == 0
+            && Float.compare(event, u.event) == 0 && Float.compare(eventT, u.eventT) == 0
+            && Float.compare(seed, u.seed) == 0;
     }
 
     @Override
@@ -259,6 +287,9 @@ public final class RetroUniforms {
         h = 31 * h + Float.floatToIntBits(aberr);
         h = 31 * h + Float.floatToIntBits(aberrFlat);
         h = 31 * h + Float.floatToIntBits(recess);
-        return 31 * h + Float.floatToIntBits(dim);
+        h = 31 * h + Float.floatToIntBits(dim);
+        h = 31 * h + Float.floatToIntBits(event);
+        h = 31 * h + Float.floatToIntBits(eventT);
+        return 31 * h + Float.floatToIntBits(seed);
     }
 }

@@ -56,6 +56,10 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
             case "terminal_margin_adjustment":
                 mPreferences.setTerminalMarginAdjustment(value);
                 break;
+            case "terminal_screen_events":
+                // Read by each pane when an event fires; nothing to restyle.
+                mPreferences.setTerminalScreenEventsEnabled(value);
+                break;
             default:
                 break;
         }
@@ -103,6 +107,8 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                     TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "terminal_margin_adjustment":
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
+            case "terminal_screen_events":
+                return mPreferences.isTerminalScreenEventsEnabled();
             default:
                 return defValue;
         }

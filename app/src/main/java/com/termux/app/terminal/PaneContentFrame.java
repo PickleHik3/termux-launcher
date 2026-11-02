@@ -219,6 +219,18 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /**
+     * Plays a screen event on this pane's CRT picture ({@link RetroEffectBinder#fire}): nothing
+     * unless the pane is drawn CRT and the Screen events switch is on.
+     */
+    public void screenEvent(@NonNull PaneScreenEvent.Kind kind) {
+        if (!mRetroEffect.style().usesCrt()) return;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
+    }
+
+    /**
      * The child that owes the shape its clearance. A terminal pane finds its own on inflation; a
      * page whose content arrives later — the wall's widget grid — names it here.
      */

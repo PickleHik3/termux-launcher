@@ -27,5 +27,10 @@
             app:entryValues="@array/settings_terminal_retro_effect_values"
             app:defaultValue="none"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_screen_events"
+            app:title="@string/settings_terminal_screen_events_title"
+            app:summary="@string/settings_terminal_screen_events_summary"
+            app:defaultValue="true" />
     </PreferenceCategory>
 </PreferenceScreen>

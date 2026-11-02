@@ -40,6 +40,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(preferencesXml(), rootKey);
         androidx.preference.Preference retro = findPreference("terminal_retro_effect");
         if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        androidx.preference.Preference events = findPreference("terminal_screen_events");
+        if (events != null) events.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
             SettingsEditorDoors.openEditor(this, row,
@@ -70,7 +72,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
 
         @Override public void putBoolean(String key, boolean value) {
             if ("split_pane_controls".equals(key)) io.putBoolean("compatibility_mode", !value);
-            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key))
+            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_screen_events".equals(key))
                 view.putBoolean(key, value);
             else if ("show_in_recents_when_not_default".equals(key)) style.putBoolean(key, value);
             else io.putBoolean(key, value);
@@ -78,7 +81,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
 
         @Override public boolean getBoolean(String key, boolean fallback) {
             if ("split_pane_controls".equals(key)) return !io.getBoolean("compatibility_mode", !fallback);
-            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key))
+            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_screen_events".equals(key))
                 return view.getBoolean(key, fallback);
             if ("show_in_recents_when_not_default".equals(key)) return style.getBoolean(key, fallback);
             return io.getBoolean(key, fallback);
