@@ -96,6 +96,9 @@ public class StatusBarFoldGestureTest {
         float endX = vertical ? point[0] + delta : point[0];
         float endY = vertical ? point[1] : point[1] + delta;
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, point[0], point[1]));
+        // The fold is hold, buzz, drag: the finger rests until the bar is armed.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            StatusBarSwipeLayout.ARM_MS + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, endX, endY));
         mHost.dispatchTouchEvent(event(MotionEvent.ACTION_UP, endX, endY));
         return mRequests;
