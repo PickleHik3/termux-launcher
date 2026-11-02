@@ -1185,6 +1185,8 @@ final class EditorCardSheet {
         @Nullable SliderRow sliderRow;
         /** The run a slider row stands in, put away when all its rows are. */
         @Nullable Strip strip;
+        /** A Presets row's picture tiles. */
+        @Nullable com.termux.app.surfaces.rows.PreviewTilesRow looks;
         @Nullable MaterialSwitch toggle;
         @Nullable MaterialButtonToggleGroup segments;
         @Nullable List<MaterialButton> buttons;
@@ -1382,8 +1384,8 @@ final class EditorCardSheet {
         float widest = 0f;
         float textSum = 0f;
         for (String choice : choices) {
-            MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
-                null, false);
+            MaterialButton button = com.termux.app.surfaces.rows.SegmentRow.connectedButton(
+                mContext);
             button.setId(View.generateViewId());
             // No check mark (wireframe 02): the container colour carries the choice, and a mark's
             // reserved room would stand every unchosen word off its centre.
@@ -1431,7 +1433,8 @@ final class EditorCardSheet {
         } else {
             root.addView(labelLine(row, views, false));
         }
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(mContext);
+        MaterialButtonToggleGroup group =
+            com.termux.app.surfaces.rows.SegmentRow.connectedGroup(mContext);
         group.setSingleSelection(true);
         group.setSelectionRequired(true);
         group.setSpacing(dp(SEGMENT_GAP_DP));
@@ -1563,65 +1566,30 @@ final class EditorCardSheet {
 
     @NonNull
     private RowViews lookRow(@NonNull Row row) {
+        // Presets as picture tiles on every card (appearance-cards overhaul §4), as the
+        // redesigned cards draw them (CardBody#looks): every stop a tile, nothing clipped.
         LinearLayout root = new LinearLayout(mContext);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(0, dp(8), 0, dp(8));
+        root.setPadding(0, dp(8), 0, 0);
         RowViews views = new RowViews(row, root);
-        root.addView(labelLine(row, views, true));
-        Slider slider = newSlider();
-        slider.setContentDescription(mContext.getString(row.labelRes));
-        slider.setLabelFormatter(value -> mModel.readout(row, Math.round(value)));
-        slider.addOnChangeListener((s, value, fromUser) -> {
-            if (mRestating || !fromUser)
-                return;
-            int v = Math.round(value);
-            EditorViews.setText(views.value, mModel.readout(row, v));
-            styleStops(views, v);
-            mModel.onValue(row, v, views.tracking);
-        });
-        slider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider s) {
-                views.tracking = true;
-            }
-
-            @Override public void onStopTrackingTouch(@NonNull Slider s) {
-                views.tracking = false;
-                mModel.onValue(row, Math.round(s.getValue()), false);
-                mModel.onReleased(row);
-            }
-        });
-        LinearLayout.LayoutParams sliderParams = sliderParams(slider);
-        root.addView(slider, sliderParams);
-        LinearLayout stops = new LinearLayout(mContext);
-        stops.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(labelLine(row, views, false));
         String[] names = mModel.choices(row);
-        List<TextView> labels = new ArrayList<>(names.length);
-        for (int i = 0; i < names.length; i++) {
-            TextView stop = new TextView(mContext);
-            EditorViews.textAppearance(stop, com.google.android.material.R.attr.textAppearanceLabelMedium);
-            stop.setText(names[i]);
-            stop.setGravity(Gravity.CENTER);
-            stop.setSingleLine(true);
-            stop.setEllipsize(TextUtils.TruncateAt.END);
-            stop.setMinHeight(dp(32));
-            final int index = i;
-            stop.setOnClickListener(v -> {
-                styleStops(views, index);
-                mModel.onValue(row, index, false);
-                mModel.onReleased(row);
-            });
-            stops.addView(stop, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            labels.add(stop);
-        }
-        LinearLayout.LayoutParams stopsParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        // Under the slider's own reach, so each stop's word stands under its stop.
-        stopsParams.setMarginStart(sliderParams.getMarginStart());
-        stopsParams.setMarginEnd(sliderParams.getMarginEnd());
-        root.addView(stops, stopsParams);
-        views.slider = slider;
-        views.stopLabels = labels;
+        List<com.termux.app.surfaces.rows.PreviewTilesRow.Tile> tiles =
+            new ArrayList<>(names.length);
+        for (int i = 0; i < names.length; i++)
+            tiles.add(new com.termux.app.surfaces.rows.PreviewTilesRow.Tile(names[i],
+                CardBody.lookPreview(mContext, i)));
+        com.termux.app.surfaces.rows.PreviewTilesRow looks =
+            com.termux.app.surfaces.rows.PreviewTilesRow.build(mContext, tiles,
+                mModel.value(row), index -> {
+                    if (mRestating)
+                        return;
+                    mModel.onValue(row, index, false);
+                    mModel.onReleased(row);
+                });
+        root.addView(looks.root, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        views.looks = looks;
         return views;
     }
 
@@ -1935,6 +1903,8 @@ final class EditorCardSheet {
                 EditorViews.setText(views.summary, summary);
                 EditorViews.setVisible(views.summary, summary != null && summary.length() > 0);
             }
+            if (views.looks != null)
+                views.looks.select(value);
             if (views.slider != null && !views.tracking) {
                 Slider slider = views.slider;
                 int from = mModel.from(row);
