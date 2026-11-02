@@ -3,8 +3,12 @@ package com.termux.app.surfaces.cards;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.place.LayoutVariant;
+
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -14,9 +18,8 @@ import java.util.Set;
  *
  * <p>A side is {@code null} where it does not wear the element (Home never wears the extra keys).
  * The switch reads on only when every side that wears the element shows it. A change asks first
- * when the sides disagree and the change would move a side: that side "has its own layout". The
- * dialog's Keep button applies the change only to the sides that are not kept; it is offered only
- * when that writes something, so it is never a second Cancel.</p>
+ * when the two sides disagree: the side the change would move "has its own layout", and the
+ * dialog offers Cancel or Override.</p>
  */
 public final class LayoutOverride {
 
@@ -53,26 +56,17 @@ public final class LayoutOverride {
 
     /** What a change to {@code want} does. */
     public static final class Decision {
-        /** Whether the dialog asks first. */
+        /** Whether the dialog asks first (Cancel · Override). */
         public final boolean ask;
-        /** The sides whose own value the change would overwrite; named by the dialog's title. */
-        @NonNull public final Set<Side> own;
-        /** Override, or the change itself when nothing is asked: the sides written. */
-        @NonNull public final Set<Side> overrideWrites;
-        /** Keep: the sides written when the {@link #own} ones keep their value. */
-        @NonNull public final Set<Side> keepWrites;
+        /** The side whose own value the change would overwrite, named by the dialog; or none. */
+        @Nullable public final Side own;
+        /** The sides written: at once, or on Override. */
+        @NonNull public final Set<Side> writes;
 
-        Decision(boolean ask, @NonNull Set<Side> own, @NonNull Set<Side> overrideWrites,
-                 @NonNull Set<Side> keepWrites) {
+        Decision(boolean ask, @Nullable Side own, @NonNull Set<Side> writes) {
             this.ask = ask;
-            this.own = Collections.unmodifiableSet(own);
-            this.overrideWrites = Collections.unmodifiableSet(overrideWrites);
-            this.keepWrites = Collections.unmodifiableSet(keepWrites);
-        }
-
-        /** Whether the dialog offers Keep: only when Keep writes something. */
-        public boolean offersKeep() {
-            return ask && !keepWrites.isEmpty();
+            this.own = own;
+            this.writes = Collections.unmodifiableSet(writes);
         }
     }
 
@@ -85,10 +79,20 @@ public final class LayoutOverride {
         if (workspace != null && workspace != want) moving.add(Side.WORKSPACE);
         boolean disagree = home != null && workspace != null && !home.equals(workspace);
         if (!disagree || moving.isEmpty())
-            return new Decision(false, EnumSet.noneOf(Side.class), moving,
-                EnumSet.noneOf(Side.class));
-        EnumSet<Side> keep = EnumSet.copyOf(moving);
-        keep.removeAll(moving);
-        return new Decision(true, moving, moving, keep);
+            return new Decision(false, null, moving);
+        // Two sides that disagree: exactly one of them moves.
+        return new Decision(true, moving.iterator().next(), moving);
+    }
+
+    /** The layouts a write to {@code sides} lands on: Home's, the Workspace's normal and Display. */
+    @NonNull
+    public static List<LayoutVariant> variantsOf(@NonNull Set<Side> sides) {
+        List<LayoutVariant> out = new ArrayList<>(3);
+        if (sides.contains(Side.HOME)) out.add(LayoutVariant.HOME);
+        if (sides.contains(Side.WORKSPACE)) {
+            out.add(LayoutVariant.NORMAL);
+            out.add(LayoutVariant.DISPLAY);
+        }
+        return out;
     }
 }

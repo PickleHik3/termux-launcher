@@ -2,14 +2,17 @@ package com.termux.app.surfaces.cards;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.place.LayoutVariant;
 import com.termux.app.surfaces.cards.LayoutOverride.Decision;
 import com.termux.app.surfaces.cards.LayoutOverride.Reading;
 import com.termux.app.surfaces.cards.LayoutOverride.Side;
 
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 
 /** Customization › Layout: what the switch reads, and when a change asks first (§2). */
@@ -32,17 +35,18 @@ public class LayoutOverrideTest {
         assertEquals(Reading.OFF, LayoutOverride.read(null, false));
         Decision decision = LayoutOverride.decide(null, false, true);
         assertFalse(decision.ask);
-        assertEquals(EnumSet.of(Side.WORKSPACE), decision.overrideWrites);
+        assertEquals(EnumSet.of(Side.WORKSPACE), decision.writes);
     }
 
     @Test
     public void agreeingSidesChangeTogetherWithoutAsking() {
         Decision on = LayoutOverride.decide(false, false, true);
         assertFalse(on.ask);
-        assertEquals(EnumSet.of(Side.HOME, Side.WORKSPACE), on.overrideWrites);
+        assertNull(on.own);
+        assertEquals(EnumSet.of(Side.HOME, Side.WORKSPACE), on.writes);
         Decision off = LayoutOverride.decide(true, true, false);
         assertFalse(off.ask);
-        assertEquals(EnumSet.of(Side.HOME, Side.WORKSPACE), off.overrideWrites);
+        assertEquals(EnumSet.of(Side.HOME, Side.WORKSPACE), off.writes);
     }
 
     @Test
@@ -51,26 +55,26 @@ public class LayoutOverrideTest {
         // asks for on, which would change Home.
         Decision decision = LayoutOverride.decide(false, true, true);
         assertTrue(decision.ask);
-        assertEquals(EnumSet.of(Side.HOME), decision.own);
-        assertEquals(EnumSet.of(Side.HOME), decision.overrideWrites);
+        assertEquals(Side.HOME, decision.own);
+        assertEquals(EnumSet.of(Side.HOME), decision.writes);
 
         Decision workspace = LayoutOverride.decide(true, false, true);
         assertTrue(workspace.ask);
-        assertEquals(EnumSet.of(Side.WORKSPACE), workspace.own);
-    }
-
-    @Test
-    public void keepIsNotOfferedWhenItWouldWriteNothing() {
-        // Keeping the one side that would change leaves nothing to write: no second Cancel.
-        Decision decision = LayoutOverride.decide(false, true, true);
-        assertTrue(decision.keepWrites.isEmpty());
-        assertFalse(decision.offersKeep());
+        assertEquals(Side.WORKSPACE, workspace.own);
     }
 
     @Test
     public void nothingMovesWhenTheChangeIsAlreadyWorn() {
         Decision decision = LayoutOverride.decide(true, true, true);
         assertFalse(decision.ask);
-        assertTrue(decision.overrideWrites.isEmpty());
+        assertTrue(decision.writes.isEmpty());
+    }
+
+    @Test
+    public void theWorkspaceIsTheNormalAndDisplayLayouts() {
+        assertEquals(Arrays.asList(LayoutVariant.HOME, LayoutVariant.NORMAL, LayoutVariant.DISPLAY),
+            LayoutOverride.variantsOf(EnumSet.of(Side.HOME, Side.WORKSPACE)));
+        assertEquals(Arrays.asList(LayoutVariant.HOME),
+            LayoutOverride.variantsOf(EnumSet.of(Side.HOME)));
     }
 }

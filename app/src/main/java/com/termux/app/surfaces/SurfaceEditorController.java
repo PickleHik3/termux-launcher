@@ -2115,9 +2115,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * What Customization's Layout list reads and writes: each element's show/hide on the Home
-     * kind and on the Workspace's kinds (Terminal and Display), straight into the page-kind
-     * layouts ({@code place.dress.<kind>.*}, both orientations). The dock's own tiles have one
-     * value for the app and go through the screen cards' host.
+     * layout and on the Workspace's (Terminal and Display), both orientations, through the layout
+     * session as the screen cards' lists write. The dock's own tiles have one value for the app
+     * and go through the screen cards' host.
      */
     private final class WholeAppElementsHost
             implements com.termux.app.surfaces.cards.ElementsList.Host {
@@ -2166,7 +2166,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             com.termux.app.surfaces.cards.LayoutOverride.Decision decision =
                 com.termux.app.surfaces.cards.LayoutOverride.decide(home, workspace, shown);
             if (!decision.ask) {
-                writeSides(item, decision.overrideWrites, shown);
+                writeSides(item, decision.writes, shown);
                 return;
             }
             askOverride(item, decision, home, workspace, shown);
@@ -2213,36 +2213,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         private void writeSides(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
                                 @NonNull java.util.Set<com.termux.app.surfaces.cards.LayoutOverride.Side> sides,
                                 boolean shown) {
-            com.termux.app.place.PlaceLayoutStore places = scopePlaces();
-            if (places != null) {
-                for (com.termux.app.surfaces.cards.LayoutOverride.Side side : sides) {
-                    boolean home = side == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
-                    if (item.visibility
-                            == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD) {
-                        if (home) {
-                            places.setHomeKeyboardAlwaysOn(shown);
-                        } else {
-                            TermuxAppSharedPreferences prefs = prefs();
-                            if (prefs != null && prefs.isKeyboardTurnedOff() == shown)
-                                prefs.setKeyboardTurnedOff(!shown);
-                        }
-                        continue;
-                    }
-                    Element element = item.element;
-                    if (element == null)
-                        continue;
-                    com.termux.app.wall.WallPages.PageKind[] kinds = home
-                        ? new com.termux.app.wall.WallPages.PageKind[] {
-                            com.termux.app.wall.WallPages.PageKind.HOME}
-                        : new com.termux.app.wall.WallPages.PageKind[] {
-                            com.termux.app.wall.WallPages.PageKind.TERMINAL,
-                            com.termux.app.wall.WallPages.PageKind.DISPLAY};
-                    for (com.termux.app.wall.WallPages.PageKind kind : kinds) {
-                        for (com.termux.app.place.PlaceOrientation orientation
-                                : com.termux.app.place.PlaceOrientation.values())
-                            places.setKindShows(kind, orientation, element, shown);
-                    }
-                }
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) {
+                // Through the layout session, as the Home and Workspace lists write: Undo,
+                // Discard and Done treat it the same.
+                java.util.List<com.termux.app.place.LayoutVariant> variants =
+                    com.termux.app.surfaces.cards.LayoutOverride.variantsOf(sides);
+                boolean keyboard = item.visibility
+                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
+                if (keyboard || item.element != null)
+                    layout.setShownOnLayouts(variants, keyboard ? null : item.element, shown);
             }
             positionTargets();
             syncDirty();
@@ -2255,24 +2235,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         /**
-         * The page kind(s) with a layout of their own would change: ask first (§2). Cancel puts
-         * the switch back; Keep writes only the sides that are not kept (offered only when that
-         * writes something); Override writes both.
+         * The page kind with a layout of its own would change: ask first (§2). Cancel puts the
+         * switch back; Override writes both kinds.
          */
         private void askOverride(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
                                  @NonNull com.termux.app.surfaces.cards.LayoutOverride.Decision decision,
                                  @Nullable Boolean home, @Nullable Boolean workspace,
                                  boolean shown) {
             Context context = mHost.context();
-            boolean ownHome = decision.own.contains(
-                com.termux.app.surfaces.cards.LayoutOverride.Side.HOME);
-            boolean ownWorkspace = decision.own.contains(
-                com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE);
-            int title = ownHome && ownWorkspace ? R.string.editor_layout_own_both
-                : ownHome ? R.string.editor_layout_own_home : R.string.editor_layout_own_workspace;
-            int keep = ownHome && ownWorkspace ? R.string.editor_layout_keep_both
-                : ownHome ? R.string.editor_layout_keep_home
-                : R.string.editor_layout_keep_workspace;
+            boolean ownHome = decision.own
+                == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
+            boolean ownWorkspace = !ownHome;
+            int title = ownHome ? R.string.editor_layout_own_home
+                : R.string.editor_layout_own_workspace;
             String name = context.getString(item.nameRes);
             StringBuilder line = new StringBuilder();
             if (ownHome && home != null)
@@ -2280,7 +2255,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     : R.string.editor_layout_hidden_on, name,
                     context.getString(R.string.appearance_card_home)));
             if (ownWorkspace && workspace != null) {
-                if (line.length() > 0) line.append(' ');
                 line.append(context.getString(workspace ? R.string.editor_layout_shown_on
                     : R.string.editor_layout_hidden_on, name,
                     context.getString(R.string.appearance_card_workspace)));
@@ -2293,13 +2267,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     .setNegativeButton(R.string.editor_layout_cancel, null)
                     .setPositiveButton(R.string.editor_layout_override, (d, w) -> {
                         answered[0] = true;
-                        writeSides(item, decision.overrideWrites, shown);
+                        writeSides(item, decision.writes, shown);
                     });
-            if (decision.offersKeep())
-                builder.setNeutralButton(keep, (d, w) -> {
-                    answered[0] = true;
-                    writeSides(item, decision.keepWrites, shown);
-                });
             builder.setOnDismissListener(d -> {
                 if (answered[0])
                     return;

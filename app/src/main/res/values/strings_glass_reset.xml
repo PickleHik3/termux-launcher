@@ -5,13 +5,9 @@
     <string name="editor_layout_workspace_only">Workspace only</string>
     <string name="editor_layout_own_home">Home has its own layout</string>
     <string name="editor_layout_own_workspace">Workspace has its own layout</string>
-    <string name="editor_layout_own_both">Home and Workspace have their own layouts</string>
     <string name="editor_layout_hidden_on">%1$s is hidden on %2$s.</string>
     <string name="editor_layout_shown_on">%1$s is shown on %2$s.</string>
     <string name="editor_layout_cancel">Cancel</string>
-    <string name="editor_layout_keep_home">Keep Home\'s</string>
-    <string name="editor_layout_keep_workspace">Keep Workspace\'s</string>
-    <string name="editor_layout_keep_both">Keep both</string>
     <string name="editor_layout_override">Override</string>
 
     <!-- Reset everything and the upgrade nudge (overhaul §6). -->
