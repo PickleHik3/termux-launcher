@@ -35,6 +35,40 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
   expiry leaves the display untouched.
 
+- **CRT wave 1 on pong (11-02, 41b6a6036).** Terminal effect CRT on a dark Look and on a bright
+  glass tint: the 8/10 dp bezel reads lit at the top and shaded at the bottom over glass and over a
+  solid fill; the screen edge has an inner shadow; box lines carry a faint orange/blue fringe; the
+  triad mask is a hair of colour fringe on glyphs, not a grid over the background (emulator 11-02
+  showed a grid over saturated green; judge on the phone); the dock, status bar and keyboard keep
+  crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
+  10-22 baseline (`project-docs/active/input-latency-study.md` method).
+- **Trail halo + decays on pong (11-02, 963e8329e).** Cursor trail Default and Comet on a dark Look
+  and on a bright glass tint: a soft additive glow about one cell wide hugs the trail quad on
+  moves in both directions (no dark band, no glow only inside); a `cursor_trail_color` from
+  kitty.conf colours the halo too; the other four styles are unchanged. Typing feel at the
+  0.15/0.60 s app decays: the streak outlives a newline move but settles within a second and never
+  reads as lag; a `cursor_trail_decay` line in kitty.conf still wins.
+- **CRT screen events on pong (11-02, 2b7484ebd).** Terminal effect CRT (also green, amber), more
+  than 1.5 s after the last key or scroll: a bell (`sleep 2; printf '\a'`) tears one 4–5 row band
+  sideways with a red/blue split for about 150 ms and nothing else moves (emulator: seen); a pane
+  opened by touch or `launcherctl pane open` powers on from a bright centre line over about 400 ms
+  (emulator: seen); tapping the other pane of a two-pane window shears it sideways for about
+  300 ms, strongest at the top and bottom (emulator: not resolvable at 4 fps); a shell killed from
+  outside (`kill -9 <pid>`) shows about 300 ms of grey snow before "[Process completed (signal 9)]"
+  (emulator: seen). Nothing within 1.5 s of a key or a scroll, nothing with Remove animations on,
+  nothing with Settings › Terminal › Text & display › Screen events off, nothing on TFT or on the
+  chrome. A pane at rest after an event draws no further frames (gfxinfo frame count flat).
+  Known gaps, not bugs: a plain `exit` closes the pane before the snow; power-off is unwired; a
+  split or focus change started from the keyboard is held by the typing rule.
+- **Idle animations + dim on pong (11-02, 88e25065e).** Battery and performance › Idle animations
+  off (default): a CRT pane at rest renders no frames (`dumpsys gfxinfo com.termux reset`, 30 s,
+  then `dumpsys gfxinfo com.termux`: 0; emulator: 0 in 20 s). On: the pane breathes very gently
+  with no flashes at a low steady rate (emulator: 120 frames in 20 s, 6 fps on CPU rendering; the
+  brief aimed at about 20); one small sideways tear within 2–5 minutes of idling (not waited for
+  on the emulator); everything stops on a key for 1.5 s, on screen off, Lazy mode, power save,
+  Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
+  unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
+  near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.

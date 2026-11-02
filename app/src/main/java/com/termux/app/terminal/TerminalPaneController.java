@@ -673,8 +673,8 @@ public class TerminalPaneController {
 
     /** App defaults for the tunables {@code kitty.conf} may override; see the class's design brief. */
     private static final long DEFAULT_CURSOR_TRAIL_DELAY_MS = 10L;
-    private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.10f;
-    private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.15f;
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.60f;
     private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
 
     /** Trail style id from kitty.conf {@code custom_shaders}; null when it names none. */
@@ -1434,7 +1434,7 @@ public class TerminalPaneController {
         // onSizeChanged. Re-measure them so the PTY matches what is on screen. A promoted
         // neighbour stood at this size all along, so the re-measure finds its grid fitting.
         if (switched) refreshPaneSizes();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
     }
 
     // --- Live neighbour windows (LiveNeighbourPolicy) ---
@@ -1698,7 +1698,7 @@ public class TerminalPaneController {
         if (mHomeFloats.remove(w)) {
             if (mFocusedHomeFloat == w) {
                 mFocusedHomeFloat = null;
-                mHost.onActivePaneChanged();
+                activePaneChanged();
                 mHost.onHomeFloatFocusReleased();
             }
             mHost.onHomeFloatsChanged();
@@ -1709,7 +1709,7 @@ public class TerminalPaneController {
             if (container != null) container.leaveSlot();
             if (mFocusedHomeFloat == w) {
                 mFocusedHomeFloat = null;
-                mHost.onActivePaneChanged();
+                activePaneChanged();
                 mHost.onHomeFloatFocusReleased();
             }
         }
@@ -2204,7 +2204,7 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
     }
 
@@ -2229,7 +2229,7 @@ public class TerminalPaneController {
             w.active = single;
         }
         render();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return dropped;
     }
@@ -2596,6 +2596,12 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(window);
         render();
         animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
+        // A pane the user (or an agent) opened powers on once it is laid out. Panes restored at
+        // launch are built by the workspace restore, never through here, so they stay still.
+        PaneContentFrame opened = mPaneFrames.get(newSession);
+        if (opened != null)
+            OneShotPreDrawListener.add(opened,
+                () -> opened.screenEvent(PaneScreenEvent.Kind.POWER_ON));
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -2604,8 +2610,51 @@ public class TerminalPaneController {
             TerminalView v = mPaneViews.get(reflowed);
             if (v != null) v.onScreenUpdated();
         }, 250);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
+    }
+
+    /** The pane the last focus wobble looked at, and its window: a wobble needs a change. */
+    @Nullable private TerminalSession mFocusEventSession;
+    @Nullable private Window mFocusEventWindow;
+
+    /**
+     * Tells the host the active pane may have changed, and plays the focus wobble on the newly
+     * focused pane when focus moved between panes of one window that holds more than one.
+     */
+    private void activePaneChanged() {
+        TerminalSession now = getActiveSession();
+        Window window = mActiveWindow;
+        if (now != null && mFocusEventSession != null && now != mFocusEventSession
+            && window != null && window == mFocusEventWindow && allLeavesOf(window).size() > 1)
+            screenEvent(now, PaneScreenEvent.Kind.FOCUS_WOBBLE);
+        mFocusEventSession = now;
+        mFocusEventWindow = window;
+        refreshPaneDims();
+        mHost.onActivePaneChanged();
+    }
+
+    /**
+     * Dims every pane of the window on screen but its focused one when it holds more than one
+     * ({@link PaneDimPolicy}); panes of other windows are off screen and stay undimmed. Snaps.
+     */
+    private void refreshPaneDims() {
+        Window window = mActiveWindow;
+        List<TerminalSession> leaves = new ArrayList<>();
+        TerminalSession active = null;
+        if (window != null) {
+            for (Leaf leaf : allLeavesOf(window)) leaves.add(leaf.session);
+            if (window.active != null) active = window.active.session;
+        }
+        Set<TerminalSession> dimmed = PaneDimPolicy.dimmed(active, leaves);
+        for (Map.Entry<TerminalSession, PaneContentFrame> e : mPaneFrames.entrySet())
+            e.getValue().setDimmed(dimmed.contains(e.getKey()));
+    }
+
+    /** Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}). */
+    public void screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
+        PaneContentFrame frame = session == null ? null : mPaneFrames.get(session);
+        if (frame != null) frame.screenEvent(kind);
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */
@@ -2646,7 +2695,7 @@ public class TerminalPaneController {
             if (owner.active == owningLeaf) owner.active = firstLeaf(owner.root);
             if (owner == mActiveWindow) {
                 render();
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             }
             mHost.onTreesChanged();
             return FINISHED_PANE;
@@ -2664,7 +2713,7 @@ public class TerminalPaneController {
                 dockLeaf(owner, promoted);
                 if (owner == mActiveWindow) {
                     render();
-                    mHost.onActivePaneChanged();
+                    activePaneChanged();
                 }
                 mHost.onTreesChanged();
                 return FINISHED_PANE;
@@ -2690,7 +2739,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(owner);
         if (owner == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return FINISHED_PANE;
@@ -2750,7 +2799,7 @@ public class TerminalPaneController {
         if (target == null) return false;
         mInteractionOverlay.dismissControls();
         swapSessions(mActiveWindow.active, target);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return true;
     }
@@ -3138,7 +3187,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(into);
         if (into == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return true;
@@ -3186,7 +3235,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(from);
         if (from == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return window;
@@ -3215,7 +3264,7 @@ public class TerminalPaneController {
             dockLeaf(window, leaf);
             render();
             animateDockDepthLoss(leaf.session);
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onTreesChanged();
             return FLOAT_TOGGLE_DOCKED;
         }
@@ -3234,7 +3283,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(window);
         render();
         animateFloatDepthGain(leaf);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return FLOAT_TOGGLE_FLOATED;
     }
@@ -3429,7 +3478,7 @@ public class TerminalPaneController {
         dockLeaf(window, leaf);
         render();
         animateDockDepthLoss(leaf.session);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
     }
 
@@ -3597,7 +3646,7 @@ public class TerminalPaneController {
         updateActiveBorders();
         focusActiveView();
         applyHomeFloatLift();
-        if (changed) mHost.onActivePaneChanged();
+        if (changed) activePaneChanged();
     }
 
     /**
@@ -3609,7 +3658,7 @@ public class TerminalPaneController {
         mFocusedHomeFloat = null;
         applyHomeFloatLift();
         updateActiveBorders();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onHomeFloatFocusReleased();
     }
 
@@ -3995,7 +4044,7 @@ public class TerminalPaneController {
         if (wasFocused) {
             mFocusedHomeFloat = null;
             updateActiveBorders();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onHomeFloatFocusReleased();
         }
         mHost.onTreesChanged();
@@ -4359,7 +4408,7 @@ public class TerminalPaneController {
         window.active = leaf;
         mPendingFloatEntryLeaf = leaf;
         if (wasMaximized || !addFloatOnly(leaf)) render();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return SCRATCHPAD_TOGGLE_SHOWN;
     }
@@ -4444,7 +4493,7 @@ public class TerminalPaneController {
                     removeFloatContainer(leaf);
                     render();
                 }
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             } else {
                 removeFloatContainer(leaf);
             }
@@ -4873,6 +4922,7 @@ public class TerminalPaneController {
         Trace.beginSection("Panes.render");
         try {
             doRender();
+            refreshPaneDims();
         } finally {
             Trace.endSection();
         }
@@ -6657,7 +6707,7 @@ public class TerminalPaneController {
                                 mControlLeaf = source;
                                 render();
                                 showControls(source, x, y);
-                                mHost.onActivePaneChanged();
+                                activePaneChanged();
                                 mHost.onTreesChanged();
                             } else {
                                 swapPanePositions(source, target, x, y);
@@ -6766,7 +6816,7 @@ public class TerminalPaneController {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
                 mActiveWindow.active = leaf;
                 render();
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
@@ -6792,7 +6842,7 @@ public class TerminalPaneController {
             mControlLeaf = target;
             swapSessions(source, target);
             showControls(target, dropX, dropY);
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onTreesChanged();
         }
 
@@ -6802,7 +6852,7 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
 
         /**

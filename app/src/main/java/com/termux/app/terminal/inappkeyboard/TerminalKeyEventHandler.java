@@ -79,6 +79,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         if (value == null)
             return;
         com.termux.terminal.LatencyProbe.commit();
+        com.termux.app.terminal.InputQuiet.noteKey();
         dispatch(value, TerminalModifiers.from(modifiers));
     }
 
