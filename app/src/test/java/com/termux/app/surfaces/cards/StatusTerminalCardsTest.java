@@ -219,17 +219,17 @@ public class StatusTerminalCardsTest {
                 face.getWidth() * face.getScaleX() <= ((View) face.getParent()).getWidth() + 1);
         }
 
-        CardRowView options = StatusBarCard.view(f.themed, Row.STATUS_OPTIONS, f.width, host);
-        f.layOut(options.view);
-        List<MaterialButton> optionTiles = buttons(options.view);
-        assertEquals(4, optionTiles.size());
-        optionTiles.get(StatusBarCard.OPTION_SECONDS).performClick();
-        assertTrue("Seconds on", host.options[StatusBarCard.OPTION_SECONDS]);
-        optionTiles.get(StatusBarCard.OPTION_CAMERA_GAP).performClick();
+        CardRowView seconds = StatusBarCard.view(f.themed, Row.STATUS_SECONDS, f.width, host);
+        f.layOut(seconds.view);
+        seconds.view.performClick();
+        assertTrue("Show seconds is a switch row on the Seconds option",
+            host.options[StatusBarCard.OPTION_SECONDS]);
+
+        CardRowView cutout = StatusBarCard.view(f.themed, Row.CAMERA_CUTOUT, f.width, host);
+        f.layOut(cutout.view);
+        cutout.view.performClick();
         ShadowLooper.idleMainLooper();
-        assertEquals("Camera gap opens its setting", 1, host.cameraGapOpened);
-        assertFalse("and never reads on: it is a shortcut, not a switch",
-            optionTiles.get(StatusBarCard.OPTION_CAMERA_GAP).isChecked());
+        assertEquals("Camera cutout opens its setting", 1, host.cameraGapOpened);
 
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);

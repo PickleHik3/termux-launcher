@@ -21,33 +21,48 @@ public class GlassRowsTest {
     private static final Offers ALL = new Offers(true, true);
     private static final Offers NO_EDGE = new Offers(false, true);
 
+    /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
+    private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM,
+        Row.GLASS_EDGE, Row.DEPTH);
+
     @Test
-    public void everyGlassCardWearsTheRowSetInTouchOrder() {
+    public void everyGlassCardWearsTheAppearanceBlock() {
         for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
-                EditorCard.KEYBOARD, EditorCard.TERMINAL}) {
-            assertEquals(card.toString(), Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY,
-                Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.DEPTH, Row.GLASS_EDGE),
-                EditorRows.tier(card, ALL, 1));
-            assertEquals(card.toString(), Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM),
-                EditorRows.tier(card, ALL, 3).subList(0, 3));
+                EditorCard.TERMINAL, EditorCard.HOME, EditorCard.WORKSPACE, EditorCard.WIDGETS,
+                EditorCard.SHEETS}) {
+            java.util.List<Row> rows = rowsOf(card, ALL);
+            int at = rows.indexOf(Row.SECTION_APPEARANCE);
+            assertTrue(card.toString(), at >= 0);
+            assertEquals(card.toString(), BLOCK, rows.subList(at, at + BLOCK.size()));
         }
     }
 
     @Test
     public void widgetsAndSheetsArePlainGlassCards() {
         for (EditorCard card : new EditorCard[] {EditorCard.WIDGETS, EditorCard.SHEETS}) {
-            assertEquals(card.toString(), GlassRows.card(ALL).build(), EditorRows.rows(card, ALL));
+            assertEquals(card.toString(), BLOCK, rowsOf(card, ALL));
             assertFalse(card.hasEye());
         }
         assertEquals(LookGrid.Element.SHEETS, EditorChips.elementOf(EditorCard.SHEETS));
-        assertTrue(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
+        assertFalse(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
         assertTrue(EditorRows.rows(EditorCard.APPEARANCE, ALL).toString().contains("LINK_SHEETS"));
     }
 
     @Test
-    public void depthAndEdgeOnlyWhereTheDeviceDrawsThem() {
-        assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.DEPTH));
-        assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.GLASS_EDGE));
+    public void depthAndEdgeStayWhereTheDeviceCannotDrawThem() {
+        assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, NO_EDGE));
+        assertTrue(rowsOf(EditorCard.APPEARANCE, NO_EDGE).contains(Row.DEPTH));
+        assertTrue(GlassRows.needsGlassEdge(Row.GLASS_EDGE));
+        assertTrue(GlassRows.needsGlassEdge(Row.DEPTH));
+        assertFalse(GlassRows.needsGlassEdge(Row.FROST));
+    }
+
+    private static java.util.List<Row> rowsOf(EditorCard card, Offers offers) {
+        java.util.List<Row> out = new java.util.ArrayList<>();
+        for (EditorRows.Spec spec : EditorRows.rows(card, offers))
+            out.add(spec.row);
+        return out;
     }
 
     @Test
