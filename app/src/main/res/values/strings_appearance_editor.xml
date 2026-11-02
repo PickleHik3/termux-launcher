@@ -78,16 +78,16 @@
     <string name="appearance_row_style">Style</string>
     <string name="appearance_row_design">Design</string>
     <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
-    <string name="appearance_row_frost">Frost</string>
-    <string name="appearance_row_corners">Corners</string>
+    <string name="appearance_row_frost">Blur</string>
+    <string name="appearance_row_corners">Corner radius</string>
     <string name="appearance_row_margin">Margin</string>
     <string name="appearance_row_depth">Depth</string>
     <string name="appearance_row_search_field">Search field</string>
-    <string name="appearance_row_text_size">Text size</string>
+    <string name="appearance_row_text_size">Font size</string>
     <string name="appearance_row_contrast">Contrast</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>
-    <string name="appearance_row_split_gap">Split gap</string>
+    <string name="appearance_row_split_gap">Inner gap</string>
     <string name="appearance_row_font">Font</string>
     <string name="appearance_row_label_size">Label size</string>
     <string name="appearance_row_glass_widgets">Glass widgets</string>
@@ -95,9 +95,9 @@
     <string name="appearance_row_label_shadow">Label shadow</string>
     <string name="appearance_row_page_transition">Transition</string>
     <string name="appearance_row_folders">Folders</string>
-    <string name="appearance_row_numerals">Numerals</string>
+    <string name="appearance_row_numerals">Numerals font</string>
     <string name="appearance_row_page_dots">Page dots</string>
-    <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
+    <string name="appearance_row_wallpaper_scroll">Wallpaper scrolling</string>
     <!-- The Match rows: copy the other screen's layout and glass onto this one. -->
     <!-- The Match row's button: Copy, then Undo while the copy can be taken back. -->
     <!-- The link from a screen's card to the card both screens share. -->
@@ -107,23 +107,23 @@
     <string name="appearance_row_clock_12h">12-hour clock</string>
     <string name="appearance_row_clock_face">Clock face</string>
     <string name="appearance_row_keyboard_theme">Keyboard theme</string>
-    <string name="appearance_row_key_opacity">Key opacity</string>
-    <string name="appearance_row_key_corners">Key corners</string>
+    <string name="appearance_row_key_opacity">Keys opacity</string>
+    <string name="appearance_row_key_corners">Key corner radius</string>
     <string name="appearance_row_key_spacing">Key spacing</string>
-    <string name="appearance_row_form">Type</string>
+    <string name="appearance_row_form">Default type</string>
     <string name="appearance_row_layouts">Layouts</string>
     <string name="appearance_row_look">Presets</string>
     <string name="appearance_row_wallpaper">Wallpaper</string>
     <string name="appearance_row_theme">Theme</string>
     <string name="appearance_row_icon_pack">Icon pack</string>
-    <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
+    <string name="appearance_row_wallpaper_colours">Dynamic colour</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
     <string name="appearance_row_vibrancy">Vibrancy</string>
-    <string name="appearance_row_tint_hue">Colour</string>
+    <string name="appearance_row_tint_hue">Accent</string>
     <string name="appearance_row_grain">Grain</string>
     <!-- The light line around the glass: none, a hairline, or a bright one. -->
-    <string name="appearance_row_rim">Rim</string>
+    <string name="appearance_row_rim">Rim strength</string>
     <string name="appearance_rim_none">None</string>
     <string name="appearance_rim_hairline">Thin</string>
     <string name="appearance_rim_bright">Bright</string>
@@ -151,7 +151,7 @@
     <string name="appearance_pane_borders_back">Back to Terminal</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
     <string name="appearance_row_glass_edge">Edge</string>
-    <string name="appearance_row_tool_colours">Tool colours</string>
+    <string name="appearance_row_tool_colours">TUI app themes</string>
     <!-- The dot after a row's label, as accessibility reads it. -->
     <string name="appearance_row_own_value">Set here</string>
     <!-- Under Visible while the frame shows the other orientation. -->
