@@ -227,6 +227,29 @@ public final class SegmentRow {
             params.bottomMargin = RowKit.dp(context, GROUP_GAP_DP);
             root.addView(group, params);
         }
+        // TEMP diagnostic (W3SEG): why titles cut beside worded groups on the emulator. Revert.
+        {
+            StackTraceElement[] st = new Throwable().getStackTrace();
+            StringBuilder frames = new StringBuilder();
+            for (int f = 1; f < Math.min(st.length, 7); f++)
+                frames.append(" <- ").append(st[f].getClassName().replaceAll(".*\\.", ""))
+                    .append('.').append(st[f].getMethodName()).append(':')
+                    .append(st[f].getLineNumber());
+            android.util.Log.d("W3SEG", android.os.SystemClock.uptimeMillis() + " build \""
+                + title + "\" widthPx=" + widthPx + " titlePx=" + titlePx + " controlPx="
+                + controlPx + " inline=" + inline + " density="
+                + context.getResources().getDisplayMetrics().density + " fontScale="
+                + context.getResources().getConfiguration().fontScale + frames);
+            root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                android.text.Layout tl = titleView.getLayout();
+                android.util.Log.d("W3SEG", android.os.SystemClock.uptimeMillis() + " laid \""
+                    + title + "\" rootW=" + (r - l) + " lineW=" + line.getWidth()
+                    + " titleW=" + titleView.getWidth() + " titleNeeds="
+                    + titleView.getPaint().measureText(title.toString())
+                    + " cut=" + (tl == null ? -1 : tl.getEllipsisCount(0))
+                    + " groupW=" + group.getWidth() + " inline=" + inline);
+            });
+        }
         SegmentRow row = new SegmentRow(root, titleView, group, buttons, inline);
         row.select(selected);
         group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
