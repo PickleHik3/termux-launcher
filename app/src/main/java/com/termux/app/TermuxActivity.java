@@ -9777,16 +9777,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
-            com.termux.app.place.SeamTime3.step("spec:followLooksGlassTheme", () -> followLooksGlassTheme());
-            com.termux.app.place.SeamTime3.step("spec:syncFancierGlassLook", () -> syncFancierGlassLook());
-            com.termux.app.place.SeamTime3.step("spec:syncFrameStandDown", () -> syncFrameStandDown());
-            com.termux.app.place.SeamTime3.step("spec:doApplyChromeSpec", () -> doApplyChromeSpec(state));
+            followLooksGlassTheme();
+            syncFancierGlassLook();
+            syncFrameStandDown();
+            doApplyChromeSpec(state);
             // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
             // both through one request.
-            com.termux.app.place.SeamTime3.step("spec:syncStatusBarInk", () -> syncStatusBarInk());
+            syncStatusBarInk();
         } finally {
-        Trace.endSection();
+            Trace.endSection();
         }
     }
 
@@ -9797,49 +9797,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // bands, so the layers' MATCH_PARENT above it is already exactly the dock's rows.
         Rect toolbarOnlyBounds = state.keyboardShown && !underKeyboardBandsShown()
             ? buildToolbarOnlyAccessoryBounds(state) : null;
-            com.termux.app.place.SeamTime3.step("spec:applyAccessorySurfaceBounds", () -> applyAccessorySurfaceBounds(state));
-            com.termux.app.place.SeamTime3.step("spec:applyAccessoryLayerVerticalBounds", () -> applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds));
-            com.termux.app.place.SeamTime3.step("spec:applyAccessoryLayerVerticalBounds", () -> applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds));
+        applyAccessorySurfaceBounds(state);
+        applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds);
+        applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         boolean useDecorSurface = shouldUseDockDecorNavBarSurface(state);
-            com.termux.app.place.SeamTime3.step("spec:applyAccessoryAmbientVeil", () -> applyAccessoryAmbientVeil(accessoryContainer, state));
+        applyAccessoryAmbientVeil(accessoryContainer, state);
 
         // Which of the dock's views show is Dock rows' answer, one for every chrome spec, the dock
         // up or not. Its subscribers (onDockRowsChanged: a drag on the pinned apps, their page
         // ticks, the icon reflection) hear a change before the views move, so a drag is cancelled
         // while its source is still on screen. Under the navigation strip's glass a Docked dock's
         // own sheet stands down.
-        com.termux.app.place.SeamTime3.step("spec:dockRowsApply", () -> mDockRows.apply(state,
-            mStatusBarEdge == PlaceLayout.Edge.BOTTOM, useDecorSurface && !dockFloats()));
+        mDockRows.apply(state, mStatusBarEdge == PlaceLayout.Edge.BOTTOM,
+            useDecorSurface && !dockFloats());
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
             // The letters keep their scrub without the apps row — it just shows its matches on the
             // floating strip instead — so only drop the gesture when the letters are gone too.
             // Standing on another edge is not gone: the row here is empty, the bar is elsewhere.
             if (!isAzIndexEnabled()) {
-            com.termux.app.place.SeamTime3.step("spec:resetAzGestureState", () -> resetAzGestureState(true));
+                resetAzGestureState(true);
             }
         }
         if (!state.toolbarShown) {
-            com.termux.app.place.SeamTime3.step("spec:clearAccessoryRenderEffectBackdrop", () -> clearAccessoryRenderEffectBackdrop());
+            clearAccessoryRenderEffectBackdrop();
             // Nothing lands on the dock, but the letters may still be standing on another edge.
-            com.termux.app.place.SeamTime3.step("spec:syncAzBarHosts", () -> syncAzBarHosts());
-            com.termux.app.place.SeamTime3.step("spec:syncOffDockPlank", () -> syncOffDockPlank(arrangement().layout()));
-            com.termux.app.place.SeamTime3.step("spec:refreshOffDockGlass", () -> refreshOffDockGlass());
+            syncAzBarHosts();
+            syncOffDockPlank(arrangement().layout());
+            refreshOffDockGlass();
             // The extra keys or the letters standing on another edge, with nothing left on the
             // dock, still take their ink from the face under them (the plank wears the dock's
             // glass), not from the theme they were built in.
-            com.termux.app.place.SeamTime3.step("spec:syncDockGlassInks", () -> syncDockGlassInks(state.barAlpha));
-            com.termux.app.place.SeamTime3.step("spec:applyDecorNavBarSurfaceState", () -> applyDecorNavBarSurfaceState(state));
-            com.termux.app.place.SeamTime3.step("spec:applyInAppKeyboardSurfaceState", () -> applyInAppKeyboardSurfaceState(state));
-            com.termux.app.place.SeamTime3.step("spec:completePendingOpenReveal", () -> mKeyboardGeometry.completePendingOpenReveal(state));
-            com.termux.app.place.SeamTime3.step("spec:completePendingCloseGeometry", () -> mKeyboardGeometry.completePendingCloseGeometry(state));
-            com.termux.app.place.SeamTime3.step("spec:configureAccessoryTopEdgeFx", () -> configureAccessoryTopEdgeFx(false, state.barAlpha));
-            com.termux.app.place.SeamTime3.step("spec:resetAzOverflowAffordanceState", () -> resetAzOverflowAffordanceState());
+            syncDockGlassInks(state.barAlpha);
+            applyDecorNavBarSurfaceState(state);
+            applyInAppKeyboardSurfaceState(state);
+            mKeyboardGeometry.completePendingOpenReveal(state);
+            mKeyboardGeometry.completePendingCloseGeometry(state);
+            configureAccessoryTopEdgeFx(false, state.barAlpha);
+            resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
-            com.termux.app.place.SeamTime3.step("spec:setEnabled", () -> mDockPlankController.setEnabled(false));
+                mDockPlankController.setEnabled(false);
             }
-            com.termux.app.place.SeamTime3.step("spec:requestSync", () -> mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST));
+            mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
             return;
         }
 
@@ -9848,31 +9848,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
             // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
             // Under a joined Docked frame the frame's glass is this sheet.
-            com.termux.app.place.SeamTime3.step("spec:extraKeysDockSurface", () ->
-                extraKeysBackground.setBackground(stackStandsDownOnFrame() ? null
-                    : mChrome.glass().dockSurface(state.barAlpha, 0f, 1f, false)));
+            extraKeysBackground.setBackground(stackStandsDownOnFrame() ? null
+                : mChrome.glass().dockSurface(state.barAlpha,
+                    0f, 1f, false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
-            com.termux.app.place.SeamTime3.step("spec:setAlpha", () -> extraKeysBackground.setAlpha(1f));
+            extraKeysBackground.setAlpha(1f);
         }
-            com.termux.app.place.SeamTime3.step("spec:refreshDockPlankFx", () -> refreshDockPlankFx(state.barAlpha));
+        refreshDockPlankFx(state.barAlpha);
         // A bar off the dock is not in this stack and never rides its plank; it wears the same
         // glass, so it is re-glazed on the same pass that re-glazes the dock.
-            com.termux.app.place.SeamTime3.step("spec:syncAzBarHosts", () -> syncAzBarHosts());
-            com.termux.app.place.SeamTime3.step("spec:syncOffDockPlank", () -> syncOffDockPlank(arrangement().layout()));
-            com.termux.app.place.SeamTime3.step("spec:refreshOffDockGlass", () -> refreshOffDockGlass());
-            com.termux.app.place.SeamTime3.step("spec:syncDockGlassInks", () -> syncDockGlassInks(state.barAlpha));
+        syncAzBarHosts();
+        syncOffDockPlank(arrangement().layout());
+        refreshOffDockGlass();
+        syncDockGlassInks(state.barAlpha);
 
-            com.termux.app.place.SeamTime3.step("spec:configureAccessoryTopEdgeFx", () -> configureAccessoryTopEdgeFx(true, state.barAlpha));
-            com.termux.app.place.SeamTime3.step("spec:applyDecorNavBarSurfaceState", () -> applyDecorNavBarSurfaceState(state));
-            com.termux.app.place.SeamTime3.step("spec:applyInAppKeyboardSurfaceState", () -> applyInAppKeyboardSurfaceState(state));
+        configureAccessoryTopEdgeFx(true, state.barAlpha);
+        applyDecorNavBarSurfaceState(state);
+        applyInAppKeyboardSurfaceState(state);
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
         // the live blur views have nothing left to contribute — and each one that keeps capturing
         // redraws the whole window, terminal text included, on the UI thread.
-            com.termux.app.place.SeamTime3.step("spec:updateAccessoryRenderEffectBackdrop", () -> updateAccessoryRenderEffectBackdrop(state));
-            com.termux.app.place.SeamTime3.step("spec:requestSync", () -> mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST));
-            com.termux.app.place.SeamTime3.step("spec:completePendingOpenReveal", () -> mKeyboardGeometry.completePendingOpenReveal(state));
-            com.termux.app.place.SeamTime3.step("spec:completePendingCloseGeometry", () -> mKeyboardGeometry.completePendingCloseGeometry(state));
-            com.termux.app.place.SeamTime3.step("spec:updateAzOverflowAffordance", () -> updateAzOverflowAffordance());
+        updateAccessoryRenderEffectBackdrop(state);
+        mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        mKeyboardGeometry.completePendingOpenReveal(state);
+        mKeyboardGeometry.completePendingCloseGeometry(state);
+        updateAzOverflowAffordance();
         // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
         // again, yet it decides whether the Peek card may stand: read it again before the next draw.
         if (mPeekWatchedHost != null) schedulePeekRefresh();
@@ -23935,15 +23935,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             first ? com.termux.app.wall.PaneWallPage.TERMINAL : mLastWallPage;
         if (page == from) {
             if (first && commitWallPage(page))
-            com.termux.app.place.SeamTime3.step("spec:requestSync", () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             return;
         }
         boolean overlayChanged = KeyboardOverlayPolicy.changesBetween(from, page,
             arrangement().layout());
-            com.termux.app.place.SeamTime3.step("place:syncWallKeyboard", () -> syncWallKeyboard(page, leavingKeyboardUp, !first));
-            com.termux.app.place.SeamTime3.step("place:syncDisplayTouchpad", () -> syncDisplayTouchpad());
-            com.termux.app.place.SeamTime3.step("place:applyPlaceSystemImeOwner", () -> applyPlaceSystemImeOwner());
-            com.termux.app.place.SeamTime3.step("place:applyExtraKeysPlaceEligibility", () -> applyExtraKeysPlaceEligibility());
+        syncWallKeyboard(page, leavingKeyboardUp, !first);
+        syncDisplayTouchpad();
+        applyPlaceSystemImeOwner();
+        applyExtraKeysPlaceEligibility();
         // One chrome pass at rest, for the two pieces of geometry that are the place's by design:
         // the terminal alone pads the dock down to a whole text row, and Home and the display can
         // float an open keyboard over their content where the terminal gives it room. An
@@ -23955,12 +23955,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
         if (overlayChanged) {
             scopes |= ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
-            com.termux.app.place.SeamTime3.step("place:geometryRequestNow", () ->
-                mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
-                    GeometryScheduler.ResizePolicy.NOW));
+            mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
         }
-        final int s3Scopes = scopes;
-        com.termux.app.place.SeamTime3.step("place:requestSync", () -> mChrome.requestSync(s3Scopes));
+        mChrome.requestSync(scopes);
     }
 
     // ---- The chrome travelling with the wall ------------------------------------------------
@@ -23980,10 +23978,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncChromeTravel(float offsetPx) {
         Trace.beginSection("Wall.chromeTravel");
         try {
-            // TEMP diag(seam): SeamTime3 labels the travel frames.
-            com.termux.app.place.SeamTime3.travelFrame();
             doSyncChromeTravel(offsetPx);
-            com.termux.app.place.SeamTime3.travelFrameDone();
         } finally {
             Trace.endSection();
         }
@@ -24435,8 +24430,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stackDressOf(otherDress, therePage, orientation),
                 mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
                 otherRowsPx);
-        // TEMP diag(seam): SeamTime3 numbers each wall crossing.
-        if (begins) com.termux.app.place.SeamTime3.crossingBegin();
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
                 isSplitPanesEnabled()),
@@ -26243,12 +26236,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     Trace.beginSection("Wall.pageSettled");
                     try {
-                        // TEMP diag(seam): SeamTime3 labels the landing and what follows it.
-                        com.termux.app.place.SeamTime3.landingBegin();
-                        long s3 = com.termux.app.place.SeamTime3.begin("landing:all");
                         onWallPageSettledTraced(page);
-                        com.termux.app.place.SeamTime3.end("landing:all", s3, 0f);
-                        com.termux.app.place.SeamTime3.landingEnd();
                     } finally {
                         Trace.endSection();
                     }

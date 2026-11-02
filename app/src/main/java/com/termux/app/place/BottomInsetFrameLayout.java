@@ -40,13 +40,6 @@ public class BottomInsetFrameLayout extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // TEMP diag(seam): SeamTime3 logs a slow measure while a crossing is in play.
-        long s3 = com.termux.app.place.SeamTime3.begin("measure");
-        onMeasureS3(widthMeasureSpec, heightMeasureSpec);
-        com.termux.app.place.SeamTime3.measured(this, s3, 3f);
-    }
-
-    private void onMeasureS3(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         View child = reaching();
         if (child == null) return;

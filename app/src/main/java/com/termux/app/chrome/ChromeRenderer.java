@@ -357,14 +357,7 @@ public final class ChromeRenderer {
     public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
         mSurfaces = surfaces;
         mBlurWorker = blurWorker;
-        // TEMP diag(seam): SeamTime3 times the posted pass, its spec build included.
-        mRenderSyncRunnable = () -> {
-            com.termux.app.place.SeamTime3.renderRun("posted");
-            long s3 = com.termux.app.place.SeamTime3.begin("render:buildChromeSpec");
-            ChromeSpec s3Spec = mSurfaces.buildChromeSpec();
-            com.termux.app.place.SeamTime3.end("render:buildChromeSpec", s3, 2f);
-            runRenderSync(s3Spec);
-        };
+        mRenderSyncRunnable = () -> runRenderSync(mSurfaces.buildChromeSpec());
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
             public void run() {
@@ -502,13 +495,10 @@ public final class ChromeRenderer {
      */
     public void applySettled(@NonNull ChromeSpec spec) {
         if (!mRenderSyncPending) {
-            // TEMP diag(seam): SeamTime3 times the gate's plain apply.
-            com.termux.app.place.SeamTime3.step("apply:preDrawGatePlain",
-                () -> mSurfaces.applyChromeSpec(spec));
+            mSurfaces.applyChromeSpec(spec);
             return;
         }
         mHandler.removeCallbacks(mRenderSyncRunnable);
-        com.termux.app.place.SeamTime3.renderRun("preDrawGate");
         runRenderSync(spec);
     }
 
@@ -522,16 +512,11 @@ public final class ChromeRenderer {
         // states, because the apply asks unconditionally (Pong, 2026-09-09).
         long dirtyBefore = mLedger.dirtyGeneration();
         mRenderSyncRunning = true;
-        // TEMP diag(seam): SeamTime3 splits the pass.
-        long s3All = com.termux.app.place.SeamTime3.begin("render:all");
         try {
-            com.termux.app.place.SeamTime3.step("render:applyChromeSpec",
-                () -> mSurfaces.applyChromeSpec(spec));
-            com.termux.app.place.SeamTime3.step("render:enforceAccessoryFxInvariants",
-                mSurfaces::enforceAccessoryFxInvariants);
+            mSurfaces.applyChromeSpec(spec);
+            mSurfaces.enforceAccessoryFxInvariants();
         } finally {
             mRenderSyncRunning = false;
-            com.termux.app.place.SeamTime3.end("render:all", s3All, 0f);
         }
         if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
             requestSync(SCOPE_ACCESSORY_RENDER);
@@ -570,9 +555,6 @@ public final class ChromeRenderer {
             runTopPaneFrost();
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
-            // TEMP diag(seam): SeamTime3 records who asks for the pass.
-            com.termux.app.place.SeamTime3.renderAsked(!mRenderSyncRunning && !mRenderSyncPending,
-                mRenderSyncRunning);
             if (mRenderSyncRunning) {
                 // The pass that would run is the pass asking. It decides for itself, once, at the
                 // end of its run — from whether it left anything stale — rather than each caller
@@ -763,9 +745,7 @@ public final class ChromeRenderer {
         }
         Trace.beginSection("Chrome.commit");
         try {
-            // TEMP diag(seam): SeamTime3 times the commit (SCOPE_APPLY_THIS_FRAME).
-            com.termux.app.place.SeamTime3.step("apply:commit",
-                () -> mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec()));
+            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
         } finally {
             Trace.endSection();
         }

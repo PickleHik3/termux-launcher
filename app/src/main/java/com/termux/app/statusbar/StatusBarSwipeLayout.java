@@ -398,12 +398,4 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                                          int dxUnconsumed, int dyUnconsumed) { }
     @Override public void onNestedScroll(@NonNull View target, int dxConsumed, int dyConsumed,
                                          int dxUnconsumed, int dyUnconsumed, int type) { }
-
-    // TEMP diag(seam): SeamTime3 logs a slow measure while a crossing is in play.
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        long s3 = com.termux.app.place.SeamTime3.begin("measure");
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        com.termux.app.place.SeamTime3.measured(this, s3, 3f);
-    }
 }
