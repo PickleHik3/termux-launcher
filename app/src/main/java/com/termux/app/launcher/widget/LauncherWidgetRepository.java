@@ -142,6 +142,12 @@ public final class LauncherWidgetRepository {
      * payload so the two commit together. Null when no shrink is outstanding.
      */
     @Nullable private RowSnapshot rowSnapshot;
+    /**
+     * The wall as it stood before the wall's caps cut the grid ({@link #setGridDefinition} with
+     * {@code capped}), kept in the same payload like {@link #rowSnapshot}. Its rows are unused.
+     * Null when no capped shrink is outstanding.
+     */
+    @Nullable private RowSnapshot capSnapshot;
     private long revision;
     private boolean migrationWritePending;
     private boolean readOnlyUnknownVersion;
@@ -162,7 +168,7 @@ public final class LauncherWidgetRepository {
             // An index-keyed wall is written back keyed by id at once: the owner may reorder the
             // pages before the next edit, and a position would then name the wrong page.
             storage.write(encode(records, orphans, ids, pending, grid, freshPages, orientation,
-                layouts, rowSnapshot, revision));
+                layouts, rowSnapshot, capSnapshot, revision));
         }
         // An empty grid carries no placements worth preserving: adopt the current default
         // dimensions so a stale persisted grid (e.g. the old 6x4) cannot outlive its widgets.
@@ -244,22 +250,26 @@ public final class LauncherWidgetRepository {
             changed |= cut != entry.getValue();
             shelf.put(entry.getKey(), cut);
         }
-        RowSnapshot cutSnapshot = rowSnapshot;
-        if (rowSnapshot != null) {
-            OrientationLayout before = withoutPage(rowSnapshot.before, id);
-            OrientationLayout after = withoutPage(rowSnapshot.after, id);
-            if (before != rowSnapshot.before || after != rowSnapshot.after) {
-                cutSnapshot = new RowSnapshot(rowSnapshot.orientation, rowSnapshot.rows, before, after);
-                changed = true;
-            }
-        }
+        RowSnapshot cutSnapshot = withoutPage(rowSnapshot, id);
+        RowSnapshot cutCaps = withoutPage(capSnapshot, id);
+        changed |= cutSnapshot != rowSnapshot || cutCaps != capSnapshot;
         if (!changed) return;
         LinkedHashMap<Integer, LauncherWidgetRecord> was = orphans;
         orphans = keptAside;
         if (!commitValidated(records, pending, grid, pageCount, freshPages, orientation, shelf,
-            cutSnapshot, revision + 1)) {
+            cutSnapshot, cutCaps, revision + 1)) {
             orphans = was;
         }
+    }
+
+    /** The snapshot without page {@code id}; the same object when it had none, null for null. */
+    @Nullable
+    private static RowSnapshot withoutPage(@Nullable RowSnapshot snapshot, int id) {
+        if (snapshot == null) return null;
+        OrientationLayout before = withoutPage(snapshot.before, id);
+        OrientationLayout after = withoutPage(snapshot.after, id);
+        if (before == snapshot.before && after == snapshot.after) return snapshot;
+        return new RowSnapshot(snapshot.orientation, snapshot.rows, before, after);
     }
 
     /** The layout without its cells on page {@code id}; the same object when it had none. */
@@ -557,13 +567,47 @@ public final class LauncherWidgetRepository {
      * Refused while an add is in flight, since its reservation was made against the old grid.
      */
     public synchronized boolean setGridDefinition(@NonNull WidgetGridDefinition next) {
+        return setGridDefinition(next, false);
+    }
+
+    /**
+     * The same, saying whether {@code next} is the user's grid cut by what the wall can hold
+     * ({@code capped}) rather than the user's own choice. A capped grid reflows the same way, but
+     * the wall as it stood is kept first, so a cap that falls never loses the arrangement: when a
+     * later grid is the one the wall stood on before the cap fell, and nothing was edited since,
+     * the exact cells, pages and page list come back, and the pages the cut added go again. A
+     * second capped change while the first is untouched keeps the first wall, so one return
+     * undoes both. Any other change, and every uncapped one, is today's reflow and drops what was
+     * kept. Refused while an add is in flight.
+     */
+    public synchronized boolean setGridDefinition(@NonNull WidgetGridDefinition next,
+                                                  boolean capped) {
         if (next.equals(grid)) return true;
         if (pending != null) return false;
+        RowSnapshot held = capSnapshot != null && capSnapshot.isUntouched(this)
+            ? capSnapshot : null;
+        if (held != null && next.equals(held.before.grid)) {
+            return replay(held.before, rowSnapshot, null);
+        }
         int[] pages = { pageCount };
         LinkedHashMap<Integer, LauncherWidgetRecord> relaid = reflow(records, next, pages);
         if (relaid == null) return false;
-        return commitValidated(relaid, null, next, pages[0], revision + 1);
+        boolean shrinks = next.rows < grid.rows || next.columns < grid.columns;
+        if (!capped || (held == null && !shrinks)) {
+            return commitValidated(relaid, null, next, pages[0], freshPages, orientation, layouts,
+                rowSnapshot, null, revision + 1);
+        }
+        List<Integer> afterIds = idsGrownTo(pages[0]);
+        OrientationLayout before = held != null ? held.before
+            : layoutOf(records, grid, ids, freshPages);
+        OrientationLayout after = layoutOf(relaid, next, afterIds, freshPages);
+        plannedIds = afterIds;
+        return commitValidated(relaid, null, next, pages[0], freshPages, orientation, layouts,
+            rowSnapshot, new RowSnapshot(orientation, 0, before, after), revision + 1);
     }
+
+    /** True while a capped shrink's wall is kept, edited since or not. */
+    public synchronized boolean hasGridCapSnapshot() { return capSnapshot != null; }
 
     /**
      * Takes {@code rows} rows off the grid (the room an always-on keyboard needs) with today's
@@ -625,34 +669,41 @@ public final class LauncherWidgetRepository {
         if (held == null || pending != null || migrationWritePending || readOnlyUnknownVersion) {
             return false;
         }
-        if (held.isUntouched(this)) {
-            OrientationLayout before = held.before;
-            LinkedHashMap<Integer, LauncherWidgetRecord> replayed = new LinkedHashMap<>();
-            for (LauncherWidgetRecord record : records.values()) {
-                Placement placed = before.cells.get(record.appWidgetId);
-                int at = placed == null ? -1 : ids.indexOf(placed.page);
-                replayed.put(record.appWidgetId,
-                    at < 0 ? record : record.withPage(at).withCell(placed.cell));
-            }
-            // The pages the shrink added at the end go again; any other page change stands.
-            int count = pageCount;
-            if (before.pageIds != null && before.pageIds.size() <= ids.size()
-                && ids.subList(0, before.pageIds.size()).equals(before.pageIds)) {
-                count = before.pageIds.size();
-            }
-            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
-            for (Integer id : before.freshPages) {
-                int at = ids.indexOf(id);
-                if (at >= 0 && at < count) fresh.add(at);
-            }
-            return commitValidated(replayed, null, before.grid, count, fresh, orientation, layouts,
-                null, revision + 1);
-        }
+        if (held.isUntouched(this)) return replay(held.before, null, capSnapshot);
         int rows = Math.min(WidgetGridDefinition.MAX_ROWS, grid.rows + held.rows);
         WidgetGridDefinition grown = new WidgetGridDefinition(rows, grid.columns);
         commitValidated(records, null, grown, pageCount, freshPages, orientation, layouts, null,
             revision + 1);
         return false;
+    }
+
+    /**
+     * Puts the wall back as {@code before} holds it: every widget on its page and cell, the grid,
+     * and the page list less the pages added at its end since; any other page change stands.
+     * Commits with {@code nextRows} and {@code nextCaps} as the snapshots kept after it.
+     */
+    private boolean replay(@NonNull OrientationLayout before, @Nullable RowSnapshot nextRows,
+                           @Nullable RowSnapshot nextCaps) {
+        LinkedHashMap<Integer, LauncherWidgetRecord> replayed = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            Placement placed = before.cells.get(record.appWidgetId);
+            int at = placed == null ? -1 : ids.indexOf(placed.page);
+            replayed.put(record.appWidgetId,
+                at < 0 ? record : record.withPage(at).withCell(placed.cell));
+        }
+        // The pages the shrink added at the end go again; any other page change stands.
+        int count = pageCount;
+        if (before.pageIds != null && before.pageIds.size() <= ids.size()
+            && ids.subList(0, before.pageIds.size()).equals(before.pageIds)) {
+            count = before.pageIds.size();
+        }
+        LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+        for (Integer id : before.freshPages) {
+            int at = ids.indexOf(id);
+            if (at >= 0 && at < count) fresh.add(at);
+        }
+        return commitValidated(replayed, null, before.grid, count, fresh, orientation, layouts,
+            nextRows, nextCaps, revision + 1);
     }
 
     /**
@@ -1224,7 +1275,7 @@ public final class LauncherWidgetRepository {
 
     @NonNull public synchronized String serialize() {
         return encode(records, orphans, ids, pending, grid, freshPages, orientation, layouts,
-            rowSnapshot, revision);
+            rowSnapshot, capSnapshot, revision);
     }
 
     private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
@@ -1261,6 +1312,18 @@ public final class LauncherWidgetRepository {
                                     @Nullable String nextOrientation,
                                     @NonNull Map<String, OrientationLayout> nextLayouts,
                                     @Nullable RowSnapshot nextSnapshot, long nextRevision) {
+        return commitValidated(next, nextPending, nextGrid, nextPageCount, nextFresh,
+            nextOrientation, nextLayouts, nextSnapshot, capSnapshot, nextRevision);
+    }
+
+    private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
+                                    @Nullable WidgetAddTransaction nextPending,
+                                    WidgetGridDefinition nextGrid, int nextPageCount,
+                                    @NonNull Collection<Integer> nextFresh,
+                                    @Nullable String nextOrientation,
+                                    @NonNull Map<String, OrientationLayout> nextLayouts,
+                                    @Nullable RowSnapshot nextSnapshot,
+                                    @Nullable RowSnapshot nextCapSnapshot, long nextRevision) {
         List<Integer> planned = plannedIds;
         plannedIds = null;
         List<Integer> already = preGrown;
@@ -1301,7 +1364,7 @@ public final class LauncherWidgetRepository {
             }
         }
         String encoded = encode(next, orphans, nextIds, nextPending, nextGrid, fresh,
-            nextOrientation, shelf, nextSnapshot, nextRevision);
+            nextOrientation, shelf, nextSnapshot, nextCapSnapshot, nextRevision);
         if (!storage.write(encoded)) {
             List<Integer> back = new ArrayList<>(grown);
             back.addAll(already);
@@ -1317,6 +1380,7 @@ public final class LauncherWidgetRepository {
         orientation = nextOrientation;
         layouts = shelf;
         rowSnapshot = nextSnapshot;
+        capSnapshot = nextCapSnapshot;
         revision = nextRevision;
         if (!removed.isEmpty()) {
             ownerRemove(removed);
@@ -1474,7 +1538,8 @@ public final class LauncherWidgetRepository {
             List<Integer> byPosition = idKeyed ? null : ids;
             layouts = keptShelf(decodeLayouts(root.optJSONObject("layouts"), orientation,
                 byPosition), orientation);
-            rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"), byPosition);
+            rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"), byPosition, 1);
+            capSnapshot = decodeRowSnapshot(root.optJSONObject("capSnapshot"), byPosition, 0);
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException exception) {
             android.util.Log.e("LauncherWidgets", "stored wall unreadable", exception);
@@ -1497,7 +1562,7 @@ public final class LauncherWidgetRepository {
         pageCount = ids.size();
         revision = Math.max(0, root.optLong("revision", 0));
         migrationWritePending = !storage.write(encode(loaded, orphans, ids, loadedPending,
-            loadedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, revision));
+            loadedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, null, revision));
     }
 
     private void migrateV1(JSONObject root) throws JSONException {
@@ -1530,7 +1595,7 @@ public final class LauncherWidgetRepository {
         pageCount = ids.size();
         revision = 0;
         migrationWritePending = !storage.write(encode(migrated, orphans, ids, migratedPending,
-            migratedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, 0));
+            migratedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, null, 0));
     }
 
     @NonNull
@@ -1615,7 +1680,8 @@ public final class LauncherWidgetRepository {
                                  @NonNull Collection<Integer> freshIndices,
                                  @Nullable String orientation,
                                  @NonNull Map<String, OrientationLayout> layouts,
-                                 @Nullable RowSnapshot snapshot, long revision) {
+                                 @Nullable RowSnapshot snapshot,
+                                 @Nullable RowSnapshot capSnapshot, long revision) {
         try {
             // Everything is written under its page id; the root says so, so a payload without the
             // marker is read as positions once (and written back as ids).
@@ -1664,13 +1730,9 @@ public final class LauncherWidgetRepository {
                 }
                 root.put("layouts", shelf);
             }
-            if (snapshot != null) {
-                JSONObject held = new JSONObject().put("rows", snapshot.rows)
-                    .put("before", encodeLayout(snapshot.before))
-                    .put("after", encodeLayout(snapshot.after));
-                if (snapshot.orientation != null) held.put("orientation", snapshot.orientation);
-                root.put("rowSnapshot", held);
-            }
+            if (snapshot != null) root.put("rowSnapshot", encodeSnapshot(snapshot));
+            // Left out when none, so a save without a capped shrink is the payload it was.
+            if (capSnapshot != null) root.put("capSnapshot", encodeSnapshot(capSnapshot));
             JSONArray array = new JSONArray();
             for (LauncherWidgetRecord record : values.values()) {
                 array.put(encodeRecord(record, writeKind));
@@ -1757,15 +1819,27 @@ public final class LauncherWidgetRepository {
             cells);
     }
 
-    /** An unreadable snapshot is dropped: the wall stands as it is and nothing is replayed. */
+    private static JSONObject encodeSnapshot(@NonNull RowSnapshot snapshot) throws JSONException {
+        JSONObject held = new JSONObject().put("rows", snapshot.rows)
+            .put("before", encodeLayout(snapshot.before))
+            .put("after", encodeLayout(snapshot.after));
+        if (snapshot.orientation != null) held.put("orientation", snapshot.orientation);
+        return held;
+    }
+
+    /**
+     * An unreadable snapshot is dropped: the wall stands as it is and nothing is replayed. Its
+     * rows are read no lower than {@code leastRows}.
+     */
     @Nullable
     private static RowSnapshot decodeRowSnapshot(@Nullable JSONObject value,
-                                                 @Nullable List<Integer> byPosition) {
+                                                 @Nullable List<Integer> byPosition,
+                                                 int leastRows) {
         if (value == null) return null;
         try {
             String key = value.optString("orientation", null);
             return new RowSnapshot(key == null || key.isEmpty() ? null : key,
-                Math.max(1, value.getInt("rows")),
+                Math.max(leastRows, value.getInt("rows")),
                 decodeLayout(value.getJSONObject("before"), byPosition),
                 decodeLayout(value.getJSONObject("after"), byPosition));
         } catch (JSONException | IllegalArgumentException ignored) {
