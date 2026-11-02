@@ -23,47 +23,59 @@ public class IconSizeCapTest {
     private static final Collection<DockStyle> TRAY = EnumSet.of(DockStyle.GLASS_TRAY);
 
     private static IconSize cap(Collection<DockStyle> designs, int count, int widthDp) {
-        return IconSizeCap.largestFitting(designs, count, widthDp, GRID_EDGE_DP, GRID_COLUMNS);
+        return cap(designs, count, widthDp, false);
+    }
+
+    private static IconSize cap(Collection<DockStyle> designs, int count, int widthDp,
+                                boolean floating) {
+        return IconSizeCap.largestFitting(designs, count, widthDp, GRID_EDGE_DP, GRID_COLUMNS,
+            floating);
     }
 
     @Test
-    public void theCapPerStepWidthAndCountOnTheGlassTray() {
-        // 412 dp, the developer's phone: XL fits 5, L fits 6, M fits 7, 8 only at S.
-        assertEquals(IconSize.XL, cap(TRAY, 4, 412));
-        assertEquals(IconSize.XL, cap(TRAY, 5, 412));
-        assertEquals(IconSize.L, cap(TRAY, 6, 412));
-        assertEquals(IconSize.M, cap(TRAY, 7, 412));
-        assertEquals(IconSize.S, cap(TRAY, 8, 412));
+    public void theCapPerStepWidthAndCountOnTheGlassTrayFloating() {
+        // 412 dp, the developer's phone, Floating: XL fits 5, L fits 6, M fits 7, 8 only at S.
+        assertEquals(IconSize.XL, cap(TRAY, 4, 412, true));
+        assertEquals(IconSize.XL, cap(TRAY, 5, 412, true));
+        assertEquals(IconSize.L, cap(TRAY, 6, 412, true));
+        assertEquals(IconSize.M, cap(TRAY, 7, 412, true));
+        assertEquals(IconSize.S, cap(TRAY, 8, 412, true));
         // 360 dp: L fits 5, 6 only at M, 7 only at S.
-        assertEquals(IconSize.L, cap(TRAY, 5, 360));
-        assertEquals(IconSize.M, cap(TRAY, 6, 360));
-        assertEquals(IconSize.S, cap(TRAY, 7, 360));
+        assertEquals(IconSize.L, cap(TRAY, 5, 360, true));
+        assertEquals(IconSize.M, cap(TRAY, 6, 360, true));
+        assertEquals(IconSize.S, cap(TRAY, 7, 360, true));
     }
 
     @Test
-    public void everyDesignShownCapsTheStepItsTightestStyleFits() {
-        // Lens beads floating fits 7 only at S at 412 dp, so a Terminal on beads caps Home too.
-        assertEquals(IconSize.S,
-            cap(EnumSet.of(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS), 7, 412));
+    public void onlyTheStyleTheDockWearsCapsTheStep() {
+        // Lens beads fits 7 at M docked but only at S floating (412 dp): a Terminal on beads
+        // caps Home at S only while the dock is Floating (developer, 2026-11-02).
+        java.util.Set<DockStyle> pong = EnumSet.of(DockStyle.WALL_STRIP, DockStyle.LENS_BEADS);
+        assertEquals(IconSize.M, cap(pong, 7, 412, false));
+        assertEquals(IconSize.S, cap(pong, 7, 412, true));
         assertEquals(IconSize.M,
-            cap(EnumSet.of(DockStyle.GLASS_TRAY, DockStyle.PEEK_GLASS), 7, 412));
+            cap(EnumSet.of(DockStyle.GLASS_TRAY, DockStyle.PEEK_GLASS), 7, 412, true));
     }
 
     @Test
-    public void aStepFitsOnlyWhereEveryShownDesignAndStyleFitsIt() {
-        for (IconSize step : IconSize.values()) {
-            for (int count = 4; count <= 8; count++) {
-                boolean all = true;
-                for (boolean capsule : new boolean[] {false, true}) {
-                    all &= IconSizeCap.fits(DockStyle.GLASS_TRAY, capsule, step, count, 412,
-                        GRID_EDGE_DP, GRID_COLUMNS);
+    public void aStepFitsOnlyWhereEveryShownDesignFitsItInTheStyleWorn() {
+        java.util.Set<DockStyle> both = EnumSet.of(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS);
+        for (boolean floating : new boolean[] {false, true}) {
+            for (IconSize step : IconSize.values()) {
+                for (int count = 4; count <= 8; count++) {
+                    boolean all = true;
+                    for (DockStyle design : both) {
+                        all &= IconSizeCap.fits(design, floating, step, count, 412,
+                            GRID_EDGE_DP, GRID_COLUMNS);
+                    }
+                    assertEquals(step + " " + count + " floating=" + floating, all,
+                        IconSizeCap.fits(both, step, count, 412, GRID_EDGE_DP, GRID_COLUMNS,
+                            floating));
                 }
-                assertEquals(step + " " + count, all,
-                    IconSizeCap.fits(TRAY, step, count, 412, GRID_EDGE_DP, GRID_COLUMNS));
             }
         }
-        assertTrue(IconSizeCap.fits(TRAY, IconSize.XL, 0, 412, GRID_EDGE_DP, GRID_COLUMNS));
-        assertFalse(IconSizeCap.fits(TRAY, IconSize.XL, 7, 412, GRID_EDGE_DP, GRID_COLUMNS));
+        assertTrue(IconSizeCap.fits(TRAY, IconSize.XL, 0, 412, GRID_EDGE_DP, GRID_COLUMNS, false));
+        assertFalse(IconSizeCap.fits(TRAY, IconSize.XL, 7, 412, GRID_EDGE_DP, GRID_COLUMNS, false));
     }
 
     @Test

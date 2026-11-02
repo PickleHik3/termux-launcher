@@ -10,10 +10,10 @@ import java.util.Collection;
  * The cap the pinned-app count puts on the one icon size (ADR 0020 §3, developer 2026-11-01).
  * Icons are one size everywhere, so a step is offered only where the dock's pinned apps fit at
  * it, with the least gap between them ({@link DockLayoutPolicy#MIN_ICON_GAP_DP}), on the dock
- * designs the user sees now (Home's and the Terminal's) in both styles: no dock has to shrink or
- * clip an icon, the step drawn is the same on every page, and turning the dock floating does not
- * change it. (Every design would be stabler but caps 7 pins at S on a 412 dp phone, since Lens
- * beads floating fits 7 only at S; the developer's 7 pins land on M.)
+ * designs the user sees now (Home's and the Terminal's) in the style the dock wears (Docked or
+ * Floating; developer, 2026-11-02): no dock has to shrink or clip an icon and the step drawn is
+ * the same on every page. Turning the dock floating can lower the step drawn (Lens beads floating
+ * fits 7 pins only at S on a 412 dp phone, docked at M); turning it back brings the choice back.
  *
  * <p>The stored choice is kept as the user made it; what draws is {@link #effective}: the largest
  * step no bigger than the choice that fits. Unpinning apps brings the choice back.</p>
@@ -31,20 +31,20 @@ public final class IconSizeCap {
 
     /**
      * Whether {@code count} pinned icons of {@code step} stand in a row {@code widthDp} wide with
-     * the least gap, on each of {@code designs} in both styles (Docked and Floating, so turning
-     * the dock floating never changes the step). Zero or fewer pins always fit.
+     * the least gap, on each of {@code designs} in the style the dock wears. Zero or fewer pins
+     * always fit.
      *
+     * @param floating whether the dock is Floating (its capsule form) rather than Docked
      * @param gridEdgeDp the Home grid's side margin, dp (the dock's least side inset)
      * @param gridColumns the Home grid's columns (a row of that many stands on the grid's margin)
      */
     public static boolean fits(@NonNull Collection<DockStyle> designs, @NonNull IconSize step,
-                               int count, int widthDp, float gridEdgeDp, int gridColumns) {
+                               int count, int widthDp, float gridEdgeDp, int gridColumns,
+                               boolean floating) {
         if (count <= 0 || widthDp <= 0) return true;
         for (DockStyle design : designs) {
-            for (boolean capsule : new boolean[] {false, true}) {
-                if (!fits(design, capsule, step, count, widthDp, gridEdgeDp, gridColumns)) {
-                    return false;
-                }
+            if (!fits(design, floating, step, count, widthDp, gridEdgeDp, gridColumns)) {
+                return false;
             }
         }
         return true;
@@ -78,10 +78,13 @@ public final class IconSizeCap {
     /** The largest step at which {@code count} pins fit; {@link IconSize#S} when none does. */
     @NonNull
     public static IconSize largestFitting(@NonNull Collection<DockStyle> designs, int count,
-                                          int widthDp, float gridEdgeDp, int gridColumns) {
+                                          int widthDp, float gridEdgeDp, int gridColumns,
+                                          boolean floating) {
         IconSize[] steps = IconSize.values();
         for (int i = steps.length - 1; i > 0; i--) {
-            if (fits(designs, steps[i], count, widthDp, gridEdgeDp, gridColumns)) return steps[i];
+            if (fits(designs, steps[i], count, widthDp, gridEdgeDp, gridColumns, floating)) {
+                return steps[i];
+            }
         }
         return steps[0];
     }

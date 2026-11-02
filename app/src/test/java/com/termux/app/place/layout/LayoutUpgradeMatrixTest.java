@@ -74,14 +74,14 @@ public class LayoutUpgradeMatrixTest {
 
     @Test public void v2PageLooks() throws Exception { check("v16-page-looks"); }
 
-    /** The developer's phone: a dock at 2.994 (about a 55 dp icon) folds to L 54, and its seven
-     * pinned apps cap it at M 48 (developer, 2026-11-01). */
+    /** The developer's phone: a dock at 2.994 (about a 55 dp icon) folds to L 54, stored as the
+     * choice; the seven pinned apps cap only what draws (developer, 2026-11-02). */
     @Test public void v2PhoneIconSize() throws Exception { check("v16-phone-icon-size"); }
 
     /** Home's own icon size wins over the dock's at the fold (spec §8a). */
     @Test public void v2HomeIconWins() throws Exception { check("v16-home-icon-wins"); }
 
-    /** Five pinned apps fit at L, so the phone's L stands (seven cap it at M). */
+    /** Five pinned apps: the phone's L is stored as folded. */
     @Test public void v2FivePinsKeepL() throws Exception { check("v16-five-pins-icon-size"); }
 
     /** One grid for both orientations (ADR 0020 §12): the portrait count wins, landscape goes. */

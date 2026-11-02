@@ -17825,6 +17825,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mIconCapColumns = -1;
     @Nullable private com.termux.app.dock.DockStyle mIconCapHomeDesign;
     @Nullable private com.termux.app.dock.DockStyle mIconCapTerminalDesign;
+    private boolean mIconCapFloating;
     @NonNull private com.termux.app.place.layout.IconSize mIconCap =
         com.termux.app.place.layout.IconSize.XL;
     /** The step Home's icons were last given, so a change re-dresses them once. */
@@ -17849,9 +17850,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             storeArrangementOf(com.termux.app.wall.PageRef.HOME).design();
         com.termux.app.dock.DockStyle terminal =
             storeArrangementOf(com.termux.app.wall.PageRef.TERMINAL).design();
+        // Only the style the dock wears caps the step (developer, 2026-11-02).
+        boolean floating = mPreferences != null
+            && com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .APP_LAUNCHER_DOCK_STYLE_FLOATING.equals(mPreferences.getAppLauncherDockStyle());
         if (count != mIconCapCount || widthDp != mIconCapWidthDp
             || Float.compare(edgeDp, mIconCapEdgeDp) != 0 || columns != mIconCapColumns
-            || home != mIconCapHomeDesign || terminal != mIconCapTerminalDesign) {
+            || home != mIconCapHomeDesign || terminal != mIconCapTerminalDesign
+            || floating != mIconCapFloating) {
+            mIconCapFloating = floating;
             mIconCapCount = count;
             mIconCapWidthDp = widthDp;
             mIconCapEdgeDp = edgeDp;
@@ -17859,7 +17866,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIconCapHomeDesign = home;
             mIconCapTerminalDesign = terminal;
             mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
-                java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns);
+                java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns, floating);
             com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
         }
         com.termux.app.place.layout.IconSize drawn =
