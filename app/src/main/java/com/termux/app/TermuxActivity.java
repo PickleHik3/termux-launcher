@@ -1317,7 +1317,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mRootFitBottomPx, mRootRestFitBottomPx;
     /** The navigation band the content keeps clear below itself ({@link #applyBottomKept}). */
     private int mBottomKeptPx;
-    /** The system keyboard's take the content's bottom margin reaches past on Home; 0 elsewhere. */
+    /** The reach the content's bottom margin carries on Home ({@link com.termux.app.place.BottomInsets#homeContentReachPx}). */
     private int mHomeContentImeReachPx;
     /** Set only after this activity explicitly requests a system IME in its current visible run. */
     private final LruCache<String, Integer> mLaunchIconColorCache = new LruCache<>(64);
@@ -10592,7 +10592,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Home page a change in their difference moves the content's reach at once, ahead of this
      * traversal's measure, so the window resizing for the system keyboard never lays the widget
      * grid out shorter even for the frame before the geometry pass, which writes the same reach
-     * ({@link KeyboardOverlayPolicy#overlapPx(boolean, int, int, int, int)}).
+     * ({@link KeyboardOverlayPolicy#overlapPx(boolean, int, int, int, int)}). The reach counts the
+     * kept band these insets give too ({@link com.termux.app.place.BottomInsets#homeContentReachPx}):
+     * the root's padding takes the band over from the content as the keyboard comes up and hands
+     * it back as it goes, while the stack the content hangs above keeps standing on the old band
+     * until the geometry pass, so a reach of the take alone left the grid a band short on the way
+     * up and a band tall on the way down for that one layout.
      */
     @SuppressWarnings("deprecation")
     private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
@@ -10600,7 +10605,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mRootRestFitBottomPx = insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom;
         if (mCrossing.holdsContent() || mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS)
             return;
-        int reach = systemImeTakePx();
+        int kept = com.termux.app.place.BottomInsets.keptPx(insets.isVisible(Type.ime()),
+            mRootFitBottomPx, mRootRestFitBottomPx);
+        int reach = com.termux.app.place.BottomInsets.homeContentReachPx(systemImeTakePx(), kept);
         int delta = reach - mHomeContentImeReachPx;
         if (delta == 0) return;
         View content = findViewById(R.id.terminal_content_column);
@@ -17298,7 +17305,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (applySideStackDockInsets(dockOverlays, stack.sideStackOverlapPx))
             mChrome.onArrangementChanged();
         mCrossing.heldOverlap(stack.contentOverlapPx);
-        mHomeContentImeReachPx = stack.homeImeReachPx;
+        // The kept band this pass stood the stack on, so the next inset dispatch answers a band
+        // that moves as well as the take (noteRootFitBottom).
+        mHomeContentImeReachPx = com.termux.app.place.BottomInsets.homeContentReachPx(
+            stack.homeImeReachPx, mBottomKeptPx);
         // On a Home page the dock floats over the grid, so the grid ends above the dock's rows at
         // rest and the edge gap under them (#104). A slide keeps what the content was committed
         // with, and a crossing toward Home gave the grid Home's own band as it began
