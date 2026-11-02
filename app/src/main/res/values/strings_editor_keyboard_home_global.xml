@@ -14,6 +14,21 @@
     <string name="editor_section_wallpaper">Wallpaper</string>
     <string name="editor_section_colour">Colour</string>
     <string name="editor_section_glass_material">Glass material</string>
+    <!-- The overhaul's section titles (appearance-cards-overhaul §2). -->
+    <string name="editor_section_more_options">More options</string>
+    <string name="editor_section_layout">Layout</string>
+    <string name="editor_section_appearance">Appearance</string>
+    <string name="editor_section_links">Links</string>
+    <string name="editor_section_colours">Colours</string>
+    <string name="editor_section_clock_weather">Clock &amp; Weather</string>
+    <string name="editor_row_outer_margin">Outer margin</string>
+    <string name="editor_row_not_on_this_phone">Not on this phone.</string>
+    <string name="editor_st_hours">Clock format</string>
+    <string name="editor_st_hours_12">12 h</string>
+    <string name="editor_st_hours_24">24 h</string>
+    <string name="editor_st_unit">Temperature</string>
+    <string name="editor_st_unit_c">°C</string>
+    <string name="editor_st_unit_f">°F</string>
     <string name="editor_note_home_only">Home only</string>
     <string name="editor_note_workspace_only">Workspace only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>
@@ -22,7 +37,7 @@
     <string name="editor_hint_glass_material">Edge and Depth show on phones that draw the glass edge.</string>
 
     <!-- Keyboard card. -->
-    <string name="editor_row_background_opacity">Background opacity</string>
+    <string name="editor_row_background_opacity">Keyboard opacity</string>
     <string name="editor_row_bottom_padding">Bottom padding</string>
     <string name="editor_row_opacity_link">Move both opacities together</string>
     <string name="editor_chip_keyboard_theme">Theme</string>

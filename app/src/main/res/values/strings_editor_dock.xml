@@ -4,7 +4,7 @@
     <string name="editor_dock_row_style">Style</string>
     <string name="editor_dock_row_bars">Bars</string>
     <string name="editor_dock_row_type">Dock type</string>
-    <string name="editor_dock_row_options">Options</string>
+    <string name="editor_dock_row_options">Show/hide</string>
     <string name="editor_dock_appearance">Appearance</string>
 
     <string name="editor_dock_bars_hint">Hold the handle to reorder</string>
@@ -44,7 +44,7 @@
     <string name="editor_dock_strip_height">Strip height</string>
     <string name="editor_dock_strip_height_value">%1$d dp</string>
 
-    <string name="editor_dock_option_search_field">Search field</string>
+    <string name="editor_dock_option_search_field">Search bar</string>
     <string name="editor_dock_option_drawer_icon">Drawer icon</string>
     <string name="editor_dock_option_command_palette">Command palette</string>
     <string name="editor_dock_option_notification_dots">Notification dots</string>

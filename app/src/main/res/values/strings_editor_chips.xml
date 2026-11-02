@@ -12,7 +12,7 @@
     <string name="editor_chip_kind_display">Display pages</string>
     <string name="editor_chip_all_glass">All glass</string>
     <string name="editor_element_widgets">Widgets</string>
-    <string name="editor_element_sheets">Sheets</string>
+    <string name="editor_element_sheets">Menus and dialogs</string>
     <!-- A row's name with where its value comes from, as accessibility reads the row. -->
     <string name="editor_source_from">%1$s, from %2$s</string>
     <!-- The caption of a row's long-press menu: the row, then where its value comes from. -->

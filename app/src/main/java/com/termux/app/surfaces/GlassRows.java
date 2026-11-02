@@ -8,29 +8,29 @@ import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 
 /**
- * The one row set every glass card wears (ADR 0017, the editor-cards spec §3), in touch order:
- * Look, Frost, Opacity, Tint, Colour, Corners, Depth, Edge; then, under More, Grain and Rim
- * before the card's own rows. Also the rows that read and write the chips' grid cell directly
+ * The Appearance block every glass card wears (appearance-cards overhaul §2). Also the rows that read and write the chips' grid cell directly
  * and their units. Pure: no views, no Context.
  */
 public final class GlassRows {
 
     private GlassRows() {}
 
-    /** The glass rows over More, Depth and Edge only where the device draws the glass edge. */
+    /**
+     * The Appearance section every glass card wears (appearance-cards overhaul §2), under its
+     * heading, in {@code tier}: Presets, Opacity, Blur, Grain, Tint with its colour swatches
+     * under it, Corner radius, Rim strength, Edge and Depth. Edge and Depth are always listed;
+     * where the phone cannot draw them they read "Not on this phone." and stay put.
+     */
     @NonNull
-    public static EditorRows.CardRows glass(@NonNull EditorRows.CardRows rows,
-                                            @NonNull Offers offers) {
-        rows.tier(1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE, Row.CORNERS);
-        if (offers.glassEdge)
-            rows.tier(1, Row.DEPTH, Row.GLASS_EDGE);
-        return rows.tier(3, Row.SECTION_MORE, Row.GRAIN, Row.RIM);
+    public static EditorRows.CardRows appearance(@NonNull EditorRows.CardRows rows,
+                                                 @NonNull Offers offers, int tier) {
+        return rows.tier(tier, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
+            Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
     }
 
-    /** A glass card: the row set, then {@code own} under More. */
-    @NonNull
-    public static EditorRows.CardRows card(@NonNull Offers offers, @NonNull Row... own) {
-        return glass(new EditorRows.CardRows(), offers).tier(3, own);
+    /** Whether {@code row} is drawn only where the phone draws the glass edge. */
+    public static boolean needsGlassEdge(@NonNull Row row) {
+        return row == Row.GLASS_EDGE || row == Row.DEPTH;
     }
 
     /**

@@ -102,7 +102,8 @@ public class ElementRowsTest {
         assertEquals(PaneWallPage.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
-            boolean screen = ElementRows.screenOf(card) != null;
+            // The Terminal card's Layout is the Workspace's list (overhaul §2).
+            boolean screen = ElementRows.screenOf(card) != null || card == EditorCard.TERMINAL;
             assertEquals(card + " holds the Elements list", screen,
                 rowsOf(card).contains(Row.ELEMENTS));
         }
@@ -119,9 +120,10 @@ public class ElementRowsTest {
         for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.WORKSPACE}) {
             List<Row> rows = rowsOf(card);
             int list = rows.indexOf(Row.ELEMENTS);
-            assertTrue(card + ": the list is under More", list > rows.indexOf(Row.SECTION_MORE));
-            assertTrue(card + ": a link chip follows the list",
-                rows.get(list + 1).name().startsWith("LINK_"));
+            // Overhaul §2: the list is the Layout section's, and no link repeats it.
+            assertEquals(card + ": the list is under Layout", Row.SECTION_LAYOUT,
+                rows.get(list - 1));
+            assertFalse(card + ": no Widgets link", rows.contains(Row.LINK_WIDGETS));
         }
     }
 

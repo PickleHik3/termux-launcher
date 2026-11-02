@@ -21,6 +21,7 @@ import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.PreviewTilesRow;
 import com.termux.app.surfaces.rows.SectionHeader;
 import com.termux.app.surfaces.rows.SegmentRow;
+import com.termux.app.surfaces.rows.SwitchRow;
 import com.termux.app.surfaces.rows.TileGrid;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -46,9 +47,12 @@ public final class StatusBarCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return com.termux.app.surfaces.GlassRows.card(offers, Row.STATUS_POSITION,
-                Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.MARGIN, Row.STATUS_OPTIONS,
-                Row.STATUS_INDICATORS)
+        EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.STATUS_POSITION, Row.MARGIN, Row.STATUS_INDICATORS)
+            .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
+                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT);
+        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT)
             .build();
     }
 
@@ -118,9 +122,6 @@ public final class StatusBarCard {
     public static final int OPTION_12H = 0;
     public static final int OPTION_SECONDS = 1;
     public static final int OPTION_FAHRENHEIT = 2;
-    /** A shortcut, not a switch: it never reads on, and opens the cutout setting. */
-    public static final int OPTION_CAMERA_GAP = 3;
-    static final int OPTION_COUNT = 4;
 
     /** The Indicators tiles, in order. */
     public static final int INDICATOR_CPU = 0;
@@ -187,7 +188,10 @@ public final class StatusBarCard {
             case GLASS_SECTION: return glassHeader(context, true);
             case CLOCK_FACE: return clockFaces(context, host);
             case CLOCK_POSITION: return clockPosition(context, widthPx, host);
-            case STATUS_OPTIONS: return options(context, widthPx, host);
+            case STATUS_SECONDS: return seconds(context, host);
+            case STATUS_HOURS: return hours(context, widthPx, host);
+            case STATUS_UNIT: return unit(context, widthPx, host);
+            case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
         }
@@ -227,10 +231,8 @@ public final class StatusBarCard {
                 facePreview(context, FACES[i])));
         PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.clockFace(),
             host::setClockFace);
-        // The sheet's tier divider stands over the Clock section.
-        View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_clock), null, false, row.root);
-        return new CardRowView(section, () -> row.select(host.clockFace()));
+        // The Clock & Weather section's heading stands over the faces: no label of their own.
+        return new CardRowView(row.root, () -> row.select(host.clockFace()));
     }
 
     /**
@@ -267,45 +269,59 @@ public final class StatusBarCard {
         return new CardRowView(row.root, () -> row.select(host.clockPosition()));
     }
 
+    /** Show seconds, a switch row bound to the Seconds option. */
     @NonNull
-    private static CardRowView options(@NonNull Context context, int widthPx,
-                                       @NonNull Host host) {
-        List<TileGrid.Tile> tiles = Arrays.asList(
-            new TileGrid.Tile(R.drawable.ic_ms_schedule,
-                context.getString(R.string.editor_st_option_12h)),
-            new TileGrid.Tile(R.drawable.ic_ms_timer,
-                context.getString(R.string.editor_st_option_seconds)),
-            new TileGrid.Tile(R.drawable.ic_ms_thermostat,
-                context.getString(R.string.editor_st_option_fahrenheit)),
-            new TileGrid.Tile(R.drawable.ic_ms_crop_free,
-                context.getString(R.string.editor_st_option_camera_gap),
-                context.getString(R.string.editor_st_option_camera_gap_hint)));
-        TileGrid[] grid = new TileGrid[1];
-        grid[0] = TileGrid.build(context, tiles, options(host), widthPx, (index, on) -> {
-            if (index == OPTION_CAMERA_GAP) {
-                // A shortcut, not a switch: it never reads on, and opens its setting.
-                View tile = grid[0].tiles.get(index);
-                tile.post(() -> grid[0].setOn(index, false));
-                host.openCameraGap();
-                return;
-            }
-            host.setOption(index, on);
-        });
-        View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_options), null, true, grid[0].root);
-        return new CardRowView(section, () -> {
-            boolean[] on = options(host);
-            for (int i = 0; i < on.length; i++)
-                grid[0].setOn(i, on[i]);
-        });
+    private static CardRowView seconds(@NonNull Context context, @NonNull Host host) {
+        SwitchRow row = SwitchRow.build(context, R.drawable.ic_ms_timer,
+            context.getString(R.string.editor_st_option_seconds), host.option(OPTION_SECONDS),
+            on -> host.setOption(OPTION_SECONDS, on));
+        return new CardRowView(row.root, () -> row.setOn(host.option(OPTION_SECONDS)));
     }
 
+    /** 12 h · 24 h, a connected group bound to the 12-hour option (12 h is the first). */
     @NonNull
-    private static boolean[] options(@NonNull Host host) {
-        boolean[] on = new boolean[OPTION_COUNT];
-        for (int i = 0; i < on.length; i++)
-            on[i] = i != OPTION_CAMERA_GAP && host.option(i);
-        return on;
+    private static CardRowView hours(@NonNull Context context, int widthPx,
+                                     @NonNull Host host) {
+        return pair(context, widthPx, host, R.drawable.ic_ms_schedule, R.string.editor_st_hours,
+            R.string.editor_st_hours_12, R.string.editor_st_hours_24, OPTION_12H, true);
+    }
+
+    /** °C · °F, a connected group bound to the °F option (°F is the second). */
+    @NonNull
+    private static CardRowView unit(@NonNull Context context, int widthPx, @NonNull Host host) {
+        return pair(context, widthPx, host, R.drawable.ic_ms_thermostat, R.string.editor_st_unit,
+            R.string.editor_st_unit_c, R.string.editor_st_unit_f, OPTION_FAHRENHEIT, false);
+    }
+
+    /**
+     * Two words bound to one on/off option: the first word is the option on where
+     * {@code firstIsOn}, the second otherwise.
+     */
+    @NonNull
+    private static CardRowView pair(@NonNull Context context, int widthPx, @NonNull Host host,
+                                    int glyph, int title, int first, int second, int option,
+                                    boolean firstIsOn) {
+        SegmentRow row = SegmentRow.words(context, glyph, context.getString(title),
+            new CharSequence[] {context.getString(first), context.getString(second)},
+            pairIndex(host.option(option), firstIsOn), widthPx,
+            index -> host.setOption(option, (index == 0) == firstIsOn));
+        return new CardRowView(row.root,
+            () -> row.select(pairIndex(host.option(option), firstIsOn)));
+    }
+
+    /** The segment an on/off option reads in a pair whose first word is on where {@code firstIsOn}. */
+    static int pairIndex(boolean on, boolean firstIsOn) {
+        return on == firstIsOn ? 0 : 1;
+    }
+
+    /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */
+    @NonNull
+    private static CardRowView cameraCutout(@NonNull Context context, @NonNull Host host) {
+        com.termux.app.surfaces.rows.ActionRow row = com.termux.app.surfaces.rows.ActionRow.build(
+            context, R.drawable.ic_ms_crop_free,
+            context.getString(R.string.editor_st_option_camera_gap), null,
+            v -> host.openCameraGap());
+        return new CardRowView(row.root, () -> {});
     }
 
     @NonNull
@@ -323,6 +339,7 @@ public final class StatusBarCard {
                 context.getString(R.string.editor_st_indicator_notifications_hint)),
             new TileGrid.Tile(R.drawable.ic_ms_music_note,
                 context.getString(R.string.editor_st_indicator_media)));
+        // "Elements" is a plain label inside the Status bar section, not a section heading.
         boolean[] on = new boolean[INDICATOR_COUNT];
         for (int i = 0; i < on.length; i++)
             on[i] = host.indicator(i);

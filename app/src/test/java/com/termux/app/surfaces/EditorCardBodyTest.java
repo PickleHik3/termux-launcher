@@ -128,17 +128,19 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
-        // Home's glass rows follow its Look with no Glass header of their own (the row set).
-        for (int res : new int[] {R.string.editor_section_grid, R.string.editor_section_look,
-            R.string.editor_section_labels_folders,
-            R.string.editor_section_options, R.string.editor_section_more})
+        // Home's sections (overhaul §2): Home · More options · Layout · Appearance · Links.
+        for (int res : new int[] {R.string.appearance_card_home,
+            R.string.editor_section_more_options, R.string.editor_section_layout,
+            R.string.editor_section_appearance, R.string.editor_section_links})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
         // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
         Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
         List<String> globalTexts = texts(global.sheet.rows());
-        assertTrue(globalTexts.contains(global.themed.getString(
+        // Edge and Depth stay on the card; the glass-material hint row is gone.
+        assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
+        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
     }
 
     @Test

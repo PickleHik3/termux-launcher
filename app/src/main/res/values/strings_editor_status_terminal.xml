@@ -20,11 +20,11 @@
     <string name="editor_st_clock_slab">Slab</string>
     <string name="editor_st_section_options">Options</string>
     <string name="editor_st_option_12h">12-hour</string>
-    <string name="editor_st_option_seconds">Seconds</string>
+    <string name="editor_st_option_seconds">Show seconds</string>
     <string name="editor_st_option_fahrenheit">°F weather</string>
-    <string name="editor_st_option_camera_gap">Camera gap</string>
+    <string name="editor_st_option_camera_gap">Camera cutout</string>
     <string name="editor_st_option_camera_gap_hint">Camera gap: opens its setting, where the bar leaves room for the camera</string>
-    <string name="editor_st_section_indicators">Indicators</string>
+    <string name="editor_st_section_indicators">Elements</string>
     <string name="editor_st_indicator_cpu">CPU</string>
     <string name="editor_st_indicator_ram">RAM</string>
     <string name="editor_st_indicator_weather">Weather</string>

@@ -153,6 +153,14 @@ public final class EditorRows {
         CLOCK_POSITION(Kind.MENU, R.string.editor_st_clock_position, R.drawable.ic_editor_clock),
         /** The status bar's Options tiles: 12-hour, Seconds, °F weather, Camera gap. */
         STATUS_OPTIONS(Kind.SWITCH, R.string.editor_st_section_options, R.drawable.ic_ms_tune),
+        /** The status clock's seconds, a switch row (the Seconds option). */
+        STATUS_SECONDS(Kind.SWITCH, R.string.editor_st_option_seconds, R.drawable.ic_ms_timer),
+        /** 12 h · 24 h, a connected group bound to the 12-hour option. */
+        STATUS_HOURS(Kind.SEGMENTS, R.string.editor_st_hours, R.drawable.ic_ms_schedule),
+        /** °C · °F, a connected group bound to the °F option. */
+        STATUS_UNIT(Kind.SEGMENTS, R.string.editor_st_unit, R.drawable.ic_ms_thermostat),
+        /** Camera cutout ↗: opens the cutout setting the Camera gap tile opened. */
+        CAMERA_CUTOUT(Kind.LINK, R.string.editor_st_option_camera_gap, R.drawable.ic_ms_crop_free),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
         STATUS_INDICATORS(Kind.SWITCH, R.string.editor_st_section_indicators,
             R.drawable.ic_symbol_weather),
@@ -164,8 +172,11 @@ public final class EditorRows {
         DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
-        /** The dock's Options tiles. */
+        /** The dock's Show/hide tiles. */
         DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune),
+        /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
+        DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
+            R.drawable.ic_ed_monochrome),
         // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
@@ -198,6 +209,16 @@ public final class EditorRows {
         SECTION_WALLPAPER(Kind.MENU, R.string.editor_section_wallpaper, 0),
         SECTION_COLOUR(Kind.MENU, R.string.editor_section_colour, 0),
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
+        // The overhaul's sections (appearance-cards-overhaul §2): [card name] · More options ·
+        // Layout · Appearance · Links, plus Colours (Customization) and Clock & Weather (Status
+        // bar). A card's first section is named for the card where it is not one of these; the
+        // headings above stay only as EditorSectionStore keys of earlier builds, no card lists them.
+        SECTION_MORE_OPTIONS(Kind.MENU, R.string.editor_section_more_options, 0),
+        SECTION_LAYOUT(Kind.MENU, R.string.editor_section_layout, 0),
+        SECTION_APPEARANCE(Kind.MENU, R.string.editor_section_appearance, 0),
+        SECTION_LINKS(Kind.MENU, R.string.editor_section_links, 0),
+        SECTION_COLOURS(Kind.MENU, R.string.editor_section_colours, 0),
+        SECTION_CLOCK_WEATHER(Kind.MENU, R.string.editor_section_clock_weather, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
         /**
@@ -325,7 +346,7 @@ public final class EditorRows {
             case KEYBOARD: return KeyboardCard.rows(offers);
             case WIDGETS:
             case SHEETS:
-                return GlassRows.card(offers).build();
+                return GlassRows.appearance(new CardRows(), offers, 1).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);

@@ -84,6 +84,14 @@ public final class DockCard {
         }
     }
 
+    /**
+     * The Show/hide tiles, in the spec's order (overhaul §2 Dock); Monochrome icons is a switch
+     * row of its own ({@link Row#DOCK_MONOCHROME}).
+     */
+    public static final List<Option> SHOW_HIDE = java.util.Collections.unmodifiableList(
+        Arrays.asList(Option.COMMAND_PALETTE, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
+            Option.QUICK_REPLY, Option.SEARCH_FIELD));
+
     /** What the card reads and writes. */
     public interface Host {
         @NonNull Context context();
@@ -152,8 +160,14 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return com.termux.app.surfaces.GlassRows.card(offers, Row.HOME_ICON_SIZE, Row.DOCK_STYLE,
-                Row.DOCK_TYPE, Row.MARGIN, Row.REFLECTION, Row.DOCK_BARS, Row.DOCK_OPTIONS)
+        EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE)
+            .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME)
+            .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);
+        // Reflection is Peek glass's own knob, shown only while Peek is the type.
+        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.REFLECTION)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL)
             .build();
     }
 
@@ -171,6 +185,7 @@ public final class DockCard {
     /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
     @Nullable private StepperRow mStripHeight;
     @Nullable private TileGrid mOptions;
+    @Nullable private com.termux.app.surfaces.rows.SwitchRow mMonochrome;
     @NonNull private final Map<Element, BarViews> mBarViews = new EnumMap<>(Element.class);
     /** A restatement sets the switches; only a touch reports. */
     private boolean mRestating;
@@ -241,23 +256,32 @@ public final class DockCard {
                     mHost::setStripHeightDp);
                 LinearLayout body = new LinearLayout(context);
                 body.setOrientation(LinearLayout.VERTICAL);
-                body.addView(mType.picker(context,
-                    context.getString(R.string.editor_dock_row_type)));
+                // Type is the Dock section's first row: its tiles, no label row above them.
+                mType.root.setContentDescription(context.getString(R.string.editor_dock_row_type));
+                body.addView(mType.root);
                 body.addView(mStripHeight.root);
                 restateStripHeight();
                 return body;
             }
             case DOCK_OPTIONS: {
                 List<TileGrid.Tile> tiles = new ArrayList<>();
-                boolean[] on = new boolean[Option.values().length];
-                for (Option option : Option.values()) {
+                boolean[] on = new boolean[SHOW_HIDE.size()];
+                for (int i = 0; i < SHOW_HIDE.size(); i++) {
+                    Option option = SHOW_HIDE.get(i);
                     tiles.add(new TileGrid.Tile(option.glyph, context.getString(option.word),
                         option.hint == 0 ? null : context.getString(option.hint)));
-                    on[option.ordinal()] = mHost.option(option);
+                    on[i] = mHost.option(option);
                 }
                 mOptions = TileGrid.build(context, tiles, on, widthPx, (index, checked) ->
-                    mHost.setOption(Option.values()[index], checked));
+                    mHost.setOption(SHOW_HIDE.get(index), checked));
                 return section(context, R.string.editor_dock_row_options, mOptions.root);
+            }
+            case DOCK_MONOCHROME: {
+                mMonochrome = com.termux.app.surfaces.rows.SwitchRow.build(context,
+                    Option.MONOCHROME.glyph, context.getString(Option.MONOCHROME.word),
+                    mHost.option(Option.MONOCHROME),
+                    on -> mHost.setOption(Option.MONOCHROME, on));
+                return mMonochrome.root;
             }
             default:
                 return null;
@@ -280,9 +304,13 @@ public final class DockCard {
                 break;
             case DOCK_OPTIONS:
                 if (mOptions != null) {
-                    for (Option option : Option.values())
-                        mOptions.setOn(option.ordinal(), mHost.option(option));
+                    for (int i = 0; i < SHOW_HIDE.size(); i++)
+                        mOptions.setOn(i, mHost.option(SHOW_HIDE.get(i)));
                 }
+                break;
+            case DOCK_MONOCHROME:
+                if (mMonochrome != null)
+                    mMonochrome.setOn(mHost.option(Option.MONOCHROME));
                 break;
             default:
                 break;
