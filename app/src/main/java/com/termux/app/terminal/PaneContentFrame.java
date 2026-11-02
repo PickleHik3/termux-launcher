@@ -703,9 +703,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             int bottom = PaneShape.verticalInsetPx(radius, floor);
             int side = Math.max(PaneShape.sideInsetPx(radius, bottom), floor);
             if (bezelWorn()) {
-                // Inside the bezel: past it, past the screen's arc and past what the bend pushes
-                // off the screen's edges, so the effect loses no cell.
-                PaneBezel.contentInsets(width, height, density(), bezelBend(), mBezelInsets);
+                // Inside the bezel: past it and past the screen's arc. The bend is pinned at
+                // the edges' middles and pushes nothing off the screen.
+                PaneBezel.contentInsets(width, height, density(), mBezelInsets);
                 side = mBezelInsets[0];
                 bottom = mBezelInsets[1];
             }
