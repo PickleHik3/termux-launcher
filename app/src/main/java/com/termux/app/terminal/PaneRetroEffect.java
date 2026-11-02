@@ -28,8 +28,22 @@ public final class PaneRetroEffect {
     /** The CRT's barrel bend on a pane card; the shader and {@link #displayedPoint} share it. */
     static final float CRT_BEND = 0.04f;
 
-    /** How far a pane card's corners darken: light, the corners hold the prompt as often as not. */
-    static final float PANE_VIGNETTE = 0.08f;
+    /**
+     * How dark the picture's edge goes under the vignette (a share of full brightness lost at the
+     * edge, full at the middle third): a CRT's raster is lit from the middle, and the edge is where
+     * the tube face begins. Steep near the edge, as sam1am/termux_crt draws it (0.45 there).
+     */
+    static final float PANE_VIGNETTE = 0.30f;
+
+    /**
+     * The tube face a pane's picture sits in: the dark glass the picture's barrel outline leaves
+     * at the corners, {@code r, g, b} and its alpha over the pane's glass.
+     */
+    static final String TUBE_RGB = "0.030, 0.030, 0.036";
+    static final float TUBE_ALPHA = 0.92f;
+
+    /** The lit phosphor's own haze at the middle of the picture (additive, in the tint's colour). */
+    static final float AMBIENT = 0.04f;
 
     /**
      * Where content at ({@code x}, {@code y}) of a {@code w}×{@code h} card shows on screen once
@@ -61,9 +75,9 @@ public final class PaneRetroEffect {
         float sy = (y - top) / h * 2f - 1f;
         float cx = sx;
         float cy = sy;
-        // Fixed point of c = s / f(c); f stays within 8 % of 1, so a few steps settle it.
+        // Fixed point of c = s / f(c); f stays within 4 % of 1, so a few steps settle it.
         for (int i = 0; i < 5; i++) {
-            float f = (1f + CRT_BEND * (cx * cx + cy * cy)) / (1f + 2f * CRT_BEND);
+            float f = (1f + CRT_BEND * (cx * cx + cy * cy)) / (1f + CRT_BEND);
             cx = sx / f;
             cy = sy / f;
         }
@@ -178,13 +192,17 @@ public final class PaneRetroEffect {
         + "    float2 lo = uBendBox.xy;\n"
         + "    float2 size = max(uBendBox.zw - uBendBox.xy, float2(1.0, 1.0));\n"
         + "    float2 c = (p - lo) / size * 2.0 - 1.0;\n"
-        // Barrel bend normalised so the corners stay put: every cell still lands on the screen.
-        // Flat (uBend 0) on the chrome, whose keys and icons have to stay under the finger. Read
-        // only from inside the screen, so the bezel never shows in the picture.
-        + "    float2 w = c * (1.0 + uBend * dot(c, c)) / (1.0 + 2.0 * uBend);\n"
+        // Barrel bend pinned at the middle of each edge: the picture touches the glass there, its
+        // corners pull inward and the tube face shows in between (TUBE_RGB); no cell ever leaves
+        // the screen. Flat (uBend 0) on the chrome, whose keys and icons have to stay under the
+        // finger, where the picture is the whole screen. Read only from inside the screen, so the
+        // bezel never shows in the picture.
+        + "    float2 w = c * (1.0 + uBend * dot(c, c)) / (1.0 + uBend);\n"
+        + "    float2 wp = (w * 0.5 + 0.5) * size + lo;\n"
+        + "    float pic = 1.0 - smoothstep(-0.5, 0.5, roundDist(wp, uScreen, uScreenRadius));\n"
         + "    float2 inMin = uScreen.xy + 0.5;\n"
         + "    float2 inMax = max(uScreen.zw - 0.5, inMin);\n"
-        + "    float2 at = clamp((w * 0.5 + 0.5) * size + lo, inMin, inMax);\n"
+        + "    float2 at = clamp(wp, inMin, inMax);\n"
         // Screen events that move the picture: they only shift where it is read from, so they
         // cost no extra sample.
         + "    float2 scr = max(uScreen.zw - uScreen.xy, float2(1.0, 1.0));\n"
@@ -246,7 +264,11 @@ public final class PaneRetroEffect {
         // The screen's own rows, straight, as kitty draws them: the bend moves the picture, never
         // the scanlines, so they run on into the surface beside this one.
         + "    float scan = mix(0.70, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
-        + "    float vig = 1.0 - uVignette * dot(c, c);\n"
+        // Vignette over the picture's own space: full across its middle third, uVignette lost at
+        // its edge, steep on the way (after sam1am/termux_crt's uv(1-uv) curve).
+        + "    float2 uv = w * 0.5 + 0.5;\n"
+        + "    float2 vv = uv * (1.0 - uv);\n"
+        + "    float vig = mix(1.0 - uVignette, 1.0, pow(clamp(vv.x * vv.y * 18.0, 0.0, 1.0), 0.4));\n"
         // Phosphor triad: vertical R, G, B stripes over the period, each channel full in its own
         // third and TRIAD_DEPTH down elsewhere; on the screen's columns, like the scanlines.
         + "    float tx = fract((p.x + uOrigin.x) / " + PERIOD + ");\n"
@@ -276,7 +298,15 @@ public final class PaneRetroEffect {
         + "        float n = fract(sin(dot(grain, float2(12.9898, 78.233))) * 43758.5453);\n"
         + "        rgb = mix(rgb, float3(n) * a, smoothstep(0.0, 0.2, uEventT));\n"
         + "    }\n"
-        + "    rgb = clamp(rgb * scan * vig * triad * (1.0 - recess) + sheen * a, 0.0, a);\n"
+        // The lit phosphor's haze at the middle of the picture, in the tint's colour (grey-white
+        // on the plain CRT); the glass's glow pass stays clamped to the picture's own alpha.
+        + "    float3 haze = mix(float3(1.0, 1.0, 1.0), float3(uTint.rgb), float(uTint.a));\n"
+        + "    rgb = rgb * scan * vig * triad + haze * " + AMBIENT + " * exp(-6.0 * dot(c, c)) * a;\n"
+        // Outside the picture's barrel outline the tube face shows, dark and nearly opaque, with
+        // no scanlines or mask; the glass's recess and sheen lie over both.
+        + "    rgb = mix(float3(" + TUBE_RGB + ") * " + TUBE_ALPHA + ", rgb, pic);\n"
+        + "    a = mix(" + TUBE_ALPHA + ", a, pic);\n"
+        + "    rgb = clamp(rgb * (1.0 - recess) + sheen * a, 0.0, a);\n"
         // Power on: a bright one-row line at the centre opening to the whole screen over the
         // first 60 %, the picture 1.6x bright fading to 1; black outside the open part.
         + "    if (uEvent > 1.5 && uEvent < 2.5) {\n"

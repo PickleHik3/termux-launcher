@@ -80,25 +80,16 @@ public final class PaneBezel {
     }
 
     /**
-     * How much of a screen's half-extent the CRT's barrel bend pushes past its edge, at the
-     * middle of that edge, in px. The shader samples the picture at {@code c(1 + b|c|²)/(1 + 2b)}
-     * of the screen's half size, so the edge's middle shows the picture from {@code (1 + b)/(1 +
-     * 2b)} of the way out, and everything beyond that falls off the screen: {@code b/(1 + 2b)} of
-     * the half-extent. Rounded up; 0 for a flat effect.
-     */
-    public static int bendClearancePx(float halfExtentPx, float bend) {
-        if (!(bend > 0f) || !(halfExtentPx > 0f)) return 0;
-        return (int) Math.ceil(halfExtentPx * bend / (1f + 2f * bend));
-    }
-
-    /**
      * The terminal's margins inside a pane {@code width} by {@code height} px while the bezel is
-     * worn: the bezel, the screen's arc clearance and the bend's clearance on each axis. The top
-     * is before the terminal's own headroom ({@link PaneShape#topInsetPx} takes that off).
+     * worn: the bezel and the screen's arc clearance on each axis. The CRT's bend needs none: it
+     * is pinned at the middle of each edge ({@code c(1 + b|c|²)/(1 + b)} in
+     * {@link PaneRetroEffect#CRT_AGSL}), so the picture touches the screen there and pulls inward
+     * everywhere else; no cell leaves the screen. The top is before the terminal's own headroom
+     * ({@link PaneShape#topInsetPx} takes that off).
      *
      * @param out {@code side, topBottom}
      */
-    public static void contentInsets(float width, float height, float density, float bend,
+    public static void contentInsets(float width, float height, float density,
                                      @NonNull int[] out) {
         float w = Math.max(0f, width);
         float h = Math.max(0f, height);
@@ -108,8 +99,8 @@ public final class PaneBezel {
         float screenH = h - 2f * topBottom;
         int arc = PaneShape.contentInsetPx(PaneShape.radiusForBounds(
             SCREEN_RADIUS_DP * Math.max(0f, density), Math.round(screenW), Math.round(screenH)));
-        out[0] = Math.round(side) + arc + bendClearancePx(screenW / 2f, bend);
-        out[1] = Math.round(topBottom) + arc + bendClearancePx(screenH / 2f, bend);
+        out[0] = Math.round(side) + arc;
+        out[1] = Math.round(topBottom) + arc;
     }
 
     /**

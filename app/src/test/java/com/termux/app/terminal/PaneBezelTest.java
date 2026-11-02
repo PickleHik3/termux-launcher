@@ -53,25 +53,16 @@ public class PaneBezelTest {
     }
 
     @Test
-    public void theBendsClearanceIsWhatFallsOffTheMiddleOfAnEdge() {
-        assertEquals(0, PaneBezel.bendClearancePx(1000f, 0f));
-        assertEquals(0, PaneBezel.bendClearancePx(0f, PaneRetroEffect.CRT_BEND));
-        // b / (1 + 2b) of the half-extent: 0.04 / 1.08 of 1000 px is 37.04, rounded up.
-        assertEquals(38, PaneBezel.bendClearancePx(1000f, PaneRetroEffect.CRT_BEND));
-    }
-
-    @Test
-    public void theTerminalSitsPastTheBezelTheArcAndTheBend() {
+    public void theTerminalSitsPastTheBezelAndTheArcAndTheBendNeedsNoClearance() {
         int[] insets = new int[2];
-        PaneBezel.contentInsets(W, H, DENSITY, 0f, insets);
+        PaneBezel.contentInsets(W, H, DENSITY, insets);
         int arc = PaneShape.contentInsetPx(PaneBezel.SCREEN_RADIUS_DP * DENSITY);
         assertEquals(22 + arc, insets[0]);
         assertEquals(28 + arc, insets[1]);
-        PaneBezel.contentInsets(W, H, DENSITY, PaneRetroEffect.CRT_BEND, insets);
-        assertEquals(22 + arc + PaneBezel.bendClearancePx((W - 44f) / 2f, PaneRetroEffect.CRT_BEND),
-            insets[0]);
-        assertEquals(28 + arc + PaneBezel.bendClearancePx((H - 56f) / 2f, PaneRetroEffect.CRT_BEND),
-            insets[1]);
+        // The bend is pinned at the middle of each edge: the picture's edge middles land on
+        // the screen's, and its corners pull inward, so no cell needs room past the arc.
+        assertTrue(PaneRetroEffect.CRT_AGSL.contains(
+            "c * (1.0 + uBend * dot(c, c)) / (1.0 + uBend)"));
     }
 
     @Test
@@ -81,7 +72,7 @@ public class PaneBezelTest {
         float[] screen = new float[4];
         PaneBezel.screen(true, W, H, DENSITY, 0f, screen);
         int[] insets = new int[2];
-        PaneBezel.contentInsets(W, H, DENSITY, PaneRetroEffect.CRT_BEND, insets);
+        PaneBezel.contentInsets(W, H, DENSITY, insets);
         float left = insets[0], top = insets[1], right = W - insets[0], bottom = H - insets[1];
         float[] out = new float[2];
         for (int i = 0; i <= 20; i++) {
