@@ -3544,19 +3544,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
      * pair on the half, as the previous editor's Frost wrote it for a tapped element.
      */
-    /**
-     * A screen card's Frost: that half's Base alone. A surface that holds its own value there
-     * keeps it, and neither the other half nor the shared glass position is touched.
-     */
-    @VisibleForTesting
-    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull PaneWallPage half,
-                                 int glass) {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(half),
-            AppearanceLooks.blurDp(GlassControls.blurForGlass(glass)));
-        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(half),
-            AppearanceLooks.grainPercent(GlassControls.grainForGlass(glass)));
-    }
-
     private void writeFrost(@NonNull EditorCard card, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)

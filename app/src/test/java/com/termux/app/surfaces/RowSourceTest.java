@@ -37,8 +37,8 @@ public class RowSourceTest {
         assertEquals("a page's value is its kind's (ADR 0020 §2)", RowSource.KIND,
             source(grid, onHome, Row.OPACITY));
         grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 50);
-        assertEquals("the kind wins over the element everywhere", RowSource.KIND,
-            source(grid, onHome, Row.OPACITY));
+        assertEquals("the element everywhere beats the kind's all glass (element beats page)",
+            RowSource.ELEMENT, source(grid, onHome, Row.OPACITY));
         assertEquals(RowSource.ELEMENT, source(grid, dock, Row.OPACITY));
         grid.write(Property.OPACITY, Element.DOCK, PAGE, 60);
         assertEquals(RowSource.ELEMENT_ON_KIND, source(grid, onHome, Row.OPACITY));

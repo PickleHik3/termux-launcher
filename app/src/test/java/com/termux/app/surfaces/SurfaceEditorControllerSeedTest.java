@@ -178,26 +178,6 @@ public class SurfaceEditorControllerSeedTest {
             TWEAKED_DOCK_OPACITY);
     }
 
-    @Test
-    public void aScreenCardsFrostWritesItsOwnHalfOnly() {
-        PaneWallPage home = PaneWallPage.WIDGETS;
-        PaneWallPage workspace =
-            PaneWallPage.TERMINAL;
-        preferences.setSurfaceGlassPosition(null, 33);
-        int otherBlur = preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(home));
-        int otherGrain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(home));
-        SurfaceEditorController.writeScreenFrost(preferences, workspace, 90);
-        assertEquals("the shared position is the Appearance card's", 33,
-            preferences.getSurfaceGlassPosition(null));
-        // Base is wall-wide: the screen card's Frost is the wall's, so Home reads it too.
-        assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(workspace)));
-        assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(home)));
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(workspace)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(home)));
-    }
-
     /** The grid's page kinds are process-wide: none leaks into the next test class. */
     @org.junit.After
     public void resetLookGridPageKinds() {
