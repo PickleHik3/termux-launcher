@@ -3414,10 +3414,10 @@
     <string name="setup_panes_multiplexer">Multiplexer</string>
     <string name="setup_panes_status">Status strip shown</string>
     <string name="setup_panes_status_help">The strip above the panes with the clock and status.</string>
-    <string name="setup_panes_autotiling">Autotiling</string>
-    <string name="setup_panes_autotiling_help">New panes tile automatically</string>
-    <string name="setup_panes_grows">Focused pane grows</string>
-    <string name="setup_panes_grows_help">The focused pane takes more room</string>
+    <string name="setup_panes_autotiling">Auto tiling</string>
+    <string name="setup_panes_autotiling_help">New panes tile automatically.</string>
+    <string name="setup_panes_grows">Enlarge focused pane</string>
+    <string name="setup_panes_grows_help">The focused pane takes more room.</string>
     <string name="setup_desktop_title">Linux desktop apps?</string>
     <string name="setup_desktop_description">Yes adds a setup card for the environment and the graphics profile.</string>
     <string name="setup_desktop_yes">Yes</string>

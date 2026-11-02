@@ -1000,6 +1000,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, value, false);
     }
 
+    /** Whether the status bar shows its clock; shown unless the Status bar card turned it off. */
+    public boolean isStatusClockShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_CLOCK_SHOWN, TERMUX_APP.DEFAULT_STATUS_CLOCK_SHOWN);
+    }
+
+    public void setStatusClockShown(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_CLOCK_SHOWN, value, false);
+    }
+
     /** Whose box the status row's camera gap follows: auto, custom or off; unknown reads as auto. */
     @NonNull
     public String getStatusBarCutoutMode() {

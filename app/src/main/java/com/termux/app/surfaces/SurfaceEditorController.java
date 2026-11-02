@@ -2515,6 +2515,47 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return true;
     }
 
+    /**
+     * The Terminal card's pane switches, written as the setup wizard writes them (plain prefs the
+     * panes read): Multiplexer is compatibility mode off. Undo and Discard put them back with the
+     * look ({@link AppearanceSnapshot}), as the status bar's switches.
+     */
+    private void writePaneSwitch(@NonNull TermuxAppSharedPreferences prefs, @NonNull Row row,
+                                 boolean on) {
+        switch (row) {
+            case MULTIPLEXER:
+                if (prefs.isCompatibilityModeEnabled() != on)
+                    return;
+                prefs.setCompatibilityModeEnabled(!on);
+                // The bar stands only with the Multiplexer on; the two below follow it.
+                mHost.refreshTerminalWindowBar();
+                restateRows(Row.AUTO_TILING, Row.FOCUS_GROWS);
+                break;
+            case AUTO_TILING:
+                if (prefs.isDwindleDefaultLayoutEnabled() == on)
+                    return;
+                prefs.setDwindleDefaultLayoutEnabled(on);
+                break;
+            case FOCUS_GROWS:
+                if (prefs.isFocusedPaneGrowsEnabled() == on)
+                    return;
+                prefs.setFocusedPaneGrowsEnabled(on);
+                break;
+            default:
+                return;
+        }
+        syncDirty();
+    }
+
+    /** Reads {@code rows} again on the open card, where it shows them. */
+    private void restateRows(@NonNull Row... rows) {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null)
+            return;
+        for (Row row : rows)
+            sheet.restate(row);
+    }
+
     /** The Keyboard theme page in Settings, over the editor; Back returns to the same session. */
     private void openKeyboardTheme() {
         openSettingsPage(KeyboardColorSchemeFragment.class, R.string.appearance_editor_keyboard_theme);
@@ -2923,6 +2964,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean enabled(@NonNull Row row) {
+            if (row == Row.AUTO_TILING || row == Row.FOCUS_GROWS) {
+                // Panes' own choices stand only with the Multiplexer on, as in the wizard.
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null || !prefs.isCompatibilityModeEnabled();
+            }
             // Edge and Depth stay on every glass card, put out where the phone cannot draw them.
             return !GlassRows.needsGlassEdge(row) || mHost.isGlassRefractionActive();
         }
@@ -3207,6 +3253,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 external = true; summary = R.string.editor_link_keyboard_theme_summary; break;
             case TOOL_COLOURS:
                 external = true; summary = R.string.editor_link_tool_colours_summary; break;
+            case PINNED_NOTIFICATIONS:
+                external = true; summary = R.string.editor_link_pinned_notifications_summary;
+                break;
             default: external = true; summary = 0; break;
         }
         return com.termux.app.surfaces.rows.LinkRow.build(context,
@@ -3538,6 +3587,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
+                break;
+            case PINNED_NOTIFICATIONS:
+                openSettingsPage(com.termux.app.fragments.settings.termux
+                        .EssentialNotificationRulesFragment.class,
+                    R.string.settings_essential_notifications_title);
                 break;
             case LINK_WIDGETS:
                 openCard(EditorCard.WIDGETS, true);
@@ -5493,6 +5547,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (prefs == null)
                     return false;
                 switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CLOCK:
+                        return prefs.isStatusClockShown();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         return prefs.isStatusWidgetCpuEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
@@ -5513,6 +5569,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (prefs == null || indicator(index) == on)
                     return;
                 switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CLOCK:
+                        prefs.setStatusClockShown(on);
+                        // The clock rows stand disabled while the clock is hidden.
+                        restateRows(Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
+                            Row.STATUS_HOURS);
+                        break;
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         prefs.setStatusWidgetCpuEnabled(on);
                         break;
@@ -5999,6 +6061,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }
             case OPACITY_LINK:
                 return prefs.isInAppKeyboardOpacityLinked() ? 1 : 0;
+            case MULTIPLEXER:
+                return prefs.isCompatibilityModeEnabled() ? 0 : 1;
+            case AUTO_TILING:
+                return prefs.isDwindleDefaultLayoutEnabled() ? 1 : 0;
+            case FOCUS_GROWS:
+                return prefs.isFocusedPaneGrowsEnabled() ? 1 : 0;
             case HOME_COLUMNS:
             case HOME_ROWS: {
                 int[] grid = layout == null ? null : layout.widgetGrid();
@@ -6076,6 +6144,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return null;
             case SECTION_GLASS_MATERIAL:
                 return getString(R.string.editor_note_both_screens);
+            case MULTIPLEXER: return getString(R.string.editor_row_multiplexer_summary);
+            case AUTO_TILING: return getString(R.string.editor_row_auto_tiling_summary);
+            case FOCUS_GROWS: return getString(R.string.editor_row_focus_grows_summary);
             default:
                 return null;
         }
@@ -6221,6 +6292,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     mLinkAnchor = null;
                     syncDirty();
                 }
+                break;
+            case MULTIPLEXER:
+            case AUTO_TILING:
+            case FOCUS_GROWS:
+                writePaneSwitch(prefs, row, value != 0);
                 break;
             case HOME_COLUMNS:
             case HOME_ROWS: {

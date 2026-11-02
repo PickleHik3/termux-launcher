@@ -69,7 +69,7 @@ public class StatusTerminalCardsTest {
             Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
             Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
             Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS,
-            Row.CAMERA_CUTOUT), rows(StatusBarCard.rows(ALL)));
+            Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS), rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
@@ -78,7 +78,8 @@ public class StatusTerminalCardsTest {
     @Test
     public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
         assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS,
-            Row.CURSOR_TRAIL, Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.SECTION_LAYOUT,
+            Row.CURSOR_TRAIL, Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER,
+            Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SECTION_LAYOUT,
             Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
             Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS, Row.LINK_FONT),
             rows(TerminalCard.rows(ALL)));
@@ -242,7 +243,8 @@ public class StatusTerminalCardsTest {
 
         CardRowView seconds = StatusBarCard.view(f.themed, Row.STATUS_SECONDS, f.width, host);
         f.layOut(seconds.view);
-        seconds.view.performClick();
+        // The clock rows stand in a column with their "Clock is hidden" note under them.
+        ((ViewGroup) seconds.view).getChildAt(0).performClick();
         assertTrue("Show seconds is a switch row on the Seconds option",
             host.options[StatusBarCard.OPTION_SECONDS]);
 
@@ -255,7 +257,9 @@ public class StatusTerminalCardsTest {
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
         List<MaterialButton> indicatorTiles = buttons(indicators.view);
-        assertEquals(5, indicatorTiles.size());
+        assertEquals(6, indicatorTiles.size());
+        assertEquals("Clock is the first Elements tile", "Clock",
+            indicatorTiles.get(StatusBarCard.INDICATOR_CLOCK).getText().toString());
         assertFalse("Notifications starts off",
             indicatorTiles.get(StatusBarCard.INDICATOR_NOTIFICATIONS).isChecked());
         indicatorTiles.get(StatusBarCard.INDICATOR_NOTIFICATIONS).performClick();
@@ -263,6 +267,61 @@ public class StatusTerminalCardsTest {
         host.indicators[StatusBarCard.INDICATOR_CPU] = false;
         indicators.restate();
         assertFalse(indicatorTiles.get(StatusBarCard.INDICATOR_CPU).isChecked());
+    }
+
+    @Test
+    public void theClockRowsStandDisabledWhileTheClockIsHidden() {
+        Fixture f = new Fixture(1f);
+        FakeStatus host = new FakeStatus();
+        CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
+        f.layOut(indicators.view);
+        Row[] clockRows = {Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
+            Row.STATUS_HOURS};
+        List<CardRowView> held = new ArrayList<>();
+        for (Row row : clockRows) {
+            assertTrue(StatusBarCard.clockRow(row));
+            CardRowView view = StatusBarCard.view(f.themed, row, f.width, host);
+            f.layOut(view.view);
+            held.add(view);
+            assertFalse(row + ": no note while the clock shows",
+                hasShownText(view.view, "Clock is hidden"));
+        }
+        buttons(indicators.view).get(StatusBarCard.INDICATOR_CLOCK).performClick();
+        assertFalse("the Clock tile hides the clock", host.indicators[StatusBarCard.INDICATOR_CLOCK]);
+        for (int i = 0; i < clockRows.length; i++) {
+            CardRowView view = held.get(i);
+            view.restate();
+            assertTrue(clockRows[i] + " says the clock is hidden",
+                hasShownText(view.view, "Clock is hidden"));
+            for (MaterialButton button : buttons(view.view))
+                assertFalse(clockRows[i] + ": its buttons are out", button.isEnabled());
+        }
+        CardRowView unit = StatusBarCard.view(f.themed, Row.STATUS_UNIT, f.width, host);
+        f.layOut(unit.view);
+        assertFalse("°C · °F is the weather's", StatusBarCard.clockRow(Row.STATUS_UNIT));
+        for (MaterialButton button : buttons(unit.view))
+            assertTrue("°C · °F stays live", button.isEnabled());
+        host.indicators[StatusBarCard.INDICATOR_CLOCK] = true;
+        for (CardRowView view : held) {
+            view.restate();
+            assertFalse(hasShownText(view.view, "Clock is hidden"));
+            for (MaterialButton button : buttons(view.view))
+                assertTrue(button.isEnabled());
+        }
+    }
+
+    private static boolean hasShownText(@NonNull View view, @NonNull String text) {
+        if (view.getVisibility() != View.VISIBLE)
+            return false;
+        if (view instanceof TextView && !(view instanceof MaterialButton)
+                && text.contentEquals(((TextView) view).getText()))
+            return true;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                if (hasShownText(group.getChildAt(i), text)) return true;
+        }
+        return false;
     }
 
     // --------------------------------------------------------------------- terminal rows
@@ -340,7 +399,7 @@ public class StatusTerminalCardsTest {
         int face = 5;
         int align;
         final boolean[] options = {false, false, false, true};
-        final boolean[] indicators = {true, true, true, false, true};
+        final boolean[] indicators = {true, true, true, true, false, true};
         int cameraGapOpened;
 
         @Override public int position() { return position; }

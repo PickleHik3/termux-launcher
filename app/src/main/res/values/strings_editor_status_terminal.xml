@@ -25,6 +25,16 @@
     <string name="editor_st_option_camera_gap">Camera cutout</string>
     <string name="editor_st_option_camera_gap_hint">Camera gap: opens its setting, where the bar leaves room for the camera</string>
     <string name="editor_st_section_indicators">Elements</string>
+    <!-- The Elements tile that shows or hides the bar's clock. -->
+    <string name="editor_st_indicator_clock">Clock</string>
+    <!-- Under the clock rows while the Clock tile is off. -->
+    <string name="editor_st_clock_hidden">Clock is hidden</string>
+    <!-- The Terminal card's pane switches' one-line summaries. -->
+    <string name="editor_row_multiplexer_summary">Several terminals in one window, with panes and tabs.</string>
+    <string name="editor_row_auto_tiling_summary">New panes tile automatically.</string>
+    <string name="editor_row_focus_grows_summary">The focused pane takes more room.</string>
+    <!-- Pinned notifications ↗: where the page stands in Settings. -->
+    <string name="editor_link_pinned_notifications_summary">Settings › Notifications</string>
     <string name="editor_st_indicator_cpu">CPU</string>
     <string name="editor_st_indicator_ram">RAM</string>
     <string name="editor_st_indicator_weather">Weather</string>

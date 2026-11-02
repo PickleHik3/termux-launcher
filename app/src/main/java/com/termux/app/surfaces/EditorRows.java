@@ -229,6 +229,17 @@ public final class EditorRows {
         ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
         /** The Terminal card's way to its Pane borders card (#206). */
         PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
+        /**
+         * The Terminal card's pane switches (appearance-cards overhaul §2, Terminal), the setup
+         * wizard's Panes choices: Multiplexer is compatibility mode off; Auto tiling and Enlarge
+         * focused pane stand only while it is on.
+         */
+        MULTIPLEXER(Kind.SWITCH, R.string.setup_panes_multiplexer, R.drawable.ic_ms_vertical_split),
+        AUTO_TILING(Kind.SWITCH, R.string.setup_panes_autotiling, R.drawable.ic_ms_view_quilt),
+        FOCUS_GROWS(Kind.SWITCH, R.string.setup_panes_grows, R.drawable.ic_ms_open_in_full),
+        /** The Status bar card's Pinned notifications ↗: the Settings page of the pinning rules. */
+        PINNED_NOTIFICATIONS(Kind.LINK, R.string.settings_essential_notifications_title,
+            R.drawable.ic_ms_push_pin),
         // The Pane borders card's rows (cards/PaneBordersCard), drawn by that card through
         // EditorCardSheet.Model#rowView; the Kind is the stand-in. Rim is RIM itself.
         /** The three frames, Normal, Focused and Attention, in the panes' own drawables. */
