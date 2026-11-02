@@ -30,8 +30,8 @@ public class RowSourceTest {
     @Test
     public void aRowsDotFollowsWhereTheChipsReadIt() {
         LookGrid grid = homeGrid();
-        EditorChips dock = new EditorChips(LookGrid.NO_PAGE, Element.DOCK);
-        EditorChips onHome = dock.withWhere(EditorChips.Where.kind(LookGrid.Kind.HOME));
+        EditorChips dock = new EditorChips(EditorChips.AppliesTo.GLOBAL, Element.DOCK);
+        EditorChips onHome = dock.withAppliesTo(EditorChips.AppliesTo.HOME);
         assertFalse(source(grid, dock, Row.OPACITY).marked());
         grid.write(Property.OPACITY, null, PAGE, 40);
         assertEquals("a page's value is its kind's (ADR 0020 §2)", RowSource.KIND,
@@ -47,7 +47,7 @@ public class RowSourceTest {
     @Test
     public void resetThisRowClearsTheChipsCellAlone() {
         LookGrid grid = homeGrid();
-        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.DOCK);
+        EditorChips chips = new EditorChips(EditorChips.AppliesTo.HOME, Element.DOCK);
         grid.write(Property.GRAIN, Element.DOCK, PAGE, 30);
         grid.write(Property.GRAIN, Element.DOCK, LookGrid.NO_PAGE, 20);
         LookGrid.Key cell = chips.cell(GlassRows.gridProperty(Row.GRAIN));

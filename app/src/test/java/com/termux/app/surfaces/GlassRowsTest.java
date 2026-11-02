@@ -111,18 +111,18 @@ public class GlassRowsTest {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
         assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
         assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
-        EditorChips dockOnPage = new EditorChips(4, LookGrid.Element.DOCK);
-        LookGrid.Key margin = dockOnPage.cell(GlassRows.cellProperty(Row.MARGIN));
+        EditorChips dockOnHome = new EditorChips(EditorChips.AppliesTo.HOME, LookGrid.Element.DOCK);
+        LookGrid.Key margin = dockOnHome.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
-        assertEquals(4, margin.page);
+        assertNull("no kind row", margin.kind);
+        assertEquals(LookGrid.NO_PAGE, margin.page);
     }
 
     @Test
-    public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsKind() {
+    public void theHomeCardsDepthAndEdgeLandOnHomesKind() {
         LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
             page -> page == 4 ? LookGrid.Kind.HOME : null, null);
-        EditorChips onKind = EditorChips.openFor(EditorCard.APPEARANCE,
-            (LookGrid.Kind) null).withWhere(EditorChips.Where.kind(LookGrid.Kind.HOME));
+        EditorChips onKind = EditorChips.openFor(EditorCard.HOME, null);
         for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE}) {
             LookGrid.Key cell = onKind.cell(GlassRows.cellProperty(row));
             grid.write(cell, GlassRows.toCell(row, 30));

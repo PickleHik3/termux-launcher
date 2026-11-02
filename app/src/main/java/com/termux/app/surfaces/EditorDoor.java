@@ -38,7 +38,7 @@ public enum EditorDoor {
     TERMINAL_SHEET_APPEARANCE("terminal-sheet-appearance"),
     /** The legacy terminal context-menu item for the editor, which no sheet lists today. */
     TERMINAL_CONTEXT_MENU("terminal-context-menu"),
-    /** A pane's or window's controls, then Appearance: the page's own card. */
+    /** A pane's or window's controls, then Appearance: the Workspace card. */
     PANE_CONTROLS("pane-controls-appearance"),
     /** {@code launcherctl appearance.surface_editor}: the page's own card. */
     LAUNCHERCTL("launcherctl-surface-editor"),
@@ -133,7 +133,8 @@ public enum EditorDoor {
             case EDITOR_PAGE_SWIPE:
                 return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
             case PANE_CONTROLS:
-                return onScreen == null ? null : screenCard(onScreen);
+                // The Terminal or Display pane corner opens the Workspace (overhaul §1).
+                return EditorCard.WORKSPACE;
             case TERMINAL_CONTEXT_MENU:
             case LAUNCHERCTL:
                 return pageCard(onScreen);

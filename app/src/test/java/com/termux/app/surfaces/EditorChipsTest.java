@@ -5,151 +5,150 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.surfaces.EditorChips.AppliesTo;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.LookGrid.Element;
 import com.termux.shared.termux.settings.preferences.LookGrid.Property;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-/** The two chips name the cell a card's rows read and write (ADR 0017). */
+/** Card × Applies to names the cells a card's rows write (appearance-cards-overhaul §1). */
 public class EditorChipsTest {
 
-    private static final int PAGE = 7;
-
-    @Test
-    public void anElementsCardOpensEverywhereOnItsElement() {
-        EditorChips chips = EditorChips.openFor(EditorCard.DOCK, LookGrid.Kind.HOME);
-        assertEquals(LookGrid.NO_PAGE, chips.page);
-        assertEquals(Element.DOCK, chips.element);
-        assertEquals(Element.TERMINAL, EditorChips.openFor(EditorCard.TERMINAL, LookGrid.Kind.TERMINAL).element);
+    /** The keys a card writes for Opacity at {@code chosen}. */
+    private static List<String> written(EditorCard card, AppliesTo chosen) {
+        List<String> out = new ArrayList<>();
+        for (LookGrid.Key key : EditorChips.openFor(card, chosen).cells(Property.OPACITY))
+            out.add(key.text());
+        return out;
     }
 
     @Test
-    public void aPageCardOpensOnItsPagesKindOnAllGlass() {
-        // No look is kept per page (ADR 0020 §2).
-        EditorChips chips = EditorChips.openFor(EditorCard.HOME, LookGrid.Kind.HOME);
-        assertEquals(LookGrid.NO_PAGE, chips.page);
-        assertEquals(LookGrid.Kind.HOME, chips.kind);
-        assertNull(chips.element);
-        assertTrue(EditorChips.openFor(EditorCard.WORKSPACE, LookGrid.Kind.TERMINAL).onKind());
+    public void cardTimesAppliesToNamesTheCellsWritten() {
+        Object[][] table = {
+            // card, Applies to choice, cells written
+            {EditorCard.APPEARANCE, null, new String[] {"look.opacity"}},
+            {EditorCard.APPEARANCE, AppliesTo.HOME, new String[] {"look.opacity"}},
+            {EditorCard.HOME, null, new String[] {"look.opacity@kind:home"}},
+            {EditorCard.WORKSPACE, null,
+                new String[] {"look.opacity@kind:terminal", "look.opacity@kind:display"}},
+            {EditorCard.WIDGETS, null, new String[] {"look.opacity.widgets@kind:home"}},
+            {EditorCard.WIDGETS, AppliesTo.WORKSPACE,
+                new String[] {"look.opacity.widgets@kind:home"}},
+            {EditorCard.TERMINAL, null, new String[] {"look.opacity.terminal@kind:terminal",
+                "look.opacity.terminal@kind:display"}},
+            {EditorCard.DOCK, null, new String[] {"look.opacity.dock"}},
+            {EditorCard.DOCK, AppliesTo.GLOBAL, new String[] {"look.opacity.dock"}},
+            {EditorCard.DOCK, AppliesTo.HOME, new String[] {"look.opacity.dock@kind:home"}},
+            {EditorCard.DOCK, AppliesTo.WORKSPACE, new String[] {"look.opacity.dock@kind:terminal",
+                "look.opacity.dock@kind:display"}},
+            {EditorCard.STATUS, AppliesTo.HOME, new String[] {"look.opacity.status@kind:home"}},
+            {EditorCard.KEYBOARD, AppliesTo.WORKSPACE, new String[] {
+                "look.opacity.keyboard@kind:terminal", "look.opacity.keyboard@kind:display"}},
+            {EditorCard.SHEETS, AppliesTo.GLOBAL, new String[] {"look.opacity.sheets"}},
+            {EditorCard.SHEETS, AppliesTo.HOME, new String[] {"look.opacity.sheets@kind:home"}},
+        };
+        for (Object[] row : table) {
+            EditorCard card = (EditorCard) row[0];
+            AppliesTo chosen = (AppliesTo) row[1];
+            assertEquals(card + " at " + chosen, Arrays.asList((String[]) row[2]),
+                written(card, chosen));
+        }
     }
 
     @Test
-    public void theAppearanceCardOpensEverywhereOnAllGlassAndHasNoWhatChip() {
-        EditorChips chips = EditorChips.openFor(EditorCard.APPEARANCE, LookGrid.Kind.HOME);
-        assertFalse(chips.onPage());
-        assertNull(chips.element);
-        assertTrue(EditorChips.whatOptions(EditorCard.APPEARANCE,
-            Arrays.asList(Element.DOCK)).isEmpty());
+    public void workspaceWritesBothKindsAndReadsTheTerminals() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(), page -> null, null);
+        EditorChips workspace = EditorChips.openFor(EditorCard.WORKSPACE, null);
+        for (LookGrid.Key cell : workspace.cells(Property.FROST))
+            grid.write(cell, 3);
+        assertEquals(3, grid.value(Property.FROST, null, LookGrid.Kind.TERMINAL));
+        assertEquals(3, grid.value(Property.FROST, null, LookGrid.Kind.DISPLAY));
+        assertFalse("Home is left", grid.has(Property.FROST, null, LookGrid.Kind.HOME));
+        assertFalse("Base is left", grid.has(Property.FROST, null, LookGrid.NO_PAGE));
+        assertEquals(LookGrid.Kind.TERMINAL, workspace.cell(Property.FROST).kind);
     }
 
     @Test
-    public void whereOffersEverywhereThenThePagesKindButNoPage() {
-        assertEquals(Arrays.asList(EditorChips.Where.EVERYWHERE,
-                EditorChips.Where.kind(LookGrid.Kind.HOME)),
-            EditorChips.whereOptions(PAGE, LookGrid.Kind.HOME));
-        assertEquals(Collections.singletonList(EditorChips.Where.EVERYWHERE),
-            EditorChips.whereOptions(PAGE, null));
-        assertEquals(Collections.singletonList(EditorChips.Where.EVERYWHERE),
-            EditorChips.whereOptions(-1, null));
+    public void customizationWritesBaseThatEveryKindShows() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(), page -> null, null);
+        EditorChips customization = EditorChips.openFor(EditorCard.APPEARANCE, null);
+        for (LookGrid.Key cell : customization.cells(Property.TINT))
+            grid.write(cell, 42);
+        for (LookGrid.Kind kind : LookGrid.Kind.values())
+            assertEquals(kind + " follows Base", 42,
+                grid.value(Property.TINT, Element.DOCK, kind));
     }
 
     @Test
-    public void aKindNamesTheKindsCell() {
-        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.KEYBOARD);
-        assertTrue(chips.onKind());
-        assertFalse(chips.onPage());
-        assertEquals(EditorChips.Where.kind(LookGrid.Kind.HOME), chips.where());
-        LookGrid.Key cell = chips.cell(Property.OPACITY);
-        assertEquals(LookGrid.Kind.HOME, cell.kind);
-        assertEquals(Element.KEYBOARD, cell.element);
-        assertEquals(LookGrid.NO_PAGE, cell.page);
-        // Margin and Vibrancy have no kind row: everywhere, greyed as all glass.
-        LookGrid.Key margin = chips.cell(Property.MARGIN);
-        assertNull(margin.kind);
-        assertNull(margin.element);
-        assertTrue(chips.elementIgnored(Property.MARGIN));
-        assertTrue(new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), null)
+    public void vibrancyAndMarginStayBaseWhateverTheCard() {
+        for (EditorCard card : EditorCard.values())
+            for (Property property : new Property[] {Property.VIBRANCY, Property.MARGIN}) {
+                List<LookGrid.Key> cells = EditorChips.openFor(card, AppliesTo.WORKSPACE)
+                    .cells(property);
+                assertEquals(1, cells.size());
+                assertNull(cells.get(0).element);
+                assertNull(cells.get(0).kind);
+            }
+    }
+
+    @Test
+    public void onlyTheFourElementCardsOfferAppliesTo() {
+        for (EditorCard card : EditorCard.values()) {
+            boolean offers = card == EditorCard.STATUS || card == EditorCard.DOCK
+                || card == EditorCard.KEYBOARD || card == EditorCard.SHEETS;
+            assertEquals(card.name(), offers, EditorChips.offersAppliesTo(card));
+            assertEquals(card.name(), offers
+                    ? Arrays.asList(AppliesTo.GLOBAL, AppliesTo.HOME, AppliesTo.WORKSPACE)
+                    : Collections.emptyList(),
+                EditorChips.appliesToOptions(card));
+        }
+    }
+
+    @Test
+    public void anElementCardOpensOnGlobal() {
+        EditorChips dock = EditorChips.openFor(EditorCard.DOCK, null);
+        assertEquals(AppliesTo.GLOBAL, dock.appliesTo);
+        assertEquals(Element.DOCK, dock.element);
+        assertFalse(dock.onKind());
+        assertTrue(dock.withAppliesTo(AppliesTo.HOME).onKind());
+    }
+
+    @Test
+    public void elementIgnoredGreysTheBaseOnlyRowsAwayFromCustomization() {
+        assertFalse(EditorChips.openFor(EditorCard.APPEARANCE, null)
             .elementIgnored(Property.VIBRANCY));
-        // Picking What keeps the kind; picking a page or Everywhere drops it.
-        assertEquals(LookGrid.Kind.HOME, chips.withElement(null).kind);
-        assertNull(chips.withPage(PAGE).kind);
-        assertNull(chips.withWhere(EditorChips.Where.EVERYWHERE).kind);
-        assertFalse(chips.isOpening(EditorCard.KEYBOARD));
-        assertFalse(chips.equals(new EditorChips(LookGrid.NO_PAGE, Element.KEYBOARD)));
+        assertTrue(EditorChips.openFor(EditorCard.HOME, null).elementIgnored(Property.MARGIN));
+        assertTrue(EditorChips.openFor(EditorCard.DOCK, null).elementIgnored(Property.VIBRANCY));
+        assertFalse(EditorChips.openFor(EditorCard.DOCK, null).elementIgnored(Property.OPACITY));
+    }
+
+    private static List<String> texts(List<LookGrid.Key> keys) {
+        List<String> out = new ArrayList<>();
+        for (LookGrid.Key key : keys) out.add(key.text());
+        return out;
     }
 
     @Test
-    public void aWriteAndResetAtTheKindCellTouchOnlyTheKindKey() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
-            page -> page == PAGE ? LookGrid.Kind.HOME : null, null);
-        EditorChips chips = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.KEYBOARD);
-        LookGrid.Key cell = chips.cell(Property.OPACITY);
-        grid.write(cell, 60);
-        assertTrue(grid.store().contains("look.opacity.keyboard@kind:home"));
-        assertEquals(RowSource.ELEMENT_ON_KIND,
-            RowSource.of(grid.resolve(Property.OPACITY, Element.KEYBOARD, PAGE).cell));
-        assertEquals(RowSource.ELEMENT_ON_KIND, RowSource.of(grid.resolve(cell).cell));
-        grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 20);
-        assertEquals(RowSource.KIND,
-            RowSource.of(grid.resolve(Property.OPACITY, Element.DOCK, PAGE).cell));
-        // "Reset this row" at the kind cell deletes the kind key and nothing else.
-        grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE, 40);
-        grid.clear(cell);
-        assertFalse(grid.has(cell));
-        assertTrue(grid.has(Property.OPACITY, Element.KEYBOARD, LookGrid.NO_PAGE));
-        assertTrue(grid.has(Property.OPACITY, null, LookGrid.Kind.HOME));
-    }
-
-    @Test
-    public void whatOffersAllGlassThenTheElement() {
-        assertEquals(Arrays.asList(null, Element.KEYBOARD),
-            EditorChips.whatOptions(EditorCard.KEYBOARD, Arrays.asList(Element.DOCK)));
-        List<Element> page = Arrays.asList(Element.STATUS, Element.DOCK);
-        assertEquals(Arrays.asList(null, Element.STATUS, Element.DOCK),
-            EditorChips.whatOptions(EditorCard.HOME, page));
-    }
-
-    @Test
-    public void theCellIsThePageAndTheElement() {
-        LookGrid.Key cell = new EditorChips(PAGE, Element.DOCK).cell(Property.OPACITY);
-        assertEquals(Property.OPACITY, cell.property);
-        assertEquals(Element.DOCK, cell.element);
-        assertEquals(PAGE, cell.page);
-        assertNull(new EditorChips(PAGE, null).cell(Property.TINT).element);
-    }
-
-    @Test
-    public void aPropertyWithNoElementColumnDropsTheElement() {
-        EditorChips chips = new EditorChips(LookGrid.NO_PAGE, Element.DOCK);
-        assertNull(chips.cell(Property.MARGIN).element);
-        assertNull(chips.cell(Property.VIBRANCY).element);
-        assertTrue(chips.elementIgnored(Property.MARGIN));
-        assertFalse(chips.elementIgnored(Property.FROST));
-        assertFalse(new EditorChips(PAGE, null).elementIgnored(Property.MARGIN));
-    }
-
-    @Test
-    public void openingIsWhereTheCardOpens() {
-        assertTrue(EditorChips.openFor(EditorCard.DOCK, LookGrid.Kind.HOME).isOpening(EditorCard.DOCK));
-        assertFalse(new EditorChips(PAGE, Element.DOCK).isOpening(EditorCard.DOCK));
-        assertFalse(new EditorChips(LookGrid.NO_PAGE, null).isOpening(EditorCard.DOCK));
-    }
-
-    @Test
-    public void aWriteAtTheChipsCellIsReadBackFromThatCell() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
-            page -> page == PAGE ? LookGrid.Kind.HOME : null, null);
-        LookGrid.Key cell = new EditorChips(EditorChips.Where.kind(LookGrid.Kind.HOME), Element.DOCK)
-            .cell(Property.OPACITY);
-        grid.write(cell, 40);
-        assertEquals("a Home page reads the Home kind's cell", LookGrid.Cell.ELEMENT_ON_KIND,
-            grid.resolve(Property.OPACITY, Element.DOCK, PAGE).cell);
-        assertFalse("the element everywhere holds nothing",
-            grid.has(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE));
+    public void resetClearsEveryCellOfTheCardsPlace() {
+        List<LookGrid.Key> workspace =
+            SurfaceEditorController.resetCells(EditorChips.openFor(EditorCard.WORKSPACE, null));
+        assertTrue(texts(workspace).contains("look.opacity@kind:display"));
+        assertTrue(texts(workspace).contains("look.opacity@kind:terminal"));
+        for (LookGrid.Key key : workspace)
+            assertTrue("Base stays: " + key.text(), key.kind != null);
+        List<String> customization = texts(
+            SurfaceEditorController.resetCells(EditorChips.openFor(EditorCard.APPEARANCE, null)));
+        assertTrue(customization.contains("look.vibrancy"));
+        assertTrue(customization.contains("look.frost"));
+        List<String> dockHome = texts(SurfaceEditorController.resetCells(
+            EditorChips.openFor(EditorCard.DOCK, AppliesTo.HOME)));
+        assertTrue(dockHome.contains("look.grain.dock@kind:home"));
+        assertFalse("Vibrancy is Base's", dockHome.contains("look.vibrancy"));
     }
 }
