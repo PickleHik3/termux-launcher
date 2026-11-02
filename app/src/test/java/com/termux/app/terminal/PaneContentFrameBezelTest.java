@@ -2,6 +2,9 @@ package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -75,6 +78,23 @@ public class PaneContentFrameBezelTest {
             assertTrue(style + " top", gridTop > screen[1]);
             assertTrue(style + " bottom", terminal.getBottom() < screen[3]);
         }
+    }
+
+    @Test
+    public void theBezelsShadeIsBuiltWithItsPathAndKeptWhileItRests() {
+        TerminalView terminal = terminal();
+        PaneContentFrame frame = frameAround(terminal);
+        frame.setRetroStyle(PaneRetroStyle.CRT);
+        layOut(frame);
+        assertNull(frame.bezelShade());
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(FRAME_WIDTH,
+            FRAME_HEIGHT, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        frame.draw(canvas);
+        android.graphics.Shader shade = frame.bezelShade();
+        assertNotNull(shade);
+        frame.draw(canvas);
+        assertSame("a pane at rest keeps the gradient it has", shade, frame.bezelShade());
     }
 
     @Test

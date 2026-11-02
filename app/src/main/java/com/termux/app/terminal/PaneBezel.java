@@ -20,11 +20,21 @@ public final class PaneBezel {
     private PaneBezel() {}
 
     /** The bezel's width at the left and right. */
-    public static final float SIDE_DP = 12f;
+    public static final float SIDE_DP = 8f;
     /** The bezel's height at the top and bottom. */
-    public static final float TOP_BOTTOM_DP = 16f;
+    public static final float TOP_BOTTOM_DP = 10f;
     /** The radius the screen inside the bezel is rounded at. */
     public static final float SCREEN_RADIUS_DP = 10f;
+
+    /**
+     * The bezel's depth, laid over its fill from the card's top to its bottom: the top edge lit
+     * (white at 8 %), clear at the middle, the bottom edge in shade (black at 18 %). Translucent
+     * over the slab, so it reads over glass and over the opaque surface colour alike. White and
+     * black each fade to their own clear colour, so the middle never greys.
+     */
+    public static final int[] SHADE_COLOURS = {0x14FFFFFF, 0x00FFFFFF, 0x00000000, 0x2E000000};
+    /** Where each of {@link #SHADE_COLOURS} stands, top 0 to bottom 1. */
+    public static final float[] SHADE_POSITIONS = {0f, 0.5f, 0.5f, 1f};
 
     /** Whether a pane drawn through {@code style} wears the bezel: whenever any effect is on. */
     public static boolean worn(@NonNull PaneRetroStyle style) {
