@@ -29,7 +29,7 @@ public final class GlobalCard {
             .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.FULL_SCREEN, Row.SHOW_WALLPAPER)
+            .tier(3, Row.SECTION_MORE_OPTIONS, Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER)
             .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.TOOL_COLOURS)
             .build();
     }

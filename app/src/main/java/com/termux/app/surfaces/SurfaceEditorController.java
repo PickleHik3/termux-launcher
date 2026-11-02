@@ -3563,7 +3563,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean titled = card == EditorCard.APPEARANCE;
         com.termux.app.surfaces.rows.SegmentRow hue = com.termux.app.surfaces.rows.SegmentRow.build(
             context, titled ? Row.TINT_HUE.iconRes : 0,
-            titled ? context.getString(Row.TINT_HUE.labelRes) : "", segments,
+            context.getString(titled ? Row.TINT_HUE.labelRes : R.string.appearance_row_tint_colour),
+            segments,
             mModel.value(Row.TINT_HUE), widthPx,
             index -> mModel.onValue(Row.TINT_HUE, index, false));
         for (int i = 0; i < hue.buttons.size() && swatches != null && i < swatches.length; i++) {

@@ -68,25 +68,7 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void aDragBeforeTheHoldDoesNotFoldAndIsNotConsumed() {
-        StatusBarSwipeLayout view = createView();
-        List<Boolean> requests = new ArrayList<>();
-        view.setCollapsed(true);
-        view.setListener(requests::add);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
-        shadowLooperAdvance(100);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
-        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
-        assertFalse(view.onTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
-        shadowLooperAdvance(400);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 90f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 90f));
-        assertTrue(requests.isEmpty());
-        assertFalse(ticked(view));
-    }
-
-    @Test
-    public void holdTicksOnceThenTheDragFoldsFollowingTheFinger() {
+    public void aDragIsNotConsumedAndNeverFoldsHoldOrNot() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         List<Float> drags = new ArrayList<>();
@@ -96,17 +78,31 @@ public class StatusBarSwipeLayoutTest {
             @Override public void onFoldDrag(float px) { drags.add(px); }
         });
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
-        shadowLooperAdvance(StatusBarSwipeLayout.ARM_MS - 10);
-        assertFalse(ticked(view));
-        shadowLooperAdvance(20);
-        assertTrue(ticked(view));
+        shadowLooperAdvance(100);
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
-        assertTrue(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f)));
-        assertEquals(1, drags.size());
-        assertEquals(55f, drags.get(0), 0.01f);
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
+        assertFalse(view.onTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
+        shadowLooperAdvance(400);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 90f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 90f));
+        assertTrue(requests.isEmpty());
+        assertTrue(drags.isEmpty());
+        assertFalse(ticked(view));
+    }
+
+    @Test
+    public void holdingThenDraggingDoesNotTickOrFold() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(requests::add);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
+        shadowLooperAdvance(500);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f)));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 70f));
-        assertEquals(java.util.Collections.singletonList(false), requests);
-        assertTrue(ticked(view));
+        assertTrue(requests.isEmpty());
+        assertFalse(ticked(view));
     }
 
     @Test
@@ -120,32 +116,6 @@ public class StatusBarSwipeLayoutTest {
         // The popup's long-press cancels the view stream.
         view.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, 100f, 15f));
         assertTrue(requests.isEmpty());
-        // Releasing after the buzz, before any long-press, does nothing either.
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
-        shadowLooperAdvance(StatusBarSwipeLayout.ARM_MS + 10);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 15f));
-        assertTrue(requests.isEmpty());
-    }
-
-    @Test
-    public void withHapticsOffThereIsNoTickButTheGestureStillWorks() {
-        android.content.SharedPreferences prefs =
-            com.termux.shared.settings.preferences.SharedPreferenceUtils.getPrivateSharedPreferences(
-                ApplicationProvider.getApplicationContext(),
-                com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION);
-        prefs.edit().putBoolean(
-            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.KEY_APP_HAPTICS_ENABLED,
-            false).commit();
-        StatusBarSwipeLayout view = createView();
-        List<Boolean> requests = new ArrayList<>();
-        view.setCollapsed(true);
-        view.setListener(requests::add);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
-        shadowLooperAdvance(StatusBarSwipeLayout.ARM_MS + 10);
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
-        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 70f));
-        assertFalse(ticked(view));
-        assertEquals(java.util.Collections.singletonList(false), requests);
     }
 
     private static boolean ticked(View view) {
@@ -182,24 +152,20 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void aVerticalSwipeTogglesTheBarAndAnAlreadySatisfiedOneDoesNot() {
+    public void noSwipeChangesTheForm() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(true);
         view.setListener(requests::add);
 
-        // Compact bar, downward drag: expand. This is the only swipe that changes its form.
         swipe(view, 100f, 105f, 15f, 70f);
-        assertEquals(java.util.Collections.singletonList(false), requests);
-
-        // Compact bar, upward drag: nothing to collapse.
-        requests.clear();
+        assertEquals(0, requests.size());
         swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
-
-        // A sideways drag is nobody's, and never a form change.
-        requests.clear();
         swipe(view, 160f, 30f, 40f, 40f);
+        assertEquals(0, requests.size());
+        view.setCollapsed(false);
+        swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
     }
 
@@ -277,7 +243,7 @@ public class StatusBarSwipeLayoutTest {
     private static void swipe(StatusBarSwipeLayout view, float startX, float endX,
                               float startY, float endY) {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, startX, startY));
-        shadowLooperAdvance(StatusBarSwipeLayout.ARM_MS + 10);
+        shadowLooperAdvance(260);
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, endX, endY));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, endX, endY));
     }
