@@ -150,9 +150,8 @@ public class EditorRowKindsTest {
                 Layout layout = tile.getLayout();
                 assertTrue(which + ": no word is broken", layout.getLineCount()
                     <= tile.getText().toString().split(" ").length);
-                Drawable[] sides = tile.getCompoundDrawablesRelative();
-                assertTrue(which + ": the glyph stands on top", sides[0] == null
-                    && sides[1] != null);
+                // Expressive toggle buttons (overhaul §4): the word alone, no glyph, no mark.
+                assertTrue(which + ": the word alone", tile.getIcon() == null);
                 int textBottom = tile.getTotalPaddingTop() + layout.getHeight();
                 assertTrue(which + ": the word ends inside the tile",
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);

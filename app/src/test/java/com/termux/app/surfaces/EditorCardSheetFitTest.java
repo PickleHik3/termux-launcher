@@ -220,59 +220,104 @@ public class EditorCardSheetFitTest {
                 assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
                 checked++;
             }
+            // The Presets were this card's slider; they are picture tiles now (overhaul §4),
+            // every one inside the 16dp margins, none clipped.
+            int[] parentAt = new int[2];
+            fixture.parent.getLocationInWindow(parentAt);
+            for (ViewGroup grid : presetGrids(fixture.sheet.rows())) {
+                for (int i = 0; i < grid.getChildCount(); i++) {
+                    View tile = grid.getChildAt(i);
+                    int[] at = new int[2];
+                    tile.getLocationInWindow(at);
+                    int left = at[0] - parentAt[0];
+                    assertTrue(card + ": a Presets tile inside the margins " + left,
+                        left >= fixture.dp(16) - 1
+                            && left + tile.getWidth() <= width - fixture.dp(16) + 1);
+                    assertTrue(card + ": a Presets tile is laid out", tile.getWidth() > 0);
+                    checked++;
+                }
+            }
         }
         assertTrue(!anyLook || checked > 0);
     }
 
+    /** The Presets rows' picture grids (PreviewTilesRow's grid). */
+    @NonNull
+    private static List<ViewGroup> presetGrids(@NonNull View view) {
+        List<ViewGroup> out = new ArrayList<>();
+        if (!(view instanceof ViewGroup))
+            return out;
+        ViewGroup group = (ViewGroup) view;
+        if (group.getClass().getName().endsWith("PreviewTilesRow$Grid")) {
+            out.add(group);
+            return out;
+        }
+        for (int i = 0; i < group.getChildCount(); i++)
+            out.addAll(presetGrids(group.getChildAt(i)));
+        return out;
+    }
+
     @Test
-    public void theDesignTilesHoldTheirGlyphAndWordInsideTheirOutline() {
+    public void theDockOptionsAreToggleButtonsHoldingTheirWordWhole() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
             fixture.layOut();
             int tiles = 0;
-            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
-                if (tile.getIcon() == null || tile.getLayout() == null)
-                    continue;
-                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
-                    continue;
+            for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
                 tiles++;
-                assertEquals("no inset under the outline", 0, tile.getInsetBottom());
+                String which = tile.getText() + " at " + scale;
+                // Expressive toggle buttons (overhaul §4): the word alone, no check mark.
+                assertTrue(which + ": no glyph, no check mark", tile.getIcon() == null);
+                assertTrue(which + ": a 48dp target", tile.getHeight() >= fixture.dp(48) - 1);
+                assertTrue(which + ": laid out", tile.getLayout() != null);
                 int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
-                assertTrue(tile.getText() + " at " + scale + ": the word ends at " + textBottom
-                        + " inside " + tile.getHeight(),
+                assertTrue(which + ": the word ends at " + textBottom + " inside "
+                        + tile.getHeight(),
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
+                android.text.Layout layout = tile.getLayout();
+                assertTrue(which + ": no word is cut",
+                    layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
             }
-            // The Dock types are a picker rail now (the row set's picker rows): six Options.
             assertEquals("six Dock options", 6, tiles);
         }
     }
 
     @Test
-    public void theDesignTilesCentreTheirWordUnderTheGlyph() {
-        for (float scale : new float[] {1f, 1.3f}) {
-            Fixture fixture = new Fixture(EditorCard.DOCK, scale);
-            fixture.layOut();
-            int tiles = 0;
-            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
-                if (tile.getIcon() == null || tile.getLayout() == null)
-                    continue;
-                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
-                    continue;
-                tiles++;
-                android.graphics.drawable.Drawable[] sides = tile.getCompoundDrawablesRelative();
-                assertTrue("the glyph stands on top, not at the start", sides[0] == null
-                    && sides[1] != null);
-                assertEquals(tile.getText() + " at " + scale + ": the word is laid out across the"
-                        + " whole tile", tile.getWidth() - tile.getCompoundPaddingLeft()
-                        - tile.getCompoundPaddingRight(), tile.getLayout().getWidth());
-                float wordCentre = tile.getCompoundPaddingLeft()
-                    + (tile.getLayout().getLineLeft(0) + tile.getLayout().getLineRight(0)) / 2f;
-                assertEquals(tile.getText() + " at " + scale + ": under the glyph's centre",
-                    tile.getWidth() / 2f, wordCentre, 2f);
-            }
-            // The Dock types are a picker rail now (the row set's picker rows): six Options.
-            assertEquals("six Dock options", 6, tiles);
+    public void theDockOptionsWearThePrimaryWhenOnAndTheTonalWhenOff() {
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        fixture.layOut();
+        int tiles = 0;
+        for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
+            tiles++;
+            int[] state = tile.getDrawableState();
+            int fill = tile.getBackgroundTintList().getColorForState(state, 0);
+            int ink = tile.getTextColors().getColorForState(state, 0);
+            int primary = com.google.android.material.color.MaterialColors.getColor(tile,
+                androidx.appcompat.R.attr.colorPrimary);
+            int onPrimary = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorOnPrimary);
+            int tonal = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorSecondaryContainer);
+            int onTonal = com.google.android.material.color.MaterialColors.getColor(tile,
+                com.google.android.material.R.attr.colorOnSecondaryContainer);
+            String which = tile.getText() + (tile.isChecked() ? " (on)" : " (off)");
+            assertEquals(which + ": its container", tile.isChecked() ? primary : tonal, fill);
+            assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
+            assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
         }
+        assertEquals("six Dock options", 6, tiles);
+    }
+
+    /** The Dock's Show/hide toggles: the buttons of its TileGrid. */
+    @NonNull
+    private static List<MaterialButton> dockOptions(@NonNull View rows) {
+        List<MaterialButton> out = new ArrayList<>();
+        for (MaterialButton button : buttons(rows)) {
+            if (button.isShown() && button.getParent() != null
+                    && button.getParent().getClass().getName().endsWith("TileGrid$Lines"))
+                out.add(button);
+        }
+        return out;
     }
 
     @Test
@@ -442,13 +487,9 @@ public class EditorCardSheetFitTest {
             for (LegendSlider legend : legends)
                 assertTrue(card + ": " + legend.getContentDescription() + " stands open, no More",
                     legend.isShown() && legend.getWidth() > 0);
+            // The Presets are picture tiles now (overhaul §4), so no horizontal slider is left.
             List<com.google.android.material.slider.Slider> sliders = sliders(fixture.sheet.rows());
-            int looks = 0;
-            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
-                if (spec.row == EditorRows.Row.LOOK)
-                    looks++;
-            }
-            assertEquals(card + ": the Look's is the one horizontal slider", looks,
+            assertEquals(card + ": no horizontal slider; the Presets are tiles", 0,
                 sliders.size());
             // The row set has a More header by the spec (§3), so the old "no More" rule is gone.
         }
