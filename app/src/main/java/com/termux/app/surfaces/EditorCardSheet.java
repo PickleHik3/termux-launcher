@@ -232,6 +232,8 @@ final class EditorCardSheet {
     @NonNull private final FrameLayout mSheet;
     @NonNull private final LinearLayout mColumn;
     @NonNull private final LinearLayout mHeader;
+    /** The header's drag, also fed the down a header button takes first. */
+    @Nullable private View.OnTouchListener mHeaderTouch;
     @NonNull private final FrameLayout mGrab;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
@@ -317,7 +319,27 @@ final class EditorCardSheet {
         mSheet.addView(mColumn, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
-        mHeader = new LinearLayout(context);
+        // The header's buttons (the pill, ←, Show, ⋮) take taps; a vertical drag that starts on
+        // one is still the sheet's: past the slop the header takes it from the button.
+        final int headerSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mHeader = new LinearLayout(context) {
+            private float mDownRawY;
+
+            @Override
+            public boolean onInterceptTouchEvent(MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        mDownRawY = event.getRawY();
+                        if (mHeaderTouch != null)
+                            mHeaderTouch.onTouch(this, event);
+                        return false;
+                    case MotionEvent.ACTION_MOVE:
+                        return Math.abs(event.getRawY() - mDownRawY) > headerSlop;
+                    default:
+                        return false;
+                }
+            }
+        };
         mHeader.setOrientation(LinearLayout.VERTICAL);
         mColumn.addView(mHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             dp(HEADER_DP)));
@@ -1096,7 +1118,7 @@ final class EditorCardSheet {
         final float[] down = new float[2];
         final boolean[] dragging = {false};
         final VelocityTracker[] tracker = {null};
-        mHeader.setOnTouchListener((view, event) -> {
+        mHeaderTouch = (view, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     down[0] = event.getRawY();
@@ -1152,7 +1174,8 @@ final class EditorCardSheet {
                 default:
                     return true;
             }
-        });
+        };
+        mHeader.setOnTouchListener(mHeaderTouch);
     }
 
     /** The tracker reads screen positions: the header moves under the finger while it drags. */
@@ -1604,6 +1627,26 @@ final class EditorCardSheet {
                 return section;
         }
         return null;
+    }
+
+    /** Opens every section at once, for a test that reads every row. */
+    @VisibleForTesting
+    void openAllSections() {
+        for (Section section : mSectionList)
+            setSectionOpen(section, true, false);
+    }
+
+    /** {@link #flatRows}, for a test: what the least half detent walks. */
+    @VisibleForTesting
+    @NonNull
+    List<View> flatRowsForTest() {
+        return flatRows();
+    }
+
+    /** Whether {@code view} is a section's title row, for a test. */
+    @VisibleForTesting
+    boolean isSectionTitleForTest(@NonNull View view) {
+        return isSectionTitle(view);
     }
 
     /** The card's sections, for a test. */
@@ -2721,7 +2764,8 @@ final class EditorCardSheet {
             : (mSheet.getParent() instanceof View && ((View) mSheet.getParent()).getWidth() > 0
                 ? ((View) mSheet.getParent()).getWidth()
                 : mContext.getResources().getDisplayMetrics().widthPixels);
-        return Math.max(1, sheet - dp(ICON_COLUMN_DP) - dp(EDGE_DP));
+        // Rows stand inside a section container, 8dp in from either side (overhaul §3).
+        return Math.max(1, sheet - dp(ICON_COLUMN_DP) - dp(EDGE_DP) - 2 * dp(SECTION_SIDE_DP));
     }
 
     /** The smallest share of its text size a three-segment row shrinks to to stand inline. */
