@@ -1168,6 +1168,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mCardTrail.addLast(mCard);
         mCard = card;
         mSubcardParent = null;
+        mSubcardRow = null;
         mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
         mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
@@ -1352,7 +1353,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (sheet == null || card == null || !sheet.isShown())
             return;
         if (mSubcardParent == card)
-            showPaneBorders(false);
+            showSubcard(false);
         else
             sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
         sheet.restate();
@@ -1365,6 +1366,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card the Pane borders subcard stands over, or null while no subcard is shown. */
     @Nullable private EditorCard mSubcardParent;
+    /**
+     * The row whose subcard stands: {@link Row#PANE_BORDERS} or {@link Row#ICON_PACK}; null while
+     * no subcard is shown.
+     */
+    @Nullable private Row mSubcardRow;
 
     /** Pane borders in the Terminal card's place, at the detent the sheet stands at. */
     private void openPaneBorders() {
@@ -1372,29 +1378,60 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (sheet == null || mCard != EditorCard.TERMINAL || !sheet.isShown())
             return;
         mSubcardParent = mCard;
-        showPaneBorders(true);
+        mSubcardRow = Row.PANE_BORDERS;
+        showSubcard(true);
     }
 
-    private void showPaneBorders(boolean animate) {
+    /**
+     * The Icon pack subcard in the card's place (overhaul §2, Home): the pack tiles the Icon pack
+     * row expanded in place, which often opened below the visible sheet.
+     */
+    private void openIconPackCard() {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || mCard == null || !sheet.isShown())
+            return;
+        mSubcardParent = mCard;
+        mSubcardRow = Row.ICON_PACK;
+        showSubcard(true);
+        AppearanceSurfaceController.Page page = mIconsPage;
+        if (page != null) page.onShown();
+    }
+
+    /** The rows the Icon pack subcard shows. */
+    @NonNull
+    static java.util.List<EditorRows.Spec> iconPackCardRows() {
+        return new EditorRows.CardRows().tier(1, Row.ICON_PACK_PAGE).build();
+    }
+
+    private void showSubcard(boolean animate) {
         EditorCardSheet sheet = mSheet;
         EditorCard parent = mSubcardParent;
         if (sheet == null || parent == null)
             return;
+        if (mSubcardRow == Row.ICON_PACK) {
+            sheet.showSubcard(parent, R.string.appearance_row_icon_pack, iconPackCardRows(),
+                "", animate, this::closeSubcard);
+            return;
+        }
         sheet.showSubcard(parent, R.string.appearance_row_pane_borders,
             com.termux.app.surfaces.cards.PaneBordersCard.rows(),
             getString(R.string.appearance_pane_borders_reset), animate, this::closeSubcard);
     }
 
-    /** Back from Pane borders: the Terminal card again, scrolled to its Pane borders row. */
+    /** Back from a subcard: its card again, scrolled to the row that opened it. */
     private void closeSubcard() {
         EditorCard parent = mSubcardParent;
         EditorCardSheet sheet = mSheet;
         if (parent == null || sheet == null)
             return;
+        Row opener = mSubcardRow == null ? Row.PANE_BORDERS : mSubcardRow;
+        if (opener == Row.ICON_PACK && mIconsPage != null)
+            mIconsPage.onHidden();
         mSubcardParent = null;
+        mSubcardRow = null;
         openCard(parent, true);
         if (mCard == parent)
-            sheet.scrollTo(Row.PANE_BORDERS);
+            sheet.scrollTo(opener);
     }
 
     /** Writes a Pane borders value, then shows it in the card's strip and in the live panes. */
@@ -1531,8 +1568,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || card == null)
             return;
         if (mSubcardParent != null) {
-            // The subcard's Reset is its own: Reset pane borders.
-            writePaneBorders(EditorCardReset::resetPaneBorders);
+            // The Icon pack subcard has no Reset; Pane borders' is its own.
+            if (mSubcardRow != Row.ICON_PACK)
+                writePaneBorders(EditorCardReset::resetPaneBorders);
             return;
         }
         if (!chipsPlain(card) && card.slot != null) {
@@ -3115,6 +3153,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
             EditorCard card = mCard;
+            if (row == Row.ICON_PACK_PAGE) {
+                // The pack tiles, built once per session, moved into the Icon pack subcard.
+                ensureIconsContent();
+                if (mIconsPage == null)
+                    return null;
+                View page = mIconsPage.root();
+                if (page.getParent() instanceof ViewGroup)
+                    ((ViewGroup) page.getParent()).removeView(page);
+                return page;
+            }
             if (row == Row.RIM) {
                 // Rim's three words beside its name, as the cards' own segment rows stand.
                 Context context = mHost.context();
@@ -3148,6 +3196,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
             EditorCard card = mCard;
+            if (row == Row.ICON_PACK_PAGE)
+                return;
             if (row == Row.RIM) {
                 com.termux.app.surfaces.rows.SegmentRow rim = mRimRow;
                 if (rim != null && rim.root == view) rim.select(value(row));
@@ -3246,6 +3296,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_PAGES: external = false; summary = R.string.editor_link_pages_summary; break;
             case PANE_BORDERS:
                 external = false; summary = R.string.editor_link_pane_borders_summary; break;
+            case ICON_PACK:
+                external = false; summary = R.string.editor_link_icon_pack_summary; break;
             case LINK_GESTURES:
                 external = true; summary = R.string.editor_link_gestures_summary; break;
             case LINK_LAYOUTS: external = true; summary = R.string.editor_link_layouts_summary; break;
@@ -3565,15 +3617,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case CHANGE_WALLPAPER:
                 if (mPageListener != null) mPageListener.onOpenWallpaper();
                 break;
-            case ICON_PACK: {
-                AppearanceSurfaceController.Page page = mIconsPage;
-                if (page != null) {
-                    boolean shown = page.root().isShown();
-                    if (shown) page.onShown();
-                    else page.onHidden();
-                }
+            case ICON_PACK:
+                openIconPackCard();
                 break;
-            }
             case TOOL_COLOURS:
                 openSettingsFromEditor(TermuxStylePreferencesFragment.class,
                     R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);

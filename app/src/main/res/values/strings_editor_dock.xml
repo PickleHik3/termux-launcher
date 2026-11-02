@@ -29,7 +29,11 @@
     <string name="editor_dock_app_icons">App icons</string>
     <string name="editor_dock_most_used">Most used row</string>
     <string name="editor_dock_icon_pack">Icon pack</string>
-    <string name="editor_dock_icon_pack_global">Same as Global</string>
+    <string name="editor_dock_icon_pack_global">Same as Home</string>
+    <!-- The Dock card's More options row: the pinned apps' icon pack. -->
+    <string name="editor_dock_icon_pack_row">Dock icon pack</string>
+    <!-- Icon pack ›'s subtitle: what the subcard holds. -->
+    <string name="editor_link_icon_pack_summary">Packs for Home\'s apps</string>
     <string name="editor_dock_icon_pack_hint">The icon pack here applies to the apps row only.</string>
 
     <string name="editor_dock_az_glass">Glass background</string>

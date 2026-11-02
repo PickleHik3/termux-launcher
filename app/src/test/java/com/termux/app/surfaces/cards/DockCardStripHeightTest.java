@@ -51,6 +51,40 @@ public class DockCardStripHeightTest {
     }
 
     @Test
+    public void dockIconPackNamesThePinnedPackAndOpensItsChooser() {
+        View row = mCard.view(Row.DOCK_ICON_PACK, 1000);
+        assertNotNull(row);
+        List<String> words = new java.util.ArrayList<>();
+        collectTexts(row, words);
+        assertEquals(true, words.contains("Dock icon pack"));
+        assertEquals("the current choice", true, words.contains("System"));
+        com.google.android.material.button.MaterialButton action = findButton(row);
+        assertNotNull(action);
+        action.performClick();
+        assertEquals(1, mHost.iconPackPicks);
+    }
+
+    private static void collectTexts(View view, List<String> out) {
+        if (view instanceof TextView) out.add(String.valueOf(((TextView) view).getText()));
+        if (view instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
+                collectTexts(((ViewGroup) view).getChildAt(i), out);
+    }
+
+    @Nullable
+    private static com.google.android.material.button.MaterialButton findButton(View view) {
+        if (view instanceof com.google.android.material.button.MaterialButton)
+            return (com.google.android.material.button.MaterialButton) view;
+        if (view instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) {
+                com.google.android.material.button.MaterialButton found =
+                    findButton(((ViewGroup) view).getChildAt(i));
+                if (found != null) return found;
+            }
+        return null;
+    }
+
+    @Test
     public void stripTypeIsTheWallStrip() {
         assertEquals(DockStyle.WALL_STRIP, DockStyle.CHOICES.get(DockCard.STRIP_TYPE));
     }
@@ -161,7 +195,8 @@ public class DockCardStripHeightTest {
         @Override public boolean mostUsed() { return true; }
         @Override public void setMostUsed(boolean on) {}
         @NonNull @Override public CharSequence iconPack() { return "System"; }
-        @Override public void pickIconPack() {}
+        int iconPackPicks;
+        @Override public void pickIconPack() { iconPackPicks++; }
         @Override public boolean azGlass() { return false; }
         @Override public void setAzGlass(boolean on) {}
         @Override public int azShow() { return 0; }

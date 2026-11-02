@@ -122,7 +122,8 @@ public class EditorCardSectionsTest {
     public void dock() {
         check(EditorCard.DOCK, expect(
             CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME),
+            "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
+                Row.DOCK_MONOCHROME),
             "SECTION_LAYOUT", Arrays.asList(Row.DOCK_BARS),
             "SECTION_APPEARANCE", block(Row.REFLECTION),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.LINK_GLOBAL)));

@@ -162,7 +162,8 @@ public final class DockCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME)
+            .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
+                Row.DOCK_MONOCHROME)
             .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);
         // Reflection is Peek glass's own knob, shown only while Peek is the type.
         return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
@@ -200,6 +201,9 @@ public final class DockCard {
         @Nullable MaterialSwitch azGlass;
         @Nullable SegmentRow azShow;
     }
+
+    /** Dock icon pack, under More options. */
+    @Nullable private ActionRow mDockIconPack;
 
     public DockCard(@NonNull Host host) {
         mHost = host;
@@ -276,6 +280,13 @@ public final class DockCard {
                     mHost.setOption(SHOW_HIDE.get(index), checked));
                 return section(context, R.string.editor_dock_row_options, mOptions.root);
             }
+            case DOCK_ICON_PACK: {
+                // The pinned apps' pack, the same choice as the Apps row's own Icon pack.
+                mDockIconPack = ActionRow.build(context, R.drawable.ic_symbol_icon_pack,
+                    context.getString(R.string.editor_dock_icon_pack_row), mHost.iconPack(),
+                    v -> mHost.pickIconPack());
+                return mDockIconPack.root;
+            }
             case DOCK_MONOCHROME: {
                 mMonochrome = com.termux.app.surfaces.rows.SwitchRow.build(context,
                     Option.MONOCHROME.glyph, context.getString(Option.MONOCHROME.word),
@@ -311,6 +322,10 @@ public final class DockCard {
             case DOCK_MONOCHROME:
                 if (mMonochrome != null)
                     mMonochrome.setOn(mHost.option(Option.MONOCHROME));
+                break;
+            case DOCK_ICON_PACK:
+                if (mDockIconPack != null)
+                    mDockIconPack.setAction(mHost.iconPack());
                 break;
             default:
                 break;

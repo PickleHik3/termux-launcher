@@ -57,7 +57,8 @@ public class EditorRowsTest {
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
         assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_STYLE, Row.MARGIN, Row.HOME_ICON_SIZE),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME,
+        assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
+            Row.DOCK_MONOCHROME,
             Row.SECTION_LAYOUT, Row.DOCK_BARS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
             Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION,
             Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL),
@@ -117,6 +118,18 @@ public class EditorRowsTest {
         assertEquals(Kind.SEGMENTS, Row.PAGE_TRANSITION.kind);
         assertEquals(5, com.termux.app.launcher.home.HomePageTransition.values().length);
         assertEquals("slide", com.termux.app.launcher.home.HomePageTransition.values()[0].value);
+    }
+
+    @Test
+    public void iconPackIsALinkToItsSubcardOfThePackTiles() {
+        assertEquals("Icon pack opens a subcard, no longer expands in place",
+            EditorRows.Kind.LINK, Row.ICON_PACK.kind);
+        List<Row> subcard = new java.util.ArrayList<>();
+        for (EditorRows.Spec spec : SurfaceEditorController.iconPackCardRows())
+            subcard.add(spec.row);
+        assertEquals(Arrays.asList(Row.ICON_PACK_PAGE), subcard);
+        assertFalse("the page row is the subcard's alone",
+            rowsOf(EditorCard.HOME, ALL).contains(Row.ICON_PACK_PAGE));
     }
 
     @Test
@@ -239,9 +252,10 @@ public class EditorRowsTest {
     public void theLinksToSettingsComeLast() {
         for (EditorCard card : EditorCard.values()) {
             for (Spec spec : EditorRows.rows(card, ALL)) {
-                // Pane borders opens a card (›) inside the Terminal section, as the spec puts it.
+                // Pane borders and Icon pack open a subcard (›) inside their card's first
+                // section, as the spec puts them.
                 if (spec.row.kind == Kind.LINK && spec.row != Row.KEYBOARD_THEME
-                        && spec.row != Row.PANE_BORDERS)
+                        && spec.row != Row.PANE_BORDERS && spec.row != Row.ICON_PACK)
                     assertEquals(card + ": a link to Settings is rare", 3, spec.tier);
             }
         }

@@ -125,7 +125,15 @@ public final class EditorRows {
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_ed_look),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
-        ICON_PACK(Kind.EXPANDER, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** Icon pack ›: opens the Icon pack subcard (overhaul §2, Home); it expanded in place. */
+        ICON_PACK(Kind.LINK, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** The Icon pack subcard's one row: the pack tiles, as the Icon pack row expanded them. */
+        ICON_PACK_PAGE(Kind.MENU, R.string.appearance_row_icon_pack, 0),
+        /**
+         * The Dock card's Dock icon pack: the pinned apps' pack, "Same as Home" or a pack; drawn
+         * by cards/DockCard, the Kind is the stand-in.
+         */
+        DOCK_ICON_PACK(Kind.MENU, R.string.editor_dock_icon_pack_row, R.drawable.ic_symbol_icon_pack),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
             R.drawable.ic_ed_wallpaper_colours),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
