@@ -323,3 +323,6 @@ cut the developer works this list or accepts what is left (recorded as in
   within the five minutes an automatic load reports the GPU skipped for memory and loads on CPU.
   Only a real kill shows it: the Saga reporter on #191 is the device, or pong with memory filled
   by other apps during a cold GPU load · pong or the reporter's reply on #191.
+
+## Editor motion (2026-10-31, moved from device-checks.md)
+- 2026-10-31 · look grid W2/W3 editor springs · on pong, by eye: a card swap (dock, then the status bar) fades the title, glyph, chips and rows out and back relabelled with the rows rising a little and the ring flying from one to the other, the sheet staying at half; opening the editor drops the bar in and the Appearance ring grows to stand 4dp out round the whole frame, not clipped; changing page with a card up fades the ring out and back in on the new page's surface once it lands; the Wallpaper page rises over the card and falls on Back with no flash at the end and the card at its old detent, Done closing both in one reveal; Reset this row springs the slider with a small overshoot and fades the dot, Reset card moves the rows one after another, quickly, top to bottom; with Remove animations on, moves jump while fades still run · pong.
