@@ -95,6 +95,18 @@ public class GlassRowsTest {
     }
 
     @Test
+    public void pictureGridLinesAreBalanced() {
+        // A phone card: room for five 64dp tiles 8dp apart (379 px at 1x).
+        assertEquals(3, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 6));
+        assertEquals(4, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 7));
+        assertEquals(5, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 5));
+        assertEquals(4, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 64, 8, 4));
+        // Large text: three fit, so seven is 3 + 3 + 1 at worst, never wider than the fit.
+        assertEquals(3, com.termux.app.surfaces.rows.PreviewTilesRow.columns(379, 120, 8, 7));
+        assertEquals(1, com.termux.app.surfaces.rows.PreviewTilesRow.columns(60, 120, 8, 5));
+    }
+
+    @Test
     public void marginAndVibrancyAreTheWhereChipsAllGlassWhateverWhatNames() {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
         assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));

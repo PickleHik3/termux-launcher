@@ -79,6 +79,8 @@ public final class SegmentRow {
     static final int WORD_GLYPH_GAP_DP = 6;
     /** The least room kept between the title and the pills beside it. */
     static final int TITLE_GAP_DP = 16;
+    /** The least room above and below a group, so groups in a run never touch. */
+    static final int GROUP_GAP_DP = 4;
 
     @NonNull public final LinearLayout root;
     @NonNull public final TextView title;
@@ -199,12 +201,17 @@ public final class SegmentRow {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMarginStart(RowKit.dp(context, TITLE_GAP_DP));
+            // 4dp above and below: two one-of rows in a run keep at least 8dp between
+            // their groups, whatever the button's own height (W1a emulator check).
+            params.topMargin = RowKit.dp(context, GROUP_GAP_DP);
+            params.bottomMargin = RowKit.dp(context, GROUP_GAP_DP);
             line.addView(group, params);
         } else {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMarginStart(RowKit.dp(context, RowKit.ICON_COLUMN_DP));
             params.setMarginEnd(RowKit.dp(context, RowKit.EDGE_DP));
+            params.bottomMargin = RowKit.dp(context, GROUP_GAP_DP);
             root.addView(group, params);
         }
         SegmentRow row = new SegmentRow(root, titleView, group, buttons, inline);

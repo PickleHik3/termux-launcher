@@ -395,6 +395,9 @@ final class CardBody {
             words.setOrientation(LinearLayout.VERTICAL);
             words.addView(RowKit.title(mContext, name(row)));
             TextView summary = RowKit.caption(mContext, mModel.summary(row));
+            // The whole summary, up to three lines, never cut.
+            summary.setMaxLines(3);
+            summary.setEllipsize(null);
             summary.setVisibility(isEmpty(mModel.summary(row)) ? View.GONE : View.VISIBLE);
             words.addView(summary);
             line.addView(words, new LinearLayout.LayoutParams(0,
