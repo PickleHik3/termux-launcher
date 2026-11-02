@@ -319,7 +319,7 @@ public class EditorCardSheetFitTest {
                 assertTrue(which + ": no word is cut",
                     layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
             }
-            assertEquals("six Dock options", 6, tiles);
+            assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
         }
     }
 
@@ -346,7 +346,7 @@ public class EditorCardSheetFitTest {
             assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
             assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
         }
-        assertEquals("six Dock options", 6, tiles);
+        assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
     }
 
     @Test
@@ -826,6 +826,11 @@ public class EditorCardSheetFitTest {
                 case LOOK: return strings(R.string.termux_surface_preset_minimal,
                     R.string.termux_surface_preset_frost, R.string.termux_surface_preset_stock,
                     R.string.termux_surface_preset_solid, R.string.termux_surface_preset_custom);
+                // The Status bar's pairs, as StatusBarCard words them.
+                case STATUS_HOURS: return strings(R.string.editor_st_hours_12,
+                    R.string.editor_st_hours_24);
+                case STATUS_UNIT: return strings(R.string.editor_st_unit_c,
+                    R.string.editor_st_unit_f);
                 default: return new String[0];
             }
         }
