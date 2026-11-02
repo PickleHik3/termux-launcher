@@ -35,6 +35,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
   expiry leaves the display untouched.
 
+- **CRT wave 1 on pong (11-02, 41b6a6036).** Terminal effect CRT on a dark Look and on a bright
+  glass tint: the 8/10 dp bezel reads lit at the top and shaded at the bottom over glass and over a
+  solid fill; the screen edge has an inner shadow; box lines carry a faint orange/blue fringe; the
+  triad mask is a hair of colour fringe on glyphs, not a grid over the background (emulator 11-02
+  showed a grid over saturated green; judge on the phone); the dock, status bar and keyboard keep
+  crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
+  10-22 baseline (`project-docs/active/input-latency-study.md` method).
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
