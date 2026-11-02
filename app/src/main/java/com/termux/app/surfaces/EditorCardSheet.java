@@ -149,6 +149,9 @@ final class EditorCardSheet {
         @Nullable
         default CharSequence resetLabel() { return null; }
 
+        /** Whether ⋮ also offers Reset everything (the Customization card, overhaul §1). */
+        default boolean offersResetEverything() { return false; }
+
         /** Where a row's value comes from, for its dot; a model with no grid says own or not. */
         @NonNull
         default RowSource source(@NonNull Row row) {
@@ -182,6 +185,9 @@ final class EditorCardSheet {
     interface Listener {
         /** The header's reset: the card's keys back as they were, with no question asked. */
         void onReset();
+
+        /** ⋮'s Reset everything: the glass and colours back to the defaults, asked first. */
+        default void onResetEverything() {}
         /** The sheet stands at a new top edge: every frame of its motion, and while dragged. */
         void onSheetMoved(int detent, float topPx);
 
@@ -839,9 +845,16 @@ final class EditorCardSheet {
         CharSequence resetLabel = mModel.resetLabel();
         menu.getMenu().add(0, R.id.editor_header_reset, 0,
             resetLabel != null ? resetLabel : mResetLabel);
+        if (mModel.offersResetEverything())
+            menu.getMenu().add(0, R.id.editor_header_reset_everything, 1,
+                R.string.editor_reset_everything);
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.editor_header_reset) {
                 mListener.onReset();
+                return true;
+            }
+            if (item.getItemId() == R.id.editor_header_reset_everything) {
+                mListener.onResetEverything();
                 return true;
             }
             return false;

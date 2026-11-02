@@ -2113,6 +2113,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 if (openSetupWizardIfDue()) return;
                 setupWizard().openCardsIfDue();
+                showGlassResetNudgeIfDue();
             });
         } else {
             resumeFirstRunAfterRestart();
@@ -2578,6 +2579,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         reopenAppearanceAfterRelaunch();
+        View nudgeContent = findViewById(android.R.id.content);
+        if (nudgeContent != null && com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences))
+            nudgeContent.post(this::showGlassResetNudgeIfDue);
         // A permission page the setup cards sent the person to may have been answered.
         if (mSetupWizard != null) mSetupWizard.onActivityResumed();
         // A distro installed in a shell while we were away still needs its sound drop-in.
@@ -2767,6 +2771,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         if (root != null) root.post(resume);
         else resume.run();
+    }
+
+    /**
+     * The upgrade nudge (appearance overhaul §6), once it is due: only on a Home page, after the
+     * setup wizard and its cards, never over a terminal; else it waits for the next resume.
+     */
+    private void showGlassResetNudgeIfDue() {
+        if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        if (!com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences)) return;
+        if (setupWizardComesFirst()) return;
+        if (mSetupWizard != null && mSetupWizard.isCardSheetShowing()) return;
+        if (currentWallPage() != com.termux.app.wall.PaneWallPage.WIDGETS) return;
+        com.termux.app.setup.GlassResetNudgeCard.showIfDue(this, mPreferences, () -> {
+            // Mode back to System, then the window restyled for the new glass and colours.
+            String mode = com.termux.app.surfaces.GlassReset.NIGHT_MODE_DEFAULT;
+            if (mProperties == null || !mode.equals(mProperties.getNightMode()))
+                com.termux.app.settings.TermuxPropertiesFile.write(
+                    com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+                        .KEY_NIGHT_MODE, mode);
+            recreate();
+        });
     }
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Customization › Layout (appearance-cards overhaul §2). -->
+    <string name="editor_layout_home_only">Home only</string>
+    <string name="editor_layout_workspace_only">Workspace only</string>
+    <string name="editor_layout_own_home">Home has its own layout</string>
+    <string name="editor_layout_own_workspace">Workspace has its own layout</string>
+    <string name="editor_layout_own_both">Home and Workspace have their own layouts</string>
+    <string name="editor_layout_hidden_on">%1$s is hidden on %2$s.</string>
+    <string name="editor_layout_shown_on">%1$s is shown on %2$s.</string>
+    <string name="editor_layout_cancel">Cancel</string>
+    <string name="editor_layout_keep_home">Keep Home\'s</string>
+    <string name="editor_layout_keep_workspace">Keep Workspace\'s</string>
+    <string name="editor_layout_keep_both">Keep both</string>
+    <string name="editor_layout_override">Override</string>
+
+    <!-- Reset everything and the upgrade nudge (overhaul §6). -->
+    <item name="editor_header_reset_everything" type="id" />
+    <string name="editor_reset_everything">Reset everything</string>
+    <string name="editor_reset_everything_title">Reset everything?</string>
+    <string name="editor_reset_everything_line">Glass and colours go back to the defaults, with the Clear preset. Layouts, wallpaper, icons and keyboard layouts stay.</string>
+    <string name="editor_reset_everything_confirm">Reset</string>
+    <string name="glass_reset_nudge_title">Glass options</string>
+    <string name="glass_reset_nudge_line">It is recommended that you reset the Glass options to default to migrate safely to the new version. Please pick one from below.</string>
+    <string name="glass_reset_nudge_decline">Decline</string>
+    <string name="glass_reset_nudge_accept">Accept</string>
+</resources>
