@@ -181,6 +181,22 @@ final class EditorCardSheet {
 
         /** The sheet came to rest: on a detent, or off screen. Once per motion. */
         default void onSheetSettled(int detent, float topPx) {}
+
+        /** A main card's pill chose {@code card} (Customization, Home or Workspace). */
+        default void onOpenCard(@NonNull EditorCard card) {}
+
+        /** An element card's ← was tapped (a subcard's ← runs its own back instead). */
+        default void onBack() {}
+    }
+
+    /** The three main cards, in the header pill's order (overhaul §1). */
+    static final EditorCard[] MAIN_CARDS = {EditorCard.APPEARANCE, EditorCard.HOME,
+        EditorCard.WORKSPACE};
+
+    /** Whether {@code card} wears the main header (the pill) rather than an element's. */
+    static boolean isMainCard(@NonNull EditorCard card) {
+        return card == EditorCard.APPEARANCE || card == EditorCard.HOME
+            || card == EditorCard.WORKSPACE;
     }
 
     static final int DETENT_HALF = 0;
@@ -216,6 +232,8 @@ final class EditorCardSheet {
     @NonNull private final FrameLayout mSheet;
     @NonNull private final LinearLayout mColumn;
     @NonNull private final LinearLayout mHeader;
+    /** The header's drag, also fed the down a header button takes first. */
+    @Nullable private View.OnTouchListener mHeaderTouch;
     @NonNull private final FrameLayout mGrab;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
@@ -245,10 +263,24 @@ final class EditorCardSheet {
     }
 
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
-    @NonNull private final MaterialButton mEye;
+    @NonNull private final MaterialSwitch mEye;
+    /** The ⋮ button: a menu holding the card's Reset. */
     @NonNull private final MaterialButton mReset;
-    /** The glyph the eye shows now: open or struck through. */
-    private int mEyeIcon = R.drawable.ic_ms_visibility;
+    /** The Reset item's words, as the controller names them ("Reset dock"). */
+    @NonNull private String mResetLabel = "";
+    /** The main cards' pill and its three buttons, in {@link #MAIN_CARDS} order. */
+    @NonNull private final MaterialButtonToggleGroup mMainPill;
+    @NonNull private final List<MaterialButton> mMainButtons = new ArrayList<>();
+    /** The orientation being edited, on main cards: an indicator, never a button. */
+    @NonNull private final ImageView mPhone;
+    private boolean mLandscape;
+    /** What the element header's ← runs now: a subcard's own back, or null for the listener. */
+    @Nullable private Runnable mBack;
+    @NonNull private final EditorSectionStore mSections;
+    /** The card's sections as built, in order. */
+    @NonNull private final List<Section> mSectionList = new ArrayList<>();
+    /** The store's key for the card shown (the card, and its subcard where one stands). */
+    @NonNull private String mSectionCard = "";
     @NonNull private final ScrollView mScroll;
     /** The chips row under the header: Where it applies, then What it applies to. */
     @NonNull private final LinearLayout mScopeSlot;
@@ -287,7 +319,27 @@ final class EditorCardSheet {
         mSheet.addView(mColumn, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
-        mHeader = new LinearLayout(context);
+        // The header's buttons (the pill, ←, Show, ⋮) take taps; a vertical drag that starts on
+        // one is still the sheet's: past the slop the header takes it from the button.
+        final int headerSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mHeader = new LinearLayout(context) {
+            private float mDownRawY;
+
+            @Override
+            public boolean onInterceptTouchEvent(MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        mDownRawY = event.getRawY();
+                        if (mHeaderTouch != null)
+                            mHeaderTouch.onTouch(this, event);
+                        return false;
+                    case MotionEvent.ACTION_MOVE:
+                        return Math.abs(event.getRawY() - mDownRawY) > headerSlop;
+                    default:
+                        return false;
+                }
+            }
+        };
         mHeader.setOrientation(LinearLayout.VERTICAL);
         mColumn.addView(mHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             dp(HEADER_DP)));
@@ -321,13 +373,32 @@ final class EditorCardSheet {
         handle.setBackground(handleShape);
         mGrab.addView(handle, new FrameLayout.LayoutParams(dp(32), dp(4), Gravity.CENTER));
 
+        // The header row (appearance-cards overhaul §1). Main cards: the Customization | Home |
+        // Workspace pill, the phone glyph and ⋮. Element cards: ← · name · Show · ⋮.
+        LinearLayout line = new LinearLayout(context);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPaddingRelative(dp(4), 0, dp(HEADER_END_DP), 0);
+        headerRow.addView(line, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+
         mHeaderIcon = new ImageView(context);
+        mHeaderIcon.setImageResource(R.drawable.ic_category_back_arrow);
         mHeaderIcon.setImageTintList(ColorStateList.valueOf(EditorViews.color(context,
             com.google.android.material.R.attr.colorOnSurface)));
-        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(24), dp(24),
-            Gravity.START | Gravity.CENTER_VERTICAL);
-        iconParams.setMarginStart(dp(EDGE_DP));
-        headerRow.addView(mHeaderIcon, iconParams);
+        int iconPad = dp(12);
+        mHeaderIcon.setPadding(iconPad, iconPad, iconPad, iconPad);
+        mHeaderIcon.setContentDescription(context.getString(R.string.appearance_header_back));
+        mHeaderIcon.setBackgroundResource(borderlessRipple());
+        mHeaderIcon.setOnClickListener(v -> {
+            Runnable back = mBack;
+            if (back != null)
+                back.run();
+            else
+                mListener.onBack();
+        });
+        line.addView(mHeaderIcon, new LinearLayout.LayoutParams(dp(HEADER_BUTTON_DP),
+            dp(HEADER_BUTTON_DP)));
 
         mTitle = new TextView(context);
         EditorViews.textAppearance(mTitle, com.google.android.material.R.attr.textAppearanceTitleLarge);
@@ -336,31 +407,81 @@ final class EditorCardSheet {
         mTitle.setSingleLine(true);
         mTitle.setEllipsize(TextUtils.TruncateAt.END);
         androidx.core.view.ViewCompat.setAccessibilityHeading(mTitle, true);
-        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.START | Gravity.CENTER_VERTICAL);
-        titleParams.setMarginStart(dp(ICON_COLUMN_DP));
-        titleParams.setMarginEnd(headerButtonsDp(true));
-        headerRow.addView(mTitle, titleParams);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleParams.setMarginStart(dp(4));
+        titleParams.setMarginEnd(dp(8));
+        line.addView(mTitle, titleParams);
 
-        // From the end: reset where the ⋮ menu sat (it only held Reset and Copy to, and the
-        // Match rows replaced Copy to), then the eye where the card has one. There is no ✕: the
-        // card is never put down, and the handle, a drag or Back takes it to peek.
-        mReset = headerButton(R.drawable.ic_ms_restart_alt, R.string.appearance_card_reset);
-        mReset.setOnClickListener(v -> mListener.onReset());
-        headerRow.addView(mReset, headerButtonParams(0));
+        mMainPill = com.termux.app.surfaces.rows.SegmentRow.connectedGroup(context);
+        mMainPill.setSingleSelection(true);
+        mMainPill.setSelectionRequired(true);
+        for (EditorCard main : MAIN_CARDS) {
+            MaterialButton button = com.termux.app.surfaces.rows.SegmentRow.connectedButton(
+                context);
+            button.setId(View.generateViewId());
+            button.setText(main.titleRes);
+            button.setMinWidth(0);
+            button.setMinimumWidth(0);
+            button.setMinHeight(dp(HEADER_BUTTON_DP));
+            button.setPaddingRelative(dp(10), button.getPaddingTop(), dp(10),
+                button.getPaddingBottom());
+            button.setEllipsize(TextUtils.TruncateAt.END);
+            mMainButtons.add(button);
+            mMainPill.addView(button, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        mMainPill.addOnButtonCheckedListener((group, id, checked) -> {
+            if (mRestating || !checked)
+                return;
+            for (int i = 0; i < mMainButtons.size(); i++) {
+                if (mMainButtons.get(i).getId() == id && mCard != MAIN_CARDS[i]) {
+                    mListener.onOpenCard(MAIN_CARDS[i]);
+                    return;
+                }
+            }
+        });
+        LinearLayout.LayoutParams pillParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        pillParams.setMarginStart(dp(EDGE_DP - 4));
+        pillParams.setMarginEnd(dp(8));
+        line.addView(mMainPill, pillParams);
 
-        mEye = headerButton(R.drawable.ic_ms_visibility, R.string.appearance_row_visible);
-        mEye.setCheckable(true);
-        mEye.setOnClickListener(v -> {
+        mEye = new MaterialSwitch(context);
+        mEye.setText(R.string.appearance_header_show);
+        mEye.setSwitchPadding(dp(8));
+        mEye.setOnCheckedChangeListener((button, checked) -> {
             if (mRestating)
                 return;
-            boolean shown = mModel.value(Row.VISIBLE) != 0;
-            mModel.onValue(Row.VISIBLE, shown ? 0 : 1, false);
+            mModel.onValue(Row.VISIBLE, checked ? 1 : 0, false);
             restateEye();
         });
         mEye.setVisibility(View.GONE);
-        headerRow.addView(mEye, headerButtonParams(1));
+        LinearLayout.LayoutParams eyeParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(HEADER_BUTTON_DP));
+        eyeParams.setMarginEnd(dp(4));
+        line.addView(mEye, eyeParams);
+
+        mPhone = new ImageView(context);
+        mPhone.setImageResource(R.drawable.ic_symbol_phone_portrait);
+        mPhone.setImageTintList(ColorStateList.valueOf(EditorViews.color(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant)));
+        mPhone.setContentDescription(context.getString(
+            R.string.appearance_header_editing_portrait));
+        mPhone.setClickable(false);
+        mPhone.setFocusable(false);
+        LinearLayout.LayoutParams phoneParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+        phoneParams.setMarginEnd(dp(4));
+        line.addView(mPhone, phoneParams);
+
+        // ⋮ holds the card's Reset (the bare reset button it replaces did the same, no question).
+        mReset = headerButton(R.drawable.ic_editor_more_vert, R.string.appearance_header_more);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset,
+            context.getString(R.string.appearance_header_more));
+        mReset.setOnClickListener(this::openHeaderMenu);
+        line.addView(mReset, new LinearLayout.LayoutParams(dp(HEADER_BUTTON_DP),
+            dp(HEADER_BUTTON_DP)));
+        mSections = new EditorSectionStore(context);
         bindHeaderDrag();
 
         mScopeSlot = new LinearLayout(context);
@@ -490,9 +611,10 @@ final class EditorCardSheet {
         int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP) + chipRowPx(widthPx);
         int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
         int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        for (int i = 0; i < mRows.getChildCount(); i++) {
-            View child = mRows.getChildAt(i);
-            if (child.getTag() != TIER_ONE_TAG)
+        // The first section's title row counts with tier 1 under it.
+        for (View child : flatRows()) {
+            boolean title = isSectionTitle(child);
+            if (!title && child.getTag() != TIER_ONE_TAG)
                 break;
             child.measure(spec, unspecified);
             height += child.getMeasuredHeight();
@@ -526,13 +648,13 @@ final class EditorCardSheet {
         // One complete control: a section heading or a divider over it counts with it, so rows
         // are taken down to the first one tall enough to be a touch target.
         int target = dp(MIN_TARGET_DP);
-        for (int i = 0; i < mRows.getChildCount(); i++) {
-            View child = mRows.getChildAt(i);
+        for (View child : flatRows()) {
             if (child.getVisibility() == View.GONE)
                 continue;
             child.measure(spec, unspecified);
             height += child.getMeasuredHeight();
-            if (child.getMeasuredHeight() >= target)
+            // A section's title row is not a control: the first control under it counts.
+            if (!isSectionTitle(child) && child.getMeasuredHeight() >= target)
                 break;
         }
         return height;
@@ -586,29 +708,31 @@ final class EditorCardSheet {
         // A restatement with another row list (a chip offered or withdrawn) rebuilds in place.
         boolean sameRows = sameCard && rows.equals(mBuilt);
         mCard = card;
-        mReset.setContentDescription(resetLabel);
-        androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset, resetLabel);
-        EditorViews.setVisible(mEye, card.hasEye());
-        ViewGroup.LayoutParams titleParams = mTitle.getLayoutParams();
-        if (titleParams instanceof FrameLayout.LayoutParams) {
-            int end = headerButtonsDp(card.hasEye());
-            if (((FrameLayout.LayoutParams) titleParams).getMarginEnd() != end) {
-                ((FrameLayout.LayoutParams) titleParams).setMarginEnd(end);
-                mTitle.setLayoutParams(titleParams);
-            }
-        }
+        mResetLabel = resetLabel;
+        int titleRes = subcardTitle != 0 ? subcardTitle : card.titleRes;
+        // A main card wears the pill and the phone glyph; an element card (a subcard too) its
+        // ←, name and, where its object can be hidden, the Show switch.
+        boolean main = subcardTitle == 0 && isMainCard(card);
+        mBack = back;
+        EditorViews.setVisible(mHeaderIcon, !main);
+        EditorViews.setVisible(mTitle, !main);
+        EditorViews.setVisible(mMainPill, main);
+        EditorViews.setVisible(mPhone, main);
+        EditorViews.setVisible(mEye, !main && subcardTitle == 0 && card.hasEye());
+        mHeaderIcon.setContentDescription(mContext.getString(back != null
+            ? R.string.appearance_pane_borders_back : R.string.appearance_header_back));
+        if (main)
+            restateMainPill(card);
         if (!sameRows) {
             int scrollY = mScroll.getScrollY();
-            build(card, rows);
+            mSectionCard = card.name() + (subcardTitle != 0
+                ? "/" + mContext.getResources().getResourceEntryName(subcardTitle) : "");
+            build(card, rows, mContext.getString(titleRes));
             mScroll.scrollTo(0, sameCard ? scrollY : 0);
         }
         restateEye();
         restateScope();
-        int titleRes = subcardTitle != 0 ? subcardTitle : card.titleRes;
         EditorViews.setText(mTitle, mContext.getString(titleRes));
-        mHeaderIcon.setImageResource(back != null ? R.drawable.ic_category_back_arrow
-            : card.iconRes);
-        restateHeaderBack(back);
         mSheet.setContentDescription(mContext.getString(titleRes));
         boolean wasShown = mShown;
         mShown = true;
@@ -632,34 +756,87 @@ final class EditorCardSheet {
             fadeInAfterSwap();
     }
 
-    /**
-     * The header glyph as a subcard's back arrow: tappable across a 48dp target round its 24dp
-     * glyph, or the card's plain glyph again for null.
-     */
-    private void restateHeaderBack(@Nullable Runnable back) {
-        int pad = back != null ? dp(12) : 0;
-        if (mHeaderIcon.getPaddingLeft() != pad) {
-            mHeaderIcon.setPadding(pad, pad, pad, pad);
-            ViewGroup.LayoutParams params = mHeaderIcon.getLayoutParams();
-            if (params instanceof FrameLayout.LayoutParams) {
-                int size = dp(24) + 2 * pad;
-                params.width = size;
-                params.height = size;
-                ((FrameLayout.LayoutParams) params).setMarginStart(dp(EDGE_DP) - pad);
-                mHeaderIcon.setLayoutParams(params);
+    /** The pill shows {@code card} chosen, without reporting it. */
+    private void restateMainPill(@NonNull EditorCard card) {
+        for (int i = 0; i < MAIN_CARDS.length; i++) {
+            if (MAIN_CARDS[i] != card)
+                continue;
+            int id = mMainButtons.get(i).getId();
+            if (mMainPill.getCheckedButtonId() == id)
+                return;
+            boolean was = mRestating;
+            mRestating = true;
+            try {
+                mMainPill.check(id);
+            } finally {
+                mRestating = was;
             }
+            return;
         }
-        if (back != null) {
-            mHeaderIcon.setOnClickListener(v -> back.run());
-            mHeaderIcon.setContentDescription(
-                mContext.getString(R.string.appearance_pane_borders_back));
-            mHeaderIcon.setBackgroundResource(borderlessRipple());
-        } else {
-            mHeaderIcon.setOnClickListener(null);
-            mHeaderIcon.setClickable(false);
-            mHeaderIcon.setContentDescription(null);
-            mHeaderIcon.setBackground(null);
-        }
+    }
+
+    /**
+     * The orientation being edited, shown by the main header's phone glyph: upright in
+     * portrait, sideways in landscape. An indicator only.
+     */
+    void setLandscape(boolean landscape) {
+        if (mLandscape == landscape)
+            return;
+        mLandscape = landscape;
+        mPhone.setImageResource(landscape ? R.drawable.ic_symbol_phone_landscape
+            : R.drawable.ic_symbol_phone_portrait);
+        mPhone.setContentDescription(mContext.getString(landscape
+            ? R.string.appearance_header_editing_landscape
+            : R.string.appearance_header_editing_portrait));
+    }
+
+    /** ⋮'s menu: the card's Reset, which does what the header's reset button did. */
+    private void openHeaderMenu(@NonNull View anchor) {
+        androidx.appcompat.widget.PopupMenu menu =
+            new androidx.appcompat.widget.PopupMenu(mContext, anchor);
+        menu.getMenu().add(0, R.id.editor_header_reset, 0, mResetLabel);
+        menu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.editor_header_reset) {
+                mListener.onReset();
+                return true;
+            }
+            return false;
+        });
+        mHeaderMenu = menu;
+        menu.show();
+    }
+
+    /** The ⋮ menu last opened, for a test. */
+    @Nullable private androidx.appcompat.widget.PopupMenu mHeaderMenu;
+
+    @VisibleForTesting
+    @Nullable
+    androidx.appcompat.widget.PopupMenu headerMenu() {
+        return mHeaderMenu;
+    }
+
+    @VisibleForTesting
+    @NonNull
+    MaterialButtonToggleGroup mainPill() {
+        return mMainPill;
+    }
+
+    @VisibleForTesting
+    @NonNull
+    ImageView phoneGlyph() {
+        return mPhone;
+    }
+
+    @VisibleForTesting
+    @NonNull
+    ImageView backButton() {
+        return mHeaderIcon;
+    }
+
+    @VisibleForTesting
+    @NonNull
+    TextView titleView() {
+        return mTitle;
     }
 
     /** The theme's borderless ripple. */
@@ -823,10 +1000,17 @@ final class EditorCardSheet {
      * Elements list opening the Dock card at its Options.
      */
     void scrollTo(@NonNull Row row) {
+        // A row in a closed section: the section opens first (at once), then the scroll.
+        Section section = sectionOf(row);
+        if (section != null && !section.open)
+            setSectionOpen(section, true, false);
         RowViews views = mRowViews.get(row);
-        if (views == null)
+        View sectionTarget = section != null && section.key.equals(row.name())
+            ? section.root : null;
+        if (views == null && sectionTarget == null)
             return;
-        View target = views.strip != null ? views.strip.root : views.root;
+        View target = sectionTarget != null ? sectionTarget
+            : views.strip != null ? views.strip.root : views.root;
         mScroll.post(() -> {
             int y = 0;
             for (View at = target; at != null && at != mRows; ) {
@@ -934,7 +1118,7 @@ final class EditorCardSheet {
         final float[] down = new float[2];
         final boolean[] dragging = {false};
         final VelocityTracker[] tracker = {null};
-        mHeader.setOnTouchListener((view, event) -> {
+        mHeaderTouch = (view, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     down[0] = event.getRawY();
@@ -990,7 +1174,8 @@ final class EditorCardSheet {
                 default:
                     return true;
             }
-        });
+        };
+        mHeader.setOnTouchListener(mHeaderTouch);
     }
 
     /** The tracker reads screen positions: the header moves under the finger while it drags. */
@@ -1220,38 +1405,277 @@ final class EditorCardSheet {
     /** The rows the sheet was last built with, so a restatement can tell a changed list. */
     @NonNull private List<EditorRows.Spec> mBuilt = java.util.Collections.emptyList();
 
-    private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs) {
+    private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs,
+                       @NonNull String cardTitle) {
         mBuilt = new java.util.ArrayList<>(specs);
         mRows.removeAllViews();
         mRowViews.clear();
+        mSectionList.clear();
+        // Collapsible sections (overhaul §3): a heading row and every row up to the next one;
+        // the rows before the first heading are a section named for the card.
+        Section section = null;
         int tier = 0;
         Strip strip = null;
         for (EditorRows.Spec spec : specs) {
+            if (isSectionHeading(spec.row)) {
+                section = newSection(spec.row.name(), mContext.getString(spec.row.labelRes));
+                tier = 0;
+                strip = null;
+                continue;
+            }
+            if (section == null)
+                section = newSection(EditorSectionStore.FIRST, cardTitle);
+            LinearLayout body = section.body;
             RowViews own = ownRow(spec.row);
             if (own == null && spec.row.kind == Kind.SLIDER) {
                 if (strip == null) {
-                    if (tier != 0 && spec.tier != tier)
-                        mRows.addView(divider());
+                    if (tier != 0 && spec.tier != tier && body.getChildCount() > 0)
+                        body.addView(divider());
                     tier = spec.tier;
                     strip = newStrip(spec.row);
                     if (spec.tier == 1)
                         strip.root.setTag(TIER_ONE_TAG);
-                    mRows.addView(strip.root);
+                    body.addView(strip.root);
                 }
                 mRowViews.put(spec.row, sliderRow(spec.row, strip));
+                section.rows.add(spec.row);
                 continue;
             }
             strip = null;
-            if (tier != 0 && spec.tier != tier)
-                mRows.addView(divider());
+            if (tier != 0 && spec.tier != tier && body.getChildCount() > 0)
+                body.addView(divider());
             tier = spec.tier;
             RowViews row = own != null ? own : buildRow(spec.row);
             mRowViews.put(spec.row, row);
             if (spec.tier == 1)
                 row.root.setTag(TIER_ONE_TAG);
-            mRows.addView(row.root);
+            body.addView(row.root);
+            section.rows.add(spec.row);
         }
+        for (int i = 0; i < mSectionList.size(); i++) {
+            Section built = mSectionList.get(i);
+            built.open = mSections.isOpen(mSectionCard, built.key, i);
+            mSections.setOpen(mSectionCard, built.key, built.open);
+            applySection(built, false);
+        }
+        mSections.markVisited(mSectionCard);
         restate();
+    }
+
+    /** Whether {@code row} heads a collapsible section (a tier-level SECTION_* row). */
+    static boolean isSectionHeading(@NonNull Row row) {
+        return row.name().startsWith("SECTION_");
+    }
+
+    /** One collapsible section: its container, title row, arrow and body. */
+    static final class Section {
+        @NonNull final String key;
+        @NonNull final String title;
+        @NonNull final LinearLayout root;
+        @NonNull final LinearLayout titleRow;
+        @NonNull final ImageView arrow;
+        @NonNull final LinearLayout body;
+        @NonNull final List<Row> rows = new ArrayList<>();
+        boolean open;
+        @Nullable android.animation.ValueAnimator motion;
+
+        Section(@NonNull String key, @NonNull String title, @NonNull LinearLayout root,
+                @NonNull LinearLayout titleRow, @NonNull ImageView arrow,
+                @NonNull LinearLayout body) {
+            this.key = key;
+            this.title = title;
+            this.root = root;
+            this.titleRow = titleRow;
+            this.arrow = arrow;
+            this.body = body;
+        }
+    }
+
+    static final int SECTION_CORNER_DP = 20;
+    static final int SECTION_GAP_DP = 2;
+    static final int SECTION_SIDE_DP = 8;
+    static final int SECTION_TITLE_DP = 48;
+    static final long SECTION_MOTION_MS = 300;
+
+    @NonNull
+    private Section newSection(@NonNull String key, @NonNull String title) {
+        LinearLayout root = new LinearLayout(mContext);
+        root.setOrientation(LinearLayout.VERTICAL);
+        com.google.android.material.shape.MaterialShapeDrawable shape =
+            new com.google.android.material.shape.MaterialShapeDrawable(
+                com.google.android.material.shape.ShapeAppearanceModel.builder()
+                    .setAllCornerSizes(dp(SECTION_CORNER_DP)).build());
+        shape.setFillColor(ColorStateList.valueOf(EditorViews.color(mContext,
+            com.google.android.material.R.attr.colorSurfaceContainerLowest)));
+        root.setBackground(shape);
+        root.setClipToOutline(true);
+
+        LinearLayout titleRow = new LinearLayout(mContext);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setMinimumHeight(dp(SECTION_TITLE_DP));
+        titleRow.setPaddingRelative(dp(EDGE_DP), 0, dp(12), 0);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        mContext.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple,
+            true);
+        titleRow.setBackgroundResource(ripple.resourceId);
+        TextView name = new TextView(mContext);
+        EditorViews.textAppearance(name, com.google.android.material.R.attr.textAppearanceTitleSmall);
+        name.setTextColor(EditorViews.color(mContext, androidx.appcompat.R.attr.colorPrimary));
+        name.setText(title);
+        name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        titleRow.addView(name, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ImageView arrow = new ImageView(mContext);
+        arrow.setImageResource(R.drawable.ic_editor_expand_more);
+        arrow.setImageTintList(ColorStateList.valueOf(EditorViews.color(mContext,
+            com.google.android.material.R.attr.colorOnSurfaceVariant)));
+        arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        titleRow.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        androidx.core.view.ViewCompat.setAccessibilityHeading(titleRow, true);
+        root.addView(titleRow, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout body = new LinearLayout(mContext);
+        body.setOrientation(LinearLayout.VERTICAL);
+        root.addView(body, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginStart(dp(SECTION_SIDE_DP));
+        params.setMarginEnd(dp(SECTION_SIDE_DP));
+        params.topMargin = mSectionList.isEmpty() ? 0 : dp(SECTION_GAP_DP);
+        mRows.addView(root, params);
+        Section section = new Section(key, title, root, titleRow, arrow, body);
+        titleRow.setOnClickListener(v -> setSectionOpen(section, !section.open, true));
+        mSectionList.add(section);
+        return section;
+    }
+
+    /** Opens or closes {@code section}, remembering it for the card. */
+    private void setSectionOpen(@NonNull Section section, boolean open, boolean animate) {
+        if (section.open == open)
+            return;
+        section.open = open;
+        mSections.setOpen(mSectionCard, section.key, open);
+        applySection(section, animate);
+    }
+
+    /**
+     * Shows {@code section} as it stands: its arrow turned, its words read aloud, its body's
+     * height growing or shrinking on the emphasized easing (at once under reduced motion). Only
+     * the section's own height changes, so the sections above it stay where they stand.
+     */
+    private void applySection(@NonNull Section section, boolean animate) {
+        section.titleRow.setContentDescription(mContext.getString(section.open
+            ? R.string.appearance_section_expanded : R.string.appearance_section_collapsed,
+            section.title));
+        if (section.motion != null) {
+            section.motion.cancel();
+            section.motion = null;
+        }
+        LinearLayout body = section.body;
+        float turn = section.open ? 180f : 0f;
+        boolean moving = animate && !ReducedMotion.isEnabled(mContext) && body.isLaidOut();
+        if (!moving) {
+            section.arrow.setRotation(turn);
+            ViewGroup.LayoutParams params = body.getLayoutParams();
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            body.setLayoutParams(params);
+            body.setVisibility(section.open ? View.VISIBLE : View.GONE);
+            return;
+        }
+        android.view.animation.Interpolator emphasized =
+            new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f);
+        section.arrow.animate().rotation(turn).setDuration(SECTION_MOTION_MS)
+            .setInterpolator(emphasized).start();
+        int from = body.getVisibility() == View.VISIBLE ? body.getHeight() : 0;
+        body.setVisibility(View.VISIBLE);
+        body.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1, section.root.getWidth()),
+            View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0,
+            View.MeasureSpec.UNSPECIFIED));
+        int to = section.open ? body.getMeasuredHeight() : 0;
+        android.animation.ValueAnimator motion = android.animation.ValueAnimator.ofInt(from, to);
+        motion.setDuration(SECTION_MOTION_MS);
+        motion.setInterpolator(emphasized);
+        motion.addUpdateListener(a -> {
+            ViewGroup.LayoutParams params = body.getLayoutParams();
+            params.height = (int) a.getAnimatedValue();
+            body.setLayoutParams(params);
+        });
+        motion.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (section.motion != animation)
+                    return;
+                section.motion = null;
+                ViewGroup.LayoutParams params = body.getLayoutParams();
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                body.setLayoutParams(params);
+                body.setVisibility(section.open ? View.VISIBLE : View.GONE);
+            }
+        });
+        section.motion = motion;
+        motion.start();
+    }
+
+    /** The section that holds {@code row}, or null. */
+    @Nullable
+    private Section sectionOf(@NonNull Row row) {
+        for (Section section : mSectionList) {
+            if (section.key.equals(row.name()) || section.rows.contains(row))
+                return section;
+        }
+        return null;
+    }
+
+    /** Opens every section at once, for a test that reads every row. */
+    @VisibleForTesting
+    void openAllSections() {
+        for (Section section : mSectionList)
+            setSectionOpen(section, true, false);
+    }
+
+    /** {@link #flatRows}, for a test: what the least half detent walks. */
+    @VisibleForTesting
+    @NonNull
+    List<View> flatRowsForTest() {
+        return flatRows();
+    }
+
+    /** Whether {@code view} is a section's title row, for a test. */
+    @VisibleForTesting
+    boolean isSectionTitleForTest(@NonNull View view) {
+        return isSectionTitle(view);
+    }
+
+    /** The card's sections, for a test. */
+    @VisibleForTesting
+    @NonNull
+    List<Section> sections() {
+        return mSectionList;
+    }
+
+    /** The views the rows stand in, in order: each section's title row, then its open body's. */
+    @NonNull
+    private List<View> flatRows() {
+        List<View> out = new ArrayList<>();
+        for (Section section : mSectionList) {
+            out.add(section.titleRow);
+            if (!section.open)
+                continue;
+            for (int i = 0; i < section.body.getChildCount(); i++)
+                out.add(section.body.getChildAt(i));
+        }
+        return out;
+    }
+
+    private boolean isSectionTitle(@NonNull View view) {
+        for (Section section : mSectionList) {
+            if (section.titleRow == view)
+                return true;
+        }
+        return false;
     }
 
 
@@ -1826,20 +2250,8 @@ final class EditorCardSheet {
         try {
             if (mEye.isChecked() != shown)
                 mEye.setChecked(shown);
-            int icon = shown ? R.drawable.ic_ms_visibility : R.drawable.ic_ms_visibility_off;
-            if (mEyeIcon != icon) {
-                mEyeIcon = icon;
-                mEye.setIconResource(icon);
-            }
             if (mEye.isEnabled() != enabled)
                 mEye.setEnabled(enabled);
-            int container = shown ? EditorViews.color(mContext,
-                com.google.android.material.R.attr.colorSecondaryContainer) : 0;
-            int content = EditorViews.color(mContext, shown
-                ? androidx.appcompat.R.attr.colorPrimary
-                : com.google.android.material.R.attr.colorOnSurfaceVariant);
-            mEye.setBackgroundTintList(ColorStateList.valueOf(container));
-            mEye.setIconTint(ColorStateList.valueOf(content));
             CharSequence note = mModel.summary(Row.VISIBLE);
             androidx.appcompat.widget.TooltipCompat.setTooltipText(mEye,
                 note != null && note.length() > 0 ? note
@@ -1852,7 +2264,7 @@ final class EditorCardSheet {
     /** The eye, for a test. */
     @VisibleForTesting
     @NonNull
-    MaterialButton eyeButton() {
+    MaterialSwitch eyeButton() {
         return mEye;
     }
 
@@ -2156,9 +2568,9 @@ final class EditorCardSheet {
     @NonNull
     List<Row> shownRows() {
         List<Row> rows = new ArrayList<>();
-        for (int i = 0; i < mRows.getChildCount(); i++) {
+        for (View child : flatRows()) {
             for (RowViews views : mRowViews.values()) {
-                if (views.root == mRows.getChildAt(i)) {
+                if (views.root == child) {
                     rows.add(views.row);
                     break;
                 }
@@ -2335,20 +2747,6 @@ final class EditorCardSheet {
         return line;
     }
 
-    /** The room the header's buttons take at its end: reset, and the eye with it. */
-    private int headerButtonsDp(boolean withEye) {
-        return dp(HEADER_END_DP + HEADER_BUTTON_DP * (withEye ? 2 : 1) + 8);
-    }
-
-    /** The {@code index}th header button from the end. */
-    @NonNull
-    private FrameLayout.LayoutParams headerButtonParams(int index) {
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(HEADER_BUTTON_DP),
-            dp(HEADER_BUTTON_DP), Gravity.END | Gravity.CENTER_VERTICAL);
-        params.setMarginEnd(dp(HEADER_END_DP + HEADER_BUTTON_DP * index));
-        return params;
-    }
-
     @NonNull
     private MaterialButton headerButton(int iconRes, int descriptionRes) {
         MaterialButton button = new MaterialButton(mContext, null,
@@ -2366,7 +2764,8 @@ final class EditorCardSheet {
             : (mSheet.getParent() instanceof View && ((View) mSheet.getParent()).getWidth() > 0
                 ? ((View) mSheet.getParent()).getWidth()
                 : mContext.getResources().getDisplayMetrics().widthPixels);
-        return Math.max(1, sheet - dp(ICON_COLUMN_DP) - dp(EDGE_DP));
+        // Rows stand inside a section container, 8dp in from either side (overhaul §3).
+        return Math.max(1, sheet - dp(ICON_COLUMN_DP) - dp(EDGE_DP) - 2 * dp(SECTION_SIDE_DP));
     }
 
     /** The smallest share of its text size a three-segment row shrinks to to stand inline. */

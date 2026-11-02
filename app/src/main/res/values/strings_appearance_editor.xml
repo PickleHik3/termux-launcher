@@ -47,6 +47,16 @@
     <string name="appearance_card_expand">Expand</string>
     <string name="appearance_card_collapse">Collapse</string>
     <string name="appearance_card_reset">Reset</string>
+    <!-- Appearance cards overhaul §1: the header rows. -->
+    <string name="appearance_card_customization">Customization</string>
+    <string name="appearance_header_show">Show</string>
+    <string name="appearance_header_more">More options</string>
+    <string name="appearance_header_back">Back</string>
+    <string name="appearance_header_editing_portrait">Editing portrait</string>
+    <string name="appearance_header_editing_landscape">Editing landscape</string>
+    <!-- Appearance cards overhaul §3: a collapsible section's title row, read aloud. -->
+    <string name="appearance_section_expanded">%1$s, expanded</string>
+    <string name="appearance_section_collapsed">%1$s, collapsed</string>
     <!-- A stepper row's buttons, read by a screen reader and on long-press: "Decrease App icons". -->
     <string name="appearance_stepper_less">Decrease %1$s</string>
     <string name="appearance_stepper_more">Increase %1$s</string>
