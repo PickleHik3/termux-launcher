@@ -431,13 +431,20 @@ final class EditorCardSheet {
             button.setMinWidth(0);
             button.setMinimumWidth(0);
             button.setMinHeight(dp(HEADER_BUTTON_DP));
-            button.setPaddingRelative(dp(10), button.getPaddingTop(), dp(10),
+            button.setPaddingRelative(dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
+                button.getPaddingTop(), dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
                 button.getPaddingBottom());
-            button.setEllipsize(TextUtils.TruncateAt.END);
+            button.setSingleLine(true);
             mMainButtons.add(button);
             mMainPill.addView(button, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         }
+        // Every word whole (overhaul §4): the pill shares its room by the words' widths; where
+        // even that cannot fit (large text), the phone glyph gives up its margin, then the words
+        // step down a size. Never an ellipsis.
+        com.termux.app.surfaces.rows.SegmentRow.weighByText(mMainButtons);
+        mMainPill.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) ->
+            fitWhole(mMainPill, mMainButtons, true));
         mMainPill.addOnButtonCheckedListener((group, id, checked) -> {
             if (mRestating || !checked)
                 return;
@@ -526,6 +533,8 @@ final class EditorCardSheet {
         });
         mScopeSlot.addView(mAppliesGroup, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        mAppliesGroup.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) ->
+            fitWhole(mAppliesGroup, appliesButtons(), false));
         mColumn.addView(mScopeSlot, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -2204,22 +2213,80 @@ final class EditorCardSheet {
                     button.setMinWidth(0);
                     button.setMinimumWidth(0);
                     button.setSingleLine(true);
-                    button.setEllipsize(TextUtils.TruncateAt.END);
+                    button.setPaddingRelative(
+                        dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
+                        button.getPaddingTop(),
+                        dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
+                        button.getPaddingBottom());
                     mAppliesGroup.addView(button, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 }
             }
+            boolean reworded = false;
             for (int i = 0; i < chip.labels.length; i++) {
                 MaterialButton button = (MaterialButton) mAppliesGroup.getChildAt(i);
-                if (!TextUtils.equals(button.getText(), chip.labels[i]))
+                if (!TextUtils.equals(button.getText(), chip.labels[i])) {
                     button.setText(chip.labels[i]);
+                    reworded = true;
+                }
                 if (i == chip.selected && !button.isChecked())
                     mAppliesGroup.check(button.getId());
             }
+            if (reworded)
+                com.termux.app.surfaces.rows.SegmentRow.weighByText(appliesButtons());
             mAppliesGroup.setContentDescription(chip.question + ": " + chip.label());
         } finally {
             mRestating = was;
         }
+    }
+
+    @NonNull
+    private List<MaterialButton> appliesButtons() {
+        List<MaterialButton> out = new ArrayList<>(mAppliesGroup.getChildCount());
+        for (int i = 0; i < mAppliesGroup.getChildCount(); i++)
+            out.add((MaterialButton) mAppliesGroup.getChildAt(i));
+        return out;
+    }
+
+    /** labelLarge and labelMedium, the two sizes a header group's words stand at. */
+    static final float GROUP_TEXT_SP = 14f;
+    static final float GROUP_TEXT_SMALL_SP = 12f;
+
+    /**
+     * Keeps every word of a header group whole once it is laid out: where the words need more
+     * than the group has, the phone glyph's margin goes first ({@code canTakePhoneRoom}), then
+     * the words step down to labelMedium; each step once, on the next frame.
+     */
+    private void fitWhole(@NonNull MaterialButtonToggleGroup group,
+                          @NonNull List<MaterialButton> buttons, boolean canTakePhoneRoom) {
+        if (group.getWidth() <= 0 || buttons.isEmpty()
+            || com.termux.app.surfaces.rows.SegmentRow.fitsWhole(buttons, group.getWidth(), 0))
+            return;
+        LinearLayout.LayoutParams phone = (LinearLayout.LayoutParams) mPhone.getLayoutParams();
+        if (canTakePhoneRoom && phone.getMarginEnd() > 0) {
+            phone.setMarginEnd(0);
+            group.post(() -> mPhone.setLayoutParams(phone));
+            return;
+        }
+        if (buttons.get(0).getTextSize() > spPx(GROUP_TEXT_SMALL_SP) + 0.5f) {
+            group.post(() -> {
+                for (MaterialButton button : buttons)
+                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,
+                        GROUP_TEXT_SMALL_SP);
+                com.termux.app.surfaces.rows.SegmentRow.weighByText(buttons);
+            });
+        }
+    }
+
+    private float spPx(float sp) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, sp,
+            mContext.getResources().getDisplayMetrics());
+    }
+
+    @VisibleForTesting
+    @NonNull
+    List<MaterialButton> mainPillButtons() {
+        return mMainButtons;
     }
 
     @VisibleForTesting

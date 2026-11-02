@@ -247,6 +247,43 @@ public final class SegmentRow {
             R.layout.editor_connected_button, null, false);
     }
 
+    /** The side padding of a word button in a header group that sizes by its words. */
+    public static final int FIT_PAD_DP = 12;
+
+    /**
+     * Weighs each button of a connected group by the width its word needs (its text and side
+     * padding), so a group narrower than the sum shares the room in proportion and a wide enough
+     * one shows every word whole. Words are never cut: no ellipsis.
+     */
+    public static void weighByText(@NonNull List<MaterialButton> buttons) {
+        for (MaterialButton button : buttons) {
+            button.setEllipsize(null);
+            ViewGroup.LayoutParams params = button.getLayoutParams();
+            if (!(params instanceof LinearLayout.LayoutParams))
+                continue;
+            LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
+            linear.width = 0;
+            linear.weight = Math.max(1f, neededPx(button));
+            button.setLayoutParams(linear);
+        }
+    }
+
+    /** The width {@code button}'s word needs whole: its text, padding and icon room. */
+    public static float neededPx(@NonNull MaterialButton button) {
+        CharSequence text = button.getText();
+        float word = text == null ? 0f : button.getPaint().measureText(text.toString());
+        return word + button.getPaddingStart() + button.getPaddingEnd() + 1f;
+    }
+
+    /** Whether every word of {@code buttons} stands whole in a group {@code groupPx} wide. */
+    public static boolean fitsWhole(@NonNull List<MaterialButton> buttons, int groupPx,
+                                    int gapPx) {
+        float need = gapPx * Math.max(0, buttons.size() - 1);
+        for (MaterialButton button : buttons)
+            need += neededPx(button);
+        return need <= groupPx;
+    }
+
     /** A row of word segments ({@link Segment#word}), as {@link #build} lays any row. */
     @NonNull
     public static SegmentRow words(@NonNull Context context, @DrawableRes int glyph,

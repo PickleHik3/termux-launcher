@@ -317,9 +317,10 @@ public final class StatusBarCard {
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */
     @NonNull
     private static CardRowView cameraCutout(@NonNull Context context, @NonNull Host host) {
-        com.termux.app.surfaces.rows.ActionRow row = com.termux.app.surfaces.rows.ActionRow.build(
+        com.termux.app.surfaces.rows.LinkRow row = com.termux.app.surfaces.rows.LinkRow.build(
             context, R.drawable.ic_ms_crop_free,
-            context.getString(R.string.editor_st_option_camera_gap), null,
+            context.getString(R.string.editor_st_option_camera_gap),
+            context.getString(R.string.editor_link_camera_cutout_summary), true,
             v -> host.openCameraGap());
         return new CardRowView(row.root, () -> {});
     }

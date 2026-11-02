@@ -878,8 +878,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
         mSheet.attach(content);
-        if (mBar != null)
-            mSheet.setLandscape(mBar.isLandscape());
+        mSheet.setLandscape(mBar.isLandscape());
         notifyDirty();
 
         bindTargets();
@@ -1162,7 +1161,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         if (mCard != card)
             mChips = chipsFor(card);
-        if (mCard != null && mCard != card && !mGoingBack && sheetUp())
+        // The trail grows only going deeper: switching between the three main cards with the
+        // pill is not a step ← walks back through.
+        if (mCard != null && mCard != card && !mGoingBack && sheetUp()
+                && !(EditorCardSheet.isMainCard(mCard) && EditorCardSheet.isMainCard(card)))
             mCardTrail.addLast(mCard);
         mCard = card;
         mSubcardParent = null;
@@ -3078,6 +3080,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mTintHueRow = tintHueRow(card, widthPx);
                 return mTintHueRow.root;
             }
+            // Every link is one list row (overhaul §4); Font and Camera cutout are drawn by
+            // their cards, which own what the tap opens.
+            if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
+                    && row != Row.CAMERA_CUTOUT)
+                return linkRow(row).root;
             if (row == Row.ELEMENTS && card != null) {
                 // The Terminal card's Layout is the Workspace's list.
                 PaneWallPage screen = card == EditorCard.TERMINAL ? PaneWallPage.TERMINAL
@@ -3099,6 +3106,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (rim != null && rim.root == view) rim.select(value(row));
                 return;
             }
+            if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
+                    && row != Row.CAMERA_CUTOUT)
+                return;
             if (row == Row.TINT_HUE) {
                 com.termux.app.surfaces.rows.SegmentRow hue = mTintHueRow;
                 if (hue != null && hue.root == view) hue.select(value(row));
@@ -3171,6 +3181,40 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The Rim row the card up shows, read again on restate. */
     @Nullable private com.termux.app.surfaces.rows.SegmentRow mRimRow;
+    /**
+     * A link as a list row: its name over a one-line subtitle, › where it opens a card or the
+     * page overview, ↗ where it opens a Settings page (the subtitle names it).
+     */
+    @NonNull
+    private com.termux.app.surfaces.rows.LinkRow linkRow(@NonNull Row row) {
+        Context context = mHost.context();
+        int glyph = cardRowGlyph(row);
+        CharSequence name = cardRowName(row);
+        boolean external;
+        int summary;
+        switch (row) {
+            case LINK_GLOBAL: external = false; summary = R.string.editor_link_global_summary; break;
+            case LINK_SHEETS: external = false; summary = R.string.editor_link_sheets_summary; break;
+            case LINK_WIDGETS: external = false; summary = R.string.editor_link_widgets_summary; break;
+            case LINK_PAGES: external = false; summary = R.string.editor_link_pages_summary; break;
+            case PANE_BORDERS:
+                external = false; summary = R.string.editor_link_pane_borders_summary; break;
+            case LINK_GESTURES:
+                external = true; summary = R.string.editor_link_gestures_summary; break;
+            case LINK_LAYOUTS: external = true; summary = R.string.editor_link_layouts_summary; break;
+            case KEYBOARD_THEME:
+                external = true; summary = R.string.editor_link_keyboard_theme_summary; break;
+            case TOOL_COLOURS:
+                external = true; summary = R.string.editor_link_tool_colours_summary; break;
+            default: external = true; summary = 0; break;
+        }
+        return com.termux.app.surfaces.rows.LinkRow.build(context,
+            glyph != 0 ? glyph : row.iconRes,
+            name != null ? name : context.getString(row.labelRes),
+            summary == 0 ? null : context.getString(summary), external,
+            v -> onRowAction(row, v));
+    }
+
     /** The Tint row's colour swatches, built by {@link #tintHueRow}. */
     @Nullable private com.termux.app.surfaces.rows.SegmentRow mTintHueRow;
 

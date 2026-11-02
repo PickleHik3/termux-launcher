@@ -177,13 +177,11 @@ public final class TerminalCard {
 
     @NonNull
     private static CardRowView more(@NonNull Context context, @NonNull Host host) {
-        ChipsRow chips = ChipsRow.build(context, Collections.singletonList(
-            new ChipsRow.Link(R.drawable.ic_ms_font_download,
-                context.getString(R.string.appearance_row_font))), index -> host.openFont());
-        // The sheet's tier divider stands over More.
-        View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_more), null, false, chips.root);
-        return new CardRowView(section, () -> {});
+        // Font ↗, a list row in the Links section (overhaul §4).
+        com.termux.app.surfaces.rows.LinkRow link = com.termux.app.surfaces.rows.LinkRow.build(
+            context, R.drawable.ic_ms_font_download, context.getString(R.string.appearance_row_font),
+            context.getString(R.string.editor_link_font_summary), true, v -> host.openFont());
+        return new CardRowView(link.root, () -> {});
     }
 
     // ---------------------------------------------------------------------------- previews
