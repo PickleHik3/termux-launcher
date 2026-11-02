@@ -72,11 +72,14 @@ public final class PreviewTilesRow {
     /**
      * How many tiles of at least {@code tilePx} stand on a line of {@code widthPx} with
      * {@code gapPx} between them: never more than {@code count} or {@link #MAX_COLUMNS}, never
-     * fewer than one.
+     * fewer than one. The lines are balanced, no orphan: as few lines as the width allows, and
+     * the tiles spread evenly over them (six: 3 + 3; seven: 4 + 3; five: 5; four: 4).
      */
     public static int columns(int widthPx, int tilePx, int gapPx, int count) {
         int fit = Math.max(1, (widthPx + gapPx) / Math.max(1, tilePx + gapPx));
-        return Math.max(1, Math.min(fit, Math.min(Math.max(1, count), MAX_COLUMNS)));
+        int most = Math.max(1, Math.min(fit, Math.min(Math.max(1, count), MAX_COLUMNS)));
+        int lines = (Math.max(1, count) + most - 1) / most;
+        return Math.max(1, (Math.max(1, count) + lines - 1) / lines);
     }
 
     /**

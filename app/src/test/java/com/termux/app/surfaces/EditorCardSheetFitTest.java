@@ -308,6 +308,35 @@ public class EditorCardSheetFitTest {
         assertEquals("six Dock options", 6, tiles);
     }
 
+    @Test
+    public void aSheetConnectedGroupShowsEveryButtonWhole() {
+        // Emulator W1a: the Status bar's Rim (None / Thin / Bright beside its title) was cut
+        // flat at the bottom. Every connected button keeps its 48dp target, inside its row.
+        for (EditorCard card : new EditorCard[] {EditorCard.STATUS, EditorCard.DOCK,
+                EditorCard.TERMINAL}) {
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+            fixture.layOut();
+            for (com.google.android.material.button.MaterialButtonToggleGroup group
+                    : toggleGroups(fixture.sheet.rows())) {
+                if (!group.isShown())
+                    continue;
+                View row = (View) group.getParent();
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    View button = group.getChildAt(i);
+                    String which = card + " " + ((MaterialButton) button).getText()
+                        + " " + group.getContentDescription();
+                    assertTrue(which + ": a 48dp target, " + button.getHeight(),
+                        button.getHeight() >= fixture.dp(48) - 1);
+                    assertTrue(which + ": the group holds it whole",
+                        group.getHeight() >= button.getBottom());
+                    assertTrue(which + ": the row holds the group whole",
+                        row.getHeight() >= group.getBottom());
+                }
+            }
+        }
+    }
+
     /** The Dock's Show/hide toggles: the buttons of its TileGrid. */
     @NonNull
     private static List<MaterialButton> dockOptions(@NonNull View rows) {
