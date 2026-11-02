@@ -72,6 +72,21 @@ public final class BottomInsets {
         return new BottomInsets(root, kept, margin, kept, 0, flush + kept, flush + kept);
     }
 
+    /**
+     * How far a Home page's content column reaches below where it stands with the keyboard down
+     * and no band kept, for the system keyboard's take on the root {@code systemImeTakePx}
+     * ({@link KeyboardOverlayPolicy#systemImeTakePx}) and the band kept {@code keptPx}. The column
+     * hangs above the accessory stack, which stands on the kept band (by its margin, or by its
+     * foot's height), and the root's padding grows by the take plus the band whenever the system
+     * keyboard comes up ({@link #rootPaddingPx}): both moves have to be answered together, or the
+     * frame between this inset dispatch and the stack's pass lays the grid out a band short
+     * (keyboard up) or a band tall (keyboard down). Only its change between two dispatches is
+     * meaningful.
+     */
+    public static int homeContentReachPx(int systemImeTakePx, int keptPx) {
+        return Math.max(0, systemImeTakePx) - Math.max(0, keptPx);
+    }
+
     /** Where the rows' bottom stands above the screen's bottom edge: the parity number. */
     public int rowsBottomFromScreenBottomPx() {
         return rootPaddingPx + stackMarginPx + stackPaddingPx + keyboardColumnMarginPx;
