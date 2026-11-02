@@ -130,6 +130,18 @@ public final class ElementRows {
         return Collections.unmodifiableList(out);
     }
 
+    /**
+     * Customization's list, for the whole app: the shared rows, then the terminal and the
+     * widgets (no switch; › opens their cards).
+     */
+    @NonNull
+    public static List<Item> wholeApp() {
+        List<Item> out = new ArrayList<>(SHARED);
+        out.add(Item.TERMINAL);
+        out.add(Item.WIDGETS);
+        return Collections.unmodifiableList(out);
+    }
+
     /** The screen card that holds the list: Home's on Home, the Workspace's on the Workspace. */
     @Nullable
     public static PaneWallPage screenOf(@NonNull EditorCard card) {

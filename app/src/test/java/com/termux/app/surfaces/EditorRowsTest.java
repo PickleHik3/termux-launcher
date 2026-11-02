@@ -160,8 +160,9 @@ public class EditorRowsTest {
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
-            Row.WALLPAPER_COLOURS, Row.SECTION_MORE_OPTIONS, Row.FULL_SCREEN, Row.SHOW_WALLPAPER,
-            Row.SECTION_LINKS, Row.LINK_SHEETS, Row.TOOL_COLOURS),
+            Row.WALLPAPER_COLOURS, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
+            Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
+            Row.TOOL_COLOURS),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,

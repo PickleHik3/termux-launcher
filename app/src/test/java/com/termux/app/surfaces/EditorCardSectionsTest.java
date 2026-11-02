@@ -77,6 +77,7 @@ public class EditorCardSectionsTest {
                 Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS),
+            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.TOOL_COLOURS)));
     }

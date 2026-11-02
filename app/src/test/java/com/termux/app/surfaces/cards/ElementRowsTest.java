@@ -103,8 +103,10 @@ public class ElementRowsTest {
         assertEquals(PaneWallPage.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
-            // The Terminal card's Layout is the Workspace's list (overhaul §2).
-            boolean screen = ElementRows.screenOf(card) != null || card == EditorCard.TERMINAL;
+            // The Terminal card's Layout is the Workspace's list, Customization's the whole
+            // app's (overhaul §2).
+            boolean screen = ElementRows.screenOf(card) != null || card == EditorCard.TERMINAL
+                || card == EditorCard.APPEARANCE;
             assertEquals(card + " holds the Elements list", screen,
                 rowsOf(card).contains(Row.ELEMENTS));
         }
