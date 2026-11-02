@@ -1,6 +1,13 @@
 # CRT realism, bezel depth, trail glow and event effects (2026-11-02)
 
-Status: spec, settled in a grilling round on 2026-11-02 (19 questions). Wave 1 in progress.
+Status: spec, settled in a grilling round on 2026-11-02 (19 questions). All four waves built the
+same day on branch `worktree-agsl-effects` (waves 1–2 merged 866b20085/963e8329e, waves 3–4
+committed 2b7484ebd/88e25065e), emulator-shot on the page at `~/reports/crt-effects-2026-11-02`;
+developer judgement and pong checks owed (`project-docs/device-checks.md`). Known gaps from the
+build: decision 7's power-off is in the shader but unwired (the leaving pane is removed at once and
+its ghost keeps no picture); death snow shows only for a shell killed from outside (a plain `exit`
+closes the pane first); a split or focus change started from the keyboard is held by decision 3's
+typing rule; the Idle animations loop restarts only on a visibility, screen or style change.
 
 Builds on [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md)
 and amends two of its decisions (see "Amendments"). Everything here is built-in AGSL picked in

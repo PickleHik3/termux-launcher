@@ -60,6 +60,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   chrome. A pane at rest after an event draws no further frames (gfxinfo frame count flat).
   Known gaps, not bugs: a plain `exit` closes the pane before the snow; power-off is unwired; a
   split or focus change started from the keyboard is held by the typing rule.
+- **Idle animations + dim on pong (11-02, 88e25065e).** Battery and performance › Idle animations
+  off (default): a CRT pane at rest renders no frames (`dumpsys gfxinfo com.termux reset`, 30 s,
+  then `dumpsys gfxinfo com.termux`: 0; emulator: 0 in 20 s). On: the pane breathes very gently
+  with no flashes at a low steady rate (emulator: 120 frames in 20 s, 6 fps on CPU rendering; the
+  brief aimed at about 20); one small sideways tear within 2–5 minutes of idling (not waited for
+  on the emulator); everything stops on a key for 1.5 s, on screen off, Lazy mode, power save,
+  Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
+  unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
+  near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
