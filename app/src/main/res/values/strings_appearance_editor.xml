@@ -40,7 +40,6 @@
     <string name="appearance_card_terminal">Terminal</string>
     <string name="appearance_card_dock">Dock</string>
     <string name="appearance_card_keyboard">Keyboard</string>
-    <string name="appearance_theme_hint">Theme, colours and glass</string>
     <string name="appearance_card_appearance">Appearance</string>
     <!-- The card sheet's handle, read by a screen reader, and its two actions. -->
     <string name="appearance_card_handle">Drag handle</string>

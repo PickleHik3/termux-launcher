@@ -121,7 +121,8 @@ final class EditorBar {
         EditorViews.textAppearance(mHint, com.google.android.material.R.attr.textAppearanceLabelLarge);
         mHint.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
-        mHint.setText(R.string.appearance_theme_hint);
+        // The bubble names the card the pill opens: Customization.
+        mHint.setText(EditorCard.APPEARANCE.titleRes);
         mHint.setSingleLine(true);
         mHint.setEllipsize(TextUtils.TruncateAt.END);
         mHint.setGravity(Gravity.CENTER);

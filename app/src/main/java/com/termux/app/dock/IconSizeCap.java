@@ -95,6 +95,46 @@ public final class IconSizeCap {
         return chosen.dp <= cap.dp ? chosen : cap;
     }
 
+    /**
+     * The most icons, up to {@code upTo}, that stand in the row at {@code step} with the least
+     * gap on every one of {@code designs} in the style the dock wears; 0 when none does. The
+     * Dock card's Apps in the dock stops there.
+     */
+    public static int mostFitting(@NonNull Collection<DockStyle> designs, @NonNull IconSize step,
+                                  int upTo, int widthDp, float gridEdgeDp, int gridColumns,
+                                  boolean floating) {
+        for (int count = upTo; count > 0; count--) {
+            if (fits(designs, step, count, widthDp, gridEdgeDp, gridColumns, floating))
+                return count;
+        }
+        return 0;
+    }
+
+    /** What the launcher last measured the fit on; null designs before it measured. */
+    @androidx.annotation.Nullable private static volatile Collection<DockStyle> sFitDesigns;
+    private static volatile int sFitWidthDp;
+    private static volatile float sFitEdgeDp;
+    private static volatile int sFitColumns;
+
+    /** The launcher publishes what it measures the fit on, for the editor's Apps in the dock. */
+    public static void publishFit(@NonNull Collection<DockStyle> designs, int widthDp,
+                                  float gridEdgeDp, int gridColumns) {
+        sFitDesigns = designs;
+        sFitWidthDp = widthDp;
+        sFitEdgeDp = gridEdgeDp;
+        sFitColumns = gridColumns;
+    }
+
+    /**
+     * {@link #mostFitting} on what the launcher last measured, in the style {@code floating};
+     * {@code upTo} before it measured anything.
+     */
+    public static int publishedMostFitting(@NonNull IconSize step, boolean floating, int upTo) {
+        Collection<DockStyle> designs = sFitDesigns;
+        if (designs == null) return upTo;
+        return mostFitting(designs, step, upTo, sFitWidthDp, sFitEdgeDp, sFitColumns, floating);
+    }
+
     /** The cap the launcher last measured, and the pinned count it measured it for. */
     private static volatile IconSize sCap = IconSize.XL;
     private static volatile int sCount;

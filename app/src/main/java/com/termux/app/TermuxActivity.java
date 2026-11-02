@@ -17879,6 +17879,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIconCap = com.termux.app.dock.IconSizeCap.largestFitting(
                 java.util.EnumSet.of(home, terminal), count, widthDp, edgeDp, columns, floating);
             com.termux.app.dock.IconSizeCap.publish(mIconCap, count);
+            com.termux.app.dock.IconSizeCap.publishFit(java.util.EnumSet.of(home, terminal),
+                widthDp, edgeDp, columns);
         }
         com.termux.app.place.layout.IconSize drawn =
             com.termux.app.dock.IconSizeCap.effective(chosen, mIconCap);
@@ -18546,6 +18548,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         row.setClockFace(mPreferences.getTopPaneClockStyle(),
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
         row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
+        // The Status bar card's Clock toggle hides the strip's clock with the bar's.
+        row.setClockAllowed(isStatusClockShown());
     }
 
     /**

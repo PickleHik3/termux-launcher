@@ -157,6 +157,20 @@ public final class SegmentRow {
         }
         controlPx += RowKit.dp(context, GAP_DP) * Math.max(0, segments.size() - 1);
 
+        MaterialButtonToggleGroup group = connectedGroup(context);
+        group.setSingleSelection(true);
+        group.setSelectionRequired(true);
+        group.setSpacing(RowKit.dp(context, GAP_DP));
+        group.setContentDescription(title);
+        // The group measured as it lays out beside the title: in the expressive group each button
+        // takes the group's own padding and shape, which a lone button's measure misses (W3SEG on
+        // tl16: 462 px measured, 651 px laid, so "Label size" was cut).
+        for (MaterialButton button : buttons)
+            group.addView(button, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        group.measure(unspecified, unspecified);
+        controlPx = Math.max(controlPx, group.getMeasuredWidth());
+
         TextView titleView = RowKit.title(context, title);
         float titlePx = titleView.getPaint().measureText(title.toString());
         boolean inline = fitsInline(widthPx, RowKit.dp(context, RowKit.ICON_COLUMN_DP),
@@ -174,14 +188,10 @@ public final class SegmentRow {
         root.addView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        MaterialButtonToggleGroup group = connectedGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setSpacing(RowKit.dp(context, GAP_DP));
-        group.setContentDescription(title);
         // Under the title, the pills share the width; where a word would not fit its share
         // (a large text size), they stand one under another instead, so no word is cut.
         if (!inline) {
+            group.removeAllViews();
             // Under the title the words carry the choice alone: a glyph before a word gives up
             // its room, so a share fits the word whole (Floating at 1.3×).
             widestPx = 0;
@@ -199,7 +209,7 @@ public final class SegmentRow {
             RowKit.dp(context, GAP_DP), segments.size(), widestPx);
         if (vertical)
             group.setOrientation(LinearLayout.VERTICAL);
-        for (MaterialButton button : buttons) {
+        for (MaterialButton button : inline ? new ArrayList<MaterialButton>() : buttons) {
             if (vertical) {
                 group.addView(button, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
