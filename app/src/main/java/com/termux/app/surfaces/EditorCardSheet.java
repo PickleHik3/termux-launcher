@@ -1470,44 +1470,6 @@ final class EditorCardSheet {
             groupParams.topMargin = dp(8);
         }
         root.addView(group, groupParams);
-        // TEMP W1aSeg diagnostic (revert before merge): why the sheet's inline group is cut.
-        final String w1aLabel = mContext.getString(row.labelRes);
-        final boolean w1aInline = inline;
-        final StackTraceElement[] w1aStack = new Throwable().getStackTrace();
-        group.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
-            StringBuilder s = new StringBuilder();
-            s.append("t=").append(android.os.SystemClock.uptimeMillis())
-                .append(" row=").append(w1aLabel).append(" inline=").append(w1aInline)
-                .append(" groupH=").append(v.getHeight()).append(" groupTop=").append(v.getTop());
-            for (MaterialButton button : buttons) {
-                s.append(" | ").append(button.getText()).append(" h=").append(button.getHeight())
-                    .append(" mh=").append(button.getMinHeight())
-                    .append(" lines=").append(button.getLineCount())
-                    .append(" inset=").append(button.getInsetTop()).append('/')
-                    .append(button.getInsetBottom())
-                    .append(" pad=").append(button.getPaddingTop()).append('/')
-                    .append(button.getPaddingBottom())
-                    .append(" bg=").append(button.getBackground() == null ? "null"
-                        : button.getBackground().getBounds().toShortString());
-            }
-            View up = v;
-            for (int i = 0; i < 6 && up.getParent() instanceof ViewGroup; i++) {
-                ViewGroup parent = (ViewGroup) up.getParent();
-                s.append(" ^").append(parent.getClass().getSimpleName())
-                    .append(" h=").append(parent.getHeight())
-                    .append(" pad=").append(parent.getPaddingTop()).append('/')
-                    .append(parent.getPaddingBottom())
-                    .append(" clip=").append(parent.getClipChildren())
-                    .append(" childTop=").append(up.getTop()).append(" childBottom=")
-                    .append(up.getBottom());
-                up = parent;
-            }
-            for (int i = 1; i < Math.min(7, w1aStack.length); i++)
-                s.append(" @").append(w1aStack[i].getClassName()).append('.')
-                    .append(w1aStack[i].getMethodName()).append(':')
-                    .append(w1aStack[i].getLineNumber());
-            android.util.Log.d("W1aSeg", s.toString());
-        });
         views.segments = group;
         views.buttons = buttons;
         return views;
