@@ -13,6 +13,7 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -32,11 +33,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * A Look and the scope chip (ADR 0015 §6, #175 B2): the editor writes Global (Base) by default, so
- * a Look reaches every page; on the page side of the chip a Look lands as that page's own
- * {@code @id} values alone, the slider reads the stop the page wears from its overrides (so a page
- * detached before this visit shows its stop), Custom brings the saved Custom to that page alone,
- * and Reset returns the page to Base. The halves and their Match rows are gone.
+ * A Look by card (appearance-cards-overhaul §1): Customization's reaches every page; Home's lands
+ * in Home pages' all-glass cells alone, the Workspace's in Terminal and Display pages' together,
+ * and their Reset returns those pages to Base.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
@@ -64,10 +63,10 @@ public class EditorScreenLookTest {
     }
 
     @Test
-    public void aLookUnderGlobalReachesEveryPage() {
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        model(editor).setScopeOnPage(false);
-        assertFalse("Where stands on Everywhere", model(editor).scopeOnPage());
+    public void aLookOnCustomizationReachesEveryPage() {
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertFalse("Customization stands on Global", model(editor).scopeOnPage());
         assertEquals(FROST, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
 
@@ -79,66 +78,38 @@ public class EditorScreenLookTest {
     }
 
     @Test
-    public void aLookOnThePageSideIsThatPagesAlone() {
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        model(editor).setScopeOnPage(true);
-        assertTrue(model(editor).scopeOnPage());
-        assertEquals("a page that holds nothing wears the wall's stop", FROST,
-            model(editor).value(Row.LOOK));
+    public void aLookOnTheWorkspaceLandsOnTerminalAndDisplayPages() {
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
         tapLook(editor, SOLID);
-
-        assertEquals(SOLID, model(editor).value(Row.LOOK));
-        assertTrue(SurfacePresets.wornAtPage(preferences, preset("solid"), TERMINAL_PAGE));
-        assertEquals(92, pageValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TERMINAL_PAGE));
-        assertFalse("the other page holds nothing",
-            SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
+        int[] solid = GlassRows.lookCell(SOLID);
+        LookGrid.Property[] properties = {LookGrid.Property.FROST, LookGrid.Property.OPACITY,
+            LookGrid.Property.TINT};
+        LookGrid grid = preferences.lookGrid();
+        for (LookGrid.Kind kind : new LookGrid.Kind[] {LookGrid.Kind.TERMINAL, LookGrid.Kind.DISPLAY})
+            for (int i = 0; i < properties.length; i++)
+                assertEquals(kind.key + " " + properties[i].key, properties[i].clamp(solid[i]),
+                    grid.value(new LookGrid.Key(properties[i], null, kind)));
+        assertFalse("Home pages are left", grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME));
         assertTrue("the wall still wears Frost",
             SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
-
-        model(editor).setScopeOnPage(false);
-        assertEquals("Global reads the wall's stop", FROST, model(editor).value(Row.LOOK));
-    }
-
-    @Test
-    public void aPageDetachedBeforeThisVisitShowsItsStop() {
-        SurfacePresets.applyLookAtPage(preferences, preset("solid"), TERMINAL_PAGE);
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        assertEquals(FROST, model(editor).value(Row.LOOK));
-        model(editor).setScopeOnPage(true);
-        assertEquals("the stop is read from the page's overrides", SOLID,
-            model(editor).value(Row.LOOK));
-    }
-
-    @Test
-    public void customOnThePageSideBringsTheSavedCustomToThatPageAlone() {
-        SurfacePresets.applyLook(preferences, preset("solid"));
-        SurfacePresets.saveCustom(preferences);
-        SurfacePresets.applyLook(preferences, preset("frost"));
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        model(editor).setScopeOnPage(true);
-        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
-
-        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
-        assertEquals("the saved Custom's numbers land on the page", 92,
-            pageValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TERMINAL_PAGE));
-        assertTrue("the wall is untouched",
-            SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
-        assertFalse(SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
-    }
-
-    @Test
-    public void resetOnThePageSideReturnsThePageToBase() {
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, TERMINAL_PAGE);
-        model(editor).setScopeOnPage(true);
-        tapLook(editor, SOLID);
-        assertTrue(SurfacePresets.holdsPageLook(preferences, TERMINAL_PAGE));
+        assertEquals(SOLID, model(editor).value(Row.LOOK));
 
         ReflectionHelpers.callInstanceMethod(editor, "resetCard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertFalse(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.TERMINAL));
+        assertFalse(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.DISPLAY));
+        assertEquals("the Workspace follows Base again", FROST, model(editor).value(Row.LOOK));
+    }
 
-        assertFalse(SurfacePresets.holdsPageLook(preferences, TERMINAL_PAGE));
-        assertEquals("the page follows Base again", FROST, model(editor).value(Row.LOOK));
-        assertTrue(SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
+    @Test
+    public void aLookOnHomeLandsOnHomePagesAlone() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        tapLook(editor, SOLID);
+        LookGrid grid = preferences.lookGrid();
+        assertTrue(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME));
+        assertFalse(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.TERMINAL));
+        assertEquals(SOLID, model(editor).value(Row.LOOK));
     }
 
     @Test
@@ -177,8 +148,8 @@ public class EditorScreenLookTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    /** The Appearance card up on {@code place}; the wall is a Home page and the Terminal page. */
-    private SurfaceEditorController open(PaneWallPage place, int pageInFront) {
+    /** {@code card} up on {@code place}; the wall is a Home page and the Terminal page. */
+    private SurfaceEditorController open(EditorCard card, PaneWallPage place, int pageInFront) {
         List<WallPages.Page> pages = Arrays.asList(
             new WallPages.Page(HOME_PAGE, WallPages.PageKind.HOME, "Home 1", null),
             new WallPages.Page(TERMINAL_PAGE, WallPages.PageKind.TERMINAL, "Terminal", null));
@@ -190,9 +161,9 @@ public class EditorScreenLookTest {
                 default: return null;
             }
         });
-        harness.editor.present(EditorCard.APPEARANCE, place, null);
+        harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(EditorCard.APPEARANCE, harness.editor.shownCard());
+        assertEquals(card, harness.editor.shownCard());
         return harness.editor;
     }
 

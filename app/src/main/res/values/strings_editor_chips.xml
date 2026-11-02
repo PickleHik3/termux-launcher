@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The two chips at the top of every Appearance editor card (ADR 0017). -->
-    <string name="editor_chip_where">Where it applies</string>
-    <string name="editor_chip_what">What it applies to</string>
-    <string name="editor_chip_everywhere">Everywhere</string>
-    <!-- The Where chip's kind of page: every page of the kind in front. -->
+    <!-- The Applies to row of the status bar, dock, keyboard and menus cards
+         (appearance-cards-overhaul §1): Global · Home · Workspace. -->
+    <string name="editor_applies_to">Applies to</string>
+    <string name="editor_applies_global">Global</string>
+    <!-- ⋮'s Reset on a card with the Applies to row, e.g. "Reset dock for Home". -->
+    <string name="editor_reset_for">%1$s for %2$s</string>
+    <!-- A kind of page, in a row's source: every page of that kind. -->
     <string name="editor_chip_kind_home">Home pages</string>
     <string name="editor_chip_kind_terminal">Terminal pages</string>
     <string name="editor_chip_kind_display">Display pages</string>

@@ -740,8 +740,9 @@ public class EditorCardSheetFitTest {
             mDock = new com.termux.app.surfaces.cards.DockCard(new FakeDockHost(context));
         }
 
-        @Nullable @Override public EditorCardSheet.Chip whereChip() {
-            return sChips ? new EditorCardSheet.Chip("Where", new CharSequence[] {"All", "Home"}, 0)
+        @Nullable @Override public EditorCardSheet.Chip appliesToChip() {
+            return sChips ? new EditorCardSheet.Chip("Applies to",
+                new CharSequence[] {"Global", "Home", "Workspace"}, 0)
                 : null;
         }
 

@@ -65,13 +65,13 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void paneControlsOpenTheCardOfTheScreenTheyAreOn() {
-        assertEquals(EditorCard.HOME, EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.WIDGETS, null));
+    public void paneControlsOpenTheWorkspace() {
+        assertEquals(EditorCard.WORKSPACE, EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.WIDGETS, null));
         assertEquals(EditorCard.WORKSPACE,
             EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.TERMINAL, null));
         assertEquals(EditorCard.WORKSPACE,
             EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.DISPLAY, null));
-        assertNull(EditorDoor.PANE_CONTROLS.cardFor(null, null));
+        assertEquals(EditorCard.WORKSPACE, EditorDoor.PANE_CONTROLS.cardFor(null, null));
     }
 
     @Test

@@ -129,19 +129,19 @@ final class EditorCardSheet {
         /** Reads a {@link #rowView} again from the values, as {@link #restate()} does any row. */
         default void restateRowView(@NonNull Row row, @NonNull View view) {}
 
-        /** The Where it applies chip for the card up, or null where the card has none. */
+        /**
+         * The Applies to row of the card up (Global · Home · Workspace), or null where the card
+         * has none (appearance-cards-overhaul §1).
+         */
         @Nullable
-        default Chip whereChip() { return null; }
+        default Chip appliesToChip() { return null; }
 
-        /** The What it applies to chip for the card up, or null (the Appearance card). */
+        /** The Applies to row picked option {@code index}. */
+        default void pickAppliesTo(int index) {}
+
+        /** ⋮'s Reset words for the card up as it now stands, or null for those it opened with. */
         @Nullable
-        default Chip whatChip() { return null; }
-
-        /** The Where chip's menu picked option {@code index}. */
-        default void pickWhere(int index) {}
-
-        /** The What chip's menu picked option {@code index}. */
-        default void pickWhat(int index) {}
+        default CharSequence resetLabel() { return null; }
 
         /** Where a row's value comes from, for its dot; a model with no grid says own or not. */
         @NonNull
@@ -238,8 +238,8 @@ final class EditorCardSheet {
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
     /**
-     * One of a card's two chips: its question (the menu's caption), its options and the one
-     * picked. The first option is the wide one (Everywhere, All glass); any other reads narrowed.
+     * A card's Applies to row: its question (the row's name), its options and the one picked.
+     * The first option is the wide one (Global); any other reads narrowed.
      */
     public static final class Chip {
         @NonNull public final CharSequence question;
@@ -284,8 +284,9 @@ final class EditorCardSheet {
     @NonNull private final ScrollView mScroll;
     /** The chips row under the header: Where it applies, then What it applies to. */
     @NonNull private final LinearLayout mScopeSlot;
-    @NonNull private final MaterialButton mWhereChip;
-    @NonNull private final MaterialButton mWhatChip;
+    /** The Applies to row's connected group, Global · Home · Workspace. */
+    @NonNull private final MaterialButtonToggleGroup mAppliesGroup;
+    @NonNull private final TextView mAppliesLabel;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
     @Nullable private EditorCard mCard;
@@ -486,16 +487,39 @@ final class EditorCardSheet {
 
         mScopeSlot = new LinearLayout(context);
         mScopeSlot.setOrientation(LinearLayout.HORIZONTAL);
-        // Two halves: a chip never takes more than half the row, its twin there or not.
-        mScopeSlot.setWeightSum(2f);
+        mScopeSlot.setGravity(Gravity.CENTER_VERTICAL);
         mScopeSlot.setVisibility(View.GONE);
         float dp = context.getResources().getDisplayMetrics().density;
         mScopeSlot.setPadding(Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_TOP_DP * dp),
             Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_BOTTOM_DP * dp));
-        mWhereChip = buildChip(context, true);
-        mWhatChip = buildChip(context, false);
-        mScopeSlot.addView(mWhereChip);
-        mScopeSlot.addView(mWhatChip);
+        mAppliesLabel = new TextView(context);
+        mAppliesLabel.setText(R.string.editor_applies_to);
+        mAppliesLabel.setTextColor(EditorViews.color(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant));
+        mAppliesLabel.setSingleLine(true);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        labelParams.setMarginEnd(Math.round(CHIP_GAP_DP * dp));
+        mScopeSlot.addView(mAppliesLabel, labelParams);
+        mAppliesGroup = com.termux.app.surfaces.rows.SegmentRow.connectedGroup(context);
+        mAppliesGroup.setSingleSelection(true);
+        mAppliesGroup.setSelectionRequired(true);
+        mAppliesGroup.addOnButtonCheckedListener((group, id, checked) -> {
+            if (mRestating || !checked)
+                return;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (group.getChildAt(i).getId() == id) {
+                    Chip now = mModel.appliesToChip();
+                    if (now != null && now.selected != i) {
+                        mModel.pickAppliesTo(i);
+                        restate();
+                    }
+                    return;
+                }
+            }
+        });
+        mScopeSlot.addView(mAppliesGroup, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         mColumn.addView(mScopeSlot, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -794,7 +818,9 @@ final class EditorCardSheet {
     private void openHeaderMenu(@NonNull View anchor) {
         androidx.appcompat.widget.PopupMenu menu =
             new androidx.appcompat.widget.PopupMenu(mContext, anchor);
-        menu.getMenu().add(0, R.id.editor_header_reset, 0, mResetLabel);
+        CharSequence resetLabel = mModel.resetLabel();
+        menu.getMenu().add(0, R.id.editor_header_reset, 0,
+            resetLabel != null ? resetLabel : mResetLabel);
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.editor_header_reset) {
                 mListener.onReset();
@@ -2150,90 +2176,49 @@ final class EditorCardSheet {
     static final int CHIP_HEIGHT_DP = 40;
     static final int CHIP_GAP_DP = 8;
 
-    /** A chip: a capsule that names its option on one line and opens its menu on a tap. */
-    @NonNull
-    private MaterialButton buildChip(@NonNull Context context, boolean where) {
-        MaterialButton chip = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        float dp = context.getResources().getDisplayMetrics().density;
-        chip.setSingleLine(true);
-        chip.setEllipsize(TextUtils.TruncateAt.END);
-        chip.setAllCaps(false);
-        chip.setMinWidth(0);
-        chip.setMinimumWidth(0);
-        chip.setInsetTop(0);
-        chip.setInsetBottom(0);
-        chip.setCornerRadius(Math.round(CHIP_HEIGHT_DP * dp / 2f));
-        chip.setPadding(Math.round(8 * dp), 0, Math.round(12 * dp), 0);
-        chip.setIconResource(R.drawable.ic_editor_expand_more);
-        chip.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_END);
-        chip.setIconSize(Math.round(18 * dp));
-        chip.setIconPadding(Math.round(8 * dp));
-        chip.setOnClickListener(v -> openChipMenu(chip, where));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-            Math.round(CHIP_HEIGHT_DP * dp), 1f);
-        if (!where) params.setMarginStart(Math.round(CHIP_GAP_DP * dp));
-        chip.setLayoutParams(params);
-        return chip;
-    }
-
-    /** A chip's menu: its question as the caption, its options as radio items. */
-    private void openChipMenu(@NonNull MaterialButton anchor, boolean where) {
-        Chip chip = where ? mModel.whereChip() : mModel.whatChip();
-        if (chip == null || chip.labels.length < 2)
-            return;
-        android.widget.PopupMenu menu = new android.widget.PopupMenu(mContext, anchor);
-        menu.getMenu().add(0, -1, 0, chip.question).setEnabled(false);
-        for (int i = 0; i < chip.labels.length; i++)
-            menu.getMenu().add(1, i, i + 1, chip.labels[i]).setChecked(i == chip.selected);
-        menu.getMenu().setGroupCheckable(1, true, true);
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() < 0)
-                return false;
-            if (where)
-                mModel.pickWhere(item.getItemId());
-            else
-                mModel.pickWhat(item.getItemId());
-            restate();
-            return true;
-        });
-        menu.show();
-    }
-
-    /** One chip read again: its words, its narrowed fill, its chevron where it has a choice. */
-    private void restateChip(@NonNull MaterialButton view, @Nullable Chip chip) {
-        if (chip == null) {
-            EditorViews.setVisible(view, false);
-            return;
-        }
-        CharSequence label = chip.label();
-        if (!TextUtils.equals(view.getText(), label))
-            view.setText(label);
-        view.setContentDescription(chip.question + ": " + label);
-        boolean choice = chip.labels.length > 1;
-        view.setEnabled(choice);
-        view.setIconResource(choice ? R.drawable.ic_editor_expand_more : 0);
-        int fill = com.google.android.material.color.MaterialColors.getColor(view,
-            chip.narrowed() ? com.google.android.material.R.attr.colorPrimaryContainer
-                : android.R.attr.colorBackground, 0);
-        int ink = com.google.android.material.color.MaterialColors.getColor(view,
-            chip.narrowed() ? com.google.android.material.R.attr.colorOnPrimaryContainer
-                : com.google.android.material.R.attr.colorOnSurface, 0);
-        view.setBackgroundTintList(ColorStateList.valueOf(chip.narrowed() ? fill : 0));
-        view.setTextColor(ink);
-        view.setIconTint(ColorStateList.valueOf(ink));
-        view.setStrokeWidth(chip.narrowed() ? 0
-            : Math.round(mContext.getResources().getDisplayMetrics().density));
-        EditorViews.setVisible(view, true);
-    }
-
-    /** The chips read again; the row hides when the card has neither. */
+    /**
+     * The Applies to row read again: one connected button per option, the picked one checked;
+     * the row hides when the card has none.
+     */
     private void restateScope() {
-        Chip where = mModel.whereChip();
-        Chip what = mModel.whatChip();
-        restateChip(mWhereChip, where);
-        restateChip(mWhatChip, what);
-        EditorViews.setVisible(mScopeSlot, where != null || what != null);
+        Chip chip = mModel.appliesToChip();
+        EditorViews.setVisible(mScopeSlot, chip != null);
+        if (chip == null)
+            return;
+        boolean was = mRestating;
+        mRestating = true;
+        try {
+            if (mAppliesGroup.getChildCount() != chip.labels.length) {
+                mAppliesGroup.removeAllViews();
+                for (int i = 0; i < chip.labels.length; i++) {
+                    MaterialButton button =
+                        com.termux.app.surfaces.rows.SegmentRow.connectedButton(mContext);
+                    button.setId(View.generateViewId());
+                    button.setMinWidth(0);
+                    button.setMinimumWidth(0);
+                    button.setSingleLine(true);
+                    button.setEllipsize(TextUtils.TruncateAt.END);
+                    mAppliesGroup.addView(button, new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                }
+            }
+            for (int i = 0; i < chip.labels.length; i++) {
+                MaterialButton button = (MaterialButton) mAppliesGroup.getChildAt(i);
+                if (!TextUtils.equals(button.getText(), chip.labels[i]))
+                    button.setText(chip.labels[i]);
+                if (i == chip.selected && !button.isChecked())
+                    mAppliesGroup.check(button.getId());
+            }
+            mAppliesGroup.setContentDescription(chip.question + ": " + chip.label());
+        } finally {
+            mRestating = was;
+        }
+    }
+
+    @VisibleForTesting
+    @NonNull
+    MaterialButtonToggleGroup appliesToGroup() {
+        return mAppliesGroup;
     }
 
     /**

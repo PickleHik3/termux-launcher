@@ -123,6 +123,9 @@ public enum EditorCard {
                 return TERMINAL;
             case "sessions":
                 return STATUS;
+            case "display":
+                // The Display card is gone: Display pages are the Workspace's (overhaul §1).
+                return WORKSPACE;
             default:
                 break;
         }

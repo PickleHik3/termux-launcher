@@ -38,8 +38,8 @@ public class LookGridTest {
             int expectedValue;
             Cell expectedCell;
             if (elementOnKind) { expectedValue = 11; expectedCell = Cell.ELEMENT_ON_KIND; }
-            else if (kind) { expectedValue = 22; expectedCell = Cell.KIND; }
             else if (element) { expectedValue = 33; expectedCell = Cell.ELEMENT; }
+            else if (kind) { expectedValue = 22; expectedCell = Cell.KIND; }
             else if (base) { expectedValue = 44; expectedCell = Cell.BASE; }
             else { expectedValue = Property.OPACITY.shipped; expectedCell = Cell.SHIPPED; }
             assertEquals("mask " + mask, expectedValue, resolved.value);
@@ -213,9 +213,12 @@ public class LookGridTest {
 
     /** Every combination of the six cells, opacity on the keyboard on a Home page. */
     @Test
-    public void theKindRowSitsBetweenThePageAndEverywhere() {
-        // The page tier is retired (ADR 0020 §2): a Home page reads the Home row, then everywhere.
-        Cell[] order = {Cell.ELEMENT_ON_KIND, Cell.KIND, Cell.ELEMENT, Cell.BASE};
+    public void anElementBeatsThePagesAllGlass() {
+        // The page tier is retired (ADR 0020 §2), and an element beats a page (11-02): the
+        // element on the kind, the element everywhere, all glass on the kind, then Base.
+        int[] bits = {1, 4, 2, 8};
+        Cell[] order = {Cell.ELEMENT_ON_KIND, Cell.ELEMENT, Cell.KIND, Cell.BASE};
+        int[] values = {11, 13, 12, 14};
         for (int mask = 0; mask < 16; mask++) {
             LookGrid grid = kindGrid(new LookGrid.MemoryStore());
             if ((mask & 1) != 0) grid.write(Property.OPACITY, Element.KEYBOARD, LookGrid.Kind.HOME, 11);
@@ -225,15 +228,33 @@ public class LookGridTest {
             // A leftover @<page> cell of the page itself is never read.
             grid.store().putInt(LookGrid.key(Property.OPACITY, Element.KEYBOARD, HOME_PAGE), 99);
             Resolved got = grid.resolve(Property.OPACITY, Element.KEYBOARD, HOME_PAGE);
-            int first = Integer.numberOfTrailingZeros(mask);
+            int first = -1;
+            for (int i = 0; i < bits.length && first < 0; i++)
+                if ((mask & bits[i]) != 0) first = i;
             if (mask == 0) {
                 assertEquals(Cell.SHIPPED, got.cell);
                 assertEquals(60, got.value);
             } else {
                 assertEquals("mask " + mask, order[first], got.cell);
-                assertEquals("mask " + mask, 11 + first, got.value);
+                assertEquals("mask " + mask, values[first], got.value);
             }
         }
+    }
+
+    @Test
+    public void aDocksGlobalValueBeatsTheHomeCardAndItsHomeValueBeatsBoth() {
+        LookGrid grid = kindGrid(new LookGrid.MemoryStore());
+        grid.write(Property.OPACITY, null, LookGrid.Kind.HOME, 70);
+        grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 30);
+        Resolved dock = grid.resolve(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME);
+        assertEquals(30, dock.value);
+        assertEquals(Cell.ELEMENT, dock.cell);
+        assertEquals("the status bar wears the Home card", 70,
+            grid.value(Property.OPACITY, Element.STATUS, LookGrid.Kind.HOME));
+        grid.write(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME, 45);
+        assertEquals(45, grid.value(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME));
+        assertEquals(Cell.ELEMENT_ON_KIND,
+            grid.resolve(Property.OPACITY, Element.DOCK, LookGrid.Kind.HOME).cell);
     }
 
     @Test

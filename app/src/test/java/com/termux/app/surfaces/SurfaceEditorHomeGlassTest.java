@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -9,11 +10,10 @@ import android.os.Build;
 
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-
-import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -25,10 +25,9 @@ import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
 
 /**
- * The Home card's glass strip: Frost, Opacity and Tint are the Home half's Base, which Home's
- * widgets, status bar and dock wear while they follow it. It reads the values a phone already
- * holds (pong's Home: opacity 92, no blur, no grain, no tint), writes Home alone, and Reset Home
- * puts it back on the Look Home wore when the editor opened.
+ * The Home and Workspace cards' glass strips (appearance-cards-overhaul §1): Home writes the
+ * all-glass cells of Home pages, the Workspace those of Terminal and Display pages together;
+ * neither touches Base, which Customization writes. Reset clears the card's cells alone.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
@@ -65,105 +64,97 @@ public class SurfaceEditorHomeGlassTest {
         }
     }
 
-    @Test
-    public void theStripReadsTheValuesHomeHolds() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(92, model(editor).value(Row.OPACITY));
-        assertEquals(0, model(editor).value(Row.TINT));
-        assertEquals("Frost stands where Home's own pair puts it, not at the Workspace's 60",
-            GlassControls.glassFor(0, 0), model(editor).value(Row.FROST));
+    private static final LookGrid.Kind HOME = LookGrid.Kind.HOME;
+
+    private LookGrid grid() {
+        return preferences.lookGrid();
     }
 
     @Test
-    public void theStripWritesHomesBaseAndHomesChromeFollowsIt() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-
-        model(editor).onValue(Row.OPACITY, 70, false);
-        model(editor).onReleased(Row.OPACITY);
-        model(editor).onValue(Row.TINT, 25, false);
-        model(editor).onReleased(Row.TINT);
-        model(editor).onValue(Row.FROST, 40, false);
-        model(editor).onReleased(Row.FROST);
-
-        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(GlassControls.blurForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(GlassControls.grainForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("the dock on Home follows", 70,
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("the status bar on Home follows", 70, preferences.getSurfaceValue(
-            SurfaceSlot.STATUS, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("Base is the wall's, so the Workspace reads Home's write", 70,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(GlassControls.blurForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
+    public void theStripReadsHomesCellOverBase() {
+        grid().write(LookGrid.Property.OPACITY, null, HOME, 33);
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
+        assertEquals(33, model(editor).value(Row.OPACITY));
     }
 
     @Test
-    public void theStripWritesHomeWhicheverHalfTheFrameShows() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
+    public void homeWritesHomePagesAndLeavesBase() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 55, false);
-        assertEquals(55, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(55,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(55, grid().value(LookGrid.Property.OPACITY, null, HOME));
+        assertEquals("Base is Customization's", 92,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        assertFalse(grid().has(LookGrid.Property.OPACITY, null, LookGrid.Kind.TERMINAL));
+        assertFalse(grid().has(LookGrid.Property.OPACITY, null, LookGrid.Kind.DISPLAY));
     }
 
     @Test
-    public void aDockGivenItsOwnHomeValueKeepsIt() {
+    public void workspaceWritesTerminalAndDisplayPages() {
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        model(editor).onValue(Row.OPACITY, 44, false);
+        model(editor).onValue(Row.FROST, 70, false);
+        model(editor).onReleased(Row.FROST);
+        for (LookGrid.Kind kind : new LookGrid.Kind[] {LookGrid.Kind.TERMINAL, LookGrid.Kind.DISPLAY}) {
+            assertEquals(kind.key, 44, grid().value(LookGrid.Property.OPACITY, null, kind));
+            assertTrue(kind.key, grid().has(LookGrid.Property.FROST, null, kind));
+            assertTrue(kind.key, grid().has(LookGrid.Property.GRAIN, null, kind));
+        }
+        assertFalse(grid().has(LookGrid.Property.OPACITY, null, HOME));
+        assertEquals(92,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+    }
+
+    @Test
+    public void customizationWritesBaseAlone() {
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            TermuxAppSharedPreferences.PAGE_WALL, 30);
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
+        model(editor).onValue(Row.OPACITY, 61, false);
+        assertEquals(61, grid().value(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE));
+        assertEquals("a dock's own value is not put back on Base", 30,
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                TermuxAppSharedPreferences.PAGE_WALL));
+        for (LookGrid.Kind kind : LookGrid.Kind.values())
+            assertFalse(kind.key, grid().has(LookGrid.Property.OPACITY, null, kind));
+    }
+
+    @Test
+    public void aDocksOwnValueIsLeftByHomesWrite() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             30);
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 70, false);
-        assertEquals(30,
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(30, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, LookGrid.NO_PAGE));
     }
 
-    /**
-     * Reset puts Home's glass back as it ships, not as the editor found it: Undo is what takes
-     * the card back to the open, and a reset that restored the open state did nothing for a card
-     * opened on the glass it was meant to clear (EditorCardReset).
-     */
     @Test
-    public void resetHomePutsTheGlassBackAsItShips() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
+    public void resetHomeClearsHomePagesCellsAlone() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 50, false);
         model(editor).onValue(Row.FROST, 70, false);
         model(editor).onReleased(Row.FROST);
+        assertTrue(grid().has(LookGrid.Property.OPACITY, null, HOME));
 
         ReflectionHelpers.callInstanceMethod(editor, "resetCard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
+        for (LookGrid.Property property : new LookGrid.Property[] {LookGrid.Property.OPACITY,
+                LookGrid.Property.FROST, LookGrid.Property.GRAIN})
+            assertFalse(property.key, grid().has(property, null, HOME));
+        assertEquals("Base stays", 92,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        // The shipped Base blur wears its nearest Frost stop, and Frost reads where that pair is.
-        assertEquals(GlassControls.glassFor(
-            com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(
-                com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(
-                    TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
-            TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN), model(editor).value(Row.FROST));
-        assertEquals("Base is the wall's, so the Workspace reads the reset too",
-            TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals("Home follows Base again", 92, model(editor).value(Row.OPACITY));
     }
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(PaneWallPage place) {
+    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
-        harness.editor.present(EditorCard.HOME, place, null);
-        assertEquals("the card is up when present returns", EditorCard.HOME,
+        harness.editor.present(card, place, null);
+        assertEquals("the card is up when present returns", card,
             harness.editor.shownCard());
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(EditorCard.HOME, harness.editor.shownCard());
+        assertEquals(card, harness.editor.shownCard());
         return harness.editor;
     }
 
