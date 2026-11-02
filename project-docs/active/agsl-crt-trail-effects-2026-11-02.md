@@ -18,6 +18,18 @@ the same hue as the glass behind the pane; the trail halo is halved (peak 0.28) 
 two-cell skirt instead of a one-cell box; the trail decays go back to kitty's 0.10/0.40 s
 (decision 9 amended), since 0.60 s lingered on newlines over a slow ssh echo.
 
+Wave 6 (same evening; the developer: "the borders don't convey a proper CRT border feel", pointing
+at sam1am/termux_crt, whose look is a barrel-shaped picture in black with a steep 45 % vignette and
+a centre glow, no bezel at all). The bend is now pinned at the middle of each edge
+(`c(1 + b|c|²)/(1 + b)`): the picture touches the glass there, its corners pull inward, and the
+gap is a dark tube face (`TUBE_RGB`, alpha 0.92, no scanlines or mask) under the glass's recess
+and sheen; the bend clearance in `PaneBezel.contentInsets` is gone, since no cell leaves the
+screen (the columns it reserved come back). The vignette runs in the picture's space on
+termux_crt's `uv(1-uv)` curve, full across the middle third and 30 % down at the edge (decision
+5's 0.08 r² vignette replaced; 45 % was judged too dark for edge text). A 4 % additive haze in the
+tint's colour lights the middle (clamped to the picture's alpha, so glass panes keep their glass).
+The bezel band, line and shade are unchanged.
+
 Builds on [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md)
 and amends two of its decisions (see "Amendments"). Everything here is built-in AGSL picked in
 settings (its decision 4); nothing reads user shader files.

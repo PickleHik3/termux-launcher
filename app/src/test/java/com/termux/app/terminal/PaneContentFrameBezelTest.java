@@ -108,7 +108,13 @@ public class PaneContentFrameBezelTest {
         frame.setRetroStyle(PaneRetroStyle.CRT_AMBER);
         assertTrue("the effect coming on asks for the one relayout", frame.isLayoutRequested());
         layOut(frame);
-        assertTrue(terminal.getLeft() > plainLeft);
+        // Inside the screen the effect is cut to: past the bezel band and the screen's arc. (The
+        // bend needs no clearance of its own since it was pinned at the edges' middles.)
+        float[] worn = new float[4];
+        frame.retroScreen(worn);
+        assertTrue(worn[0] > 0f);
+        assertTrue(terminal.getLeft() > worn[0]);
+        assertTrue(FRAME_HEIGHT - terminal.getBottom() > FRAME_HEIGHT - worn[3]);
 
         frame.setRetroStyle(PaneRetroStyle.CRT_GREEN);
         assertFalse("another CRT tint keeps the same bezel", frame.isLayoutRequested());

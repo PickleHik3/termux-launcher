@@ -47,7 +47,7 @@ public class PaneRetroEffectTest {
             PaneRetroEffect.displayedPoint(PaneRetroStyle.CRT_AMBER, w, h, p[0], p[1], out);
             // The shader samples content at bend(displayed); it must be the point we started from.
             float cx = out[0] / w * 2f - 1f, cy = out[1] / h * 2f - 1f;
-            float f = (1f + bend * (cx * cx + cy * cy)) / (1f + 2f * bend);
+            float f = (1f + bend * (cx * cx + cy * cy)) / (1f + bend);
             assertEquals(p[0], (cx * f + 1f) * 0.5f * w, 0.5f);
             assertEquals(p[1], (cy * f + 1f) * 0.5f * h, 0.5f);
         }
@@ -55,7 +55,30 @@ public class PaneRetroEffectTest {
         assertEquals(123f, out[0], 0f);
         assertEquals(456f, out[1], 0f);
         assertTrue("the shader bends by the uniform the pane sets to CRT_BEND",
-            PaneRetroEffect.CRT_AGSL.contains("c * (1.0 + uBend * dot(c, c)) / (1.0 + 2.0 * uBend)"));
+            PaneRetroEffect.CRT_AGSL.contains("c * (1.0 + uBend * dot(c, c)) / (1.0 + uBend)"));
+        // Pinned at the middle of each edge: the content's edge middle shows at the screen's,
+        // and its corner lands inside the screen, where the tube face fills the gap.
+        PaneRetroEffect.displayedPoint(PaneRetroStyle.CRT, w, h, w, h / 2f, out);
+        assertEquals(w, out[0], 0.5f);
+        PaneRetroEffect.displayedPoint(PaneRetroStyle.CRT, w, h, w, h, out);
+        // 1 - 1/f at the corner, f = (1 + 2b)/(1 + b): 3.7 % of the half-extent, 1.8 % of the whole.
+        assertTrue(out[0] < w - 0.015f * w && out[1] < h - 0.015f * h);
+    }
+
+    @Test public void thePictureSitsInADarkTubeFaceUnderASteepVignetteAndACentreHaze() {
+        String crt = PaneRetroEffect.CRT_AGSL;
+        // The barrel outline is the screen's rounded rect in the bent space, anti-aliased.
+        assertTrue(crt.contains("float pic = 1.0 - smoothstep(-0.5, 0.5, roundDist(wp, uScreen, uScreenRadius));"));
+        assertTrue(crt.contains("rgb = mix(float3(" + PaneRetroEffect.TUBE_RGB + ") * "
+            + PaneRetroEffect.TUBE_ALPHA + ", rgb, pic);"));
+        assertTrue(crt.contains("a = mix(" + PaneRetroEffect.TUBE_ALPHA + ", a, pic);"));
+        assertTrue(PaneRetroEffect.TUBE_ALPHA > 0.8f && PaneRetroEffect.TUBE_ALPHA < 1f);
+        // Vignette in the picture's own space, full across its middle, uVignette lost at the edge.
+        assertTrue(crt.contains("float vig = mix(1.0 - uVignette, 1.0, pow(clamp(vv.x * vv.y * 18.0, 0.0, 1.0), 0.4));"));
+        assertEquals(0.30f, PaneRetroEffect.PANE_VIGNETTE, 0f);
+        // The haze is additive at the middle, in the tint's colour, inside the picture's alpha.
+        assertTrue(crt.contains("haze * " + PaneRetroEffect.AMBIENT + " * exp(-6.0 * dot(c, c)) * a"));
+        assertTrue(PaneRetroEffect.AMBIENT <= 0.06f);
     }
 
     @Test public void scanlinesAndCellsAreTheScreensRowsNotTheBentPicture() {
@@ -94,7 +117,6 @@ public class PaneRetroEffectTest {
         assertTrue(crt.contains("float g = 1.5 * uDensity;"));
         assertTrue(crt.contains("rgb = rgb + 0.35 * bloom;"));
         assertTrue(crt.contains("float scan = mix(0.70, 1.0,"));
-        assertTrue(crt.contains("float vig = 1.0 - uVignette * dot(c, c);"));
     }
 
     @Test public void textIsSharpenedOnTheBentScreenAndTheGlowBloomsFromBrightPixelsOnly() {
