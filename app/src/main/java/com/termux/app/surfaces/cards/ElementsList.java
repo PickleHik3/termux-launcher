@@ -66,6 +66,13 @@ public final class ElementsList {
         default boolean pageSide() { return false; }
 
         default void setPageSide(boolean pageSide) {}
+
+        /**
+         * A line under the element's name for its state, or null for none: Customization's
+         * "Home only" where the two kinds disagree.
+         */
+        @Nullable
+        default CharSequence summary(@NonNull Item item) { return null; }
     }
 
     @NonNull public final LinearLayout root;
@@ -85,13 +92,16 @@ public final class ElementsList {
         @NonNull final ImageView glyph;
         @NonNull final TextView title;
         @NonNull final MaterialSwitch toggle;
+        /** The state line under the name, unseen while the host has none. */
+        @NonNull final TextView summary;
 
         Views(@NonNull LinearLayout row, @NonNull ImageView glyph, @NonNull TextView title,
-              @NonNull MaterialSwitch toggle) {
+              @NonNull MaterialSwitch toggle, @NonNull TextView summary) {
             this.row = row;
             this.glyph = glyph;
             this.title = title;
             this.toggle = toggle;
+            this.summary = summary;
         }
     }
 
@@ -199,6 +209,10 @@ public final class ElementsList {
 
     private void restate(@NonNull Item item, @NonNull Views views) {
         setVisible(views.row, mHost.offers(item));
+        CharSequence summary = mHost.summary(item);
+        if (summary != null && !summary.toString().contentEquals(views.summary.getText()))
+            views.summary.setText(summary);
+        setVisible(views.summary, summary != null);
         if (!item.hasEye())
             return;
         boolean shown = mHost.shown(item);
@@ -244,6 +258,9 @@ public final class ElementsList {
         CharSequence opens = opensLine(context, item);
         if (opens != null)
             words.addView(RowKit.caption(context, opens));
+        TextView summary = RowKit.caption(context, "");
+        summary.setVisibility(View.GONE);
+        words.addView(summary);
         row.addView(words, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -270,7 +287,7 @@ public final class ElementsList {
         chevronParams.setMarginStart(RowKit.dp(context, 8));
         row.addView(chevron, chevronParams);
 
-        Views views = new Views(row, glyph, title, toggle);
+        Views views = new Views(row, glyph, title, toggle, summary);
         row.setContentDescription(context.getString(R.string.editor_elements_open, name));
         row.setOnClickListener(v -> mHost.open(item));
         toggle.setOnCheckedChangeListener((button, checked) -> {

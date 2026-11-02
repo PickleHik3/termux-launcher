@@ -1538,6 +1538,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             goBack();
         }
 
+        @Override public void onResetEverything() {
+            askResetEverything();
+        }
+
         @Override public void onReset() {
             EditorCardSheet sheet = mSheet;
             EditorCardSheet.ResetMotion motion = sheet == null ? null
@@ -2094,6 +2098,220 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (item.section != null && sheet != null && mCard == card)
                 sheet.scrollTo(item.section);
         }
+    }
+
+    // ------------------------------------------------------- Customization › Layout (§2)
+
+    /** Customization's Layout list: every element, written to Home and the Workspace. */
+    @NonNull
+    private View customizationElementsView() {
+        com.termux.app.surfaces.cards.ElementsList list =
+            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(),
+                new WholeAppElementsHost(),
+                com.termux.app.surfaces.cards.ElementRows.wholeApp(), true);
+        mElements = list;
+        return list.root;
+    }
+
+    /**
+     * What Customization's Layout list reads and writes: each element's show/hide on the Home
+     * layout and on the Workspace's (Terminal and Display), both orientations, through the layout
+     * session as the screen cards' lists write. The dock's own tiles have one value for the app
+     * and go through the screen cards' host.
+     */
+    private final class WholeAppElementsHost
+            implements com.termux.app.surfaces.cards.ElementsList.Host {
+        @NonNull private final ElementsHost mOne = new ElementsHost();
+
+        @Nullable @Override public String layoutTitle() {
+            return null;
+        }
+
+        @Override public boolean offers(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            return true;
+        }
+
+        @Override public boolean shown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            return reading(item).switchOn();
+        }
+
+        @Nullable @Override public CharSequence summary(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            switch (reading(item)) {
+                case HOME_ONLY: return getString(R.string.editor_layout_home_only);
+                case WORKSPACE_ONLY: return getString(R.string.editor_layout_workspace_only);
+                default: return null;
+            }
+        }
+
+        @NonNull
+        private com.termux.app.surfaces.cards.LayoutOverride.Reading reading(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            return com.termux.app.surfaces.cards.LayoutOverride.read(
+                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME),
+                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE));
+        }
+
+        @Override public void setShown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
+            if (!byKind(item)) {
+                mOne.setShown(item, shown);
+                return;
+            }
+            Boolean home = sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME);
+            Boolean workspace = sideShows(item,
+                com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE);
+            com.termux.app.surfaces.cards.LayoutOverride.Decision decision =
+                com.termux.app.surfaces.cards.LayoutOverride.decide(home, workspace, shown);
+            if (!decision.ask) {
+                writeSides(item, decision.writes, shown);
+                return;
+            }
+            askOverride(item, decision, home, workspace, shown);
+        }
+
+        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            mOne.open(item);
+        }
+
+        /** Whether {@code item}'s show/hide is held per page kind (else one app-wide value). */
+        private boolean byKind(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            return item.visibility == com.termux.app.surfaces.cards.ElementRows.Visibility.ELEMENT
+                || item.visibility
+                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
+        }
+
+        /** Whether {@code side} shows {@code item}; null where the side does not wear it. */
+        @Nullable
+        private Boolean sideShows(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
+                                  @NonNull com.termux.app.surfaces.cards.LayoutOverride.Side side) {
+            boolean home = side == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
+            if (!byKind(item))
+                return item.hasEye() ? mOne.shown(item) : Boolean.TRUE;
+            com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+            if (places == null)
+                return null;
+            if (item.visibility
+                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (home) return places.isHomeKeyboardAlwaysOn();
+                return prefs == null || !prefs.isKeyboardTurnedOff();
+            }
+            Element element = item.element;
+            if (element == null)
+                return null;
+            // Home never wears the extra keys (DressResolver.wornBy).
+            if (home && element == Element.EXTRA_KEYS)
+                return null;
+            return places.kindShowsAny(home ? com.termux.app.wall.WallPages.PageKind.HOME
+                : com.termux.app.wall.WallPages.PageKind.TERMINAL, element);
+        }
+
+        /** Writes {@code shown} for {@code item} on {@code sides}, then restates the editor. */
+        private void writeSides(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
+                                @NonNull java.util.Set<com.termux.app.surfaces.cards.LayoutOverride.Side> sides,
+                                boolean shown) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) {
+                // Through the layout session, as the Home and Workspace lists write: Undo,
+                // Discard and Done treat it the same.
+                java.util.List<com.termux.app.place.LayoutVariant> variants =
+                    com.termux.app.surfaces.cards.LayoutOverride.variantsOf(sides);
+                boolean keyboard = item.visibility
+                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
+                if (keyboard || item.element != null)
+                    layout.setShownOnLayouts(variants, keyboard ? null : item.element, shown);
+            }
+            positionTargets();
+            syncDirty();
+            com.termux.app.surfaces.cards.ElementsList list = mElements;
+            if (list != null)
+                list.restate();
+            EditorCardSheet sheet = mSheet;
+            if (sheet != null && sheet.isShown())
+                sheet.restate();
+        }
+
+        /**
+         * The page kind with a layout of its own would change: ask first (§2). Cancel puts the
+         * switch back; Override writes both kinds.
+         */
+        private void askOverride(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
+                                 @NonNull com.termux.app.surfaces.cards.LayoutOverride.Decision decision,
+                                 @Nullable Boolean home, @Nullable Boolean workspace,
+                                 boolean shown) {
+            Context context = mHost.context();
+            boolean ownHome = decision.own
+                == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
+            boolean ownWorkspace = !ownHome;
+            int title = ownHome ? R.string.editor_layout_own_home
+                : R.string.editor_layout_own_workspace;
+            String name = context.getString(item.nameRes);
+            StringBuilder line = new StringBuilder();
+            if (ownHome && home != null)
+                line.append(context.getString(home ? R.string.editor_layout_shown_on
+                    : R.string.editor_layout_hidden_on, name,
+                    context.getString(R.string.appearance_card_home)));
+            if (ownWorkspace && workspace != null) {
+                line.append(context.getString(workspace ? R.string.editor_layout_shown_on
+                    : R.string.editor_layout_hidden_on, name,
+                    context.getString(R.string.appearance_card_workspace)));
+            }
+            boolean[] answered = {false};
+            com.google.android.material.dialog.MaterialAlertDialogBuilder builder =
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+                    .setTitle(title)
+                    .setMessage(line.toString())
+                    .setNegativeButton(R.string.editor_layout_cancel, null)
+                    .setPositiveButton(R.string.editor_layout_override, (d, w) -> {
+                        answered[0] = true;
+                        writeSides(item, decision.writes, shown);
+                    });
+            builder.setOnDismissListener(d -> {
+                if (answered[0])
+                    return;
+                // Cancel, back or a tap outside: no change, the switch reads as before.
+                com.termux.app.surfaces.cards.ElementsList list = mElements;
+                if (list != null)
+                    list.restate();
+            });
+            builder.show();
+        }
+    }
+
+    // ------------------------------------------------------- Reset everything (§1, §6)
+
+    /** ⋮ › Reset everything on Customization: asked first, then {@link #resetEverything}. */
+    private void askResetEverything() {
+        Context context = mHost.context();
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.editor_reset_everything_title)
+            .setMessage(R.string.editor_reset_everything_line)
+            .setNegativeButton(R.string.editor_layout_cancel, null)
+            .setPositiveButton(R.string.editor_reset_everything_confirm,
+                (d, w) -> resetEverything())
+            .show();
+    }
+
+    /**
+     * The upgrade nudge's reset with Clear ({@link GlassReset}): the grid cleared, Contrast and
+     * Dynamic colour back, Clear on Customization; Mode back to System as the Mode row previews it
+     * (stored on Done, like the row).
+     */
+    private void resetEverything() {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        GlassReset.reset(mHost.context(), prefs, GlassReset.DEFAULT_STOP);
+        mHeldCustom.clear();
+        mHeldCustomPages.clear();
+        forgetGlassEdgePositions();
+        mHost.refreshTerminalPalette();
+        settingsWritten();
+        previewTheme(GlassReset.NIGHT_MODE_DEFAULT);
+        syncAfterBulkWrite();
     }
 
     /** The card stands at a new top edge, or settled on a detent. */
@@ -2924,6 +3142,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mCard == null ? null : SurfaceEditorController.this.resetLabel(mCard);
         }
 
+        @Override public boolean offersResetEverything() {
+            return mCard == EditorCard.APPEARANCE;
+        }
+
         @Override public boolean scopeOnPage() {
             return onPageSide();
         }
@@ -3178,6 +3400,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
                     && row != Row.CAMERA_CUTOUT)
                 return linkRow(row).root;
+            if (row == Row.ELEMENTS && card == EditorCard.APPEARANCE)
+                return customizationElementsView();
             if (row == Row.ELEMENTS && card != null) {
                 // The Terminal card's Layout is the Workspace's list.
                 PaneWallPage screen = card == EditorCard.TERMINAL ? PaneWallPage.TERMINAL

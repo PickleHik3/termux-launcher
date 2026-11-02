@@ -13,7 +13,8 @@ import java.util.List;
  * The Customization card's rows (appearance-cards overhaul §2, Customization): Appearance, the
  * defaults every surface wears (the block with Vibrancy, and Tint as strength alone); Colours
  * (Mode, Contrast, Accent swatches, Dynamic colour); More options (Full screen, Show
- * wallpaper); Links (Menus and dialogs, TUI app themes). The whole-app Layout list comes later.
+ * wallpaper); Links (Menus and dialogs, TUI app themes). Layout, the whole app's elements list
+ * (written to Home and the Workspace, {@link LayoutOverride}).
  */
 public final class GlobalCard {
 
@@ -27,6 +28,7 @@ public final class GlobalCard {
                 Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH)
             .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS)
+            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.FULL_SCREEN, Row.SHOW_WALLPAPER)
             .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.TOOL_COLOURS)
             .build();

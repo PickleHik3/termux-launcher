@@ -261,6 +261,27 @@ public final class LayoutEditorController {
         afterWrite(drop);
     }
 
+    /**
+     * Customization › Layout: {@code element} (the keyboard for null) shown or put away on each
+     * of {@code variants}' layouts, through the session, so Undo, Discard and Done treat it as
+     * every other write.
+     */
+    public void setShownOnLayouts(@NonNull List<com.termux.app.place.LayoutVariant> variants,
+                                  @Nullable Element element, boolean shown) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop result = LayoutEditorPlan.Drop.NONE;
+        for (com.termux.app.place.LayoutVariant variant : variants) {
+            LayoutEditorPlan.Drop drop = element == null
+                ? plan.setKeyboardShownOnLayout(variant, shown)
+                : plan.setShownOnLayout(variant, element, shown);
+            if (drop != LayoutEditorPlan.Drop.NONE)
+                result = LayoutEditorPlan.Drop.LIVE;
+        }
+        afterWrite(result);
+    }
+
     /** Whether the keyboard is on (the switch the palette's Keyboard on/off flips). */
     public boolean isKeyboardShown() {
         return mPlan != null && mPlan.shownLayout().keyboardShown;
