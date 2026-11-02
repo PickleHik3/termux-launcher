@@ -48,6 +48,10 @@ import java.util.List;
 public class EditorCardSheetFitTest {
 
     private static final int NAV_DP = 24;
+    /** Whether the fake model offers a Where chip, so the sheet shows its chip row. */
+    private static boolean sChips;
+    /** The row the fake model draws as a 24 dp heading, or null for none. */
+    private static EditorRows.Row sShortRow;
 
     @After
     public void resetFontScale() {
@@ -59,6 +63,97 @@ public class EditorCardSheetFitTest {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values())
                 assertFits(card, scale);
+        }
+    }
+
+    @Test
+    public void theLeastHalfHeightCountsTheChipRowWhenItIsShown() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            sChips = false;
+            Fixture plain = new Fixture(EditorCard.DOCK, scale);
+            plain.layOut();
+            int without = plain.sheet.minHalfHeightPx(plain.parent.getWidth());
+            int tierOneWithout = plain.sheet.tierOneHeightPx(plain.parent.getWidth());
+            sChips = true;
+            try {
+                Fixture chips = new Fixture(EditorCard.DOCK, scale);
+                chips.layOut();
+                int with = chips.sheet.minHalfHeightPx(chips.parent.getWidth());
+                int grown = with - without;
+                assertTrue("the chip row (56dp) is counted at " + scale + ", grew " + grown,
+                    grown >= chips.dp(56));
+                assertTrue("tier 1 counts it too", chips.sheet.tierOneHeightPx(
+                    chips.parent.getWidth()) - tierOneWithout >= chips.dp(56));
+            } finally {
+                sChips = false;
+            }
+        }
+    }
+
+    @Test
+    public void theLeastHalfHeightCountsAHeadingWithTheFirstControlUnderIt() {
+        boolean anyControlFirst = false;
+        for (float scale : new float[] {1f, 1.3f}) {
+            for (EditorCard card : EditorCard.values()) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.layOut();
+                int width = fixture.parent.getWidth();
+                int target = fixture.dp(48);
+                int rowsPx = 0;
+                int counted = 0;
+                int spec = android.view.View.MeasureSpec.makeMeasureSpec(width,
+                    android.view.View.MeasureSpec.EXACTLY);
+                int free = android.view.View.MeasureSpec.makeMeasureSpec(0,
+                    android.view.View.MeasureSpec.UNSPECIFIED);
+                LinearLayout rows = fixture.sheet.rows();
+                for (int i = 0; i < rows.getChildCount(); i++) {
+                    View child = rows.getChildAt(i);
+                    if (child.getVisibility() == View.GONE)
+                        continue;
+                    child.measure(spec, free);
+                    rowsPx += child.getMeasuredHeight();
+                    counted++;
+                    if (child.getMeasuredHeight() >= target)
+                        break;
+                }
+                if (counted == 1)
+                    anyControlFirst = true;
+                int chrome = fixture.dp(72) + fixture.navPx + fixture.dp(16);
+                int got = fixture.sheet.minHalfHeightPx(width);
+                assertTrue(card + " at " + scale + ": header + rows down to the first control, "
+                    + (chrome + rowsPx) + " vs " + got, Math.abs(chrome + rowsPx - got) <= 2);
+            }
+        }
+        assertTrue("some card opens on a whole control", anyControlFirst);
+    }
+
+    @Test
+    public void aShortHeadingFirstIsCountedWithTheControlUnderIt() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            EditorCard card = EditorCard.HOME;
+            sShortRow = EditorRows.rows(card, new EditorRows.Offers(true, true)).get(0).row;
+            try {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.layOut();
+                int width = fixture.parent.getWidth();
+                LinearLayout rows = fixture.sheet.rows();
+                int spec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+                int free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+                View heading = rows.getChildAt(0);
+                View control = rows.getChildAt(1);
+                heading.measure(spec, free);
+                control.measure(spec, free);
+                assertTrue("a heading under 48dp", heading.getMeasuredHeight() < fixture.dp(48));
+                assertTrue("a control of 48dp or more",
+                    control.getMeasuredHeight() >= fixture.dp(48));
+                int expected = fixture.dp(72) + fixture.navPx + fixture.dp(16)
+                    + heading.getMeasuredHeight() + control.getMeasuredHeight();
+                int got = fixture.sheet.minHalfHeightPx(width);
+                assertTrue("heading + control + chrome at " + scale + ": " + expected + " vs " + got,
+                    Math.abs(expected - got) <= 2);
+            } finally {
+                sShortRow = null;
+            }
         }
     }
 
@@ -502,8 +597,9 @@ public class EditorCardSheetFitTest {
             EditorFramePose.Window window = new EditorFramePose.Window(mHeight,
                 Math.round(41 * density), navPx, density, fontScale, Math.round(41 * density),
                 mHeight, 0, Math.round(48 * density), Math.round(8 * density));
-            int fullPx = EditorFramePose.fullSheetPx(window);
-            int half = EditorFramePose.halfSheetPx(window, sheet.minHalfHeightPx(mWidth), fullPx);
+            int minPx = sheet.minHalfHeightPx(mWidth);
+            int fullPx = EditorFramePose.fullSheetPx(window, minPx);
+            int half = EditorFramePose.halfSheetPx(window, minPx, fullPx);
             sheet.setGeometry(half, fullPx, navPx);
             layOut();
         }
@@ -529,7 +625,20 @@ public class EditorCardSheetFitTest {
             mDock = new com.termux.app.surfaces.cards.DockCard(new FakeDockHost(context));
         }
 
+        @Nullable @Override public EditorCardSheet.Chip whereChip() {
+            return sChips ? new EditorCardSheet.Chip("Where", new CharSequence[] {"All", "Home"}, 0)
+                : null;
+        }
+
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            if (row == sShortRow) {
+                final int height = Math.round(24 * mContext.getResources().getDisplayMetrics().density);
+                return new View(mContext) {
+                    @Override protected void onMeasure(int w, int h) {
+                        setMeasuredDimension(MeasureSpec.getSize(w), height);
+                    }
+                };
+            }
             // Rim is the card's own word row, built as the editor builds it.
             if (row == Row.RIM)
                 return com.termux.app.surfaces.rows.SegmentRow.words(mContext, row.iconRes,

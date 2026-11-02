@@ -1666,8 +1666,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorFramePose.Window window = mPoseWindow;
         if (sheet == null || !mFrameCtxValid || window == null)
             return;
-        int full = EditorFramePose.fullSheetPx(window);
-        int half = EditorFramePose.halfSheetPx(window, sheet.minHalfHeightPx(mWindowWidthPx), full);
+        int minPx = sheet.minHalfHeightPx(mWindowWidthPx);
+        int full = EditorFramePose.fullSheetPx(window, minPx);
+        int half = EditorFramePose.halfSheetPx(window, minPx, full);
         sheet.setGeometry(half, full, mNavInsetPx);
     }
 

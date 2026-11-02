@@ -487,7 +487,7 @@ final class EditorCardSheet {
      * {@code widthPx}: what the half detent would like to show whole.
      */
     int tierOneHeightPx(int widthPx) {
-        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP) + chipRowPx(widthPx);
         int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
         int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         for (int i = 0; i < mRows.getChildCount(); i++) {
@@ -500,22 +500,46 @@ final class EditorCardSheet {
         return height;
     }
 
+    /** The Where and What chip row's height at {@code widthPx}, or 0 where the card has none. */
+    private int chipRowPx(int widthPx) {
+        if (mScopeSlot.getVisibility() != View.VISIBLE)
+            return 0;
+        mScopeSlot.measure(
+            View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return mScopeSlot.getMeasuredHeight();
+    }
+
     private static final Object TIER_ONE_TAG = new Object();
 
     /**
-     * The least the half detent may stand: the header, the first row and the foot clearance over
-     * the navigation inset, at {@code widthPx}. Under it the card would show no control at all.
+     * The least the half detent may stand: the header, the chip row, the first control (with the
+     * heading over it) and the foot clearance over the navigation inset, at {@code widthPx}. Under
+     * it the card would show no control whole.
      */
     int minHalfHeightPx(int widthPx) {
-        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP) + chipRowPx(widthPx);
         if (mRows.getChildCount() == 0)
             return height + dp(SLIDER_ROW_MIN_DP);
         int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
         int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        View first = mRows.getChildAt(0);
-        first.measure(spec, unspecified);
-        return height + first.getMeasuredHeight();
+        // One complete control: a section heading or a divider over it counts with it, so rows
+        // are taken down to the first one tall enough to be a touch target.
+        int target = dp(MIN_TARGET_DP);
+        for (int i = 0; i < mRows.getChildCount(); i++) {
+            View child = mRows.getChildAt(i);
+            if (child.getVisibility() == View.GONE)
+                continue;
+            child.measure(spec, unspecified);
+            height += child.getMeasuredHeight();
+            if (child.getMeasuredHeight() >= target)
+                break;
+        }
+        return height;
     }
+
+    /** A control's least touch target; a row under it is a heading or a divider. */
+    private static final int MIN_TARGET_DP = 48;
 
     // ----------------------------------------------------------------------------------- cards
 
