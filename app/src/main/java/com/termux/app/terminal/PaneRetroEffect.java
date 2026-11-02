@@ -90,6 +90,20 @@ public final class PaneRetroEffect {
     static final float DIM_SATURATION = 0.20f;
     static final float DIM_BRIGHTNESS = 0.10f;
 
+    /**
+     * The 1 px unsharp mask on a bent screen: the bend reads every pixel from between two of
+     * kitty's, which splits a 1 px stem across two; this gives the stem its weight back. Off on
+     * the flat chrome, whose samples are exact and would only ring.
+     */
+    static final float SHARPEN = 0.20f;
+
+    /**
+     * The glow blooms only from pixels brighter than this (the share of full white it is
+     * measured from); under it, an anti-aliased edge or a faint pixel adds nothing, so the
+     * halos stay on the glyphs instead of filling the counters of dense text.
+     */
+    static final float BLOOM_FLOOR = 0.45f;
+
     /** The period every shader takes its rows and cells from, in px: {@link RetroUniforms#PERIOD_DP}. */
     private static final String PERIOD = "(" + RetroUniforms.PERIOD_DP + " * uDensity)";
 
@@ -106,6 +120,9 @@ public final class PaneRetroEffect {
         + "uniform float4 uCard;\n"
         + "uniform float uRadius;\n"
         + "uniform half4 uTint;\n"
+        // 1 keeps a pixel's own colour where it has one (PaneRetroStyle#keepsColour): the tint
+        // then takes the greys and whites and leaves coloured text its colour. 0 tints everything.
+        + "uniform float uTintKeep;\n"
         + "uniform float uBend;\n"
         + "uniform float uVignette;\n"
         // The screen inside the card the effect is drawn on (a pane's bezel stands between the
@@ -205,9 +222,27 @@ public final class PaneRetroEffect {
         + "                + content.eval(clamp(at - float2(g, 0.0), inMin, inMax))\n"
         + "                + content.eval(clamp(at + float2(0.0, g), inMin, inMax))\n"
         + "                + content.eval(clamp(at - float2(0.0, g), inMin, inMax))) * 0.25;\n"
-        + "    float3 rgb = float3(col.rgb) + 0.35 * float3(glow.rgb);\n"
+        + "    float a = float(col.a);\n"
+        // Sharpen (SHARPEN): a 1 px unsharp mask on the bent screen only, where every sample
+        // lands between two of kitty's pixels; the chrome's samples are exact and get none.
+        + "    float k = " + SHARPEN + " * step(0.001, uBend);\n"
+        + "    float3 nb = float3(content.eval(clamp(at + float2(1.0, 0.0), inMin, inMax)).rgb)\n"
+        + "              + float3(content.eval(clamp(at - float2(1.0, 0.0), inMin, inMax)).rgb)\n"
+        + "              + float3(content.eval(clamp(at + float2(0.0, 1.0), inMin, inMax)).rgb)\n"
+        + "              + float3(content.eval(clamp(at - float2(0.0, 1.0), inMin, inMax)).rgb);\n"
+        + "    float3 rgb = clamp(float3(col.rgb) * (1.0 + 4.0 * k) - k * nb, 0.0, a);\n"
+        // The glow blooms from bright pixels only (BLOOM_FLOOR), so it haloes the glyphs
+        // without lifting their anti-aliased edges into the gaps between them.
+        + "    float3 bloom = max(float3(glow.rgb) - " + BLOOM_FLOOR + ", 0.0) / (1.0 - " + BLOOM_FLOOR + ");\n"
+        + "    rgb = rgb + 0.35 * bloom;\n"
         + "    float lum = dot(rgb, float3(0.299, 0.587, 0.114));\n"
-        + "    rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, float(uTint.a));\n"
+        // The phosphor tint. With uTintKeep, a pixel keeps its own colour in proportion to how
+        // much it has (its HSV saturation), so the greys and whites glow in the phosphor while
+        // a prompt or an error keeps the colour that tells it apart.
+        + "    float mx = max(rgb.r, max(rgb.g, rgb.b));\n"
+        + "    float sat = (mx - min(rgb.r, min(rgb.g, rgb.b))) / max(mx, 0.001);\n"
+        + "    float tw = float(uTint.a) * (1.0 - uTintKeep * smoothstep(0.15, 0.5, sat));\n"
+        + "    rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, tw);\n"
         // The screen's own rows, straight, as kitty draws them: the bend moves the picture, never
         // the scanlines, so they run on into the surface beside this one.
         + "    float scan = mix(0.70, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
@@ -228,7 +263,6 @@ public final class PaneRetroEffect {
         + "    float along = dot(p - uScreen.xy, diag) / dot(diag, diag);\n"
         + "    float off = (along - " + SHEEN_AT + ") / " + SHEEN_SIGMA + ";\n"
         + "    float sheen = uRecess * " + SHEEN_PEAK + " * exp(-0.5 * off * off);\n"
-        + "    float a = float(col.a);\n"
         // Ambient flicker: two slow sines (1.3 Hz and 0.37 Hz), never a flash.
         + "    float flick = sin(uTime * 2.0 * PI * 1.3) * 0.6 + sin(uTime * 2.0 * PI * 0.37 + 1.7) * 0.4;\n"
         + "    rgb *= 1.0 - uFlicker * (0.5 + 0.5 * flick);\n"
@@ -330,6 +364,7 @@ public final class PaneRetroEffect {
             shader.setFloatUniform("uCard", u.cardLeft, u.cardTop, u.cardRight, u.cardBottom);
             shader.setFloatUniform("uRadius", u.radius);
             shader.setFloatUniform("uTint", tint[0], tint[1], tint[2], tint[3]);
+            shader.setFloatUniform("uTintKeep", style.keepsColour() ? 1f : 0f);
             shader.setFloatUniform("uBend", u.bend);
             shader.setFloatUniform("uVignette", u.vignette);
             shader.setFloatUniform("uScreen", u.screenLeft, u.screenTop, u.screenRight,

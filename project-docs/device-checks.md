@@ -43,11 +43,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
   10-22 baseline (`project-docs/active/input-latency-study.md` method).
 - **Trail halo + decays on pong (11-02, 963e8329e).** Cursor trail Default and Comet on a dark Look
-  and on a bright glass tint: a soft additive glow about one cell wide hugs the trail quad on
-  moves in both directions (no dark band, no glow only inside); a `cursor_trail_color` from
-  kitty.conf colours the halo too; the other four styles are unchanged. Typing feel at the
-  0.15/0.60 s app decays: the streak outlives a newline move but settles within a second and never
-  reads as lag; a `cursor_trail_decay` line in kitty.conf still wins.
+  and on a bright glass tint: a faint additive glow (peak alpha 0.28 since the developer's 11-02
+  look, a bright core within a cell and a skirt two cells out with no visible edge) hugs the
+  trail quad on moves in both directions (no dark band, no glow only inside, no pale box); a
+  `cursor_trail_color` from kitty.conf colours the halo too; the other four styles are unchanged.
+  Typing feel at kitty's 0.10/0.40 s decays (the app's defaults again since 11-02): a newline's
+  streak settles well under a second over a slow ssh echo; a `cursor_trail_decay` line in
+  kitty.conf still wins. Known: an echo burst of 3+ cells starts a trail (kitty's 2-cell
+  `cursor_trail_start_threshold`), so fast typing over ssh trails now and then.
 - **CRT screen events on pong (11-02, 2b7484ebd).** Terminal effect CRT (also green, amber), more
   than 1.5 s after the last key or scroll: a bell (`sleep 2; printf '\a'`) tears one 4–5 row band
   sideways with a red/blue split for about 150 ms and nothing else moves (emulator: seen); a pane

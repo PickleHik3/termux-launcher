@@ -673,8 +673,10 @@ public class TerminalPaneController {
 
     /** App defaults for the tunables {@code kitty.conf} may override; see the class's design brief. */
     private static final long DEFAULT_CURSOR_TRAIL_DELAY_MS = 10L;
-    private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.15f;
-    private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.60f;
+    // kitty's own defaults: the halo makes the trail visible, the decays need not. Longer ones
+    // (0.15/0.60 s, tried 2026-11-02) left a newline's streak lingering over a slow ssh echo.
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.10f;
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
     private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
 
     /** Trail style id from kitty.conf {@code custom_shaders}; null when it names none. */

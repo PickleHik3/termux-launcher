@@ -9,6 +9,15 @@ its ghost keeps no picture); death snow shows only for a shell killed from outsi
 closes the pane first); a split or focus change started from the keyboard is held by decision 3's
 typing rule; the Idle animations loop restarts only on a visibility, screen or style change.
 
+Wave 5 (2026-11-02 evening, from the developer's look at pong, no emulator page): text under
+CRT is sharpened with a 1 px unsharp mask on bent screens (`PaneRetroEffect.SHARPEN`, none on the
+flat chrome); the glow blooms only from pixels above `BLOOM_FLOOR`, so it haloes glyphs without
+filling the gaps of dense text; the Material CRT keeps coloured text its own colour and tints
+only greys and whites (`PaneRetroStyle.keepsColour`), since its phosphor is the wallpaper's hue,
+the same hue as the glass behind the pane; the trail halo is halved (peak 0.28) with a feathered
+two-cell skirt instead of a one-cell box; the trail decays go back to kitty's 0.10/0.40 s
+(decision 9 amended), since 0.60 s lingered on newlines over a slow ssh echo.
+
 Builds on [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md)
 and amends two of its decisions (see "Amendments"). Everything here is built-in AGSL picked in
 settings (its decision 4); nothing reads user shader files.

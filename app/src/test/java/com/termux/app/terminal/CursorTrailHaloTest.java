@@ -10,6 +10,18 @@ public class CursorTrailHaloTest {
     private static final float[] QUAD = {0f, 0f, 100f, 0f, 100f, 20f, 0f, 20f};
 
     @Test
+    public void theHaloIsFaintWithAWideFeatheredSkirt() {
+        // Halved from 0.55 on the developer's 11-02 look at pong, where it read as a pale box.
+        assertEquals(0.28f, CursorTrailHalo.PEAK_ALPHA, 0f);
+        assertEquals(2f, CursorTrailHalo.SKIRT, 0f);
+        // Core over skirt, drawn out to the skirt so the clip never shows as an edge.
+        org.junit.Assert.assertTrue(CursorTrailHalo.AGSL.contains(
+            "float fall = 0.65 * exp(-4.0 * q * q) + 0.35 * exp(-q * q);"));
+        double atClip = 0.65 * Math.exp(-4.0 * 4.0) + 0.35 * Math.exp(-4.0);
+        org.junit.Assert.assertTrue("under 1 % of the peak at the clip", atClip < 0.01);
+    }
+
+    @Test
     public void inflatedBoundsAddTheWidthOnEverySide() {
         float[] out = new float[4];
         CursorTrailHalo.inflatedBounds(QUAD, 12f, out);

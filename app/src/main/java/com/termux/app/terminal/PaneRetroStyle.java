@@ -56,6 +56,16 @@ public enum PaneRetroStyle {
         return this == CRT_MATERIAL ? sMaterialTint.clone() : mTint.clone();
     }
 
+    /**
+     * True where the phosphor takes only the greys and whites and coloured text keeps its own
+     * colour: the Material CRT, whose phosphor is the wallpaper's hue, the same hue the glass
+     * behind the pane wears, so a picture tinted whole would be one colour at two brightnesses.
+     * Green and Amber are monochrome phosphors and tint everything.
+     */
+    public boolean keepsColour() {
+        return this == CRT_MATERIAL;
+    }
+
     /** True for the scanline family (CRT and its phosphor tints). */
     public boolean usesCrt() {
         return this == CRT || this == CRT_GREEN || this == CRT_AMBER || this == CRT_MATERIAL;

@@ -52,6 +52,9 @@ public class PaneRetroStyleTest {
         assertTrue(PaneRetroStyle.CRT_MATERIAL.usesCrt());
         assertFalse(PaneRetroStyle.TFT.usesCrt());
         assertFalse(PaneRetroStyle.NONE.usesCrt());
+        // Only the Material phosphor leaves coloured text its colour.
+        for (PaneRetroStyle s : PaneRetroStyle.values())
+            assertEquals(s == PaneRetroStyle.CRT_MATERIAL, s.keepsColour());
     }
 
     /** Material's phosphor is the theme's primary hue, bright as a phosphor, at Green's strength. */

@@ -320,7 +320,7 @@ public final class PaneMotionOverlayView extends View {
                 || previousOpacity != mCursorTrail.opacity() || !previous.equals(current))) {
                 previous.union(current);
                 if (haloed) {
-                    float w = haloWidth();
+                    float w = haloWidth() * CursorTrailHalo.SKIRT;
                     previous.inset(-w, -w);
                 }
                 invalidateRect(previous);
