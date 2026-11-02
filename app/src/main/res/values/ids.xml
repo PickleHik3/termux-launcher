@@ -1,5 +1,7 @@
 <resources>
     <item name="help_split_divider" type="id" />
+    <!-- The Appearance editor header ⋮ menu's Reset item. -->
+    <item name="editor_header_reset" type="id" />
 
     <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
     <item name="tai_centre_list" type="id" />

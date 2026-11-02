@@ -570,6 +570,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
     /** The card that is up, or null. */
     @Nullable private EditorCard mCard;
+    /** The cards the user came from, newest last: an element card's ← returns to the last. */
+    @NonNull private final java.util.ArrayDeque<EditorCard> mCardTrail = new java.util.ArrayDeque<>();
+    /** Set while ← reopens a card, so the way back is not pushed again. */
+    private boolean mGoingBack;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
     private boolean mRaisedKeyboard;
     /** The session a relaunch handed over, continued by the next presentation. */
@@ -839,9 +843,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mBarUp = true;
         mBar.setPageName(pageName());
         mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
+        mCardTrail.clear();
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
         mSheet.attach(content);
+        if (mBar != null)
+            mSheet.setLandscape(mBar.isLandscape());
         notifyDirty();
 
         bindTargets();
@@ -1039,6 +1046,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         LayoutEditorController layout = mHost.layoutEditor();
         if (mBar != null && layout != null && layout.shownOrientation() != null)
             mBar.setOrientation(layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
+        if (mSheet != null && mBar != null)
+            mSheet.setLandscape(mBar.isLandscape());
+    }
+
+    /**
+     * An element card's ←: back to the card the user came from, or, opened directly, to the
+     * main card of the page shown (Home on a Home page, Workspace otherwise).
+     */
+    private void goBack() {
+        EditorCard previous = mCardTrail.pollLast();
+        if (previous == null)
+            previous = EditorCard.forScreen(mScreen);
+        mGoingBack = true;
+        try {
+            openCard(previous, true);
+        } finally {
+            mGoingBack = false;
+        }
     }
 
     private final class BarListener implements EditorBar.Listener {
@@ -1114,6 +1139,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         if (mCard != card)
             mChips = EditorChips.openFor(card, scopeKind());
+        if (mCard != null && mCard != card && !mGoingBack && sheetUp())
+            mCardTrail.addLast(mCard);
         mCard = card;
         mSubcardParent = null;
         mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
@@ -1421,6 +1448,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         };
 
     private final class SheetListener implements EditorCardSheet.Listener {
+        @Override public void onOpenCard(@NonNull EditorCard card) {
+            openCard(card, true);
+        }
+
+        @Override public void onBack() {
+            goBack();
+        }
+
         @Override public void onReset() {
             EditorCardSheet sheet = mSheet;
             EditorCardSheet.ResetMotion motion = sheet == null ? null

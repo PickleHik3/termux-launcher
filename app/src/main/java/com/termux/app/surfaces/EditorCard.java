@@ -35,7 +35,7 @@ public enum EditorCard {
         R.drawable.ic_symbol_dock_glass_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
-    APPEARANCE("appearance", null, R.string.appearance_row_global,
+    APPEARANCE("appearance", null, R.string.appearance_card_customization,
         R.drawable.ic_symbol_palette),
     /** The Card-form widgets' glass: a plain glass card (ADR 0017). */
     WIDGETS("widgets", SurfaceSlot.WIDGETS, R.string.editor_element_widgets,

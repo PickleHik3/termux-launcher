@@ -30,8 +30,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The card header (editor-redesign §1, §2): icon and title, then the eye where the object can be
- * hidden (Status bar, Dock, Keyboard), reset where the ⋮ menu sat, and ✕. Reset asks nothing.
+ * The card header (appearance-cards overhaul §1): main cards wear the Customization | Home |
+ * Workspace pill and the phone glyph; element cards ←, the name and the Show switch where the
+ * object can be hidden (Status bar, Dock, Keyboard). Both end in ⋮, whose Reset asks nothing.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
@@ -44,29 +45,61 @@ public class EditorCardHeaderTest {
     }
 
     @Test
-    public void theEyeStandsOnlyOnTheCardsWhoseObjectCanBeHidden() {
+    public void eachCardWearsItsKindOfHeader() {
         for (float scale : new float[] {1f, 1.3f}) {
             for (EditorCard card : EditorCard.values()) {
                 Fixture f = new Fixture(card, scale);
                 String at = card + " at " + scale;
-                assertEquals(at, card.hasEye(), f.sheet.eyeButton().getVisibility() == View.VISIBLE);
-                assertEquals(at, View.VISIBLE, f.sheet.resetButton().getVisibility());
-                int titleEnd = f.left(f.title()) + f.title().getWidth();
-                View firstButton = card.hasEye() ? f.sheet.eyeButton() : f.sheet.resetButton();
-                assertTrue(at + ": the title stops before the buttons",
-                    titleEnd <= f.left(firstButton) + 1);
-                assertFalse(at + ": no More options button",
-                    hasDescription(f.sheet.view(), "More options"));
+                boolean main = EditorCardSheet.isMainCard(card);
+                // Main cards: the Customization | Home | Workspace pill and the phone glyph.
+                assertEquals(at + ": the pill", main, f.sheet.mainPill().getVisibility() == View.VISIBLE);
+                assertEquals(at + ": the phone glyph", main, f.sheet.phoneGlyph().getVisibility() == View.VISIBLE);
+                assertFalse(at + ": the glyph is no button", f.sheet.phoneGlyph().isClickable());
+                // Element cards: back, name, Show where the object can be hidden.
+                assertEquals(at + ": back", !main, f.sheet.backButton().getVisibility() == View.VISIBLE);
+                assertEquals(at + ": the name", !main, f.sheet.titleView().getVisibility() == View.VISIBLE);
+                assertEquals(at + ": Show", !main && card.hasEye(), f.sheet.eyeButton().getVisibility() == View.VISIBLE);
+                assertTrue(at + ": the More menu", f.sheet.resetButton().getVisibility() == View.VISIBLE);
+                assertEquals(at, "More options",
+                    String.valueOf(f.sheet.resetButton().getContentDescription()));
+                View last = f.sheet.resetButton();
+                View before = main ? f.sheet.phoneGlyph()
+                    : card.hasEye() ? f.sheet.eyeButton() : f.sheet.titleView();
+                assertTrue(at + ": nothing runs under the More button",
+                    f.left(before) + before.getWidth() <= f.left(last) + 1);
+                if (main) {
+                    int checked = f.sheet.mainPill().getCheckedButtonId();
+                    int index = java.util.Arrays.asList(EditorCardSheet.MAIN_CARDS).indexOf(card);
+                    assertEquals(at + ": its own part chosen",
+                        f.sheet.mainPill().getChildAt(index).getId(), checked);
+                }
             }
         }
     }
 
     @Test
-    public void resetResetsWithNoQuestion() {
+    public void thePillOpensTheOtherMainCard() {
+        Fixture f = new Fixture(EditorCard.HOME, 1f);
+        f.sheet.mainPill().getChildAt(2).performClick();
+        assertEquals(EditorCard.WORKSPACE, f.opened);
+    }
+
+    @Test
+    public void backAsksTheControllerOnAnElementCard() {
+        Fixture f = new Fixture(EditorCard.DOCK, 1f);
+        f.sheet.backButton().performClick();
+        assertEquals(1, f.backs);
+    }
+
+    @Test
+    public void theMoreMenuHoldsResetWhichAsksNothing() {
         Fixture f = new Fixture(EditorCard.DOCK, 1f);
         f.sheet.resetButton().performClick();
+        androidx.appcompat.widget.PopupMenu menu = f.sheet.headerMenu();
+        assertTrue("the menu opened", menu != null);
+        assertEquals("Reset dock", String.valueOf(menu.getMenu().getItem(0).getTitle()));
+        menu.getMenu().performIdentifierAction(R.id.editor_header_reset, 0);
         assertEquals(1, f.resets);
-        assertEquals("Reset dock", String.valueOf(f.sheet.resetButton().getContentDescription()));
     }
 
     @Test
@@ -126,6 +159,8 @@ public class EditorCardHeaderTest {
         final EditorCardSheet sheet;
         final Model model;
         int resets;
+        int backs;
+        EditorCard opened;
 
         Fixture(@NonNull EditorCard card, float fontScale) {
             RuntimeEnvironment.setFontScale(fontScale);
@@ -143,6 +178,12 @@ public class EditorCardHeaderTest {
                     resets++;
                 }
                 @Override public void onSheetMoved(int detent, float topPx) {}
+                @Override public void onOpenCard(@NonNull EditorCard card) {
+                    opened = card;
+                }
+                @Override public void onBack() {
+                    backs++;
+                }
             });
             sheet.attach(parent);
             int full = Math.round(height * 0.55f);

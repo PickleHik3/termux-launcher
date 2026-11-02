@@ -108,7 +108,9 @@ final class EditorBar {
         mDone.setOnClickListener(v -> { if (mListener != null) mListener.onDone(); });
         addItem(mDone, ViewGroup.LayoutParams.WRAP_CONTENT);
 
-        mPalette = iconButton(R.drawable.ic_symbol_palette, R.string.appearance_card_appearance);
+        mPalette = iconButton(R.drawable.ic_symbol_palette, R.string.appearance_card_customization);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mPalette,
+            context.getString(R.string.appearance_card_customization));
         mPalette.setOnClickListener(v -> {
             dismissThemeHint();
             if (mListener != null) mListener.onPalette();
