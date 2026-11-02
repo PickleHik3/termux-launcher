@@ -87,4 +87,35 @@ public class RetroUniformsTest {
         b.set(1080f, 300f, 0f, 1789f + 4f * PERIOD, 1f, 1f, DENSITY, 0f, 0f, 1080f, 300f, 0f, 0f, 0f);
         assertSameRow("whole periods", a.phaseY, b.phaseY);
     }
+
+    @Test public void setClearsTheSurfacePartsAndEachOneCountsInEquality() {
+        RetroUniforms a = new RetroUniforms().set(1080f, 300f, 0f, 0f, 1f, 1f, DENSITY,
+            0f, 0f, 1080f, 300f, 0f, 0f, 0f)
+            .surface(RetroUniforms.PANE_ABERR_PX, 0f, 1f, 0.5f);
+        assertEquals(0.6f, a.aberr, 0f);
+        assertEquals(0f, a.aberrFlat, 0f);
+        assertEquals(1f, a.recess, 0f);
+        assertEquals(0.5f, a.dim, 0f);
+        RetroUniforms b = new RetroUniforms();
+        b.copyFrom(a);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        b.aberr = RetroUniforms.CHROME_ABERR_PX;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.aberrFlat = 1f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.recess = 0f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
+        b.dim = 0f;
+        assertNotEquals(a, b);
+        // A fresh set starts every surface part at nothing; prewarm and old callers draw plain.
+        a.set(1080f, 300f, 0f, 0f, 1f, 1f, DENSITY, 0f, 0f, 1080f, 300f, 0f, 0f, 0f);
+        assertEquals(0f, a.aberr, 0f);
+        assertEquals(0f, a.aberrFlat, 0f);
+        assertEquals(0f, a.recess, 0f);
+        assertEquals(0f, a.dim, 0f);
+    }
 }

@@ -58,6 +58,10 @@ public final class RetroEffectBinder {
     @NonNull private final Shape mShape;
     private final float mBend;
     private final float mVignette;
+    /** The surface's own CRT parts ({@link RetroUniforms#surface}); package-visible for tests. */
+    final float mAberr;
+    final float mAberrFlat;
+    final float mRecess;
     @NonNull private final PaneRetroEffect mEffect = new PaneRetroEffect();
     @NonNull private final PreDrawHook mHook;
 
@@ -76,19 +80,36 @@ public final class RetroEffectBinder {
      * @param bend     the CRT's barrel bend: {@link PaneRetroEffect#CRT_BEND} on a pane card, 0 on
      *                 chrome, whose keys and icons must stay under the finger
      * @param vignette how far the corners darken, 0 for none
+     * @param aberr     the red/blue split in px ({@link RetroUniforms#aberr})
+     * @param aberrFlat 1 for the same split everywhere, 0 for one growing from the centre
+     * @param recess    1 for the glass's recess and sheen (a pane), 0 for none
      */
-    public RetroEffectBinder(@NonNull View view, @NonNull Shape shape, float bend, float vignette) {
+    public RetroEffectBinder(@NonNull View view, @NonNull Shape shape, float bend, float vignette,
+                             float aberr, float aberrFlat, float recess) {
         mView = view;
         mShape = shape;
         mBend = bend;
         mVignette = vignette;
+        mAberr = aberr;
+        mAberrFlat = aberrFlat;
+        mRecess = recess;
         mHook = new PreDrawHook(view, this::refresh);
+    }
+
+    /**
+     * A pane card: bent, vignetted, its split growing to {@link RetroUniforms#PANE_ABERR_PX} at
+     * the screen's edge, its glass recessed in the bezel.
+     */
+    @NonNull
+    public static RetroEffectBinder pane(@NonNull View view, @NonNull ScreenShape shape) {
+        return new RetroEffectBinder(view, shape, PaneRetroEffect.CRT_BEND,
+            PaneRetroEffect.PANE_VIGNETTE, RetroUniforms.PANE_ABERR_PX, 0f, 1f);
     }
 
     /** A flat card cut to the view's bounds: what every chrome surface is drawn through. */
     @NonNull
     public static RetroEffectBinder flat(@NonNull View view) {
-        return new RetroEffectBinder(view, BOUNDS, 0f, 0f);
+        return new RetroEffectBinder(view, BOUNDS, 0f, 0f, RetroUniforms.CHROME_ABERR_PX, 1f, 0f);
     }
 
     @NonNull
@@ -155,7 +176,8 @@ public final class RetroEffectBinder {
         float radius = mShape.card(mView, mCard);
         mScratch.set(width, height, mLocation[0], mLocation[1], scaleX, scaleY,
             mView.getResources().getDisplayMetrics().density,
-            mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette);
+            mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette)
+            .surface(mAberr, mAberrFlat, mRecess, 0f);
         if (mShape instanceof ScreenShape) {
             float screenRadius = ((ScreenShape) mShape).screen(mView, mScreen);
             mScratch.screen(mScreen[0], mScreen[1], mScreen[2], mScreen[3], screenRadius,

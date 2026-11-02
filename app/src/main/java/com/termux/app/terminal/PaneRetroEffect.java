@@ -71,6 +71,25 @@ public final class PaneRetroEffect {
         out[1] = top + (cy + 1f) * 0.5f * h;
     }
 
+    /** How far the phosphor triad darkens each channel outside its own third of the period. */
+    static final float TRIAD_DEPTH = 0.10f;
+
+    /** The glass recess's inner shadow on a pane: its strength at the lip and its width in dp. */
+    static final float RECESS_SHADE = 0.25f;
+    static final float RECESS_DP = 6f;
+
+    /**
+     * The sheen on a pane's glass: its peak (additive white), where it crosses the screen's
+     * top-left to bottom-right diagonal (as a share of it) and its Gaussian sigma (likewise).
+     */
+    static final float SHEEN_PEAK = 0.06f;
+    static final float SHEEN_AT = 0.35f;
+    static final float SHEEN_SIGMA = 0.12f;
+
+    /** At uDim 1, the share of saturation and of brightness the picture loses. */
+    static final float DIM_SATURATION = 0.20f;
+    static final float DIM_BRIGHTNESS = 0.10f;
+
     /** The period every shader takes its rows and cells from, in px: {@link RetroUniforms#PERIOD_DP}. */
     private static final String PERIOD = "(" + RetroUniforms.PERIOD_DP + " * uDensity)";
 
@@ -94,11 +113,22 @@ public final class PaneRetroEffect {
         + "uniform float4 uScreen;\n"
         + "uniform float uScreenRadius;\n"
         + "uniform float4 uBendBox;\n"
-        + "float roundMask(float2 p, float4 r, float radius) {\n"
+        // The red/blue split at the screen's edge in px (RetroUniforms#aberr); with uAberrFlat 1
+        // it is that split everywhere instead of growing from the centre (the chrome).
+        + "uniform float uAberr;\n"
+        + "uniform float uAberrFlat;\n"
+        // 1 draws the glass's recess and sheen (a pane), 0 leaves them out (the chrome).
+        + "uniform float uRecess;\n"
+        // 0..1: how far the picture loses brightness and colour (an unfocused pane, later).
+        + "uniform float uDim;\n"
+        // Signed distance from the rounded rect r's edge, negative inside.
+        + "float roundDist(float2 p, float4 r, float radius) {\n"
         + "    float2 h = (r.zw - r.xy) * 0.5;\n"
         + "    float2 q = abs(p - r.xy - h) - (h - radius);\n"
-        + "    float d = length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - radius;\n"
-        + "    return 1.0 - smoothstep(-0.5, 0.5, d);\n"
+        + "    return length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - radius;\n"
+        + "}\n"
+        + "float roundMask(float2 p, float4 r, float radius) {\n"
+        + "    return 1.0 - smoothstep(-0.5, 0.5, roundDist(p, r, radius));\n"
         + "}\n"
         // The card's own rounded corners, redrawn here: a view's outline clip does not reach what
         // its own render effect puts out. A container whose children clip themselves is cut to
@@ -129,6 +159,11 @@ public final class PaneRetroEffect {
         + "    float2 at = clamp((w * 0.5 + 0.5) * size + lo, inMin, inMax);\n"
         + "    float g = 1.5 * uDensity;\n"
         + "    half4 col = content.eval(at);\n"
+        // Chromatic aberration: red and blue read a little outward and inward along the bent
+        // radius, 0 at the centre and uAberr px at the edge; a constant sideways split when flat.
+        + "    float2 split = mix(w, float2(1.0, 0.0), uAberrFlat) * uAberr;\n"
+        + "    col.r = content.eval(clamp(at + split, inMin, inMax)).r;\n"
+        + "    col.b = content.eval(clamp(at - split, inMin, inMax)).b;\n"
         + "    half4 glow = (content.eval(clamp(at + float2(g, 0.0), inMin, inMax))\n"
         + "                + content.eval(clamp(at - float2(g, 0.0), inMin, inMax))\n"
         + "                + content.eval(clamp(at + float2(0.0, g), inMin, inMax))\n"
@@ -140,8 +175,27 @@ public final class PaneRetroEffect {
         // the scanlines, so they run on into the surface beside this one.
         + "    float scan = mix(0.70, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
         + "    float vig = 1.0 - uVignette * dot(c, c);\n"
+        // Phosphor triad: vertical R, G, B stripes over the period, each channel full in its own
+        // third and TRIAD_DEPTH down elsewhere; on the screen's columns, like the scanlines.
+        + "    float tx = fract((p.x + uOrigin.x) / " + PERIOD + ");\n"
+        + "    float3 third = float3(1.0 - step(1.0 / 3.0, tx),\n"
+        + "                          step(1.0 / 3.0, tx) * (1.0 - step(2.0 / 3.0, tx)),\n"
+        + "                          step(2.0 / 3.0, tx));\n"
+        + "    float3 triad = (1.0 - " + TRIAD_DEPTH + ") + " + TRIAD_DEPTH + " * third;\n"
+        // The glass sits in the bezel: an inner shadow darkest at the lip, gone RECESS_DP in.
+        + "    float inside = -roundDist(p, uScreen, uScreenRadius);\n"
+        + "    float recess = uRecess * " + RECESS_SHADE + "\n"
+        + "        * (1.0 - smoothstep(0.0, " + RECESS_DP + " * uDensity, inside));\n"
+        // One fixed specular band across the screen's top-left to bottom-right diagonal.
+        + "    float2 diag = max(uScreen.zw - uScreen.xy, float2(1.0, 1.0));\n"
+        + "    float along = dot(p - uScreen.xy, diag) / dot(diag, diag);\n"
+        + "    float off = (along - " + SHEEN_AT + ") / " + SHEEN_SIGMA + ";\n"
+        + "    float sheen = uRecess * " + SHEEN_PEAK + " * exp(-0.5 * off * off);\n"
         + "    float a = float(col.a);\n"
-        + "    rgb = clamp(rgb * scan * vig, 0.0, a);\n"
+        + "    float dimLum = dot(rgb, float3(0.299, 0.587, 0.114));\n"
+        + "    rgb = mix(rgb, float3(dimLum), " + DIM_SATURATION + " * uDim)\n"
+        + "        * (1.0 - " + DIM_BRIGHTNESS + " * uDim);\n"
+        + "    rgb = clamp(rgb * scan * vig * triad * (1.0 - recess) + sheen * a, 0.0, a);\n"
         + "    half4 fx = half4(half3(rgb), half(a));\n"
         + "    return mix(plain, fx, half(s)) * half(m);\n"
         + "}\n";
@@ -216,6 +270,10 @@ public final class PaneRetroEffect {
                 u.screenBottom);
             shader.setFloatUniform("uScreenRadius", u.screenRadius);
             shader.setFloatUniform("uBendBox", u.bendLeft, u.bendTop, u.bendRight, u.bendBottom);
+            shader.setFloatUniform("uAberr", u.aberr);
+            shader.setFloatUniform("uAberrFlat", u.aberrFlat);
+            shader.setFloatUniform("uRecess", u.recess);
+            shader.setFloatUniform("uDim", u.dim);
             // The effect keeps the uniforms it was made with; the next write starts a new copy.
             return RenderEffect.createRuntimeShaderEffect(shader, "content");
         }
