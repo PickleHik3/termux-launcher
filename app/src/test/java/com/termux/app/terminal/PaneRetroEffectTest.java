@@ -82,7 +82,14 @@ public class PaneRetroEffectTest {
         assertEquals(0.25f, PaneRetroEffect.RECESS_SHADE, 0f);
         assertEquals(6f, PaneRetroEffect.RECESS_DP, 0f);
         assertTrue(PaneRetroEffect.SHEEN_PEAK <= 0.06f);
-        assertFalse(crt.contains("uTime"));
+        // Time reaches the picture only through the ambient flicker (Idle animations, wave 4),
+        // whose depth uFlicker is 0 unless its loop runs: the static pass itself never moves.
+        String flickLine = "float flick = sin(uTime * 2.0 * PI * 1.3) * 0.6"
+            + " + sin(uTime * 2.0 * PI * 0.37 + 1.7) * 0.4;";
+        assertTrue(crt.contains(flickLine));
+        assertTrue(crt.contains("rgb *= 1.0 - uFlicker * (0.5 + 0.5 * flick);"));
+        String main = crt.substring(crt.indexOf("half4 main(")).replace(flickLine, "");
+        assertFalse(main.contains("uTime"));
         // Bend, vignette, glow and scanline depth stay as they were.
         assertTrue(crt.contains("float g = 1.5 * uDensity;"));
         assertTrue(crt.contains("+ 0.35 * float3(glow.rgb)"));
