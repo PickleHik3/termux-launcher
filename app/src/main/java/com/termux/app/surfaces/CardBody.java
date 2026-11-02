@@ -535,13 +535,17 @@ final class CardBody {
     private CardRowView segments(@NonNull Row row, int widthPx) {
         String[] choices = mModel.choices(row);
         int[] glyphs = mModel.chipIcons(row);
+        // Five named transitions do not fit one connected group: picture tiles with names.
+        if (row == Row.PAGE_TRANSITION && glyphs != null)
+            return pictureTiles(row, choices, glyphs);
         int[] swatches = mLooks.swatches(row);
         List<SegmentRow.Segment> segments = new ArrayList<>(choices.length);
         for (int i = 0; i < choices.length; i++) {
             if (swatches != null)
                 segments.add(SegmentRow.Segment.glyph(R.drawable.ic_editor_tint, choices[i]));
             else if (glyphs != null && i < glyphs.length)
-                segments.add(SegmentRow.Segment.glyph(glyphs[i], choices[i]));
+                // Words carry the choice, the glyph before them (overhaul §4/§7).
+                segments.add(SegmentRow.Segment.both(glyphs[i], choices[i]));
             else
                 segments.add(SegmentRow.Segment.word(choices[i]));
         }
@@ -562,6 +566,28 @@ final class CardBody {
             segmentRow.select(mModel.value(row));
             for (int i = 0; i < segmentRow.buttons.size(); i++)
                 segmentRow.buttons.get(i).setEnabled(mModel.choiceEnabled(row, i));
+        });
+    }
+
+    /** A one-of choice as named picture tiles, each its glyph; the chosen one filled. */
+    @NonNull
+    private CardRowView pictureTiles(@NonNull Row row, @NonNull String[] choices,
+                                     @NonNull int[] glyphs) {
+        List<com.termux.app.surfaces.rows.PreviewTilesRow.Tile> tiles = new ArrayList<>();
+        for (int i = 0; i < choices.length; i++) {
+            android.widget.ImageView preview = new android.widget.ImageView(mContext);
+            if (i < glyphs.length)
+                preview.setImageResource(glyphs[i]);
+            preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            tiles.add(new com.termux.app.surfaces.rows.PreviewTilesRow.Tile(choices[i], preview));
+        }
+        com.termux.app.surfaces.rows.PreviewTilesRow picker =
+            com.termux.app.surfaces.rows.PreviewTilesRow.build(mContext, tiles, mModel.value(row),
+                index -> mModel.onValue(row, index, false));
+        LinearLayout column = picker.picker(mContext, name(row));
+        return new CardRowView(column, () -> {
+            showRoot(column, row);
+            picker.select(mModel.value(row));
         });
     }
 

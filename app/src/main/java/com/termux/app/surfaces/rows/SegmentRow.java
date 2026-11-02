@@ -181,6 +181,19 @@ public final class SegmentRow {
         group.setContentDescription(title);
         // Under the title, the pills share the width; where a word would not fit its share
         // (a large text size), they stand one under another instead, so no word is cut.
+        if (!inline) {
+            // Under the title the words carry the choice alone: a glyph before a word gives up
+            // its room, so a share fits the word whole (Floating at 1.3×).
+            widestPx = 0;
+            for (int i = 0; i < buttons.size(); i++) {
+                MaterialButton button = buttons.get(i);
+                if (!segments.get(i).glyphOnly() && segments.get(i).glyph != 0) {
+                    button.setIcon(null);
+                    button.measure(unspecified, unspecified);
+                }
+                widestPx = Math.max(widestPx, button.getMeasuredWidth());
+            }
+        }
         boolean vertical = !inline && stacksVertically(widthPx,
             RowKit.dp(context, RowKit.ICON_COLUMN_DP), RowKit.dp(context, RowKit.EDGE_DP),
             RowKit.dp(context, GAP_DP), segments.size(), widestPx);

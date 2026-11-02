@@ -144,10 +144,8 @@ public final class TerminalCard {
                 SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_default)),
                 SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_harder))),
             host.contrast(), widthPx, host::setContrast);
-        // The sheet's tier divider stands over the Contrast section.
-        View section = CardRowView.section(context,
-            context.getString(R.string.appearance_row_contrast), null, false, row.root);
-        return new CardRowView(section, () -> row.select(host.contrast()));
+        // The row's own title names it: no Contrast sub-label over it.
+        return new CardRowView(row.root, () -> row.select(host.contrast()));
     }
 
     @NonNull

@@ -2789,7 +2789,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_CORNERS:
                     return getString(R.string.appearance_readout_dp, value);
                 case KEY_SPACING:
-                    return String.format(Locale.getDefault(), "%.1f", value / 10f);
+                    // Tenths of a dp, read "3 dp" or "2.5 dp" (overhaul §4: value with its unit).
+                    return value % 10 == 0 ? getString(R.string.appearance_readout_dp, value / 10)
+                        : String.format(Locale.getDefault(), "%.1f dp", value / 10f);
                 case VIBRANCY:
                     return getString(R.string.appearance_readout_times,
                         String.format(Locale.getDefault(), "%.2f", value / 100f));
@@ -3060,8 +3062,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
-            if (mCard == EditorCard.DOCK)
-                return com.termux.app.surfaces.cards.DockCard.stripHeading(mHost.context());
+            // No sub-label inside a section (overhaul §3): the Dock's Appearance is its section.
             return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
                 ? getString(R.string.appearance_strip_all_surfaces) : null;
         }

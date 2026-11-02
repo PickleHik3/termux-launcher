@@ -217,7 +217,8 @@ public class StatusTerminalCardsTest {
         f.layOut(position.view);
         List<MaterialButton> segments = buttons(position.view);
         assertEquals("Top and Bottom", 2, segments.size());
-        assertEquals("Top", String.valueOf(segments.get(0).getContentDescription()));
+        // Position reads in words (overhaul §4/§7), the glyph before them.
+        assertEquals("Top", String.valueOf(segments.get(0).getText()));
         segments.get(1).performClick();
         assertEquals(1, host.position);
         host.position = 0;
