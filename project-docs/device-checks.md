@@ -42,6 +42,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   showed a grid over saturated green; judge on the phone); the dock, status bar and keyboard keep
   crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
   10-22 baseline (`project-docs/active/input-latency-study.md` method).
+- **Trail halo + decays on pong (11-02, 963e8329e).** Cursor trail Default and Comet on a dark Look
+  and on a bright glass tint: a soft additive glow about one cell wide hugs the trail quad on
+  moves in both directions (no dark band, no glow only inside); a `cursor_trail_color` from
+  kitty.conf colours the halo too; the other four styles are unchanged. Typing feel at the
+  0.15/0.60 s app decays: the streak outlives a newline move but settles within a second and never
+  reads as lag; a `cursor_trail_decay` line in kitty.conf still wins.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
