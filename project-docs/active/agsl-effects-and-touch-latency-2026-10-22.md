@@ -2,6 +2,9 @@
 
 Status: spec, settled in a grilling round on 2026-10-22. Nothing built.
 
+Amended 2026-11-02 by [`agsl-crt-trail-effects-2026-11-02.md`](agsl-crt-trail-effects-2026-11-02.md):
+decision 10 (flicker is ambient-only) and decision 11 (animated parts are pane-only).
+
 Two linked pieces of work. The first makes a typed character reach the terminal sooner and measures
 where the time goes. The second adds built-in shader effects that cost nothing at rest. The effects
 come second so their cost can be judged against a measured baseline.

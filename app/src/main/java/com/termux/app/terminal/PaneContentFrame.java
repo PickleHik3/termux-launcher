@@ -3,10 +3,12 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
@@ -78,7 +80,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * inside the bezel ({@link PaneBezel}) only. It re-reads all of that before each frame, so a
      * divider drag, a re-dress or a wall page needs no call here.
      */
-    private final RetroEffectBinder mRetroEffect = new RetroEffectBinder(this,
+    private final RetroEffectBinder mRetroEffect = RetroEffectBinder.pane(this,
         new RetroEffectBinder.ScreenShape() {
             @Override
             public float card(@NonNull View view, @NonNull float[] rect) {
@@ -101,7 +103,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
                 rect[4] = view.getHeight() - PaneBezel.topBottomPx(worn, density());
                 return radius;
             }
-        }, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE);
+        });
 
     /**
      * What the bezel's band is filled with under the terminal: transparent while the pane's slab
@@ -113,6 +115,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     private int mBezelLineColour;
     private final Paint mBezelFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mBezelLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The bezel's depth ({@link PaneBezel#SHADE_COLOURS}), rebuilt with {@link #mBezelPath}. */
+    private final Paint mBezelShadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** The band between the pane's outline and the screen, and the screen's own edge. */
     private final Path mBezelPath = new Path();
     private final Path mBezelLinePath = new Path();
@@ -154,6 +158,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         mPaddingFillPaint.setAntiAlias(false);
         mBezelFillPaint.setStyle(Paint.Style.FILL);
         mBezelLinePaint.setStyle(Paint.Style.STROKE);
+        mBezelShadePaint.setStyle(Paint.Style.FILL);
     }
 
     private float density() {
@@ -211,6 +216,74 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         super.onFinishInflate();
         mContent = findViewById(R.id.terminal_view);
         wirePaddingFillListener();
+    }
+
+    /**
+     * Plays a screen event on this pane's CRT picture ({@link RetroEffectBinder#fire}): nothing
+     * unless the pane is drawn CRT and the Screen events switch is on.
+     */
+    public void screenEvent(@NonNull PaneScreenEvent.Kind kind) {
+        if (!mRetroEffect.style().usesCrt()) return;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
+    }
+
+    /**
+     * Re-reads the Idle animations switch and re-checks the ambient gate
+     * ({@link RetroEffectBinder#setAmbient}): run on attach, on every style, and whenever the
+     * pane's window, visibility or the screen changes. With the switch off it posts nothing.
+     */
+    public void refreshAmbient() {
+        // Null while the super constructor runs: FrameLayout may report visibility that early.
+        if (mRetroEffect == null) return;
+        boolean on = false;
+        if (mRetroEffect.style().usesCrt()) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                    .build(getContext(), false);
+            on = prefs != null && prefs.isIdleAnimationsEnabled();
+        }
+        mRetroEffect.setAmbient(on);
+    }
+
+    /**
+     * Draws the CRT picture dimmed (an unfocused pane of a window with more than one, spec
+     * decision 8): one uniform, snapped, no frames.
+     */
+    public void setDimmed(boolean dimmed) {
+        mRetroEffect.setDim(dimmed ? 1f : 0f);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    public void onScreenStateChanged(int screenState) {
+        super.onScreenStateChanged(screenState);
+        refreshAmbient();
     }
 
     /**
@@ -332,6 +405,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         boolean wornBefore = bezelWorn();
         float bendBefore = bezelBend();
         mRetroEffect.setStyle(style);
+        refreshAmbient();
         // The bezel comes and goes with the effect: the one relayout is the terminal taking its
         // new margins, and only when the bezel or the bend it clears actually changed.
         if (bezelWorn() != wornBefore || (wornBefore && bezelBend() != bendBefore)) {
@@ -533,11 +607,20 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         }
     }
 
+    /** The bezel's depth gradient as last built, null before the bezel was first drawn. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    Shader bezelShade() {
+        return mBezelShadePaint.getShader();
+    }
+
     /**
      * The bezel, over the pane's glass and under the terminal: its fill while the glass has no
      * opacity to show ({@link #setBezelFill}), and the screen's edge, the pane rim's own line laid
-     * just outside the screen so the effect inside never touches it. The band is otherwise the
-     * slab itself, which the effect leaves as it is ({@link RetroEffectBinder.ScreenShape}).
+     * just outside the screen so the effect inside never touches it, with the band lit at its top
+     * and shaded at its bottom between the two ({@link PaneBezel#SHADE_COLOURS}). The band is
+     * otherwise the slab itself, which the effect leaves as it is
+     * ({@link RetroEffectBinder.ScreenShape}).
      */
     private void drawBezel(@NonNull Canvas canvas) {
         if (!bezelWorn() || getWidth() <= 0 || visibleHeight() <= 0) return;
@@ -557,12 +640,17 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             mBezelLinePath.addRoundRect(mScreenScratch[0] - half, mScreenScratch[1] - half,
                 mScreenScratch[2] + half, mScreenScratch[3] + half, radius + half, radius + half,
                 Path.Direction.CW);
+            mBezelShadePaint.setShader(new LinearGradient(0f, 0f, 0f, height,
+                PaneBezel.SHADE_COLOURS, PaneBezel.SHADE_POSITIONS, Shader.TileMode.CLAMP));
             mBezelPathDirty = false;
         }
         if (Color.alpha(mBezelFill) > 0) {
             mBezelFillPaint.setColor(mBezelFill);
             canvas.drawPath(mBezelPath, mBezelFillPaint);
         }
+        // Lit at the top and shaded at the bottom, over the fill or the bare glass; the screen's
+        // own lip shadow is the effect's recess (PaneRetroEffect#RECESS_SHADE).
+        canvas.drawPath(mBezelPath, mBezelShadePaint);
         if (mBezelLineColour == 0) mBezelLineColour = PaneRim.lineColour(getContext());
         mBezelLinePaint.setStrokeWidth(stroke);
         mBezelLinePaint.setColor(mBezelLineColour);

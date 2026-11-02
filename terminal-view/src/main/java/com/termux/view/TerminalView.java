@@ -2108,10 +2108,22 @@ public final class TerminalView extends View {
         return latched || (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
     }
 
+    /** When any terminal view last scrolled; see {@link #lastScrollUptimeMillis}. */
+    private static volatile long sLastScrollUptime = Long.MIN_VALUE / 4;
+
+    /**
+     * The uptime of the last scroll in any terminal view (a drag, a fling or a mouse wheel), so
+     * the app can hold its screen events while the user scrolls.
+     */
+    public static long lastScrollUptimeMillis() {
+        return sLastScrollUptime;
+    }
+
     /**
      * Perform a scroll, either from dragging the screen or by scrolling a mouse wheel.
      */
     void doScroll(MotionEvent event, int rowsDown) {
+        sLastScrollUptime = SystemClock.uptimeMillis();
         boolean up = rowsDown < 0;
         int amount = Math.abs(rowsDown);
         for (int i = 0; i < amount; i++) {

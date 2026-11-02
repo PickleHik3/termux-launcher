@@ -45,17 +45,17 @@ public class StatusBarTapFoldTest {
         dispatch(layout, MotionEvent.ACTION_UP, x, y, 40);
     }
 
-    @Test public void tappingTheFoldedBarChromeRequestsUnfold() {
+    @Test public void tappingTheFoldedBarChromeDoesNotUnfold() {
         StatusBarSwipeLayout layout = layout(Robolectric.buildActivity(Activity.class).setup().get());
         List<Boolean> requests = new ArrayList<>();
         layout.setListener(requests::add);
 
         tap(layout, 540f, 40f);
 
-        assertEquals(java.util.Collections.singletonList(false), requests);
+        assertEquals(0, requests.size());
     }
 
-    @Test public void tappingTheUnfoldedBarChromeRequestsFold() {
+    @Test public void tappingTheUnfoldedBarChromeDoesNotFold() {
         StatusBarSwipeLayout layout = layout(Robolectric.buildActivity(Activity.class).setup().get());
         layout.setCollapsed(false);
         List<Boolean> requests = new ArrayList<>();
@@ -63,7 +63,7 @@ public class StatusBarTapFoldTest {
 
         tap(layout, 540f, 40f);
 
-        assertEquals(java.util.Collections.singletonList(true), requests);
+        assertEquals(0, requests.size());
     }
 
     @Test public void tappingWhereExpansionIsNotAllowedDoesNothing() {

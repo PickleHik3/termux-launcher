@@ -21,7 +21,8 @@ public class PaneRetroEffectTest {
     private static final String[] REQUIRED = {
         "uniform shader content", "uniform float2 uSize", "uniform float2 uOrigin", "uniform float uDensity",
         "uniform float4 uCard", "uniform float uRadius", "uniform half4 uTint", "uniform float uBend",
-        "uniform float uVignette", "half4 main(float2 "
+        "uniform float uVignette", "uniform float uAberr", "uniform float uAberrFlat",
+        "uniform float uRecess", "uniform float uDim", "half4 main(float2 "
     };
     private static final String[] FORBIDDEN = {"uint", "<<", ">>", "#define", "^", "fwidth", "dFdx"};
 
@@ -64,6 +65,70 @@ public class PaneRetroEffectTest {
         assertFalse(PaneRetroEffect.CRT_AGSL.contains("sp.y"));
         assertTrue(PaneRetroEffect.TFT_AGSL.contains("fract((p + uOrigin) / (3.0 * uDensity))"));
         assertEquals(3f, RetroUniforms.PERIOD_DP, 0f);
+    }
+
+    @Test public void theRicherCrtSplitsColourMasksTriadsAndRecessesOnlyThePane() {
+        String crt = PaneRetroEffect.CRT_AGSL;
+        // The split follows the bent radius on a pane and is constant on the flat chrome.
+        assertTrue(crt.contains("mix(w, float2(1.0, 0.0), uAberrFlat) * uAberr"));
+        assertTrue(crt.contains("clamp(at + split, inMin, inMax)"));
+        assertTrue(crt.contains("clamp(at - split, inMin, inMax)"));
+        // The triad runs on the screen's columns, like the scanlines run on its rows.
+        assertTrue(crt.contains("fract((p.x + uOrigin.x) / (3.0 * uDensity))"));
+        assertEquals(0.10f, PaneRetroEffect.TRIAD_DEPTH, 0f);
+        // Recess and sheen are gated by uRecess; no time uniform, nothing moves.
+        assertTrue(crt.contains("uRecess * " + PaneRetroEffect.RECESS_SHADE));
+        assertTrue(crt.contains("uRecess * " + PaneRetroEffect.SHEEN_PEAK));
+        assertEquals(0.25f, PaneRetroEffect.RECESS_SHADE, 0f);
+        assertEquals(6f, PaneRetroEffect.RECESS_DP, 0f);
+        assertTrue(PaneRetroEffect.SHEEN_PEAK <= 0.06f);
+        // Time reaches the picture only through the ambient flicker (Idle animations, wave 4),
+        // whose depth uFlicker is 0 unless its loop runs: the static pass itself never moves.
+        String flickLine = "float flick = sin(uTime * 2.0 * PI * 1.3) * 0.6"
+            + " + sin(uTime * 2.0 * PI * 0.37 + 1.7) * 0.4;";
+        assertTrue(crt.contains(flickLine));
+        assertTrue(crt.contains("rgb *= 1.0 - uFlicker * (0.5 + 0.5 * flick);"));
+        String main = crt.substring(crt.indexOf("half4 main(")).replace(flickLine, "");
+        assertFalse(main.contains("uTime"));
+        // Bend, vignette, glow radius and scanline depth stay as they were.
+        assertTrue(crt.contains("float g = 1.5 * uDensity;"));
+        assertTrue(crt.contains("rgb = rgb + 0.35 * bloom;"));
+        assertTrue(crt.contains("float scan = mix(0.70, 1.0,"));
+        assertTrue(crt.contains("float vig = 1.0 - uVignette * dot(c, c);"));
+    }
+
+    @Test public void textIsSharpenedOnTheBentScreenAndTheGlowBloomsFromBrightPixelsOnly() {
+        String crt = PaneRetroEffect.CRT_AGSL;
+        // A 1 px unsharp mask, gated by the bend: the flat chrome (uBend 0) gets none.
+        assertTrue(crt.contains("float k = " + PaneRetroEffect.SHARPEN + " * step(0.001, uBend);"));
+        assertTrue(crt.contains("clamp(float3(col.rgb) * (1.0 + 4.0 * k) - k * nb, 0.0, a)"));
+        assertTrue(crt.contains("content.eval(clamp(at + float2(1.0, 0.0), inMin, inMax))"));
+        assertTrue(crt.contains("content.eval(clamp(at - float2(0.0, 1.0), inMin, inMax))"));
+        assertTrue(PaneRetroEffect.SHARPEN > 0f && PaneRetroEffect.SHARPEN <= 0.3f);
+        // The glow's floor: anti-aliased edges and faint pixels add nothing.
+        assertTrue(crt.contains("max(float3(glow.rgb) - " + PaneRetroEffect.BLOOM_FLOOR + ", 0.0)"));
+        assertTrue(PaneRetroEffect.BLOOM_FLOOR > 0.3f && PaneRetroEffect.BLOOM_FLOOR < 0.6f);
+        // The Material CRT keeps a pixel's own colour by its saturation; the others tint all.
+        assertTrue(crt.contains("uniform float uTintKeep;"));
+        assertTrue(crt.contains("float tw = float(uTint.a) * (1.0 - uTintKeep * smoothstep(0.15, 0.5, sat));"));
+        assertTrue(crt.contains("rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, tw);"));
+    }
+
+    @Test public void thePaneAndTheChromeEachSetTheirOwnSurfaceParts() {
+        View view = new View(RuntimeEnvironment.getApplication());
+        RetroEffectBinder chrome = RetroEffectBinder.flat(view);
+        assertEquals(0.3f, chrome.mAberr, 0f);
+        assertEquals(1f, chrome.mAberrFlat, 0f);
+        assertEquals(0f, chrome.mRecess, 0f);
+        RetroEffectBinder pane = RetroEffectBinder.pane(view, new RetroEffectBinder.ScreenShape() {
+            @Override public float card(View v, float[] rect) { return 0f; }
+            @Override public float screen(View v, float[] rect) { return 0f; }
+        });
+        assertEquals(0.6f, pane.mAberr, 0f);
+        assertEquals(0f, pane.mAberrFlat, 0f);
+        assertEquals(1f, pane.mRecess, 0f);
+        chrome.release();
+        pane.release();
     }
 
     @Test public void setRetroStyleOnOldApiIsHarmless() {

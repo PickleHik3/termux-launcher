@@ -23,8 +23,11 @@ public class PaneBezelTest {
             if (style != PaneRetroStyle.NONE) assertTrue(style.name(), PaneBezel.worn(style));
         assertEquals(0, PaneBezel.sidePx(false, DENSITY));
         assertEquals(0, PaneBezel.topBottomPx(false, DENSITY));
-        assertEquals(33, PaneBezel.sidePx(true, DENSITY));
-        assertEquals(44, PaneBezel.topBottomPx(true, DENSITY));
+        assertEquals(22, PaneBezel.sidePx(true, DENSITY));
+        assertEquals(28, PaneBezel.topBottomPx(true, DENSITY));
+        // 8 dp and 10 dp, a thin frame: 10 dp at 2.75 is 27.5, rounded up.
+        assertEquals(8f, PaneBezel.SIDE_DP, 0f);
+        assertEquals(10f, PaneBezel.TOP_BOTTOM_DP, 0f);
     }
 
     @Test
@@ -38,11 +41,11 @@ public class PaneBezelTest {
     public void theScreenStandsInsideTheBezelRoundedAtTenDp() {
         float[] screen = new float[4];
         float radius = PaneBezel.screen(true, W, H, DENSITY, 30f, screen);
-        assertRect(screen, 33f, 44f, W - 33f, H - 44f);
+        assertRect(screen, 22f, 28f, W - 22f, H - 28f);
         assertEquals(PaneBezel.SCREEN_RADIUS_DP * DENSITY, radius, 0.001f);
         // A pane only a few rows tall caps the screen's corners like any pane.
-        float shortRadius = PaneBezel.screen(true, W, 150f, DENSITY, 30f, screen);
-        assertEquals((150f - 88f) / 3f, shortRadius, 1f);
+        float shortRadius = PaneBezel.screen(true, W, 120f, DENSITY, 30f, screen);
+        assertEquals((120f - 56f) / 3f, shortRadius, 1f);
         // Smaller than its own bezel, the screen closes to nothing rather than turning inside out.
         PaneBezel.screen(true, 40f, 60f, DENSITY, 0f, screen);
         assertTrue(screen[2] >= screen[0]);
@@ -62,12 +65,12 @@ public class PaneBezelTest {
         int[] insets = new int[2];
         PaneBezel.contentInsets(W, H, DENSITY, 0f, insets);
         int arc = PaneShape.contentInsetPx(PaneBezel.SCREEN_RADIUS_DP * DENSITY);
-        assertEquals(33 + arc, insets[0]);
-        assertEquals(44 + arc, insets[1]);
+        assertEquals(22 + arc, insets[0]);
+        assertEquals(28 + arc, insets[1]);
         PaneBezel.contentInsets(W, H, DENSITY, PaneRetroEffect.CRT_BEND, insets);
-        assertEquals(33 + arc + PaneBezel.bendClearancePx((W - 66f) / 2f, PaneRetroEffect.CRT_BEND),
+        assertEquals(22 + arc + PaneBezel.bendClearancePx((W - 44f) / 2f, PaneRetroEffect.CRT_BEND),
             insets[0]);
-        assertEquals(44 + arc + PaneBezel.bendClearancePx((H - 88f) / 2f, PaneRetroEffect.CRT_BEND),
+        assertEquals(28 + arc + PaneBezel.bendClearancePx((H - 56f) / 2f, PaneRetroEffect.CRT_BEND),
             insets[1]);
     }
 
@@ -101,6 +104,23 @@ public class PaneBezelTest {
         assertEquals(0xFF123456, PaneBezel.fill(true, 0x00FFFFFF, surface));
         assertEquals(0, PaneBezel.fill(true, 0x40000000, surface));
         assertEquals(0, PaneBezel.fill(false, 0x00000000, surface));
+    }
+
+    @Test
+    public void theBezelIsLitAtTheTopAndShadedAtTheBottom() {
+        assertEquals(4, PaneBezel.SHADE_COLOURS.length);
+        assertEquals(PaneBezel.SHADE_COLOURS.length, PaneBezel.SHADE_POSITIONS.length);
+        // White at 8 % on top, clear at the middle, black at 18 % at the bottom.
+        assertEquals(0xFFFFFF, PaneBezel.SHADE_COLOURS[0] & 0xFFFFFF);
+        assertEquals(Math.round(0.08f * 255), PaneBezel.SHADE_COLOURS[0] >>> 24);
+        assertEquals(0, PaneBezel.SHADE_COLOURS[1] >>> 24);
+        assertEquals(0, PaneBezel.SHADE_COLOURS[2] >>> 24);
+        assertEquals(0x000000, PaneBezel.SHADE_COLOURS[3] & 0xFFFFFF);
+        assertEquals(Math.round(0.18f * 255), PaneBezel.SHADE_COLOURS[3] >>> 24);
+        assertEquals(0f, PaneBezel.SHADE_POSITIONS[0], 0f);
+        assertEquals(0.5f, PaneBezel.SHADE_POSITIONS[1], 0f);
+        assertEquals(0.5f, PaneBezel.SHADE_POSITIONS[2], 0f);
+        assertEquals(1f, PaneBezel.SHADE_POSITIONS[3], 0f);
     }
 
     private static void assertRect(float[] r, float l, float t, float right, float b) {
