@@ -115,7 +115,7 @@ public class EditorCardSectionsTest {
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
             "SECTION_APPEARANCE", block(),
-            "SECTION_LINKS", Arrays.asList(Row.CAMERA_CUTOUT)));
+            "SECTION_LINKS", Arrays.asList(Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)));
     }
 
     @Test
@@ -132,7 +132,8 @@ public class EditorCardSectionsTest {
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
             CARD, Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL,
-                Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN),
+                Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
+                Row.FOCUS_GROWS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
             "SECTION_APPEARANCE", block(),
             "SECTION_LINKS", Arrays.asList(Row.LINK_FONT)));

@@ -248,8 +248,16 @@ public class EditorRowKindsTest {
             top(f, row.link) >= top(f, row.items.get(1).root) + row.items.get(1).root.getHeight() - 1);
         assertTrue("over the second",
             top(f, row.link) + row.link.getHeight() <= top(f, row.items.get(2).root) + 1);
+        assertEquals("Linked", String.valueOf(row.link.getText()));
+        assertTrue("the Linked toggle is checkable", row.link.isCheckable());
+        assertTrue("about half the row wide",
+            Math.abs(row.link.getWidth() - row.root.getWidth() / 2) <= row.root.getWidth() / 8);
         row.link.performClick();
         assertEquals(java.util.Collections.singletonList(false), linked);
+        assertEquals("Not linked", String.valueOf(row.link.getText()));
+        row.setLinked(true);
+        assertEquals("restated without a report", 1, linked.size());
+        assertEquals("Linked", String.valueOf(row.link.getText()));
         row.setShown(2, false);
         assertEquals(View.GONE, row.link.getVisibility());
         row.setShown(2, true);

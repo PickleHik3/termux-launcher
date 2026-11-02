@@ -6926,7 +6926,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View stackedClock = findViewById(R.id.terminal_status_column_clock);
             if (stackedClock != null && !isStatusBarFoldInteractive()) {
                 stackedClock.setAlpha(1f);
-                stackedClock.setVisibility(vertical && !collapsed ? View.VISIBLE : View.GONE);
+                stackedClock.setVisibility(vertical && !collapsed && isStatusClockShown()
+                    ? View.VISIBLE : View.GONE);
                 // The column's glass starts where the canvas does, so its clock starts at the top
                 // of the column itself — the system status bar is already above all of it.
                 if (stackedClock.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
@@ -7094,7 +7095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * column whose height is type, and type is what a raised font scale grows.
      */
     private int statusColumnClockHeightPx(boolean collapsed) {
-        if (collapsed) return 0;
+        if (collapsed || !isStatusClockShown()) return 0;
         View clock = findViewById(R.id.terminal_status_column_clock);
         if (clock == null) return 0;
         int width = targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), false);
@@ -30445,7 +30446,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (stackedClock != null && vertical) {
             // The column's clock arrives with the width that makes room for it, rather than
             // sliding: there is nothing above it in a column for it to slide out from under.
-            stackedClock.setVisibility(expansion > 0.02f ? View.VISIBLE : View.GONE);
+            stackedClock.setVisibility(expansion > 0.02f && isStatusClockShown()
+                ? View.VISIBLE : View.GONE);
             stackedClock.setAlpha(expansion);
         }
         if (topWidgets != null && !vertical) {
@@ -30891,6 +30893,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
             ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockAlignment(
                 mPreferences == null ? null : mPreferences.getTopPaneClockAlignment());
+            // The Status bar card's Clock toggle; the collapsed bar hides the whole slot anyway.
+            ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockShown(
+                isStatusClockShown());
         }
         com.termux.app.statusbar.StatusBarStackedClockView stackedClock =
             findViewById(R.id.terminal_status_column_clock);
@@ -32666,6 +32671,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (v.getCurrentSession() != null) v.onScreenUpdated();
         rebuildDrawerSessions();
         return previousFocused != session;
+    }
+
+    /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
+    private boolean isStatusClockShown() {
+        return mPreferences == null || mPreferences.isStatusClockShown();
     }
 
     /** Whether custom window/pane splitting is active (disabled by compatibility mode). */

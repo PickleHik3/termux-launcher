@@ -74,7 +74,8 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
             Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
             Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
-            Row.SECTION_LINKS, Row.CAMERA_CUTOUT), EditorRows.tier(EditorCard.STATUS, ALL, 3));
+            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+            EditorRows.tier(EditorCard.STATUS, ALL, 3));
     }
 
     @Test
@@ -100,7 +101,8 @@ public class EditorRowsTest {
     @Test
     public void theTerminalCardHasNoPlaceOfItsOwn() {
         assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL,
-            Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
+            Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
+            Row.FOCUS_GROWS), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
             Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
             Row.SECTION_LINKS, Row.LINK_FONT), EditorRows.tier(EditorCard.TERMINAL, ALL, 3));

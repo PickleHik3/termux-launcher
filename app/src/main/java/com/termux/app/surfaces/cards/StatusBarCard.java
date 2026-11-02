@@ -52,7 +52,7 @@ public final class StatusBarCard {
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT);
         return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT)
+            .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)
             .build();
     }
 
@@ -123,13 +123,23 @@ public final class StatusBarCard {
     public static final int OPTION_SECONDS = 1;
     public static final int OPTION_FAHRENHEIT = 2;
 
-    /** The Indicators tiles, in order. */
-    public static final int INDICATOR_CPU = 0;
-    public static final int INDICATOR_RAM = 1;
-    public static final int INDICATOR_WEATHER = 2;
-    public static final int INDICATOR_NOTIFICATIONS = 3;
-    public static final int INDICATOR_MEDIA = 4;
-    static final int INDICATOR_COUNT = 5;
+    /** The Elements tiles, in order; Clock (show or hide the bar's clock) first. */
+    public static final int INDICATOR_CLOCK = 0;
+    public static final int INDICATOR_CPU = 1;
+    public static final int INDICATOR_RAM = 2;
+    public static final int INDICATOR_WEATHER = 3;
+    public static final int INDICATOR_NOTIFICATIONS = 4;
+    public static final int INDICATOR_MEDIA = 5;
+    static final int INDICATOR_COUNT = 6;
+
+    /**
+     * Whether {@code row} is one of the Clock &amp; Weather section's clock rows, which stand
+     * disabled ("Clock is hidden") while the Clock tile is off; °C · °F is the weather's and stays.
+     */
+    public static boolean clockRow(@NonNull Row row) {
+        return row == Row.CLOCK_FACE || row == Row.CLOCK_POSITION || row == Row.STATUS_SECONDS
+            || row == Row.STATUS_HOURS;
+    }
 
     /** Whether the Camera gap tile reads on: the bar leaves a gap (Auto or Custom), not Off. */
     public static boolean cameraGapOn(@Nullable String cutoutMode) {
@@ -186,14 +196,61 @@ public final class StatusBarCard {
         switch (row) {
             case STATUS_POSITION: return position(context, widthPx, host);
             case GLASS_SECTION: return glassHeader(context, true);
-            case CLOCK_FACE: return clockFaces(context, host);
-            case CLOCK_POSITION: return clockPosition(context, widthPx, host);
-            case STATUS_SECONDS: return seconds(context, host);
-            case STATUS_HOURS: return hours(context, widthPx, host);
+            case CLOCK_FACE: return clockHeld(context, clockFaces(context, host), host);
+            case CLOCK_POSITION:
+                return clockHeld(context, clockPosition(context, widthPx, host), host);
+            case STATUS_SECONDS: return clockHeld(context, seconds(context, host), host);
+            case STATUS_HOURS: return clockHeld(context, hours(context, widthPx, host), host);
             case STATUS_UNIT: return unit(context, widthPx, host);
             case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
+        }
+    }
+
+    /**
+     * A clock row under the Clock tile: while the bar's clock is hidden the row stands disabled
+     * and dimmed, "Clock is hidden" under it; restated with the row.
+     */
+    @NonNull
+    static CardRowView clockHeld(@NonNull Context context, @NonNull CardRowView row,
+                                 @NonNull Host host) {
+        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+        column.addView(row.view, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.TextView note = com.termux.app.surfaces.rows.RowKit.caption(context,
+            context.getString(R.string.editor_st_clock_hidden));
+        int lead = com.termux.app.surfaces.rows.RowKit.dp(context,
+            com.termux.app.surfaces.rows.RowKit.ICON_COLUMN_DP);
+        int edge = com.termux.app.surfaces.rows.RowKit.dp(context,
+            com.termux.app.surfaces.rows.RowKit.EDGE_DP);
+        note.setPadding(lead, 0, edge, edge / 2);
+        column.addView(note, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        Runnable hold = () -> {
+            boolean shown = host.indicator(INDICATOR_CLOCK);
+            setEnabledDeep(row.view, shown);
+            row.view.setAlpha(shown ? 1f : 0.5f);
+            int visibility = shown ? View.GONE : View.VISIBLE;
+            if (note.getVisibility() != visibility)
+                note.setVisibility(visibility);
+        };
+        hold.run();
+        return new CardRowView(column, () -> {
+            row.restate();
+            hold.run();
+        });
+    }
+
+    /** {@code view} and everything in it enabled or not. */
+    static void setEnabledDeep(@NonNull View view, boolean enabled) {
+        if (view.isEnabled() != enabled)
+            view.setEnabled(enabled);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                setEnabledDeep(group.getChildAt(i), enabled);
         }
     }
 
@@ -329,6 +386,8 @@ public final class StatusBarCard {
     private static CardRowView indicators(@NonNull Context context, int widthPx,
                                           @NonNull Host host) {
         List<TileGrid.Tile> tiles = Arrays.asList(
+            new TileGrid.Tile(R.drawable.ic_editor_clock,
+                context.getString(R.string.editor_st_indicator_clock)),
             new TileGrid.Tile(R.drawable.ic_ms_memory,
                 context.getString(R.string.editor_st_indicator_cpu)),
             new TileGrid.Tile(R.drawable.ic_ms_developer_board,

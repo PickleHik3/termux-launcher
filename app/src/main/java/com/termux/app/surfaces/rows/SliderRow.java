@@ -37,9 +37,10 @@ import java.util.List;
  * a tap moves the handle where it lands ({@link StripTouchPolicy#decideAcross}). A long press on
  * the name is the row's menu ({@link OnName}).</p>
  *
- * <p>Two neighbouring sliders may be linked (the keyboard's Background and Key opacity): a toggle
- * with the link glyph stands between their rows and says on or off by its colour; what the link
- * does is the caller's.</p>
+ * <p>Two neighbouring sliders may be linked (the keyboard's Background and Key opacity): the
+ * Linked toggle stands between their rows, centred and about half the row wide (appearance-cards
+ * overhaul §4), a tonal button that reads "Linked" with the link glyph, filled, while on and
+ * "Not linked" with link_off while off; what the link does is the caller's.</p>
  */
 public final class SliderRow {
 
@@ -154,6 +155,8 @@ public final class SliderRow {
     @NonNull public final List<Item> items;
     /** The link between two sliders, or null where the run has none. */
     @Nullable public final MaterialButton link;
+    /** The row the link stands centred in, half its width; null where the run has none. */
+    @Nullable private final LinearLayout mLinkHolder;
     @NonNull private final List<Track> mTracks;
     private final int mLinkAfter;
     private boolean mSettingLink;
@@ -163,6 +166,7 @@ public final class SliderRow {
         this.root = root;
         this.items = Collections.unmodifiableList(items);
         this.link = link;
+        mLinkHolder = link == null ? null : (LinearLayout) link.getParent();
         mTracks = tracks;
         mLinkAfter = linkAfter;
     }
@@ -200,10 +204,17 @@ public final class SliderRow {
             root.addView(item.root, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             if (link != null && i == linkAfter) {
-                // Between the two rows it links, centred under the tracks.
-                LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(touch, touch);
-                linkParams.gravity = Gravity.CENTER_HORIZONTAL;
-                root.addView(link, linkParams);
+                // Between the two rows it links, centred, about half the row's width.
+                LinearLayout holder = new LinearLayout(context);
+                holder.setOrientation(LinearLayout.HORIZONTAL);
+                holder.setGravity(Gravity.CENTER);
+                holder.setWeightSum(2f);
+                LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                link.setMinHeight(touch);
+                holder.addView(link, linkParams);
+                root.addView(holder, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             }
         }
         SliderRow row = new SliderRow(root, items, held, link, linking ? linkAfter : -1);
@@ -211,7 +222,9 @@ public final class SliderRow {
             row.setValue(i, i < values.length ? values[i] : held.get(i).from);
         if (link != null) {
             row.setLinked(linked);
+            dressLink(context, link, link.isChecked());
             link.addOnCheckedChangeListener((button, on) -> {
+                dressLink(context, link, on);
                 if (!row.mSettingLink && onLink != null)
                     onLink.onLink(on);
             });
@@ -241,9 +254,12 @@ public final class SliderRow {
         if (index < 0 || index >= items.size())
             return;
         setVisible(items.get(index).root, shown);
-        if (link != null)
-            setVisible(link, items.get(mLinkAfter).root.getVisibility() == View.VISIBLE
-                && items.get(mLinkAfter + 1).root.getVisibility() == View.VISIBLE);
+        if (link != null) {
+            boolean both = items.get(mLinkAfter).root.getVisibility() == View.VISIBLE
+                && items.get(mLinkAfter + 1).root.getVisibility() == View.VISIBLE;
+            setVisible(link, both);
+            if (mLinkHolder != null) setVisible(mLinkHolder, both);
+        }
     }
 
     /** Slider {@code index}'s source: {@link Item#setSource}. */
@@ -272,24 +288,27 @@ public final class SliderRow {
             view.setVisibility(visibility);
     }
 
-    /** The link: the link glyph, on the secondary container while on, a 48dp target. */
+    /**
+     * The Linked toggle: the editor's tonal button ({@code Widget.Material3Expressive.Button
+     * .TonalButton}, as the connected groups wear it), checkable, filled with the primary while
+     * on, no check mark; its word and glyph follow the state ({@link #dressLink}).
+     */
     @NonNull
     private static MaterialButton linkButton(@NonNull Context context,
                                              @NonNull CharSequence name) {
-        MaterialButton button = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialIconButtonStyle);
-        button.setIconResource(R.drawable.ic_ms_link);
+        MaterialButton button = SegmentRow.connectedButton(context);
         button.setCheckable(true);
+        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        // Its name; the checked state says Linked or not.
         button.setContentDescription(name);
         GlyphNames.name(button, name);
-        int[][] states = {{android.R.attr.state_checked}, {}};
-        button.setIconTint(new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorOnSecondaryContainer),
-            RowKit.color(context, com.google.android.material.R.attr.colorOnSurfaceVariant)}));
-        button.setBackgroundTintList(new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorSecondaryContainer),
-            0}));
         return button;
+    }
+
+    /** "Linked" with the link glyph while on, "Not linked" with link_off while off. */
+    static void dressLink(@NonNull Context context, @NonNull MaterialButton link, boolean on) {
+        link.setText(on ? R.string.editor_opacity_linked : R.string.editor_opacity_not_linked);
+        link.setIconResource(on ? R.drawable.ic_ms_link : R.drawable.ic_ms_link_off);
     }
 
     /**
