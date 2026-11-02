@@ -115,6 +115,12 @@ final class CardBody {
             case SECTION_WALLPAPER:
             case SECTION_COLOUR:
             case SECTION_GLASS_MATERIAL:
+            case SECTION_MORE_OPTIONS:
+            case SECTION_LAYOUT:
+            case SECTION_APPEARANCE:
+            case SECTION_LINKS:
+            case SECTION_COLOURS:
+            case SECTION_CLOCK_WEATHER:
                 return Shape.SECTION;
             case HINT_GLASS_MATERIAL:
                 return Shape.HINT;
@@ -354,6 +360,11 @@ final class CardBody {
                 strip.setShown(i, shown);
                 any |= shown;
                 strip.setValue(i, mModel.value(row));
+                boolean enabled = mModel.enabled(row);
+                SliderRow.Item item = strip.items.get(i);
+                if (item.slider.isEnabled() != enabled)
+                    item.slider.setEnabled(enabled);
+                item.root.setAlpha(enabled ? 1f : 0.5f);
                 // The source dot: where the value comes from, and Reset would take it back.
                 strip.setSource(i, mModel.source(row).ink(mContext), spokenSource(row));
             }

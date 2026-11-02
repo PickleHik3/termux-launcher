@@ -23,10 +23,10 @@ public final class WorkspaceCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE,
-                Row.CORNERS);
-        return rows.tier(3, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.ELEMENTS, Row.LINK_GLOBAL)
+        // Minimal layout closes the Appearance section, with no heading of its own.
+        return com.termux.app.surfaces.GlassRows.appearance(new EditorRows.CardRows(), offers, 1)
+            .tier(1, Row.MINIMAL)
+            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
             .build();
     }
 }

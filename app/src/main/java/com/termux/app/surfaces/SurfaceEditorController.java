@@ -2764,6 +2764,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
+            if (GlassRows.needsGlassEdge(row) && !enabled(row))
+                return getString(R.string.editor_row_not_on_this_phone);
             switch (row) {
                 case FROST:
                 case OPACITY:
@@ -2917,7 +2919,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean enabled(@NonNull Row row) {
-            return true;
+            // Edge and Depth stay on every glass card, put out where the phone cannot draw them.
+            return !GlassRows.needsGlassEdge(row) || mHost.isGlassRefractionActive();
+        }
+
+        @Nullable @Override public CharSequence rowLabel(@NonNull Row row) {
+            return cardRowName(row);
         }
 
         @Nullable @Override public CharSequence summary(@NonNull Row row) {
@@ -3071,8 +3078,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     index -> onValue(Row.RIM, index, false));
                 return mRimRow.root;
             }
+            if (row == Row.TINT_HUE && card != null) {
+                mTintHueRow = tintHueRow(card, widthPx);
+                return mTintHueRow.root;
+            }
             if (row == Row.ELEMENTS && card != null) {
-                PaneWallPage screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                // The Terminal card's Layout is the Workspace's list.
+                PaneWallPage screen = card == EditorCard.TERMINAL ? PaneWallPage.TERMINAL
+                    : com.termux.app.surfaces.cards.ElementRows.screenOf(card);
                 if (screen != null)
                     return elementsView(screen);
             }
@@ -3088,6 +3101,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.RIM) {
                 com.termux.app.surfaces.rows.SegmentRow rim = mRimRow;
                 if (rim != null && rim.root == view) rim.select(value(row));
+                return;
+            }
+            if (row == Row.TINT_HUE) {
+                com.termux.app.surfaces.rows.SegmentRow hue = mTintHueRow;
+                if (hue != null && hue.root == view) hue.select(value(row));
                 return;
             }
             com.termux.app.surfaces.cards.ElementsList elements = mElements;
@@ -3157,6 +3175,44 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The Rim row the card up shows, read again on restate. */
     @Nullable private com.termux.app.surfaces.rows.SegmentRow mRimRow;
+    /** The Tint row's colour swatches, built by {@link #tintHueRow}. */
+    @Nullable private com.termux.app.surfaces.rows.SegmentRow mTintHueRow;
+
+    /**
+     * Tint's three colour swatches (Accent, Neutral, Tertiary) as one connected group, on every
+     * card and both render paths: under the Tint slider with no title of its own on a page or
+     * element card, and as the Colours section's Accent row on Customization.
+     */
+    @NonNull
+    private com.termux.app.surfaces.rows.SegmentRow tintHueRow(@NonNull EditorCard card,
+                                                               int widthPx) {
+        Context context = mHost.context();
+        String[] names = mModel.choices(Row.TINT_HUE);
+        int[] swatches = cardRowSwatches(Row.TINT_HUE);
+        java.util.List<com.termux.app.surfaces.rows.SegmentRow.Segment> segments =
+            new java.util.ArrayList<>(names.length);
+        for (String name : names)
+            segments.add(com.termux.app.surfaces.rows.SegmentRow.Segment.glyph(
+                R.drawable.ic_editor_tint, name));
+        boolean titled = card == EditorCard.APPEARANCE;
+        com.termux.app.surfaces.rows.SegmentRow hue = com.termux.app.surfaces.rows.SegmentRow.build(
+            context, titled ? Row.TINT_HUE.iconRes : 0,
+            titled ? context.getString(Row.TINT_HUE.labelRes) : "", segments,
+            mModel.value(Row.TINT_HUE), widthPx,
+            index -> mModel.onValue(Row.TINT_HUE, index, false));
+        for (int i = 0; i < hue.buttons.size() && swatches != null && i < swatches.length; i++) {
+            android.graphics.drawable.GradientDrawable dot =
+                new android.graphics.drawable.GradientDrawable();
+            dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            dot.setColor(swatches[i]);
+            dot.setStroke(Math.max(1, dp(1)), EditorViews.color(context,
+                com.google.android.material.R.attr.colorOutlineVariant));
+            dot.setSize(dp(18), dp(18));
+            hue.buttons.get(i).setIcon(dot);
+            hue.buttons.get(i).setIconTint(null);
+        }
+        return hue;
+    }
 
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
@@ -5364,9 +5420,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return prefs.isStatusClockSecondsEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
                         return prefs.isStatusWidgetWeatherFahrenheit();
-                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_CAMERA_GAP:
-                        return com.termux.app.surfaces.cards.StatusBarCard.cameraGapOn(
-                            prefs.getStatusBarCutoutMode());
                     default:
                         return false;
                 }
@@ -6044,6 +6097,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The name a redesigned card gives a row where it is not the row's own. */
     @Nullable
     private CharSequence cardRowName(@NonNull Row row) {
+        if (row == Row.MARGIN && (mCard == EditorCard.TERMINAL || mCard == EditorCard.KEYBOARD))
+            return getString(R.string.editor_row_outer_margin);
         if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
             return getString(R.string.editor_row_background_opacity);
         if (row == Row.KEYBOARD_THEME)

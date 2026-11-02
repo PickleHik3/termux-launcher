@@ -129,6 +129,12 @@ final class EditorCardSheet {
         /** Reads a {@link #rowView} again from the values, as {@link #restate()} does any row. */
         default void restateRowView(@NonNull Row row, @NonNull View view) {}
 
+        /** The name {@code row} wears on this card where it is not the row's own, or null. */
+        @Nullable
+        default CharSequence rowLabel(@NonNull Row row) {
+            return null;
+        }
+
         /**
          * The Applies to row of the card up (Global · Home · Workspace), or null where the card
          * has none (appearance-cards-overhaul §1).
@@ -1742,7 +1748,8 @@ final class EditorCardSheet {
     private RowViews sliderRow(@NonNull Row row, @NonNull Strip strip) {
         RowViews[] built = new RowViews[1];
         SliderRow slider = SliderRow.build(mContext, java.util.Collections.singletonList(
-                new SliderRow.Track(row.iconRes, mContext.getString(row.labelRes),
+                new SliderRow.Track(row.iconRes, mModel.rowLabel(row) != null
+                    ? mModel.rowLabel(row) : mContext.getString(row.labelRes),
                     mModel.from(row), mModel.to(row), mModel.step(row),
                     value -> mModel.readout(row, value))),
             new int[] {mModel.value(row)},
@@ -2329,6 +2336,7 @@ final class EditorCardSheet {
                 if (legend.getValueTo() != to) legend.setValueTo(to);
                 if (legend.getStepSize() != step) legend.setStepSize(step);
                 if (legend.getValue() != value) legend.setValue(value);
+                if (legend.isEnabled() != enabled) legend.setEnabled(enabled);
                 if (views.value != null)
                     EditorViews.setText(views.value,
                         mModel.readout(row, Math.round(legend.getValue())));

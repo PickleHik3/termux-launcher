@@ -46,11 +46,15 @@ public final class TerminalCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = com.termux.app.surfaces.GlassRows.card(offers,
-            Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
+        EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
         if (offers.terminalEffect)
-            rows.tier(3, Row.EFFECT);
-        return rows.tier(3, Row.MARGIN, Row.LINK_FONT).build();
+            rows.tier(1, Row.EFFECT);
+        rows.tier(1, Row.SPLIT_GAP, Row.MARGIN)
+            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
+        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT)
+            .build();
     }
 
     // ------------------------------------------------------------------------------ policy
