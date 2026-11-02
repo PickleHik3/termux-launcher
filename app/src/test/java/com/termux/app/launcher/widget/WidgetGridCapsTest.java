@@ -120,6 +120,48 @@ public class WidgetGridCapsTest {
      * with four 8 dp gaps. The page used to stand in the opening's Margin too, a grid 96 dp
      * narrower, whose caps lost a column it had room for on screen.
      */
+    /**
+     * Pong (411 x 918 dp, a 32 dp status bar) at a 12 dp Margin, 2026-11-02. Upright the
+     * configuration reports 411 x 870 dp; turned, 870 x 379 dp, its short side less the status
+     * bar. Worked out from what the configuration reports, the turned caps lost a column (379 dp
+     * holds five) and the wall reflowed onto new pages. The screen remembered upright gives the
+     * turned wall the upright caps to the column and the row.
+     */
+    @Test
+    public void pongTurnedHasTheCapsItHasUpright() {
+        long key = WidgetGridCaps.PortraitScreen.key(379, 420);
+        WidgetGridCaps.PortraitScreen upright = new WidgetGridCaps.PortraitScreen(411f, 870f, 32f, key);
+        WidgetGridCaps.PortraitScreen turned = new WidgetGridCaps.PortraitScreen(870f, 379f, 32f, key);
+        WidgetGridCaps portrait = WidgetGridCaps.forPortraitWall(
+            WidgetGridCaps.PortraitScreen.resolve(true, upright, null, upright), 12f);
+        assertEquals("upright as before", WidgetGridCaps.forPortraitWall(411f, 870f, 32f, 12f),
+            portrait);
+        assertEquals(6, portrait.maxColumns);
+        assertEquals("the turned configuration alone loses a column", 5,
+            WidgetGridCaps.forPortraitWall(870f, 379f, 32f, 12f).maxColumns);
+
+        WidgetGridCaps landscape = WidgetGridCaps.forPortraitWall(
+            WidgetGridCaps.PortraitScreen.resolve(false, turned, upright, turned), 12f);
+        assertEquals(portrait, landscape);
+        assertEquals(6, landscape.maxColumns);
+        assertEquals(portrait.maxRows, landscape.maxRows);
+    }
+
+    /** A screen remembered on another display size is not used; the reckoning stands in. */
+    @Test
+    public void aRememberedScreenIsOnlyUsedOnTheSameScreen() {
+        WidgetGridCaps.PortraitScreen upright = new WidgetGridCaps.PortraitScreen(411f, 870f, 32f,
+            WidgetGridCaps.PortraitScreen.key(379, 420));
+        WidgetGridCaps.PortraitScreen turned = new WidgetGridCaps.PortraitScreen(700f, 340f, 32f,
+            WidgetGridCaps.PortraitScreen.key(340, 480));
+        WidgetGridCaps.PortraitScreen reckoned = new WidgetGridCaps.PortraitScreen(372f, 650f, 32f,
+            WidgetGridCaps.PortraitScreen.key(340, 480));
+        assertEquals(reckoned,
+            WidgetGridCaps.PortraitScreen.resolve(false, turned, upright, reckoned));
+        assertEquals(reckoned, WidgetGridCaps.PortraitScreen.resolve(false, turned, null, reckoned));
+        assertEquals(turned, WidgetGridCaps.PortraitScreen.resolve(true, turned, upright, reckoned));
+    }
+
     @Test
     public void aWideMarginIsPaidOnceOnTheEmulatorsWall() {
         assertEquals(5, WidgetGridCaps.forWall(411f, 760f, 48f).maxColumns);

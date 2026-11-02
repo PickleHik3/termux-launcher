@@ -290,9 +290,51 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // orientations (ADR 0020 §12), so neither a turn nor a keyboard or sheet shrinking the
         // wall changes the caps, and nothing reflows. The cells get shorter or narrower instead.
         // Nor does the icon step: the caps keep room for the largest step's dock.
+        // Turned, the configuration's short side has the status bar and the cutout taken off it,
+        // which is less than the portrait width and would cut a column; so the screen is the one
+        // last read while portrait, and the caps are the portrait caps to the column.
         android.content.res.Configuration config = pane.getResources().getConfiguration();
-        return WidgetGridCaps.forPortraitWall(config.screenWidthDp, config.screenHeightDp,
-            statusBarDp(), gridEdgeDp);
+        WidgetGridCaps.PortraitScreen current = new WidgetGridCaps.PortraitScreen(
+            config.screenWidthDp, config.screenHeightDp, statusBarDp(),
+            WidgetGridCaps.PortraitScreen.key(config.smallestScreenWidthDp, config.densityDpi));
+        boolean portrait = !isLandscape();
+        WidgetGridCaps.PortraitScreen screen = WidgetGridCaps.PortraitScreen.resolve(portrait,
+            current, lastPortraitScreen, portrait ? current : reckonedPortraitScreen(current));
+        if (portrait && config.screenWidthDp > 0 && config.screenHeightDp > 0) {
+            lastPortraitScreen = current;
+        }
+        return WidgetGridCaps.forPortraitWall(screen, gridEdgeDp);
+    }
+
+    /**
+     * The screen as last read while portrait, for the whole process: a turn and a new activity
+     * both keep it. Null until the launcher has stood upright once.
+     */
+    @Nullable private static WidgetGridCaps.PortraitScreen lastPortraitScreen;
+
+    /**
+     * The portrait screen reckoned while turned, for a launcher that has not stood upright yet:
+     * the display's short side across, and its long side less the status bar and the navigation
+     * bar, which is what the configuration reports upright on a phone with the bar at the bottom.
+     * A reckoning only: a cap it gets wrong is put right by the first portrait pass, and the
+     * repository puts a wall a cap cut back as it stood. Before Android 11, the screen turned.
+     */
+    @NonNull private WidgetGridCaps.PortraitScreen reckonedPortraitScreen(
+            @NonNull WidgetGridCaps.PortraitScreen current) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return current;
+        android.content.res.Resources res = pane.getResources();
+        float density = res.getDisplayMetrics().density;
+        android.view.WindowManager windows =
+            pane.getContext().getSystemService(android.view.WindowManager.class);
+        if (windows == null || !(density > 0f)) return current;
+        Rect bounds = windows.getMaximumWindowMetrics().getBounds();
+        float shortDp = Math.min(bounds.width(), bounds.height()) / density;
+        float longDp = Math.max(bounds.width(), bounds.height()) / density;
+        @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
+        int navId = res.getIdentifier("navigation_bar_height", "dimen", "android");
+        float navDp = navId != 0 ? res.getDimensionPixelSize(navId) / density : 0f;
+        return new WidgetGridCaps.PortraitScreen((int) shortDp,
+            (int) (longDp - current.statusBarDp - navDp), current.statusBarDp, current.key);
     }
 
     /** The system's status bar height, dp, or a fallback where it names none. */
@@ -375,7 +417,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         appliedCaps = caps;
         // The rows given away stay part of the grid's height, so the cells keep their size.
         pane.grid().setReservedRows(keyboardRows);
-        widgets.applyGrid(caps.clampRows(rows) - keyboardRows, caps.clampColumns(columns));
+        // A grid the caps cut is kept restorable: when the caps grow back, the wall returns as
+        // it stood instead of keeping the reflow.
+        int cappedRows = caps.clampRows(rows);
+        int cappedColumns = caps.clampColumns(columns);
+        boolean capped = cappedRows < rows || cappedColumns < columns;
+        widgets.applyGrid(cappedRows - keyboardRows, cappedColumns, capped);
     }
 
     /** The grid's height as last laid out, in px: what always on measures a keyboard row by. */

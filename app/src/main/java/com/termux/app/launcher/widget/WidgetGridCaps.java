@@ -102,6 +102,58 @@ public final class WidgetGridCaps {
         return forWall(across, tall, edgeDp);
     }
 
+    /**
+     * {@link #forPortraitWall(float, float, float, float)} of a screen taken while portrait, so a
+     * turn cannot change the caps: the configuration's short side in landscape has the status bar
+     * and the cutout taken off it, and would cut a column the portrait width holds.
+     */
+    @NonNull public static WidgetGridCaps forPortraitWall(@NonNull PortraitScreen screen,
+                                                          float edgeDp) {
+        return forPortraitWall(screen.widthDp, screen.heightDp, screen.statusBarDp, edgeDp);
+    }
+
+    /**
+     * The screen as the configuration reports it while portrait: its width and height in dp,
+     * and the status bar's height then. {@code key} names the screen it was read on (the
+     * smallest width and the density, which a turn leaves alone), so a remembered one is never
+     * used for another display or another display size.
+     */
+    public static final class PortraitScreen {
+        public final float widthDp;
+        public final float heightDp;
+        public final float statusBarDp;
+        public final long key;
+
+        public PortraitScreen(float widthDp, float heightDp, float statusBarDp, long key) {
+            this.widthDp = widthDp;
+            this.heightDp = heightDp;
+            this.statusBarDp = statusBarDp;
+            this.key = key;
+        }
+
+        /** The key of a screen with this smallest width in dp and this density in dpi. */
+        public static long key(int smallestWidthDp, int densityDpi) {
+            return ((long) smallestWidthDp << 32) | (densityDpi & 0xffffffffL);
+        }
+
+        /**
+         * The screen the caps are worked out from. While {@code portrait} it is the one on screen,
+         * exactly as before, so no portrait cap changes. Turned, it is the one {@code remembered}
+         * from the last portrait pass on the same screen, so the caps are the portrait caps; only
+         * when there is none (the launcher started turned) is it {@code fallback}, a reckoning
+         * the first portrait pass replaces.
+         */
+        @NonNull public static PortraitScreen resolve(boolean portrait,
+                                                      @NonNull PortraitScreen current,
+                                                      @androidx.annotation.Nullable
+                                                      PortraitScreen remembered,
+                                                      @NonNull PortraitScreen fallback) {
+            if (portrait) return current;
+            if (remembered != null && remembered.key == current.key) return remembered;
+            return fallback;
+        }
+    }
+
     /** The caps for a wall measured in pixels, with a rim of {@code edgeDp} round the grid. */
     @NonNull public static WidgetGridCaps forWallPx(int widthPx, int heightPx, float density,
                                                     float edgeDp) {
