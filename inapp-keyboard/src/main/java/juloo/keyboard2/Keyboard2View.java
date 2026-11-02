@@ -2087,6 +2087,19 @@ public class Keyboard2View extends View
   @Override
   public void onMeasure(int wSpec, int hSpec)
   {
+    // TEMP diag(seam): SeamTime3 logs a keyboard measure of 3 ms or more.
+    android.os.Trace.beginSection("Seam3:measure:Keyboard2View");
+    long s3 = System.nanoTime();
+    onMeasureS3(wSpec, hSpec);
+    android.os.Trace.endSection();
+    float s3Ms = (System.nanoTime() - s3) / 1e6f;
+    if (s3Ms >= 3f)
+      android.util.Log.d("SeamTime3", "t=" + SystemClock.uptimeMillis()
+          + " step=measure:Keyboard2View ms=" + String.format(java.util.Locale.ROOT, "%.2f", s3Ms));
+  }
+
+  private void onMeasureS3(int wSpec, int hSpec)
+  {
     if (_keyboard == null)
     {
       setMeasuredDimension(resolveSize(getSuggestedMinimumWidth(), wSpec),

@@ -135,6 +135,13 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // TEMP diag(seam): SeamTime3 logs a slow measure while a crossing is in play.
+        long s3 = com.termux.app.place.SeamTime3.begin("measure");
+        onMeasureS3(widthMeasureSpec, heightMeasureSpec);
+        com.termux.app.place.SeamTime3.measured(this, s3, 1f);
+    }
+
+    private void onMeasureS3(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (marginBottom != null) {
@@ -153,6 +160,13 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        // TEMP diag(seam): SeamTime3 logs the whole layout while a crossing is in play.
+        long s3 = com.termux.app.place.SeamTime3.begin("layout");
+        onLayoutS3(changed, l, t, r, b);
+        com.termux.app.place.SeamTime3.laidOut(this, s3, 1f);
+    }
+
+    private void onLayoutS3(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
         ViewGroup.LayoutParams params = getLayoutParams();
         mLaidOutBottomMargin = params instanceof ViewGroup.MarginLayoutParams

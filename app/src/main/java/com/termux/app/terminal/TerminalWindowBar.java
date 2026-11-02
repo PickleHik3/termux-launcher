@@ -2832,4 +2832,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private float dpF(float value) {
         return value * getResources().getDisplayMetrics().density;
     }
+
+    // TEMP diag(seam): SeamTime3 logs a slow measure while a crossing is in play.
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        long s3 = com.termux.app.place.SeamTime3.begin("measure");
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        com.termux.app.place.SeamTime3.measured(this, s3, 3f);
+    }
 }

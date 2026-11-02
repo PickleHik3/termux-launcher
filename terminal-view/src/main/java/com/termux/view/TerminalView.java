@@ -5099,4 +5099,16 @@ public final class TerminalView extends View {
             }
         }
     }
+
+    // TEMP diag(seam): SeamTime3 logs a terminal measure of 3 ms or more.
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        android.os.Trace.beginSection("Seam3:measure:TerminalView");
+        long s3 = System.nanoTime();
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        android.os.Trace.endSection();
+        float s3Ms = (System.nanoTime() - s3) / 1e6f;
+        if (s3Ms >= 3f) android.util.Log.d("SeamTime3", "t=" + android.os.SystemClock.uptimeMillis()
+            + " step=measure:TerminalView ms=" + String.format(java.util.Locale.ROOT, "%.2f", s3Ms));
+    }
 }
