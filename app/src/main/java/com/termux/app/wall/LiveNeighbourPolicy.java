@@ -53,6 +53,16 @@ public final class LiveNeighbourPolicy {
         return side < 0 ? 0 : 1;
     }
 
+    /**
+     * The slot a released step {@code steps} away leaves empty until its settle ends: the one the
+     * arriving window came from. The window beyond it would stand there a width past the
+     * arriving one, which moves toward rest without passing it ({@link SettleSpring}), so that
+     * slot stays off screen the whole settle. The other slot carries the window leaving.
+     */
+    public static int heldSlotAfterStep(int steps) {
+        return slotOf(steps);
+    }
+
     /** The side a slot's neighbour stands on. */
     public static int sideOf(int slot) {
         return slot == 0 ? -1 : 1;

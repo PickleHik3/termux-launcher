@@ -1412,6 +1412,47 @@ public class TerminalPaneController {
     /** Make {@code w} the visible window and render its pane tree. */
     public void showWindow(Window w) {
         if (w == null) return;
+        Trace.beginSection("Panes.showWindow");
+        try {
+            doShowWindow(w);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * {@link #showWindow}, for a released window swipe {@code steps} away: when {@code w} stands
+     * live beside the host, the slot it came from is left empty until
+     * {@link #releaseHeldNeighbour}. The window beyond it would stand there one width past the
+     * arriving one, off screen for the whole settle, and building and laying out its tree is
+     * work the release frame does not need.
+     */
+    public void showWindowAfterStep(Window w, int steps) {
+        if (w == null) return;
+        mHeldNeighbourSlot = isLiveNeighbour(w)
+            ? com.termux.app.wall.LiveNeighbourPolicy.heldSlotAfterStep(steps) : -1;
+        showWindow(w);
+    }
+
+    /**
+     * Builds the neighbour {@link #showWindowAfterStep} left out, once the step's settle is over.
+     * Nothing to do when none is held (a drag since has rebuilt both).
+     */
+    public void releaseHeldNeighbour() {
+        if (mHeldNeighbourSlot < 0) return;
+        mHeldNeighbourSlot = -1;
+        Trace.beginSection("Panes.releaseHeldNeighbour");
+        try {
+            syncNeighbours();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /** The neighbour slot a released step left empty ({@link #showWindowAfterStep}), or -1. */
+    private int mHeldNeighbourSlot = -1;
+
+    private void doShowWindow(@NonNull Window w) {
         // A Home float is drawn over its Home page, never in the pane host: showing one is
         // focusing it there.
         if (w.isHomeFloat()) {
@@ -1438,7 +1479,14 @@ public class TerminalPaneController {
         }
         // A live neighbour is promoted: its tree, already laid out at the host's size beside
         // it, becomes the host's, and the window leaving takes its place on the other side.
-        if (switched) adoptNeighbourTree(w, previous);
+        if (switched) {
+            Trace.beginSection("Panes.adoptNeighbour");
+            try {
+                adoptNeighbourTree(w, previous);
+            } finally {
+                Trace.endSection();
+            }
+        }
         render();
         // The wall's travel cover belongs to the window in front: one taken while the window that
         // left was in front (a chip on Home starts the slide before it shows its window) stays on
@@ -1450,7 +1498,12 @@ public class TerminalPaneController {
         // onSizeChanged. Re-measure them so the PTY matches what is on screen. A promoted
         // neighbour stood at this size all along, so the re-measure finds its grid fitting.
         if (switched) refreshPaneSizes();
-        activePaneChanged();
+        Trace.beginSection("Panes.activePaneChanged");
+        try {
+            activePaneChanged();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     // --- Live neighbour windows (LiveNeighbourPolicy) ---
@@ -1499,17 +1552,30 @@ public class TerminalPaneController {
      * a window closed or the setting switched since is caught before anything is shown.
      */
     public void refreshNeighbourWindows() {
+        mHeldNeighbourSlot = -1;
         syncNeighbours();
     }
 
     /** Let go of both neighbours' trees (memory pressure); the next drag builds them again. */
     public void dropNeighbourWindows() {
+        mHeldNeighbourSlot = -1;
         for (int slot = 0; slot < 2; slot++) clearNeighbour(slot);
     }
 
     private void syncNeighbours() {
+        Trace.beginSection("Panes.syncNeighbours");
+        try {
+            doSyncNeighbours();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doSyncNeighbours() {
         for (int slot = 0; slot < 2; slot++) {
             if (mNeighbourContainers[slot] == null) continue;
+            // Left empty by a released step until its settle is over (showWindowAfterStep).
+            if (slot == mHeldNeighbourSlot) continue;
             Window w = mHost.liveNeighbourWindow(com.termux.app.wall.LiveNeighbourPolicy.sideOf(slot));
             if (w == null || w == mActiveWindow || w.isHomeFloat() || w.root == null) {
                 clearNeighbour(slot);
