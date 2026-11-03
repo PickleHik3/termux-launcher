@@ -504,7 +504,8 @@ The two chips at the top of every Appearance card: **Where it applies** (Everywh
 Terminal or Display pages, the kind of the page in front | <page name>) and **What it applies to**
 (All glass | <element>). Together they name the **Cell** the card's
 rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
-_Avoid_: Global (the old label; in prose and code say Base)
+_Avoid_: Global as the scope chip's label (the old chip; in prose and code say Base). **Global** is
+the Appearance editor's card for the Base look (developer, 2026-11-03).
 
 ### Look and motion
 
