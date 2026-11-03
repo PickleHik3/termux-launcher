@@ -13965,6 +13965,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || !mPreferences.isInAppKeyboardEnabled())
             return;
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
+        // The effect was applied before the keyboard existed; it comes up in the deck look too.
+        applyDeckLook();
         mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
         // Every way the keyboard goes up or down that is not the Display place's own text-focus
         // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
@@ -23574,10 +23576,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 settledWallPage() == com.termux.app.wall.PaneWallPage.WIDGETS);
             mChromeRetroEffect.setStyle(com.termux.app.terminal.PaneRetroStyle.fromId(retroEffect));
         }
+        applyDeckLook();
         if (mPaneController == null)
             return;
         mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
         mPaneController.setRetroEffectPreference(retroEffect);
+    }
+
+    /**
+     * Dresses the in-app keyboard as the CRT's accessory while the chrome draws a terminal effect
+     * (wave 8, the deck look): the bezel's panel colour, the effect's lights. Plain everywhere the
+     * chrome is plain, Home included.
+     */
+    private void applyDeckLook() {
+        if (mInAppKeyboard == null)
+            return;
+        com.termux.app.terminal.PaneRetroStyle style = mChromeRetroEffect == null
+            ? com.termux.app.terminal.PaneRetroStyle.NONE : mChromeRetroEffect.drawnStyle();
+        mInAppKeyboard.setDeckLook(com.termux.app.terminal.DeckLook.of(style,
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                R.color.termux_surface_panel_high),
+            MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4)));
     }
 
     /**
@@ -25275,6 +25294,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The terminal effect is the Workspace's: Home's chrome lands plain (ChromeRetroEffect).
             if (mChromeRetroEffect != null)
                 mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
+            applyDeckLook();
         } finally {
             Trace.endSection();
         }
