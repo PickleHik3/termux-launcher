@@ -1326,8 +1326,17 @@ public final class ChromeInk {
                                                         @NonNull BandGlass glass, boolean framed) {
         int dim = groundDim(framed, dimUnder(rootRect));
         int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
-        if (memo.measured && memo.generation == mCache.generation() && memo.rect.equals(rootRect)
-                && memo.dim == dim && memo.tint == tint && samePolicy(memo.policy, policy)) {
+        boolean sameDress = memo.measured && memo.tint == tint && samePolicy(memo.policy, policy);
+        if (sameDress && memo.generation == mCache.generation() && memo.rect.equals(rootRect)
+                && memo.dim == dim) {
+            return memo.matrix;
+        }
+        // Held (holdEvenOut): only the ground under the band moved, as it does every frame the
+        // chrome travels over the wallpaper. It keeps the matrix it stands on and is measured once
+        // on release. A new dress (tint, policy) still measures: that is a frame the chrome is
+        // dressed whole anyway.
+        if (mEvenOutHeld && sameDress) {
+            mEvenOutHeldMoved = true;
             return memo.matrix;
         }
         GlassBackdropCache.Lightness lightness = mCache.sampleLightnessUncached(rootRect);
@@ -1378,6 +1387,36 @@ public final class ChromeInk {
         if (other <= 0d || other < own) return flipped;
         return current;
     }
+
+    /**
+     * Holds every chrome band's even-out (and the nav strip's) on the matrix it was last measured
+     * with, while the chrome travels across the seam: each frame of that travel moves the band over
+     * new wallpaper, and every re-measure that moved the matrix asked for a whole apply of the
+     * chrome in that frame (pong 2026-11-03: 19-28 ms on every drag frame). A band that was never
+     * measured, or whose dress changes, is still measured.
+     */
+    public void holdEvenOut() {
+        mEvenOutHeld = true;
+    }
+
+    /**
+     * Lets a {@link #holdEvenOut} go. Says whether any band was asked for while held from ground
+     * other than the one it was measured on, so the caller books the one pass that settles it.
+     */
+    public boolean releaseEvenOut() {
+        boolean moved = mEvenOutHeldMoved;
+        mEvenOutHeld = false;
+        mEvenOutHeldMoved = false;
+        return moved;
+    }
+
+    /** Whether {@link #holdEvenOut} is in force. */
+    public boolean isEvenOutHeld() {
+        return mEvenOutHeld;
+    }
+
+    private boolean mEvenOutHeld;
+    private boolean mEvenOutHeldMoved;
 
     /** A band's matrix moved: its frame is re-dressed and its ink re-solved on the next pass. */
     private void changedEvenOut() {

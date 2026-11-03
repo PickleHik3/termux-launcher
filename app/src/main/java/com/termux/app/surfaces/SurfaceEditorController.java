@@ -3562,7 +3562,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 R.drawable.ic_editor_tint, name));
         boolean titled = card == EditorCard.APPEARANCE;
         com.termux.app.surfaces.rows.SegmentRow hue = com.termux.app.surfaces.rows.SegmentRow.build(
-            context, titled ? Row.TINT_HUE.iconRes : 0,
+            context, Row.TINT_HUE.iconRes,
             context.getString(titled ? Row.TINT_HUE.labelRes : R.string.appearance_row_tint_colour),
             segments,
             mModel.value(Row.TINT_HUE), widthPx,

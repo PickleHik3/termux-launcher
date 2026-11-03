@@ -372,6 +372,16 @@ public final class SeamCrossing {
             return dressDiffered && dressedFor != null && SeamTravel.crosses(dressedFor, landed);
         }
 
+        /**
+         * Whether the stack already wears the half the wall landed on ({@code landed}): the halves
+         * dress it differently and it changed into the arriving half's dress mid-slide. The page's
+         * commit then has nothing to show the landed frame that the slide has not already shown,
+         * so its whole re-dress may follow that frame instead of holding it.
+         */
+        public boolean stackDressedFor(@NonNull PaneWallPage landed) {
+            return dressDiffered && dressedFor != null && !SeamTravel.crosses(dressedFor, landed);
+        }
+
         /** Whether that dress back changes the shape too. */
         public boolean shapeDiffered() {
             return shapeDiffered;
