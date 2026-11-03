@@ -1,6 +1,9 @@
 package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
@@ -132,6 +135,221 @@ public class AppDrawerKeyboardSeparationTest {
         Frame content = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
 
         assertEquals(KEYBOARD_TOP - 26f, content.bottom, 1e-3f);
+    }
+
+    @Test public void midAnimationFramesRequestNoLayout() {
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        root.addView(plane, new FrameLayout.LayoutParams(WIDTH, HEIGHT));
+        // Floating with a measured card runs the scrim: its swaps must not request a layout either.
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(24f, KEYBOARD_TOP + 8f, WIDTH - 24f, KEYBOARD_TOP + 640f));
+        for (boolean rounded : new boolean[] {false, true}) {
+            if (rounded) floating(); else docked();
+            reveal(0f);
+            applyFrame(0.3f);
+            layOut(root);
+            for (float p : new float[] {0.35f, 0.5f, 0.75f, 0.99f}) {
+                reveal(p);
+                applyFrame(p);
+                assertFalse("p=" + p + " rounded=" + rounded, root.isLayoutRequested());
+                assertFalse(plane.isLayoutRequested());
+            }
+        }
+    }
+
+    /**
+     * The live blur's capture is a software draw of the decor in its pre-draw hook; on pong it
+     * cost ~13 ms of every open and close frame. It must never be woken while the plane moves.
+     */
+    @Test public void liveBlurNeverCapturesWhileThePlaneMoves() {
+        com.github.mmin18.widget.RealtimeBlurView blur =
+            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
+        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(progress, "target", 1f);
+        // The open's one capture has been taken and the view rested itself.
+        blur.setUpdatesPaused(true);
+
+        for (float p : new float[] {0.03f, 0.26f, 0.5f, 0.9f, 0.998f}) {
+            ReflectionHelpers.setField(progress, "value", p);
+            controller.applyLiveBlurRest();
+            assertTrue("open p=" + p, blur.isUpdatesPaused());
+        }
+
+        // Settled open: exactly one fresh capture, then rest — not on the settle frame itself but
+        // a moment later, from the posted refresh.
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(progress, "value", 1f);
+        controller.applyLiveBlurRest();
+        assertTrue(blur.isUpdatesPaused());
+        controller.refreshSettledBackdrop();
+        assertFalse(blur.isUpdatesPaused());
+        blur.setUpdatesPaused(true);
+        controller.applyLiveBlurRest();
+        assertTrue(blur.isUpdatesPaused());
+
+        // Close: rests on the settled capture all the way down.
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        ReflectionHelpers.setField(progress, "target", 0f);
+        for (float p : new float[] {0.9f, 0.5f, 0.1f}) {
+            ReflectionHelpers.setField(progress, "value", p);
+            controller.applyLiveBlurRest();
+            assertTrue("close p=" + p, blur.isUpdatesPaused());
+        }
+    }
+
+    @Test public void floatingScrimRunsAroundTheKeyboardCard() {
+        floating();
+        host.paneGapPx = 11f;
+        Frame card = new Frame(24f, KEYBOARD_TOP + 8f, WIDTH - 24f, KEYBOARD_TOP + 640f);
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame", card);
+        reveal(1f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        // No clip at the keyboard's top: the dim covers the whole host ...
+        assertNull(root.getClipBounds());
+        assertTrue(root.getBackground() instanceof AppDrawerScrimDrawable);
+        AppDrawerScrimDrawable scrim = (AppDrawerScrimDrawable) root.getBackground();
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(1f), scrim.getColor());
+        // ... but for the keyboard card, cut out where it stands.
+        assertEquals(new android.graphics.RectF(card.left, card.top, card.right, card.bottom),
+            scrim.getHole());
+        // The card itself still ends above the keyboard.
+        assertEquals(KEYBOARD_TOP - 11f, plane.getFrame().bottom, 1e-3f);
+    }
+
+    @Test public void dockedDimStillStopsAtTheKeyboardTop() {
+        docked();
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(0f, KEYBOARD_TOP, WIDTH, HEIGHT));
+        reveal(1f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        assertEquals(new android.graphics.Rect(0, 0, WIDTH, Math.round(KEYBOARD_TOP)),
+            root.getClipBounds());
+        assertFalse(root.getBackground() instanceof AppDrawerScrimDrawable);
+    }
+
+    @Test public void keyboardDownFloatingDimIsThePlainColour() {
+        floating();
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(24f, KEYBOARD_TOP, WIDTH - 24f, HEIGHT - 80f));
+        reveal(1f);
+        applyFrame(1f);
+        reveal(0f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        assertNull(root.getClipBounds());
+        assertTrue(root.getBackground() instanceof android.graphics.drawable.ColorDrawable);
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 0f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(false, 1f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, true, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, false, false));
+        assertTrue(AppDrawerController.scrimRunsAroundKeyboard(true, 0.2f, false, true));
+    }
+
+    /**
+     * The brightness jump before settle: the first capture was of the p ~ 0.03 scene, the settled
+     * one of p = 1. Every capture is now taken of the settled scene, and the shown frame is put back.
+     */
+    @Test public void everyCaptureIsOfTheSettledSceneAndTheFrameIsPutBack() {
+        floating();
+        reveal(0f);
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        ReflectionHelpers.setField(spring, "target", 1f);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(progress, "value", 0.03f);
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        applyFrame(0.03f);
+        Frame shown = plane.getFrame();
+        float shownAlpha = root.getAlpha();
+
+        com.github.mmin18.widget.RealtimeBlurView.CaptureScene scene =
+            ReflectionHelpers.getField(controller, "mSettledScene");
+        scene.beforeCapture();
+        // What the capture sees: the full dim, the host at full opacity, the plane fully open.
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(1f),
+            ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
+        assertEquals(1f, root.getAlpha(), 0f);
+        scene.afterCapture();
+
+        assertEquals(shown, plane.getFrame());
+        assertEquals(shownAlpha, root.getAlpha(), 0f);
+        assertEquals(0f, (float) ReflectionHelpers.getField(spring, "value"), 0f);
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(0.03f),
+            ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
+    }
+
+    @Test public void draggingTheListSendsTheBuiltInKeyboardAwayAndKeepsTheQuery() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        reveal(1f);
+        assertEquals(1f, content.getRevealFraction(), 0f);
+
+        controller.onListDragHidesKeyboard();
+
+        // The reveal heads back to the keyboard-down card; the spring animates it there.
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(0f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+        assertEquals(0f, content.getRevealFraction(), 0f);
+        // The search request (and with it any query) is left as it was.
+        assertTrue((boolean) ReflectionHelpers.getField(content, "mSearchRevealRequested"));
+    }
+
+    @Test public void aDragWithTheKeyboardDownOrTheDrawerClosedDoesNothing() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        reveal(0f);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        controller.onListDragHidesKeyboard();
+        assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
+
+        reveal(1f);
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        controller.onListDragHidesKeyboard();
+        assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
+    }
+
+    @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
+        assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
+        assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
+        assertFalse(AppDrawerController.isSettledOpen(true, false, 1f, 0.5f));
+        assertFalse(AppDrawerController.isSettledOpen(true, true, 1f, 1f));
+        assertFalse(AppDrawerController.isSettledOpen(false, false, 0f, 1f));
+        assertFalse(AppDrawerController.isSettledOpen(true, false, 0f, 1f));
+    }
+
+    private static void layOut(FrameLayout root) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, WIDTH, HEIGHT);
+    }
+
+    @Test public void categoryCardsAreSizedForTheKeyboardDownCard() {
+        floating();
+        host.paneGapPx = 11f;
+        reveal(1f);
+
+        Frame shortened = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
+        float sized = controller.categoryMetricsHeightPx(shortened);
+
+        assertEquals(KEYBOARD_TOP - 11f, shortened.bottom, 1e-3f);
+        // The full card's height, not the shortened one: no card is squashed by the keyboard.
+        assertEquals(HEIGHT - 62f - 125f, sized, 1e-3f);
     }
 
     @Test public void keyboardDownLeavesThePlaneAsItWas() {

@@ -21,6 +21,8 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewTreeObserver;
 
+import androidx.annotation.Nullable;
+
 import com.termux.R;
 
 /**
@@ -292,6 +294,38 @@ public class RealtimeBlurView extends View {
         invalidate();
     }
 
+    /**
+     * Puts the scene behind the view into the state a capture should show, and back. Called on the
+     * UI thread around the one software draw of the decor a capture is, so a view whose backdrop
+     * animates (the app drawer's dim, its dock fading) can capture the settled scene from any
+     * frame: two captures taken at different moments then match.
+     */
+    public interface CaptureScene {
+        void beforeCapture();
+
+        void afterCapture();
+    }
+
+    @Nullable private CaptureScene mCaptureScene;
+    private boolean mKeepCaptureWhileHidden;
+
+    public void setCaptureScene(@Nullable CaptureScene scene) {
+        mCaptureScene = scene;
+    }
+
+    /**
+     * Keeps the capture across a hide and a show instead of taking a fresh one on the first frame
+     * back: for an owner that refreshes it itself once it is safe to spend the frame.
+     */
+    public void setKeepCaptureWhileHidden(boolean keep) {
+        mKeepCaptureWhileHidden = keep;
+    }
+
+    /** Whether a capture is held that a resting view may keep showing. */
+    public boolean hasCapture() {
+        return mHasCapture;
+    }
+
     /** Visible for tests: whether the pre-draw hook is currently skipping captures. */
     public boolean isUpdatesPaused() {
         return mUpdatesPaused;
@@ -307,7 +341,7 @@ public class RealtimeBlurView extends View {
     public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
         // Whatever was behind this view while it was hidden may have changed under it.
-        if (isVisible) mHasCapture = false;
+        if (isVisible && !mKeepCaptureWhileHidden) mHasCapture = false;
     }
 
     /** Scratch for the pre-draw hook, which runs on every frame of the window. */
@@ -347,12 +381,14 @@ public class RealtimeBlurView extends View {
                         1f * mBitmapToBlur.getHeight() / getHeight()
                     );
                     mBlurringCanvas.translate(-x, -y);
+                    if (mCaptureScene != null) mCaptureScene.beforeCapture();
                     if (decor.getBackground() != null) {
                         decor.getBackground().draw(mBlurringCanvas);
                     }
                     decor.draw(mBlurringCanvas);
                 } catch (StopException ignored) {
                 } finally {
+                    if (mCaptureScene != null) mCaptureScene.afterCapture();
                     mIsRendering = false;
                     RENDERING_COUNT--;
                     mBlurringCanvas.restoreToCount(rc);
