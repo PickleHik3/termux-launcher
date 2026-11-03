@@ -153,6 +153,36 @@ Not "Live glass": the page already has **Living glass** (`fancier_glass_motion_l
 would read as one. Key `live_blur`, default off, stored beside `fancier_glass`. One row covers the dock, floating windows and widgets. Its glyph is drawn in
 one family with Glass refraction's and Living glass's.
 
+## The backdrop service: every glass surface declares one kind (added 2026-11-03)
+
+The drawer investigation (handoff from the drawer session, 2026-11-03; script and numbers kept with
+this work) found the software blur behind most jank: `RealtimeBlurView`
+(`com/github/mmin18/widget/RealtimeBlurView.java:316-383`) redraws the whole decor into a bitmap in
+its pre-draw listener, about **13 ms a frame** while live and **30–36 ms** for a one-off capture.
+The drawer now freezes it during motion (a8148acc8: 28.6% → 12.4% janky). Live blur's recorder
+answers the same question for every surface, so all glass moves onto one service with three kinds:
+
+| Kind | Surfaces | Picture | Cost while moving |
+|---|---|---|---|
+| **Wallpaper** | status bar, window bar, the off-dock plank and A–Z host, the bars | the stored pre-blurred frame (`SharedFrameDrawable`) | none |
+| **Snapshot** | app drawer, command palette, terminal sheet, popup menus (`AnchoredMenu`) | `LiveBackdrop.recordBelow` drawn once into a GPU bitmap on open and on settle, frozen while moving | none; one GPU recording + blur per open, nothing on the UI thread but the recording |
+| **Live** | dock, floating windows, widgets, with Live blur on | `recordBelow`, re-blurred on frames where something beneath changed | explicit, budgeted, opt-in |
+
+Snapshot uses the recorder, not `PixelCopy`: the recording only ever holds what is beneath the
+panel (PixelCopy reads the composited screen and must run before the panel appears or it copies
+itself), reuses cached display lists, and blurs on the GPU. When no surface uses
+`RealtimeBlurView` any more it is deleted, with its RenderScript path (Android 8–12 fall back to the
+Wallpaper kind).
+
+Checked and dropped from the drawer session's list: `PaneGlassBackdropView` builds its
+`BitmapShader` only when its frame changes (`setGlass` ~273), Peek's reflection gradient is built
+when its still is captured, and the scene layers' per-frame recording is one `drawRect` for a
+shader that animates by design. None allocates per draw.
+
+**Measurement guard.** `scripts/perf-frametime.sh` scenarios for the drawer, palette, sheet and the
+Home ↔ Workspace swipe (plus `gfxbench.sh`'s phase split, which shows a capture as `trav` time with
+no layout), each with a frame budget, run before and after each move.
+
 ## Waves
 
 Each wave: worker in its own worktree, diff read here, before/after shots opened here, a staging
@@ -163,6 +193,7 @@ build on pong after the wave with the numbers below.
 | 0 | **Pong baseline.** `scripts/perf-baseline.sh memory frames` and `perf-frametime.sh` on `pong.txt`, plus a new scenario `pong-home-swipe-widgets.txt`: swipe across two Home pages with widgets and back, ×5. Current staging build. | numbers recorded in this file |
 | 1 | **Seam, no visible change.** `GlassEffects` out of `TermuxActivity` (the builder, the dock surface glass inputs, the lens/touch rebuild path, the nav strip's use); `GlassPicture` + `StoredPicture`, and `installAccessoryBackdropFrame` installs the picture it is given. Tests: the effect's program uniforms equal before and after for each dock style + nav strip; emulator shots of the four styles, keyboard up and down, before/after. | shots identical; pong numbers within noise of wave 0 |
 | 2 | **`LiveBackdrop` + switch + dock.** `recordBelow`, ¼-scale blur, `LivePicture`, pre-draw re-record, `LiveBlurPolicy` + fallback, budget test, the Live blur row; every dock style (Tray, Beads, Wall strip, Peek with its reflection), keyboard up and down, Docked and Floating. | the dock shows widgets/icons/terminal sliding under it, blurred; Live off pixel-identical to wave 1; rest frames unchanged; pong numbers Live off and on |
+| 2b | **Snapshot + Wallpaper kinds.** Palette and sheet measured first; drawer, palette, sheet, menus onto Snapshot; status bar, window bar, plank, A–Z host onto Wallpaper; `RealtimeBlurView` deleted; guard scenarios added. | each surface's janky % and p90 before/after on pong; no `trav` spikes during motion |
 | 3 | **Floating windows.** A float's glass slab (`PaneGlassBackdropView`, terminal pane) takes the live picture while Live blur is on; Home and Workspace; one float and several (each sees the lower ones). | a float over Home shows the widgets under it; pong numbers with a float over a printing terminal |
 | 3b | **Widgets.** Built-in widget slabs and widget panes take the live picture. | a widget shows icons/widgets beneath it; pong numbers |
 | 4 | **ADR 0021, docs, checks.** ADR; `performance.md` rule 3 narrowed and the Live budget row added; `docs/en/` line; owed items to `device-checks.md` / `developer-checks.md`. | merged |
