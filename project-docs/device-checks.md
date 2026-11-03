@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Battery & performance at the root (11-03, a38b183c3).** Settings root shows Battery &
+  performance in System above General; it opens the page in one-pane and two-pane (landscape)
+  Settings; General no longer lists it; search for "Glass refraction" lands on the page. Every
+  row wears its glyph, legible at 1.3× font in light and dark (pong or emulator).
+- **Dock glass after the GlassEffects move (11-03, 5559211a5).** Emulator was pixel-identical for
+  the four dock types, Docked; still owed: Floating style for the four types, and a held extra
+  key's lens on the dock still magnifies and fades (pong).
 - **Home key with Start in on the Terminal (11-02, 1d7506c51).** With two Home pages and Start in
   set to the Terminal page (then to a Display page), the extra keys' house key from the Terminal
   goes to Home 1, not the nearer Home 2; with Start in on Home 2 it goes to Home 2.
