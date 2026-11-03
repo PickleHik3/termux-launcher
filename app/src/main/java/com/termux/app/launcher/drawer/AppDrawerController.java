@@ -852,9 +852,59 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mLiveBlurRefreshedAtRest = false;
         } else if (!mLiveBlurRefreshedAtRest) {
             mLiveBlurRefreshedAtRest = true;
-            blur.refreshThenRest();
+            // Off the settle frame: the capture costs ~30 ms, and on a frame where nothing moves
+            // any more it is a frame nobody sees late.
+            FrameLayout host = mHostLayout;
+            if (host != null) {
+                host.removeCallbacks(mSettledRefresh);
+                host.postDelayed(mSettledRefresh, SETTLED_REFRESH_DELAY_MS);
+            } else {
+                refreshSettledBackdrop();
+            }
         }
     }
+
+    private static final long SETTLED_REFRESH_DELAY_MS = 160L;
+    private final Runnable mSettledRefresh = this::refreshSettledBackdrop;
+
+    /** The settled-open scene's one capture, if the plane is still resting open. */
+    @VisibleForTesting
+    void refreshSettledBackdrop() {
+        com.github.mmin18.widget.RealtimeBlurView blur = mLiveBlur;
+        if (blur == null || !mEngaged || !isSettledOpen(mOpen, mDragging, mProgress.target,
+                mProgress.value)) return;
+        blur.refreshThenRest();
+    }
+
+    /** True for the length of one capture's software draw; see {@link #mSettledScene}. */
+    private boolean mCapturingSettledScene;
+
+    /**
+     * Every capture shows the settled-open scene, whichever frame it is taken on: the dim at p = 1,
+     * the dock faded out, the keyboard where the reveal is going. The first capture of an open
+     * used to be taken at p ~ 0.03 — almost no dim, the dock still showing — and the settled one at
+     * p = 1, so the frost jumped from bright to dim just before the plane came to rest. The real
+     * frame is put back straight after; nothing of the swap reaches the screen.
+     */
+    private final com.github.mmin18.widget.RealtimeBlurView.CaptureScene mSettledScene =
+        new com.github.mmin18.widget.RealtimeBlurView.CaptureScene() {
+            private float mHeldReveal;
+
+            @Override public void beforeCapture() {
+                if (!mEngaged || mCapturingSettledScene) return;
+                mCapturingSettledScene = true;
+                mHeldReveal = mReveal.value;
+                mReveal.value = mReveal.target;
+                applyFrame(1f);
+            }
+
+            @Override public void afterCapture() {
+                if (!mCapturingSettledScene) return;
+                mReveal.value = mHeldReveal;
+                applyFrame(mProgress.value);
+                mCapturingSettledScene = false;
+            }
+        };
 
     @VisibleForTesting
     static boolean isSettledOpen(boolean open, boolean dragging, float target, float value) {
@@ -1036,6 +1086,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyFrame(mProgress.value);
     }
 
+    /**
+     * The finger started dragging a list while the search keyboard is up: the user is browsing,
+     * not searching, so the keyboard goes at once — the way the keyboard-away scroll ends, which
+     * the reveal animates back to the keyboard-down card. The query stays.
+     */
+    @VisibleForTesting
+    void onListDragHidesKeyboard() {
+        AppDrawerContentView content = mContent;
+        if (!mOpen || content == null) return;
+        if (mImePinTopPx > 0f) {
+            if (mSystemImeScrolledAway) return;
+            mSystemImeScrolledAway = true;
+            content.dismissSearchKeyboardByScroll();
+            mHost.dismissSearchSystemKeyboard();
+            return;
+        }
+        if (!hasRevealableKeyboard() || mReveal.target <= 0f) return;
+        finishKeyboardScrollAway();
+    }
+
     /** The scroll came to rest: a keyboard held part-way finishes going, or springs back up. */
     private void onKeyboardScrollIdle() {
         mKeyboardScrollPx = 0f;
@@ -1171,6 +1241,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
             @Override public void onListScrolledDown(int dy) { onKeyboardScrollStep(dy); }
             @Override public void onListScrollIdle() { onKeyboardScrollIdle(); }
+            @Override public void onListDragStarted() { onListDragHidesKeyboard(); }
         });
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
@@ -1523,6 +1594,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         float left = mViewLocation[0] - mHostLocation[0];
         float top = mViewLocation[1] - mHostLocation[1];
         return new Frame(left, top, left + view.getWidth(), top + view.getHeight());
+    }
+
+    /** {@link #frameOf} against the host's location now, not the one captured at the pull. */
+    @Nullable
+    private Frame liveFrameOf(@NonNull View view) {
+        FrameLayout host = mHostLayout;
+        if (host == null) return null;
+        host.getLocationOnScreen(mHostLocation);
+        return frameOf(view);
     }
 
     /** {@link #frameOf} less the view's own vertical translation. */
@@ -1895,7 +1975,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // applyLiveBlurRest takes one more once the plane settles. Never live while it moves.
         if (mLiveBlur != null) {
             mLiveBlurRefreshedAtRest = false;
-            mLiveBlur.refreshThenRest();
+            mLiveBlur.setCaptureScene(mSettledScene);
+            // The last open's settled capture is the scene this open settles into, give or take
+            // what the terminal printed since: it is kept across the close and reused, and the
+            // settle refreshes it. Only an open with nothing held pays a capture on its first frame.
+            mLiveBlur.setKeepCaptureWhileHidden(true);
+            if (mLiveBlur.hasCapture()) {
+                mLiveBlur.setUpdatesPaused(true);
+            } else {
+                mLiveBlur.refreshThenRest();
+            }
         }
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
@@ -1918,7 +2007,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame openRect = mOpenRect;
         if (plane == null || mHostLayout == null || dockRect == null || openRect == null) return;
         float p = AppDrawerTransitionGeometry.clamp01(progress);
-        if (mRaisedKeyboardDockRect != null && p >= 1f) {
+        // Never from the settled-scene capture's p = 1: adopting the seed there would move the
+        // plane of the frame actually shown.
+        if (mRaisedKeyboardDockRect != null && p >= 1f && !mCapturingSettledScene) {
             adoptRaisedKeyboardDockRect(p);
             dockRect = mDockRect;
         }
@@ -2086,8 +2177,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (mScrim == null) mScrim = new AppDrawerScrimDrawable();
         if (host.getBackground() != mScrim) host.setBackground(mScrim);
         mScrim.setColor(com.termux.app.GlassBackdropTint.colorFor(p));
-        float dy = mKeyboardView == null ? 0f : mKeyboardView.getTranslationY();
-        mScrimHoleScratch.set(card.left, card.top + dy, card.right, card.bottom + dy);
+        // Where the card stands now, every translation above it included; the resting rect plus
+        // the band's translation only when it cannot be read (not attached).
+        View cardView = mKeyboardCardView;
+        Frame live = cardView != null && cardView.isAttachedToWindow() && isBandVisible(cardView)
+            ? liveFrameOf(cardView) : null;
+        if (live != null) {
+            mScrimHoleScratch.set(live.left, live.top, live.right, live.bottom);
+        } else {
+            float dy = mKeyboardView == null ? 0f : mKeyboardView.getTranslationY();
+            mScrimHoleScratch.set(card.left, card.top + dy, card.right, card.bottom + dy);
+        }
         mScrim.setHole(mScrimHoleScratch, mHost.inAppKeyboardCardRadiusPx());
     }
 

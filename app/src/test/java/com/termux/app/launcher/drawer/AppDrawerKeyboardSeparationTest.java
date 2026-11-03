@@ -177,9 +177,13 @@ public class AppDrawerKeyboardSeparationTest {
             assertTrue("open p=" + p, blur.isUpdatesPaused());
         }
 
-        // Settled open: exactly one fresh capture, then rest.
+        // Settled open: exactly one fresh capture, then rest — not on the settle frame itself but
+        // a moment later, from the posted refresh.
+        ReflectionHelpers.setField(controller, "mEngaged", true);
         ReflectionHelpers.setField(progress, "value", 1f);
         controller.applyLiveBlurRest();
+        assertTrue(blur.isUpdatesPaused());
+        controller.refreshSettledBackdrop();
         assertFalse(blur.isUpdatesPaused());
         blur.setUpdatesPaused(true);
         controller.applyLiveBlurRest();
@@ -249,6 +253,75 @@ public class AppDrawerKeyboardSeparationTest {
         assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, true, true));
         assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, false, false));
         assertTrue(AppDrawerController.scrimRunsAroundKeyboard(true, 0.2f, false, true));
+    }
+
+    /**
+     * The brightness jump before settle: the first capture was of the p ~ 0.03 scene, the settled
+     * one of p = 1. Every capture is now taken of the settled scene, and the shown frame is put back.
+     */
+    @Test public void everyCaptureIsOfTheSettledSceneAndTheFrameIsPutBack() {
+        floating();
+        reveal(0f);
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        ReflectionHelpers.setField(spring, "target", 1f);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(progress, "value", 0.03f);
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        applyFrame(0.03f);
+        Frame shown = plane.getFrame();
+        float shownAlpha = root.getAlpha();
+
+        com.github.mmin18.widget.RealtimeBlurView.CaptureScene scene =
+            ReflectionHelpers.getField(controller, "mSettledScene");
+        scene.beforeCapture();
+        // What the capture sees: the full dim, the host at full opacity, the plane fully open.
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(1f),
+            ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
+        assertEquals(1f, root.getAlpha(), 0f);
+        scene.afterCapture();
+
+        assertEquals(shown, plane.getFrame());
+        assertEquals(shownAlpha, root.getAlpha(), 0f);
+        assertEquals(0f, (float) ReflectionHelpers.getField(spring, "value"), 0f);
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(0.03f),
+            ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
+    }
+
+    @Test public void draggingTheListSendsTheBuiltInKeyboardAwayAndKeepsTheQuery() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        reveal(1f);
+        assertEquals(1f, content.getRevealFraction(), 0f);
+
+        controller.onListDragHidesKeyboard();
+
+        // The reveal heads back to the keyboard-down card; the spring animates it there.
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(0f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+        assertEquals(0f, content.getRevealFraction(), 0f);
+        // The search request (and with it any query) is left as it was.
+        assertTrue((boolean) ReflectionHelpers.getField(content, "mSearchRevealRequested"));
+    }
+
+    @Test public void aDragWithTheKeyboardDownOrTheDrawerClosedDoesNothing() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        reveal(0f);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        controller.onListDragHidesKeyboard();
+        assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
+
+        reveal(1f);
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        controller.onListDragHidesKeyboard();
+        assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
     }
 
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
