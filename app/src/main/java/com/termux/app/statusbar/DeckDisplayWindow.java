@@ -28,7 +28,7 @@ public final class DeckDisplayWindow {
     private static final int ALONG_PADDING_DP = 8;
     private static final int ACROSS_INSET_DP = 2;
     /** Tag key for the padding the window added, so it is added once and taken back exactly. */
-    private static final int TAG_ADDED = R.id.terminal_status_dot_cpu_ram;
+    private static final int TAG_ADDED = R.id.deck_display_window_padding;
 
     private DeckDisplayWindow() {}
 
