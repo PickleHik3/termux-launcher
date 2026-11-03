@@ -52,9 +52,11 @@ public final class GlassEffects {
 
         float keyLensIntensity();
 
-        /** The held key's lens {centreX, centreY, halfX, halfY, radius} in backdrop coordinates. */
-        @NonNull
-        float[] keyLens();
+        /**
+         * Fills {@code out} with the held key's lens {centreX, centreY, halfX, halfY, radius} in
+         * backdrop coordinates. Filled, not returned: the lens rebuilds the effect every frame.
+         */
+        void keyLens(@NonNull float[] out);
     }
 
     @NonNull private final Host mHost;
@@ -63,6 +65,7 @@ public final class GlassEffects {
 
     private boolean mParamsValid = false;
     private float mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx;
+    @NonNull private final float[] mLens = new float[5];
 
     public GlassEffects(@NonNull Host host) {
         mHost = host;
@@ -170,8 +173,9 @@ public final class GlassEffects {
             }
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
             if (!navStrip && mHost.keyLensActive() && mHost.keyLensIntensity() > 0f) {
-                float[] lens = mHost.keyLens();
-                program.setLens(lens[0], lens[1], lens[2], lens[3], lens[4], mHost.keyLensIntensity());
+                mHost.keyLens(mLens);
+                program.setLens(mLens[0], mLens[1], mLens[2], mLens[3], mLens[4],
+                    mHost.keyLensIntensity());
                 // A held key's lens owns the dock's glass: an icon's touch light yields to it.
                 program.clearTouch();
             } else {

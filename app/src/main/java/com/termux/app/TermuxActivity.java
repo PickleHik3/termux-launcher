@@ -4970,8 +4970,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public float keyLensIntensity() {
                 return mKeyLensIntensity;
             }
-            @NonNull @Override public float[] keyLens() {
-                return new float[] {mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius};
+            @Override public void keyLens(@NonNull float[] out) {
+                out[0] = mKeyLensCx;
+                out[1] = mKeyLensCy;
+                out[2] = mKeyLensHx;
+                out[3] = mKeyLensHy;
+                out[4] = mKeyLensRadius;
             }
         });
 

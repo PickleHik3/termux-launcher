@@ -41,7 +41,7 @@ public class GlassEffectsTest {
         }
         @Override public boolean keyLensActive() { return false; }
         @Override public float keyLensIntensity() { return 0f; }
-        @NonNull @Override public float[] keyLens() { return new float[5]; }
+        @Override public void keyLens(@NonNull float[] out) { }
     }
 
     @Test
