@@ -355,4 +355,89 @@ public class GlassStackTest {
         assertNotEquals(keyboardSpec(null).withTintStrength(60), keyboardSpec(null));
         assertEquals("the plain spec mixes in no accent", 0, dockSpec(null).tintStrengthPercent);
     }
+
+    /** The docked keyboard's spec as TermuxActivity#inAppKeyboardGlassSpec builds it: a slice of the frame. */
+    private GlassStack.Spec dockedKeyboardSpec() {
+        return GlassStack.keyboard(preferences, 0.55f, 0f, FANCIER)
+            .withBlur(19)
+            .withStackAlpha(70)
+            .withRim(true)
+            .withSlice(0.8f, false)
+            .withSeams(ChromeEdgeRule.ALL & ~ChromeEdgeRule.TOP)
+            .withTintColor(0x80112233)
+            .withBand(GlassBackdropCache.Band.KEYBOARD);
+    }
+
+    @Test
+    public void theStripUnderThePillIsTheKeyboardsSpecApartFromItsSlice() {
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, 40);
+        GlassStack.Spec keyboard = dockedKeyboardSpec();
+        GlassStack.Spec strip = keyboard.continuedBelow();
+
+        // The rest of the same light model: it starts where the keyboard's slice ends.
+        assertEquals(0f, keyboard.sliceStart, 0f);
+        assertEquals(keyboard.sliceEnd, strip.sliceStart, 0f);
+        assertEquals(1f, strip.sliceEnd, 0f);
+        assertEquals(keyboard.foot, strip.foot);
+        // Every value of the material is the keyboard's.
+        assertEquals(keyboard.blurRadiusDp, strip.blurRadiusDp);
+        assertEquals(keyboard.tintAlpha, strip.tintAlpha, 0f);
+        assertEquals(keyboard.grainPercent, strip.grainPercent);
+        assertEquals(keyboard.look, strip.look);
+        assertEquals(keyboard.stackAlphaPercent, strip.stackAlphaPercent);
+        assertEquals(keyboard.tintColor, strip.tintColor);
+        assertEquals(keyboard.band, strip.band);
+        assertEquals(keyboard.tintStrengthPercent, strip.tintStrengthPercent);
+        // A strip has no edge of its own: no rim, every edge a seam, square.
+        assertFalse(strip.rim);
+        assertEquals(ChromeEdgeRule.ALL, strip.seams);
+        assertEquals(0f, strip.cornerRadiusPx, 0f);
+        // The slice is the only part of the material that differs: the keyboard with its edges
+        // dressed as the strip's differs from the strip by the slice alone.
+        GlassStack.Spec keyboardAsStrip = keyboard.withRim(false).withSeams(ChromeEdgeRule.ALL);
+        assertNotEquals(keyboardAsStrip, strip);
+        assertEquals(keyboardAsStrip.continuedBelow(), strip);
+    }
+
+    @Test
+    public void theStripsTintIsTheKeyboardsLayersUnderTheSameStackAlpha() {
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, 40);
+        GlassStack.Spec keyboard = dockedKeyboardSpec();
+        LayerDrawable over = (LayerDrawable) GlassStack.build(glass, keyboard, 2f, null);
+        Drawable stripTint = GlassStack.buildContinuation(glass, keyboard.continuedBelow());
+        LayerDrawable under = (LayerDrawable) stripTint;
+        // The scheme colour, faded by the one stack alpha on both; the strip lays no rim.
+        assertEquals(((android.graphics.drawable.ColorDrawable) over.getDrawable(0)).getColor(),
+            ((android.graphics.drawable.ColorDrawable) under.getDrawable(0)).getColor());
+        assertEquals(1, rimsIn(over));
+        assertEquals(0, rimsIn(stripTint));
+    }
+
+    @Test
+    public void theStripsGlassTintContinuesTheKeyboardsLightModelWhereItStops() {
+        GlassStack.Spec keyboard = dockedKeyboardSpec().withTintColor(null);
+        LayerDrawable over = (LayerDrawable) GlassStack.build(glass, keyboard, 2f, null);
+        LayerDrawable under = (LayerDrawable) GlassStack.buildContinuation(glass,
+            keyboard.continuedBelow());
+        int[] above = ((GradientDrawable) over.getDrawable(1)).getColors();
+        int[] below = ((GradientDrawable) under.getDrawable(1)).getColors();
+        // One light model: the strip's first row is the colour the keyboard's last row ends on,
+        // over the same base.
+        assertEquals(above[above.length - 1], below[0]);
+        assertEquals(((GradientDrawable) over.getDrawable(0)).getColor().getDefaultColor(),
+            ((GradientDrawable) under.getDrawable(0)).getColor().getDefaultColor());
+        assertEquals(0, rimsIn(under));
+    }
+
+    @Test
+    public void theStripsFrostIsTheFrostAtTheSpecsOpacityWithTheMatrixAbove() {
+        GlassStack.Spec strip = dockedKeyboardSpec().continuedBelow();
+        assertSame(GlassFilters.frost(Math.round(strip.tintAlpha * 100f)),
+            GlassStack.frostFilter(strip, null));
+        android.graphics.ColorMatrix evenOut = new android.graphics.ColorMatrix();
+        evenOut.setScale(1.1f, 1.1f, 1.1f, 1f);
+        assertSame(GlassFilters.withEvenOut(evenOut,
+                GlassFilters.frost(Math.round(strip.tintAlpha * 100f))),
+            GlassStack.frostFilter(strip, evenOut));
+    }
 }
