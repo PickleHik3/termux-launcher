@@ -165,8 +165,15 @@ answers the same question for every surface, so all glass moves onto one service
 | Kind | Surfaces | Picture | Cost while moving |
 |---|---|---|---|
 | **Wallpaper** | status bar, window bar, the off-dock plank and A–Z host, the bars | the stored pre-blurred frame (`SharedFrameDrawable`) | none |
-| **Snapshot** | app drawer, command palette, terminal sheet, popup menus (`AnchoredMenu`) | `LiveBackdrop.recordBelow` drawn once into a GPU bitmap on open and on settle, frozen while moving | none; one GPU recording + blur per open, nothing on the UI thread but the recording |
+| **Snapshot**, or **Live** while Live blur is on | app drawer, command palette, terminal sheet, popup menus (`AnchoredMenu`) | `LiveBackdrop.recordBelow`: with Live blur off, drawn once into a GPU bitmap on open and on settle and frozen while moving; with it on, refreshed like any Live surface | off: none while moving, one GPU recording + blur per open; on: a GPU re-blur on frames where something beneath changed |
 | **Live** | dock, floating windows, widgets, with Live blur on | `recordBelow`, re-blurred on frames where something beneath changed | explicit, budgeted, opt-in |
+
+Panels follow the switch (developer, 2026-11-03): Snapshot and Live are the same recorded picture
+(glass on glass either way: a palette over Home shows the widgets' glass beneath it); the switch
+only decides whether it refreshes while open. The command palette's sheet also takes its glass base
+from the in-app keyboard's palette (`TermuxInAppKeyboard.createPalette` ~1630: theme, Look glass,
+the page's keyboard look, deck look) instead of `resolveDockGlassBaseColor`
+(`CommandPaletteView.refreshPalette` ~508), so the sheet and the keyboard under it always match.
 
 Snapshot uses the recorder, not `PixelCopy`: the recording only ever holds what is beneath the
 panel (PixelCopy reads the composited screen and must run before the panel appears or it copies
@@ -193,7 +200,7 @@ build on pong after the wave with the numbers below.
 | 0 | **Pong baseline.** `scripts/perf-baseline.sh memory frames` and `perf-frametime.sh` on `pong.txt`, plus a new scenario `pong-home-swipe-widgets.txt`: swipe across two Home pages with widgets and back, ×5. Current staging build. | numbers recorded in this file |
 | 1 | **Seam, no visible change.** `GlassEffects` out of `TermuxActivity` (the builder, the dock surface glass inputs, the lens/touch rebuild path, the nav strip's use); `GlassPicture` + `StoredPicture`, and `installAccessoryBackdropFrame` installs the picture it is given. Tests: the effect's program uniforms equal before and after for each dock style + nav strip; emulator shots of the four styles, keyboard up and down, before/after. | shots identical; pong numbers within noise of wave 0 |
 | 2 | **`LiveBackdrop` + switch + dock.** `recordBelow`, ¼-scale blur, `LivePicture`, pre-draw re-record, `LiveBlurPolicy` + fallback, budget test, the Live blur row; every dock style (Tray, Beads, Wall strip, Peek with its reflection), keyboard up and down, Docked and Floating. | the dock shows widgets/icons/terminal sliding under it, blurred; Live off pixel-identical to wave 1; rest frames unchanged; pong numbers Live off and on |
-| 2b | **Snapshot + Wallpaper kinds.** Palette and sheet measured first; drawer, palette, sheet, menus onto Snapshot; status bar, window bar, plank, A–Z host onto Wallpaper; `RealtimeBlurView` deleted; guard scenarios added. | each surface's janky % and p90 before/after on pong; no `trav` spikes during motion |
+| 2b | **Snapshot + Wallpaper kinds.** Palette and sheet measured first; drawer, palette, sheet, menus onto Snapshot (Live while Live blur is on); the palette sheet's base from the keyboard's palette; status bar, window bar, plank, A–Z host onto Wallpaper; `RealtimeBlurView` deleted; guard scenarios added. | each surface's janky % and p90 before/after on pong; no `trav` spikes during motion |
 | 3 | **Floating windows.** A float's glass slab (`PaneGlassBackdropView`, terminal pane) takes the live picture while Live blur is on; Home and Workspace; one float and several (each sees the lower ones). | a float over Home shows the widgets under it; pong numbers with a float over a printing terminal |
 | 3b | **Widgets.** Built-in widget slabs and widget panes take the live picture. | a widget shows icons/widgets beneath it; pong numbers |
 | 4 | **ADR 0021, docs, checks.** ADR; `performance.md` rule 3 narrowed and the Live budget row added; `docs/en/` line; owed items to `device-checks.md` / `developer-checks.md`. | merged |
