@@ -20,6 +20,9 @@ second part is its own spec; this one only builds the live backdrop and the seam
 2. An opt-in switch, off by default. The stored frame stays the default and the fallback.
 3. Live blur first, the glass shape after it.
 4. No per-style copy of the live path: if the dock styles need one each, fix the architecture first.
+5. Glass on glass: floating terminal windows (now possible on Home) see through to what is behind
+   them, widgets and their glass included. One switch covers the dock, widgets and floats; a float
+   costs only while one is on screen. Order: dock, then floats, then widgets.
 
 ## This goes against a written rule
 
@@ -91,25 +94,30 @@ Rejected: moving the dock onto the paint route. Its blur and frost colour filter
 pixels (`updateAccessoryRenderEffectBackdrop` ~10210), and a `BitmapShader` would change both: a
 visible change for no gain, since live mode needs the effect route anyway.
 
-### `LiveBackdrop`
+### `LiveBackdrop`: each glass sees what is drawn beneath it (revised 2026-11-03)
 
-- **What it records.** The launcher-drawn wallpaper (`WallpaperBackdropView`, `activity_termux.xml`
-  ~30, in the same view tree as the dock and the wall) and the wall's page content, **excluding glass
-  surfaces and what they carry**. While the backdrop records, glass hosts draw nothing
-  (`LiveBackdrop.isRecording()`), so no glass sees itself or recurses.
-- **How.** One `RenderNode` per frame of change for the whole wall area (recording reuses the child
-  views' display lists, so it does not repaint them). Each live surface's backdrop view draws that node
-  through a `LivePicture`, offset by its aim, and its `GlassEffects` effect (blur chained into
-  the program) runs over it. Blur and bend run on the RenderThread on
-  the GPU.
-- **When.** Re-recorded only when something under the glass changed: a wall slide, a parallax
-  offset, an invalidation of a view under a live surface, a wallpaper change. At rest it records
-  nothing and the surfaces redraw nothing.
-- **Resolution.** The blur draws into a node scaled by ¼ (like the stored frame), then is scaled
-  back up, which cuts both the GPU layer memory and the blur cost by about 16×. Radius is divided
-  by the same scale.
-- **What does not show through in wave 2.** Glass under glass (one widget seen through another), the
-  terminal pane's own glass, X11 display. Each is a later question, not this build.
+- **The rule.** A live surface's picture is everything drawn *beneath* it, in the order Android
+  draws (z-order, elevation included), and never itself or anything above it. Nothing can record
+  itself, so no glass needs hiding, and **glass on glass** falls out: a floating terminal over Home
+  shows the widgets (their glass included), icons and wallpaper under it; the dock shows the floating
+  window, the page and the wallpaper. (The earlier draft recorded the whole wall with glass hidden;
+  that fails because recording reuses each view's cached display list, so a "hide while recording"
+  flag never reaches it.)
+- **How.** `LiveBackdrop.recordBelow(surface)` walks from the surface up to
+  `terminal_root_container`; at each level it draws the siblings that draw before it, with their
+  transforms, into one `RenderNode`, and the launcher-drawn wallpaper (`WallpaperBackdropView`)
+  at the bottom. Recording reuses each sibling's cached display list (it does not repaint them);
+  containers on the path expose an ordered "draw my children below this one" (`PaneWallLayout`, the
+  pane host and `BottomInsetFrameLayout` are ours; `terminal_content_column` needs a small subclass).
+- **Blur.** The recording is drawn into a ¼-scale node carrying `RenderEffect.createBlurEffect`
+  (radius ÷ 4), then scaled back up by the surface's `LivePicture`; the surface's `GlassEffects`
+  effect (refraction, frost) runs over that as it does over the stored frame.
+- **When.** Re-recorded in the pre-draw of a frame that is already being drawn because something
+  invalidated; recording never invalidates, so it never schedules a frame. At rest nothing draws,
+  nothing records, nothing blurs. A frame where something under the glass changed (a slide, a
+  terminal printing, the clock widget's seconds hand) re-blurs the surfaces above it: that is the
+  cost of the mode, measured on pong.
+- **Floating windows** use it only while one is on screen, so they cost nothing otherwise.
 
 ### When Live is used
 
@@ -142,7 +150,7 @@ Glass refraction on). The page moves from General to the root's System section i
 - **Live blur** — "Glass blurs whatever moves behind it. Uses more battery."
 
 Not "Live glass": the page already has **Living glass** (`fancier_glass_motion_light`), and the two
-would read as one. Key `live_blur`, default off, stored beside `fancier_glass`. Its glyph is drawn in
+would read as one. Key `live_blur`, default off, stored beside `fancier_glass`. One row covers the dock, floating windows and widgets. Its glyph is drawn in
 one family with Glass refraction's and Living glass's.
 
 ## Waves
@@ -154,8 +162,9 @@ build on pong after the wave with the numbers below.
 |---|---|---|
 | 0 | **Pong baseline.** `scripts/perf-baseline.sh memory frames` and `perf-frametime.sh` on `pong.txt`, plus a new scenario `pong-home-swipe-widgets.txt`: swipe across two Home pages with widgets and back, ×5. Current staging build. | numbers recorded in this file |
 | 1 | **Seam, no visible change.** `GlassEffects` out of `TermuxActivity` (the builder, the dock surface glass inputs, the lens/touch rebuild path, the nav strip's use); `GlassPicture` + `StoredPicture`, and `installAccessoryBackdropFrame` installs the picture it is given. Tests: the effect's program uniforms equal before and after for each dock style + nav strip; emulator shots of the four styles, keyboard up and down, before/after. | shots identical; pong numbers within noise of wave 0 |
-| 2 | **`LiveBackdrop` + switch, widgets.** Recording, exclusion of glass hosts, ¼-scale blur, invalidation on change, policy + fallback, budget test, the switch row. | swipe shows the next page's widgets/icons blurred through the glass; rest frames unchanged (0.17 fps); memory and swipe numbers measured with Live on and off |
-| 3 | **Dock styles on Live.** Tray, Beads, Wall strip, Peek (with its reflection), keyboard up and down, Docked and Floating. | each style shot with Live on over moving content; pong numbers |
+| 2 | **`LiveBackdrop` + switch + dock.** `recordBelow`, ¼-scale blur, `LivePicture`, pre-draw re-record, `LiveBlurPolicy` + fallback, budget test, the Live blur row; every dock style (Tray, Beads, Wall strip, Peek with its reflection), keyboard up and down, Docked and Floating. | the dock shows widgets/icons/terminal sliding under it, blurred; Live off pixel-identical to wave 1; rest frames unchanged; pong numbers Live off and on |
+| 3 | **Floating windows.** A float's glass slab (`PaneGlassBackdropView`, terminal pane) takes the live picture while Live blur is on; Home and Workspace; one float and several (each sees the lower ones). | a float over Home shows the widgets under it; pong numbers with a float over a printing terminal |
+| 3b | **Widgets.** Built-in widget slabs and widget panes take the live picture. | a widget shows icons/widgets beneath it; pong numbers |
 | 4 | **ADR 0021, docs, checks.** ADR; `performance.md` rule 3 narrowed and the Live budget row added; `docs/en/` line; owed items to `device-checks.md` / `developer-checks.md`. | merged |
 
 ## Wave 0: pong baseline (2026-11-03 09:05Z)
