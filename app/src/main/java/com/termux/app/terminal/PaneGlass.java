@@ -144,17 +144,31 @@ public final class PaneGlass {
         // gradient rim here as well would put two borders on a lone pane.
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
-        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
-        // what that tint covers.
-        com.termux.app.chrome.GlassRefraction.Look refraction = style.paneGlassRefraction();
-        backdrop.setRefraction(refraction == null ? null
-            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
+        applyEdgeLight(style, frame, backdrop);
         backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
         // The slab answers for this pane now; the bare frame's answer would count it twice.
         if (terminalPane && style != null) style.paneGlassForget(frame);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /**
+     * The slab's refraction, and with it the gathered light along its edge, for {@code frame}: the
+     * style's while the edge shows, none while a terminal effect's bezel stands over it. Under the
+     * bezel the bend is hidden anyway, and the light along the outline leaks past the bezel's
+     * anti-aliased edge as a thin bright ring round the solid frame. The frost and tint inside the
+     * screen are drawn either way. Called by {@link #apply} and again when the effect comes or goes.
+     */
+    public static void applyEdgeLight(@NonNull PaneSurfaceStyle style, @NonNull View frame,
+                                      @NonNull PaneGlassBackdropView backdrop) {
+        boolean bezel = frame instanceof PaneContentFrame && ((PaneContentFrame) frame).bezelWorn();
+        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
+        // what that tint covers.
+        com.termux.app.chrome.GlassRefraction.Look refraction =
+            bezel ? null : style.paneGlassRefraction();
+        backdrop.setRefraction(refraction == null ? null
+            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
     }
 
     /** Scratch for {@link #measureBarePane}; main thread only, as every dress pass is. */

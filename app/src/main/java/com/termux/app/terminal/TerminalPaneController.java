@@ -712,7 +712,14 @@ public class TerminalPaneController {
     public void setRetroEffectPreference(@Nullable String id) {
         mRetroEffectId = id;
         PaneRetroStyle style = PaneRetroStyle.fromId(id);
-        for (PaneContentFrame frame : mPaneFrames.values()) frame.setRetroStyle(style);
+        for (PaneContentFrame frame : mPaneFrames.values()) {
+            frame.setRetroStyle(style);
+            // The slab's edge light goes under the bezel and comes back without it.
+            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE
+                    && PaneGlass.isActive(mSurfaceStyle))
+                PaneGlass.applyEdgeLight(mSurfaceStyle, frame, backdrop);
+        }
     }
 
     /**
