@@ -255,6 +255,27 @@ above it), so Live on looks the same as off (the calibrated blur matches the sto
 panels (2b). Owed: the emulator's Floating dock over moving terminal content (the content column can
 reach under the stack, `applyContentBottomMargin`).
 
+## Wave 3 on pong (2026-11-03 ~11:55Z)
+
+Staging `+dev.05dbf9eac` (v2-redesign a03fbe651 + feat/live-blur-floats), charging, 28–45%. A Home
+float opened from the Home actions sheet (Terminal) over the clock, weather and calendar widgets.
+
+**Seen:** with Live on the float shows the weather widget's "32°" and sun, the calendar grid and the
+Messages widget's WhatsApp badge, blurred and bent, under its sharp text; Live off shows wallpaper
+only. Glass on glass works.
+
+| What (float open on Home 1) | Live off | Live on |
+|---|---|---|
+| Home swipe without a float (Home 1 ↔ 2), janky | 2.8% / 2.8% | — |
+| Float swipe ×5 (Home 1 ↔ 2 on the top air), janky | 3.8% / 3.8% | 4.1% / 4.8% |
+| same, p50 / p90 / p99 | 16–19 / 24–25 / 48–53 ms | 21 / 29–30 / 53 ms |
+| At rest 30 s (the clock widget's seconds hand under the float) | 39 frames, p50 19 ms | 32 frames, p50 28 ms |
+| PSS mean | 230.3 MB | 236.4 MB |
+
+Inside the gates (janky +0.3 to +1.0 point, memory within noise), but the cost is visible: with a
+float over moving content every such frame re-blurs the float, about +3–5 ms at p50/p90 on a swipe
+and about +9 ms on each seconds-hand frame at rest. Opt-in, and only while a float is on screen.
+
 ## Gates on pong (90 Hz, 11.1 ms budget)
 
 Live **off** must equal wave 0 within noise on every row. Live **on**, against wave 0:
