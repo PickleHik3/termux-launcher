@@ -129,6 +129,41 @@ public final class LensBeadGeometry {
     }
 
     /**
+     * {@link #rowWearsBeads} for Lens beads themselves, which may cut the joined Docked frame
+     * (2026-11-03): where the dock's sheet stands down on the frame ({@code sheetStandsDownOnFrame})
+     * the frame leaves the apps row's band out of its glass and the row wears its own beads
+     * there, as it does under Floating, while every other band keeps the frame's glass. Under the
+     * frame the row may share the plank with the A–Z row standing under it (nearer the screen's
+     * edge), whose glass is the frame's; any other band, or the A–Z row over the icons, keeps the
+     * slab. Without the frame this is {@link #rowWearsBeads}, unchanged. The Peek card keeps
+     * asking {@link #rowWearsBeads}: it never cuts the frame.
+     */
+    public static boolean rowWearsBeadsCuttingFrame(
+            @NonNull com.termux.app.place.PlaceLayout layout, boolean sheetStandsDownOnFrame,
+            boolean keyboardSharesGlass) {
+        if (!sheetStandsDownOnFrame) return rowWearsBeads(layout, false, keyboardSharesGlass);
+        if (keyboardSharesGlass
+            || !com.termux.app.place.PlaceChromePolicy.appsShown(layout)
+            || com.termux.app.place.PlaceChromePolicy.appsRailShown(layout)
+            || com.termux.app.place.PlaceChromePolicy.appsEdge(layout)
+                != com.termux.app.place.PlaceLayout.Edge.BOTTOM) return false;
+        java.util.List<com.termux.app.place.Element> bands =
+            com.termux.app.terminal.AccessoryStackLayoutPolicy.plankBands(
+                com.termux.app.place.EdgeStackPolicy.stack(layout,
+                    com.termux.app.place.PlaceLayout.Edge.BOTTOM));
+        int apps = bands.indexOf(com.termux.app.place.Element.APPS);
+        if (apps < 0) return false;
+        for (int i = 0; i < bands.size(); i++) {
+            com.termux.app.place.Element band = bands.get(i);
+            if (band == com.termux.app.place.Element.APPS) continue;
+            // Outermost first: an index under the row's is a band nearer the screen's edge.
+            if (band == com.termux.app.place.Element.AZ && i < apps) continue;
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * One row of beads, in the coordinates of the surface they were computed for, and the Search
      * field's capsule under them where the dock carries the field ({@link #hasCapsule}).
      */

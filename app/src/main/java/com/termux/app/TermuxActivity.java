@@ -3630,6 +3630,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return !stackDressedApart() && frameStandsDown();
     }
 
+    /**
+     * Whether the apps row wears Lens beads on the joined frame, which then leaves the row's band
+     * out of its glass ({@link #syncFrameBeadCut}): the beads resolved
+     * ({@link #resolveDockBeads}, from the row's geometry and the frame's answer alone, no glass
+     * read) while the stack stands down on the frame.
+     */
+    private boolean dockBeadsCutFrame() {
+        return mDockBeads != null && stackStandsDownOnFrame();
+    }
+
+    /**
+     * {@link #stackStandsDownOnFrame} for the dock's own sheet: it stands down on the frame, but
+     * returns for the apps row's beads where they cut the frame ({@link #dockBeadsCutFrame}); the
+     * host clips that sheet to the beads, so every other band keeps the frame's glass. The
+     * keyboard's sheet and the gesture strip keep asking {@link #stackStandsDownOnFrame}.
+     */
+    private boolean dockSheetStandsDownOnFrame() {
+        return mDockBeads == null && stackStandsDownOnFrame();
+    }
+
     /** Whether the sheets were last dressed standing down; see {@link #syncFrameStandDown}. */
     private boolean mFrameSheetsStoodDown;
 
@@ -3708,6 +3728,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
             syncFrameStandDown();
+            syncFrameBeadCut();
             return;
         }
         mFrameGutterKey = key;
@@ -3723,13 +3744,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
             .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
-        mFrameGutterDrawable =
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
+        // Wrapped so the apps row's band can be left out where it wears Lens beads; with no band
+        // it draws the sheet whole (FrameBandCutDrawable).
+        mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(
+            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop));
         body.setBackground(mFrameGutterDrawable);
         growFrameGlassUnderSystemBars(body);
         body.setVisibility(View.VISIBLE);
         mFrameGutterShown = true;
         syncFrameStandDown();
+        syncFrameBeadCut();
+    }
+
+    /**
+     * Leaves the apps row's band out of the joined frame's glass while the row wears Lens beads
+     * on it ({@link #dockBeadsCutFrame}), and puts it back otherwise: the band spans the frame's
+     * width and reaches over the row and its beads (and the Search field's capsule under them),
+     * so the frame continues above and under it (the A–Z row, the gesture strip's foot) and the
+     * beads stand on the wallpaper as they do under Floating.
+     */
+    private void syncFrameBeadCut() {
+        if (!(mFrameGutterDrawable instanceof com.termux.app.dock.FrameBandCutDrawable)) return;
+        com.termux.app.dock.FrameBandCutDrawable frame =
+            (com.termux.app.dock.FrameBandCutDrawable) mFrameGutterDrawable;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mDockBeads;
+        View body = findViewById(R.id.docked_frame_glass);
+        View host = findViewById(R.id.accessory_surface_host);
+        SuggestionBarView row = mSuggestionBarView;
+        if (beads == null || body == null || host == null || row == null || !mFrameGutterShown
+            || body.getWidth() <= 0 || !dockBeadsCutFrame()) {
+            frame.setCut(null);
+            return;
+        }
+        int[] at = new int[2];
+        body.getLocationOnScreen(at);
+        float bodyY = at[1];
+        host.getLocationOnScreen(at);
+        float hostY = at[1];
+        row.getLocationOnScreen(at);
+        float top = Math.min(at[1], hostY + beads.centerY - beads.radiusPx);
+        float bottom = Math.max(at[1] + row.getHeight(), hostY + beads.centerY + beads.radiusPx);
+        if (beads.hasCapsule()) {
+            top = Math.min(top, hostY + beads.capsuleTop);
+            bottom = Math.max(bottom, hostY + beads.capsuleBottom);
+        }
+        frame.setCut(new RectF(0f, top - bodyY, body.getWidth(), bottom - bodyY));
     }
 
     /**
@@ -5360,7 +5419,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean refreshDockBeads() {
         syncDockBeadsListeners();
         com.termux.app.dock.LensBeadGeometry.Beads beads = resolveDockBeads();
-        if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) return false;
+        if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) {
+            // The same beads, but the row may have moved on the screen under the frame's cut.
+            syncFrameBeadCut();
+            return false;
+        }
         boolean modeChanged = (beads == null) != (mDockBeads == null);
         mDockBeads = beads;
         // Back to the slab, nothing of the beads is kept: a swipe's moving beads would otherwise
@@ -5381,6 +5444,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
         // The Search field's well nests in its capsule, or in the slab again.
         syncPromptFieldWell();
+        syncFrameBeadCut();
         return true;
     }
 
@@ -5401,7 +5465,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row == null || !(host instanceof DockSurfaceHostLayout) || container == null
             || host.getWidth() <= 0 || host.getHeight() <= 0 || row.getWidth() <= 0) return null;
         PlaceLayout layout = arrangement().layout();
-        if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeads(layout, stackStandsDownOnFrame(),
+        if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeadsCuttingFrame(layout,
+            stackStandsDownOnFrame(),
             isInAppKeyboardShown()
                 && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
         // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
@@ -7684,7 +7749,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean shouldUseAccessoryRenderEffectBlur(@NonNull ChromeSpec state) {
         return state.toolbarShown
             && state.blurEnabled
-            && !stackStandsDownOnFrame();
+            && !dockSheetStandsDownOnFrame();
     }
 
     /**
@@ -9356,8 +9421,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (accessoryContainer == null || !mDockRows.stackShown()) {
             return !state.toolbarShown;
         }
-        // Under a joined Docked frame the dock has no blur of its own to keep alive.
-        if (stackStandsDownOnFrame()) return true;
+        // Under a joined Docked frame the dock has no blur of its own to keep alive, unless its
+        // sheet returns for the beads.
+        if (dockSheetStandsDownOnFrame()) return true;
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         if (useRenderEffectBlur) {
             ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
@@ -10143,8 +10209,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
             // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
             // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
-            // Under a joined Docked frame the frame's glass is this sheet.
-            extraKeysBackground.setBackground(stackStandsDownOnFrame() ? null
+            // Under a joined Docked frame the frame's glass is this sheet, but where the row's
+            // beads cut the frame (the host clips this sheet to them).
+            extraKeysBackground.setBackground(dockSheetStandsDownOnFrame() ? null
                 : mChrome.glass().dockSurface(state.barAlpha,
                     0f, 1f, false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
