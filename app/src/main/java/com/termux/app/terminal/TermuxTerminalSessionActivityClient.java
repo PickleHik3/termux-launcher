@@ -309,7 +309,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = isLazyModeEnabled();
+        //
+        // Only a view on the window has a frame clock. Off it, postOnAnimation parks the redraw in
+        // the view's own queue until an attach that may never come, and the session stays in the
+        // coalescing set meanwhile, so every later burst is swallowed and the pane shows nothing new
+        // until a resize or a stop jogs it. A plain post always runs.
+        boolean pumpFrames = isLazyModeEnabled() && changedView.isAttachedToWindow();
         if (pumpFrames) {
             changedView.postOnAnimation(redraw);
         } else {
