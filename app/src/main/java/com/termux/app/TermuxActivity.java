@@ -6700,6 +6700,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
+    /** Set through a landing's commit while the stack already wears the half it landed on. */
+    private boolean mLandingStackDressed;
+    /** A half re-dress a landing left for after its frame: from where, to where; null when none. */
+    @Nullable private com.termux.app.wall.PaneWallPage mHalfRestyleFrom;
+    @Nullable private com.termux.app.wall.PaneWallPage mHalfRestyleTo;
+    private final Runnable mLandingSettleRunnable = this::runLandingSettle;
+
+    /** {@link #restyleChromeForHalfIfChanged} for {@code from} onto {@code to}, after this frame. */
+    private void deferHalfRestyle(@NonNull com.termux.app.wall.PaneWallPage from,
+                                  @NonNull com.termux.app.wall.PaneWallPage to) {
+        if (mHalfRestyleFrom == null) mHalfRestyleFrom = from;
+        mHalfRestyleTo = to;
+    }
+
+    /** Runs a deferred half re-dress now, if one waits. */
+    private void flushLandingRestyle() {
+        com.termux.app.wall.PaneWallPage from = mHalfRestyleFrom;
+        com.termux.app.wall.PaneWallPage to = mHalfRestyleTo;
+        mHalfRestyleFrom = null;
+        mHalfRestyleTo = null;
+        if (from != null && to != null) restyleChromeForHalfIfChanged(from, to);
+    }
+
+    /**
+     * Books {@link #runLandingSettle} for just after the frame a landing is drawn in: a plain post
+     * from the frame's own callbacks runs once that frame's traversal has been handed off.
+     */
+    private void postLandingSettle() {
+        if (mHalfRestyleFrom == null && (mChrome == null || !mChrome.isEvenOutHeld())) return;
+        View root = getWindow().getDecorView();
+        root.removeCallbacks(mLandingSettleRunnable);
+        root.post(mLandingSettleRunnable);
+    }
+
+    /**
+     * After a landing's frame: the half's re-dress it deferred, then the even-out held through
+     * the travel is let go and measured where the chrome rests. A crossing already under way again
+     * keeps the hold; its own landing settles it.
+     */
+    private void runLandingSettle() {
+        if (isDestroyed()) return;
+        flushLandingRestyle();
+        if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
+    }
+
     /**
      * Whether the status bar wears anything different on Home than on the Workspace: the shape
      * (Style, Corners, Margin) or the look values (ADR 0013).
@@ -23874,14 +23919,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean commitWallPage(@NonNull com.termux.app.wall.PaneWallPage page) {
         if (page == mLastWallPage) return false;
+        // A re-dress the last landing left for after its frame runs first, while the wall still
+        // stands where it landed: a commit that follows it reads from there.
+        flushLandingRestyle();
         com.termux.app.wall.PaneWallPage left = mLastWallPage;
         mLastWallPage = page;
         // The arrangement before the keyboard, so the keyboard's geometry pass sees the
         // chrome it will stand in.
         syncChromeArrangement();
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
-        // dresses the chrome for the arriving one, as the variant above re-arranged it.
-        restyleChromeForHalfIfChanged(left, page);
+        // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
+        // whose stack already changed into that dress on the way leaves the landed frame nothing
+        // to show from it, so the whole re-dress (58-88 ms on pong) follows that frame instead.
+        if (mLandingStackDressed) deferHalfRestyle(left, page);
+        else restyleChromeForHalfIfChanged(left, page);
         // The dock wears the arriving page's Dock design; one design on both changes nothing.
         restyleDockSurfaceForPageIfChanged(left, page);
         // The bar's readings are the same on both halves (#91); whether the bar shows decides
@@ -24380,6 +24431,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return;
         if (other == null || other == mCrossing.seam().other()) return;
+        // A landing's re-dress still waiting for its post is had before a new crossing reads
+        // the halves' dresses.
+        if (!mCrossing.crossing()) flushLandingRestyle();
         PlaceOrientation orientation = currentPlaceOrientation();
         PlaceLayout committed = committedArrangement().layout();
         ResolvedArrangement otherArrangement = arrangementOf(other);
@@ -24435,6 +24489,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 isSplitPanesEnabled()),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        // From here to the landing the chrome travels over the wallpaper: its bands keep the
+        // even-out they stand on, so the ground moving under them asks for no whole apply each
+        // frame. The landing lets it go after its own frame (runLandingSettle).
+        if (mChrome != null) mChrome.holdEvenOut();
         // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
         // out at its final size for the slide rather than re-measured at the landing.
         if (otherHome && rests != null)
@@ -25394,13 +25452,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // settle-time show the pre-roll stood in for would have told it.
                 mX11Display.onUserKeyboardIntent(true);
             }
-            syncPlaceState(page, leavingKeyboardUp);
+            mLandingStackDressed = seamLanding.stackDressedFor(page);
+            try {
+                syncPlaceState(page, leavingKeyboardUp);
+            } finally {
+                mLandingStackDressed = false;
+            }
             syncTerminalAway(page);
             if (beadsMelted) applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             mCrossing.end();
+            // What waits for the landed frame (the half's re-dress, the even-out's settle) runs
+            // just after it.
+            postLandingSettle();
             // A slide that came back to Home committed nothing, so no commit dressed the status
             // bar back out of the Workspace's look it slid in. Its glass and the strip behind the
             // system status bar are glazed again here, together, in Home's, or the strip alone
