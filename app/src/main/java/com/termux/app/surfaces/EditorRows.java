@@ -15,7 +15,6 @@ import com.termux.app.surfaces.cards.TerminalCard;
 import com.termux.app.surfaces.cards.WorkspaceCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,9 +24,9 @@ import java.util.List;
  * What every card of the Appearance editor holds, as data (appearance-and-settings-rework §2.3,
  * §3, §7 and §8): one table of rows per {@link EditorCard}, each row in one of three tiers, so a
  * control's position teaches how often it is touched. Tiers only order the rows: every row of a
- * card is always shown, and the sheet scrolls. Every value slider of a card is a column of its
- * glass strip ({@link Kind#STRIP}), all of them in one run, first in the card; the Appearance
- * card's Look is the one horizontal slider.
+ * card is always shown, and the sheet scrolls. Every value slider of a card is a horizontal
+ * slider row ({@link Kind#SLIDER}), one under another; the Appearance card's Look is a stopped
+ * slider of its own.
  *
  * <p>It also answers where a row writes ({@link #halfFor}): the glass numbers of the dock, the
  * status bar and the keyboard, and the Look slider, land on the half the frame shows; everything
@@ -43,12 +42,13 @@ public final class EditorRows {
     /** How a row is drawn and what it reports. */
     public enum Kind {
         /**
-         * A vertical slider in the card's strip ({@link LegendSlider}): its name and value read
-         * upward beside the track ("Frost · 20%", "Corners · 16 dp"). Every value slider is one,
-         * the glass and the sizes alike; strip rows that follow one another stand side by side
-         * as one strip, as the previous editor's Custom row did.
+         * A horizontal slider row ({@link LegendSlider} lying along it): the glyph, the name and
+         * its source dot, the value at the end, and the track under them across the row. Every
+         * value slider is one, the glass and the sizes alike; slider rows that follow one another
+         * stand one under another (they stood side by side as vertical columns until
+         * 2026-10-31).
          */
-        STRIP,
+        SLIDER,
         /** A switch. */
         SWITCH,
         /** A connected button group: one of a few named choices. */
@@ -74,9 +74,9 @@ public final class EditorRows {
 
     /** Every row any card has. */
     public enum Row {
-        OPACITY(Kind.STRIP, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
-        TINT(Kind.STRIP, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
-        HEIGHT(Kind.STRIP, R.string.appearance_row_height, R.drawable.ic_editor_height),
+        OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        TINT(Kind.SLIDER, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
+        HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
         VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_symbol_dock_glass_tray),
@@ -84,21 +84,25 @@ public final class EditorRows {
          * Frost: blur and grain together along {@link GlassControls}' curve, the one glass slider
          * the cards have (BLUR and GRAIN are still the stored properties underneath).
          */
-        FROST(Kind.STRIP, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
-        CORNERS(Kind.STRIP, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
-        MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
-        DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
+        FROST(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
+        CORNERS(Kind.SLIDER, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
+        /** The glass's grain at the chips' cell, 0 to 100%. */
+        GRAIN(Kind.SLIDER, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
+        /** The glass's rim at the chips' cell: None, Hairline or Bright. */
+        RIM(Kind.SEGMENTS, R.string.appearance_row_rim, R.drawable.ic_editor_corners),
+        MARGIN(Kind.SLIDER, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
+        DEPTH(Kind.SLIDER, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         /**
          * How strongly the icons' reflections show on the Peek glass card, 0 (off) to strong;
          * the Dock card shows it only while Peek glass is the design.
          */
-        REFLECTION(Kind.STRIP, R.string.appearance_row_reflection,
+        REFLECTION(Kind.SLIDER, R.string.appearance_row_reflection,
             R.drawable.ic_symbol_dock_peek_glass),
-        TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
+        TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
-        SPLIT_GAP(Kind.STRIP, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
+        SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
@@ -110,32 +114,48 @@ public final class EditorRows {
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        /** Home's card: Home takes the Workspace's layout and glass ({@link ScreenMatch}). */
-        MATCH_WORKSPACE(Kind.ACTION, R.string.appearance_row_match_workspace,
-            R.drawable.ic_ms_swap_horiz),
-        /** The Workspace's card: the Workspace takes Home's layout and glass. */
-        MATCH_HOME(Kind.ACTION, R.string.appearance_row_match_home, R.drawable.ic_ms_swap_horiz),
         /** A screen's card to the card both screens share (the palette's). */
         LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_editor_dark_mode),
-        KEY_OPACITY(Kind.STRIP, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
-        KEY_CORNERS(Kind.STRIP, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
-        KEY_SPACING(Kind.STRIP, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
+        KEY_OPACITY(Kind.SLIDER, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
+        KEY_CORNERS(Kind.SLIDER, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
+        KEY_SPACING(Kind.SLIDER, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_ed_look),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
-        ICON_PACK(Kind.EXPANDER, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** Icon pack ›: opens the Icon pack subcard (overhaul §2, Home); it expanded in place. */
+        ICON_PACK(Kind.LINK, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
+        /** The Icon pack subcard's one row: the pack tiles, as the Icon pack row expanded them. */
+        ICON_PACK_PAGE(Kind.MENU, R.string.appearance_row_icon_pack, 0),
+        /**
+         * The Dock card's Dock icon pack: the pinned apps' pack, "Same as Home" or a pack; drawn
+         * by cards/DockCard, the Kind is the stand-in.
+         */
+        /**
+         * The Dock card's Apps in the dock (overhaul §5): how many pinned apps a dock page shows,
+         * a stepper stopped at the most that fit at the icon size and style; drawn by
+         * cards/DockCard, the Kind is the stand-in.
+         */
+        DOCK_APP_ICONS(Kind.MENU, R.string.editor_dock_apps_in_dock, R.drawable.ic_ms_tag),
+        DOCK_ICON_PACK(Kind.MENU, R.string.editor_dock_icon_pack_row, R.drawable.ic_symbol_icon_pack),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
             R.drawable.ic_ed_wallpaper_colours),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
-        VIBRANCY(Kind.STRIP, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
+        VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
-        GLASS_EDGE(Kind.STRIP, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
+        GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
+        /** The Home card's way to the Widgets card. */
+        LINK_WIDGETS(Kind.LINK, R.string.editor_element_widgets, R.drawable.ic_symbol_stacks),
+        /** The Appearance card's way to the Sheets card. */
+        LINK_SHEETS(Kind.LINK, R.string.editor_element_sheets, R.drawable.ic_symbol_grid_view),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
+        /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
+        LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
+            R.drawable.ic_symbol_tune),
         LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),
         LINK_FONT(Kind.LINK, R.string.appearance_row_font, R.drawable.ic_editor_text_size),
         LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
@@ -150,6 +170,14 @@ public final class EditorRows {
         CLOCK_POSITION(Kind.MENU, R.string.editor_st_clock_position, R.drawable.ic_editor_clock),
         /** The status bar's Options tiles: 12-hour, Seconds, °F weather, Camera gap. */
         STATUS_OPTIONS(Kind.SWITCH, R.string.editor_st_section_options, R.drawable.ic_ms_tune),
+        /** The status clock's seconds, a switch row (the Seconds option). */
+        STATUS_SECONDS(Kind.SWITCH, R.string.editor_st_option_seconds, R.drawable.ic_ms_timer),
+        /** 12 h · 24 h, a connected group bound to the 12-hour option. */
+        STATUS_HOURS(Kind.SEGMENTS, R.string.editor_st_hours, R.drawable.ic_ms_schedule),
+        /** °C · °F, a connected group bound to the °F option. */
+        STATUS_UNIT(Kind.SEGMENTS, R.string.editor_st_unit, R.drawable.ic_ms_thermostat),
+        /** Camera cutout ↗: opens the cutout setting the Camera gap tile opened. */
+        CAMERA_CUTOUT(Kind.LINK, R.string.editor_st_option_camera_gap, R.drawable.ic_ms_crop_free),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
         STATUS_INDICATORS(Kind.SWITCH, R.string.editor_st_section_indicators,
             R.drawable.ic_symbol_weather),
@@ -161,20 +189,23 @@ public final class EditorRows {
         DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
-        /** The dock's Options tiles. */
+        /** The dock's Show/hide tiles. */
         DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune),
+        /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
+        DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
+            R.drawable.ic_ed_monochrome),
         // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
         /** The air under the keyboard's last key row (the layout's chin), in dp. */
-        BOTTOM_PADDING(Kind.STRIP, R.string.editor_row_bottom_padding,
+        BOTTOM_PADDING(Kind.SLIDER, R.string.editor_row_bottom_padding,
             R.drawable.ic_ed_bottom_padding),
         /** The keyboard's two opacities move together, keeping their difference. */
         OPACITY_LINK(Kind.SWITCH, R.string.editor_row_opacity_link, R.drawable.ic_ms_link),
         /** Home's widget grid, in cells, each a stepper (− value +). */
         HOME_COLUMNS(Kind.MENU, R.string.editor_row_columns, R.drawable.ic_ed_grid_columns),
         HOME_ROWS(Kind.MENU, R.string.editor_row_rows, R.drawable.ic_ed_grid_rows),
-        /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
+        /** The one icon size, S/M/L/XL ({@code IconSize}): the Home card's and the Dock card's first row. */
         HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
         /**
          * A shortcut tile that never reads on: it opens the wallpaper picker (Change wallpaper).
@@ -195,6 +226,16 @@ public final class EditorRows {
         SECTION_WALLPAPER(Kind.MENU, R.string.editor_section_wallpaper, 0),
         SECTION_COLOUR(Kind.MENU, R.string.editor_section_colour, 0),
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
+        // The overhaul's sections (appearance-cards-overhaul §2): [card name] · More options ·
+        // Layout · Appearance · Links, plus Colours (Customization) and Clock & Weather (Status
+        // bar). A card's first section is named for the card where it is not one of these; the
+        // headings above stay only as EditorSectionStore keys of earlier builds, no card lists them.
+        SECTION_MORE_OPTIONS(Kind.MENU, R.string.editor_section_more_options, 0),
+        SECTION_LAYOUT(Kind.MENU, R.string.editor_section_layout, 0),
+        SECTION_APPEARANCE(Kind.MENU, R.string.editor_section_appearance, 0),
+        SECTION_LINKS(Kind.MENU, R.string.editor_section_links, 0),
+        SECTION_COLOURS(Kind.MENU, R.string.editor_section_colours, 0),
+        SECTION_CLOCK_WEATHER(Kind.MENU, R.string.editor_section_clock_weather, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
         /**
@@ -202,7 +243,39 @@ public final class EditorRows {
          * the screen, its eye and the sliders glyph that opens its card. Drawn by the editor
          * through EditorCardSheet.Model#rowView; the Kind is the stand-in.
          */
-        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune);
+        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
+        /** The Terminal card's way to its Pane borders card (#206). */
+        PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
+        /**
+         * The Terminal card's pane switches (appearance-cards overhaul §2, Terminal), the setup
+         * wizard's Panes choices: Multiplexer is compatibility mode off; Auto tiling and Enlarge
+         * focused pane stand only while it is on.
+         */
+        MULTIPLEXER(Kind.SWITCH, R.string.setup_panes_multiplexer, R.drawable.ic_ms_vertical_split),
+        AUTO_TILING(Kind.SWITCH, R.string.setup_panes_autotiling, R.drawable.ic_ms_view_quilt),
+        FOCUS_GROWS(Kind.SWITCH, R.string.setup_panes_grows, R.drawable.ic_ms_open_in_full),
+        /** The Status bar card's Pinned notifications ↗: the Settings page of the pinning rules. */
+        PINNED_NOTIFICATIONS(Kind.LINK, R.string.settings_essential_notifications_title,
+            R.drawable.ic_ms_push_pin),
+        // The Pane borders card's rows (cards/PaneBordersCard), drawn by that card through
+        // EditorCardSheet.Model#rowView; the Kind is the stand-in. Rim is RIM itself.
+        /** The three frames, Normal, Focused and Attention, in the panes' own drawables. */
+        PANE_PREVIEW(Kind.MENU, R.string.appearance_row_pane_borders, 0),
+        PANE_BORDER_COLOUR(Kind.SEGMENTS, R.string.appearance_row_border_colour,
+            R.drawable.ic_editor_tint),
+        PANE_BORDER_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_FOCUS_COLOUR(Kind.SEGMENTS, R.string.appearance_row_when_focused,
+            R.drawable.ic_editor_tint),
+        PANE_FOCUS_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_GLOW(Kind.SEGMENTS, R.string.appearance_row_glow, R.drawable.ic_editor_depth),
+        PANE_GLOW_COLOUR(Kind.SEGMENTS, R.string.appearance_row_glow_colour,
+            R.drawable.ic_editor_tint),
+        PANE_GLOW_CUSTOM(Kind.MENU, R.string.appearance_row_custom_colour,
+            R.drawable.ic_editor_tint),
+        PANE_BORDERS_RESET(Kind.ACTION, R.string.appearance_pane_borders_reset,
+            R.drawable.ic_editor_corners);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;
@@ -269,7 +342,29 @@ public final class EditorRows {
             this(glassEdge, terminalEffect, true);
         }
 
+        /** Whether the page overview is up: Home's Edit pages chip is not offered under it. */
+        public final boolean overviewUp;
+
         public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown) {
+            this(glassEdge, terminalEffect, homeShown, false);
+        }
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
+                      boolean overviewUp) {
+            this(glassEdge, terminalEffect, homeShown, overviewUp, false);
+        }
+
+        /**
+         * Whether Depth and Edge are out for a setting the user can change (Glass refraction off,
+         * Reduce idle activity on, a wallpaper not set from the launcher): the Appearance block
+         * then links to that setting.
+         */
+        public final boolean refractionLink;
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
+                      boolean overviewUp, boolean refractionLink) {
+            this.refractionLink = refractionLink;
+            this.overviewUp = overviewUp;
             this.glassEdge = glassEdge;
             this.terminalEffect = terminalEffect;
             this.homeShown = homeShown;
@@ -290,6 +385,9 @@ public final class EditorRows {
             case TERMINAL: return TerminalCard.rows(offers);
             case DOCK: return DockCard.rows(offers);
             case KEYBOARD: return KeyboardCard.rows(offers);
+            case WIDGETS:
+            case SHEETS:
+                return GlassRows.appearance(new CardRows(), offers, 1).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);
@@ -329,36 +427,31 @@ public final class EditorRows {
     }
 
     /**
-     * Whether {@code row} is one of the Appearance card's All surfaces columns, the strip that
+     * Whether {@code row} is one of the Appearance card's All surfaces sliders, the run that
      * stands only at the Custom stop: the shared glass, the glass edge and the shared text size.
      */
     public static boolean isAllSurfaces(@NonNull Row row) {
-        return row.kind == Kind.STRIP;
+        return row.kind == Kind.SLIDER;
     }
 
     /**
-     * The half a row of {@code card} writes while the frame shows {@code frameHalf}, or null
-     * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
-     * dock, the status bar and the keyboard, the Look slider and the shared glass the
-     * Appearance card's Frost, Opacity and Tint write, follow the frame; the Home card's Look and glass are
-     * the Home half's whatever the frame shows, and the Workspace card's Look and glass the Workspace
-     * half's; the terminal's numbers (it stands on the Workspace
-     * alone), corners, margins, heights, places, the Dock's style and design, and every app-wide
-     * choice do not.
+     * The page a row of {@code card} writes: {@link TermuxAppSharedPreferences#PAGE_WALL} for the
+     * glass numbers of the dock, the status bar and the keyboard, the Look slider and the shared
+     * glass the screen and Appearance cards' Frost, Opacity and Tint write (a page's own values go
+     * through the editor's scope, ADR 0015 §6); {@link TermuxAppSharedPreferences#PAGE_ALL} where
+     * it writes one value for the wall: the terminal's numbers, corners, margins, heights, places,
+     * the Dock's style and design, and every app-wide choice.
      */
-    @Nullable
-    public static WallHalf halfFor(@NonNull EditorCard card, @NonNull Row row,
-                                   @NonNull WallHalf frameHalf) {
-        if (card == EditorCard.HOME)
-            return row == Row.LOOK || row.property() != null ? WallHalf.HOME : null;
-        if (card == EditorCard.WORKSPACE)
-            return row == Row.LOOK || row.property() != null ? WallHalf.WORKSPACE : null;
-        if (card == EditorCard.APPEARANCE)
-            return row == Row.LOOK || row.property() != null ? frameHalf : null;
+    public static int pageFor(@NonNull EditorCard card, @NonNull Row row) {
+        int none = TermuxAppSharedPreferences.PAGE_ALL;
+        if (card == EditorCard.HOME || card == EditorCard.WORKSPACE || card == EditorCard.APPEARANCE)
+            return row == Row.LOOK || row.property() != null
+                ? TermuxAppSharedPreferences.PAGE_WALL : none;
         SurfaceProperty property = row.property();
         if (card.slot == null || property == null)
-            return null;
-        return TermuxAppSharedPreferences.isPerHalf(card.slot, property) ? frameHalf : null;
+            return none;
+        return TermuxAppSharedPreferences.isPerPage(card.slot, property)
+            ? TermuxAppSharedPreferences.PAGE_WALL : none;
     }
 
     /**

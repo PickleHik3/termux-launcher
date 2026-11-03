@@ -58,7 +58,7 @@ public class LayoutEditorPlanTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("layout-editor-plan-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        places = com.termux.app.place.KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null))));
     }
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {
@@ -498,5 +498,12 @@ public class LayoutEditorPlanTest {
         assertFalse(prefs.contains("layout.landscape.keyboard_mode"));
         assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
         assertFalse(plan.isDirty());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

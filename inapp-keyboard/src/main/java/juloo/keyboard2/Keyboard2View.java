@@ -93,6 +93,8 @@ public class Keyboard2View extends View
   private Theme _theme;
   private Theme.Computed _tc;
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  /** Fills the deck look's push-button layers; see [drawDeckKeyFrame]. */
+  private final Paint _deckPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
   /** Transient keybind-hint lighting; sits above the color-scheme overrides. */
@@ -271,7 +273,19 @@ public class Keyboard2View extends View
     _fxFillPaint.setColor(_theme.pressedColor);
     _fxStrokePaint.setColor(_theme.pressedColor);
     _fxHaloPaint.setColor(_theme.pressedColor);
-    setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+    Theme.Palette p = _theme.palette;
+    if (p.deck)
+    {
+      // The deck's bed is solid plastic, lit at the top. Square: the host clips the keyboard to
+      // its card's outline.
+      android.graphics.drawable.GradientDrawable bed =
+          new android.graphics.drawable.GradientDrawable(
+              android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+              new int[]{p.deckBedTop, p.deckBed});
+      setBackground(bed);
+    }
+    else
+      setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
   /** Brief host-triggered wave that subtly modulates each key as the dock front reaches it. */
@@ -2396,7 +2410,9 @@ public class Keyboard2View extends View
     boolean usedHintTrace = false;
     int keyIdValue = keyId(rowIndex, keyIndex);
     KeyColorOverride hintOverride = _hintColorOverrides.get(keyIdValue);
-    KeyColorOverride schemeOverride = _keyColorOverrides.get(keyIdValue);
+    // Under the deck the deck's colours win over the colour scheme's; the hint lighting stays.
+    boolean deck = _theme.palette.deck;
+    KeyColorOverride schemeOverride = deck ? null : _keyColorOverrides.get(keyIdValue);
     KeyColorOverride colorOverride =
         hintOverride != null ? hintOverride : schemeOverride;
     boolean isKeyDown = _pointers.isKeyDown(k)
@@ -2436,8 +2452,21 @@ public class Keyboard2View extends View
     // lighting's border stays a tint of an existing stroke, not a new outline.
     boolean drawsBorder = slots.hasBorder && (tc_key.border_width > 0.f
         || (schemeOverride != null && schemeOverride.borderColor != null));
-    drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
-        drawsBorder, slots.border);
+    if (deck)
+    {
+      boolean enter = isEnterKey(k);
+      drawDeckKeyFrame(canvas, x, y, keyW, keyH, isKeyDown, isLatched(k), enter);
+      // Return is lit, so its legends take the dark ink, unless the hint lighting colours them.
+      if (enter)
+      {
+        Theme.Palette p = _theme.palette;
+        if (!slots.hasPrimary) { slots.hasPrimary = true; slots.primary = p.deckLitInk; }
+        if (!slots.hasSecondary) { slots.hasSecondary = true; slots.secondary = p.deckLitInk; }
+      }
+    }
+    else
+      drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
+          drawsBorder, slots.border);
     // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
     // while the hint lighting is up. Latched modifiers render as key-down.
     if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
@@ -2686,6 +2715,57 @@ public class Keyboard2View extends View
     }
   }
 
+  /** Whether a key's centre value is a modifier held latched or locked, not just pressed. */
+  private boolean isLatched(KeyboardData.Key k)
+  {
+    if (k.keys[0] == null)
+      return false;
+    int flags = _pointers.getKeyFlags(k.keys[0]);
+    return flags != -1
+        && (flags & (Pointers.FLAG_P_LATCHED | Pointers.FLAG_P_LOCKED)) != 0;
+  }
+
+  /**
+   * The deck look's key: an opaque push-button with a 6 dp corner, whatever radius or opacity
+   * the host set. Drawn in three layers so every edge keeps the round corner: the whole cap in
+   * the 2 dp foot's colour, the cap less the foot in the 1 dp top edge's colour, and the face
+   * below that edge. A key that is down sinks: no foot, the face 25 % toward the foot. A latched
+   * modifier carries a 2 dp bar in the light near its foot; return is filled with the light.
+   */
+  private void drawDeckKeyFrame(Canvas canvas, float x, float y, float keyW, float keyH,
+      boolean down, boolean latched, boolean lit)
+  {
+    Theme.Palette p = _theme.palette;
+    float dp = _launchWaveDensity;
+    float r = 6f * dp;
+    int face = lit ? p.deckLit : p.deckKey;
+    int foot = lit ? p.deckLitFoot : p.deckKeyFoot;
+    int top = lit ? lerpColor(p.deckLit, Color.WHITE, 0.14f) : p.deckKeyTop;
+    float footH = down ? 0f : 2f * dp;
+    if (down)
+      face = lerpColor(face, foot, 0.25f);
+    float bottom = y + keyH;
+    if (footH > 0f)
+    {
+      _deckPaint.setColor(foot);
+      _tmpRect.set(x, y, x + keyW, bottom);
+      canvas.drawRoundRect(_tmpRect, r, r, _deckPaint);
+    }
+    _deckPaint.setColor(top);
+    _tmpRect.set(x, y, x + keyW, bottom - footH);
+    canvas.drawRoundRect(_tmpRect, r, r, _deckPaint);
+    _deckPaint.setColor(face);
+    _tmpRect.set(x, y + dp, x + keyW, bottom - footH);
+    canvas.drawRoundRect(_tmpRect, r, r, _deckPaint);
+    if (latched)
+    {
+      _deckPaint.setColor(p.deckLit);
+      float inset = 6f * dp;
+      _tmpRect.set(x + inset, bottom - 5f * dp, x + keyW - inset, bottom - 3f * dp);
+      canvas.drawRect(_tmpRect, _deckPaint);
+    }
+  }
+
   /** Clip to draw a border at a time. This allows to call [drawRoundRect]
       several time with the same parameters but a different Paint. */
   void drawBorder(Canvas canvas, float clipl, float clipt, float clipr,
@@ -2706,6 +2786,9 @@ public class Keyboard2View extends View
       int flags = _pointers.getKeyFlags(k);
       if (flags != -1)
       {
+        // Under the deck a latched, locked or held modifier's legend is lit.
+        if (_theme.palette.deck)
+          return _theme.palette.deckLit;
         if ((flags & Pointers.FLAG_P_LOCKED) != 0)
           return _theme.lockedColor;
         return _theme.activatedColor;

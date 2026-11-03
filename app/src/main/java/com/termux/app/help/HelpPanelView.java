@@ -16,7 +16,6 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import java.util.ArrayList;
@@ -407,7 +406,7 @@ public final class HelpPanelView extends FrameLayout {
                 style.button(string(R.string.help_show_on_screen), true,
                     () -> { if (listener != null) listener.onShowOnScreen(id); })));
         }
-        if (entry.gesture != null && entry.gesture != TourGesture.NONE) {
+        if (entry.gesture != null && entry.gesture != HelpGesture.NONE) {
             actions.addView(add(string(R.string.help_show_gesture),
                 style.button(string(R.string.help_show_gesture), true,
                     () -> { if (listener != null) listener.onShowGesture(id); })),

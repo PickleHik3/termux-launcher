@@ -23,21 +23,6 @@ public class WallRowTest {
     }
 
     @Test
-    public void anEmptyWorkspaceStillTakesTheSwipeWhenItCanStart() {
-        assertTrue(WallRow.seamContinues(true, false));
-        assertTrue("an empty Workspace that can start", WallRow.seamContinues(false, true));
-        assertFalse("nothing after Home and nothing to start", WallRow.seamContinues(false, false));
-    }
-
-    @Test
-    public void onlyACommittedCrossingIntoAnEmptyWorkspaceStartsAShell() {
-        assertTrue(WallRow.seamStartsShell(true, PaneWallPage.TERMINAL));
-        assertFalse("sprang back to Home", WallRow.seamStartsShell(true, PaneWallPage.WIDGETS));
-        assertFalse("a Workspace with a window starts nothing",
-            WallRow.seamStartsShell(false, PaneWallPage.TERMINAL));
-    }
-
-    @Test
     public void theWorkspaceIsOnTheRowOnlyWhileTheCurrentSessionHasAWindow() {
         assertTrue(WallRow.hasWorkspace(true, 1));
         assertFalse("the last window closed: the Workspace is gone", WallRow.hasWorkspace(true, 0));
@@ -147,5 +132,31 @@ public class WallRowTest {
         assertEquals(WallRow.homePage(0), WallRow.restore("TERMINAL", 2, 3, 3));
         assertEquals(WallRow.homePage(0), WallRow.restore("WIDGETS", 2, 3, 3));
         assertEquals(WallRow.homePage(0), WallRow.restore(null, 2, 3, 3));
+    }
+
+    /** [Home 1][Terminal][Home 2] (ids 1 3 2) and the default [Home 1][Home 2][Terminal]. */
+    private static WallPages mid() {
+        return WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages;
+    }
+
+    @Test
+    public void runEdgeSwipeEqualsSwipeLeavesHomeInTheDefaultOrder() {
+        for (int len = 1; len <= 3; len++) {
+            for (int page = 0; page < len; page++) {
+                assertEquals(WallRow.swipeLeavesHome(page, len, 1, true),
+                    WallRow.swipeLeavesRun(page, len, 1, true));
+                // Nothing lies before the first Home page: backward never leaves.
+                assertFalse(WallRow.swipeLeavesRun(page, len, -1, false));
+            }
+        }
+        assertFalse(WallRow.swipeLeavesRun(0, 2, 1, true));
+        assertTrue(WallRow.swipeLeavesRun(1, 2, 1, true));
+    }
+
+    @Test
+    public void aSlotBehindTheFirstPageOfARunLetsBackwardLeave() {
+        assertTrue(WallRow.swipeLeavesRun(0, 1, -1, true));
+        assertTrue(WallRow.swipeLeavesRun(0, 3, -1, true));
+        assertFalse(WallRow.swipeLeavesRun(1, 3, -1, true));
     }
 }

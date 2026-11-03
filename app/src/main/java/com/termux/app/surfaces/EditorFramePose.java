@@ -37,9 +37,9 @@ final class EditorFramePose {
     /** The resting frame's largest scale (wireframe 01: ×0.84). */
     static final float REST_MAX_SCALE = 0.84f;
     /** The frame over a card at its half detent. */
-    static final float HALF_SCALE = 0.6f;
+    static final float HALF_SCALE = 0.5f;
     /** The frame over a card at its full detent. */
-    static final float FULL_SCALE = 0.44f;
+    static final float FULL_SCALE = 0.28f;
     /** The frame's top line under the status bar, and the air round the half line. */
     static final int TOP_GAP_DP = 16;
     static final int GAP_DP = 8;
@@ -194,18 +194,29 @@ final class EditorFramePose {
             - window.halfRowPx() - window.gapPx());
     }
 
-    /** The full detent: the frame at {@link #FULL_SCALE} above it. */
-    static int fullSheetPx(@NonNull Window window) {
-        return sheetPxFor(window, FULL_SCALE);
+    /**
+     * The full detent: the frame at {@link #FULL_SCALE} above it, but grown to {@code minPx} (the
+     * least a body holding one complete control needs) as far as the frame at {@link #MIN_SCALE}
+     * allows. A window too short for that gets the card the floor leaves, never more.
+     */
+    static int fullSheetPx(@NonNull Window window, int minPx) {
+        int full = sheetPxFor(window, FULL_SCALE);
+        return Math.max(full, Math.min(minPx, sheetPxFor(window, MIN_SCALE)));
     }
 
     /**
      * The half detent: the frame at {@link #HALF_SCALE} above it, but never less than
      * {@code minPx} (the card's header and its first row over the inset; the frame then shrinks
-     * to fit) and never taller than the full detent. What tier 1 does not show scrolls.
+     * to fit) and never taller than the full detent. What tier 1 does not show scrolls. Where the full
+     * detent is no taller than {@code minPx} the two come out equal: one editing detent.
      */
     static int halfSheetPx(@NonNull Window window, int minPx, int fullPx) {
         return Math.min(fullPx, Math.max(minPx, sheetPxFor(window, HALF_SCALE)));
+    }
+
+    /** Half and full are one editing detent: neither body holds more than the other. */
+    static boolean collapsed(int halfPx, int fullPx) {
+        return halfPx >= fullPx;
     }
 
     /**

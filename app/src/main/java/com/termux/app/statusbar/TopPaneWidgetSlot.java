@@ -67,6 +67,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private String mClockAlignment;
     /** Whether the media row may claim the slot; off, the slot acts as if nothing played. */
     private boolean mMediaEnabled = true;
+    /**
+     * Whether the clock shows (the Status bar card's Clock toggle). Hidden, it is GONE and takes
+     * no room: whatever shares the slot spans the whole run.
+     */
+    private boolean mClockShown = true;
 
     public TopPaneWidgetSlot(Context context) {
         this(context, null);
@@ -110,6 +115,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     protected void onFinishInflate() {
         super.onFinishInflate();
         mClock = findViewById(R.id.terminal_clock_widget);
+        if (mClock != null && !mClockShown) mClock.setVisibility(GONE);
         mNotifications = findViewById(R.id.terminal_pinned_notifications);
         mMedia = findViewById(R.id.terminal_media_widget);
         mIcons = new PinnedNotificationIconCache(getContext());
@@ -195,6 +201,20 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     /** "Mute this rule": the card's rule stops matching, so the rebuild takes the card away. */
     private void muteRule(@NonNull PinnedNotification notification) {
         TopPaneFeed.muteRule(getContext(), notification.matchedRuleId);
+    }
+
+    /** Shows or hides the clock; hidden, the media row and the pinned cards take its room. */
+    public void setClockShown(boolean shown) {
+        if (mClockShown == shown) return;
+        mClockShown = shown;
+        if (mClock != null) mClock.setVisibility(shown ? VISIBLE : GONE);
+        requestLayout();
+        invalidate();
+    }
+
+    /** Whether the clock shows ({@link #setClockShown}). */
+    public boolean isClockShown() {
+        return mClockShown;
     }
 
     private void openPinned(@NonNull PinnedNotification notification) {
@@ -356,10 +376,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             int cap = Math.max(Math.round(available * .55f), available - sideMin - gap);
             cap = Math.max(0, cap);
             mClock.setFitBudget(cap, heightBudget, mClockShared);
-            int clockWidth = Math.min(cap,
+            int clockWidth = !mClockShown ? 0 : Math.min(cap,
                 (int) Math.ceil(mClock.fitWidthPx(cap, heightBudget, mClockShared)));
-            row = TopPaneSlotRow.shared(width, contentStart, gutter, gap, clockWidth,
-                mClockAlignment);
+            row = TopPaneSlotRow.shared(width, contentStart, gutter, mClockShown ? gap : 0,
+                clockWidth, mClockAlignment);
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(row.clockWidth(), MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));

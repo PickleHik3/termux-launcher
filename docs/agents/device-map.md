@@ -10,7 +10,7 @@ plain `adb -s <serial>` works the same. Add what you had to find out; fix what t
   others). Main activity `.app.TermuxActivity`; it is also the HOME activity.
 - Build for the emulator: `./gradlew :app:assembleDebug`, then install
   `app/build/outputs/apk/debug/termux-app_apt-android-7-debug_x86_64.apk` (`ad install` keeps
-  data). Pong takes release builds only; see AGENTS.md.
+  data). Pong runs staging or diagnostic builds during development; the release build only just before an update ships (`docs/agents/building.md`).
 - After installing on the emulator the launcher becomes home. Before handing the emulator over:
   `ad shell cmd package set-home-activity com.google.android.apps.nexuslauncher/.NexusLauncherActivity`.
 - Leases: `ad lease status` shows only the time left on a lease. Its true age is the `since=`
@@ -75,6 +75,8 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Sessions sidebar (legacy) | tap the session indicator `terminal_sessions_indicator`, the number box left of the chips | after it closes, focus stays on the indicator: tap the terminal before typing |
 | Widgets page | tl16 1080×2400: long-press a free Home cell (e.g. 540,1990) → "Add a widget" ≈806,1338 ("Edit widgets" ≈300,1633); Termux Launcher group ≈400,630; edit mode gear ≈143,195, X ≈60,195, ✓ ≈827,178; page swipe `swipe 900 2060 150 2060 250`. Wall store `shared_prefs/launcher_widget_repository.xml` (built-in ids negative; an overlap refuses the whole wall, tag `LauncherWidgets`; force-stop before seeding) | `WidgetPaneView` |
 | Voice pill | needs a microphone: pong only | — |
+
+Motion invariants: with Settings › Debugging › Motion log on, drive the page changes, then `project-docs/verification/motion-invariants.sh <serial>` exits 1 and lists any `INVARIANT` line the log recorded; `launcherctl motion-log dump` carries the count as `"invariants"`.
 
 ## Routes since the editor redesign (2026-10-26)
 

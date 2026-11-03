@@ -2,9 +2,15 @@ package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -78,6 +84,23 @@ public class PaneContentFrameBezelTest {
     }
 
     @Test
+    public void theBezelsShadeIsBuiltWithItsPathAndKeptWhileItRests() {
+        TerminalView terminal = terminal();
+        PaneContentFrame frame = frameAround(terminal);
+        frame.setRetroStyle(PaneRetroStyle.CRT);
+        layOut(frame);
+        assertNull(frame.bezelShade());
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(FRAME_WIDTH,
+            FRAME_HEIGHT, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        frame.draw(canvas);
+        android.graphics.Shader shade = frame.bezelShade();
+        assertNotNull(shade);
+        frame.draw(canvas);
+        assertSame("a pane at rest keeps the gradient it has", shade, frame.bezelShade());
+    }
+
+    @Test
     public void theBezelComesOffWithTheEffectAndTheMarginsGoBack() {
         TerminalView terminal = terminal();
         PaneContentFrame frame = frameAround(terminal);
@@ -88,7 +111,13 @@ public class PaneContentFrameBezelTest {
         frame.setRetroStyle(PaneRetroStyle.CRT_AMBER);
         assertTrue("the effect coming on asks for the one relayout", frame.isLayoutRequested());
         layOut(frame);
-        assertTrue(terminal.getLeft() > plainLeft);
+        // Inside the screen the effect is cut to: past the bezel band and the screen's arc. (The
+        // bend needs no clearance of its own since it was pinned at the edges' middles.)
+        float[] worn = new float[4];
+        frame.retroScreen(worn);
+        assertTrue(worn[0] > 0f);
+        assertTrue(terminal.getLeft() > worn[0]);
+        assertTrue(FRAME_HEIGHT - terminal.getBottom() > FRAME_HEIGHT - worn[3]);
 
         frame.setRetroStyle(PaneRetroStyle.CRT_GREEN);
         assertFalse("another CRT tint keeps the same bezel", frame.isLayoutRequested());
@@ -103,5 +132,32 @@ public class PaneContentFrameBezelTest {
         frame.retroScreen(screen);
         assertEquals(0f, screen[0], 0f);
         assertEquals(FRAME_HEIGHT, screen[3], 0f);
+    }
+
+    /** Whether the frame's foreground puts any pixel down when drawn at the frame's size. */
+    private static boolean foregroundDraws(PaneContentFrame frame) {
+        Drawable border = frame.getForeground();
+        assertNotNull(border);
+        int size = 200;
+        border.setBounds(0, 0, size, size);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        border.draw(new Canvas(bitmap));
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                if ((bitmap.getPixel(x, y) >>> 24) > 0) return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void theSharedRimDrawsNothingWhileTheBezelIsWorn() {
+        PaneContentFrame frame = frameAround(terminal());
+        new PaneRim().apply(frame, false, RADIUS_PX, PaneBorderStyle.lone(), null);
+        assertTrue("no effect: the rim is the pane's outline", foregroundDraws(frame));
+        frame.setRetroStyle(PaneRetroStyle.CRT);
+        assertFalse("CRT: the solid bezel is the outline, the rim yields", foregroundDraws(frame));
+        frame.setRetroStyle(PaneRetroStyle.NONE);
+        assertTrue("and comes back with the effect off", foregroundDraws(frame));
     }
 }

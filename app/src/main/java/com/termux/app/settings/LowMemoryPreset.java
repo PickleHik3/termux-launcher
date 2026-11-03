@@ -57,6 +57,11 @@ public final class LowMemoryPreset {
                 if (isOwnKey(key) || Objects.equals(before.get(key), entry.getValue())) continue;
                 snapshot.put(key, encode(before.get(key)));
             }
+            for (Map.Entry<String, ?> entry : before.entrySet()) {
+                String key = entry.getKey();
+                if (!isOwnKey(key) && !after.containsKey(key))
+                    snapshot.put(key, encode(entry.getValue()));
+            }
         } catch (JSONException e) {
             snapshot = new JSONObject();
         }

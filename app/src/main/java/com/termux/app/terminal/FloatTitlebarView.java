@@ -63,6 +63,8 @@ public final class FloatTitlebarView extends FrameLayout {
     @Nullable private PaneSurfaceStyle mStyle;
     private float mRequestedRadiusPx;
     private float mOutlineRadiusPx;
+    private boolean mDressed;
+    private int mSizeDresses;
     private boolean mMaximised;
     private boolean mFocused;
     private int mInk;
@@ -163,9 +165,10 @@ public final class FloatTitlebarView extends FrameLayout {
      */
     public void dress(@Nullable PaneSurfaceStyle style, float requestedRadiusPx) {
         mStyle = style;
+        mDressed = true;
         mRequestedRadiusPx = requestedRadiusPx;
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx, false);
-        float outline = PaneShape.radiusForBounds(requestedRadiusPx, getWidth(), getHeight());
+        float outline = cappedRadius(requestedRadiusPx);
         if (outline != mOutlineRadiusPx) {
             mOutlineRadiusPx = outline;
             invalidateOutline();
@@ -180,6 +183,16 @@ public final class FloatTitlebarView extends FrameLayout {
             if (getBackground() != fill) setBackground(fill);
         }
         updateInk(glass);
+    }
+
+    /** The corner the strip wears for a requested radius, capped against its own size. */
+    private float cappedRadius(float requestedRadiusPx) {
+        return PaneShape.radiusForBounds(requestedRadiusPx, getWidth(), getHeight());
+    }
+
+    /** Times a size change re-dressed the strip; read by tests. */
+    int sizeDressCount() {
+        return mSizeDresses;
     }
 
     /** Re-aim the glass at the wallpaper: the float moved, or the page it sits on slid. */
@@ -204,13 +217,34 @@ public final class FloatTitlebarView extends FrameLayout {
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        android.os.Trace.beginSection("Pane.FloatTitlebarView.onSizeChanged");
+        try {
+            onSizeChangedImpl(w, h, oldw, oldh);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        // The slab's corner is capped against its own size, which is only known now.
+        // The slab's corner is capped against its own size, which is only known now. A resize
+        // that leaves the capped corner where it was has nothing to re-dress.
+        if (mDressed && cappedRadius(mRequestedRadiusPx) == mOutlineRadiusPx) return;
+        mSizeDresses++;
         dress(mStyle, mRequestedRadiusPx);
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        android.os.Trace.beginSection("Pane.FloatTitlebarView.onMeasure");
+        try {
+            onMeasureImpl(widthMeasureSpec, heightMeasureSpec);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onMeasureImpl(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
@@ -224,6 +258,15 @@ public final class FloatTitlebarView extends FrameLayout {
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        android.os.Trace.beginSection("Pane.FloatTitlebarView.onLayout");
+        try {
+            onLayoutImpl(changed, left, top, right, bottom);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onLayoutImpl(boolean changed, int left, int top, int right, int bottom) {
         int width = right - left;
         int height = bottom - top;
         mGlass.layout(0, 0, width, height);

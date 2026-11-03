@@ -117,7 +117,8 @@ public class BuiltinWidgetZoomReturnTest {
         widget.bind(null);
         settle(widget, width, height);
         float before = widget.content().getScaleX();
-        assertTrue("zoomed, not to the most: " + before, before > 1.02f && before < 1.8f);
+        // Never zoomed (ADR 0020 §12): the card keeps its design at 1, and comes back at 1.
+        assertTrue("never zoomed: " + before, before <= 1f);
         assertTrue("the label fits at first", !cutShort(widget.label));
 
         walkAndReturn(widget, width, height);

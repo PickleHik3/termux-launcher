@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ public final class GuiAppsSetupGuide {
      * (command copied, fcitx5 installed, and the chosen distro's rootfs present on the distro
      * route) is taken as finished once, and gets its marker written then.
      */
-    public static boolean finished(@NonNull SharedPreferences prefs, @NonNull TourEdition edition) {
+    public static boolean finished(@NonNull SharedPreferences prefs, @NonNull AppEdition edition) {
         if (markerPresent.getAsBoolean()) return true;
         if (!prefs.getBoolean(KEY_COPIED, false) || !fcitx5Installed.getAsBoolean()) return false;
         Choices choices = read(prefs, edition);
@@ -80,7 +80,7 @@ public final class GuiAppsSetupGuide {
      * for, so it counts as set up.
      */
     public static boolean isSetUp(@NonNull Context context) {
-        TourEdition edition = TourEdition.of(context.getPackageName());
+        AppEdition edition = AppEdition.of(context.getPackageName());
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return true;
         return finished(preferences(context), edition) && fcitx5Installed.getAsBoolean();
     }
@@ -94,7 +94,7 @@ public final class GuiAppsSetupGuide {
      * guide, only its own page of advice.
      */
     @NonNull
-    public static List<Step> stepsFor(@NonNull TourEdition edition, @Nullable GuiAppsSetup.Route route) {
+    public static List<Step> stepsFor(@NonNull AppEdition edition, @Nullable GuiAppsSetup.Route route) {
         List<GuiAppsSetup.Route> routes = GuiAppsSetup.routesFor(edition);
         if (routes.isEmpty()) return Collections.emptyList();
         List<Step> steps = new ArrayList<>();
@@ -112,10 +112,10 @@ public final class GuiAppsSetupGuide {
      * browser, so that route offers the file manager alone.
      */
     @NonNull
-    public static List<GuiAppsSetup.StarterApp> startersOffered(@NonNull TourEdition edition,
+    public static List<GuiAppsSetup.StarterApp> startersOffered(@NonNull AppEdition edition,
                                                                 @NonNull GuiAppsSetup.Route route) {
         List<GuiAppsSetup.StarterApp> offered = new ArrayList<>();
-        if (!(edition == TourEdition.VAJ && route == GuiAppsSetup.Route.X11_REPO)) {
+        if (!(edition == AppEdition.VAJ && route == GuiAppsSetup.Route.X11_REPO)) {
             offered.add(GuiAppsSetup.StarterApp.BROWSER);
         }
         offered.add(GuiAppsSetup.StarterApp.FILE_MANAGER);
@@ -145,7 +145,7 @@ public final class GuiAppsSetupGuide {
 
     /** The stored choices, with this edition's own default where nothing (valid) is stored. */
     @NonNull
-    public static Choices read(@NonNull SharedPreferences prefs, @NonNull TourEdition edition) {
+    public static Choices read(@NonNull SharedPreferences prefs, @NonNull AppEdition edition) {
         String stored = prefs.getString(KEY_ROUTE, null);
         GuiAppsSetup.Route route = null;
         for (GuiAppsSetup.Route candidate : GuiAppsSetup.routesFor(edition)) {
@@ -163,7 +163,7 @@ public final class GuiAppsSetupGuide {
 
     /** The command for what is picked, or null when the edition builds none (nix). */
     @Nullable
-    public static String command(@NonNull SharedPreferences prefs, @NonNull TourEdition edition) {
+    public static String command(@NonNull SharedPreferences prefs, @NonNull AppEdition edition) {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return null;
         Choices choices = read(prefs, edition);
         return GuiAppsSetup.command(choices.route, choices.distro, choices.starters, edition);
@@ -193,7 +193,7 @@ public final class GuiAppsSetupGuide {
      */
     @NonNull
     public static String rowSummary(@NonNull Context context, @NonNull SharedPreferences prefs,
-                                    @NonNull TourEdition edition) {
+                                    @NonNull AppEdition edition) {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) {
             return context.getString(R.string.settings_gui_apps_row_summary_nix);
         }

@@ -14,6 +14,41 @@
     <string name="editor_section_wallpaper">Wallpaper</string>
     <string name="editor_section_colour">Colour</string>
     <string name="editor_section_glass_material">Glass material</string>
+    <!-- The overhaul's section titles (appearance-cards-overhaul §2). -->
+    <string name="editor_section_more_options">More options</string>
+    <string name="editor_section_layout">Layout</string>
+    <string name="editor_section_appearance">Appearance</string>
+    <string name="editor_section_links">Links</string>
+    <string name="editor_section_colours">Colours</string>
+    <string name="editor_section_clock_weather">Clock &amp; Weather</string>
+    <string name="editor_row_outer_margin">Outer margin</string>
+    <string name="editor_row_not_on_this_phone">Not on this phone.</string>
+    <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
+    <string name="editor_row_refraction_off_lazy">Off while Reduce idle activity is on.</string>
+    <string name="editor_row_refraction_off_wallpaper">Needs a wallpaper set in the launcher.</string>
+    <string name="editor_link_glass_refraction_summary">Settings › Battery &amp; performance</string>
+    <string name="editor_st_hours">Clock format</string>
+    <string name="editor_st_hours_12">12 h</string>
+    <string name="editor_st_hours_24">24 h</string>
+    <string name="editor_st_unit">Temperature</string>
+    <string name="editor_st_unit_c">°C</string>
+    <string name="editor_st_unit_f">°F</string>
+    <!-- Link rows (overhaul §4): a one-fact line for a card (›), the page's path for Settings (↗). -->
+    <string name="editor_link_global_summary">Glass and colours for the whole app</string>
+    <string name="editor_link_sheets_summary">Glass for the palette, drawer and dialogs</string>
+    <string name="editor_link_widgets_summary">Glass for the widgets on Home</string>
+    <string name="editor_link_pages_summary">Add, remove and reorder pages</string>
+    <string name="editor_link_pane_borders_summary">Frames, focus and glow around panes</string>
+    <string name="editor_link_gestures_summary">Settings › Home › Gestures</string>
+    <string name="editor_link_layouts_summary">Settings › Keyboard › Layouts</string>
+    <string name="editor_link_keyboard_theme_summary">Settings › Keyboard › Keyboard theme</string>
+    <string name="editor_link_font_summary">Settings › Terminal › Font</string>
+    <string name="editor_link_tool_colours_summary">Settings › Appearance</string>
+    <string name="editor_link_camera_cutout_summary">Settings › Status bar</string>
+    <string name="editor_link_opens_card">Opens a card</string>
+    <string name="editor_link_opens_settings">Opens Settings</string>
+    <!-- Layout rows: the card a row opens, where it is not the element's own. -->
+    <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
     <string name="editor_note_workspace_only">Workspace only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>
@@ -22,9 +57,12 @@
     <string name="editor_hint_glass_material">Edge and Depth show on phones that draw the glass edge.</string>
 
     <!-- Keyboard card. -->
-    <string name="editor_row_background_opacity">Background opacity</string>
+    <string name="editor_row_background_opacity">Keyboard opacity</string>
     <string name="editor_row_bottom_padding">Bottom padding</string>
     <string name="editor_row_opacity_link">Move both opacities together</string>
+    <!-- The Linked toggle between Keyboard opacity and Keys opacity. -->
+    <string name="editor_opacity_linked">Linked</string>
+    <string name="editor_opacity_not_linked">Not linked</string>
     <string name="editor_chip_keyboard_theme">Theme</string>
 
     <!-- Home card. -->
@@ -42,6 +80,17 @@
     <string name="editor_home_icon_small">Small (48 dp)</string>
     <string name="editor_home_icon_default">Default (54 dp)</string>
     <string name="editor_home_icon_large">Large (60 dp)</string>
+    <!-- The one icon size (ADR 0020 §3): Home's icons and every dock design's. -->
+    <string name="editor_icon_size_s">S</string>
+    <string name="editor_icon_size_m">M</string>
+    <string name="editor_icon_size_l">L</string>
+    <string name="editor_icon_size_xl">XL</string>
+    <!-- Under the Icon size row while the pinned apps cap it: count, then the largest step. -->
+    <string name="editor_icon_size_cap">%1$d pinned apps fit up to %2$s</string>
+    <!-- Settings › Home › Icon size: a step, and its size. -->
+    <string name="settings_icon_size_step">%1$s, %2$d dp</string>
+    <!-- Settings › Home › Icon size while the pinned apps cap it: the step drawn, then why. -->
+    <string name="settings_icon_size_capped">%1$s. %2$s</string>
     <string-array name="editor_home_icon_size_entries">
         <item>@string/editor_home_icon_small</item>
         <item>@string/editor_home_icon_default</item>

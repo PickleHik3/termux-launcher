@@ -71,6 +71,25 @@ public class EditorCardBodyTest {
     }
 
     @Test
+    public void linksIsAnAlwaysOpenInsetAndTheOtherSectionsCollapse() {
+        for (EditorCard card : CARDS) {
+            Fixture f = new Fixture(card, 1f);
+            for (EditorCardSheet.Section section : f.sheet.sections()) {
+                boolean links = section.key.equals(Row.SECTION_LINKS.name());
+                assertEquals(card + " " + section.key, links, section.inset);
+                assertEquals(card + " " + section.key + " clickable", !links,
+                    section.titleRow.hasOnClickListeners());
+                assertEquals(card + " " + section.key + " arrow", !links,
+                    section.arrow.getVisibility() == View.VISIBLE);
+                if (links) {
+                    assertTrue(card + " links open", section.open);
+                    assertEquals(View.VISIBLE, section.body.getVisibility());
+                }
+            }
+        }
+    }
+
+    @Test
     public void everyRowOfTheCardIsThere() {
         for (EditorCard card : CARDS) {
             Fixture f = new Fixture(card, 1f);
@@ -78,6 +97,9 @@ public class EditorCardBodyTest {
             assertNotNull(card + " is drawn by the card body", body);
             for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
                 assertTrue(card + " holds " + spec.row, body.holds(spec.row));
+                // Section headings are the sheet's collapsible titles (W1b), not the body's.
+                if (EditorCardSheet.isSectionHeading(spec.row))
+                    continue;
                 assertTrue(card + " draws " + spec.row + " itself",
                     f.model.asked.contains(spec.row));
             }
@@ -125,17 +147,19 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
-        for (int res : new int[] {R.string.editor_section_grid, R.string.editor_section_look,
-            R.string.editor_section_glass, R.string.editor_section_labels_folders,
-            R.string.editor_section_options, R.string.editor_section_more})
+        // Home's sections (overhaul §2): Home · More options · Layout · Appearance · Links.
+        for (int res : new int[] {R.string.appearance_card_home,
+            R.string.editor_section_more_options, R.string.editor_section_layout,
+            R.string.editor_section_appearance, R.string.editor_section_links})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
-        assertTrue(texts.contains(home.themed.getString(R.string.editor_note_home_only)));
+        // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
         Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
         List<String> globalTexts = texts(global.sheet.rows());
-        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_note_both_screens)));
-        assertTrue(globalTexts.contains(global.themed.getString(
+        // Edge and Depth stay on the card; the glass-material hint row is gone.
+        assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
+        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
     }
 
     @Test
@@ -158,11 +182,10 @@ public class EditorCardBodyTest {
             if (name.equals(f.themed.getString(R.string.appearance_row_key_opacity)))
                 keys = slider;
         }
-        assertNotNull(background);
+        // Background opacity is the glass row set's Opacity now, over More; the link stands
+        // beside Key opacity under More.
         assertNotNull(keys);
-        assertTrue("the link after Background opacity", f.left(link) >= f.left(background));
-        assertTrue("the link before Key opacity", f.left(link) + link.getWidth()
-            <= f.left(keys) + 1);
+        assertTrue("the link after Key opacity", f.left(link) >= f.left(keys));
         assertFalse(link.isChecked());
         link.performClick();
         assertEquals(Integer.valueOf(1), f.model.values.get(Row.OPACITY_LINK));
@@ -264,6 +287,8 @@ public class EditorCardBodyTest {
         }
 
         void layOut() {
+            // Closed sections are not laid out: every section open, as a user would read them.
+            sheet.openAllSections();
             parent.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(mHeight, View.MeasureSpec.EXACTLY));
             parent.layout(0, 0, width, mHeight);
@@ -292,7 +317,7 @@ public class EditorCardBodyTest {
             if (held != null)
                 return held;
             switch (CardBody.shape(row)) {
-                case STRIP: return 50;
+                case SLIDER: return 50;
                 case STEPPER: return 4;
                 case TILES: return 1;
                 default: return row == Row.LOOK ? AppearanceLooks.CUSTOM_STOP : 0;
@@ -328,7 +353,7 @@ public class EditorCardBodyTest {
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
             if (row.kind == Kind.ACTION)
-                return mContext.getString(R.string.appearance_match_copy);
+                return "Copy";
             return stepper(row) ? String.valueOf(value)
                 : mContext.getString(R.string.appearance_readout_percent, value);
         }

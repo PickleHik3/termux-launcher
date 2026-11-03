@@ -4,7 +4,7 @@
     <string name="editor_dock_row_style">Style</string>
     <string name="editor_dock_row_bars">Bars</string>
     <string name="editor_dock_row_type">Dock type</string>
-    <string name="editor_dock_row_options">Options</string>
+    <string name="editor_dock_row_options">Show/hide</string>
     <string name="editor_dock_appearance">Appearance</string>
 
     <string name="editor_dock_bars_hint">Hold the handle to reorder</string>
@@ -29,7 +29,15 @@
     <string name="editor_dock_app_icons">App icons</string>
     <string name="editor_dock_most_used">Most used row</string>
     <string name="editor_dock_icon_pack">Icon pack</string>
-    <string name="editor_dock_icon_pack_global">Same as Global</string>
+    <string name="editor_dock_icon_pack_global">Same as Home</string>
+    <!-- The Dock section's stepper: how many pinned apps a dock page shows. -->
+    <string name="editor_dock_apps_in_dock">Apps in the dock</string>
+    <!-- Under Apps in the dock while + is out at the fit; %2$s is S, M, L or XL. -->
+    <string name="editor_dock_apps_fit_hint">At most %1$d fit at size %2$s.</string>
+    <!-- The Dock card's More options row: the pinned apps' icon pack. -->
+    <string name="editor_dock_icon_pack_row">Dock icon pack</string>
+    <!-- Icon pack ›'s subtitle: what the subcard holds. -->
+    <string name="editor_link_icon_pack_summary">Packs for Home\'s apps</string>
     <string name="editor_dock_icon_pack_hint">The icon pack here applies to the apps row only.</string>
 
     <string name="editor_dock_az_glass">Glass background</string>
@@ -44,7 +52,7 @@
     <string name="editor_dock_strip_height">Strip height</string>
     <string name="editor_dock_strip_height_value">%1$d dp</string>
 
-    <string name="editor_dock_option_search_field">Search field</string>
+    <string name="editor_dock_option_search_field">Search bar</string>
     <string name="editor_dock_option_drawer_icon">Drawer icon</string>
     <string name="editor_dock_option_command_palette">Command palette</string>
     <string name="editor_dock_option_notification_dots">Notification dots</string>

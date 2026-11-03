@@ -41,7 +41,7 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
 import com.termux.app.x11.GuiAppsSetupGuide;
@@ -82,7 +82,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             GuiAppsSetupGuideFragment.class, R.string.settings_gui_apps_title);
     }
 
-    private TourEdition mEdition = TourEdition.TERMUX;
+    private AppEdition mEdition = AppEdition.TERMUX;
     private SharedPreferences mPrefs;
     @Nullable private Step mStep;
     private boolean mCopied;
@@ -117,8 +117,8 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         Context context = inflater.getContext();
         Bundle args = getArguments();
         String override = args == null ? null : args.getString(ARG_EDITION);
-        mEdition = override != null ? TourEdition.valueOf(override)
-            : TourEdition.of(context.getPackageName());
+        mEdition = override != null ? AppEdition.valueOf(override)
+            : AppEdition.of(context.getPackageName());
         mPrefs = GuiAppsSetupGuide.preferences(context);
         if (savedInstanceState != null) {
             String saved = savedInstanceState.getString(STATE_STEP);

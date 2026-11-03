@@ -4,8 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.place.SeamTravel.DockPlan;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Objects;
 
@@ -53,14 +53,14 @@ public final class SeamDress {
      * them changes nothing the stack shows.
      */
     public static final class StackDress {
-        @NonNull public final WallHalfShape shape;
+        @NonNull public final WallShape shape;
         public final float dockHeightScale;
         public final float keyboardHeightScale;
         public final int keyboardChinDp;
         /** The half's look; only its stack part (the dock and the keyboard) is compared. */
         @NonNull public final HalfLook look;
 
-        private StackDress(@NonNull WallHalfShape shape, float dockHeightScale,
+        private StackDress(@NonNull WallShape shape, float dockHeightScale,
                            float keyboardHeightScale, int keyboardChinDp,
                            @NonNull HalfLook look) {
             this.shape = shape;
@@ -71,13 +71,13 @@ public final class SeamDress {
         }
 
         @NonNull
-        public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
+        public static StackDress of(@NonNull WallShape shape, float dockHeightScale,
                                     float keyboardHeightScale, int keyboardChinDp) {
             return of(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp, HalfLook.NONE);
         }
 
         @NonNull
-        public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
+        public static StackDress of(@NonNull WallShape shape, float dockHeightScale,
                                     float keyboardHeightScale, int keyboardChinDp,
                                     @NonNull HalfLook look) {
             return new StackDress(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp,
@@ -146,22 +146,47 @@ public final class SeamDress {
     }
 
     /**
-     * The half of the wall whose look values {@code surface} wears on this frame (ADR 0013): the
-     * half whose dress it wears ({@link #wearsHome}). The stack's look so changes with its rows,
-     * where none of it shows; the status bar wears the Workspace's through a slide and its own
-     * half's at rest; the frame its committed half's.
+     * The page whose look values {@code surface} wears on this frame (ADR 0015): the page whose
+     * dress it wears ({@link #wearsHome}), {@link PaneWallPage#WIDGETS} for Home's and
+     * {@link PaneWallPage#TERMINAL} for the Terminal's. The stack's look so changes with its
+     * rows, where none of it shows; the status bar wears the Terminal's through a slide and its
+     * own page's at rest; the frame its committed page's.
      */
     @NonNull
-    public static WallHalf lookHalf(@NonNull Surface surface, @NonNull PaneWallPage committed,
-                                    @NonNull PaneWallPage stackPage, boolean seamTravel) {
-        return wearsHome(surface, committed, stackPage, seamTravel) ? WallHalf.HOME
-            : WallHalf.WORKSPACE;
+    public static PaneWallPage lookPage(@NonNull Surface surface, @NonNull PaneWallPage committed,
+                                        @NonNull PaneWallPage stackPage, boolean seamTravel) {
+        return wearsHome(surface, committed, stackPage, seamTravel) ? PaneWallPage.WIDGETS
+            : PaneWallPage.TERMINAL;
     }
 
-    /** The half of the wall a page stands on, for its look values. */
+    /** The kind of screen a page is, for its look values: Home's or the Terminal's. */
     @NonNull
-    public static WallHalf halfOf(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? WallHalf.HOME : WallHalf.WORKSPACE;
+    public static PaneWallPage screenOf(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+    }
+
+    /**
+     * The id a page's look values are read under: the wall (Base) for Home's pages, which hold no
+     * look of their own, and the Terminal page's id for any other page.
+     */
+    public static int lookPageId(@NonNull PaneWallPage page, int terminalPageId) {
+        return page == PaneWallPage.WIDGETS ? TermuxAppSharedPreferences.PAGE_WALL
+            : terminalPageId;
+    }
+
+    /**
+     * The id a surface's look values are read under (ADR 0015 §6): the page it stands on. Home's
+     * pages read the Home page's own ({@code homePageId}, the wall while none is known); a window
+     * reads the bound Display page's ({@code displayPageId}, when the surface stands on Display)
+     * or else the Terminal page's. A page holding no overrides reads Base through its id.
+     *
+     * @param page the kind of page the surface wears ({@link #lookPage})
+     */
+    public static int lookPageId(@NonNull PaneWallPage page, int homePageId, int displayPageId,
+                                 int terminalPageId) {
+        if (page == PaneWallPage.WIDGETS)
+            return homePageId >= 0 ? homePageId : TermuxAppSharedPreferences.PAGE_WALL;
+        return displayPageId >= 0 ? displayPageId : terminalPageId;
     }
 
     /**
@@ -204,6 +229,23 @@ public final class SeamDress {
      */
     public static boolean wholeStack(@NonNull DockPlan plan, boolean dressDiffers) {
         return dressDiffers && plan == DockPlan.DIP;
+    }
+
+    /**
+     * Whether a pictured whole-stack crossing between Home and the Workspace has each half's
+     * stack ride with its own page (D11, 2026-11-01): the committed half's, pictured as it stood,
+     * rides out with the page it stood on, and the other half's, dressed for it from the first
+     * frame, rides in with the arriving page at its rest. Nothing of either stack rises, sinks or
+     * waits, so the arriving page brings its chrome where it rests, and the terminal's page, laid
+     * out at the Terminal's rest both ways (Crossing#restTerminalAway), never shows a band of
+     * wallpaper under it. It replaced the stack that waited below the screen for the landing
+     * (2026-10-31), which showed that band through the whole slide. Between two Home pages the
+     * stacks keep crossing in step with the wall.
+     */
+    public static boolean stacksRide(@Nullable PaneWallPage committed,
+                                     @Nullable PaneWallPage other, boolean pictured) {
+        return pictured && committed != null && other != null
+            && SeamTravel.crosses(committed, other);
     }
 
     /**

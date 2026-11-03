@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
- * windows, the display window among them while a display is up ({@link DisplaySlot}). Pure, so the
+ * windows, the display window among them while a display was up (before ADR 0015 A3b). Pure, so the
  * seam, the insertion of a new window, Start in and the saved position read as arithmetic.
  *
  * <p>The wall does not hold a view per page. Home's pages are the widget grid's own pages, paged
@@ -88,35 +88,29 @@ public final class WallRow {
 
     /**
      * The seam from Home: a plain swipe forward on Home page {@code homePage} leaves Home only
-     * from the last Home page, and only when the swipe has somewhere to go ({@code rowContinues},
-     * {@link #seamContinues}). Otherwise the swipe stays with Home, which pages or stops at its
-     * end. Backward never leaves Home: Home page 1 is the row's first page.
+     * from the last Home page, and only when the swipe has somewhere to go ({@code rowContinues}:
+     * a cell after Home, the empty Terminal page's included). Otherwise the swipe stays with Home,
+     * which pages or stops at its end. Backward never leaves Home: Home page 1 is the row's first
+     * page.
      */
     public static boolean swipeLeavesHome(int homePage, int homeCount, int direction,
                                           boolean rowContinues) {
         return direction > 0 && rowContinues && homePage >= Math.max(1, homeCount) - 1;
     }
 
-    /**
-     * Whether a forward swipe past the last Home page has somewhere to go: a page after Home on
-     * the row ({@code rowHasPageAfterHome}: a window, or the display window), or, with the
-     * Workspace empty, a Workspace the crossing can start ({@code canStartWorkspace}). An empty
-     * Workspace no longer stops the swipe: the crossing brings an empty window in under the finger
-     * and the shell comes with it ({@link #seamStartsShell}).
-     */
-    public static boolean seamContinues(boolean rowHasPageAfterHome, boolean canStartWorkspace) {
-        return rowHasPageAfterHome || canStartWorkspace;
-    }
+    // ---- Slots (ADR 0015, A2a): Home runs anywhere on the row -------------------------------
 
     /**
-     * Whether the wall committing to {@code committed} starts the Workspace's first shell: only
-     * when the seam is carrying a swipe into an empty Workspace ({@code crossingIntoEmpty}) and the
-     * release lands on it. A swipe that springs back to Home starts nothing, and nothing is started
-     * at touch-down, so an aborted swipe leaves no shell behind.
+     * {@link #swipeLeavesHome} for any order: a swipe in {@code direction} leaves the Home run at
+     * the run's edge on that side, when a slot lies on that side ({@code slotOnSide}). Inside the
+     * run the swipe stays with Home, which pages. For the default order (no slot before the first
+     * Home page) this is {@code swipeLeavesHome}.
      */
-    public static boolean seamStartsShell(boolean crossingIntoEmpty,
-                                          @NonNull PaneWallPage committed) {
-        return crossingIntoEmpty && committed == PaneWallPage.TERMINAL;
+    public static boolean swipeLeavesRun(int pageInRun, int runLength, int direction,
+                                         boolean slotOnSide) {
+        if (!slotOnSide || direction == 0) return false;
+        int last = Math.max(1, runLength) - 1;
+        return direction > 0 ? pageInRun >= last : pageInRun <= 0;
     }
 
     /**

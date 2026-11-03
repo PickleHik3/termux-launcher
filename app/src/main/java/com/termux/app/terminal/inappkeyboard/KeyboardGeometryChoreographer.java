@@ -233,7 +233,8 @@ public final class KeyboardGeometryChoreographer {
         int width = floating != null ? floating.widthPx
             : availableRoot != null ? availableRoot.getWidth() : 0;
         int availableHeight = floating != null ? floating.availableHeightPx
-            : availableRoot != null ? availableRoot.getHeight() : 0;
+            : availableRoot != null
+            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
         DisplayMetrics metrics = mSurface.displayMetrics();
         if (width <= 0)
             width = metrics.widthPixels;
@@ -417,6 +418,19 @@ public final class KeyboardGeometryChoreographer {
      * path with its pre-draw correction.
      */
     public void onVisibilityRequested(boolean visible) {
+        onVisibilityRequested(visible, false);
+    }
+
+    /**
+     * The same, for a keyboard that opens {@code belowScreen}: brought up by a slide's travel
+     * (a seam crossing's pre-roll) and held below the screen by its translation until the wall
+     * brings it up. No frame can show its keys over a stale crop before then, so it is revealed
+     * at once, without the pre-draw gate: under a drag that gate held the whole window's frames
+     * back, up to {@link #MAX_OPEN_REVEAL_BLOCKED_FRAMES} of them, each with a full chrome pass
+     * run in it (SeamTime3, 2026-11-03). One render pass is booked instead, which cuts the
+     * keyboard's crop long before it rises into view.
+     */
+    public void onVisibilityRequested(boolean visible, boolean belowScreen) {
         View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
         if (keyboardContainer == null) {
             return;
@@ -429,9 +443,10 @@ public final class KeyboardGeometryChoreographer {
             mPendingCloseGeometry = false;
             ChromeSpec state = mSurface.buildChromeSpec();
             boolean backdropReady = mSurface.keyboardBackdropReady(state);
-            boolean deferReveal = mPendingOpenReveal
+            boolean deferReveal = !belowScreen && (mPendingOpenReveal
                 || shouldDeferReveal(openingFromGone, mSurface.keyboardGlassSurface(),
-                    state.blurEnabled, backdropReady);
+                    state.blurEnabled, backdropReady));
+            if (!deferReveal && mPendingOpenReveal) removeOpenPreDrawGate();
             mPendingOpenReveal = deferReveal;
             // INVISIBLE participates in destination layout without allowing a draw. The render
             // pass can therefore install the expanded crop before keys and their glass backing
@@ -440,6 +455,8 @@ public final class KeyboardGeometryChoreographer {
             mSurface.applyKeyboardSurfaceState(state);
             if (deferReveal) {
                 installOpenPreDrawGate();
+            } else if (belowScreen && openingFromGone) {
+                mSurface.requestAccessoryRenderSync();
             }
         } else {
             boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;

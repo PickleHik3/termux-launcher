@@ -43,7 +43,7 @@ public class RootPreferencesSearchIndexTest {
     private static final String[][] EXPECTED_ROWS = {
         {"home", "dock_drawer", "terminal", "linux_apps"},
         {"look", "keyboard_input", "notifications", "on_device_ai"},
-        {"general"}
+        {"performance", "general"}
     };
 
     static SettingsActivity.RootPreferencesFragment launch() {
@@ -102,7 +102,7 @@ public class RootPreferencesSearchIndexTest {
         assertTrue(results != null && results.isVisible() && results.getPreferenceCount() > 0);
         assertEquals("Reduce idle activity", String.valueOf(results.getPreference(0).getTitle()));
         assertEquals("found by its old name, on Battery & performance",
-            "General › Battery & performance", String.valueOf(results.getPreference(0).getSummary()));
+            "Battery & performance", String.valueOf(results.getPreference(0).getSummary()));
 
         search.getOnQueryChangedListener().onQueryChanged("");
         assertTrue(isVisible(root, "root_your_launcher"));

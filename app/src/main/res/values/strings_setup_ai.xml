@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_ai_need_wifi">Connect to Wi-Fi, or turn Wi-Fi only off.</string>
+    <string name="setup_ai_no_models">This phone cannot run local models.</string>
+    <string name="setup_ai_done">Done</string>
+    <string name="setup_ai_row_progress">%1$s of %2$s</string>
+    <string name="setup_ai_footer_progress">Downloaded: %1$s of %2$s</string>
+</resources>

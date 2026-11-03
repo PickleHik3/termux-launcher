@@ -71,6 +71,7 @@ nothing changes at the landing. The keyboard travels with the half that has it o
 or a chip tapped mid-slide retargets from where the wall is. A crossing is over only when the wall
 lands.
 _Avoid_: travel (the code's older word for the same motion), transition, page swipe
+_ADR 0015 (proposed): any slide between two neighbouring pages, not only between the halves._
 
 **Display**, **display window**:
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
@@ -154,6 +155,7 @@ The launcher half of the wall: the **Home pages**, left of the **Workspace**. It
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
 index, the launcher status bar it shares with the Workspace, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
+_ADR 0015 (proposed): Home stops being a half; a **Home page** is one page kind among three, and the home press lands on the **home page**._
 
 **Home page**:
 One page of **Home**: a grid of widgets, paged by a plain swipe anywhere on it. Pages 2…n lie to the
@@ -169,6 +171,7 @@ a swipe beside it does), resized at its bottom-right corner, minimised into
 its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
 Terminal from Home opens. The bar's chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
+_ADR 0015 (proposed): becomes a **Float**, which may also hang over a Terminal page window._
 
 **Float chip**:
 Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
@@ -240,6 +243,11 @@ is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
 
+**Notice**:
+The one transient message in the app, on a pill centred at the top of the screen, inside the
+terminal's rim while a terminal is on screen. Replaces stock toasts.
+_Avoid_: toast, pill (that is the dictation card), banner, chip
+
 **Orientation**:
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
 see Minimal mode); appearance is never per orientation.
@@ -249,6 +257,7 @@ One full-screen stop on the **wall**: a **Home page** or a **window**. Appearanc
 every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
+_ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
 
 **Pane**:
 One terminal view inside a split. Panes have corner tabs but no appearance of their own. A split is resized by dragging the divider, the gap between its panes, and a corner hold only shows the pane's buttons.
@@ -272,6 +281,12 @@ conversation fold into one card with a count. Tap opens it, a sideways swipe dis
 `project-docs/reference/launcher/pinned-notification-SPEC.md`.
 _Avoid_: essential notification (that is the rule, not the card), heads-up, pin (alone)
 
+**Read-out**:
+A fleeting **notice** naming what a key just did or something still under way, such as a pane's
+size in cells during a resize drag. A new label swaps its words in place, and any real notice
+displaces it.
+_Avoid_: size banner, resize overlay, hint
+
 **Saved sessions**:
 A named set of sessions, windows, splits and working directories kept under `~/.termux/workspaces/`
 and loaded back as new shells. The drawer's Saved tab lists them; Save sessions… adds one.
@@ -287,14 +302,15 @@ code's word for a pane's shell, not for a session. See `project-docs/reference/t
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
 
 **Start in**:
-The one setting that says where a cold start lands: Home (the default), the Workspace, which
-opens one fresh shell window, or Display, the **display window**, which holds only while the
+The one setting that says where a cold start and a home press land: Home (the default), the
+Workspace, which opens one fresh shell window (a home press goes to its first window), or Display, the **display window**, which holds only while the
 display starts with the launcher (choosing it turns that on; turning it off falls back to the
 Workspace when a terminal window is open, else Home). It is also what the page overview's home
 button sets: a Home page, the first terminal window or the display window. It replaces the usage
 mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
 Home reads as the Workspace.
 _Avoid_: default place, start page, usage mode
+_ADR 0015 (proposed): retires into the **home page**._
 
 **Use as**:
 Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
@@ -303,6 +319,7 @@ the Home page off the wall, hides Home's settings, drops Home from Start in and 
 card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
 home app is a separate choice.
 _Avoid_: usage mode, launcher mode, terminal alone
+_ADR 0015 (proposed): retires as a setting; the welcome sheet's choice only seeds the wall._
 
 **Search field**:
 The field under the dock's apps row that opens the command palette, there when the layout turns it
@@ -329,12 +346,15 @@ _Avoid_: surface mode, dock style (it is no longer the dock's alone),
 capsule, rounded
 
 **Surface**:
-One piece of glass whose look can be set: the dock, the keyboard, the status bar or the canvas
-(the terminal pane). In code it is a `SurfaceSlot`. The user sets its **Frost**, opacity, tint,
-corner radius and side gap (Frost is stored as the blur and grain properties), and each of those
-either follows **Base** or holds an override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
-change has to cover.
-_Avoid_: panel, layer, widget
+One piece of glass whose look can be set, also called an **element** in the look grid: the status
+bar, the dock, the keyboard, the terminal (the canvas), the **Widgets** (the Card-form widgets'
+glass on a Home page) and the **Sheets** (the app drawer, folders, anchored menus, the command
+palette, notices and the Home float, which share one set of cells). In code it is a
+`SurfaceSlot`. Every element carries every look property it has a shape for (Frost, Grain,
+opacity, tint, tint colour, Depth, Edge, corners, rim); each either follows **Base** or holds a
+**Cell** of its own (ADR 0017). AGENTS.md's "Hit every surface" uses the word more broadly, for
+every path a change has to cover.
+_Avoid_: panel, layer, widget (for the Widgets element say "the Widgets surface")
 
 **Terminal** (the entry):
 The launcher's own app entry, pinned to the dock at migration and listed in the drawer: a tap goes
@@ -355,6 +375,7 @@ past the last Home page reaches the first window, opening a fresh one when the W
 dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
+_ADR 0015 (proposed): the wall is one ordered list of pages of any **page kind**, in any order, arranged in Edit pages._
 
 **Window chip**:
 The status bar's chip for one window, the display window or a **Home float**, the same chips in the
@@ -369,6 +390,122 @@ the Workspace alive. A home press on it goes to Home page 1; a home press from a
 to the window that was left. The drawer, the corner tab and the border drag also lead back to Home.
 _Avoid_: usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
 sessions**)
+_ADR 0015 (proposed): renamed the **Terminal page**, one page placed anywhere on the wall; Workspace moves to Avoid._
+
+### Pages (ADR 0015, proposed)
+
+These words come from ADR 0015 (the wall is a list of pages), still a draft on 2026-10-27. Until it
+is accepted the entries above describe the app as built.
+
+**Page kind**:
+What a page is: a **Home page**, the **Terminal page** or a **Display page**. Each kind has its own
+default **Dress**: the dock on Home pages; the status bar and extra keys, dock off, on the others.
+_Avoid_: page type, place
+
+**home page** (the one set as home):
+The one page, of any kind, that a cold start and a home press inside the launcher land on, chosen
+in Edit pages with Set as home. Written lower-case; a **Home page** (capitalised) is the kind. A
+home press from another app returns to the page that was left first.
+_Avoid_: start page, default page, Start in
+
+**Terminal page**:
+The one page (at most one) that holds the sessions: one session's row of windows side by side,
+extended sideways by windows (Ctrl+Alt+C) and vertically by sessions (Ctrl+Alt+Shift+C, swapped in
+place by Ctrl+Alt+Up/Down). It stays on the wall when its last window closes and starts a shell
+when landed on. Named "Terminal" in the UI. Replaces the **Workspace**.
+_Avoid_: Workspace, run, shell (that is what a pane runs)
+
+**Display page**:
+A page showing the one X display, either unbound (the screen as it is) or bound to a Linux app,
+which landing on it raises (and launches). Landing starts the display when it is not running. Any
+number; it takes no Floats and no drops.
+_Avoid_: display window (the retired row window), X11 page
+
+**Float**:
+A session window floating over a Home page or a Terminal page window, with one titlebar and chip.
+A floating pane is lifted into a Float pinned to its window.
+_Avoid_: Home float (the narrower old word), floating pane
+
+**Carry**:
+Moving a held thing (a Float, an app icon, a folder or a widget) across pages: a second finger's
+swipe or a rest at the side edge pages the wall under it. A release where it cannot drop flies it
+back.
+_Avoid_: drag across pages, pick up (that is the first half of a carry)
+
+**Multi-pick**:
+A carry of several items: after one is picked up, taps on more Home items fly them into the held
+stack; the drop lays them out in pick order.
+_Avoid_: multi-select, bulk move
+
+**Page list**:
+The wall's ordered pages and its **home page**, held by one module (`WallPages`, designed
+2026-10-27). Pages have stable ids; what stands on a page is kept by its owner under that id.
+_Avoid_: page order (as a store), wall model
+
+**Stop**:
+One place the wall can land: a page, or one window of the **Terminal page**. The Terminal page
+gives one stop per window of the current session, or one when it has none.
+_Avoid_: page index, position
+
+**Widgets** (the surface):
+The look surface for widget cards on a Home page, following **Base** or detached per page; each
+widget only chooses Card or **Bare**.
+_Avoid_: widget glass (in prose)
+
+**Ground**:
+What is painted between the wallpaper and a page: its wallpaper dim, plus the canvas tint on the
+**Terminal page** when the canvas is not glass. One per page; neighbouring grounds meet in a soft
+seam that travels with the pages. The ink solver reads the ground under a rect.
+_Avoid_: wall ground (the retired single colour), unified background dim
+
+**Cell**:
+The stretch of the **wall** one page takes, in the order Edit pages arranged: every page has one,
+whatever its kind, and the wall pages from cell to cell. A cell shows its page **live** or as a
+**still**.
+_Avoid_: wall slot, place window (the retired list of at most one page per kind around the current
+one), slot
+
+**Live page**:
+The page its kind's one view is drawing right now: the widget grid for one Home page, the row of
+windows for the Terminal page, the X display for one Display page. At most one live page per kind;
+the page the wall stands on is always live once it has landed.
+_Avoid_: bound page (binding is the choice, live is the state), current page (that is the page the
+wall stands on, which may still be a still mid-slide)
+
+**Still**:
+What a cell shows while its page is not live: the page's last picture, else a card with the page's
+name and its kind's icon. A still takes no touch and wears no chrome of its own; the **Dress** is the
+page kind's whether the page is live or still. Landing on a still binds the kind's view to that page
+and the still gives way to the view.
+_Avoid_: stand-in (that is the surface's copy while a live display moves), placeholder, snapshot
+
+**Binding**:
+Which page of a kind the kind's one view draws. A landing re-binds; a far jump by name re-binds to
+the page landed on and never to the pages passed over.
+_Avoid_: bound run, bound slot
+
+**Page override**:
+A look value one page holds instead of the wall's: a **Cell** in the page's row of the look grid
+(`look.<property>@<page id>`, or `look.<property>.<element>@<page id>` for one element). Reset at
+that cell deletes it (ADR 0017).
+_Avoid_: half value, per-page setting
+
+**Cell**:
+One slot of the look grid (ADR 0017, ADR 0018 §3): a property at one *Where* (everywhere, a kind
+of page, or a page) and one *What* (all glass or one element), keyed
+`look.<property>[.<element>][@<page>|@kind:<home|terminal|display>]`. A present key is the cell's
+value; an absent key follows. Read order: the element on this page, all glass on this page, the
+element on the page's kind, all glass on that kind, the element everywhere, **Base**, the Look
+shipped for that kind. Vibrancy and Margin have no element column and no kind row.
+_Avoid_: layer, level, override slot
+
+**Scope chip**:
+The two chips at the top of every Appearance card: **Where it applies** (Everywhere | Home pages,
+Terminal or Display pages, the kind of the page in front | <page name>) and **What it applies to**
+(All glass | <element>). Together they name the **Cell** the card's
+rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
+_Avoid_: Global as the scope chip's label (the old chip; in prose and code say Base). **Global** is
+the Appearance editor's card for the Base look (developer, 2026-11-03).
 
 ### Look and motion
 
@@ -379,13 +516,22 @@ pane is not visible, and after about ten seconds without input, resuming on the 
 _Avoid_: animated background, live wallpaper (removed), animation
 
 **Base**:
-The shared value of a surface property (Frost, opacity, tint, corner radius, side gap; Frost is
-stored as blur and grain) that every surface follows until it is given its own. The Appearance
-card's All surfaces strip sets it. A surface that follows Base is **inherited**; one
-with its own value is **detached**, holding an override. The resolution happens in
-`TermuxAppSharedPreferences`, so every getter returns the resolved value. Setters write through the
-link, so a slider or the wallpaper mode leaves a surface inherited.
-_Avoid_: global, default (the shipped value is the default; Base is what the user set)
+The everywhere-and-all-glass **Cell** of a look property (`look.<property>`): the value every
+page and every element shows until a more specific cell holds one. The Appearance card writes it
+with both chips on Everywhere and All glass; Settings rows, presets, the wallpaper policy and
+launcherctl write it unless they name another cell. There are no inherit flags: a surface
+**follows** when its cells are absent and holds its own value when one is present (ADR 0017).
+The resolution happens in `LookGrid` under `TermuxAppSharedPreferences`, so every named getter
+returns the resolved value.
+_Avoid_: global, default (the shipped value is the default; Base is what the user set), inherited
+and detached (the old flag words)
+
+**Backstop**:
+The time or frame count after which a **Hold** releases on its own because its signal has not
+come. A backstop is a fail-safe, not a schedule: the design is that the signal arrives first, and
+every backstop that releases a hold is written to the motion log by name so it can be counted.
+_Avoid_: timeout (a timeout is an error; a backstop keeps the screen alive), fallback delay
+
 
 **Event effect**:
 A built-in shader effect that draws only in answer to something happening (a keystroke, a cursor
@@ -406,8 +552,11 @@ _Avoid_: glass mode, refraction mode
 The glass strip's first slider on every card with glass (and All surfaces' on the Appearance
 card), clear to frosted: it moves a surface's blur and grain together along
 one curve (`surfaces/GlassControls`; the code still calls it Glass, `GLASS`, `surface_glass_position`).
-Clear sits at 20, Tint at 40, Mist at 75; Solid has no frost and sits off it. Storage keeps blur and
-grain; the slider reads them back. Not the frost layer itself (the blurred picture a surface draws).
+Since ADR 0017 it snaps to eight **Frost stops** (0, 10, 20, 40, 55, 75, 90, 100 on the old
+scale) so that every distinct blur radius in use fits the shared-frame cache; Solid sits at 0,
+Clear at 20, Tint at 40, Mist at 75. Storage keeps the stop, and a **Grain** set on its own
+under More holds while Frost moves blur alone. Not the frost layer itself (the blurred picture a
+surface draws).
 _Avoid_: Glass (the old label; every control on that page is about the glass), material (the older
 family macro)
 
@@ -439,6 +588,20 @@ surface's own size stays an offset: pane zoom and the terminal font setting, Hom
 100% is every install's sizes as they were (`text_size_percent`, unset until moved).
 _Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
 
+**Gate**:
+A **Hold** that keeps a window from drawing until the first frame is right: the keyboard reveal
+gate, the first-draw gate. A gate's **Backstop** is short, because a gate that stays shut is a
+black home screen.
+_Avoid_: block, freeze
+
+**Hold**:
+A wait for one signal before something is let go: a layout the pass booked, a view's first draw,
+a surface's first frame after a swap, the settle of a return. A hold is named, is released once
+by the signal it waits for or by its **Backstop**, and says which of the two released it. A hold
+that is superseded by a newer one is a no-op when it fires.
+_Avoid_: wait, timer, delay, debounce (a debounce coalesces repeats; it waits for nothing)
+
+
 **Lazy mode**:
 The Battery setting that stops the launcher animating while nobody is watching: the clock swaps its
 digits instead of folding them, a working window's rim holds lit, and the status readings are sampled
@@ -451,6 +614,7 @@ stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Loo
 itself; Custom is never a gate. Home and the Workspace each hold their own Look and own surface
 values, equal until one is edited (ADR 0013); one look covers both orientations.
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
+_ADR 0015 (proposed): looks are held per page, not per half: Base, then each page inherits or detaches (supersedes ADR 0013)._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour
@@ -840,7 +1004,8 @@ The privileged lane: it runs allowlisted tlstore tools as the shell uid (2000) t
 `PrivilegedLaneService` runs as shell, `PrivilegedLaneServer` listens on an abstract socket and
 accepts only the app's own uid, and the client is `tl-priv` in the tlstore repository. The wire
 protocol between them is `tlpriv1` (`LaneRequest`), a contract changed on both sides in step. The
-allowlist guards against accidents, not against code already running as that uid. See AGENTS.md.
+allowlist guards against accidents, not against code already running as that uid. See
+`docs/agents/privileged-lane.md`.
 _Avoid_: root mode, shell mode
 
 **Nightly**:

@@ -806,7 +806,9 @@ public final class BorderDrag {
      */
     @NonNull
     public Claim secondPointer() {
-        if (mClaim == Claim.PENDING) mClaim = Claim.ABANDONED;
+        if (mClaim == Claim.PENDING) {
+            mClaim = Claim.ABANDONED;
+        }
         return mClaim;
     }
 

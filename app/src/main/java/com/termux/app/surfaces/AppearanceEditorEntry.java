@@ -9,7 +9,6 @@ import androidx.annotation.Nullable;
 import com.termux.app.TermuxActivity;
 import com.termux.app.place.SeamDress;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 /**
  * Every door into the Appearance editor from outside the launcher's window (appearance-and-
@@ -86,7 +85,7 @@ public final class AppearanceEditorEntry {
      */
     @NonNull
     public static PaneWallPage terminalMenuPlace(@Nullable PaneWallPage onScreen) {
-        return onScreen != null && SeamDress.halfOf(onScreen) == WallHalf.WORKSPACE
+        return onScreen != null && onScreen != PaneWallPage.WIDGETS
             ? onScreen : PaneWallPage.TERMINAL;
     }
 

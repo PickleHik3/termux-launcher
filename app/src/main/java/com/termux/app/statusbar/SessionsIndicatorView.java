@@ -55,6 +55,8 @@ public final class SessionsIndicatorView extends LinearLayout implements TextSca
      */
     @Nullable private Integer mBandSurface;
     @Nullable private com.termux.app.chrome.ChromeInk mInk;
+    /** The deck look, or null for the plain chip. */
+    @Nullable private com.termux.app.terminal.DeckLook mDeck;
     @Nullable private com.termux.app.chrome.OnGlass.Resolution mBand;
 
     public SessionsIndicatorView(Context context) {
@@ -87,6 +89,16 @@ public final class SessionsIndicatorView extends LinearLayout implements TextSca
         mLabel.setMaxWidth(dp(88));
         addView(mLabel, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
 
+        applyColors();
+    }
+
+    /**
+     * The raised deck button (no LED) under the count, like the window chips beside it; null
+     * restores the plain chip. The label keeps today's colour either way.
+     */
+    public void setDeckLook(@Nullable com.termux.app.terminal.DeckLook deck) {
+        if (deck == null ? mDeck == null : deck.equals(mDeck)) return;
+        mDeck = deck;
         applyColors();
     }
 
@@ -213,6 +225,16 @@ public final class SessionsIndicatorView extends LinearLayout implements TextSca
             ? StatusBarInk.chipOn(mInk, mBand, panel, CONTAINER_ALPHA, onSurface, accent)
             : StatusBarInk.chip(mBandSurface != null ? mBandSurface : panel, panel,
                 CONTAINER_ALPHA, onSurface, accent);
+
+        mLabel.setTextColor(resolved.label);
+        if (mDeck != null) {
+            com.termux.app.terminal.DeckChipDrawable button =
+                new com.termux.app.terminal.DeckChipDrawable(getResources().getDisplayMetrics().density);
+            button.setDeck(mDeck);
+            button.setLed(false);
+            setBackground(button);
+            return;
+        }
 
         GradientDrawable chip = new GradientDrawable();
         // The caller resolves the shape (the chip-radius knob, or the bar's own shape while that

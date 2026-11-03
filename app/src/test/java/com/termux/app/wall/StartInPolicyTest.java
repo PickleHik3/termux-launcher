@@ -95,6 +95,15 @@ public class StartInPolicyTest {
     }
 
     @Test
+    public void theHomeHalfOpensOnTheChosenPageOnlyWhileHomeIsStartIn() {
+        assertEquals(2, StartInPolicy.homePage(2, HOME));
+        assertEquals("a window as Home: page 1", 0, StartInPolicy.homePage(2, WORKSPACE));
+        assertEquals(0, StartInPolicy.homePage(2, DISPLAY));
+        assertEquals("unknown reads as Home", 2, StartInPolicy.homePage(2, "elsewhere"));
+        assertEquals(0, StartInPolicy.homePage(-1, HOME));
+    }
+
+    @Test
     public void exactlyOneKindWearsTheMarkerForEachValue() {
         for (String startIn : new String[] {HOME, WORKSPACE, DISPLAY}) {
             int marked = 0;

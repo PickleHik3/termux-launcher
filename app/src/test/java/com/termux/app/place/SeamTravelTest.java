@@ -10,6 +10,7 @@ import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.SeamTravel.DockPlan;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
@@ -473,5 +474,93 @@ public class SeamTravelTest {
         Frame terminal = PlaceChromeTravel.rest(PaneWallPage.TERMINAL,
             STATES.restOf(PaneWallPage.TERMINAL));
         assertEquals(0f, SeamTravel.workspaceScreenXPx(terminal, WIDTH), EPSILON);
+    }
+
+    // ---- Between two Home pages (#173 slice E) ----
+
+    private static final PageRef HOME_2 = PageRef.of(PaneWallPage.WIDGETS, 2);
+    private static final PageRef HOME_3 = PageRef.of(PaneWallPage.WIDGETS, 3);
+
+    /** Home's pager with page 2 in front, shifted {@code shiftPx}, page 3 coming in. */
+    private static Frame pager(float shiftPx) {
+        return PlaceChromeTravel.homePages(STATES.restOf(PaneWallPage.WIDGETS), 2, 3, shiftPx,
+            WIDTH);
+    }
+
+    @Test
+    public void twoHomePagesCrossOnlyWhereBothIdsAreSaidAndDiffer() {
+        assertTrue(SeamTravel.crosses(HOME_2, HOME_3));
+        assertFalse(SeamTravel.crosses(HOME_2, PageRef.of(PaneWallPage.WIDGETS, 2)));
+        assertFalse("a Home page with no id said", SeamTravel.crosses(HOME_2, PageRef.HOME));
+        assertTrue(SeamTravel.crosses(HOME_2, PageRef.TERMINAL));
+        assertFalse("two windows", SeamTravel.crosses(PageRef.TERMINAL,
+            PageRef.of(PaneWallPage.DISPLAY)));
+    }
+
+    @Test
+    public void aPagerFrameReadsTheWayBetweenTwoHomePages() {
+        for (float shift : new float[] {-300f, 300f}) {
+            Frame frame = pager(shift);
+            assertEquals(0.3f, frame.fraction, EPSILON);
+            float chrome = PlaceChromeTravel.chromeFraction(0.3f);
+            assertEquals(chrome, SeamTravel.otherEndProgress(frame, HOME_2), EPSILON);
+            assertEquals("read from the arriving page", 1f - chrome,
+                SeamTravel.otherEndProgress(frame, HOME_3), EPSILON);
+            assertEquals(0.3f, SeamTravel.otherEndFraction(frame, HOME_2), EPSILON);
+            // By half it never leaves Home: the kinds alone cannot tell the pages apart.
+            assertEquals(0f, SeamTravel.otherHalfProgress(frame, PaneWallPage.WIDGETS), EPSILON);
+        }
+        Frame rest = pager(0f);
+        assertEquals(0f, SeamTravel.otherEndProgress(rest, HOME_2), EPSILON);
+        assertEquals(0, rest.towardSide);
+    }
+
+    @Test
+    public void aWallFrameReadsByEndExactlyAsByHalf() {
+        for (float fraction = 0f; fraction <= 1f; fraction += 0.05f) {
+            Frame out = homeToTerminal(fraction);
+            Frame back = terminalToHome(fraction);
+            assertEquals(SeamTravel.otherHalfProgress(out, PaneWallPage.WIDGETS),
+                SeamTravel.otherEndProgress(out, HOME_2), EPSILON);
+            assertEquals(SeamTravel.otherHalfFraction(out, PaneWallPage.WIDGETS),
+                SeamTravel.otherEndFraction(out, HOME_2), EPSILON);
+            assertEquals(SeamTravel.otherHalfProgress(back, PaneWallPage.TERMINAL),
+                SeamTravel.otherEndProgress(back, PageRef.TERMINAL), EPSILON);
+        }
+    }
+
+    @Test
+    public void eachHomePageStandsWhereThePagerDrawsIt() {
+        // Shifted left: the page coming in stands on the right.
+        Frame left = pager(-300f);
+        assertEquals(1, left.towardSide);
+        assertEquals(-300f, SeamTravel.endScreenXPx(left, HOME_2, WIDTH), EPSILON);
+        assertEquals(700f, SeamTravel.endScreenXPx(left, HOME_3, WIDTH), EPSILON);
+        // Shifted right: it comes in from the left.
+        Frame right = pager(300f);
+        assertEquals(-1, right.towardSide);
+        assertEquals(300f, SeamTravel.endScreenXPx(right, HOME_2, WIDTH), EPSILON);
+        assertEquals(-700f, SeamTravel.endScreenXPx(right, HOME_3, WIDTH), EPSILON);
+        // A page the frame does not show, or the arriving one at rest, is out of sight.
+        assertEquals(WIDTH, SeamTravel.endScreenXPx(left, PageRef.of(PaneWallPage.WIDGETS, 7),
+            WIDTH), EPSILON);
+        assertEquals(WIDTH, SeamTravel.endScreenXPx(pager(0f), HOME_3, WIDTH), EPSILON);
+    }
+
+    @Test
+    public void theBarCrossesWithTheHomePageThatAloneWearsItAlongTheTop() {
+        PlaceLayout bare = homeWithDock();
+        PlaceLayout barred = bare.withSlot(Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
+        assertSame(barred, SeamTravel.homeBarWearer(bare, barred));
+        assertSame(barred, SeamTravel.homeBarWearer(barred, bare));
+        assertNull("worn alike", SeamTravel.homeBarWearer(barred, barred));
+        assertNull("put away alike", SeamTravel.homeBarWearer(bare, bare));
+        PlaceLayout bottomBar = bare.withSlot(Element.STATUS,
+            Slot.on(Edge.BOTTOM, Element.STATUS));
+        assertNull("a bar on the bottom edge changes at the landing",
+            SeamTravel.homeBarWearer(bare, bottomBar));
+        PlaceLayout topRow = bare.withSlot(Element.AZ, Slot.on(Edge.TOP, Element.AZ));
+        assertNull("nothing arrives over a page whose top edge it would push in",
+            SeamTravel.homeBarWearer(topRow, barred));
     }
 }

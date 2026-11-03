@@ -965,7 +965,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setScaleX(LIFT_SCALE);
         chip.setScaleY(LIFT_SCALE);
         chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         yieldStatusBarFold();
         mTabs.invalidate();
@@ -1532,6 +1532,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     private void applyChipWatermark(@NonNull TextView tab, @NonNull WindowItem item,
                                     float selection) {
+        if (mDeck != null) {
+            applyDeckChip(tab, item, selection >= 0.5f);
+            return;
+        }
+        if (!(tab.getBackground() instanceof ChipWatermarkDrawable)) {
+            // Back from the deck: the title's start makes room for the watermark again.
+            // The end keeps whatever the minimised dot added to it.
+            tab.setPaddingRelative(dp(3.5f) + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP),
+                tab.getPaddingTop(), tab.getPaddingEnd(), tab.getPaddingBottom());
+        }
         ChipWatermarkDrawable chip = watermarkOf(tab);
         chip.setSurface(mStatusBarRadiusPx, dp(ChipWatermarkGeometry.OUTLINE_WIDTH_DP),
             mUnselectedFillColor, mUnselectedStrokeColor);
@@ -1546,6 +1556,66 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             item.progressError ? mAttentionColor : mBusyColor, mLazyMode);
         ChipWatermarkDrawable.Mark mark = markFor(item);
         chip.setMark(mark, markColor(mark));
+    }
+
+    /**
+     * The deck look's chip (wave 8): a raised deck button whose LED carries the window's state,
+     * in place of the watermark, the ring and the mark. The title stands past the LED.
+     */
+    private void applyDeckChip(@NonNull TextView tab, @NonNull WindowItem item, boolean current) {
+        DeckChipDrawable chip = deckChipOf(tab);
+        chip.setDeck(mDeck);
+        chip.setLed(true);
+        chip.setRtl(getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        chip.setState(current, markFor(item) == ChipWatermarkDrawable.Mark.ATTENTION,
+            showsRing(item), needsClock(item) && !mLazyMode);
+        tab.setPaddingRelative(dp(DeckChipDrawable.TITLE_START_DP), tab.getPaddingTop(),
+            tab.getPaddingEnd(), tab.getPaddingBottom());
+        applyTitleHalo(tab, current ? 1f : 0f);
+    }
+
+    @NonNull
+    private DeckChipDrawable deckChipOf(@NonNull View view) {
+        android.graphics.drawable.Drawable background = view.getBackground();
+        if (background instanceof DeckChipDrawable) return (DeckChipDrawable) background;
+        DeckChipDrawable chip = new DeckChipDrawable(getResources().getDisplayMetrics().density);
+        view.setBackground(chip);
+        return chip;
+    }
+
+    /** The deck chip a pill is wearing, or null off the deck. */
+    @Nullable
+    private DeckChipDrawable deckChipAt(int index) {
+        if (index < 0 || index >= mTabs.getChildCount()) return null;
+        android.graphics.drawable.Drawable background = mTabs.getChildAt(index).getBackground();
+        return background instanceof DeckChipDrawable ? (DeckChipDrawable) background : null;
+    }
+
+    /**
+     * Dresses the bar in the deck look while the chrome draws a terminal effect (wave 8): the
+     * chips and the "+" as raised deck buttons, the window in front's title and LED lit. Null
+     * puts the plain chips back exactly as they were.
+     */
+    public void setDeckLook(@Nullable DeckLook deck) {
+        if (deck == null ? mDeck == null : deck.equals(mDeck)) return;
+        mDeck = deck;
+        updatePalette();
+        applyCreateButtonDeck();
+        reapplyLabelInk();
+        invalidate();
+    }
+
+    @Nullable private DeckLook mDeck;
+
+    /** The "+" as a deck button without an LED, or back to no background. */
+    private void applyCreateButtonDeck() {
+        View add = createWindowButtonView();
+        if (add == null) return;
+        if (mDeck == null) {
+            if (add.getBackground() instanceof DeckChipDrawable) add.setBackground(null);
+            return;
+        }
+        deckChipOf(add).setDeck(mDeck);
     }
 
     /**
@@ -1884,6 +1954,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         add.setOnClickListener(v -> {
             if (mCreateListener != null) mCreateListener.onCreateWindow();
         });
+        if (mDeck != null) deckChipOf(add).setDeck(mDeck);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(24), LayoutParams.MATCH_PARENT);
         if (!firstItem) params.setMarginStart(dp(3));
         mTabs.addView(add, params);
@@ -2041,6 +2112,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             applyTitleHalo(tab, selected ? 1f : 0f);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (chip != null) chip.setSelection(selected ? 1f : 0f);
+            DeckChipDrawable deckChip = deckChipAt(i);
+            if (deckChip != null) deckChip.setCurrent(selected);
             tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
@@ -2051,6 +2124,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             TextView tab = (TextView) mTabs.getChildAt(i);
             tab.setSelected(i == selectedIndex);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
+            DeckChipDrawable deckChip = deckChipAt(i);
+            if (deckChip != null) deckChip.setCurrent(i == selectedIndex);
             if (i == previousSelected) {
                 tab.setTextColor(ColorUtils.blendARGB(
                     mSelectedTextColor, mUnselectedTextColor, progress));
@@ -2315,6 +2390,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
             mDoneColor = WindowChipInk.towardPolarity(glass.band, mDoneColor, pale,
                 com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+        }
+        if (mDeck != null) {
+            // The deck's buttons carry the selection themselves (the lit title and LED): no
+            // sliding highlight over them, and the title's halo is the key it stands on.
+            mSelectedTextColor = mDeck.lit;
+            mSelectedFillColor = android.graphics.Color.TRANSPARENT;
+            mSelectedStrokeColor = android.graphics.Color.TRANSPARENT;
+            mUnselectedHaloColor = mDeck.key;
+            mSelectedHaloColor = mDeck.key;
         }
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
             mStatusBarRadiusPx, dp(1));

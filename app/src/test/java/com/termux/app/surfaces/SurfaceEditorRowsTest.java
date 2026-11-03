@@ -22,7 +22,7 @@ public class SurfaceEditorRowsTest {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 SurfaceEditorRows.Row row = SurfaceEditorRows.forCell(slot, property);
-                if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, property)) {
+                if (TermuxAppSharedPreferences.surfaceOverrideKey(slot, property) != null) {
                     assertNotNull(slot + "/" + property, row);
                     assertNotNull(row.read);
                     assertNotNull(row.write);
@@ -47,6 +47,8 @@ public class SurfaceEditorRowsTest {
         Set<Integer> seen = new HashSet<>();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             SurfaceEditorRows.Page page = SurfaceEditorRows.page(slot);
+            // Widgets and Sheets have no card until the editor wave.
+            if (slot == SurfaceSlot.WIDGETS || slot == SurfaceSlot.SHEETS) continue;
             assertSame(slot, page.slot);
             assertTrue("two surfaces share a name", seen.add(page.labelRes));
             assertEquals(page.labelRes, SurfaceEditorRows.slotLabel(slot));

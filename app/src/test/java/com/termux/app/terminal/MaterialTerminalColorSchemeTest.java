@@ -9,6 +9,7 @@ import android.view.ContextThemeWrapper;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.google.android.material.color.utilities.Hct;
+import com.termux.app.chrome.ChromeInk;
 import com.termux.app.theme.LauncherThemeTokens;
 import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.SchemeColors;
@@ -1138,5 +1139,54 @@ public class MaterialTerminalColorSchemeTest {
 
     private static int color(Properties properties, String key) {
         return Color.parseColor(properties.getProperty(key));
+    }
+    /**
+     * Harder on the wallpaper of the 2026-10-29 recording, where neither ink reads at 7:1: judged
+     * on the worst end for the ink it wears, the palette sends the ink to the other side on either
+     * end, and the band, re-measuring for the new ink, moves the worst end with it, so the two
+     * flipped each other on every pass. The pane band's verdict is now worn as decided: the palette
+     * keeps it on the end that argues against it, and only an undecided build still judges the
+     * ground.
+     */
+    @Test
+    public void aDecidedInkHoldsOnTheBandEndThatArguesAgainstIt() {
+        int brightEnd = 0xFF2D91FF;
+        int darkEnd = 0xFF0B3B8C;
+        double target = TerminalContrastLevel.HARDER.bodyTarget;
+        // The loop, as the judgement alone sees it: each end hands the ink to the other side.
+        assertSame(ChromeInk.Polarity.DARK_INK, MaterialTerminalColorScheme.inkPolarity(
+            brightEnd, target, ChromeInk.Polarity.PALE_INK));
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.inkPolarity(
+            darkEnd, target, ChromeInk.Polarity.DARK_INK));
+        // Decided by the band, the ink stays put on either end.
+        assertSame(ChromeInk.Polarity.DARK_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                ChromeInk.Polarity.DARK_INK, true)));
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, brightEnd,
+                ChromeInk.Polarity.PALE_INK, true)));
+        // Undecided, the ground still has the say.
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                ChromeInk.Polarity.DARK_INK, false)));
+        // A null ink is never "decided": the ground answers.
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                null, true)));
+    }
+
+    /** The decided ink is part of the fingerprint, so a verdict that moves rebuilds the palette. */
+    @Test
+    public void theSignatureFollowsTheDecidedInk() {
+        Context context = ApplicationProvider.getApplicationContext();
+        int darkEnd = 0xFF0B3B8C;
+        int decidedDark = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.DARK_INK, true);
+        int decidedPale = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.PALE_INK, true);
+        int judged = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.DARK_INK, false);
+        assertNotEquals(decidedDark, decidedPale);
+        assertEquals("judged on the dark end, the ink is pale", decidedPale, judged);
     }
 }

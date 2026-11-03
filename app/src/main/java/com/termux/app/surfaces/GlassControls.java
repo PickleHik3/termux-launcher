@@ -2,6 +2,8 @@ package com.termux.app.surfaces;
 
 import androidx.annotation.NonNull;
 
+import com.termux.shared.termux.settings.preferences.FrostStops;
+
 /**
  * The Custom row's Glass slider, as pure functions.
  *
@@ -24,26 +26,22 @@ public final class GlassControls {
     private GlassControls() {}
 
     /** The Glass slider's range. */
-    public static final int GLASS_MIN = 0;
-    public static final int GLASS_MAX = 100;
+    public static final int GLASS_MIN = FrostStops.POSITION_MIN;
+    public static final int GLASS_MAX = FrostStops.POSITION_MAX;
 
     /** The shipped Looks' Glass positions. */
-    public static final int CLEAR = 20;
-    public static final int TINT = 40;
-    public static final int MIST = 75;
+    public static final int CLEAR = FrostStops.positionOf(FrostStops.CLEAR);
+    public static final int TINT = FrostStops.positionOf(FrostStops.TINT);
+    public static final int MIST = FrostStops.positionOf(FrostStops.MIST);
 
     /** The blur a Glass position writes, in dp: {@code R(4 + 32 t^1.5)}, 4 to 36; 0 at Glass 0. */
     public static int blurForGlass(int glass) {
-        if (clampGlass(glass) == GLASS_MIN) return 0;
-        double t = clampGlass(glass) / 100d;
-        return (int) Math.round(4d + 32d * Math.pow(t, 1.5d));
+        return FrostStops.blurDpAt(glass);
     }
 
     /** The grain a Glass position writes, in percent: {@code R(2 + 6 t)}, 2 to 8; 0 at Glass 0. */
     public static int grainForGlass(int glass) {
-        if (clampGlass(glass) == GLASS_MIN) return 0;
-        double t = clampGlass(glass) / 100d;
-        return (int) Math.round(2d + 6d * t);
+        return FrostStops.grainPercentAt(glass);
     }
 
     /**
@@ -127,9 +125,5 @@ public final class GlassControls {
             }
         }
         return best >= 0 ? blurForGlass(best) : snapped(blur, grain)[0];
-    }
-
-    private static int clampGlass(int glass) {
-        return Math.max(GLASS_MIN, Math.min(GLASS_MAX, glass));
     }
 }

@@ -257,6 +257,19 @@ public final class TerminalActionDispatcher {
         }
     }
 
+    /**
+     * Re-dresses the attached host's chrome from the stored Look, on the main thread, after a
+     * Look write from outside the editor ({@code launcherctl look}). Does not wait for it; with no
+     * live host there is nothing on screen to re-dress and the next start reads the Look anyway.
+     */
+    public void redressChrome() {
+        if (currentHost() == null) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            TerminalHost host = currentHost();
+            if (host != null) host.redressChrome();
+        });
+    }
+
     /** Whether a live host is attached, regardless of whether it is currently visible. */
     public boolean isAttached() {
         return currentHost() != null;
@@ -270,8 +283,12 @@ public final class TerminalActionDispatcher {
      * it is gone, so this shows the keyboard itself rather than leaving it stuck down.
      */
     public void onSessionFinished(@NonNull TerminalSession session) {
-        if (!KeyboardHoldTracker.getInstance().releaseOnSessionFinished(session.mHandle)) return;
         TerminalHost host = currentHost();
+        // The snow plays first, on the pane as it is; a pane kept after a kill shows its
+        // "[Process completed]" line once the snow ends.
+        TerminalPaneController panes = host == null ? null : host.paneController();
+        if (panes != null) panes.screenEvent(session, PaneScreenEvent.Kind.DEATH_SNOW);
+        if (!KeyboardHoldTracker.getInstance().releaseOnSessionFinished(session.mHandle)) return;
         if (host != null) host.showInAppKeyboard(true);
     }
 

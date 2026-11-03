@@ -26,6 +26,7 @@ import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewConfiguration;
+import android.view.ViewTreeObserver;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
@@ -63,8 +64,10 @@ import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Owns the recursive split-pane layout, organised as tmux-style <b>windows</b>.
@@ -182,6 +185,12 @@ public class TerminalPaneController {
 
     /** Callbacks into the hosting activity. */
     public interface Host {
+        /**
+         * The window to keep live on {@code side} (-1 before, +1 after) of the window in front
+         * ({@link com.termux.app.wall.LiveNeighbourPolicy}), or null: none there, or Live windows
+         * while swiping is off.
+         */
+        @Nullable default Window liveNeighbourWindow(int side) { return null; }
         /** Spawn a new shell rooted at {@code cwd} (or default cwd if null); null on failure. */
         @Nullable TerminalSession createShell(@Nullable String cwd);
         /** Wire client + font + text size + keep-screen-on onto a freshly created pane view. */
@@ -201,6 +210,11 @@ public class TerminalPaneController {
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /**
+         * Only pane sizes or split weights changed: no window, pane or session came or went. The
+         * arrangement still has to be saved; the drawer, wall and overview rebuild is not needed.
+         */
+        default void onTreeGeometryChanged() { onTreesChanged(); }
+        /**
          * The pane tree was just laid into the host view. Fires for every structural change —
          * split, close, maximize, layout change, window switch — so anything keyed off how many
          * panes are on screen can refresh from one place.
@@ -217,6 +231,11 @@ public class TerminalPaneController {
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
+        /**
+         * A split's divider moved and only that split was laid out again, so no window-wide
+         * layout pass followed; whatever follows pane bounds through one should re-read now.
+         */
+        default void onSplitMoved() {}
         /** Whether the terminal place is in minimal mode, which the corner tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** Whether the terminal place's pixels can be on screen (false while Widgets or Display rests in front). */
@@ -266,6 +285,15 @@ public class TerminalPaneController {
          * page last shown as a Home float, taking it out of the row. False leaves it where it is.
          */
         default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
+        /**
+         * Live blur's picture of what is drawn beneath {@code slab}, a floating window's glass,
+         * made if it has none; null while Live blur is off or every live picture is taken, and
+         * the slab keeps the stored frame.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) { return null; }
+        /** {@code slab} no longer shows a live picture: its layer goes. */
+        default void detachLiveGlass(@NonNull View slab) {}
         /**
          * The shell of the float terminal widget {@code widgetId} hosts ended on its own: the
          * float is gone, and the widget shows the way to start a new shell.
@@ -358,11 +386,16 @@ public class TerminalPaneController {
          */
         float focusShareH, focusShareV;
         /**
-         * The Home page this window floats over, counting from 0, while it is a <b>Home float</b>;
+         * The id of the Home page this window floats over while it is a <b>Home float</b>;
          * {@link HomeFloatPolicy#NOT_HOME_FLOAT} while it is in the Workspace's row. A Home float
          * has no tiled tree: its one pane is its only float.
          */
-        int homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        int homePageId = HomeFloatPolicy.NOT_HOME_FLOAT;
+        /**
+         * Where its page stands in the Home order (counting from 0), kept by the controller each
+         * time the pages change; where it last stood while the page is set aside.
+         */
+        int lastHomeIndex;
         /** A Home float tucked into its chip in the status bar. */
         boolean minimised;
         /**
@@ -381,7 +414,7 @@ public class TerminalPaneController {
          * Whether this window is a Home float rather than a window of the Workspace's row: a free
          * one over a Home page, or one a terminal widget hosts.
          */
-        public boolean isHomeFloat() { return homePage >= 0 || isHostedFloat(); }
+        public boolean isHomeFloat() { return homePageId >= 0 || isHostedFloat(); }
 
         /** Whether a terminal widget hosts this float ({@link #hostedWidgetId}). */
         public boolean isHostedFloat() { return hostedWidgetId != NOT_HOSTED; }
@@ -389,8 +422,14 @@ public class TerminalPaneController {
         /** The terminal widget hosting this float, or {@link #NOT_HOSTED}. */
         public int hostedWidgetId() { return hostedWidgetId; }
 
-        /** The Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
-        public int homePage() { return homePage; }
+        /** The id of the Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
+        public int homePageId() { return homePageId; }
+
+        /**
+         * The position in the pager of the Home page a Home float is pinned to (counting from 0),
+         * or {@link HomeFloatPolicy#NOT_HOME_FLOAT}.
+         */
+        public int homePage() { return homePageId < 0 ? homePageId : lastHomeIndex; }
 
         /** Whether a Home float is tucked into its chip. */
         public boolean isMinimised() { return minimised; }
@@ -643,6 +682,8 @@ public class TerminalPaneController {
 
     /** App defaults for the tunables {@code kitty.conf} may override; see the class's design brief. */
     private static final long DEFAULT_CURSOR_TRAIL_DELAY_MS = 10L;
+    // kitty's own defaults: the halo makes the trail visible, the decays need not. Longer ones
+    // (0.15/0.60 s, tried 2026-11-02) left a newline's streak lingering over a slow ssh echo.
     private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.10f;
     private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
     private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
@@ -666,23 +707,28 @@ public class TerminalPaneController {
     }
 
     /**
-     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): nothing while
-     * the glass shows, the theme's surface while the terminal's glass has no opacity.
+     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): the theme's
+     * raised panel colour, opaque, whether or not the pane's glass shows.
      */
     private int bezelFill() {
         android.content.Context context = mHostView.getContext();
-        int surface = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfaceBase,
-            ContextCompat.getColor(context, R.color.termux_surface_base));
-        return PaneBezel.fill(paneGlassActive(),
-            mSurfaceStyle != null ? mSurfaceStyle.paneGlassTintColor() : 0, surface);
+        return PaneBezel.fill(MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
     }
 
     /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
     public void setRetroEffectPreference(@Nullable String id) {
         mRetroEffectId = id;
         PaneRetroStyle style = PaneRetroStyle.fromId(id);
-        for (PaneContentFrame frame : mPaneFrames.values()) frame.setRetroStyle(style);
+        for (PaneContentFrame frame : mPaneFrames.values()) {
+            frame.setRetroStyle(style);
+            // The slab's edge light goes under the bezel and comes back without it.
+            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE
+                    && PaneGlass.isActive(mSurfaceStyle))
+                PaneGlass.applyEdgeLight(mSurfaceStyle, frame, backdrop);
+        }
     }
 
     /**
@@ -821,7 +867,7 @@ public class TerminalPaneController {
                 if (w.root != null) equalizeNode(w.root);
             }
             render();
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -883,7 +929,7 @@ public class TerminalPaneController {
                 }
                 if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
                 hold.release();
-                mHost.onTreesChanged();
+                mHost.onTreeGeometryChanged();
             }
         });
         mFocusGrowAnimator = animator;
@@ -944,7 +990,7 @@ public class TerminalPaneController {
             RectF[] shapes = HomeFloatPolicy.savedShapes(window.active.shapeMemory,
                 window.active.floatFrac, isLandscapeScreen());
             return new TerminalWorkspace.Window(0, capture.capture(window.active.session), null,
-                window.name, new TerminalWorkspace.HomeFloat(window.homePage, window.minimised,
+                window.name, new TerminalWorkspace.HomeFloat(window.homePageId, window.minimised,
                     savedShape(shapes[0]), savedShape(shapes[1])));
         }
         List<Leaf> panes = allLeavesOf(window);
@@ -1033,7 +1079,7 @@ public class TerminalPaneController {
         Window w = new Window(leaf);
         w.root = null;
         w.floating.add(leaf);
-        w.homePage = floatPage;
+        setHomePage(w, floatPage);
         w.minimised = saved != null && saved.minimised;
         w.name = TerminalNamePolicy.normalizeWindow(definition.name);
         mWindows.add(w);
@@ -1164,7 +1210,7 @@ public class TerminalPaneController {
         Leaf leaf = window.active;
         if (leaf == null) return state;
         state.putString(STATE_NODE_SESSION, leaf.session.mHandle);
-        state.putInt(STATE_HOME_FLOAT_PAGE, Math.max(0, window.homePage));
+        state.putInt(STATE_HOME_FLOAT_PAGE, Math.max(0, window.homePage()));
         state.putBoolean(STATE_HOME_FLOAT_MINIMISED, window.minimised);
         if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
         if (leaf.fontSize > 0) state.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
@@ -1227,7 +1273,7 @@ public class TerminalPaneController {
         boolean landscapeNow = isLandscapeScreen();
         TerminalWorkspace.Window definition = new TerminalWorkspace.Window(0,
             new TerminalWorkspace.Pane(null, session.mSessionName, null), null,
-            state.getString(STATE_WINDOW_NAME), new TerminalWorkspace.HomeFloat(page,
+            state.getString(STATE_WINDOW_NAME), new TerminalWorkspace.HomeFloat(homePageIdAt(page),
                 state.getBoolean(STATE_HOME_FLOAT_MINIMISED, false),
                 landscapeNow ? left : now, landscapeNow ? now : left));
         Window window = newWorkspaceHomeFloat(definition,
@@ -1366,6 +1412,47 @@ public class TerminalPaneController {
     /** Make {@code w} the visible window and render its pane tree. */
     public void showWindow(Window w) {
         if (w == null) return;
+        Trace.beginSection("Panes.showWindow");
+        try {
+            doShowWindow(w);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * {@link #showWindow}, for a released window swipe {@code steps} away: when {@code w} stands
+     * live beside the host, the slot it came from is left empty until
+     * {@link #releaseHeldNeighbour}. The window beyond it would stand there one width past the
+     * arriving one, off screen for the whole settle, and building and laying out its tree is
+     * work the release frame does not need.
+     */
+    public void showWindowAfterStep(Window w, int steps) {
+        if (w == null) return;
+        mHeldNeighbourSlot = isLiveNeighbour(w)
+            ? com.termux.app.wall.LiveNeighbourPolicy.heldSlotAfterStep(steps) : -1;
+        showWindow(w);
+    }
+
+    /**
+     * Builds the neighbour {@link #showWindowAfterStep} left out, once the step's settle is over.
+     * Nothing to do when none is held (a drag since has rebuilt both).
+     */
+    public void releaseHeldNeighbour() {
+        if (mHeldNeighbourSlot < 0) return;
+        mHeldNeighbourSlot = -1;
+        Trace.beginSection("Panes.releaseHeldNeighbour");
+        try {
+            syncNeighbours();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /** The neighbour slot a released step left empty ({@link #showWindowAfterStep}), or -1. */
+    private int mHeldNeighbourSlot = -1;
+
+    private void doShowWindow(@NonNull Window w) {
         // A Home float is drawn over its Home page, never in the pane host: showing one is
         // focusing it there.
         if (w.isHomeFloat()) {
@@ -1381,6 +1468,7 @@ public class TerminalPaneController {
             mSuppressNextCursorFlight = true;
         }
         boolean switched = mActiveWindow != w;
+        Window previous = mActiveWindow;
         mActiveWindow = w;
         if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
             // Stack lives in the foreground-presentation field, not the tree, so re-entering a
@@ -1388,6 +1476,16 @@ public class TerminalPaneController {
             mMaximizedLeaf = w.active;
         } else if (mMaximizedLeaf != null && findLeafIn(w.root, mMaximizedLeaf.session) == null) {
             mMaximizedLeaf = null;
+        }
+        // A live neighbour is promoted: its tree, already laid out at the host's size beside
+        // it, becomes the host's, and the window leaving takes its place on the other side.
+        if (switched) {
+            Trace.beginSection("Panes.adoptNeighbour");
+            try {
+                adoptNeighbourTree(w, previous);
+            } finally {
+                Trace.endSection();
+            }
         }
         render();
         // The wall's travel cover belongs to the window in front: one taken while the window that
@@ -1397,9 +1495,227 @@ public class TerminalPaneController {
         if (switched) moveTravelCoverToActiveWindow();
         // A hidden window's panes drop any resize that settled while they were off screen
         // (setAllPaneSizeUpdatesPaused), and coming back at the same pixel size raises no
-        // onSizeChanged. Re-measure them so the PTY matches what is on screen.
+        // onSizeChanged. Re-measure them so the PTY matches what is on screen. A promoted
+        // neighbour stood at this size all along, so the re-measure finds its grid fitting.
         if (switched) refreshPaneSizes();
-        mHost.onActivePaneChanged();
+        Trace.beginSection("Panes.activePaneChanged");
+        try {
+            activePaneChanged();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    // --- Live neighbour windows (LiveNeighbourPolicy) ---
+
+    /** The containers the adjacent windows' trees are kept in, previous then next. */
+    private final FrameLayout[] mNeighbourContainers = new FrameLayout[2];
+    /** The window each container holds the tree of, or null. */
+    private final Window[] mNeighbourWindows = new Window[2];
+
+    /**
+     * The container for the live neighbour on {@code side}; the wall owns where it stands
+     * ({@code PaneWallLayout#setInnerNeighbourViews}). It is never this host's child: the host's
+     * children past the first are rebuilt by every render.
+     */
+    @NonNull
+    public FrameLayout neighbourContainer(int side) {
+        int slot = com.termux.app.wall.LiveNeighbourPolicy.slotOf(side);
+        FrameLayout container = mNeighbourContainers[slot];
+        if (container == null) {
+            container = new FrameLayout(mHostView.getContext());
+            container.setClipChildren(false);
+            container.setClipToPadding(false);
+            container.setVisibility(View.GONE);
+            mNeighbourContainers[slot] = container;
+        }
+        return container;
+    }
+
+    /** Whether {@code w}'s tree stands ready in a neighbour container now. */
+    public boolean isLiveNeighbour(@Nullable Window w) {
+        return w != null && neighbourSlotOf(w) >= 0;
+    }
+
+    private int neighbourSlotOf(@NonNull Window w) {
+        for (int slot = 0; slot < 2; slot++) {
+            FrameLayout container = mNeighbourContainers[slot];
+            if (mNeighbourWindows[slot] == w && container != null
+                && container.getChildCount() > 0) return slot;
+        }
+        return -1;
+    }
+
+    /**
+     * Re-choose and rebuild the windows beside the one in front from the host's row
+     * ({@link Host#liveNeighbourWindow}): the wall asks as a drag begins, so a row reordered,
+     * a window closed or the setting switched since is caught before anything is shown.
+     */
+    public void refreshNeighbourWindows() {
+        mHeldNeighbourSlot = -1;
+        syncNeighbours();
+    }
+
+    /** Let go of both neighbours' trees (memory pressure); the next drag builds them again. */
+    public void dropNeighbourWindows() {
+        mHeldNeighbourSlot = -1;
+        for (int slot = 0; slot < 2; slot++) clearNeighbour(slot);
+    }
+
+    private void syncNeighbours() {
+        Trace.beginSection("Panes.syncNeighbours");
+        try {
+            doSyncNeighbours();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doSyncNeighbours() {
+        for (int slot = 0; slot < 2; slot++) {
+            if (mNeighbourContainers[slot] == null) continue;
+            // Left empty by a released step until its settle is over (showWindowAfterStep).
+            if (slot == mHeldNeighbourSlot) continue;
+            Window w = mHost.liveNeighbourWindow(com.termux.app.wall.LiveNeighbourPolicy.sideOf(slot));
+            if (w == null || w == mActiveWindow || w.isHomeFloat() || w.root == null) {
+                clearNeighbour(slot);
+            } else {
+                buildNeighbour(slot, w);
+            }
+        }
+    }
+
+    /** What a window shows as its tiled tree: its focused pane alone under Stack. */
+    @NonNull
+    private static Node shownTreeOf(@NonNull Window w) {
+        return LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null ? w.active : w.root;
+    }
+
+    private void buildNeighbour(int slot, @NonNull Window w) {
+        FrameLayout container = mNeighbourContainers[slot];
+        int other = 1 - slot;
+        // A window never stands on both sides.
+        if (mNeighbourWindows[other] == w) clearNeighbour(other);
+        if (mNeighbourWindows[slot] != null && mNeighbourWindows[slot] != w) clearNeighbour(slot);
+        Node node = shownTreeOf(w);
+        View existing = container.getChildCount() > 0 ? container.getChildAt(0) : null;
+        View built = reconcile(existing, node);
+        // The split containers this registered are not the host's; the host's dividers and
+        // hit tests read that map.
+        forgetSplitLayouts(node);
+        // A neighbour's panes follow the size its container is laid out at, as the window in
+        // front does: the container is GONE at rest, so nothing is laid out or sent then, and the
+        // wall lays it out at the host's size as a drag begins. A window that missed a keyboard
+        // or chrome change while away is resized then, before it slides on screen, so its grid
+        // already fits when it is promoted. Under a host resize every pane is held; its end
+        // resumes these with the panes on screen (setAllPaneSizeUpdatesPaused).
+        for (Leaf leaf : leavesOf(node)) {
+            TerminalView view = mPaneViews.get(leaf.session);
+            if (view != null && mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true, false);
+            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (frame != null) frame.setTravelBottomInsetPx(0);
+        }
+        if (built != existing) {
+            container.removeAllViews();
+            container.addView(built, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mNeighbourWindows[slot] = w;
+        dressNeighbourFrames(w, container);
+    }
+
+    private void forgetSplitLayouts(@NonNull Node node) {
+        if (!(node instanceof Split)) return;
+        mSplitLayouts.remove(node);
+        forgetSplitLayouts(((Split) node).a);
+        forgetSplitLayouts(((Split) node).b);
+    }
+
+    /**
+     * Empty a neighbour container. Its panes are left detached, as any window not in front
+     * holds them, and take size updates again without the size the container gave them.
+     */
+    private void clearNeighbour(int slot) {
+        FrameLayout container = mNeighbourContainers[slot];
+        Window w = mNeighbourWindows[slot];
+        mNeighbourWindows[slot] = null;
+        if (container != null && container.getChildCount() > 0) container.removeAllViews();
+        if (w == null || w == mActiveWindow) return;
+        resumeNeighbourSizeUpdates(w);
+    }
+
+    private void resumeNeighbourSizeUpdates(@NonNull Window w) {
+        // Under a host resize every pane is held; its end resumes them.
+        if (mHostSurfaceResizeDepth > 0) return;
+        for (Leaf leaf : leavesOf(w.root)) {
+            TerminalView view = mPaneViews.get(leaf.session);
+            if (view != null) view.resumeTerminalSizeUpdatesDiscardingPending();
+        }
+    }
+
+    /** The container holding {@code view}'s pane, when it is a live neighbour's; else null. */
+    @Nullable
+    private FrameLayout neighbourContainerOf(@NonNull TerminalView view) {
+        for (int slot = 0; slot < 2; slot++) {
+            Window w = mNeighbourWindows[slot];
+            if (w == null) continue;
+            for (Leaf leaf : leavesOf(w.root))
+                if (mPaneViews.get(leaf.session) == view) return mNeighbourContainers[slot];
+        }
+        return null;
+    }
+
+    /** Whether {@code frame} sits in a neighbour container. */
+    private boolean isInNeighbourContainer(@NonNull View frame) {
+        android.view.ViewParent parent = frame.getParent();
+        while (parent instanceof View) {
+            if (parent == mNeighbourContainers[0] || parent == mNeighbourContainers[1]) return true;
+            if (parent == mHostView) return false;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * {@code arriving} was standing live beside the host: its tree moves into the host as it
+     * is, laid out at the same size, and the host's tree ({@code leaving}'s) moves into the
+     * container on the other side, where the leaving window now stands. False when
+     * {@code arriving} was not live; the render then builds it as before.
+     */
+    private boolean adoptNeighbourTree(@NonNull Window arriving, @Nullable Window leaving) {
+        int slot = neighbourSlotOf(arriving);
+        if (slot < 0) return false;
+        FrameLayout container = mNeighbourContainers[slot];
+        View tree = container.getChildAt(0);
+        container.removeView(tree);
+        mNeighbourWindows[slot] = null;
+        View old = mHostView.getChildCount() > 0 ? mHostView.getChildAt(0) : null;
+        int other = 1 - slot;
+        FrameLayout opposite = mNeighbourContainers[other];
+        Window displaced = mNeighbourWindows[other];
+        if (opposite != null && opposite.getChildCount() > 0) opposite.removeAllViews();
+        mNeighbourWindows[other] = null;
+        if (displaced != null && displaced != leaving) resumeNeighbourSizeUpdates(displaced);
+        if (old != null) {
+            mHostView.removeView(old);
+            if (opposite != null && leaving != null && !leaving.isHomeFloat() && leaving.root != null) {
+                opposite.addView(old, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                mNeighbourWindows[other] = leaving;
+            }
+        }
+        mHostView.addView(tree, 0, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // In front now. Its panes were laid out at the host's size in their container and already
+        // sent it, so showWindow's re-measure finds the grid fitting; a held size (none outside a
+        // host resize) is dropped rather than sent at the landing.
+        if (mHostSurfaceResizeDepth == 0) {
+            for (Leaf leaf : leavesOf(arriving.root)) {
+                TerminalView view = mPaneViews.get(leaf.session);
+                if (view != null) view.resumeTerminalSizeUpdatesDiscardingPending();
+            }
+        }
+        return true;
     }
 
     @Nullable public Window activeWindow() { return mActiveWindow; }
@@ -1464,7 +1780,7 @@ public class TerminalPaneController {
         if (mHomeFloats.remove(w)) {
             if (mFocusedHomeFloat == w) {
                 mFocusedHomeFloat = null;
-                mHost.onActivePaneChanged();
+                activePaneChanged();
                 mHost.onHomeFloatFocusReleased();
             }
             mHost.onHomeFloatsChanged();
@@ -1475,7 +1791,7 @@ public class TerminalPaneController {
             if (container != null) container.leaveSlot();
             if (mFocusedHomeFloat == w) {
                 mFocusedHomeFloat = null;
-                mHost.onActivePaneChanged();
+                activePaneChanged();
                 mHost.onHomeFloatFocusReleased();
             }
         }
@@ -1621,6 +1937,32 @@ public class TerminalPaneController {
         mGeometry = geometry;
     }
 
+    /** The pane glass slabs whose veil a drag is holding; see {@link #holdPaneVeils}. */
+    private final Set<PaneGlassBackdropView> mHeldVeils = new HashSet<>();
+
+    /**
+     * Hold the veil (text ink against the wallpaper) of {@code only}'s pane glass, or of every
+     * pane's when {@code only} is null, so a drag that moves or resizes panes does not re-solve
+     * it per move. The frost keeps tracking. Paired with {@link #releasePaneVeils}.
+     */
+    private void holdPaneVeils(@Nullable TerminalSession only) {
+        for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
+            if (only != null && entry.getKey() != only) continue;
+            View glass = entry.getValue().findViewById(R.id.terminal_pane_glass);
+            if (!(glass instanceof PaneGlassBackdropView)) continue;
+            PaneGlassBackdropView backdrop = (PaneGlassBackdropView) glass;
+            if (mHeldVeils.add(backdrop)) backdrop.setVeilHeld(true);
+        }
+    }
+
+    /** Let every held veil follow its pane again, once; idempotent. */
+    private void releasePaneVeils() {
+        if (mHeldVeils.isEmpty()) return;
+        List<PaneGlassBackdropView> held = new ArrayList<>(mHeldVeils);
+        mHeldVeils.clear();
+        for (PaneGlassBackdropView backdrop : held) backdrop.setVeilHeld(false);
+    }
+
     /**
      * The grid's pause over one transition this controller drives, released once: through the
      * scheduler, so it resizes with anything else moving the host, or directly without one.
@@ -1642,6 +1984,185 @@ public class TerminalPaneController {
             mReleased = true;
             if (mOwner != null) mOwner.settle(mTransition, false);
             else finishHostSurfaceResizeKeepingBottom();
+        }
+    }
+
+    /**
+     * The grid's pause over a finger drag that resizes panes (a split divider, a floating pane's
+     * corner): held while the finger moves, resized each time it pauses ({@link DragResizePause})
+     * and once more at the lift if it moved since. A pause ends the hold through the same
+     * {@link GridHold#release} every hold ends with, so the pending size still lands after the
+     * final layout pass; the next move opens a new one.
+     */
+    private final class PausedDragHold {
+        @Nullable private GridHold mHold;
+        @Nullable private View mHost;
+        @Nullable private DragResizePause mPause;
+        /** The session whose veil the drag holds; null holds every pane's. */
+        @Nullable private TerminalSession mVeilOnly;
+        /** Run at each pause, before the hold is released, so the resize lands on its result. */
+        @Nullable private Runnable mOnPause;
+        private final Runnable mPauseCheck = this::onPauseCheck;
+        /**
+         * The panes the read-out names: a divider's two, top/left first; a floating pane's one
+         * ({@code mReadSecond} null). Their sizes are read after each layout, before the draw.
+         */
+        @Nullable private TerminalView mReadFirst;
+        @Nullable private TerminalView mReadSecond;
+        private boolean mReadoutLive;
+        private boolean mReadoutShown;
+        private int mFirstColumns;
+        private int mFirstRows;
+        private int mSecondColumns;
+        private int mSecondRows;
+        @Nullable private View mReadoutHost;
+        @Nullable private ViewTreeObserver mReadoutObserver;
+        private final Runnable mReadoutDown = this::takeReadoutDown;
+        private final ViewTreeObserver.OnPreDrawListener mReadoutUpdate = () -> {
+            updateReadout();
+            return true;
+        };
+
+        /**
+         * The drag began at ({@code x}, {@code y}) on {@code host}, which posts its timer. The
+         * read-out names {@code first} and {@code second} (null for a floating pane) from the
+         * first move past touch slop: at once when {@code pastSlop}, else from the first
+         * {@link #move}.
+         */
+        void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
+                   @Nullable TerminalView second, boolean pastSlop,
+                   @Nullable TerminalSession veilOnly) {
+            start(host, x, y, first, second, pastSlop, veilOnly, null);
+        }
+
+        void start(@NonNull View host, float x, float y, @Nullable TerminalView first,
+                   @Nullable TerminalView second, boolean pastSlop,
+                   @Nullable TerminalSession veilOnly, @Nullable Runnable onPause) {
+            end();
+            mOnPause = onPause;
+            mVeilOnly = veilOnly;
+            mReadFirst = first;
+            mReadSecond = second;
+            mFirstColumns = mFirstRows = mSecondColumns = mSecondRows = -1;
+            if (mReadoutHost != null) mReadoutHost.removeCallbacks(mReadoutDown);
+            if (pastSlop) beginReadout(host);
+            mHost = host;
+            if (mPause == null) {
+                mPause = new DragResizePause(
+                    ViewConfiguration.get(host.getContext()).getScaledTouchSlop());
+            }
+            mHold = new GridHold();
+            holdPaneVeils(mVeilOnly);
+            mPause.start(x, y, SystemClock.uptimeMillis());
+            armTimer();
+        }
+
+        /** The finger moved; call before the move changes the layout. */
+        void move(float x, float y) {
+            if (mPause == null || mHost == null) return;
+            if (!mReadoutLive) beginReadout(mHost);
+            int moved = mPause.onMove(x, y, SystemClock.uptimeMillis());
+            if (moved == DragResizePause.MOVE_STILL) return;
+            if (mHold == null) {
+                mHold = new GridHold();
+                holdPaneVeils(mVeilOnly);
+            }
+            armTimer();
+        }
+
+        /** The finger lifted or the drag was cancelled: the panes resize if they moved since. */
+        void end() {
+            if (mHost != null) mHost.removeCallbacks(mPauseCheck);
+            if (mPause != null) mPause.onRelease();
+            releaseHold();
+            endReadout();
+            mHost = null;
+        }
+
+        private void beginReadout(@NonNull View host) {
+            if (mReadFirst == null) return;
+            mReadoutLive = true;
+            mReadoutHost = host;
+            ViewTreeObserver observer = host.getViewTreeObserver();
+            if (observer.isAlive()) {
+                observer.addOnPreDrawListener(mReadoutUpdate);
+                mReadoutObserver = observer;
+            }
+            updateReadout();
+        }
+
+        /** Raises the read-out again only when a cell count changed. */
+        private void updateReadout() {
+            TerminalView first = mReadFirst;
+            View host = mReadoutHost;
+            if (!mReadoutLive || first == null || host == null) return;
+            int firstColumns = first.getColumnsForViewSize();
+            int firstRows = first.getRowsForViewSize();
+            TerminalView second = mReadSecond;
+            int secondColumns = second == null ? 0 : second.getColumnsForViewSize();
+            int secondRows = second == null ? 0 : second.getRowsForViewSize();
+            if (firstColumns <= 0 || firstRows <= 0) return;
+            if (firstColumns == mFirstColumns && firstRows == mFirstRows
+                && secondColumns == mSecondColumns && secondRows == mSecondRows) return;
+            mFirstColumns = firstColumns;
+            mFirstRows = firstRows;
+            mSecondColumns = secondColumns;
+            mSecondRows = secondRows;
+            android.content.res.Resources res = host.getResources();
+            String label = second == null
+                ? DragResizePause.floatReadout(res, firstColumns, firstRows)
+                : DragResizePause.splitReadout(res, firstColumns, firstRows,
+                    secondColumns, secondRows);
+            com.termux.app.notice.AppNotice.readout(host.getContext(), label,
+                DragResizePause.READOUT_CEILING_MS);
+            mReadoutShown = true;
+        }
+
+        /** The drag ended: the read-out stays {@link DragResizePause#READOUT_LINGER_MS} more. */
+        private void endReadout() {
+            if (mReadoutObserver != null && mReadoutObserver.isAlive()) {
+                mReadoutObserver.removeOnPreDrawListener(mReadoutUpdate);
+            }
+            mReadoutObserver = null;
+            if (mReadoutLive) updateReadout();
+            mReadoutLive = false;
+            mReadFirst = null;
+            mReadSecond = null;
+            if (mReadoutShown && mReadoutHost != null) {
+                mReadoutHost.removeCallbacks(mReadoutDown);
+                mReadoutHost.postDelayed(mReadoutDown, DragResizePause.READOUT_LINGER_MS);
+            }
+        }
+
+        private void takeReadoutDown() {
+            View host = mReadoutHost;
+            if (!mReadoutShown || host == null || mReadoutLive) return;
+            mReadoutShown = false;
+            com.termux.app.notice.AppNotice.clearReadout(host.getContext());
+        }
+
+        boolean isActive() {
+            return mHost != null;
+        }
+
+        private void armTimer() {
+            if (mHost == null) return;
+            mHost.removeCallbacks(mPauseCheck);
+            mHost.postDelayed(mPauseCheck, DragResizePause.PAUSE_MS);
+        }
+
+        private void onPauseCheck() {
+            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) {
+                if (mOnPause != null) mOnPause.run();
+                releaseHold();
+            }
+        }
+
+        private void releaseHold() {
+            GridHold hold = mHold;
+            mHold = null;
+            if (hold != null) hold.release();
+            releasePaneVeils();
         }
     }
 
@@ -1765,7 +2286,7 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
     }
 
@@ -1790,7 +2311,7 @@ public class TerminalPaneController {
             w.active = single;
         }
         render();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return dropped;
     }
@@ -1981,7 +2502,7 @@ public class TerminalPaneController {
         target.weightB = total - target.weightA;
         if (!isDwindleManaged(window)) clearLayoutPolicy(window);
         if (window == mActiveWindow) render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2157,6 +2678,12 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(window);
         render();
         animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
+        // A pane the user (or an agent) opened powers on once it is laid out. Panes restored at
+        // launch are built by the workspace restore, never through here, so they stay still.
+        PaneContentFrame opened = mPaneFrames.get(newSession);
+        if (opened != null)
+            OneShotPreDrawListener.add(opened,
+                () -> opened.screenEvent(PaneScreenEvent.Kind.POWER_ON));
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -2165,8 +2692,51 @@ public class TerminalPaneController {
             TerminalView v = mPaneViews.get(reflowed);
             if (v != null) v.onScreenUpdated();
         }, 250);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
+    }
+
+    /** The pane the last focus wobble looked at, and its window: a wobble needs a change. */
+    @Nullable private TerminalSession mFocusEventSession;
+    @Nullable private Window mFocusEventWindow;
+
+    /**
+     * Tells the host the active pane may have changed, and plays the focus wobble on the newly
+     * focused pane when focus moved between panes of one window that holds more than one.
+     */
+    private void activePaneChanged() {
+        TerminalSession now = getActiveSession();
+        Window window = mActiveWindow;
+        if (now != null && mFocusEventSession != null && now != mFocusEventSession
+            && window != null && window == mFocusEventWindow && allLeavesOf(window).size() > 1)
+            screenEvent(now, PaneScreenEvent.Kind.FOCUS_WOBBLE);
+        mFocusEventSession = now;
+        mFocusEventWindow = window;
+        refreshPaneDims();
+        mHost.onActivePaneChanged();
+    }
+
+    /**
+     * Dims every pane of the window on screen but its focused one when it holds more than one
+     * ({@link PaneDimPolicy}); panes of other windows are off screen and stay undimmed. Snaps.
+     */
+    private void refreshPaneDims() {
+        Window window = mActiveWindow;
+        List<TerminalSession> leaves = new ArrayList<>();
+        TerminalSession active = null;
+        if (window != null) {
+            for (Leaf leaf : allLeavesOf(window)) leaves.add(leaf.session);
+            if (window.active != null) active = window.active.session;
+        }
+        Set<TerminalSession> dimmed = PaneDimPolicy.dimmed(active, leaves);
+        for (Map.Entry<TerminalSession, PaneContentFrame> e : mPaneFrames.entrySet())
+            e.getValue().setDimmed(dimmed.contains(e.getKey()));
+    }
+
+    /** Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}). */
+    public void screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
+        PaneContentFrame frame = session == null ? null : mPaneFrames.get(session);
+        if (frame != null) frame.screenEvent(kind);
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */
@@ -2207,7 +2777,7 @@ public class TerminalPaneController {
             if (owner.active == owningLeaf) owner.active = firstLeaf(owner.root);
             if (owner == mActiveWindow) {
                 render();
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             }
             mHost.onTreesChanged();
             return FINISHED_PANE;
@@ -2225,7 +2795,7 @@ public class TerminalPaneController {
                 dockLeaf(owner, promoted);
                 if (owner == mActiveWindow) {
                     render();
-                    mHost.onActivePaneChanged();
+                    activePaneChanged();
                 }
                 mHost.onTreesChanged();
                 return FINISHED_PANE;
@@ -2251,7 +2821,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(owner);
         if (owner == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return FINISHED_PANE;
@@ -2311,7 +2881,7 @@ public class TerminalPaneController {
         if (target == null) return false;
         mInteractionOverlay.dismissControls();
         swapSessions(mActiveWindow.active, target);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return true;
     }
@@ -2423,12 +2993,8 @@ public class TerminalPaneController {
     private boolean applyWeightsToRenderedLayout(@NonNull Split split) {
         LinearLayout layout = mSplitLayouts.get(split);
         if (layout == null || layout.getChildCount() < 3) return false;
-        LinearLayout.LayoutParams a = (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
-        LinearLayout.LayoutParams b = (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
-        a.weight = split.weightA;
-        b.weight = split.weightB;
-        layout.getChildAt(0).setLayoutParams(a);
-        layout.getChildAt(2).setLayoutParams(b);
+        SplitRelayout.applyWeights(layout, split.weightA, split.weightB);
+        mHost.onSplitMoved();
         return true;
     }
 
@@ -2442,7 +3008,7 @@ public class TerminalPaneController {
             mPendingKeyResizeSplit = null;
             if (mPendingKeyResizeHold != null) mPendingKeyResizeHold.release();
             mPendingKeyResizeHold = null;
-            mHost.onTreesChanged();
+            mHost.onTreeGeometryChanged();
         }
     }
 
@@ -2455,7 +3021,7 @@ public class TerminalPaneController {
         if (!transformToLayout(mActiveWindow, layout)) return false;
         mActiveWindow.layoutPolicy = layout;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2580,7 +3146,7 @@ public class TerminalPaneController {
         forgetFocusShares(mActiveWindow);
         equalizeNode(mActiveWindow.root);
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2592,7 +3158,7 @@ public class TerminalPaneController {
         rotateNode(mActiveWindow.root, clockwise);
         mActiveWindow.root.parent = null;
         render();
-        mHost.onTreesChanged();
+        mHost.onTreeGeometryChanged();
         return true;
     }
 
@@ -2703,7 +3269,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(into);
         if (into == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return true;
@@ -2751,7 +3317,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(from);
         if (from == mActiveWindow) {
             render();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
         mHost.onTreesChanged();
         return window;
@@ -2780,7 +3346,7 @@ public class TerminalPaneController {
             dockLeaf(window, leaf);
             render();
             animateDockDepthLoss(leaf.session);
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onTreesChanged();
             return FLOAT_TOGGLE_DOCKED;
         }
@@ -2799,7 +3365,7 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(window);
         render();
         animateFloatDepthGain(leaf);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return FLOAT_TOGGLE_FLOATED;
     }
@@ -2994,7 +3560,7 @@ public class TerminalPaneController {
         dockLeaf(window, leaf);
         render();
         animateDockDepthLoss(leaf.session);
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
     }
 
@@ -3077,7 +3643,7 @@ public class TerminalPaneController {
         Window w = new Window(leaf);
         w.root = null;
         w.floating.add(leaf);
-        w.homePage = Math.max(0, page);
+        setHomePage(w, Math.max(0, page));
         mWindows.add(w);
         mHomeFloats.add(w);
         mPendingFloatEntryLeaf = leaf;
@@ -3096,11 +3662,12 @@ public class TerminalPaneController {
      * float never hides the first one's titlebar. Read before the new float joins the floats.
      */
     @NonNull
-    private RectF homeFloatBirthFrac(int page) {
+    private RectF homeFloatBirthFrac(int pageIndex) {
+        int page = homePageIdAt(pageIndex);
         RectF under = null;
         for (int i = mHomeFloats.size() - 1; i >= 0 && under == null; i--) {
             Window other = mHomeFloats.get(i);
-            if (other.active != null && HomeFloatPolicy.shownOn(other.homePage, other.minimised, page))
+            if (other.active != null && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
                 under = other.active.floatFrac;
         }
         Rect room = homeFloatRoom();
@@ -3161,7 +3728,7 @@ public class TerminalPaneController {
         updateActiveBorders();
         focusActiveView();
         applyHomeFloatLift();
-        if (changed) mHost.onActivePaneChanged();
+        if (changed) activePaneChanged();
     }
 
     /**
@@ -3173,7 +3740,7 @@ public class TerminalPaneController {
         mFocusedHomeFloat = null;
         applyHomeFloatLift();
         updateActiveBorders();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onHomeFloatFocusReleased();
     }
 
@@ -3247,7 +3814,7 @@ public class TerminalPaneController {
         leaf.appliedFloatFrac = null;
         w.root = leaf;
         w.active = leaf;
-        w.homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        w.homePageId = HomeFloatPolicy.NOT_HOME_FLOAT;
         w.minimised = false;
         w.layoutPolicy = mDefaultLayoutPolicy;
         if (wasFocused) mFocusedHomeFloat = null;
@@ -3277,7 +3844,7 @@ public class TerminalPaneController {
         leaf.floatRestoreFrac = null;
         w.floating.add(leaf);
         w.active = leaf;
-        w.homePage = Math.max(0, page);
+        setHomePage(w, Math.max(0, page));
         w.minimised = false;
         w.layoutPolicy = null;
         mHomeFloats.add(w);
@@ -3331,7 +3898,8 @@ public class TerminalPaneController {
         mHomeFloatContainers.put(leaf, container);
         layer.addView(container, new FrameLayout.LayoutParams(0, 0));
         applyFloatBounds(leaf, container);
-        container.setVisibility(HomeFloatPolicy.shownOn(w.homePage, w.minimised, layer.page())
+        container.setVisibility(HomeFloatPolicy.shownOn(w.homePageId, w.minimised,
+            homePageIdAt(layer.page()))
             ? View.VISIBLE : View.GONE);
         if (container.getVisibility() == View.VISIBLE) maybeAnimateFloatEntry(leaf, container);
         updateHomeFloatBorders();
@@ -3340,22 +3908,66 @@ public class TerminalPaneController {
     /** How many Home floats stand on Home page {@code page}, minimised ones included. */
     public int homeFloatCountOn(int page) {
         int count = 0;
-        for (Window w : mHomeFloats) if (w.homePage == page) count++;
+        int id = homePageIdAt(page);
+        for (Window w : mHomeFloats) if (w.homePageId == id) count++;
         return count;
     }
 
+    /** The Home page ids in order, from the host; empty before it says (a position is then its id). */
+    @NonNull private java.util.function.Supplier<List<Integer>> mHomePageIds =
+        java.util.Collections::emptyList;
+
+    /** Where the Home pages' ids come from: the wall's page store, in pager order. */
+    public void setHomePageIds(@NonNull java.util.function.Supplier<List<Integer>> ids) {
+        mHomePageIds = ids;
+        onHomePagesChanged();
+    }
+
+    /** The id of the Home page at pager position {@code index} (the last page when past it). */
+    private int homePageIdAt(int index) {
+        List<Integer> ids = mHomePageIds.get();
+        if (ids.isEmpty()) return Math.max(0, index);
+        return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
+    }
+
+    private void setHomePage(@NonNull Window w, int pageIndex) {
+        w.homePageId = homePageIdAt(pageIndex);
+        List<Integer> ids = mHomePageIds.get();
+        w.lastHomeIndex = ids.isEmpty() ? Math.max(0, pageIndex)
+            : Math.max(0, Math.min(pageIndex, ids.size() - 1));
+    }
+
     /**
-     * Edit pages moved or removed Home pages: each float follows its page to its new number
-     * ({@link com.termux.app.launcher.home.HomePageEdits#remap}); a float whose page went stands on
-     * the page now in its place, its shell kept.
+     * The Home pages changed (moved, added, set aside or back): each float stays on its page by
+     * id, so only the positions are read again, and the floats shown follow the page on screen.
      */
-    public void remapHomeFloatPages(@NonNull int[] mapping) {
+    public void onHomePagesChanged() {
+        List<Integer> ids = mHomePageIds.get();
+        boolean moved = false;
+        if (!ids.isEmpty()) {
+            for (Window w : mHomeFloats) {
+                int at = ids.indexOf(w.homePageId);
+                if (at >= 0 && at != w.lastHomeIndex) {
+                    w.lastHomeIndex = at;
+                    moved = true;
+                }
+            }
+        }
+        applyHomeFloatPage();
+        if (moved) mHost.onHomeFloatsChanged();
+    }
+
+    /**
+     * Home page {@code removedId} is gone for good: a float on it stands on the page now in its
+     * position (the new last when that was the last), its shell kept.
+     */
+    public void homePageRemoved(int removedId) {
+        List<Integer> ids = mHomePageIds.get();
+        if (ids.isEmpty()) return;
         boolean moved = false;
         for (Window w : mHomeFloats) {
-            if (w.homePage < 0) continue;
-            int next = com.termux.app.launcher.home.HomePageEdits.remap(w.homePage, mapping);
-            if (next == w.homePage) continue;
-            w.homePage = next;
+            if (w.homePageId != removedId) continue;
+            setHomePage(w, w.lastHomeIndex);
             moved = true;
         }
         if (!moved) return;
@@ -3367,12 +3979,12 @@ public class TerminalPaneController {
     private void applyHomeFloatPage() {
         HomeFloatLayer layer = mHomeFloatLayer;
         if (layer == null) return;
-        int page = layer.page();
+        int page = homePageIdAt(layer.page());
         boolean focusedHidden = false;
         for (Window w : mHomeFloats) {
             FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
             if (container == null) continue;
-            boolean shown = HomeFloatPolicy.shownOn(w.homePage, w.minimised, page);
+            boolean shown = HomeFloatPolicy.shownOn(w.homePageId, w.minimised, page);
             int visibility = shown ? View.VISIBLE : View.GONE;
             if (container.getVisibility() != visibility) container.setVisibility(visibility);
             if (!shown && w == mFocusedHomeFloat) focusedHidden = true;
@@ -3514,7 +4126,7 @@ public class TerminalPaneController {
         if (wasFocused) {
             mFocusedHomeFloat = null;
             updateActiveBorders();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onHomeFloatFocusReleased();
         }
         mHost.onTreesChanged();
@@ -3878,7 +4490,7 @@ public class TerminalPaneController {
         window.active = leaf;
         mPendingFloatEntryLeaf = leaf;
         if (wasMaximized || !addFloatOnly(leaf)) render();
-        mHost.onActivePaneChanged();
+        activePaneChanged();
         mHost.onTreesChanged();
         return SCRATCHPAD_TOGGLE_SHOWN;
     }
@@ -3963,7 +4575,7 @@ public class TerminalPaneController {
                     removeFloatContainer(leaf);
                     render();
                 }
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             } else {
                 removeFloatContainer(leaf);
             }
@@ -4106,6 +4718,15 @@ public class TerminalPaneController {
 
     /** Re-clamp {@code leaf}'s fractions against the live host size and lay its container out. */
     private void applyFloatBounds(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
+        android.os.Trace.beginSection("Pane.floatBounds");
+        try {
+            applyFloatBoundsImpl(leaf, container);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void applyFloatBoundsImpl(@NonNull Leaf leaf, @NonNull FloatingPaneContainer container) {
         Rect fullRoom = container.room();
         if (fullRoom.width() > 0 && fullRoom.height() > 0) {
             // A turn of the screen: the float takes the shape it last had in this orientation.
@@ -4383,6 +5004,7 @@ public class TerminalPaneController {
         Trace.beginSection("Panes.render");
         try {
             doRender();
+            refreshPaneDims();
         } finally {
             Trace.endSection();
         }
@@ -4448,6 +5070,9 @@ public class TerminalPaneController {
         updateActiveBorders();
         focusActiveView();
         animateMoveFromOrigins();
+        // The windows beside the one in front follow every render: a switch, a re-tile or a
+        // pane taken from them changes what stands there.
+        syncNeighbours();
         mHost.onPanesRendered();
     }
 
@@ -4521,6 +5146,8 @@ public class TerminalPaneController {
         for (Map.Entry<TerminalSession, PaneContentFrame> entry : mPaneFrames.entrySet()) {
             FrameLayout frame = entry.getValue();
             if (!canAnimateView(frame)) continue;
+            // A promoted neighbour arrives where the wall's nudge carries it from, not by a FLIP.
+            if (isInNeighbourContainer(frame)) continue;
             frame.getLocationOnScreen(location);
             mMoveOrigins.put(entry.getKey(), new Rect(location[0], location[1],
                 location[0] + frame.getWidth(), location[1] + frame.getHeight()));
@@ -5128,6 +5755,24 @@ public class TerminalPaneController {
      * view is created once per pane and only re-fed here, so this can run on every editor slider
      * tick and on every frost refresh.
      */
+    /**
+     * A float's glass slab takes Live blur's picture of what is beneath it while the float can be
+     * seen and the slab is its own and shown ({@link FloatLiveGlass#wants}); otherwise it gives
+     * the picture back and draws the stored frame. A pane docked back into the tiled tree is no
+     * longer inside the float, so it gives its picture back too.
+     */
+    private void syncFloatLiveGlass(@NonNull FloatingPaneContainer container, boolean shown) {
+        PaneGlassBackdropView slab = mPaneGlassViews.get(container.mLeaf.session);
+        if (slab == null) return;
+        if (FloatLiveGlass.wants(shown, FloatLiveGlass.inside(slab, container),
+                slab.getVisibility() == View.VISIBLE)) {
+            slab.setLivePicture(mHost.attachLiveGlass(slab));
+        } else if (slab.livePicture() != null) {
+            slab.setLivePicture(null);
+            mHost.detachLiveGlass(slab);
+        }
+    }
+
     public void applyPaneGlass() {
         float radiusPx = paneRadiusPx();
         boolean active = paneGlassActive();
@@ -5145,15 +5790,20 @@ public class TerminalPaneController {
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx, true))
                 releasePanePlank(frame);
         }
-        // A float's titlebar is cut from the same glass as its pane, in the same pass.
-        for (FloatingPaneContainer container : mFloatContainers.values())
+        // A float's titlebar is cut from the same glass as its pane, in the same pass; and its
+        // slab takes Live blur's picture or the stored frame, as Live and the slab now stand.
+        for (FloatingPaneContainer container : mFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
-        for (FloatingPaneContainer container : mHomeFloatContainers.values())
+            syncFloatLiveGlass(container, container.isShown());
+        }
+        for (FloatingPaneContainer container : mHomeFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
+            syncFloatLiveGlass(container, container.isShown());
+        }
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
         // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
         if (mInteractionOverlay != null)
-            PaneGlass.dressTab(mSurfaceStyle, mInteractionOverlay.controlsView());
+            PaneGlass.dressTab(mSurfaceStyle, mInteractionOverlay.controlsView(), com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
         // pane, glass or not — it runs on every render, and this does not.
@@ -5426,7 +6076,12 @@ public class TerminalPaneController {
     private void detachPaneView(TerminalSession session) {
         PaneRim rim = mBorderStates.remove(session);
         FrameLayout frame = mPaneFrames.remove(session);
-        mPaneGlassViews.remove(session);
+        PaneGlassBackdropView glass = mPaneGlassViews.remove(session);
+        // The pane is closed or rebuilt: its slab and frame keys are never asked again.
+        if (mSurfaceStyle != null) {
+            if (glass != null) mSurfaceStyle.paneGlassForget(glass);
+            if (frame != null) mSurfaceStyle.paneGlassForget(frame);
+        }
         if (rim != null && frame != null) rim.clear(frame);
         else if (rim != null) rim.cancel();
         releasePanePlank(frame);
@@ -5476,33 +6131,8 @@ public class TerminalPaneController {
             // attention takes the frame's own border instead, so the glow can show.
             boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
-            // Otherwise the pane's shape, and with it the clearance the terminal is laid out
-            // inside. One radius for every pane, whatever is edging it — the glass slab, the
-            // float's card, the border's own arc — since all of them round the same corners over
-            // the same cells. Only glass clips here: a float clips on its own wrapper and a
-            // stroke does not clip at all. The frame also learns how wide the border it is about
-            // to wear is, so the band it fills behind the grid stops at the border's inner edge.
-            frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
-            frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
-            frame.setBezelFill(bezelFill());
-            if (bare) {
-                PaneRim gone = mBorderStates.remove(paneSession);
-                if (gone != null) gone.clear(frame);
-                else frame.setForeground(null);
-                continue;
-            }
-            // The decision is PaneBorderStyle's; this only renders it. A lone pane and every
-            // unfocused pane wear the shared rim, the focused pane of a split the Material active
-            // colour, and a pane asking for the user the attention glow.
-            PaneRim rim = mBorderStates.get(paneSession);
-            if (rim == null) rim = new PaneRim();
-            if (rim.apply(frame, glassShape, paneRadiusPx(), border, mSurfaceStyle)) {
-                // A rim built mid-slide (a split made while the wall moves) fades like the rest.
-                rim.setTravelAlpha(mRimTravelAlpha);
-                mBorderStates.put(paneSession, rim);
-            } else {
-                mBorderStates.remove(paneSession);
-            }
+            dressPaneFrame(frame, paneSession, border, bare, glassShape, density);
+            if (bare) continue;
             // A float's titlebar wears the border its pane wears: the focused float's strip
             // carries the active rim with it.
             if (floating) {
@@ -5519,6 +6149,77 @@ public class TerminalPaneController {
         // The resize chevrons dim with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
         updateHomeFloatBorders();
+    }
+
+    /**
+     * One tiled pane's shape and rim, as {@link PaneBorderStyle} decided them. {@code bare}: a
+     * lone plain pane wearing the shared rim carries no border and no clip of its own — the
+     * terminal host draws the same rim around this one frame and rounds the corners, and pads the
+     * arc's clearance itself (TermuxActivity.applyPaneHostCornerPadding). So the frame is told it
+     * is square; handing it the radius as well made the terminal pay that clearance twice.
+     */
+    private void dressPaneFrame(@NonNull PaneContentFrame frame, @NonNull TerminalSession session,
+                                @NonNull PaneBorderStyle.Decision border, boolean bare,
+                                boolean glassShape, float density) {
+        // Otherwise the pane's shape, and with it the clearance the terminal is laid out
+        // inside. One radius for every pane, whatever is edging it — the glass slab, the
+        // float's card, the border's own arc — since all of them round the same corners over
+        // the same cells. Only glass clips here: a float clips on its own wrapper and a
+        // stroke does not clip at all. The frame also learns how wide the border it is about
+        // to wear is, so the band it fills behind the grid stops at the border's inner edge.
+        frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
+        frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
+        frame.setBezelFill(bezelFill());
+        if (bare) {
+            PaneRim gone = mBorderStates.remove(session);
+            if (gone != null) gone.clear(frame);
+            else frame.setForeground(null);
+            return;
+        }
+        // The decision is PaneBorderStyle's; this only renders it. A lone pane and every
+        // unfocused pane wear the shared rim, the focused pane of a split the Material active
+        // colour, and a pane asking for the user the attention glow.
+        PaneRim rim = mBorderStates.get(session);
+        if (rim == null) rim = new PaneRim();
+        if (rim.apply(frame, glassShape, paneRadiusPx(), border, mSurfaceStyle)) {
+            // A rim built mid-slide (a split made while the wall moves) fades like the rest.
+            rim.setTravelAlpha(mRimTravelAlpha);
+            mBorderStates.put(session, rim);
+        } else {
+            mBorderStates.remove(session);
+        }
+    }
+
+    /**
+     * A live neighbour's panes dressed as {@link #updateActiveBordersLocked} dresses them when
+     * that window is in front: the same shape (and with it the same clearance the terminal is
+     * laid out inside), the same rim and the same glass clip, so the window that slides in is the
+     * window that lands. Its container takes the host's padding for the same reason.
+     */
+    private void dressNeighbourFrames(@NonNull Window w, @NonNull FrameLayout container) {
+        if (container.getPaddingLeft() != mHostView.getPaddingLeft()
+            || container.getPaddingTop() != mHostView.getPaddingTop()
+            || container.getPaddingRight() != mHostView.getPaddingRight()
+            || container.getPaddingBottom() != mHostView.getPaddingBottom()) {
+            container.setPadding(mHostView.getPaddingLeft(), mHostView.getPaddingTop(),
+                mHostView.getPaddingRight(), mHostView.getPaddingBottom());
+        }
+        boolean stacked = LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null;
+        List<Leaf> tiled = leavesOf(w.root);
+        boolean split = tiled.size() > 1;
+        int paneCount = tiled.size() + w.floating.size();
+        PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
+        float density = mHostView.getResources().getDisplayMetrics().density;
+        boolean glassShape = paneGlassActive();
+        for (Leaf leaf : stacked ? java.util.Collections.singletonList(w.active) : tiled) {
+            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (frame == null) continue;
+            PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount, leaf == w.active,
+                mPaneAttention.isSet(leaf.session.getPid()), palette);
+            boolean bare = !split && !stacked && !glassShape
+                && border.kind == PaneBorderStyle.Kind.RIM;
+            dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
+        }
     }
 
     @Nullable
@@ -5712,6 +6413,17 @@ public class TerminalPaneController {
         // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
+            // A live neighbour laid out beside the host is owed its size like a pane on screen; a
+            // put-away one (GONE, not laid out) holds the size it had, as a hidden window does.
+            FrameLayout neighbour = neighbourContainerOf(view);
+            if (neighbour != null) {
+                if (neighbour.getVisibility() != View.GONE) {
+                    view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
+                } else {
+                    view.resumeTerminalSizeUpdatesDiscardingPending();
+                }
+                continue;
+            }
             if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
@@ -5780,8 +6492,8 @@ public class TerminalPaneController {
         private float mYWeightA;
         private float mYWeightB;
         private boolean mDraggingDivider;
-        /** The grid's pause for the divider drag under way, released at the finger's lift. */
-        @Nullable private GridHold mDividerHold;
+        /** The grid's pause for the divider drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mDividerDrag = new PausedDragHold();
         /** A finger went down in a divider's gap: the gesture is the divider's, not a corner's. */
         private boolean mGapGesture;
         /** The splits whose gap held that finger, until its first movement says which it drags. */
@@ -6050,6 +6762,10 @@ public class TerminalPaneController {
                             x - mDownX, y - mDownY));
                         mDownX = x;
                         mDownY = y;
+                        if (mDraggingDivider) {
+                            mDividerDrag.start(this, x, y, dividerReadoutPane(true),
+                                dividerReadoutPane(false), true, null, this::settleDividerAtPause);
+                        }
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved = true;
@@ -6060,6 +6776,8 @@ public class TerminalPaneController {
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        // Held while the finger travels, resized when it pauses (ADR 0019).
+                        mDividerDrag.move(x, y);
                         applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
                         applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
                         invalidate();
@@ -6094,7 +6812,7 @@ public class TerminalPaneController {
                                 mControlLeaf = source;
                                 render();
                                 showControls(source, x, y);
-                                mHost.onActivePaneChanged();
+                                activePaneChanged();
                                 mHost.onTreesChanged();
                             } else {
                                 swapPanePositions(source, target, x, y);
@@ -6120,18 +6838,30 @@ public class TerminalPaneController {
                         if (resized) {
                             Split first = mXSplit;
                             Split second = mYSplit;
+                            android.os.Trace.beginSection("Pane.lift.snap");
                             snapSplitToCellGrid(first);
                             snapSplitToCellGrid(second);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.learnShare");
                             Leaf focused = mActiveWindow == null ? null : mActiveWindow.active;
                             Window window = windowOf(focused == null ? null : focused.session);
                             learnFocusShare(window, first, focused);
                             learnFocusShare(window, second, focused);
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.release");
                             releaseDividerHold();
+                            android.os.Trace.endSection();
+                            android.os.Trace.beginSection("Pane.lift.haptic");
                             Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
+                            android.os.Trace.endSection();
                         }
                         resetTouchState();
                         invalidate();
-                        if (resized) mHost.onTreesChanged();
+                        if (resized) {
+                            android.os.Trace.beginSection("Pane.lift.treesChanged");
+                            mHost.onTreeGeometryChanged();
+                            android.os.Trace.endSection();
+                        }
                         return true;
                     }
                     if (mHold.isTracking()) {
@@ -6191,7 +6921,7 @@ public class TerminalPaneController {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
                 mActiveWindow.active = leaf;
                 render();
-                mHost.onActivePaneChanged();
+                activePaneChanged();
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
@@ -6217,7 +6947,7 @@ public class TerminalPaneController {
             mControlLeaf = target;
             swapSessions(source, target);
             showControls(target, dropX, dropY);
-            mHost.onActivePaneChanged();
+            activePaneChanged();
             mHost.onTreesChanged();
         }
 
@@ -6227,7 +6957,7 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            mHost.onActivePaneChanged();
+            activePaneChanged();
         }
 
         /**
@@ -6359,13 +7089,25 @@ public class TerminalPaneController {
             mYWeightB = split.weightB;
             mDraggingDivider = true;
             releaseDividerHold();
-            mDividerHold = new GridHold();
         }
 
         private void releaseDividerHold() {
-            GridHold hold = mDividerHold;
-            mDividerHold = null;
-            if (hold != null) hold.release();
+            mDividerDrag.end();
+        }
+
+        /**
+         * The pane the read-out names on one side of the divider being dragged: the side's pane
+         * nearest the divider in layout order (the last of the top/left side, the first of the
+         * bottom/right one).
+         */
+        @Nullable
+        private TerminalView dividerReadoutPane(boolean firstSide) {
+            Split split = mXSplit != null ? mXSplit : mYSplit;
+            if (split == null) return null;
+            List<Leaf> leaves = leavesOf(firstSide ? split.a : split.b);
+            if (leaves.isEmpty()) return null;
+            Leaf leaf = firstSide ? leaves.get(leaves.size() - 1) : leaves.get(0);
+            return leaf.session == null ? null : mPaneViews.get(leaf.session);
         }
 
         private void applySplitDrag(@Nullable Split split, float delta,
@@ -6386,6 +7128,27 @@ public class TerminalPaneController {
             applyWeightsToRenderedLayout(split);
         }
 
+        /**
+         * The finger paused mid-drag: the split settles on the cell grid under it, in the same
+         * pass as the held panes' resize, and the drag carries on from the settled weights and
+         * the finger's place, so the next move neither jumps nor re-adds the snap.
+         */
+        private void settleDividerAtPause() {
+            if (!mDraggingDivider) return;
+            snapSplitToCellGrid(mXSplit);
+            snapSplitToCellGrid(mYSplit);
+            if (mXSplit != null) {
+                mXWeightA = mXSplit.weightA;
+                mXWeightB = mXSplit.weightB;
+            }
+            if (mYSplit != null) {
+                mYWeightA = mYSplit.weightA;
+                mYWeightB = mYSplit.weightB;
+            }
+            mDownX = mHandleX;
+            mDownY = mHandleY;
+        }
+
         private void snapSplitToCellGrid(@Nullable Split split) {
             if (split == null) return;
             LinearLayout layout = mSplitLayouts.get(split);
@@ -6402,14 +7165,7 @@ public class TerminalPaneController {
             float total = split.weightA + split.weightB;
             split.weightA = snapFirstWeightToCell(total, available, split.weightA, cell);
             split.weightB = total - split.weightA;
-            LinearLayout.LayoutParams a =
-                (LinearLayout.LayoutParams) layout.getChildAt(0).getLayoutParams();
-            LinearLayout.LayoutParams b =
-                (LinearLayout.LayoutParams) layout.getChildAt(2).getLayoutParams();
-            a.weight = split.weightA;
-            b.weight = split.weightB;
-            layout.getChildAt(0).setLayoutParams(a);
-            layout.getChildAt(2).setLayoutParams(b);
+            applyWeightsToRenderedLayout(split);
         }
 
         /**
@@ -6807,7 +7563,8 @@ public class TerminalPaneController {
      * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
      * must keep reaching the shell — so only these chrome regions ever intercept.
      */
-    private final class FloatingPaneContainer extends FrameLayout {
+    private final class FloatingPaneContainer extends FrameLayout
+            implements com.termux.app.chrome.LiveBackdrop.Container {
 
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
@@ -6838,7 +7595,8 @@ public class TerminalPaneController {
             // The container itself stays transparent so the gap between the titlebar and the
             // pane shows what is behind; the surface color lives on a wrapper rather than the
             // shared pane frame, which must stay unstyled for tiled rendering.
-            FrameLayout content = new FrameLayout(getContext());
+            // On the slab's path to the root, so Live blur can record what is beneath the slab.
+            FrameLayout content = new com.termux.app.chrome.LiveBackdropFrameLayout(getContext());
             // On glass the float's fill would sit between the frost and the text and flatten the
             // slab back to a panel; the pane's own glass is the float's surface instead.
             if (!paneGlassActive()) {
@@ -6879,6 +7637,22 @@ public class TerminalPaneController {
 
         @NonNull FloatTitlebarView titlebar() {
             return mTitlebar;
+        }
+
+        @Override
+        public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+            drawChild(canvas, child, getDrawingTime());
+        }
+
+        /**
+         * Whether this float can be seen changed: attached or detached (opened, closed, docked
+         * back), shown or hidden (minimised, another Home page, the Home layer away). Its glass
+         * takes or gives back the live picture with it.
+         */
+        @Override
+        public void onVisibilityAggregated(boolean isVisible) {
+            super.onVisibilityAggregated(isVisible);
+            syncFloatLiveGlass(this, isVisible);
         }
 
         /**
@@ -7008,6 +7782,10 @@ public class TerminalPaneController {
                         candidate.right += dx;
                         candidate.bottom += dy;
                     }
+                    // Held while the corner travels, resized when it pauses (ADR 0019).
+                    if (mDragMode == DRAG_RESIZE) {
+                        mResizeDrag.move(event.getRawX(), event.getRawY());
+                    }
                     mLeaf.floatFrac = mHomeFloat != null
                         ? HomeFloatPolicy.clampInRoom(candidate, hostWidth, hostHeight,
                             dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP),
@@ -7048,9 +7826,13 @@ public class TerminalPaneController {
             if (mLaidOutRoom != null) {
                 mDownFrac = HomeFloatPolicy.reframe(mDownFrac, mLaidOutRoom, room());
             }
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
+            if (mDragMode == DRAG_RESIZE) {
+                mResizeDrag.start(this, mDownRawX, mDownRawY,
+                    mLeaf.session == null ? null : mPaneViews.get(mLeaf.session), null, false, mLeaf.session);
+            }
             // Held still on the handle, the press opens the handle's menu instead of moving.
             if (mDragMode == DRAG_MOVE) {
+                holdPaneVeils(mLeaf.session);
                 postDelayed(mHandleLongPress, ViewConfiguration.getLongPressTimeout());
             }
             getParent().requestDisallowInterceptTouchEvent(true);
@@ -7068,7 +7850,8 @@ public class TerminalPaneController {
 
         private void endDrag() {
             removeCallbacks(mHandleLongPress);
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
+            if (mDragMode == DRAG_RESIZE) mResizeDrag.end();
+            releasePaneVeils();
             boolean shaped = mDragMoved;
             mDragMode = DRAG_NONE;
             mDragMoved = false;
@@ -7078,15 +7861,8 @@ public class TerminalPaneController {
             if (shaped && mHomeFloat != null) applyHomeFloatLift();
         }
 
-        /** The grid's pause for the resize drag under way. */
-        @Nullable private GridHold mResizeHold;
-
-        /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
-        private void setSizeUpdatesPaused(boolean paused) {
-            GridHold previous = mResizeHold;
-            mResizeHold = paused ? new GridHold() : null;
-            if (previous != null) previous.release();
-        }
+        /** The grid's pause for the resize drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mResizeDrag = new PausedDragHold();
 
         /**
          * Resize from the bottom-trailing corner and move from the titlebar, except where a

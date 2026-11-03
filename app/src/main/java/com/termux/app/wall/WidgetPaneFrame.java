@@ -74,13 +74,19 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Nullable private android.content.SharedPreferences mWidgetsOnGlassStore;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mWidgetsOnGlassListener = (store, key) -> {
-            if (key != null && !com.termux.shared.termux.settings.preferences
-                    .TermuxPreferenceConstants.TERMUX_APP.KEY_WIDGETS_ON_GLASS.equals(key)) {
+            // The Widgets cells (ADR 0017): glass off is Opacity 100 at Frost 0 there. A Widgets
+            // cell redresses the cards; a Base or page cell only when it moves the switch, since
+            // the chrome pass already redresses on the Look's own change.
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = key == null ? null
+                : com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+            if (key != null && (cell == null || (cell.element != null && cell.element
+                    != com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS))) {
                 return;
             }
             boolean before = mWidgetsOnGlass;
             readWidgetsOnGlass();
-            if (mWidgetsOnGlass != before) redressWidgets();
+            if (mWidgetsOnGlass != before || (cell != null && cell.element != null))
+                redressWidgets();
         };
 
     @Override public boolean widgetsOnGlass() { return mWidgetsOnGlass; }
@@ -765,7 +771,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         // line there is nothing for it to sit inside.
         if (mControls != null) {
             mControls.setPaneBorder(radiusPx, strokePx);
-            PaneGlass.dressTab(style, mControls);
+            PaneGlass.dressTab(style, mControls, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.PAGE_WALL);
         }
         // A page is never a divided pane, so its radius is the surface's own. The frame clips to
         // it under any line, as the lone terminal pane's host does under the plain border: a

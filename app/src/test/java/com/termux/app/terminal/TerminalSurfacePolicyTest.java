@@ -51,6 +51,24 @@ public class TerminalSurfacePolicyTest {
     }
 
     @Test
+    public void homeNeverWearsTheTerminalTint() {
+        int tint = 0x99101820;
+        int dim = 0x33000000;
+        assertEquals(dim, TerminalSurfacePolicy.pageGround(false, false, tint, dim));
+        assertEquals(dim, TerminalSurfacePolicy.pageGround(false, true, tint, dim));
+    }
+
+    @Test
+    public void theTerminalPageFoldsTheTintOnlyWithoutGlass() {
+        int tint = 0x80000000;
+        int dim = 0x33000000;
+        assertEquals(TerminalSurfacePolicy.wallGround(false, tint, dim),
+            TerminalSurfacePolicy.pageGround(true, false, tint, dim));
+        assertEquals(dim, TerminalSurfacePolicy.pageGround(true, true, tint, dim));
+        assertTrue((TerminalSurfacePolicy.pageGround(true, false, tint, dim) >>> 24) > (dim >>> 24));
+    }
+
+    @Test
     public void withoutSlabsTheTintIsFoldedIntoTheDim() {
         int ground = TerminalSurfacePolicy.wallGround(false, 0xFF000000, 0x33000000);
         assertEquals(0xFF000000, ground);

@@ -84,6 +84,52 @@ public class EditorRowKindsTest {
     }
 
     @Test
+    public void theRowTitleIsNeverCutBesideWordsWithGlyphs() {
+        // tl16, 411dp, 1.0x: "Label ...", "Defau...", "Clock po..." stood cut beside their groups.
+        // The build is told a width twice the real one: the layout decides with what it gets.
+        Object[][] rows = {
+            {"Label size", new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
+                EditorGlyphs.LABEL_LARGE}, new String[] {"Small", "Medium", "Large"}},
+            {"Default type", new int[] {EditorGlyphs.KB_DOCKED, EditorGlyphs.KB_FLOATING,
+                EditorGlyphs.KB_SPLIT}, new String[] {"Docked", "Floating", "Split"}},
+            {"Clock position", new int[] {EditorGlyphs.CLOCK_ALIGN_LEFT,
+                EditorGlyphs.CLOCK_ALIGN_CENTER, EditorGlyphs.CLOCK_ALIGN_RIGHT},
+                new String[] {"Left", "Centre", "Right"}}};
+        for (float scale : new float[] {1f, 1.3f}) {
+            Fixture f = new Fixture(scale);
+            for (Object[] spec : rows) {
+                String title = (String) spec[0];
+                int[] glyphs = (int[]) spec[1];
+                String[] words = (String[]) spec[2];
+                java.util.List<SegmentRow.Segment> segments = new java.util.ArrayList<>();
+                for (int i = 0; i < words.length; i++)
+                    segments.add(SegmentRow.Segment.both(glyphs[i], words[i]));
+                SegmentRow row = SegmentRow.build(f.themed, R.drawable.ic_symbol_tune, title,
+                    segments, 0, f.width * 2, index -> {});
+                f.layOut(row.root);
+                String at = title + " at " + scale;
+                android.text.Layout layout = row.title.getLayout();
+                assertNotNull(at, layout);
+                for (int line = 0; line < layout.getLineCount(); line++)
+                    assertEquals(at + ": the title is cut", 0, layout.getEllipsisCount(line));
+                assertEquals(at + ": the title reads on one line", 1, layout.getLineCount());
+                assertTrue(at + ": the title stands whole", row.title.getWidth() + 1
+                    >= row.title.getPaint().measureText(title));
+                for (MaterialButton button : row.buttons) {
+                    assertNotCut(button, at);
+                    assertInsideGutter(f, button, at);
+                }
+                if (row.inline)
+                    assertTrue(at + ": the pills start after the title",
+                        row.group.getLeft() >= row.title.getRight());
+                else
+                    assertTrue(at + ": stacked pills stand under the title",
+                        top(f, row.group) >= top(f, row.title) + row.title.getHeight() - 1);
+            }
+        }
+    }
+
+    @Test
     public void aWordSegmentRowNeverCutsAWordAndStacksWhenItMust() {
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);
@@ -150,9 +196,8 @@ public class EditorRowKindsTest {
                 Layout layout = tile.getLayout();
                 assertTrue(which + ": no word is broken", layout.getLineCount()
                     <= tile.getText().toString().split(" ").length);
-                Drawable[] sides = tile.getCompoundDrawablesRelative();
-                assertTrue(which + ": the glyph stands on top", sides[0] == null
-                    && sides[1] != null);
+                // Expressive toggle buttons (overhaul §4): the word alone, no glyph, no mark.
+                assertTrue(which + ": the word alone", tile.getIcon() == null);
                 int textBottom = tile.getTotalPaddingTop() + layout.getHeight();
                 assertTrue(which + ": the word ends inside the tile",
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
@@ -185,42 +230,93 @@ public class EditorRowKindsTest {
     // ---------------------------------------------------------------------------------- strip
 
     @Test
-    public void stripsStandGlyphOverTrackOverValueOnOneLineWhenTheyFit() {
+    public void sliderRowsStandTheirNameLineOverTheTrackAndNothingClipsAtLargeText() {
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);
-            StripRow row = StripRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
-                f.width, new NoStrip());
+            SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
+                new NoStrip());
+            row.setSource(1, 0xFF4285F4, "Opacity, from Home page");
             f.layOut(row.root);
             String at = "at " + scale;
-            java.util.Set<Object> lines = new java.util.HashSet<>();
-            for (StripRow.Column column : row.columns) {
-                lines.add(column.root.getParent());
-                assertInsideGutter(f, column.root, at);
-                assertTrue(at + ": glyph over track", top(f, column.glyph) + column.glyph.getHeight()
-                    <= top(f, column.slider) + 1);
-                assertTrue(at + ": track over value", top(f, column.slider)
-                    + column.slider.getHeight() <= top(f, column.value) + 1);
-                assertNotCut(column.value, at);
-                assertTrue(at + ": wide enough for its track and the name beside it",
-                    column.root.getWidth() >= column.slider.minColumnWidthPx() - 1);
-                assertEquals(at + ": no name at rest", "", column.slider.legendText().toString());
+            float density = f.themed.getResources().getDisplayMetrics().density;
+            int previousBottom = -1;
+            for (SliderRow.Item item : row.items) {
+                String which = at + ", " + item.name.getText();
+                View head = (View) item.name.getParent().getParent();
+                assertFalse(which + ": lies along its row", item.slider.isVertical());
+                assertTrue(which + ": the name line stands over the track",
+                    top(f, head) + head.getHeight() <= top(f, item.slider) + 1);
+                assertEquals(which + ": a 48dp hit area", f.dp(48), item.slider.getHeight());
+                assertEquals(which + ": the track spans the row inside its margins",
+                    f.width - 2 * f.dp(16), item.slider.getWidth(), 1);
+                for (View part : new View[] {item.slider, item.glyph, item.name, item.value})
+                    assertInsideGutter(f, part, which);
+                assertNotCut(item.name, which);
+                assertNotCut(item.value, which);
+                assertTrue(which + ": the name's line holds the name and the value",
+                    item.name.getHeight() <= head.getHeight()
+                        && item.value.getHeight() <= head.getHeight());
+                assertTrue(which + ": the name ends before the value",
+                    left(f, item.name) + item.name.getWidth() <= left(f, item.value) + 1);
+                int rowTop = top(f, item.root);
+                assertTrue(which + ": under the row before it", rowTop >= previousBottom - 1);
+                previousBottom = rowTop + item.root.getHeight();
+                assertTrue(which + ": the row holds its name line and its track",
+                    item.root.getHeight() >= head.getHeight() + item.slider.getHeight());
+                System.out.println("slider row " + which + ": " + item.root.getHeight() + " px, "
+                    + Math.round(item.root.getHeight() / density) + " dp; name line "
+                    + Math.round(head.getHeight() / density) + " dp");
             }
-            assertEquals(at + ": five strips on one line", 1, lines.size());
-            assertEquals("20%", row.columns.get(0).value.getText().toString());
+            assertEquals("20%", row.items.get(0).value.getText().toString());
             row.setValue(3, 40);
-            assertEquals("40 dp", row.columns.get(3).value.getText().toString());
+            assertEquals("40 dp", row.items.get(3).value.getText().toString());
+            SliderRow.Item opacity = row.items.get(1);
+            assertNotNull("the source dot rides after the name",
+                opacity.name.getCompoundDrawablesRelative()[2]);
+            assertEquals("Opacity, from Home page",
+                String.valueOf(opacity.name.getContentDescription()));
+            assertTrue("the track says where its value comes from", opacity.slider.isMarked());
+            assertEquals("no dot on a shared value", null,
+                row.items.get(0).name.getCompoundDrawablesRelative()[2]);
         }
-        org.junit.Assert.assertArrayEquals(new int[] {5, 4}, StripRow.lines(9, 7));
-        org.junit.Assert.assertArrayEquals(new int[] {4, 3, 3}, StripRow.lines(10, 4));
-        assertEquals(7, StripRow.capacity(379, 42, 12));
     }
 
     @Test
-    public void aSwipeOnAStripTrackTakesTheStripAndOffTheTrackItScrollsTheCard() {
+    public void theLinkStandsBetweenTheTwoRowsItLinksAndGoesWithEither() {
+        Fixture f = new Fixture(1f);
+        List<Boolean> linked = new ArrayList<>();
+        SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
+            new NoStrip(), 1, "Link opacities", true, linked::add, null);
+        f.layOut(row.root);
+        assertNotNull(row.link);
+        assertTrue(row.isLinked());
+        assertTrue("under the first",
+            top(f, row.link) >= top(f, row.items.get(1).root) + row.items.get(1).root.getHeight() - 1);
+        assertTrue("over the second",
+            top(f, row.link) + row.link.getHeight() <= top(f, row.items.get(2).root) + 1);
+        assertEquals("Linked", String.valueOf(row.link.getText()));
+        assertTrue("the Linked toggle is checkable", row.link.isCheckable());
+        assertTrue("about half the row wide",
+            Math.abs(row.link.getWidth() - row.root.getWidth() / 2) <= row.root.getWidth() / 8);
+        row.link.performClick();
+        assertEquals(java.util.Collections.singletonList(false), linked);
+        assertEquals("Not linked", String.valueOf(row.link.getText()));
+        row.setLinked(true);
+        assertEquals("restated without a report", 1, linked.size());
+        assertEquals("Linked", String.valueOf(row.link.getText()));
+        row.setShown(2, false);
+        assertEquals(View.GONE, row.link.getVisibility());
+        row.setShown(2, true);
+        assertEquals(View.VISIBLE, row.link.getVisibility());
+    }
+
+    @Test
+    public void aDragAlongATrackTakesTheSliderAndOneAcrossItScrollsTheCard() {
         Fixture f = new Fixture(1f);
         List<String> heard = new ArrayList<>();
-        StripRow row = StripRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
-            f.width, new StripRow.Listener() {
+        List<Integer> named = new ArrayList<>();
+        SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
+            new SliderRow.Listener() {
                 @Override public void onValue(int index, int value, boolean dragging) {
                     heard.add(index + "=" + value);
                 }
@@ -228,58 +324,51 @@ public class EditorRowKindsTest {
                 @Override public void onReleased(int index) {
                     heard.add("up " + index);
                 }
-            });
+            }, -1, "", false, null, (index, anchor) -> named.add(index));
         ScrollView scroll = new ScrollView(f.themed);
         scroll.addView(row.root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         f.layOut(scroll);
-        StripRow.Column frost = row.columns.get(0);
-        float x = frost.slider.trackCentreX();
-        float handleY = frost.slider.getHeight() * 0.8f;
+        SliderRow.Item frost = row.items.get(0);
+        com.termux.app.surfaces.LegendSlider slider = frost.slider;
+        float y = slider.getHeight() / 2f;
+        float w = slider.getWidth();
 
-        // A quick swipe on the track (decided 2026-10-27): the strip's at once, its value moves.
+        // Across the track: the card's scroll; nothing moves.
         long down = SystemClock.uptimeMillis();
-        assertTrue(frost.slider.dispatchTouchEvent(event(down, down, MotionEvent.ACTION_DOWN, x,
-            handleY)));
-        assertTrue("a touch on the track takes the strip", frost.isDragging());
-        frost.slider.dispatchTouchEvent(event(down, down + 16, MotionEvent.ACTION_MOVE, x,
-            handleY - f.dp(40)));
-        frost.slider.dispatchTouchEvent(event(down, down + 32, MotionEvent.ACTION_UP, x,
-            handleY - f.dp(40)));
-        assertTrue("the value followed the finger: " + heard, heard.contains("up 0"));
+        assertTrue(slider.dispatchTouchEvent(event(down, down, MotionEvent.ACTION_DOWN, w * 0.5f,
+            y)));
+        assertFalse("nothing is decided on the way down", frost.isDragging());
+        slider.dispatchTouchEvent(event(down, down + 16, MotionEvent.ACTION_MOVE, w * 0.5f,
+            y + f.dp(40)));
+        slider.dispatchTouchEvent(event(down, down + 32, MotionEvent.ACTION_UP, w * 0.5f,
+            y + f.dp(60)));
+        assertFalse(frost.isDragging());
+        assertTrue("a vertical swipe changes nothing: " + heard, heard.isEmpty());
+
+        // Along the track: the slider's at once, and the value follows the finger.
+        long along = SystemClock.uptimeMillis();
+        slider.dispatchTouchEvent(event(along, along, MotionEvent.ACTION_DOWN, w * 0.2f, y));
+        slider.dispatchTouchEvent(event(along, along + 16, MotionEvent.ACTION_MOVE, w * 0.9f,
+            y + f.dp(2)));
+        assertTrue("a horizontal drag takes the slider", frost.isDragging());
+        slider.dispatchTouchEvent(event(along, along + 32, MotionEvent.ACTION_UP, w * 0.95f, y));
+        assertFalse(frost.isDragging());
+        assertTrue("the drag set Frost high: " + slider.getValue(), slider.getValue() > 85f);
+        assertEquals("up 0", heard.get(heard.size() - 1));
         heard.clear();
 
-        // Off the track's band the card keeps the swipe, as before.
-        float off = 1f;
-        float pad = com.termux.app.surfaces.LegendSlider.TRACK_TOUCH_PAD_DP * f.themed.getResources().getDisplayMetrics().density;
-        if (Math.abs(off - x) > pad + f.dp(8)) {
-            long side = SystemClock.uptimeMillis();
-            frost.slider.dispatchTouchEvent(event(side, side, MotionEvent.ACTION_DOWN, off, handleY));
-            frost.slider.dispatchTouchEvent(event(side, side + 16, MotionEvent.ACTION_MOVE, off,
-                handleY - f.dp(40)));
-            frost.slider.dispatchTouchEvent(event(side, side + 32, MotionEvent.ACTION_UP, off,
-                handleY - f.dp(60)));
-            ShadowLooper.idleMainLooper(200, TimeUnit.MILLISECONDS);
-            assertFalse(frost.isDragging());
-            assertTrue("a swipe off the track changes nothing: " + heard, heard.isEmpty());
-        }
+        // A tap: the handle jumps where it lands.
+        long tap = SystemClock.uptimeMillis();
+        slider.dispatchTouchEvent(event(tap, tap, MotionEvent.ACTION_DOWN, w * 0.5f, y));
+        slider.dispatchTouchEvent(event(tap, tap + 40, MotionEvent.ACTION_UP, w * 0.5f, y));
+        assertEquals("a tap in the middle", 50f, slider.getValue(), 2f);
+        assertTrue("reported: " + heard, heard.contains("up 0"));
+        assertEquals("50%", frost.value.getText().toString());
 
-        // A rest, then a drag: the strip's, its name beside the track while it drags.
-        long next = SystemClock.uptimeMillis();
-        frost.slider.dispatchTouchEvent(event(next, next, MotionEvent.ACTION_DOWN, x, handleY));
-        ShadowLooper.idleMainLooper(StripTouchPolicy.HOLD_TO_CLAIM_MS + 10,
-            TimeUnit.MILLISECONDS);
-        assertTrue("a rest takes the strip", frost.isDragging());
-        assertEquals("Frost", frost.slider.legendText().toString());
-        long later = SystemClock.uptimeMillis();
-        frost.slider.dispatchTouchEvent(event(next, later, MotionEvent.ACTION_MOVE, x,
-            f.dp(4)));
-        frost.slider.dispatchTouchEvent(event(next, later + 16, MotionEvent.ACTION_UP, x,
-            f.dp(4)));
-        assertFalse(frost.isDragging());
-        assertEquals("", frost.slider.legendText().toString());
-        assertTrue("the drag set Frost high: " + heard, frost.slider.getValue() > 80f);
-        assertEquals("up 0", heard.get(heard.size() - 1));
+        // A long press on the name is the row's menu.
+        frost.name.performLongClick();
+        assertEquals(java.util.Collections.singletonList(0), named);
     }
 
     // -------------------------------------------------------------------------------- stepper
@@ -448,8 +537,8 @@ public class EditorRowKindsTest {
                     SegmentRow.Segment.word("Floating"), SegmentRow.Segment.word("Split")),
                 0, f.width, i -> {}).root);
             column.addView(SectionHeader.build(f.themed, "Glass", "Shape", true).root);
-            column.addView(StripRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
-                f.width, new NoStrip()).root);
+            column.addView(SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
+                new NoStrip()).root);
             column.addView(SectionHeader.build(f.themed, "Options", null, true).root);
             column.addView(TileGrid.build(f.themed, indicatorTiles(),
                 new boolean[] {true, true, true, false, true}, f.width, (i, on) -> {}).root);
@@ -494,18 +583,18 @@ public class EditorRowKindsTest {
     }
 
     @NonNull
-    private static List<StripRow.Strip> glassStrips() {
-        StripRow.Readout percent = v -> v + "%";
-        StripRow.Readout dp = v -> v + " dp";
+    private static List<SliderRow.Track> glassStrips() {
+        SliderRow.Readout percent = v -> v + "%";
+        SliderRow.Readout dp = v -> v + " dp";
         return Arrays.asList(
-            new StripRow.Strip(R.drawable.ic_editor_blur, "Frost", 0, 100, 1, percent),
-            new StripRow.Strip(R.drawable.ic_editor_opacity, "Opacity", 0, 100, 1, percent),
-            new StripRow.Strip(R.drawable.ic_editor_tint, "Tint", 0, 100, 1, percent),
-            new StripRow.Strip(R.drawable.ic_editor_corners, "Corners", 0, 40, 1, dp),
-            new StripRow.Strip(R.drawable.ic_editor_margin, "Margin", 0, 24, 1, dp));
+            new SliderRow.Track(R.drawable.ic_editor_blur, "Frost", 0, 100, 1, percent),
+            new SliderRow.Track(R.drawable.ic_editor_opacity, "Opacity", 0, 100, 1, percent),
+            new SliderRow.Track(R.drawable.ic_editor_tint, "Tint", 0, 100, 1, percent),
+            new SliderRow.Track(R.drawable.ic_editor_corners, "Corners", 0, 40, 1, dp),
+            new SliderRow.Track(R.drawable.ic_editor_margin, "Margin", 0, 24, 1, dp));
     }
 
-    private static final class NoStrip implements StripRow.Listener {
+    private static final class NoStrip implements SliderRow.Listener {
         @Override public void onValue(int index, int value, boolean dragging) {}
 
         @Override public void onReleased(int index) {}

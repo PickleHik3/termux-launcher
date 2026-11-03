@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.dock.AzBeadRow;
 import com.termux.app.dock.LensBeadGeometry;
 
 /**
@@ -28,9 +29,13 @@ import com.termux.app.dock.LensBeadGeometry;
  * and also held to the span the row draws its icons in ({@link #setBeadSpan}), so a bead leaves
  * and arrives exactly where its icon does.</p>
  */
-public final class DockSurfaceHostLayout extends FrameLayout {
+public final class DockSurfaceHostLayout extends FrameLayout
+    implements com.termux.app.chrome.LiveBackdrop.Container {
 
     @Nullable private LensBeadGeometry.Beads mBeads;
+    /** The A–Z row's letter beads, and their lift: the finger's x (NaN for none) and peak. */
+    @Nullable private AzBeadRow mAzBeads;
+    private float mAzLiftX = Float.NaN, mAzLiftPeak = 0f;
     private final Path mBeadPath = new Path();
     private final RectF mCapsuleRect = new RectF();
     @NonNull private View[] mSlabOnly = new View[0];
@@ -72,21 +77,59 @@ public final class DockSurfaceHostLayout extends FrameLayout {
         }
         if (beads == null ? mBeads == null : beads.equals(mBeads)) return;
         mBeads = beads;
+        rebuildBeadPath();
+        invalidate();
+    }
+
+    /**
+     * The A–Z row's letter beads under the icons' ({@link AzBeadRow}), in this view's
+     * coordinates, or null for none. Drawn only while the icons' beads are.
+     */
+    public void setAzBeads(@Nullable AzBeadRow azBeads) {
+        if (azBeads == null ? mAzBeads == null : azBeads.equals(mAzBeads)) return;
+        mAzBeads = azBeads;
+        rebuildBeadPath();
+        if (mBeads != null) invalidate();
+    }
+
+    /**
+     * The letter beads' lift: the finger's x in this view's coordinates (NaN for none) and the
+     * peak, px, at the spring's share now ({@link AzBeadRow#liftPx}). The clip is re-cut in place
+     * (no allocation) only on a change.
+     */
+    public void setAzBeadLift(float fingerX, float peakPx) {
+        if (sameFloat(mAzLiftX, fingerX) && sameFloat(mAzLiftPeak, peakPx)) return;
+        mAzLiftX = fingerX;
+        mAzLiftPeak = peakPx;
+        if (mAzBeads == null) return;
+        rebuildBeadPath();
+        if (mBeads != null) invalidate();
+    }
+
+    private void rebuildBeadPath() {
+        LensBeadGeometry.Beads beads = mBeads;
         mBeadPath.reset();
-        if (beads != null) {
-            for (int i = 0; i < beads.count(); i++) {
-                mBeadPath.addCircle(beads.centerX(i), beads.centerY, beads.radiusPx,
-                    Path.Direction.CW);
-            }
-            // The Search field's capsule under them is one more of their shapes (#84).
-            if (beads.hasCapsule()) {
-                float r = beads.capsuleRadiusPx();
-                mCapsuleRect.set(beads.capsuleLeft, beads.capsuleTop, beads.capsuleRight,
-                    beads.capsuleBottom);
-                mBeadPath.addRoundRect(mCapsuleRect, r, r, Path.Direction.CW);
+        if (beads == null) return;
+        for (int i = 0; i < beads.count(); i++) {
+            mBeadPath.addCircle(beads.centerX(i), beads.centerY, beads.radiusPx,
+                Path.Direction.CW);
+        }
+        // The Search field's capsule under them is one more of their shapes (#84).
+        if (beads.hasCapsule()) {
+            float r = beads.capsuleRadiusPx();
+            mCapsuleRect.set(beads.capsuleLeft, beads.capsuleTop, beads.capsuleRight,
+                beads.capsuleBottom);
+            mBeadPath.addRoundRect(mCapsuleRect, r, r, Path.Direction.CW);
+        }
+        // And each letter's bead under the A–Z row, risen by its lift.
+        AzBeadRow az = mAzBeads;
+        if (az != null) {
+            for (int i = 0; i < az.count; i++) {
+                float x = az.centerX(i);
+                float lift = AzBeadRow.liftPx(x, mAzLiftX, az.pitchPx, mAzLiftPeak);
+                mBeadPath.addCircle(x, az.centerY - lift, az.radiusPx, Path.Direction.CW);
             }
         }
-        invalidate();
     }
 
     /**
@@ -154,5 +197,11 @@ public final class DockSurfaceHostLayout extends FrameLayout {
             }
         }
         return super.drawChild(canvas, child, drawingTime);
+    }
+
+    /** Live blur records the children beneath the dock's backdrop from here. */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

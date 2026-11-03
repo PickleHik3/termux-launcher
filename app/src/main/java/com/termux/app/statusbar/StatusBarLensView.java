@@ -157,6 +157,17 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
+    /**
+     * The wall's state read off its cells: {@code cells} holds one page kind per cell in cell
+     * order, and the wall stands {@code offsetPx} from the rest of cell {@code currentIndex}. The
+     * place in front is that cell's kind, whichever cell of the kind it is (ADR 0016).
+     */
+    public void setWallState(@NonNull List<PaneWallPage> cells, int currentIndex, float offsetPx,
+                             int wallWidthPx) {
+        if (currentIndex < 0 || currentIndex >= cells.size()) return;
+        setWallState(cells, cells.get(currentIndex), offsetPx, wallWidthPx);
+    }
+
     /** How far the bar is unfolded: 0 compact, 1 expanded. The icons grow and rise with it. */
     public void setExpansion(float expansion) {
         float clamped = Math.max(0f, Math.min(1f, expansion));

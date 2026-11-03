@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The padding DeckDisplayWindow added to the stats cluster, kept on the view (wave 8). -->
+    <item name="deck_display_window_padding" type="id" />
+</resources>

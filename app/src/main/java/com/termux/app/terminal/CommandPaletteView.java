@@ -49,9 +49,9 @@ import java.util.List;
  * and layout pass per frame, and the clipped, bottom-anchored viewport with its focus wash and
  * bottom fade has no natural widget anyway.
  *
- * <p>The backdrop blur is not drawn here. The host stacks a {@code RealtimeBlurView} clipped to
- * this rectangle's outline underneath, exactly as the dock does; this view draws the tint,
- * gradient, specular, rim and content over it.
+ * <p>The backdrop blur is not drawn here. The host stacks the panel's backdrop
+ * ({@code chrome.PanelBackdrop}) clipped to this rectangle's outline underneath; this view draws
+ * the tint, gradient, specular, rim and content over it.
  *
  * <p>Colors resolve through Material roles and every label is contrast-checked against the
  * composited glass with {@link InAppKeyboardPaletteFactory#ensureContrast}, because the live
@@ -272,7 +272,12 @@ public final class CommandPaletteView extends View {
     }
 
     // Geometry, in dp, from the handoff's 412 x 920 dp reference frame.
-    private static final float FILTER_ROW_H = 34f;
+    /**
+     * The filter row, and so the closed palette: Material's 48dp minimum touch height, tall enough
+     * that a mid-range Corner radius reads as a rounded rect rather than a pill. Its type is
+     * single-line and ellipsized and its baseline is centred in it, so it holds at 1.3x font scale.
+     */
+    private static final float FILTER_ROW_H = 48f;
     private static final float ARG_ROW_H = 30f;
     private static final float CATEGORY_H = 22f;
     private static final float ROW_PAD_V = 6f;
@@ -335,15 +340,23 @@ public final class CommandPaletteView extends View {
     private static final float FLING_MIN_KEEP_DP = 24f;
 
     // Type sizes, in dp for a stable ledger grid under any font scale.
-    private static final float SIZE_CRUMB = 10.5f;
-    private static final float SIZE_META = 10f;
-    private static final float SIZE_FILTER = 13f;
-    private static final float SIZE_CATEGORY = 9.5f;
-    private static final float SIZE_ROW = 12.5f;
-    private static final float SIZE_DESCRIPTION = 10.5f;
-    private static final float SIZE_SHORTCUT = 10f;
-    private static final float SIZE_CAP_GLYPH = 11f;
-    private static final float SIZE_CAP_LABEL = 10.5f;
+    // Material 3's type scale (sp), in the palette's monospace face: the field is a search bar
+    // (body large), rows a dense list (body medium title, body small supporting line), chips,
+    // categories and meta labels (label medium / small).
+    private static final float M3_BODY_LARGE = 16f;
+    private static final float M3_BODY_MEDIUM = 14f;
+    private static final float M3_BODY_SMALL = 12f;
+    private static final float M3_LABEL_MEDIUM = 12f;
+    private static final float M3_LABEL_SMALL = 11f;
+    private static final float SIZE_CRUMB = M3_LABEL_SMALL;
+    private static final float SIZE_META = M3_LABEL_SMALL;
+    private static final float SIZE_FILTER = M3_BODY_LARGE;
+    private static final float SIZE_CATEGORY = M3_LABEL_SMALL;
+    private static final float SIZE_ROW = M3_BODY_MEDIUM;
+    private static final float SIZE_DESCRIPTION = M3_BODY_SMALL;
+    private static final float SIZE_SHORTCUT = M3_LABEL_SMALL;
+    private static final float SIZE_CAP_GLYPH = M3_LABEL_MEDIUM;
+    private static final float SIZE_CAP_LABEL = M3_LABEL_SMALL;
     /**
      * Smallest the search hint shrinks to before it ellipsizes: the category rules' size, the
      * smallest type this view already sets.
@@ -415,6 +428,10 @@ public final class CommandPaletteView extends View {
     private int mOnSurfaceVariant;
     private int mMeta;
     private int mChipFill;
+    /** The selected row: secondary container under on-secondary-container ink. */
+    private int mSelectedFill;
+    private int mSelectedInk;
+    private int mSelectedMeta;
     /**
      * The strip's keycap fill. The strip hangs below the glass, straight over the terminal, so a
      * translucent cap let the terminal's text run through its label; this is the chip composited
@@ -500,6 +517,18 @@ public final class CommandPaletteView extends View {
         return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
+    /** Where the sheet's glass comes from: the in-app keyboard's palette, so the two match. */
+    public interface GlassBaseSource {
+        @ColorInt int glassBaseColor();
+    }
+
+    @Nullable private GlassBaseSource mGlassBaseSource;
+
+    /** The sheet's glass from {@code source} on the next {@link #refreshPalette()}; null for the dock's. */
+    public void setGlassBaseSource(@Nullable GlassBaseSource source) {
+        mGlassBaseSource = source;
+    }
+
     public void setCallbacks(@Nullable Callbacks callbacks) {
         mCallbacks = callbacks;
     }
@@ -507,18 +536,14 @@ public final class CommandPaletteView extends View {
     /** Re-resolves every role. Called on theme, wallpaper-color and configuration changes. */
     public void refreshPalette() {
         Context context = getContext();
-        mGlassBase = InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
-        mPrimary = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
-        int onSurface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurface,
-            ContextCompat.getColor(context, R.color.termux_on_surface));
-        int onSurfaceVariant = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant,
-            ColorUtils.blendARGB(onSurface, mGlassBase, 0.28f));
-        int surfaceContainerHigh = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh,
-            ColorUtils.blendARGB(mGlassBase, onSurface, 0.10f));
+        GlassBaseSource source = mGlassBaseSource;
+        mGlassBase = source != null ? source.glassBaseColor()
+            : InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
+        // Roles through the launcher's scheme while it owns the chrome, as the rest of it reads them.
+        CommandPaletteRoles roles = CommandPaletteRoles.resolve(context, mGlassBase);
+        mPrimary = roles.primary;
+        int onSurface = roles.onSurface;
+        int onSurfaceVariant = roles.onSurfaceVariant;
 
         // Reference background for the contrast pass: the glass tint plus its darkening
         // gradient, composited down to something opaque to measure against.
@@ -529,13 +554,17 @@ public final class CommandPaletteView extends View {
         mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 212);
         mPrimary = InAppKeyboardPaletteFactory.ensureContrast(mPrimary, overGlass);
 
-        // Keycaps use the keyboard's chip recipe, so their labels are checked against the
-        // chip composited over the glass rather than over the glass alone.
-        mChipFill = ColorUtils.setAlphaComponent(surfaceContainerHigh, 160);
-        int capOverGlass = ColorUtils.setAlphaComponent(
-            ColorUtils.compositeColors(mChipFill, overGlass), 255);
+        // The selected row, its chip and the strip's keycaps sit on the secondary container
+        // (Material's selected pair), opaque: the strip hangs over the terminal, and a translucent
+        // cap let its text run through the label. Ink is checked against that fill.
+        int capOverGlass = roles.secondaryContainer | 0xFF000000;
+        mChipFill = capOverGlass;
         mCapFill = capOverGlass;
-        mCapLabel = InAppKeyboardPaletteFactory.ensureContrast(onSurface, capOverGlass);
+        mCapLabel = InAppKeyboardPaletteFactory.ensureContrast(roles.onSecondaryContainer,
+            capOverGlass);
+        mSelectedFill = capOverGlass;
+        mSelectedInk = mCapLabel;
+        mSelectedMeta = ColorUtils.setAlphaComponent(mCapLabel, 212);
         mMarkOutlineColor = ColorUtils.setAlphaComponent(
             ColorUtils.calculateLuminance(capOverGlass) < 0.5 ? Color.WHITE : Color.BLACK,
             MARK_OUTLINE_ALPHA);
@@ -1029,12 +1058,13 @@ public final class CommandPaletteView extends View {
         boolean focused = index == mFocusIndex;
         if (focused) {
             mFill.setShader(null);
-            mFill.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(mPrimary, 28), alpha));
+            mFill.setColor(withBodyAlpha(mSelectedFill, alpha));
             canvas.drawRect(mFrame.left, top, mFrame.right, top + height, mFill);
             mFill.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawRect(mFrame.left, top, mFrame.left + dp(FOCUS_BAR_W), top + height, mFill);
         }
-        int titleColor = row.enabled ? mOnSurface : mMeta;
+        int titleColor = focused ? (row.enabled ? mSelectedInk : mSelectedMeta)
+            : row.enabled ? mOnSurface : mMeta;
         mMono.setTextSize(sp(SIZE_ROW));
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(titleColor, row.enabled ? alpha : alpha / 2));
@@ -1063,13 +1093,13 @@ public final class CommandPaletteView extends View {
 
         if (!row.shortcut.isEmpty()) {
             mMono.setTextSize(sp(SIZE_SHORTCUT));
-            mMono.setColor(withBodyAlpha(mOnSurfaceVariant, alpha));
+            mMono.setColor(withBodyAlpha(focused ? mSelectedMeta : mOnSurfaceVariant, alpha));
             canvas.drawText(row.shortcut, shortcutRight - mMono.measureText(row.shortcut),
                 titleBaseline, mMono);
         }
         if (focused && row.description != null && !row.description.isEmpty()) {
             mMono.setTextSize(sp(SIZE_DESCRIPTION));
-            mMono.setColor(withBodyAlpha(mMeta, alpha));
+            mMono.setColor(withBodyAlpha(mSelectedMeta, alpha));
             float descriptionBaseline = titleBaseline + lineHeightOf(mMono);
             float width = mFrame.right - dp(ROW_PAD_RIGHT) - textLeft;
             canvas.drawText(ellipsize(mMono, "↳ " + row.description, width),

@@ -78,11 +78,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
-        /**
-         * Edit pages moved or removed a page: {@code mapping} is each old page's new number
-         * ({@link com.termux.app.launcher.home.HomePageEdits}), for what else names a page.
-         */
-        default void onHomePagesRenumbered(@NonNull int[] mapping) { }
         /** A double tap on the page's free area (Settings › Home › Gestures). */
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
@@ -204,6 +199,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         });
         pane.grid().setAppIconFactory(appIcons);
         widgets.setAddObserver(pinAddObserver);
+        widgets.setGeometrySource(this::orientationGeometry);
         // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
         pane.setOnDragListener(appDropListener);
         catalog.setBuiltinSource(builtins);
@@ -276,13 +272,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private int wantedRows, wantedColumns;
     /** The rows always on gives the keyboard, taken off the capped grid; 0 while it is off. */
     private int keyboardRows;
-    /**
-     * The largest the wall has measured in each orientation. The caps come from this, not from
-     * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
-     * grid and reflow the widgets, since a reflow is kept. A cap can only grow until the screen
-     * turns, and the two orientations keep their own.
-     */
-    private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
     @Nullable private WidgetGridCaps appliedCaps;
     /**
      * Home's Margin as last settled, in dp: the rim the caps are worked out with. The grid's live
@@ -297,10 +286,82 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * cells go, so this is the answer for the wheels and the apply.
      */
     @NonNull public WidgetGridCaps gridCaps() {
-        boolean landscape = isLandscape();
-        float density = pane.getResources().getDisplayMetrics().density;
-        return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
-            landscape ? landscapeWallHeight : portraitWallHeight, density, gridEdgeDp);
+        // The screen in its portrait form, not the wall as measured: one grid for both
+        // orientations (ADR 0020 §12), so neither a turn nor a keyboard or sheet shrinking the
+        // wall changes the caps, and nothing reflows. The cells get shorter or narrower instead.
+        // Nor does the icon step: the caps keep room for the largest step's dock.
+        // Turned, the configuration's short side has the status bar and the cutout taken off it,
+        // which is less than the portrait width and would cut a column; so the screen is the one
+        // last read while portrait, and the caps are the portrait caps to the column.
+        android.content.res.Configuration config = pane.getResources().getConfiguration();
+        WidgetGridCaps.PortraitScreen current = new WidgetGridCaps.PortraitScreen(
+            config.screenWidthDp, config.screenHeightDp, statusBarDp(),
+            WidgetGridCaps.PortraitScreen.key(config.smallestScreenWidthDp, config.densityDpi));
+        boolean portrait = !isLandscape();
+        WidgetGridCaps.PortraitScreen screen = WidgetGridCaps.PortraitScreen.resolve(portrait,
+            current, lastPortraitScreen, portrait ? current : reckonedPortraitScreen(current));
+        if (portrait && config.screenWidthDp > 0 && config.screenHeightDp > 0) {
+            lastPortraitScreen = current;
+        }
+        return WidgetGridCaps.forPortraitWall(screen, gridEdgeDp);
+    }
+
+    /**
+     * The screen as last read while portrait, for the whole process: a turn and a new activity
+     * both keep it. Null until the launcher has stood upright once.
+     */
+    @Nullable private static WidgetGridCaps.PortraitScreen lastPortraitScreen;
+
+    /**
+     * The portrait screen reckoned while turned, for a launcher that has not stood upright yet:
+     * the display's short side across, and its long side less the status bar and the navigation
+     * bar, which is what the configuration reports upright on a phone with the bar at the bottom.
+     * A reckoning only: a cap it gets wrong is put right by the first portrait pass, and the
+     * repository puts a wall a cap cut back as it stood. Before Android 11, the screen turned.
+     */
+    @NonNull private WidgetGridCaps.PortraitScreen reckonedPortraitScreen(
+            @NonNull WidgetGridCaps.PortraitScreen current) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return current;
+        android.content.res.Resources res = pane.getResources();
+        float density = res.getDisplayMetrics().density;
+        android.view.WindowManager windows =
+            pane.getContext().getSystemService(android.view.WindowManager.class);
+        if (windows == null || !(density > 0f)) return current;
+        Rect bounds = windows.getMaximumWindowMetrics().getBounds();
+        float shortDp = Math.min(bounds.width(), bounds.height()) / density;
+        float longDp = Math.max(bounds.width(), bounds.height()) / density;
+        @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
+        int navId = res.getIdentifier("navigation_bar_height", "dimen", "android");
+        float navDp = navId != 0 ? res.getDimensionPixelSize(navId) / density : 0f;
+        return new WidgetGridCaps.PortraitScreen((int) shortDp,
+            (int) (longDp - current.statusBarDp - navDp), current.statusBarDp, current.key);
+    }
+
+    /** The system's status bar height, dp, or a fallback where it names none. */
+    private float statusBarDp() {
+        android.content.res.Resources res = pane.getResources();
+        float density = res.getDisplayMetrics().density;
+        @android.annotation.SuppressLint({"DiscouragedApi", "InternalInsetResource"})
+        int statusId = res.getIdentifier("status_bar_height", "dimen", "android");
+        return statusId != 0 && density > 0f
+            ? res.getDimensionPixelSize(statusId) / density
+            : WidgetGridCaps.FALLBACK_STATUS_BAR_DP;
+    }
+
+    /**
+     * The grid's geometry for both orientations' widget sizes: the screen, the chrome at the one
+     * icon step, Home's Margin and the grid as applied (the rows given to an always-on keyboard
+     * still count, since the cells keep their size).
+     */
+    @Nullable private WidgetOrientationCells.Geometry orientationGeometry() {
+        android.content.res.Resources res = pane.getResources();
+        android.content.res.Configuration config = res.getConfiguration();
+        float density = res.getDisplayMetrics().density;
+        if (config.screenWidthDp <= 0 || config.screenHeightDp <= 0 || density <= 0f) return null;
+        WidgetGridDefinition grid = widgets.repository().gridDefinition();
+        return new WidgetOrientationCells.Geometry(config.screenWidthDp, config.screenHeightDp,
+            statusBarDp(), appIcons.style().iconDp, gridEdgeDp, grid.columns,
+            grid.rows + keyboardRows, density);
     }
 
     /**
@@ -352,12 +413,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         wantedRows = rows;
         wantedColumns = columns;
         keyboardRows = Math.max(0, takenRows);
-        rememberWall();
         WidgetGridCaps caps = gridCaps();
         appliedCaps = caps;
         // The rows given away stay part of the grid's height, so the cells keep their size.
         pane.grid().setReservedRows(keyboardRows);
-        widgets.applyGrid(caps.clampRows(rows) - keyboardRows, caps.clampColumns(columns));
+        // A grid the caps cut is kept restorable: when the caps grow back, the wall returns as
+        // it stood instead of keeping the reflow.
+        int cappedRows = caps.clampRows(rows);
+        int cappedColumns = caps.clampColumns(columns);
+        boolean capped = cappedRows < rows || cappedColumns < columns;
+        widgets.applyGrid(cappedRows - keyboardRows, cappedColumns, capped);
     }
 
     /** The grid's height as last laid out, in px: what always on measures a keyboard row by. */
@@ -370,28 +435,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
-    /**
-     * Folds the grid's measured size into its orientation's record. False when there is nothing
-     * to learn: unmeasured, or still the other orientation's size right after a turn.
-     */
-    private boolean rememberWall() {
-        WidgetGridView grid = pane.grid();
-        int width = grid.getWidth(), height = grid.getHeight();
-        if (width <= 0 || height <= 0) return false;
-        boolean landscape = isLandscape();
-        if (landscape != (width > height)) return false;
-        if (landscape) {
-            landscapeWallWidth = Math.max(landscapeWallWidth, width);
-            landscapeWallHeight = Math.max(landscapeWallHeight, height);
-        } else {
-            portraitWallWidth = Math.max(portraitWallWidth, width);
-            portraitWallHeight = Math.max(portraitWallHeight, height);
-        }
-        return true;
-    }
-
     private void onWallLayout() {
-        if (wantedRows <= 0 || !rememberWall()) return;
+        if (wantedRows <= 0) return;
         if (gridCaps().equals(appliedCaps)) return;
         // Never from inside the layout pass that reported the change.
         pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });
@@ -479,9 +524,33 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.contentShiftFraction();
     }
 
+    /** Whether the Home page in front is settling, sliding in or back; see WidgetPaneView. */
+    public boolean isHomePageSettling() {
+        return pane.isContentSettling();
+    }
+
+    /** Runs {@code action} once that settle lands or is cut short, or now if none is under way. */
+    public void runWhenHomePageSettles(@NonNull Runnable action) {
+        pane.runWhenContentSettles(action);
+    }
+
     /** Turn Home to page {@code page} (clamped), without the swipe's slide. */
     public void showHomePage(int page) {
         setCurrentPage(page);
+    }
+
+    /**
+     * The run of Home pages the one Home frame pages inside (ADR 0015, A2a), global indexes,
+     * both included; {@code last} below 0 for every page.
+     */
+    public void setHomeRun(int first, int last) {
+        pane.setRun(first, last);
+        // Re-bound to another run, the frame turns to that run's arrival page, the end nearest the
+        // page it showed: it never shows one run's page while bound to another (W5).
+        int lo = Math.max(0, first);
+        int hi = last < 0 ? Integer.MAX_VALUE : Math.max(lo, last);
+        if (currentPage < lo) setCurrentPage(lo);
+        else if (currentPage > hi) setCurrentPage(hi);
     }
 
     /**
@@ -544,7 +613,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setSeam(seam);
     }
     public boolean onBackPressed() {
-        if (pane.widgetEditActive()) { exitEditMode(); return true; }
+        // Back keeps the edit, like Done; the cross is the only discard.
+        if (pane.widgetEditActive()) { commitEditSession(); return true; }
         return pane.onBackPressed();
     }
     public void destroy() {
@@ -908,34 +978,37 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * Edit pages: page {@code from} moves to {@code to} with everything on it. The page on screen
-     * follows its page, and the host renumbers what else names a page (the floats, the default
-     * page) by the same mapping.
+     * Edit pages: the page with id {@code pageId} moves to position {@code toIndex} with
+     * everything on it. The page on screen follows its page; what else names a page (the floats)
+     * follows the Home pages' order through the wall's page store.
      */
-    public boolean movePage(int from, int to) {
+    public boolean movePage(int pageId, int toIndex) {
         if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
         LauncherWidgetRepository repository = widgets.repository();
+        int from = repository.indexOfPage(pageId);
         int count = repository.pageCount();
-        if (!com.termux.app.launcher.home.HomePageEdits.canMove(count, from, to)
-            || !repository.movePage(from, to)) return false;
-        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(count, from, to);
-        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        if (from < 0 || !com.termux.app.launcher.home.HomePageEdits.canMove(count, from, toIndex)) {
+            return false;
+        }
+        int viewingId = repository.pageIdAt(currentPage);
+        if (!repository.movePage(from, toIndex)) return false;
+        int viewing = repository.indexOfPage(viewingId);
+        if (viewing >= 0) currentPage = viewing;
         render();
-        host.onHomePagesRenumbered(mapping);
         return true;
     }
 
     /**
-     * Edit pages: page {@code page} goes, and with it every widget, icon and folder on it (the
-     * caller has asked first when it held any); a widget's allocation is given back as its own
-     * removal does. Never the last page. False when the page could not be taken away.
+     * Edit pages: the page with id {@code pageId} goes, and with it every widget, icon and folder
+     * on it (the caller has asked first when it held any); a widget's allocation is given back as
+     * its own removal does. Never the last page. False when the page could not be taken away.
      */
-    public boolean removePage(int page) {
+    public boolean removePage(int pageId) {
         if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
         LauncherWidgetRepository repository = widgets.repository();
+        int page = repository.indexOfPage(pageId);
         int count = repository.pageCount();
-        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0 || page >= count)
-            return false;
+        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0) return false;
         WidgetAddTransaction waiting = repository.pending();
         if (waiting != null && waiting.page == page) {
             // A widget is on its way to this page (its app's setup is open): it stays.
@@ -944,42 +1017,37 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (pane.widgetEditActive()) exitEditMode();
         dismissFolderPopup();
+        int viewingId = repository.pageIdAt(currentPage);
+        int viewingWas = currentPage;
         for (LauncherWidgetRecord record : repository.recordsOnPage(page)) {
             if (widgets.removeWidget(record.appWidgetId)
                     == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
-                // Stop where the store refused. What did go has been renumbered for by the trims
-                // its removals ran; the page stays with what is left on it.
+                // Stop where the store refused. What did go has been trimmed with its removals;
+                // the page stays with what is left on it.
                 pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
                 render();
                 return false;
             }
         }
-        int[] mapping = com.termux.app.launcher.home.HomePageEdits.removeMapping(count, page);
         // A page emptied by those removals went with its last widget, and the trim that took it
-        // told the host already; a page added by hand is still there and goes now.
-        if (repository.pageCount() == count) {
-            if (!repository.removePage(page)) {
-                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
-                render();
-                return false;
-            }
-            host.onHomePagesRenumbered(mapping);
+        // is done; a page added by hand is still there and goes now.
+        int now = repository.indexOfPage(pageId);
+        if (now >= 0 && !repository.removePage(now)) {
+            pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+            render();
+            return false;
         }
-        // Edit pages acts on both orientations: the shelved one loses the same page.
-        repository.renumberShelvedPages(mapping);
-        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        int viewing = repository.indexOfPage(viewingId);
+        // The page on screen keeps its place; when it was the one removed, the page now in its place.
+        currentPage = viewing >= 0 ? viewing : viewingWas;
         clampCurrentPage();
         render();
         return true;
     }
 
-    /**
-     * Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}) and hands the
-     * renumbering on, so the floats and the default page follow their pages.
-     */
+    /** Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}). */
     private void trimPages() {
-        int[] renumbered = widgets.repository().trimEmptyPagesRenumbering();
-        if (renumbered != null) host.onHomePagesRenumbered(renumbered);
+        widgets.repository().trimEmptyPageIds();
     }
 
     /** Edit pages' Add page: an empty page after the last, kept until something lands on it. */
@@ -2374,7 +2442,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             pane.showNotice(pane.getContext().getString(R.string.home_item_restore_failed));
             return;
         }
-        if (result.renumbered != null) host.onHomePagesRenumbered(result.renumbered);
         currentPage = result.record.page;
         render();
     }

@@ -106,6 +106,15 @@ public final class SurfaceLongPress {
 
         /** The in-app keyboard goes down, after its switch has been turned off. */
         void hideKeyboard();
+
+        /** Whether the status bar can be folded and unfolded where it stands now. */
+        boolean statusBarFoldable();
+
+        /** Whether the status bar shows its compact form. */
+        boolean statusBarCompact();
+
+        /** The status bar folds to its compact form, or unfolds, as the status swipe does. */
+        void setStatusBarCompact(boolean compact);
     }
 
     /** The surfaces each target is made of, in the route's priority order. */
@@ -353,6 +362,7 @@ public final class SurfaceLongPress {
                 hide(target, bar);
             }));
         if (target.offersForm()) second.add(AppMenuCard.Item.custom(formChoice(context)));
+        if (target == Target.STATUS && mHost.statusBarFoldable()) second.add(foldItem(context));
         groups.add(second);
 
         if (mMenu == null) mMenu = new AnchoredMenu(root, menuTheme(context));
@@ -364,6 +374,28 @@ public final class SurfaceLongPress {
         outline(zone.box);
         mMenu.showAppMenu(card, anchorRect, this::removeOutline,
             context.getString(R.string.surface_popup_a11y_pane, title));
+    }
+
+    /** Expand when the status bar is compact, Compact when it is expanded. */
+    @NonNull
+    private AppMenuCard.Item foldItem(@NonNull Context context) {
+        final boolean compact = mHost.statusBarCompact();
+        return new AppMenuCard.Item(foldLabel(context, compact),
+            compact ? R.drawable.ic_ms_status_bar_expand : R.drawable.ic_ms_status_bar_compact,
+            () -> foldTo(mHost, compact, this::dismiss));
+    }
+
+    /** The fold item's words: Expand on a compact bar, Compact on an expanded one. */
+    @NonNull
+    static String foldLabel(@NonNull Context context, boolean compact) {
+        return context.getString(compact
+            ? R.string.surface_popup_status_expand : R.string.surface_popup_status_compact);
+    }
+
+    /** The fold item's action: the menu goes away and the bar lands in the other form. */
+    static void foldTo(@NonNull Host host, boolean wasCompact, @NonNull Runnable dismiss) {
+        dismiss.run();
+        host.setStatusBarCompact(!wasCompact);
     }
 
     /** The card's caption: what was pressed, by the name its card or its bar goes by. */

@@ -6,7 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import org.junit.Test;
 
@@ -19,18 +19,18 @@ import java.util.List;
 public class KeyboardDataInstallTest {
 
     @Test public void theCommandIsTheScriptHandedToBash() {
-        List<String> command = KeyboardDataInstall.command(TourEdition.TERMUX);
+        List<String> command = KeyboardDataInstall.command(AppEdition.TERMUX);
         assertNotNull(command);
         assertEquals(3, command.size());
         assertEquals("bash", command.get(0));
         assertEquals("-c", command.get(1));
-        assertEquals(KeyboardDataInstall.script(TourEdition.TERMUX), command.get(2));
+        assertEquals(KeyboardDataInstall.script(AppEdition.TERMUX), command.get(2));
     }
 
     @Test public void nixHasNoCommand() {
         assertNull("nix installs the data from home.nix",
-            KeyboardDataInstall.command(TourEdition.NIX));
-        assertNull(KeyboardDataInstall.script(TourEdition.NIX));
+            KeyboardDataInstall.command(AppEdition.NIX));
+        assertNull(KeyboardDataInstall.script(AppEdition.NIX));
     }
 
     /** Termux on apt: the repository that carries the package first, then the developer's line. */
@@ -42,7 +42,7 @@ public class KeyboardDataInstallTest {
     }
 
     @Test public void termuxUsesTheAptRouteWithX11RepoUnlessThePrefixIsPacman() {
-        String script = KeyboardDataInstall.script(TourEdition.TERMUX);
+        String script = KeyboardDataInstall.script(AppEdition.TERMUX);
         assertNotNull(script);
         assertEquals("if " + KeyboardDataInstall.PACMAN_PREFIX_TEST
                 + "; then " + KeyboardDataInstall.pacmanInstall()
@@ -70,7 +70,7 @@ public class KeyboardDataInstallTest {
 
     /** VAJ's own repository carries the package: no x11-repo, and no pacman branch. */
     @Test public void vajIsTheDevelopersLineWithoutX11Repo() {
-        String script = KeyboardDataInstall.script(TourEdition.VAJ);
+        String script = KeyboardDataInstall.script(AppEdition.VAJ);
         assertNotNull(script);
         assertEquals("{ pkg update && pkg upgrade -y "
                 + "-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "
@@ -86,7 +86,7 @@ public class KeyboardDataInstallTest {
      */
     @Test public void onlyAFailureKeepsTheWindowOpen() {
         assertEquals("exec \"${SHELL:-sh}\" -l", KeyboardDataInstall.ON_FAILURE);
-        for (TourEdition edition : new TourEdition[] {TourEdition.TERMUX, TourEdition.VAJ}) {
+        for (AppEdition edition : new AppEdition[] {AppEdition.TERMUX, AppEdition.VAJ}) {
             String script = KeyboardDataInstall.script(edition);
             assertNotNull(script);
             assertTrue(edition + " falls back only on failure",

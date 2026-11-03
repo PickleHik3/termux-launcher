@@ -112,6 +112,14 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   drops it. Both it and `requestClipboard` return early when `connected()` is false, and
   `connected()` itself now checks the pointer — a wall page is asked after it has left its
   window, where upstream's view is already gone with its activity.
+- **`LorieView.lastClipboardTimestamp` starts at 0**, not at `System.currentTimeMillis()`.
+  `checkForClipboardChange` announces a clip only when its timestamp is newer than the last
+  one announced, and upstream's initial value of "now" silently excludes every clip copied
+  before the view was created. In the launcher the view is created when the display window
+  first shows, so a URL copied in the terminal and then a display started for the browser was
+  never announced: the paste key (which refreshes before Ctrl+V) pasted nothing. Reproduced on
+  the emulator 2026-10-29 with Mousepad: a clip copied before `launcherctl launch mousepad`
+  never logged "sending clipboard announce"; one copied after did, and pasted.
 - **`LorieView.onCursorNameChanged(String)` (new)** is the Java end of that event: it keeps the
   last name (`getCursorName()`) and forwards it to an optional `CursorNameListener`. Upstream has
   no such method, so a nightly merge must carry it forward with the native patch.

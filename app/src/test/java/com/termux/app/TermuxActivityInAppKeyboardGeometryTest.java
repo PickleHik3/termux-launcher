@@ -160,7 +160,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         // Edge-to-edge keyboard or dock continues under the gesture pill.
         assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
             false, true, 72, false, false, false));
-        assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
+        // The dock with the keyboard down reaches under the pill itself (DockSpec): no strip.
+        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
             true, false, 72, false, false, false));
         assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
             false, true, 0, false, false, false));

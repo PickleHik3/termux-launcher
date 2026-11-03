@@ -98,14 +98,16 @@ public final class LayoutEditorPlan {
      * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
      * the other ({@link #enterVariant}).
      */
-    @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
-        new EnumMap<>(LayoutVariant.class);
-    @NonNull private final EnumMap<LayoutVariant, String> mEntrySignatures =
-        new EnumMap<>(LayoutVariant.class);
+    @NonNull private final Map<LayoutVariant, PlaceArrangeSnapshot> mEntries =
+        new java.util.LinkedHashMap<>();
+    @NonNull private final Map<LayoutVariant, String> mEntrySignatures =
+        new java.util.LinkedHashMap<>();
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
-    /** Whether Home held a layout of its own at open: the switch Discard puts back too. */
-    private final boolean mEntryHomeLayout;
+    /**
+     * Every page the session has dressed, by id, and whether it held a page layout when the
+     * session first reached it: the flags Discard puts back too (ADR 0015 §3).
+     */
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
                              @NonNull PlaceOrientation deviceOrientation,
@@ -129,17 +131,63 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
-        // What the session may touch: the Workspace layout the launcher stands in, and Home's own
-        // always, while the launcher is not in minimal mode: a first hide gives Home a layout of its
-        // own, seeded over what Home's variant held, and Discard must put that back too. A session
-        // opened in normal mode never snapshots (so never reverts) Minimal; one opened in Minimal
-        // edits Minimal alone.
+        enterVariant(dockLayout());
+        // What the session may touch: the layout the page wears and the Workspace layout the
+        // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
+        // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
+        // remembered so Discard puts it back (ADR 0015 §3).
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
-        if (workspace != LayoutVariant.MINIMAL)
-            enterVariant(LayoutVariant.HOME);
-        mEntryHomeLayout = places.hasHomeLayout();
     }
+
+    /**
+     * The view the dock's keys are read and written through: Home's on every Home page, whether it
+     * wears a page layout of its own or the shared one the Terminal shares (ADR 0018 section 4),
+     * else the edited layout's. Both sides read the dock through {@link DressResolver#dockLayoutOf}.
+     */
+    @NonNull
+    private PlaceLayoutStore dockPlaces() {
+        return mRoot.forVariant(dockLayout());
+    }
+
+    @NonNull
+    private LayoutVariant dockLayout() {
+        // A layout's dock is its own; Home pages wear Home's layout (ADR 0020 §1).
+        return mVariant;
+    }
+
+
+    // ------------------------------------------------------------------ the layout it edits
+
+    /**
+     * The layout this session edits, by the kind of page it was opened on (ADR 0020 §9):
+     * Terminal-minimal while minimal mode dresses a window.
+     */
+    @NonNull
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        return mVariant.layoutKind();
+    }
+
+    /** The editor's title: "Home layout", "Terminal layout", ... */
+    @NonNull
+    public String layoutTitle() {
+        return layoutKind().title;
+    }
+
+    /** The page being dressed, by id; -1 where the launcher has not named it. */
+    public int pageId() {
+        return mRoot.shownPageId(mDressedPage);
+    }
+
+    /** The kind of the page being dressed. */
+    @NonNull
+    public com.termux.app.wall.WallPages.PageKind pageKind() {
+        return DressResolver.kindOf(mDressedPage);
+    }
+
+
+
+
 
     private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
         mEntries.put(entry.variant(), entry);
@@ -253,7 +301,7 @@ public final class LayoutEditorPlan {
 
     /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
     public float dockHeightScale() {
-        return mPlaces.dockHeightScale(mShownOrientation);
+        return dockPlaces().dockHeightScale(mShownOrientation);
     }
 
     /** The keyboard's height in the shown orientation, as a multiple of its unscaled height. */
@@ -274,7 +322,7 @@ public final class LayoutEditorPlan {
     /** The dock's handle dragged. */
     @NonNull
     public Drop setDockHeightScale(float scale) {
-        mPlaces.setDockHeightScale(mShownOrientation, scale);
+        dockPlaces().setDockHeightScale(mShownOrientation, scale);
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
@@ -360,6 +408,49 @@ public final class LayoutEditorPlan {
         return Drop.LIVE;
     }
 
+    // ------------------------------------------------- Customization › Layout (overhaul §2)
+
+    /**
+     * Shows or puts away {@code element} on {@code variant}'s layout, in both orientations,
+     * whichever page the session is on: Customization's whole-app list. The variant is entered
+     * first, so Undo, Discard and the unsaved question cover it as they cover the edited one.
+     */
+    @NonNull
+    public Drop setShownOnLayout(@NonNull LayoutVariant variant, @NonNull Element element,
+                                 boolean shown) {
+        enterVariant(variant);
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        boolean wrote = false;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            Slot slot = layout.slot(orientation, element);
+            if (slot.hidden == !shown)
+                continue;
+            layout.setSlot(orientation, element, slot.withHidden(!shown));
+            wrote = true;
+        }
+        return wrote ? Drop.LIVE : Drop.NONE;
+    }
+
+    /**
+     * The keyboard element on {@code variant}'s layout: Home's always-on on the Home layout, the
+     * keyboard switch elsewhere ({@link #setKeyboardShown}), entered first as above.
+     */
+    @NonNull
+    public Drop setKeyboardShownOnLayout(@NonNull LayoutVariant variant, boolean shown) {
+        enterVariant(variant);
+        if (variant.isHomeKind()) {
+            if (mRoot.isHomeKeyboardAlwaysOn() == shown)
+                return Drop.NONE;
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+            return Drop.LIVE;
+        }
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        if (layout.isKeyboardShown() == shown)
+            return Drop.NONE;
+        layout.setKeyboardShown(shown);
+        return Drop.LIVE;
+    }
+
     // ------------------------------------------------------------------------ the Dock design
 
     /**
@@ -368,7 +459,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public DockStyle dockStyle() {
-        return mPlaces.dockStyle();
+        return dockPlaces().dockStyle();
     }
 
     /**
@@ -382,7 +473,7 @@ public final class LayoutEditorPlan {
         // the Drawer tile (#97).
         if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
             return Drop.NONE;
-        mPlaces.setDockStyle(style);
+        dockPlaces().setDockStyle(style);
         return Drop.LIVE;
     }
 
@@ -390,7 +481,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Search field on: what the toggle shows. */
     public boolean searchField() {
-        return mPlaces.searchField();
+        return dockPlaces().searchField();
     }
 
     /**
@@ -401,7 +492,7 @@ public final class LayoutEditorPlan {
     public Drop setSearchField(boolean on) {
         if (on == searchField())
             return Drop.NONE;
-        mPlaces.setSearchField(on);
+        dockPlaces().setSearchField(on);
         return Drop.LIVE;
     }
 
@@ -409,7 +500,7 @@ public final class LayoutEditorPlan {
 
     /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
     public boolean drawerTile() {
-        return mPlaces.drawerTile();
+        return dockPlaces().drawerTile();
     }
 
     /**
@@ -421,7 +512,7 @@ public final class LayoutEditorPlan {
     public Drop setDrawerTile(boolean on) {
         if (on == drawerTile())
             return Drop.NONE;
-        mPlaces.setDrawerTile(on);
+        dockPlaces().setDrawerTile(on);
         return Drop.LIVE;
     }
 
@@ -453,11 +544,11 @@ public final class LayoutEditorPlan {
     public List<TrayItem> trayItems() {
         List<TrayItem> items = new ArrayList<>(5);
         PlaceLayout layout = shownLayout();
-        Dress dress = dress();
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (dress.wears(item.element) && layout.slot(item.element).hidden) {
+            } else if (DressResolver.wornOn(mVariant, item.element)
+                    && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -473,7 +564,9 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
-        if (!dress().wears(item.element))
+        // What the kind can wear, not what it wears now: an element put away in both
+        // orientations is no longer in the dress, and must still come back.
+        if (!DressResolver.wornOn(mVariant, item.element))
             return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)
@@ -516,6 +609,7 @@ public final class LayoutEditorPlan {
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
+        enterVariant(dockLayout());
         return place;
     }
 
@@ -599,8 +693,6 @@ public final class LayoutEditorPlan {
      * — the unsaved-changes question.
      */
     public boolean isDirty() {
-        if (mRoot.hasHomeLayout() != mEntryHomeLayout)
-            return true;
         for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
             if (!entry.getValue().equals(
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
@@ -614,20 +706,11 @@ public final class LayoutEditorPlan {
      * nothing moved is left unwritten.
      */
     public void revert() {
-        boolean switchMoved = mRoot.hasHomeLayout() != mEntryHomeLayout;
-        if (switchMoved)
-            mRoot.setHomeLayout(mEntryHomeLayout);
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
             if (atOpen == null || !atOpen.equals(
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
                 entry.getValue().restore(mRoot);
-        }
-        // The edited layout only changes if Home's switch did; minimal mode toggled under the
-        // open editor does not move what it edits.
-        if (switchMoved) {
-            mVariant = dress().layout();
-            mPlaces = mRoot.forVariant(mVariant);
         }
     }
 

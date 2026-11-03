@@ -1,7 +1,6 @@
 package com.termux.app.help;
 
 import com.termux.R;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
@@ -98,7 +97,7 @@ public final class HelpTopics {
         /** The places whose layout has that control; empty when the topic has no control. */
         public final List<PaneWallPage> places;
         /** The gesture a demonstration would trace, or null when none is implemented. */
-        public final TourGesture gesture;
+        public final HelpGesture gesture;
         /** A lesson from {@link #LESSON_IDS}, or null when there is nothing to practise. */
         public final String lessonId;
         /** Other topics worth reading next. */
@@ -209,7 +208,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_places_step1)
             .wayBack(R.string.help_topic_places_back)
             .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
-            .gesture(TourGesture.HOLD_DRAG)
+            .gesture(HelpGesture.HOLD_DRAG)
             .lesson(LESSON_PAGE_SWIPE)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
             .aliases(R.string.help_topic_places_aliases)
@@ -248,7 +247,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_status_back)
             .reveal(R.string.help_topic_status_reveal)
             .target("status", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
-            .gesture(TourGesture.DRAG_DOWN)
+            .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_STATUS_SWIPE)
             .related("places", "windows", "pinned_notifications")
             .terms("place", "window", "status_swipe")
@@ -280,7 +279,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_dock_back)
             .reveal(R.string.help_topic_dock_reveal)
             .target("dock", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.DRAG_DOWN)
+            .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_FIND_APPS)
             .related("az", "organize_apps", "fix_dock").terms("dock", "app_drawer")
             .aliases(R.string.help_topic_dock_aliases)
@@ -290,7 +289,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_az_step1)
             .reveal(R.string.help_topic_az_reveal)
             .target("az", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.SCRUB)
+            .gesture(HelpGesture.SCRUB)
             .related("dock", "organize_apps").terms("app_drawer")
             .aliases(R.string.help_topic_az_aliases)
             .doc("Home_Screen_And_Apps.md"));
@@ -368,7 +367,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_kswipe_back)
             .target("keyboard_grabber", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY,
                 PaneWallPage.WIDGETS)
-            .gesture(TourGesture.SWIPE_UP)
+            .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_KEYBOARD)
             .related("keyboard", "keyboard_layouts", "fix_keyboard")
             .terms("keyboard_swipe")
@@ -410,7 +409,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_space_step1, R.string.help_topic_space_step2)
             .reveal(R.string.help_topic_space_reveal)
             .target("space", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.SWIPE_UP)
+            .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_FIND_ACTION)
             .related("palette", "windows", "hierarchy").terms("command_palette")
             .aliases(R.string.help_topic_space_aliases)
@@ -627,7 +626,7 @@ public final class HelpTopics {
         private int wayBackRes;
         private int revealRes;
         private String targetId;
-        private TourGesture gesture;
+        private HelpGesture gesture;
         private String lessonId;
         private int aliasesRes;
         private String docPath;
@@ -653,7 +652,7 @@ public final class HelpTopics {
             places.addAll(Arrays.asList(on));
             return this;
         }
-        Builder gesture(TourGesture value) { gesture = value; return this; }
+        Builder gesture(HelpGesture value) { gesture = value; return this; }
         Builder lesson(String id) { lessonId = id; return this; }
         Builder related(String... ids) { relatedIds.addAll(Arrays.asList(ids)); return this; }
         Builder terms(String... ids) { termIds.addAll(Arrays.asList(ids)); return this; }

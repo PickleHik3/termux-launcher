@@ -6,67 +6,107 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.surfaces.cards.ElementRows.Item;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.GlyphNames;
 import com.termux.app.surfaces.rows.RowKit;
 import com.termux.app.surfaces.rows.SectionHeader;
+import com.termux.app.surfaces.rows.SegmentRow;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The Elements list at the end of a screen's card: one rounded list in the Bars list's style
- * ({@link BarsList}) with no handles, each row the element's glyph and name, a sliders glyph that
- * opens the element's card, and an eye that shows or hides it. A hidden element greys out; the
- * terminal and the widgets have no eye. Which rows stand and what each does is {@link
+ * The Layout list of a screen's card (overhaul §4): one rounded list in the Bars list's style
+ * ({@link BarsList}) with no handles, each row the element's glyph, its name (over the card it
+ * opens where that card is another's, "Dock card"), a switch that shows or hides it and a
+ * trailing ›; a tap anywhere else on the row opens the element's card. A hidden element greys
+ * out; the terminal and the widgets have no switch. Which rows stand and what each does is {@link
  * ElementRows}'; views only, every value read from {@link Host} and every touch reported to it.
  */
 public final class ElementsList {
 
     /** Where the list reads its elements and writes what is done to them. */
     public interface Host {
+        /**
+         * The layout being edited, named for the heading ("Home layout", ADR 0020 §9); null keeps
+         * the plain Elements heading.
+         */
+        @androidx.annotation.Nullable
+        default String layoutTitle() { return null; }
+
         /** Whether the page being edited wears {@code item}; its row stands only if it does. */
         boolean offers(@NonNull Item item);
         boolean shown(@NonNull Item item);
         void setShown(@NonNull Item item, boolean shown);
         /** The sliders glyph, or a tap on the row: the element's card. */
         void open(@NonNull Item item);
+
+        /**
+         * The chip's two words, the kind side then the page ("Home pages", "Home 2"); null hides
+         * the chip (minimal mode, or no page known).
+         */
+        @Nullable
+        default CharSequence[] chipLabels() { return null; }
+
+        /** Whether the chip stands on the page side: the page wears a layout of its own. */
+        default boolean pageSide() { return false; }
+
+        default void setPageSide(boolean pageSide) {}
+
+        /**
+         * A line under the element's name for its state, or null for none: Customization's
+         * "Home only" where the two kinds disagree.
+         */
+        @Nullable
+        default CharSequence summary(@NonNull Item item) { return null; }
     }
 
     @NonNull public final LinearLayout root;
     @NonNull private final Context mContext;
     @NonNull private final Host mHost;
+    private final boolean mDivider;
+    @NonNull private String mTitle;
     @NonNull private final Map<Item, Views> mRows = new EnumMap<>(Item.class);
+    /** Where the chip stands, under the header; the chip itself, and the words it was built with. */
+    @NonNull private final FrameLayout mChipSlot;
+    @Nullable private SegmentRow mChip;
+    @Nullable private CharSequence[] mChipLabels;
 
     /** One element's row. */
     private static final class Views {
         @NonNull final LinearLayout row;
         @NonNull final ImageView glyph;
         @NonNull final TextView title;
-        @NonNull final MaterialButton sliders;
-        @NonNull final MaterialButton eye;
-        int eyeIcon;
+        @NonNull final MaterialSwitch toggle;
+        /** The state line under the name, unseen while the host has none. */
+        @NonNull final TextView summary;
 
         Views(@NonNull LinearLayout row, @NonNull ImageView glyph, @NonNull TextView title,
-              @NonNull MaterialButton sliders, @NonNull MaterialButton eye) {
+              @NonNull MaterialSwitch toggle, @NonNull TextView summary) {
             this.row = row;
             this.glyph = glyph;
             this.title = title;
-            this.sliders = sliders;
-            this.eye = eye;
+            this.toggle = toggle;
+            this.summary = summary;
         }
     }
+
+    /** A restatement sets the switches; only a touch reports. */
+    private boolean mRestating;
 
     private ElementsList(@NonNull Context context, @NonNull Host host, @NonNull List<Item> items,
                          boolean divider) {
@@ -76,8 +116,12 @@ public final class ElementsList {
         root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(0, 0, 0, RowKit.dp(context, 8));
-        root.addView(SectionHeader.build(context,
-            context.getString(R.string.editor_section_elements), null, divider).root);
+        mDivider = divider;
+        // The card's Layout section header is the list's only heading (no "Home layout" under it).
+        mTitle = heading();
+        mChipSlot = new FrameLayout(context);
+        root.addView(mChipSlot, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout list = new LinearLayout(context);
         list.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
@@ -110,12 +154,61 @@ public final class ElementsList {
 
     /** Every row read again: which stand, which are hidden. Compares before it sets. */
     public void restate() {
+        restateHeading();
+        restateChip();
         for (Map.Entry<Item, Views> entry : mRows.entrySet())
             restate(entry.getKey(), entry.getValue());
     }
 
+    @NonNull
+    private String heading() {
+        String title = mHost.layoutTitle();
+        return title != null ? title : mContext.getString(R.string.editor_section_elements);
+    }
+
+    /** The list stands under its card's Layout header and draws no heading of its own. */
+    private void restateHeading() {
+        mTitle = heading();
+    }
+
+    /**
+     * The chip read again: built anew only when its words change (another page), else only its
+     * side set. A card segment row, as the Dock card's toggles are.
+     */
+    private void restateChip() {
+        CharSequence[] labels = mHost.chipLabels();
+        if (labels == null || labels.length != 2) {
+            if (mChip != null) {
+                mChipSlot.removeAllViews();
+                mChip = null;
+                mChipLabels = null;
+            }
+            setVisible(mChipSlot, false);
+            return;
+        }
+        if (mChip == null || !java.util.Arrays.equals(labels, mChipLabels)) {
+            mChipSlot.removeAllViews();
+            mChip = SegmentRow.build(mContext, R.drawable.ic_ms_layers,
+                mContext.getString(R.string.editor_elements_dress_for), java.util.Arrays.asList(
+                    SegmentRow.Segment.word(labels[0]), SegmentRow.Segment.word(labels[1])),
+                mHost.pageSide() ? 1 : 0, mContext.getResources().getDisplayMetrics().widthPixels,
+                index -> {
+                    mHost.setPageSide(index == 1);
+                    restate();
+                });
+            mChipLabels = labels.clone();
+            mChipSlot.addView(mChip.root);
+        }
+        mChip.select(mHost.pageSide() ? 1 : 0);
+        setVisible(mChipSlot, true);
+    }
+
     private void restate(@NonNull Item item, @NonNull Views views) {
         setVisible(views.row, mHost.offers(item));
+        CharSequence summary = mHost.summary(item);
+        if (summary != null && !summary.toString().contentEquals(views.summary.getText()))
+            views.summary.setText(summary);
+        setVisible(views.summary, summary != null);
         if (!item.hasEye())
             return;
         boolean shown = mHost.shown(item);
@@ -124,15 +217,17 @@ public final class ElementsList {
             views.glyph.setAlpha(alpha);
             views.title.setAlpha(alpha);
         }
-        int icon = shown ? R.drawable.ic_ms_visibility : R.drawable.ic_ms_visibility_off;
-        if (views.eyeIcon != icon) {
-            views.eyeIcon = icon;
-            views.eye.setIconResource(icon);
-            CharSequence action = mContext.getString(shown ? R.string.editor_elements_hide
-                : R.string.editor_elements_show, mContext.getString(item.nameRes));
-            views.eye.setContentDescription(action);
-            GlyphNames.name(views.eye, action);
+        if (views.toggle.isChecked() != shown) {
+            mRestating = true;
+            try {
+                views.toggle.setChecked(shown);
+            } finally {
+                mRestating = false;
+            }
         }
+        CharSequence action = mContext.getString(shown ? R.string.editor_elements_hide
+            : R.string.editor_elements_show, mContext.getString(item.nameRes));
+        views.toggle.setContentDescription(action);
     }
 
     @NonNull
@@ -144,8 +239,7 @@ public final class ElementsList {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(RowKit.dp(context, BarsList.ROW_DP));
         int edge = RowKit.dp(context, RowKit.EDGE_DP);
-        row.setPaddingRelative(edge, 0, 0, 0);
-        int touch = RowKit.dp(context, RowKit.TOUCH_DP);
+        row.setPaddingRelative(edge, 0, RowKit.dp(context, 12), 0);
 
         ImageView glyph = RowKit.glyph(context, item.glyphRes, name);
         LinearLayout.LayoutParams glyphParams = new LinearLayout.LayoutParams(
@@ -153,34 +247,64 @@ public final class ElementsList {
         glyphParams.setMarginEnd(RowKit.dp(context, 12));
         row.addView(glyph, glyphParams);
 
+        LinearLayout words = new LinearLayout(context);
+        words.setOrientation(LinearLayout.VERTICAL);
         TextView title = RowKit.title(context, name);
-        row.addView(title, new LinearLayout.LayoutParams(0,
+        words.addView(title);
+        CharSequence opens = opensLine(context, item);
+        if (opens != null)
+            words.addView(RowKit.caption(context, opens));
+        TextView summary = RowKit.caption(context, "");
+        summary.setVisibility(View.GONE);
+        words.addView(summary);
+        row.addView(words, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        MaterialButton sliders = iconButton(context, EditorGlyphs.BAR_SETTINGS,
-            context.getString(R.string.editor_elements_open, name));
-        row.addView(sliders, new LinearLayout.LayoutParams(touch, touch));
-
-        MaterialButton eye = iconButton(context, R.drawable.ic_ms_visibility,
-            context.getString(R.string.editor_elements_hide, name));
-        row.addView(eye, new LinearLayout.LayoutParams(touch, touch));
-        Views views = new Views(row, glyph, title, sliders, eye);
-        views.eyeIcon = R.drawable.ic_ms_visibility;
+        MaterialSwitch toggle = new MaterialSwitch(context);
+        toggle.setContentDescription(context.getString(R.string.editor_elements_hide, name));
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        toggleParams.setMarginStart(RowKit.dp(context, 8));
+        row.addView(toggle, toggleParams);
         if (!item.hasEye()) {
-            // The terminal and the widgets cannot be hidden: the eye keeps its room, unseen, so
-            // every sliders glyph stands in one column.
-            eye.setVisibility(View.INVISIBLE);
-            eye.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            // The terminal and the widgets cannot be hidden: the switch keeps its room, unseen,
+            // so every › stands in one column.
+            toggle.setVisibility(View.INVISIBLE);
+            toggle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
 
-        View.OnClickListener open = v -> mHost.open(item);
-        sliders.setOnClickListener(open);
-        row.setOnClickListener(open);
-        eye.setOnClickListener(v -> {
-            mHost.setShown(item, !mHost.shown(item));
+        ImageView chevron = new ImageView(context);
+        chevron.setImageResource(R.drawable.ic_editor_chevron_right);
+        chevron.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant)));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+            RowKit.dp(context, RowKit.GLYPH_DP), RowKit.dp(context, RowKit.GLYPH_DP));
+        chevronParams.setMarginStart(RowKit.dp(context, 8));
+        row.addView(chevron, chevronParams);
+
+        Views views = new Views(row, glyph, title, toggle, summary);
+        row.setContentDescription(context.getString(R.string.editor_elements_open, name));
+        row.setOnClickListener(v -> mHost.open(item));
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (mRestating)
+                return;
+            mHost.setShown(item, checked);
             restate(item, views);
         });
         return views;
+    }
+
+    /**
+     * The row's second line: the card it opens where that is another's ("Dock card" for the apps
+     * row), or null where the element opens its own card.
+     */
+    @Nullable
+    static CharSequence opensLine(@NonNull Context context, @NonNull Item item) {
+        String card = context.getString(item.card.titleRes);
+        if (card.equals(context.getString(item.nameRes)))
+            return null;
+        return context.getString(R.string.editor_elements_opens_card, card);
     }
 
     @NonNull
@@ -212,13 +336,13 @@ public final class ElementsList {
         return views.row;
     }
 
-    /** The eye of {@code item}'s row, for a test. */
+    /** The show/hide switch of {@code item}'s row, for a test. */
     @androidx.annotation.VisibleForTesting
     @NonNull
-    MaterialButton eyeOf(@NonNull Item item) {
+    MaterialSwitch switchOf(@NonNull Item item) {
         Views views = mRows.get(item);
         if (views == null)
             throw new IllegalArgumentException(item + " is not listed");
-        return views.eye;
+        return views.toggle;
     }
 }

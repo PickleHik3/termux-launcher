@@ -51,7 +51,7 @@ public class LayoutEditorDrawerTileTest {
     @Test
     public void theToggleIsOfferedWithThePickerOnEitherHalf() {
         for (boolean homeLayout : new boolean[] {false, true}) {
-            places.setHomeLayout(homeLayout);
+            com.termux.app.place.KindFixtures.onHomePage(places);
             for (PaneWallPage page : PaneWallPage.values()) {
                 LayoutEditorPlan plan = LayoutEditorPlan.enter(places, page, PORTRAIT);
                 assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
@@ -95,10 +95,10 @@ public class LayoutEditorDrawerTileTest {
 
     @Test
     public void onAHomeLayoutTheToggleIsHomesOwn() {
-        places.setHomeLayout(true);
+        com.termux.app.place.KindFixtures.onHomePage(places);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         plan.setDrawerTile(true);
-        assertTrue(places.forVariant(LayoutVariant.HOME).drawerTile());
+        assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).drawerTile());
         assertFalse("the Workspace keeps its own",
             places.forVariant(LayoutVariant.NORMAL).drawerTile());
     }

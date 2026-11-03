@@ -96,10 +96,9 @@ public class BorderReachTest {
 
     @Test
     public void onlyTheDisplayWindowInFrontOwnsItsContent() {
-        assertTrue(BorderReach.ownsContent(PaneWallPage.TERMINAL, true));
-        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL, false));
-        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS, false));
-        assertFalse(BorderReach.ownsContent(PaneWallPage.WIDGETS, true));
+        assertTrue("a Display page", BorderReach.ownsContent(PaneWallPage.DISPLAY));
+        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL));
+        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS));
     }
 
     // ---- The display window ------------------------------------------------------------------

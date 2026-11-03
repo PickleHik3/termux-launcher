@@ -36,8 +36,22 @@ public final class DockPlacement {
                                          @NonNull PlaceLayout layout,
                                          boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                          boolean imeLifted, boolean searchFieldShown) {
+        return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
+            imeLifted, searchFieldShown, false);
+    }
+
+    /**
+     * {@link #peekCardStands} on a Home page or not ({@code homePage}): on Home the in-app
+     * keyboard no longer refuses the card, which then stands on the keyboard instead of the
+     * screen's edge (ADR 0018 §4, D11: Home's dock over Home's keyboard). Everywhere else it does.
+     */
+    public static boolean peekCardStands(boolean peekWorn, boolean dockShown,
+                                         @NonNull PlaceLayout layout,
+                                         boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                         boolean imeLifted, boolean searchFieldShown,
+                                         boolean homePage) {
         if (!peekWorn || !dockShown) return false;
-        if (keyboardShown || imeLifted || searchFieldShown) return false;
+        if ((keyboardShown && !homePage) || imeLifted || searchFieldShown) return false;
         return LensBeadGeometry.rowWearsBeads(layout, sheetStandsDownOnFrame, false);
     }
 

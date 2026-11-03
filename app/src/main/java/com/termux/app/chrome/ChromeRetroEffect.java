@@ -122,6 +122,29 @@ public final class ChromeRetroEffect {
         apply();
     }
 
+    /**
+     * Draws {@code view} through the effect too, for as long as it is in the window: a surface
+     * that lives outside {@link #ROOT_IDS}' root, the strip the decor lays under the navigation
+     * pill below the docked keyboard. Once per view; {@link #drop} takes it off again.
+     */
+    public void adopt(@NonNull View view) {
+        for (RetroEffectBinder binder : mFixed)
+            if (binder.view() == view) return;
+        RetroEffectBinder binder = RetroEffectBinder.flat(view);
+        mFixed.add(binder);
+        binder.setStyle(drawnStyle());
+    }
+
+    /** Takes the effect off a view {@link #adopt} drew it on, which is leaving the window. */
+    public void drop(@NonNull View view) {
+        for (int i = mFixed.size() - 1; i >= 0; i--) {
+            RetroEffectBinder binder = mFixed.get(i);
+            if (binder.view() != view) continue;
+            binder.release();
+            mFixed.remove(i);
+        }
+    }
+
     private void apply() {
         PaneRetroStyle drawn = drawnStyle();
         for (RetroEffectBinder binder : mFixed) binder.setStyle(drawn);

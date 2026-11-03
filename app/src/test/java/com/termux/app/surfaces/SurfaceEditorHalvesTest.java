@@ -18,7 +18,6 @@ import com.termux.app.surfaces.cards.ElementRows.Item;
 import com.termux.app.surfaces.cards.ElementsList;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -55,28 +54,28 @@ public class SurfaceEditorHalvesTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
-        places = new PlaceLayoutStore(preferences);
+        places = com.termux.app.place.KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(preferences));
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
     }
 
     @Test
     public void slidingTheHalvesMovesTheLiveWallBothWays() {
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(PaneWallPage.WIDGETS, editor.screen());
         wallMoves.clear();
 
-        switchHalf(editor, WallHalf.WORKSPACE);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        switchHalf(editor, PaneWallPage.TERMINAL);
+        assertEquals(PaneWallPage.TERMINAL, editor.screen());
         assertEquals("the wall slides to the Workspace", PaneWallPage.TERMINAL, last());
 
-        switchHalf(editor, WallHalf.HOME);
+        switchHalf(editor, PaneWallPage.WIDGETS);
         assertEquals(PaneWallPage.WIDGETS, last());
     }
 
     @Test
     public void theTerminalCardStandsOnTheWorkspace() {
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        switchHalf(editor, WallHalf.WORKSPACE);
+        switchHalf(editor, PaneWallPage.TERMINAL);
         editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.TERMINAL, editor.shownCard());
@@ -178,9 +177,12 @@ public class SurfaceEditorHalvesTest {
         return wallMoves.isEmpty() ? null : wallMoves.get(wallMoves.size() - 1);
     }
 
-    private static void switchHalf(SurfaceEditorController editor, WallHalf half) {
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ClassParameter.from(WallHalf.class, half), ClassParameter.from(boolean.class, true));
+    /** A door to {@code half}'s page while the editor is up (the swipe retired, ADR 0015 §6). */
+    private static void switchHalf(SurfaceEditorController editor, PaneWallPage half) {
+        ReflectionHelpers.callInstanceMethod(editor, "showPage",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
+                half == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 

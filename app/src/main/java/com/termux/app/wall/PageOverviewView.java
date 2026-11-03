@@ -103,10 +103,31 @@ public final class PageOverviewView extends FrameLayout {
         /** Start in as it stands ({@link StartInPolicy#effective}), which the Home marker follows. */
         @NonNull String startIn();
 
-        // The current session's row of windows, the display window among them.
+        // The wall's order (ADR 0015): the window block is the Terminal page, anywhere among them.
+        /** How many Home pages stand before the Terminal page; all of them by default. */
+        default int homePagesBeforeTerminal() { return Integer.MAX_VALUE; }
+        /**
+         * The Home page at {@code homeIndex} moves to page index {@code wallIndex} on the wall,
+         * the Terminal page counted as one page ({@link WallPages#move}).
+         */
+        default void moveHomePageOnWall(int homeIndex, int wallIndex) { }
+        /** The Terminal page, with every window card, moves to page index {@code wallIndex}. */
+        default void moveTerminalPage(int wallIndex) { }
+        /** The Terminal page becomes home ({@link WallPages#setHome}). */
+        default void setTerminalHome() { chooseHome(PageOverviewPolicy.Kind.TERMINAL, 0); }
+
+        // Display pages (ADR 0015 A3b): wall pages of their own, in the wall's order.
+        /** The wall's Display pages, in wall order; none by default. */
+        @NonNull default java.util.List<DisplayPage> displayPages() {
+            return java.util.Collections.emptyList();
+        }
+        /** Whether Display page {@code id} holds something: its display is open on it. */
+        default boolean displayPageHolds(int id) { return false; }
+        /** Display page {@code id} leaves the wall ({@link WallPages#remove}). */
+        default void removeDisplayPage(int id) { }
+
+        // The current session's row of terminal windows (ADR 0015: no display window in it).
         int rowCount();
-        /** The display window's row place, {@link DisplaySlot#NONE} when it is not on the row. */
-        int displaySlot();
         /** Something that stays the same for the window at row place {@code row} while it lives. */
         @NonNull Object windowKey(int row);
         /** Whether the terminal window at {@code row} is running a process. */
@@ -135,6 +156,15 @@ public final class PageOverviewView extends FrameLayout {
         void land(@NonNull WallRow.Position position);
         /** The launcher's root view, drawn into the live card. */
         @NonNull View liveRoot();
+        /**
+         * The page frame while the surface editor has posed it (scaled, moved), null when it
+         * stands as laid out. The live card then draws this view alone, at its natural size.
+         */
+        @Nullable default View posedFrame() { return null; }
+        /** Whether the surface editor is open: its chrome and sheet then stand beside the page. */
+        default boolean editorOpen() { return false; }
+        /** The height of the editor's folded sheet along the bottom, which the chips stand above. */
+        default int coveredBottom() { return 0; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -142,6 +172,25 @@ public final class PageOverviewView extends FrameLayout {
         boolean reducedMotion();
         /** The overview is gone; {@code byBack} when Back closed it. */
         void onClosed(boolean byBack);
+    }
+
+    /** One Display page of the wall: where it stands, and what its card is called. */
+    public static final class DisplayPage {
+        /** The wall page's id. */
+        public final int id;
+        /** The card's name: the bound app's, else "Display". */
+        @NonNull public final String label;
+        /** How many Home pages stand before it on the wall. */
+        public final int homesBefore;
+        /** Whether it stands after the Terminal page. */
+        public final boolean afterTerminal;
+
+        public DisplayPage(int id, @NonNull String label, int homesBefore, boolean afterTerminal) {
+            this.id = id;
+            this.label = label;
+            this.homesBefore = homesBefore;
+            this.afterTerminal = afterTerminal;
+        }
     }
 
     private static final long ZOOM_MS = 320L;
@@ -155,7 +204,7 @@ public final class PageOverviewView extends FrameLayout {
     /** How far from the focused card a terminal card's text is kept fresh. */
     private static final int TEXT_RANGE = 2;
 
-    private enum Part { BODY, DELETE, HOME }
+    private enum Part { BODY, DELETE, HOME, GRIP }
 
     /** One card of the strip as it stands. */
     private static final class Card {
@@ -167,6 +216,8 @@ public final class PageOverviewView extends FrameLayout {
         final int number;
         /** Where it is drawn, in strip places; eases toward its place while a drag makes room. */
         float place;
+        /** A Display page's name; null for the others. */
+        @Nullable String label;
 
         Card(@NonNull PageOverviewPolicy.Kind kind, @NonNull Object key, int index, int number) {
             this.kind = kind;
@@ -185,6 +236,8 @@ public final class PageOverviewView extends FrameLayout {
         static final int FULL = 0;
         static final int TEXT = 1;
         static final int SURFACE = 2;
+        /** The page alone, without the card's buttons, drawn in software. */
+        static final int PAGE = 3;
 
         @NonNull final Bitmap bitmap;
         final int type;
@@ -221,7 +274,18 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final LinkedHashMap<Object, Snapshot> snapshots =
         new LinkedHashMap<>(16, 0.75f, true);
     private int homeCount;
+    /** The add chips' icon and label colour, on their dark glass. */
+    private static final int PILL_INK = 0xFFE6E1E5;
     private int rowCount;
+    /** The strip position of the first window card: the Home cards before the Terminal page. */
+    private int blockStart;
+    /** The grip over the window block is being dragged, and the whole block with it. */
+    private boolean blockDrag;
+    /** Where the finger stood when the block's drag began. */
+    private float blockDownX;
+    @NonNull private final RectF gripRect = new RectF();
+    /** The grip's label, read once. */
+    @NonNull private final String gripText;
 
     /** The strip's scroll, in card places: the focused card is the nearest whole one. */
     private float focus;
@@ -241,6 +305,10 @@ public final class PageOverviewView extends FrameLayout {
      * card stays gone until it is.
      */
     private boolean displayGoing;
+    /** A key per Display page, by wall page id, so a card stays the same card across reloads. */
+    private final Map<Integer, Object> displayKeys = new java.util.HashMap<>();
+    /** How many Display cards the strip holds. */
+    private int displayCount;
     /** How deep the overview is inside a change of its own, which it reads back itself. */
     private int mutating;
     @Nullable private Snackbar snackbar;
@@ -331,6 +399,7 @@ public final class PageOverviewView extends FrameLayout {
         surfaceColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHigh, 0xFF2B2930);
         deleteIcon = icon(context, R.drawable.ic_symbol_close);
+        gripText = context.getString(R.string.page_overview_terminal_grip);
         homeIcon = icon(context, R.drawable.ic_symbol_home);
 
         outlinePaint.setStyle(Paint.Style.STROKE);
@@ -344,9 +413,12 @@ public final class PageOverviewView extends FrameLayout {
         pills = new LinearLayout(context);
         pills.setOrientation(LinearLayout.HORIZONTAL);
         pills.setGravity(Gravity.CENTER);
-        addPage = pill(context, R.string.page_overview_add_page, v -> onAddPage());
-        addTerminal = pill(context, R.string.page_overview_add_terminal, v -> onAddWindow(false));
-        addDisplay = pill(context, R.string.page_overview_add_display, v -> onAddWindow(true));
+        addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_add,
+            v -> onAddPage());
+        addTerminal = pill(context, R.string.page_overview_add_terminal,
+            R.drawable.ic_symbol_terminal, v -> onAddWindow(false));
+        addDisplay = pill(context, R.string.page_overview_add_display,
+            R.drawable.ic_symbol_desktop_windows, v -> onAddWindow(true));
         pills.addView(addPage);
         pills.addView(addTerminal);
         pills.addView(addDisplay);
@@ -356,8 +428,10 @@ public final class PageOverviewView extends FrameLayout {
         accessibility = new Touch(this);
         ViewCompat.setAccessibilityDelegate(this, accessibility);
         reload();
-        focus = PageOverviewPolicy.openingFocus(host.onHome(), host.homePage(), host.rowCurrent(),
-            homeCount, rowCount);
+        focus = blockStart == homeCount && displayCount == 0
+            ? PageOverviewPolicy.openingFocus(host.onHome(), host.homePage(), host.rowCurrent(),
+                homeCount, rowCount)
+            : openingPosition(host.onHome(), host.onHome() ? host.homePage() : host.rowCurrent());
         if (focus < 0) focus = 0;
         for (Card card : cards) card.place = cards.indexOf(card);
         Card focused = focusedCard();
@@ -381,6 +455,9 @@ public final class PageOverviewView extends FrameLayout {
         savedRootAlpha = root.getAlpha();
         // Hidden, not gone: it keeps drawing its children, which the live card shows.
         root.setAlpha(0f);
+        // Neighbours have their text from the first frame; the live page its picture.
+        refreshNearbyText();
+        captureLive(true);
         animateZoom(1f, null);
     }
 
@@ -502,25 +579,47 @@ public final class PageOverviewView extends FrameLayout {
         Map<Object, Float> places = new java.util.HashMap<>();
         for (Card card : cards) places.put(card.key, card.place);
         cards.clear();
-        for (int page = 0; page < pages; page++) {
-            Object key = homeKeys.get(page);
-            if (isPending(key)) continue;
-            cards.add(new Card(PageOverviewPolicy.Kind.HOME_PAGE, key, page, page + 1));
-        }
-        homeCount = cards.size();
+        // In the wall's order: the window block stands where the Terminal page does, Display
+        // pages where they stand.
+        int before = Math.max(0, Math.min(pages, host.homePagesBeforeTerminal()));
         int rows = Math.max(0, host.rowCount());
-        int slot = host.displaySlot();
-        if (displayGoing && !host.displayOpen()) displayGoing = false;
-        int terminals = 0;
-        for (int row = 0; row < rows; row++) {
-            boolean display = DisplaySlot.isDisplay(row, slot);
-            if (!display) terminals++;
-            Object key = host.windowKey(row);
-            if (isPending(key) || (display && displayGoing)) continue;
-            cards.add(new Card(display ? PageOverviewPolicy.Kind.DISPLAY
-                : PageOverviewPolicy.Kind.TERMINAL, key, row, terminals));
+        List<DisplayPage> displays = host.displayPages();
+        int[] homesBefore = new int[displays.size()];
+        boolean[] after = new boolean[displays.size()];
+        for (int j = 0; j < homesBefore.length; j++) {
+            homesBefore[j] = Math.max(0, Math.min(pages, displays.get(j).homesBefore));
+            after[j] = displays.get(j).afterTerminal;
         }
-        rowCount = cards.size() - homeCount;
+        List<Integer> order = PageOverviewPolicy.wallOrder(pages, true, before, homesBefore, after);
+        if (displayGoing && !host.displayOpen()) displayGoing = false;
+        displayCount = 0;
+        blockStart = 0;
+        rowCount = 0;
+        for (int slot : order) {
+            if (slot == PageOverviewPolicy.BLOCK) {
+                blockStart = cards.size();
+                int terminals = 0;
+                for (int row = 0; row < rows; row++) {
+                    terminals++;
+                    Object key = host.windowKey(row);
+                    if (isPending(key)) continue;
+                    cards.add(new Card(PageOverviewPolicy.Kind.TERMINAL, key, row, terminals));
+                }
+                rowCount = cards.size() - blockStart;
+            } else if (slot < 0) {
+                DisplayPage page = displays.get(-slot - 1);
+                Object key = displayKeys.get(page.id);
+                if (key == null) displayKeys.put(page.id, key = new Object());
+                if (isPending(key)) continue;
+                Card card = new Card(PageOverviewPolicy.Kind.DISPLAY, key, page.id, 0);
+                card.label = page.label;
+                cards.add(card);
+                displayCount++;
+            } else {
+                addHomeCard(slot);
+            }
+        }
+        homeCount = cards.size() - rowCount;
         for (int i = 0; i < cards.size(); i++) {
             Float was = places.get(cards.get(i).key);
             cards.get(i).place = was == null ? i : was;
@@ -534,6 +633,41 @@ public final class PageOverviewView extends FrameLayout {
         }
         updatePills();
         accessibility.invalidateRoot();
+    }
+
+    private void addHomeCard(int page) {
+        Object key = homeKeys.get(page);
+        if (isPending(key)) return;
+        cards.add(new Card(PageOverviewPolicy.Kind.HOME_PAGE, key, page, page + 1));
+    }
+
+    /** The strip's kinds, in order, for the order-agnostic policy. */
+    @NonNull
+    private List<PageOverviewPolicy.Kind> strip() {
+        List<PageOverviewPolicy.Kind> out = new ArrayList<>(cards.size());
+        for (Card card : cards) out.add(card.kind);
+        return out;
+    }
+
+    /** The last window card's position; below {@link #blockStart} when there is none. */
+    private int blockEnd() {
+        return blockStart + rowCount - 1;
+    }
+
+    /** The position of the Home card for page {@code index}, or the window card at row place. */
+    private int openingPosition(boolean home, int index) {
+        for (int i = 0; i < cards.size(); i++) {
+            Card card = cards.get(i);
+            if (card.isHome() == home && card.index == index) return i;
+        }
+        return home ? 0 : Math.max(0, blockStart);
+    }
+
+    /** How many Home cards stand before strip position {@code position}. */
+    private int homesBefore(int position) {
+        int n = 0;
+        for (int i = 0; i < position && i < cards.size(); i++) if (cards.get(i).isHome()) n++;
+        return n;
     }
 
     private boolean isPending(@NonNull Object key) {
@@ -561,7 +695,15 @@ public final class PageOverviewView extends FrameLayout {
 
     @NonNull
     private WallRow.Position positionOf(@NonNull Card card) {
+        if (card.kind == PageOverviewPolicy.Kind.DISPLAY) {
+            return new WallRow.Position(com.termux.app.wall.PaneWallPage.DISPLAY, 0);
+        }
         return card.isHome() ? WallRow.homePage(card.index) : WallRow.window(card.index);
+    }
+
+    /** How many Home pages the strip holds: the last one cannot be removed. */
+    private int homePageCards() {
+        return homeCount - displayCount;
     }
 
     private void updatePills() {
@@ -577,7 +719,7 @@ public final class PageOverviewView extends FrameLayout {
     private void onAddPage() {
         if (!isOpen()) return;
         commitPending();
-        int at = PageOverviewPolicy.addPageIndex(Math.round(focus), homeCount);
+        int at = homesBefore(PageOverviewPolicy.addPageIndex(Math.round(focus), strip()));
         int before = host.pageCount();
         mutate(host::addPage);
         int after = host.pageCount();
@@ -610,16 +752,16 @@ public final class PageOverviewView extends FrameLayout {
         // Counted in the host's row places: a stopping display's hidden card still holds one.
         Card focused = focusedCard();
         int at = focused == null || focused.isHome() ? Math.round(focus)
-            : PageOverviewPolicy.positionOfRow(focused.index, homeCount);
-        int row = PageOverviewPolicy.addWindowRow(at, homeCount, host.rowCount());
+            : blockStart + focused.index;
+        int row = PageOverviewPolicy.addWindowRow(at, blockStart, host.rowCount());
         int before = host.rowCount();
         if (display) mutate(() -> host.addDisplay(row));
         else mutate(() -> host.addTerminal(row));
         reload();
         if (host.rowCount() > before) {
             int index = cards.size() - 1;
-            for (int i = homeCount; i < cards.size(); i++) {
-                if (cards.get(i).index == row) index = i;
+            for (int i = 0; i < cards.size(); i++) {
+                if (!cards.get(i).isHome() && cards.get(i).index == row) index = i;
             }
             for (int i = index + 1; i < cards.size(); i++) cards.get(i).place = i - 1;
             if (index >= 0) {
@@ -645,9 +787,13 @@ public final class PageOverviewView extends FrameLayout {
         int contents = card.isHome() ? host.itemsOn(card.index) + host.floatsOn(card.index) : 0;
         boolean busy = card.kind == PageOverviewPolicy.Kind.TERMINAL && host.windowBusy(card.index);
         PageOverviewPolicy.Removal removal =
-            PageOverviewPolicy.removal(card.kind, homeCount, contents, busy);
+            PageOverviewPolicy.removal(card.kind, homePageCards(), contents, busy);
+        // A Display page with nothing open on it goes at once; one holding the display asks.
+        if (card.kind == PageOverviewPolicy.Kind.DISPLAY && !host.displayPageHolds(card.index)) {
+            removal = PageOverviewPolicy.Removal.AT_ONCE;
+        }
         if (removal == PageOverviewPolicy.Removal.REFUSED) return;
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.VIRTUAL_KEY);
         if (removal == PageOverviewPolicy.Removal.AT_ONCE) {
             removeNow(card);
         } else {
@@ -669,8 +815,11 @@ public final class PageOverviewView extends FrameLayout {
             if (host.pageCount() < before && card.index < homeKeys.size()) {
                 homeKeys.remove(card.index);
             }
+        } else if (card.kind == PageOverviewPolicy.Kind.DISPLAY) {
+            if (host.displayPageHolds(card.index)) displayGoing = true;
+            mutate(() -> host.removeDisplayPage(card.index));
+            displayKeys.remove(card.index);
         } else {
-            if (card.kind == PageOverviewPolicy.Kind.DISPLAY) displayGoing = true;
             mutate(() -> host.removeWindow(card.index));
         }
         snapshots.remove(card.key);
@@ -744,11 +893,18 @@ public final class PageOverviewView extends FrameLayout {
                 mutate(() -> host.removePage(page));
                 if (host.pageCount() < before) homeKeys.remove(page);
             }
+        } else if (held.kind == PageOverviewPolicy.Kind.DISPLAY) {
+            for (Map.Entry<Integer, Object> e : new ArrayList<>(displayKeys.entrySet())) {
+                if (e.getValue() != held.key) continue;
+                int id = e.getKey();
+                if (host.displayPageHolds(id)) displayGoing = true;
+                mutate(() -> host.removeDisplayPage(id));
+                displayKeys.remove(id);
+            }
         } else {
             int rows = host.rowCount();
             for (int row = 0; row < rows; row++) {
                 if (host.windowKey(row) == held.key) {
-                    if (held.kind == PageOverviewPolicy.Kind.DISPLAY) displayGoing = true;
                     int at = row;
                     mutate(() -> host.removeWindow(at));
                     break;
@@ -761,8 +917,9 @@ public final class PageOverviewView extends FrameLayout {
 
     private void onMakeHome(@NonNull Card card) {
         if (!showsHomeButton(card)) return;
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-        host.chooseHome(card.kind, card.index);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.VIRTUAL_KEY);
+        if (card.kind == PageOverviewPolicy.Kind.TERMINAL) host.setTerminalHome();
+        else host.chooseHome(card.kind, card.index);
         accessibility.invalidateRoot();
         invalidate();
     }
@@ -777,10 +934,29 @@ public final class PageOverviewView extends FrameLayout {
         }
         Card moving = cards.get(now);
         if (moving.isHome()) {
-            int toPage = cards.get(to).index;
-            mutate(() -> host.movePage(moving.index, toPage));
+            // The strip as it will stand, read for the page's place on the wall and among Home.
+            List<PageOverviewPolicy.Kind> after = strip();
+            after.remove(now);
+            after.add(to, PageOverviewPolicy.Kind.HOME_PAGE);
+            int wallIndex = PageOverviewPolicy.pageIndexAt(to, after);
+            int toPage = 0;
+            for (int i = 0; i < to; i++) if (after.get(i) == PageOverviewPolicy.Kind.HOME_PAGE) toPage++;
+            final int homeTo = toPage;
+            int[] block = PageOverviewPolicy.blockBounds(after);
+            boolean crosses = block != null && (now < blockStart) != (to < block[0]);
+            // The default order, a move that stays on its side, goes as it always went; so does
+            // a strip with no window card, which cannot show where the Terminal page stands.
+            if (displayCount > 0 || (rowCount > 0 && (crosses || blockStart != homeCount))) {
+                mutate(() -> host.moveHomePageOnWall(moving.index, wallIndex));
+            } else {
+                mutate(() -> host.movePage(moving.index, homeTo));
+            }
             Object key = homeKeys.remove(moving.index);
-            homeKeys.add(toPage, key);
+            homeKeys.add(Math.min(homeTo, homeKeys.size()), key);
+        } else if (moving.kind == PageOverviewPolicy.Kind.DISPLAY) {
+            // Display cards stay where they stand (dropTarget refuses them).
+            invalidate();
+            return;
         } else {
             int toRow = cards.get(to).index;
             mutate(() -> host.moveWindow(moving.index, toRow));
@@ -828,14 +1004,14 @@ public final class PageOverviewView extends FrameLayout {
             Object key = card.key;
             int row = card.index;
             int made = generation;
-            postOnAnimation(() -> renderText(key, row, made));
+            postOnAnimation(() -> renderText(key, row, made, false));
         }
     }
 
-    private void renderText(@NonNull Object key, int row, int made) {
+    private void renderText(@NonNull Object key, int row, int made, boolean live) {
         if (!isOpen() || made != generation) return;
         int index = indexOfKey(key);
-        if (index < 0 || cards.get(index).index != row || key == liveKey) return;
+        if (index < 0 || cards.get(index).index != row || (key == liveKey && !live)) return;
         TerminalSession session = host.windowSession(row);
         TerminalEmulator emulator = session == null ? null : session.getEmulator();
         if (emulator == null || cardWidth <= 0f) return;
@@ -870,23 +1046,61 @@ public final class PageOverviewView extends FrameLayout {
     private void captureLiveCard() {
         if (!isOpen() || liveKey == null || zoom < 1f || dragCard != null || scrolling
             || snackbar != null || scrollAnimator != null) return;
+        captureLive(false);
+    }
+
+    /**
+     * The live card's picture now, which a swipe or the opening wants before the card leaves the
+     * wall. {@code early} lets it run while zooming or scrolling: only a software draw of the
+     * page does, a window copy needs the card at rest.
+     */
+    private void captureLive(boolean early) {
+        if (!isOpen() || liveKey == null || dragCard != null || cardWidth <= 0f) return;
         Card card = focusedCard();
         if (card == null || card.key != liveKey) return;
+        Object key = card.key;
+        int buttons = buttonsOf(card);
+        boolean covered = posedFrame() != null;
+        OverviewGeometry.Capture how = OverviewGeometry.captureFor(covered,
+            card.kind == PageOverviewPolicy.Kind.TERMINAL);
+        if (how == OverviewGeometry.Capture.TEXT) {
+            // Under the editor's sheet a terminal is drawn from its text, never from pixels.
+            int row = card.index;
+            int made = generation;
+            postOnAnimation(() -> renderText(key, row, made, true));
+            return;
+        }
+        if (how == OverviewGeometry.Capture.SUBTREE_DRAW) {
+            View frame = posedFrame();
+            if (frame == null) return;
+            try {
+                Bitmap bitmap = Bitmap.createBitmap(Math.max(1, Math.round(cardWidth * SNAPSHOT_SCALE)),
+                    Math.max(1, Math.round(cardHeight * SNAPSHOT_SCALE)), Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                canvas.scale(bitmap.getWidth() / rootWidth, bitmap.getHeight() / rootHeight);
+                drawPageNatural(canvas, frame);
+                // No buttons are in it, and the card draws its own over it.
+                putSnapshot(key, new Snapshot(bitmap, Snapshot.PAGE, buttons, generation));
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // No picture: the card shows its label until it is live again.
+            }
+            return;
+        }
+        if (early || zoom < 1f || scrolling || snackbar != null || scrollAnimator != null) return;
         Window window = windowOf(getContext());
-        if (window == null || cardWidth <= 0f) return;
+        if (window == null) return;
         cardRect(cards.indexOf(card), rect);
         int[] at = new int[2];
         getLocationInWindow(at);
         Rect source = new Rect(Math.round(rect.left) + at[0], Math.round(rect.top) + at[1],
             Math.round(rect.right) + at[0], Math.round(rect.bottom) + at[1]);
         if (source.width() <= 0 || source.height() <= 0) return;
-        Object key = card.key;
-        int buttons = buttonsOf(card);
         try {
             Bitmap bitmap = Bitmap.createBitmap(Math.round(cardWidth * SNAPSHOT_SCALE),
                 Math.round(cardHeight * SNAPSHOT_SCALE), Bitmap.Config.ARGB_8888);
             PixelCopy.request(window, source, bitmap, result -> {
-                if (result != PixelCopy.SUCCESS || !isOpen()) return;
+                // A copy made while a sheet came up over the page is thrown away.
+                if (result != PixelCopy.SUCCESS || !isOpen() || posedFrame() != null) return;
                 putSnapshot(key, new Snapshot(bitmap, Snapshot.FULL, buttons, generation));
             }, handler);
         } catch (RuntimeException | OutOfMemoryError e) {
@@ -928,7 +1142,7 @@ public final class PageOverviewView extends FrameLayout {
 
     /** What a card's buttons look like, which a picture of the whole card holds. */
     private int buttonsOf(@NonNull Card card) {
-        int bits = PageOverviewPolicy.canDelete(card.kind, homeCount) ? 1 : 0;
+        int bits = PageOverviewPolicy.canDelete(card.kind, homePageCards()) ? 1 : 0;
         if (showsHomeButton(card)) {
             bits |= 2;
             if (isDefault(card)) bits |= 4;
@@ -982,7 +1196,7 @@ public final class PageOverviewView extends FrameLayout {
         rootOffset[1] = theirs[1] - mine[1];
         Insets insets = insets();
         pills.setPadding(Math.max(dp(16), insets.left), dp(8), Math.max(dp(16), insets.right),
-            Math.max(dp(16), insets.bottom + dp(12)));
+            Math.max(dp(16), Math.max(insets.bottom, host.coveredBottom()) + dp(12)));
         gap = dp(16);
         seamGap = dp(28);
         corner = dp(24);
@@ -1028,8 +1242,13 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Where place {@code place} stands along the strip, the seam's extra gap counted. */
     private float placeOffset(float place) {
-        float seam = Math.max(0f, Math.min(1f, place - (homeCount - 1)));
-        if (homeCount <= 0 || rowCount <= 0) seam = 0f;
+        float seam = 0f;
+        if (rowCount > 0 && blockStart > 0) {
+            seam += Math.max(0f, Math.min(1f, place - (blockStart - 1)));
+        }
+        if (rowCount > 0 && blockEnd() < cards.size() - 1) {
+            seam += Math.max(0f, Math.min(1f, place - blockEnd()));
+        }
         return place * (cardWidth + gap) + seam * seamGap;
     }
 
@@ -1037,7 +1256,11 @@ public final class PageOverviewView extends FrameLayout {
     private void cardRect(int index, @NonNull RectF out) {
         Card card = cards.get(index);
         float left = (getWidth() - cardWidth) / 2f + placeOffset(card.place) - placeOffset(focus);
-        if (card == dragCard) left = dragX - dragGrab;
+        if (blockDrag) {
+            if (!card.isHome()) left += dragX - blockDownX;
+        } else if (card == dragCard) {
+            left = dragX - dragGrab;
+        }
         out.set(left, cardTop, left + cardWidth, cardTop + cardHeight);
     }
 
@@ -1073,15 +1296,19 @@ public final class PageOverviewView extends FrameLayout {
         int save = canvas.save();
         if (zoomTransform(zoomScratch)) canvas.scale(zoomScratch[0], zoomScratch[0],
             zoomScratch[1], zoomScratch[2]);
-        if (homeCount > 0 && rowCount > 0) drawSeam(canvas);
+        if (homeCount > 0 && rowCount > 0) {
+            if (blockStart > 0) drawSeam(canvas, blockStart - 1);
+            if (blockEnd() < cards.size() - 1) drawSeam(canvas, blockEnd());
+        }
         for (int i = 0; i < cards.size(); i++) {
             Card card = cards.get(i);
-            if (card == dragCard) continue;
+            if (card == dragCard && !blockDrag) continue;
             cardRect(i, rect);
             if (rect.right < -cardWidth || rect.left > getWidth() + cardWidth) continue;
             drawCard(canvas, card, rect);
         }
-        if (dragCard != null) {
+        drawGrip(canvas);
+        if (dragCard != null && !blockDrag) {
             int index = cards.indexOf(dragCard);
             if (index >= 0) {
                 cardRect(index, rect);
@@ -1095,6 +1322,29 @@ public final class PageOverviewView extends FrameLayout {
         canvas.restoreToCount(save);
         drawDots(canvas);
         if (easing) postInvalidateOnAnimation();
+    }
+
+    /**
+     * The window block's header grip, "Terminal ⋮⋮", over its first card's left edge: a long
+     * press on it carries the whole block. In the cards' own label type, smaller.
+     */
+    private void drawGrip(@NonNull Canvas canvas) {
+        gripRect.setEmpty();
+        if (rowCount <= 0 || zoom <= 0f || blockStart >= cards.size()) return;
+        cardRect(blockStart, scratch);
+        String text = gripText;
+        float size = labelPaint.getTextSize();
+        labelPaint.setTextSize(dp(13));
+        labelPaint.setTextAlign(Paint.Align.LEFT);
+        int alpha = labelPaint.getAlpha();
+        labelPaint.setAlpha(Math.round(alpha * zoom));
+        float baseline = scratch.top - dp(10);
+        canvas.drawText(text, scratch.left, baseline, labelPaint);
+        gripRect.set(scratch.left - dp(8), baseline - dp(26),
+            scratch.left + labelPaint.measureText(text) + dp(8), baseline + dp(8));
+        labelPaint.setAlpha(alpha);
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+        labelPaint.setTextSize(size);
     }
 
     /** The launcher's own wallpaper, full-screen behind the cards, while it is showing one. */
@@ -1111,8 +1361,9 @@ public final class PageOverviewView extends FrameLayout {
         canvas.restoreToCount(save);
     }
 
-    private void drawSeam(@NonNull Canvas canvas) {
-        float x = (getWidth() - cardWidth) / 2f + placeOffset(homeCount - 1) - placeOffset(focus)
+    /** The seam line after the card at place {@code after}. */
+    private void drawSeam(@NonNull Canvas canvas, int after) {
+        float x = (getWidth() - cardWidth) / 2f + placeOffset(after) - placeOffset(focus)
             + cardWidth + (gap + seamGap) / 2f;
         fillPaint.setColor(0x66FFFFFF);
         fillPaint.setAlpha(Math.round(0x66 * zoom));
@@ -1141,12 +1392,18 @@ public final class PageOverviewView extends FrameLayout {
             int save = canvas.save();
             canvas.translate(at.left, at.top);
             canvas.scale(at.width() / rootWidth, at.height() / rootHeight);
-            root.draw(canvas);
+            View frame = posedFrame();
+            if (frame != null) drawPageNatural(canvas, frame);
+            else root.draw(canvas);
             canvas.restoreToCount(save);
             return;
         }
         Snapshot shot = snapshots.get(card.key);
         if (shot != null && shot.type == Snapshot.FULL && shot.buttons == buttonsOf(card)) {
+            canvas.drawBitmap(shot.bitmap, null, at, bitmapPaint);
+            return;
+        }
+        if (shot != null && shot.type == Snapshot.PAGE) {
             canvas.drawBitmap(shot.bitmap, null, at, bitmapPaint);
             return;
         }
@@ -1172,6 +1429,45 @@ public final class PageOverviewView extends FrameLayout {
         canvas.drawText(labelOf(card), at.centerX(), at.centerY(), labelPaint);
     }
 
+    /** The page frame when the surface editor has posed it, else null. */
+    @Nullable
+    private View posedFrame() {
+        View frame = host.posedFrame();
+        if (frame == null || frame.getWidth() <= 0) return null;
+        // With the editor open its label and sheet stand beside the page in the root, so the page
+        // is drawn alone even while the frame stands unposed.
+        if (host.editorOpen()) return frame;
+        return OverviewGeometry.framePosed(frame.getScaleX(), frame.getScaleY(),
+            frame.getTranslationX(), frame.getTranslationY()) ? frame : null;
+    }
+
+    /**
+     * The wallpaper and then {@code frame} alone, in the root's coordinates at the frame's laid-out
+     * size: a view's own draw leaves its scale and translation to the parent, so the editor's pose
+     * is not in it, and only this subtree is drawn, so the editor's sheet and the overview are not.
+     */
+    private void drawPageNatural(@NonNull Canvas canvas, @NonNull View frame) {
+        View backdrop = host.backdrop();
+        // The backdrop is posed with the page, so it too is drawn at its laid-out place.
+        if (backdrop != null && backdrop.getVisibility() == VISIBLE) drawNatural(canvas, backdrop);
+        drawNatural(canvas, frame);
+    }
+
+    /** {@code view} at its laid-out position in the root, its own scale and translation left out. */
+    private void drawNatural(@NonNull Canvas canvas, @NonNull View view) {
+        float left = view.getLeft();
+        float top = view.getTop();
+        for (android.view.ViewParent p = view.getParent(); p instanceof View && p != root; p = p.getParent()) {
+            left += ((View) p).getLeft() - ((View) p).getScrollX();
+            top += ((View) p).getTop() - ((View) p).getScrollY();
+        }
+        int save = canvas.save();
+        canvas.translate(left, top);
+        canvas.clipRect(0, 0, view.getWidth(), view.getHeight());
+        view.draw(canvas);
+        canvas.restoreToCount(save);
+    }
+
     /** The launcher's own wallpaper inside a card that has no picture of its own. */
     private void drawScaledBackdrop(@NonNull Canvas canvas, @NonNull RectF at) {
         View backdrop = host.backdrop();
@@ -1190,7 +1486,7 @@ public final class PageOverviewView extends FrameLayout {
 
     private void drawButtons(@NonNull Canvas canvas, @NonNull Card card, @NonNull RectF at) {
         int alpha = Math.round(255 * zoom);
-        if (PageOverviewPolicy.canDelete(card.kind, homeCount)) {
+        if (PageOverviewPolicy.canDelete(card.kind, homePageCards())) {
             fillPaint.setColor(errorColor);
             fillPaint.setAlpha(alpha);
             canvas.drawCircle(at.centerX(), at.top, buttonRadius, fillPaint);
@@ -1230,11 +1526,12 @@ public final class PageOverviewView extends FrameLayout {
         if (count < 2 || zoom <= 0f) return;
         float step = dp(12);
         float seam = homeCount > 0 && rowCount > 0 ? dp(10) : 0f;
-        float total = (count - 1) * step + seam;
+        int seams = seam == 0f ? 0 : (blockStart > 0 ? 1 : 0) + (blockEnd() < count - 1 ? 1 : 0);
+        float total = (count - 1) * step + seam * seams;
         float x = (getWidth() - total) / 2f;
         int at = Math.round(focus);
         for (int i = 0; i < count; i++) {
-            if (i == homeCount && i > 0) x += seam;
+            if (seam != 0f && i > 0 && (i == blockStart || i == blockEnd() + 1)) x += seam;
             boolean focused = i == at;
             dotPaint.setColor(Color.WHITE);
             dotPaint.setAlpha(Math.round((focused ? 255 : 110) * zoom));
@@ -1248,7 +1545,7 @@ public final class PageOverviewView extends FrameLayout {
         boolean moving = false;
         for (int i = 0; i < cards.size(); i++) {
             Card card = cards.get(i);
-            float target = dragCard == null ? i
+            float target = dragCard == null || blockDrag ? i
                 : PageOverviewPolicy.shiftedPlace(i, dragFrom,
                     dragTarget == PageOverviewPolicy.NONE ? dragFrom : dragTarget);
             float d = target - card.place;
@@ -1270,7 +1567,8 @@ public final class PageOverviewView extends FrameLayout {
             case TERMINAL:
                 return getContext().getString(R.string.page_overview_terminal, card.number);
             default:
-                return getContext().getString(R.string.page_overview_display);
+                return card.label != null ? card.label
+                    : getContext().getString(R.string.page_overview_display);
         }
     }
 
@@ -1278,11 +1576,15 @@ public final class PageOverviewView extends FrameLayout {
 
     @Nullable
     private Card cardAt(float x, float y, @Nullable Part[] part) {
+        if (rowCount > 0 && blockStart < cards.size() && gripRect.contains(x, y)) {
+            if (part != null) part[0] = Part.GRIP;
+            return cards.get(blockStart);
+        }
         for (int i = cards.size() - 1; i >= 0; i--) {
             Card card = cards.get(i);
             cardRect(i, rect);
             float hit = Math.max(buttonRadius, dp(24));
-            if (PageOverviewPolicy.canDelete(card.kind, homeCount)
+            if (PageOverviewPolicy.canDelete(card.kind, homePageCards())
                 && dist(x, y, rect.centerX(), rect.top) <= hit) {
                 if (part != null) part[0] = Part.DELETE;
                 return card;
@@ -1323,7 +1625,9 @@ public final class PageOverviewView extends FrameLayout {
                 Part[] part = new Part[1];
                 downCard = cardAt(x, y, part);
                 downPart = downCard == null ? null : part[0];
-                if (downCard != null && downPart == Part.BODY) postDelayed(longPress, longPressMs);
+                if (downCard != null && (downPart == Part.BODY || downPart == Part.GRIP)) {
+                    postDelayed(longPress, longPressMs);
+                }
                 return true;
             }
             case MotionEvent.ACTION_MOVE: {
@@ -1344,7 +1648,11 @@ public final class PageOverviewView extends FrameLayout {
                     removeCallbacks(longPress);
                     scrolling = Math.abs(x - downX) > touchSlop;
                     downPart = null;
-                    if (scrolling) handler.removeCallbacks(capture);
+                    if (scrolling) {
+                        handler.removeCallbacks(capture);
+                        // The page leaves the wall's view as the swipe goes on: keep its picture.
+                        captureLive(true);
+                    }
                 }
                 if (scrolling) {
                     float stride = cardWidth + gap;
@@ -1380,7 +1688,17 @@ public final class PageOverviewView extends FrameLayout {
                     switch (downPart) {
                         case DELETE: onDelete(card); break;
                         case HOME: onMakeHome(card); break;
-                        default: closeInto(cards.indexOf(card), false); break;
+                        case GRIP: break;
+                        default: {
+                            int index = cards.indexOf(card);
+                            // Only the centred card zooms in; another one is brought to the centre.
+                            if (OverviewGeometry.tapZooms(index, focus)) closeInto(index, false);
+                            else if (index >= 0) {
+                                captureLive(true);
+                                scrollTo(index, this::onSettled);
+                            }
+                            break;
+                        }
                     }
                 }
                 downCard = null;
@@ -1442,6 +1760,7 @@ public final class PageOverviewView extends FrameLayout {
     private void startDrag() {
         Card card = downCard;
         if (card == null || scrolling || !isOpen()) return;
+        boolean grip = downPart == Part.GRIP;
         // A held removal is carried out first, so the strip the drag reorders is the real one.
         commitPending();
         reload();
@@ -1449,19 +1768,24 @@ public final class PageOverviewView extends FrameLayout {
         if (index < 0) return;
         dragCard = cards.get(index);
         dragFrom = index;
-        dragTarget = index;
+        dragTarget = grip ? PageOverviewPolicy.NONE : index;
+        blockDrag = grip && !dragCard.isHome();
+        blockDownX = lastX;
         cardRect(index, rect);
         dragGrab = lastX - rect.left;
         dragX = lastX;
         handler.removeCallbacks(capture);
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         invalidate();
     }
 
     /** The place under the dragged card's centre, if its own half takes it; else none. */
     private void updateDragTarget() {
         if (dragCard == null) return;
-        float centre = dragX - dragGrab + cardWidth / 2f;
+        float centre = blockDrag
+            ? (getWidth() - cardWidth) / 2f + placeOffset(blockStart) - placeOffset(focus)
+                + dragX - blockDownX + cardWidth / 2f
+            : dragX - dragGrab + cardWidth / 2f;
         float base = (getWidth() - cardWidth) / 2f - placeOffset(focus) + cardWidth / 2f;
         int over = 0;
         float best = Float.MAX_VALUE;
@@ -1472,7 +1796,8 @@ public final class PageOverviewView extends FrameLayout {
                 over = i;
             }
         }
-        dragTarget = PageOverviewPolicy.dropTarget(dragFrom, over, homeCount, rowCount);
+        dragTarget = blockDrag ? PageOverviewPolicy.blockDropTarget(over, strip())
+            : PageOverviewPolicy.dropTarget(dragFrom, over, strip());
     }
 
     private void scrollAtEdge() {
@@ -1490,6 +1815,10 @@ public final class PageOverviewView extends FrameLayout {
         edgeScroll = 0;
         removeCallbacks(edgeScroller);
         if (card == null) return;
+        if (blockDrag) {
+            endBlockDrag(dropIt, to);
+            return;
+        }
         int index = cards.indexOf(card);
         // The card stays where it was let go and eases into its place from there.
         if (index >= 0) {
@@ -1508,42 +1837,104 @@ public final class PageOverviewView extends FrameLayout {
         }
     }
 
+    /**
+     * The window block let go: it moves to {@code to} (its first final position, which is also
+     * its page index on the wall: the Home pages before it), or springs back. Every window card
+     * eases on from where it was drawn.
+     */
+    private void endBlockDrag(boolean dropIt, int to) {
+        float left0 = (getWidth() - cardWidth) / 2f - placeOffset(focus);
+        for (int i = 0; i < cards.size(); i++) {
+            if (cards.get(i).isHome()) continue;
+            cardRect(i, rect);
+            cards.get(i).place = placeFor(rect.left - left0);
+        }
+        blockDrag = false;
+        dragCard = null;
+        dragTarget = PageOverviewPolicy.NONE;
+        if (dropIt && to != PageOverviewPolicy.NONE && to != blockStart) {
+            moveBlock(to);
+            return;
+        }
+        invalidate();
+        scrollTo(Math.round(focus), this::onSettled);
+    }
+
+    /**
+     * The Terminal page moves to page index {@code to} (the Home pages before it); every card
+     * eases on from where it is drawn.
+     */
+    private void moveBlock(int to) {
+        commitPending();
+        Map<Object, Float> places = new java.util.HashMap<>();
+        for (Card c : cards) places.put(c.key, c.place);
+        mutate(() -> host.moveTerminalPage(to));
+        reload();
+        for (Card c : cards) {
+            Float was = places.get(c.key);
+            if (was != null) c.place = was;
+        }
+        invalidate();
+        onSettled();
+        accessibility.invalidateRoot();
+    }
+
     /** The fractional place whose offset along the strip is {@code offset}. */
     private float placeFor(float offset) {
         float stride = Math.max(1f, cardWidth + gap);
         float place = offset / stride;
-        // Past the seam the extra gap counts too.
-        if (homeCount > 0 && rowCount > 0 && place > homeCount - 1) {
-            place = (offset - seamGap) / stride;
-            if (place < homeCount - 1) place = homeCount - 1;
+        // Past a seam its extra gap counts too.
+        float seams = 0f;
+        if (rowCount > 0 && blockStart > 0 && place > blockStart - 1) {
+            seams = seamGap;
+            place = Math.max(blockStart - 1, (offset - seams) / stride);
+        }
+        if (rowCount > 0 && blockEnd() < cards.size() - 1 && place > blockEnd()) {
+            place = Math.max(blockEnd(), (offset - seams - seamGap) / stride);
         }
         return place;
     }
 
     // ---- Small pieces ---------------------------------------------------------------------------
 
+    /**
+     * An add chip: its icon over a label that wraps to a second line when its share of the row
+     * is narrow (a 420 dpi phone, a large font), so the label is never cut short.
+     */
     @NonNull
-    private TextView pill(@NonNull Context context, int text, @NonNull OnClickListener action) {
+    private TextView pill(@NonNull Context context, int text, int icon,
+                          @NonNull OnClickListener action) {
         TextView pill = new TextView(context);
         pill.setText(text);
         pill.setGravity(Gravity.CENTER);
-        pill.setSingleLine(true);
-        pill.setMaxLines(1);
-        pill.setTextColor(0xFFE6E1E5);
+        pill.setMaxLines(2);
+        pill.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        pill.setTextColor(PILL_INK);
         pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        pill.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, TypedValue.COMPLEX_UNIT_SP);
+        Drawable symbol = ContextCompat.getDrawable(context, icon);
+        if (symbol != null) {
+            symbol = symbol.mutate();
+            symbol.setTint(PILL_INK);
+            int side = dp(22);
+            symbol.setBounds(0, 0, side, side);
+            pill.setCompoundDrawablesRelative(null, symbol, null, null);
+            pill.setCompoundDrawablePadding(dp(4));
+        }
         GradientDrawable background = new GradientDrawable();
         background.setColor(0xE61D1B20);
-        background.setCornerRadius(dp(24));
+        background.setCornerRadius(dp(20));
         pill.setBackground(background);
         int ripple = rippleOf(context);
         if (ripple != 0) pill.setForeground(ContextCompat.getDrawable(context, ripple));
-        pill.setPadding(dp(12), 0, dp(12), 0);
+        pill.setPadding(dp(8), dp(10), dp(8), dp(10));
         pill.setMinimumWidth(0);
+        pill.setMinHeight(dp(64));
         pill.setClickable(true);
         pill.setFocusable(true);
         pill.setOnClickListener(action);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         params.setMargins(dp(4), 0, dp(4), 0);
         pill.setLayoutParams(params);
         return pill;
@@ -1569,15 +1960,38 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Each card's body, its remove button and its home button as virtual views. */
     private final class Touch extends ExploreByTouchHelper {
+        /** Virtual view ids per card: its body, remove and home buttons, and the block's grip. */
+        private static final int IDS = 4;
+
         Touch(@NonNull View host) {
             super(host);
+        }
+
+        /** The grip: its label, where it is drawn, and a move left or right for the block. */
+        private void populateGrip(@NonNull AccessibilityNodeInfoCompat node) {
+            Rect bounds = new Rect();
+            gripRect.round(bounds);
+            if (bounds.isEmpty()) bounds.set(0, 0, 1, 1);
+            node.setBoundsInParent(bounds);
+            node.setContentDescription(getContext().getString(
+                R.string.page_overview_terminal_grip_description));
+            if (blockStart > 0) {
+                node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.page_overview_action_move_terminal_left,
+                    getContext().getString(R.string.page_overview_move_terminal_left)));
+            }
+            if (blockStart < homeCount) {
+                node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.page_overview_action_move_terminal_right,
+                    getContext().getString(R.string.page_overview_move_terminal_right)));
+            }
         }
 
         @Override protected int getVirtualViewAt(float x, float y) {
             Part[] part = new Part[1];
             Card card = cardAt(x, y, part);
             if (card == null) return INVALID_ID;
-            return cards.indexOf(card) * 3 + part[0].ordinal();
+            return cards.indexOf(card) * IDS + part[0].ordinal();
         }
 
         @Override protected void getVisibleVirtualViews(List<Integer> ids) {
@@ -1585,22 +1999,27 @@ public final class PageOverviewView extends FrameLayout {
                 cardRect(i, rect);
                 if (rect.right < 0 || rect.left > getWidth()) continue;
                 Card card = cards.get(i);
-                ids.add(i * 3);
-                if (PageOverviewPolicy.canDelete(card.kind, homeCount)) ids.add(i * 3 + 1);
-                if (showsHomeButton(card)) ids.add(i * 3 + 2);
+                ids.add(i * IDS);
+                if (PageOverviewPolicy.canDelete(card.kind, homePageCards())) ids.add(i * IDS + 1);
+                if (showsHomeButton(card)) ids.add(i * IDS + 2);
+                if (i == blockStart && rowCount > 0) ids.add(i * IDS + 3);
             }
         }
 
         @Override protected void onPopulateNodeForVirtualView(int id,
                 @NonNull AccessibilityNodeInfoCompat node) {
-            int index = id / 3;
+            int index = id / IDS;
             if (index < 0 || index >= cards.size()) {
                 node.setContentDescription("");
                 node.setBoundsInParent(new Rect());
                 return;
             }
             Card card = cards.get(index);
-            Part part = Part.values()[id % 3];
+            Part part = Part.values()[id % IDS];
+            if (part == Part.GRIP) {
+                populateGrip(node);
+                return;
+            }
             cardRect(index, rect);
             Rect bounds = new Rect();
             float r = Math.max(buttonRadius, dp(24));
@@ -1634,11 +2053,20 @@ public final class PageOverviewView extends FrameLayout {
 
         @Override protected boolean onPerformActionForVirtualView(int id, int action,
                 @Nullable Bundle arguments) {
-            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
-            int index = id / 3;
+            int index = id / IDS;
             if (index < 0 || index >= cards.size() || !isOpen()) return false;
+            if (Part.values()[id % IDS] == Part.GRIP) {
+                // Move the Terminal page one page left or right.
+                int to = action == R.id.page_overview_action_move_terminal_left ? blockStart - 1
+                    : action == R.id.page_overview_action_move_terminal_right ? blockStart + 1
+                    : PageOverviewPolicy.NONE;
+                if (to < 0 || to > homeCount) return false;
+                moveBlock(to);
+                return true;
+            }
+            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
             Card card = cards.get(index);
-            switch (Part.values()[id % 3]) {
+            switch (Part.values()[id % IDS]) {
                 case DELETE: onDelete(card); break;
                 case HOME: onMakeHome(card); break;
                 default: closeInto(index, false); break;

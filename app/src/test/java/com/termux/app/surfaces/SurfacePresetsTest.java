@@ -41,6 +41,7 @@ public class SurfacePresetsTest {
             context.getSharedPreferences("surface-presets-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -103,11 +104,12 @@ public class SurfacePresetsTest {
         // Wander off, then come back through the card.
         SurfacePresets.apply(preferences, preset("stock"));
         assertFalse(SurfacePresets.matches(preferences, custom));
-        assertEquals(21, SurfacePresets.custom(preferences).values
-            .get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(17),
+            SurfacePresets.custom(preferences).values
+                .get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         assertEquals(63,
             preferences.getSurfaceOverrideValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
@@ -128,7 +130,7 @@ public class SurfacePresetsTest {
         java.util.Map<String, Object> look =
             SurfacePresets.deserialize(preferences.getSurfaceCustomPreset());
         assertNotNull(look);
-        assertTrue(look.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY) instanceof Integer);
+        assertTrue(look.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)) instanceof Integer);
         assertTrue(look.get(TERMUX_APP.KEY_SURFACE_MATERIAL) instanceof String);
         assertFalse(look.containsKey(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
     }
@@ -140,7 +142,7 @@ public class SurfacePresetsTest {
         preferences.setSurfaceCustomPreset(stored);
         preferences.setAppLauncherDockStyle("docked");
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals("docked", preferences.getAppLauncherDockStyle());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
     }
@@ -184,10 +186,10 @@ public class SurfacePresetsTest {
     @Test
     public void everyPresetCarriesItsGlass() {
         String[] glass = {
-            TERMUX_APP.KEY_SURFACE_BASE_BLUR,
-            TERMUX_APP.KEY_SURFACE_BASE_OPACITY,
-            TERMUX_APP.KEY_SURFACE_BASE_GRAIN,
-            TERMUX_APP.KEY_SURFACE_BASE_TINT,
+            SurfacePresets.cellKey(null, SurfaceProperty.BLUR),
+            SurfacePresets.cellKey(null, SurfaceProperty.OPACITY),
+            SurfacePresets.cellKey(null, SurfaceProperty.GRAIN),
+            SurfacePresets.cellKey(null, SurfaceProperty.TINT),
         };
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             for (String key : glass)
@@ -203,8 +205,8 @@ public class SurfacePresetsTest {
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             for (String key : preset.values.keySet())
                 assertFalse(preset.id + " names " + key, SurfacePresets.isLayoutOwned(key));
-            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
-            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP));
+            assertFalse(preset.values.containsKey(SurfacePresets.cellKey(null, SurfaceProperty.CORNER_RADIUS)));
+            assertFalse(preset.values.containsKey(SurfacePresets.cellKey(null, SurfaceProperty.SIDE_GAP)));
             assertFalse(preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
             assertFalse(preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
         }
@@ -267,7 +269,7 @@ public class SurfacePresetsTest {
         SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
         assertNotNull(custom);
         SurfacePresets.apply(preferences, custom);
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(30, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
         assertEquals(30, preferences.getTerminalCornerRadius());
         assertEquals(16, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
@@ -283,7 +285,7 @@ public class SurfacePresetsTest {
     public void everyLookResetsTheTintToItsOwnAmount() {
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             int amount = "stock".equals(preset.id) ? 35 : 0;
-            assertEquals(preset.id, amount, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+            assertEquals(preset.id, amount, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
             preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 20);
             preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 10);
             SurfacePresets.apply(preferences, preset);
@@ -304,11 +306,98 @@ public class SurfacePresetsTest {
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
         assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
-        assertEquals(15, preferences.getDockTintStrength());
+        assertEquals(15, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         // A Custom saved before the amount wore its own Look's colour in full: amount 0 now.
         java.util.Map<String, Object> older = SurfacePresets.deserialize(
             "{\"format_version\":2,\"surface_base_blur\":21}");
-        assertEquals(0, older.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+        assertEquals(0, older.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
+    }
+
+    /** A saved look stores its cells under grid keys and reads them back as the look names them. */
+    @Test
+    public void aSavedLookStoresGridKeysAndReadsThemBack() throws Exception {
+        java.util.Map<String, Object> look = new java.util.LinkedHashMap<>();
+        look.put(SurfacePresets.cellKey(null, SurfaceProperty.BLUR),
+            com.termux.shared.termux.settings.preferences.FrostStops.TINT);
+        look.put(SurfacePresets.cellKey(SurfaceSlot.DOCK, SurfaceProperty.OPACITY), 70);
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_HAIRLINE);
+        org.json.JSONObject json = new org.json.JSONObject(SurfacePresets.serialize(look));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT,
+            json.getInt("look.frost"));
+        assertEquals(70, json.getInt("look.opacity.dock"));
+        assertFalse(json.has(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertFalse(json.has(TERMUX_APP.KEY_APP_BAR_OPACITY));
+        java.util.Map<String, Object> back = SurfacePresets.deserialize(json.toString());
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT,
+            back.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
+        assertEquals(70, back.get(SurfacePresets.cellKey(SurfaceSlot.DOCK, SurfaceProperty.OPACITY)));
+    }
+
+    /** A Custom look saved before the grid is rewritten under grid keys, once. */
+    @Test
+    public void anOldSavedCustomIsRewrittenUnderGridKeys() throws Exception {
+        org.json.JSONObject old = new org.json.JSONObject();
+        old.put("format_version", 5);
+        old.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 30);
+        preferences.setSurfaceCustomPreset(old.toString());
+        SurfacePresets.rewriteStoredCustom(preferences);
+        org.json.JSONObject now = new org.json.JSONObject(preferences.getSurfaceCustomPreset());
+        assertEquals(30, now.getInt("look.opacity"));
+        assertFalse(now.has(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(30, SurfacePresets.custom(preferences).values
+            .get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)));
+    }
+
+    /**
+     * Nothing visible moved with the grid keys: every element resolves, through the grid, to the
+     * numbers the shipped table has always written (blur as the dp of its stop), over a store that
+     * held detached cells the Look must clear.
+     */
+    @Test
+    public void everyShippedLookResolvesTheNumbersItAlwaysDid() {
+        String[] ids = {"minimal", "frost", "stock", "solid"};
+        int[][] want = {{7, 10, 3, 0}, {25, 60, 7, 0}, {12, 46, 4, 35}, {0, 92, 0, 0}};
+        for (int i = 0; i < ids.length; i++) {
+            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 99);
+            preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR, 36);
+            SurfacePresets.apply(preferences, preset(ids[i]));
+            com.termux.shared.termux.settings.preferences.LookGrid grid = preferences.lookGrid();
+            for (com.termux.shared.termux.settings.preferences.LookGrid.Element element
+                    : com.termux.shared.termux.settings.preferences.LookGrid.Element.values()) {
+                String at = ids[i] + " on " + element;
+                assertEquals(at, want[i][0], com.termux.shared.termux.settings.preferences.FrostStops
+                    .blurDpFor(grid.value(com.termux.shared.termux.settings.preferences
+                        .LookGrid.Property.FROST, element, -1)));
+                assertEquals(at, want[i][1], grid.value(com.termux.shared.termux.settings.preferences
+                    .LookGrid.Property.OPACITY, element, -1));
+                assertEquals(at, want[i][2], grid.value(com.termux.shared.termux.settings.preferences
+                    .LookGrid.Property.GRAIN, element, -1));
+                assertEquals(at, want[i][3], grid.value(com.termux.shared.termux.settings.preferences
+                    .LookGrid.Property.TINT, element, -1));
+            }
+            assertTrue(ids[i], SurfacePresets.matches(preferences, preset(ids[i])));
+        }
+    }
+
+    @Test
+    public void shippedLookAnswersTheFrostStopOpacityAndTintOfALook() {
+        SurfacePresets.ShippedLook clear = SurfacePresets.shippedLook(
+            AppearanceLooks.stopForPresetId(preset("minimal").id));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.CLEAR, clear.frostStop);
+        assertEquals(10, clear.opacity);
+        assertEquals(0, clear.tint);
+        SurfacePresets.ShippedLook tint = SurfacePresets.shippedLook(
+            AppearanceLooks.stopForPresetId("stock"));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT, tint.frostStop);
+        assertEquals(46, tint.opacity);
+        assertEquals(35, tint.tint);
+        assertNull(SurfacePresets.shippedLook(AppearanceLooks.CUSTOM_STOP));
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

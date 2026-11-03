@@ -58,6 +58,7 @@ public final class TaiRuntimeServiceClient {
     private boolean binding;
     /** A {@code bindService} of ours is registered; only then is there a binding to release. */
     private boolean bound;
+    private long boundAtMs;
 
     public TaiRuntimeServiceClient(@NonNull Context context) {
         this(context, replyLooper());
@@ -257,6 +258,7 @@ public final class TaiRuntimeServiceClient {
                     return null;
                 }
                 this.bound = true;
+                boundAtMs = System.currentTimeMillis();
             }
         }
 
@@ -364,23 +366,48 @@ public final class TaiRuntimeServiceClient {
     /** The death of the runtime process as the request it interrupted sees it; nothing is retried. */
     @NonNull
     private JSONObject runtimeDied(@NonNull String operation) {
+        String reason = TaiRuntimeExitReason.lookup(appContext, diedSinceMs());
+        boolean lowMemory = TaiRuntimeExitReason.LOW_MEMORY.equals(reason);
         String message;
         if (TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation) || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)) {
-            message = "AI runtime process died while loading the model; the load was not retried. "
-                + "Load again to try once more, on CPU or with a smaller model.";
+            message = lowMemory
+                ? "Android closed the AI runtime to free memory while it was loading the model. "
+                    + "Automatic loads try that accelerator again once memory has had a few minutes to recover; "
+                    + "name it to try now at the smallest window, or load on CPU or a smaller model."
+                : "AI runtime process died while loading the model (Android may have closed it for memory); "
+                    + "the load was not retried. Automatic loads now keep off that accelerator at that window; "
+                    + "name the accelerator again to try it once at the smallest window, or load on CPU or a smaller model.";
         } else if (TaiRuntimeService.isStatusOperation(operation)) {
-            message = "AI runtime process died while answering a status request.";
+            message = lowMemory
+                ? "Android closed the AI runtime to free memory while it was answering a status request."
+                : "AI runtime process died while answering a status request.";
         } else {
-            message = "AI runtime process died while running the model; the request was not retried. "
-                + "Try again, on CPU or with a smaller model.";
+            message = lowMemory
+                ? "Android closed the AI runtime to free memory while it was running the model; the request was not retried. "
+                    + "Close other apps, then try again, on CPU or with a smaller model."
+                : "AI runtime process died while running the model; the request was not retried. "
+                    + "Try again, on CPU or with a smaller model.";
         }
         JSONObject error = runtimeCrashed("tai_runtime_crashed", message);
         try {
             error.put("operation", operation);
             error.put("retried", false);
+            if (reason != null) error.put("exitReason", reason);
         } catch (JSONException ignored) {
         }
         return error;
+    }
+
+    /** The load's own start when a marker names one, else when this binding was made. */
+    private long diedSinceMs() {
+        try {
+            JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
+            if (marker != null && marker.has("startedAtMs")) return marker.getLong("startedAtMs");
+        } catch (JSONException ignored) {
+        }
+        synchronized (connectionLock) {
+            return boundAtMs;
+        }
     }
 
     /**

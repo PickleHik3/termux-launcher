@@ -12,7 +12,7 @@ Three rules keep this directory from rotting:
   implementation record. What survives is *reasoning* git log cannot carry: research, comparisons,
   measurements and the delivered records below. Old specs are in git history.
 - **A document that contradicts AGENTS.md is worse than no document.** Build commands live in
-  AGENTS.md, and the branch model and release process in `docs/agents/releasing.md`; nothing here
+  `docs/agents/building.md`, and the branch model and release process in `docs/agents/releasing.md`; nothing here
   restates them.
 - **Move a document when its state changes**: `active/` while the work is open, `reference/` when it
   is delivered or is research that will not change.
@@ -68,6 +68,7 @@ task-oriented guide for the terminal is
 | [`reference/terminal/kitty-config-grammar.md`](reference/terminal/kitty-config-grammar.md) | The kitty.conf grammar the launcher reads. |
 | [`reference/terminal/kitty-custom-shaders-research.md`](reference/terminal/kitty-custom-shaders-research.md) | Research: which of kitty's custom shaders could carry over, and under which licences. |
 | [`reference/terminal/terminal-url-tap-research.md`](reference/terminal/terminal-url-tap-research.md) | Why tapping a link in the terminal often does nothing. Research, no decision recorded. |
+| [`reference/launcher/gesture-inventory-2026-10-31.md`](reference/launcher/gesture-inventory-2026-10-31.md) | Every custom gesture with where it is recognised, its tap path, its visible cue and the gaps. |
 | [`reference/launcher/keyboard-off.md`](reference/launcher/keyboard-off.md) | Keyboard on/off: switching the keyboard off so a tap no longer raises it, and what turns it back on. |
 | [`reference/launcher/inapp-keyboard-design.md`](reference/launcher/inapp-keyboard-design.md) | The `:inapp-keyboard` module and its launcher host. Paired with [`../inapp-keyboard/UPSTREAM.md`](../inapp-keyboard/UPSTREAM.md), which owns the vendored deviations. |
 | [`reference/voice-ai/launcherctl-agent-platform.md`](reference/voice-ai/launcherctl-agent-platform.md) | The LauncherCtl agent platform: tool registry, agent APIs, event storage, MCP bridge. |

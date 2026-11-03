@@ -283,6 +283,85 @@ otherwise. Long by default; `--short` for a brief one.
 launcherctl toast --short 'build done'
 ```
 
+## motion-log
+
+```text
+launcherctl motion-log dump
+launcherctl motion-log clear
+```
+
+With **Settings > Debugging > Motion log** on, the launcher notes each page change and resize as
+one line with its uptime in milliseconds, in memory and in `adb logcat -s TermuxMotion`. `dump`
+prints the last 2,000 lines, oldest first; `clear` empties them. Nothing is recorded while the
+switch is off.
+
+```sh
+launcherctl motion-log clear
+launcherctl motion-log dump > motion.txt
+```
+
+## look
+
+```text
+launcherctl look get PROPERTY [--element ELEMENT] [--page ID | --kind KIND]
+launcherctl look set PROPERTY VALUE [--element ELEMENT] [--page ID | --kind KIND]
+launcherctl look reset [PROPERTY] [--element ELEMENT] [--page ID | --kind KIND]
+```
+
+Reads and sets the glass look the way the Appearance editor does. **Properties**: `frost`,
+`opacity`, `tint`, `colour`, `corners`, `depth`, `edge`, `grain`, `rim`, `vibrancy` and `margin`.
+**Elements**: `status`, `dock`, `keyboard`, `terminal`, `widgets` and `sheets`. Without
+`--element` a value applies to all glass; without `--page` or `--kind`, everywhere. `--kind` takes
+`home`, `terminal` or `display` and names every page of that kind, as the editor's **Home pages**,
+**Terminal** and **Display pages**; it cannot be given with `--page`. A page has no look of its
+own: `--page ID` names that page's kind, so `--page 2` on a Home page reads and writes the **Home
+pages** cell, and a page not on the wall is an error. `vibrancy` and `margin` are for all glass,
+everywhere, only.
+
+```text
+launcherctl look set opacity 60 --element keyboard --kind home
+launcherctl look get opacity --element keyboard --kind display
+```
+
+Values are numbers, except `frost`, which takes a step from 0 to 7 or a blur in dp such as
+`12dp`; `colour`, which takes `primary`, `secondary` or `tertiary`; `rim`, which takes `off`,
+`hairline` or `bright`; and `corners`, which takes dp or `auto`. A value outside a property's range
+is held to it.
+
+`get` answers the value and where it is set (the element on a page, the page, the element on a
+kind of page such as "keyboard on Home pages", all glass on that kind, the element everywhere,
+all glass everywhere, or the shipped look). `set` changes one place and the launcher
+redraws at once. `reset` puts a place back on what it followed before; without a property it
+resets everything that place holds.
+
+```sh
+launcherctl look set opacity 60 --element dock
+launcherctl look get opacity --element dock
+launcherctl look reset --element dock
+```
+
+## layout
+
+```
+launcherctl layout get <kind>
+launcherctl layout set <kind> FILE
+```
+
+Prints or replaces one layout document (ADR 0020). `<kind>` is `home`, `terminal`,
+`terminal_minimal`, `display`, or `sizes` (the sizes every kind shares). `set` checks the file
+first and refuses it with the bad field named; nothing changes then. `set` replaces the whole
+document: a field left out falls back to its default, so start from `layout get`. A known field
+with a value the launcher cannot read (an unknown `dock_design`, a placement that is not an
+edge, an `icon_size` outside s/m/l/xl, a negative `*_order`, a size outside its range) is
+refused; a field this build does not know is kept as it is. A good file is written whole and
+shows at once.
+
+```
+launcherctl layout get home > h.json
+# edit one value in h.json
+launcherctl layout set home h.json
+```
+
 ## wallpaper
 
 ```text

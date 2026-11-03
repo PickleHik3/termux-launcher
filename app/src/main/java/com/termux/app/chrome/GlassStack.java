@@ -36,6 +36,11 @@ public final class GlassStack {
         @NonNull public final GlassRefraction.Look look;
         /** {@link GlassRefraction#SEAM_BOTTOM} and friends: edges another surface continues past. */
         public final int seams;
+        /**
+         * Where this view's piece of the light model starts: 0 for a surface that renders its top,
+         * more for the strip that continues another surface below it ({@link #continuedBelow}).
+         */
+        public final float sliceStart;
         /** How much of the light model this view renders; less than 1 leaves the rest to a strip. */
         public final float sliceEnd;
         public final boolean foot;
@@ -52,8 +57,8 @@ public final class GlassStack {
         public final int tintStrengthPercent;
 
         private Spec(int blurRadiusDp, float tintAlpha, int grainPercent, float cornerRadiusPx,
-                     boolean rim, @NonNull GlassRefraction.Look look, int seams, float sliceEnd,
-                     boolean foot, int stackAlphaPercent, @Nullable Integer tintColor,
+                     boolean rim, @NonNull GlassRefraction.Look look, int seams, float sliceStart,
+                     float sliceEnd, boolean foot, int stackAlphaPercent, @Nullable Integer tintColor,
                      @Nullable GlassBackdropCache.Band band, int tintStrengthPercent) {
             this.band = band;
             this.tintStrengthPercent = tintStrengthPercent;
@@ -64,6 +69,7 @@ public final class GlassStack {
             this.rim = rim;
             this.look = look;
             this.seams = seams;
+            this.sliceStart = sliceStart;
             this.sliceEnd = sliceEnd;
             this.foot = foot;
             this.stackAlphaPercent = stackAlphaPercent;
@@ -75,52 +81,66 @@ public final class GlassStack {
         public static Spec of(int blurRadiusDp, float tintAlpha, int grainPercent,
                               float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, false,
-                lookFor(fancierLook), 0, 1f, false, 100, null, null,
+                lookFor(fancierLook), 0, 0f, 1f, false, 100, null, null,
                 com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
                     .DEFAULT_SURFACE_BASE_TINT);
         }
 
         @NonNull public Spec withBlur(int dp) {
             return new Spec(dp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withRim(boolean on) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, on, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withSeams(int edges) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, edges,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withSlice(float end, boolean withFoot) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                end, withFoot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                sliceStart, end, withFoot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+        }
+
+        /**
+         * This glass continued below its own view, by the strip under the system navigation pill:
+         * the rest of the same light model ({@code [sliceEnd, 1]}), and every value but the slice
+         * the same, so the two read as one slab. The strip has no edge of its own (its top runs on
+         * into this surface, the rest into the screen), so it wears no rim and every edge is a seam.
+         * Its {@link #band} is the surface's: the strip draws that band's veil and frost but is no
+         * measurement of it ({@link GlassStack#buildContinuation}).
+         */
+        @NonNull public Spec continuedBelow() {
+            return new Spec(blurRadiusDp, tintAlpha, grainPercent, 0f, false, look,
+                ChromeEdgeRule.ALL, sliceEnd, 1f, foot, stackAlphaPercent, tintColor, band,
+                tintStrengthPercent);
         }
 
         @NonNull public Spec withStackAlpha(int percent) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, percent, tintColor, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, percent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withTintColor(@Nullable Integer argb) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, argb, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, stackAlphaPercent, argb, band, tintStrengthPercent);
         }
 
         /** This glass mixing in {@code percent} of the accent (the Tint control). */
         @NonNull public Spec withTintStrength(int percent) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band,
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band,
                 Math.max(0, Math.min(100, percent)));
         }
 
         /** This glass as {@code band}'s, measured and veiled for it; null for none. */
         @NonNull public Spec withBand(@Nullable GlassBackdropCache.Band band) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @Override
@@ -131,7 +151,7 @@ public final class GlassStack {
             return blurRadiusDp == that.blurRadiusDp && tintAlpha == that.tintAlpha
                 && grainPercent == that.grainPercent && cornerRadiusPx == that.cornerRadiusPx
                 && rim == that.rim && look.equals(that.look) && seams == that.seams
-                && sliceEnd == that.sliceEnd && foot == that.foot
+                && sliceStart == that.sliceStart && sliceEnd == that.sliceEnd && foot == that.foot
                 && stackAlphaPercent == that.stackAlphaPercent
                 && java.util.Objects.equals(tintColor, that.tintColor) && band == that.band
                 && tintStrengthPercent == that.tintStrengthPercent;
@@ -140,7 +160,7 @@ public final class GlassStack {
         @Override
         public int hashCode() {
             return java.util.Objects.hash(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx,
-                rim, look, seams, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
+                rim, look, seams, sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
     }
 
@@ -165,24 +185,27 @@ public final class GlassStack {
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
-        return keyboard(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE, dockAlpha,
+        return keyboard(preferences, TermuxAppSharedPreferences.terminalPageId(), dockAlpha,
             cornerRadiusPx, fancierLook);
     }
 
     /** The keyboard's glass on one half of the wall, which may hold its own values (ADR 0013). */
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences,
-                                @NonNull TermuxAppSharedPreferences.WallHalf half, float dockAlpha,
+                                int pageId, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
         float tint = linked ? dockAlpha
-            : preferences.getInAppKeyboardBackgroundOpacity(half) / 100f;
-        return Spec.of(preferences.getInAppKeyboardBlurRadius(half), tint,
-            preferences.getInAppKeyboardGrain(half), cornerRadiusPx, fancierLook)
-            .withTintStrength(preferences.getInAppKeyboardTintStrength(half))
-            .withStackAlpha(keyboardStackAlphaPercent(preferences, half));
+            : preferences.getInAppKeyboardBackgroundOpacity(pageId) / 100f;
+        // The keyboard's own Depth and Edge where it holds them (ADR 0017).
+        fancierLook = ElementGlass.refraction(preferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.KEYBOARD, pageId, fancierLook);
+        return Spec.of(preferences.getInAppKeyboardBlurRadius(pageId), tint,
+            preferences.getInAppKeyboardGrain(pageId), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength(pageId))
+            .withStackAlpha(keyboardStackAlphaPercent(preferences, pageId));
     }
 
     /**
@@ -194,16 +217,16 @@ public final class GlassStack {
      */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences) {
         return keyboardStackAlphaPercent(preferences,
-            TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId());
     }
 
     /** {@link #keyboardStackAlphaPercent(TermuxAppSharedPreferences)} on one half of the wall. */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences,
-                                                @NonNull TermuxAppSharedPreferences.WallHalf half) {
+                                                int pageId) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
-        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
+        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(pageId);
     }
 
     /**
@@ -245,6 +268,9 @@ public final class GlassStack {
             && spec.tintColor == null;
         if (bare) backdrop = null;
         glass.noteBandBlur(spec.band, backdrop != null ? spec.blurRadiusDp : 0);
+        // The frame, when there is one, is drawn over the page's dim: the band's content stands
+        // on no dim then, and its ink and even-out are measured so.
+        glass.noteBandFrame(spec.band, backdrop != null);
         if (bare) {
             Drawable rimOnly = spec.rim ? glass.rimDrawable(spec.cornerRadiusPx)
                 : new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
@@ -254,7 +280,10 @@ public final class GlassStack {
         }
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
-            backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
+            // Even-out first where the band has one (ADR 0014, wave 2c): the keyboard's frame is
+            // evened on its own rect, then frosted as before. Null for every other stack.
+            backdrop.setColorFilter(GlassFilters.withEvenOut(glass.bandEvenOut(spec.band),
+                GlassFilters.frost(Math.round(spec.tintAlpha * 100f))));
             // The gathered light is drawn under the tint, so it is raised by what the tint covers
             // and every surface shows a like outline.
             backdrop.setRefraction(spec.look.withCover(spec.tintColor != null
@@ -276,12 +305,58 @@ public final class GlassStack {
             if (spec.grainPercent > 0) layers.add(glass.grainLayer(spec.grainPercent));
             if (rim) layers.add(glass.rimDrawable(spec.cornerRadiusPx));
         } else {
-            layers.add(glass.surface(spec.tintAlpha, 0f, spec.sliceEnd, spec.foot,
+            layers.add(glass.surface(spec.tintAlpha, spec.sliceStart, spec.sliceEnd, spec.foot,
                 spec.grainPercent, spec.cornerRadiusPx, rim, spec.band,
                 spec.tintStrengthPercent));
         }
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        if (spec.stackAlphaPercent < 100)
+            applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
+        return material;
+    }
+
+    /**
+     * The frost a stack's backdrop is drawn through: {@code evenOut} (the matrix the surface above
+     * last drew its frame through, or null for none) composed ahead of the frost at the spec's
+     * opacity. What {@link #build} dresses its own backdrop with, for a strip whose backdrop is a
+     * view of its own ({@link Spec#continuedBelow}): the same matrix over the same blurred frame
+     * leaves no step where the strip meets the surface it continues.
+     */
+    @Nullable
+    public static android.graphics.ColorFilter frostFilter(@NonNull Spec spec,
+                                                          @Nullable android.graphics.ColorMatrix evenOut) {
+        return GlassFilters.withEvenOut(evenOut,
+            GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
+    }
+
+    /**
+     * The tint of a strip that continues another surface's glass ({@link Spec#continuedBelow}),
+     * without its backdrop, which the strip draws in a view of its own through
+     * {@link #frostFilter}: the same layers {@link #build} lays over a frame, its slice of the
+     * light model, the band's veil and the grain, under the same stack alpha. The band is only
+     * the veil's: nothing is noted to the ink under its name, so the surface above keeps the
+     * measurement that is its own.
+     */
+    @NonNull
+    public static Drawable buildContinuation(@NonNull GlassSurfaceFactory glass, @NonNull Spec spec) {
+        boolean bare = spec.blurRadiusDp <= 0 && spec.tintAlpha <= 0f && spec.grainPercent <= 0
+            && spec.tintColor == null;
+        if (bare) return new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
+        Drawable material;
+        if (spec.tintColor != null) {
+            List<Drawable> layers = new ArrayList<>(3);
+            layers.add(new android.graphics.drawable.ColorDrawable(spec.tintColor));
+            int veil = glass.bandVeil(spec.band);
+            if (android.graphics.Color.alpha(veil) > 0)
+                layers.add(new android.graphics.drawable.ColorDrawable(veil));
+            if (spec.grainPercent > 0) layers.add(glass.grainLayer(spec.grainPercent));
+            material = layers.size() == 1
+                ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        } else {
+            material = glass.continuationSurface(spec.tintAlpha, spec.sliceStart, spec.sliceEnd,
+                spec.foot, spec.grainPercent, spec.band, spec.tintStrengthPercent);
+        }
         if (spec.stackAlphaPercent < 100)
             applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
         return material;

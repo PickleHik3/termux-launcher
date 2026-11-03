@@ -314,8 +314,10 @@ public final class SuggestionBarView extends GridLayout
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
     private int appBarOpacity = 80;
-    private boolean blurEnabled = false;
-    private int blurRadiusDp = 10;
+    /** Whether the wallpaper blurs here (the host's call); the menus' radius is the Sheets'. */
+    private boolean wallpaperBlurs = false;
+    /** The host's radius, used only without a store to read the Sheets element from. */
+    private int hostBlurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
     /** Whether a swipe up on a badged icon opens its quick reply; off, the icon swipes like any other. */
@@ -374,18 +376,48 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private FolderEntryDragState activeFolderEntryDragState;
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
-    /** The launcher's look-and-feel, read live by the popup module. */
+    /** The half of the wall whose dock glass the menus wear; the Workspace until the host says. */
+    @NonNull private java.util.function.Supplier<Integer> lookPageSupplier = () -> com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId();
+
+    public void setLookPageSupplier(@NonNull java.util.function.Supplier<Integer> supplier) {
+        lookPageSupplier = supplier;
+    }
+
+    /**
+     * The launcher's look-and-feel, read live by the popup module. Menus and folders are sheets:
+     * their opacity, blur and grain are the Sheets element's (ADR 0017), not the dock's; whether
+     * blur can run at all (the wallpaper blurs here) stays the host's call ({@link #setBlurConfig}).
+     */
     private final AnchoredMenuTheme menuTheme = new AnchoredMenuTheme() {
         @Override public int textColor() { return resolveLauncherTextColor(); }
         @Override public int selectedTextColor() { return resolveLauncherSelectedTextColor(); }
-        @Override public int opacityPercent() { return appBarOpacity; }
-        @Override public boolean blurEnabled() { return blurEnabled; }
-        @Override public int blurRadiusDp() { return blurRadiusDp; }
+        @Override public int opacityPercent() {
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            return sheets == null ? appBarOpacity : sheets.opacityPercent;
+        }
+        // Blur runs where the wallpaper blurs and the Sheets Frost stop is above 0 (ADR 0017).
+        @Override public boolean blurEnabled() {
+            return com.termux.app.chrome.ChromePolicy.dockBlurEnabled(blurRadiusDp());
+        }
+        @Override public int blurRadiusDp() {
+            if (!wallpaperBlurs) return 0;
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            return sheets == null ? hostBlurRadiusDp : sheets.blurDp;
+        }
         @Override public int grainPercent() {
-            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
-            return preferences == null ? 0 : preferences.getDockGlassGrain();
+            com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
+            return sheets == null ? 0 : sheets.grainPercent;
         }
     };
+
+    /** The Sheets element on the page the menus open over; null without a store. */
+    @androidx.annotation.Nullable
+    private com.termux.app.chrome.ElementGlass sheetsGlass() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+        return preferences == null ? null : com.termux.app.chrome.ElementGlass.of(preferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
+            lookPageSupplier.get());
+    }
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
 
     /** The dock's menu look, lent to the popup a folder on Home opens so the two match. */
@@ -915,27 +947,40 @@ public final class SuggestionBarView extends GridLayout
     // a tile among the apps: a tile like theirs that opens the drawer, in one of the row's slots
     // (DrawerTilePolicy), so a page
     // holds one app fewer and the apps keep their own order around it. It is no pin: it has no
-    // menu, it cannot be unpinned, and a long press picks it up to be dragged to the row's start,
-    // middle or end. It stands still while a finger swipes the row's pages.
+    // menu, it cannot be unpinned, and a long press picks it up to be dragged to any column of the
+    // row, as the palette tile is; the apps make way around the column it is over. It stands
+    // still on every page, while a finger swipes the row's pages.
 
     /** Who hears the Drawer tile. */
     public interface DrawerTileListener {
         /** A tap: the drawer, as Home's own drawer entry opens it. */
         void onDrawerTileTapped();
 
-        /** The tile was dragged and let go nearest {@code position}, which is not where it was. */
-        void onDrawerTileMoved(@NonNull com.termux.app.dock.DrawerTilePolicy.Position position);
+        /**
+         * The Drawer tile or the palette tile was dragged and let go on a column that is not
+         * where it was: the two tiles' columns now, {@code drawerColumn} and {@code
+         * paletteColumn}, each -1 for a tile the row does not hold (a drop on the other tile's
+         * column swapped the two).
+         */
+        void onTileColumnsMoved(int drawerColumn, int paletteColumn);
     }
 
     /** Where the Drawer tile stands, or null for a row with none (the toggle off). */
-    @Nullable private com.termux.app.dock.DrawerTilePolicy.Position drawerTilePosition;
+    @Nullable private com.termux.app.dock.DrawerTilePolicy.Place drawerTilePlace;
     @Nullable private DrawerTileListener drawerTileListener;
     /** The Drawer tile's slot as the last render built it, or null when it built none. */
     @Nullable private View drawerTileSlot;
-    /** Its column in that render, and the app slots its page had; -1 and 0 with none. */
+    /**
+     * Its column in that render, and the app slots a page of the row had where it held either
+     * tile; -1 and 0 with none.
+     */
     private int drawerTileColumn = -1;
     private int drawerTileAppSlots;
-    /** Whether a long press has picked the tile up and a drag is moving it. */
+    /** The palette tile's column in that render; -1 with none. */
+    private int paletteTileColumn = -1;
+    /** The page's app slots in that render where it held a tile, by app index; else empty. */
+    @NonNull private final List<View> tileRowAppViews = new ArrayList<>();
+    /** Whether a long press has picked a still tile (Drawer or palette) up and a drag moves it. */
     private boolean drawerTileDragging;
     /**
      * Whether {@link #drawChild} is drawing the still tiles (the Drawer tile, the palette tile)
@@ -943,15 +988,23 @@ public final class SuggestionBarView extends GridLayout
      */
     private boolean drawingStillTilesUnshifted;
 
-    /**
-     * The Drawer tile at {@code position}, or none for null. A change re-lays the row's slots: on a
-     * row at rest (no A-Z, no typed line) it renders now, otherwise with the next render.
-     */
+    /** {@link #setDrawerTileAt} for one of the three anchors, or none for null. */
     public void setDrawerTile(@Nullable com.termux.app.dock.DrawerTilePolicy.Position position,
                             @Nullable DrawerTileListener listener) {
+        setDrawerTileAt(position == null ? null
+            : com.termux.app.dock.DrawerTilePolicy.Place.of(position), listener);
+    }
+
+    /**
+     * The Drawer tile at {@code place} (an anchor or a column), or none for null; {@code
+     * listener} hears its taps and either tile's drops. A change re-lays the row's slots: on a
+     * row at rest (no A-Z, no typed line) it renders now, otherwise with the next render.
+     */
+    public void setDrawerTileAt(@Nullable com.termux.app.dock.DrawerTilePolicy.Place place,
+                                @Nullable DrawerTileListener listener) {
         drawerTileListener = listener;
-        if (drawerTilePosition == position) return;
-        drawerTilePosition = position;
+        if (java.util.Objects.equals(drawerTilePlace, place)) return;
+        drawerTilePlace = place;
         // A page holds a different number of apps now.
         invalidateMostUsedCache();
         pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
@@ -965,12 +1018,15 @@ public final class SuggestionBarView extends GridLayout
 
     /** Whether the row lays the Drawer tile out: one stands, and the row is lying down. */
     private boolean drawerTileActive() {
-        return drawerTilePosition != null && !vertical;
+        return drawerTilePlace != null && !vertical;
     }
 
-    // The Command palette tile (editor-redesign wave 6): a trailing slot after the apps and the
-    // Drawer tile (PaletteTilePolicy), a tap opening the palette with the keyboard.
+    // The Command palette tile (editor-redesign wave 6): a still tile in a column of its own,
+    // the row's last until it is dragged (PaletteTilePolicy), a tap opening the palette with the
+    // keyboard.
     private boolean paletteTileOn;
+    /** Its stored column; {@link com.termux.app.dock.PaletteTilePolicy#DEFAULT_COLUMN} the last. */
+    private int paletteTileStoredColumn = com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN;
     @Nullable private Runnable paletteTileListener;
     @Nullable private View paletteTileSlot;
 
@@ -979,9 +1035,19 @@ public final class SuggestionBarView extends GridLayout
      * row's slots as {@link #setDrawerTile} does.
      */
     public void setPaletteTile(boolean on, @Nullable Runnable onTap) {
+        setPaletteTile(on, com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN, onTap);
+    }
+
+    /**
+     * {@link #setPaletteTile(boolean, Runnable)} standing in the stored {@code column} (below 0,
+     * the row's last).
+     */
+    public void setPaletteTile(boolean on, int column, @Nullable Runnable onTap) {
         paletteTileListener = onTap;
-        if (paletteTileOn == on) return;
+        int stored = Math.max(com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN, column);
+        if (paletteTileOn == on && paletteTileStoredColumn == stored) return;
         paletteTileOn = on;
+        paletteTileStoredColumn = stored;
         invalidateMostUsedCache();
         pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
         lastSurfaceRenderSignature = 0;
@@ -1030,6 +1096,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setOnClickListener(v -> {
             if (paletteTileListener != null) paletteTileListener.run();
         });
+        tile.setOnTouchListener(new DrawerTileTouch(shell, false));
         shell.addView(tile);
         slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
         return shell;
@@ -1065,6 +1132,23 @@ public final class SuggestionBarView extends GridLayout
         return com.termux.app.chrome.WallpaperInk.tileInk(tileFace,
             com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR),
             getLauncherTextColor(), tileInkTarget);
+    }
+
+    /**
+     * The still tiles' columns, {@code {drawer, palette}}, on a pinned page of {@code apps} apps
+     * lying down, -1 for a tile the row lays none: each where it is kept (the Drawer tile per
+     * layout, the palette tile globally), never one column for both.
+     */
+    @NonNull
+    private int[] tileColumns(int apps) {
+        boolean drawer = drawerTileActive();
+        boolean palette = paletteTileActive();
+        int columns = com.termux.app.dock.PaletteTilePolicy.columnCount(apps, drawer, palette);
+        return com.termux.app.dock.DrawerTilePolicy.apart(
+            drawer ? drawerTilePlace.columnIn(apps, columns) : -1,
+            palette ? com.termux.app.dock.PaletteTilePolicy.column(paletteTileStoredColumn,
+                columns) : -1,
+            columns);
     }
 
     /** How many apps a page of the row lying down holds: its slots, less the Drawer tile's. */
@@ -1124,16 +1208,28 @@ public final class SuggestionBarView extends GridLayout
     /** Whether the row on screen holds the Drawer tile (a pinned page lying down). */
     private boolean drawerTileShown() {
         return drawerTileColumn >= 0 && drawerTileSlot != null && drawerTileSlot.getParent() == this
-            && drawerTilePosition != null;
+            && drawerTilePlace != null;
+    }
+
+    /** The shown Drawer tile's column, -1 where the row on screen holds none. */
+    private int shownDrawerColumn() {
+        return drawerTileShown() ? drawerTileColumn : -1;
+    }
+
+    /** The shown palette tile's column, -1 where the row on screen holds none. */
+    private int shownPaletteColumn() {
+        return paletteTileShown() ? paletteTileColumn : -1;
     }
 
     /**
      * The column app {@code app} of a pinned page of {@code appSlots} apps stands in, and how many
-     * columns the page has, around the Drawer tile where the row shows one.
+     * columns the page has, around the still tiles where the row shows them.
      */
     private int pinnedColumnOf(int app, int appSlots) {
-        if (!drawerTileShown()) return app;
-        return com.termux.app.dock.DrawerTilePolicy.slotOf(app, drawerTilePosition, appSlots);
+        int drawer = shownDrawerColumn();
+        int palette = shownPaletteColumn();
+        if (drawer < 0 && palette < 0) return app;
+        return com.termux.app.dock.DrawerTilePolicy.slotOf(app, drawer, palette, appSlots);
     }
 
     private int pinnedColumnCount(int appSlots) {
@@ -1170,42 +1266,68 @@ public final class SuggestionBarView extends GridLayout
         tile.setOnClickListener(v -> {
             if (drawerTileListener != null) drawerTileListener.onDrawerTileTapped();
         });
-        tile.setOnTouchListener(new DrawerTileTouch(shell));
+        tile.setOnTouchListener(new DrawerTileTouch(shell, true));
         shell.addView(tile);
         slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
         return shell;
     }
-
     /**
-     * The tile's touch: a tap is the button's own click; a long press without travel picks the
-     * tile up, and from then the drag is the tile's (the row reads the gesture as a child's) until
-     * it lets go, nearest {@link com.termux.app.dock.DrawerTilePolicy#dropAt} of where its
-     * centre is across the row.
+     * A still tile's touch (the Drawer tile's, the palette tile's): a tap is the button's own
+     * click; a long press without travel picks the tile up, and from then the drag is the tile's
+     * (the row reads the gesture as a child's) until it lets go, on the column nearest its centre
+     * ({@link com.termux.app.dock.DrawerTilePolicy#dropColumn}). While it is carried the page's
+     * apps make way around that column, re-laid only when the column changes
+     * ({@link #reflowAroundCarriedTile}); a drop on the other tile's column swaps the two.
      */
     private final class DrawerTileTouch implements View.OnTouchListener {
         @NonNull private final View shell;
+        /** Whether this is the Drawer tile's touch (else the palette tile's). */
+        private final boolean drawer;
         private float downRawX;
         private float downRawY;
         private boolean pickedUp;
+        /** The column the tile is over while carried; its own at pick-up. */
+        private int target = -1;
         @Nullable private View pressed;
         private final Runnable pickUp = this::pickUp;
 
-        DrawerTileTouch(@NonNull View shell) {
+        DrawerTileTouch(@NonNull View shell, boolean drawer) {
             this.shell = shell;
+            this.drawer = drawer;
+        }
+
+        private int ownColumn() {
+            return drawer ? shownDrawerColumn() : shownPaletteColumn();
+        }
+
+        private int otherColumn() {
+            return drawer ? shownPaletteColumn() : shownDrawerColumn();
         }
 
         private void pickUp() {
-            if (pressed == null || drawerTileListener == null) return;
+            if (pressed == null || drawerTileListener == null || ownColumn() < 0) return;
             pickedUp = true;
             drawerTileDragging = true;
+            target = ownColumn();
             pressed.setPressed(false);
             pressed.cancelLongPress();
             ViewParent parent = getParent();
             if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
             Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
             shell.animate().cancel();
+            // Over the apps it passes, which make way under it.
+            shell.setTranslationZ(dp(4));
             shell.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120L)
                 .setInterpolator(new DecelerateInterpolator()).start();
+        }
+
+        /** The column the tile's centre is over now. */
+        private int columnUnder() {
+            float centre = shell.getLeft() + shell.getWidth() / 2f + shell.getTranslationX();
+            float fraction = getWidth() <= 0 ? 0.5f : centre / getWidth();
+            if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) fraction = 1f - fraction;
+            return com.termux.app.dock.DrawerTilePolicy.dropColumn(fraction,
+                Math.max(1, getColumnCount()));
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -1231,6 +1353,11 @@ public final class SuggestionBarView extends GridLayout
                     float centre = shell.getLeft() + shell.getWidth() / 2f;
                     dx = Math.max(-centre, Math.min(getWidth() - centre, dx));
                     shell.setTranslationX(dx);
+                    int over = columnUnder();
+                    if (over != target) {
+                        target = over;
+                        reflowAroundCarriedTile(drawer, over);
+                    }
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
@@ -1241,21 +1368,64 @@ public final class SuggestionBarView extends GridLayout
                     pickedUp = false;
                     drawerTileDragging = false;
                     boolean up = event.getActionMasked() == MotionEvent.ACTION_UP;
-                    float centre = shell.getLeft() + shell.getWidth() / 2f + shell.getTranslationX();
-                    float fraction = getWidth() <= 0 ? 0.5f : centre / getWidth();
-                    if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) fraction = 1f - fraction;
-                    com.termux.app.dock.DrawerTilePolicy.Position drop =
-                        com.termux.app.dock.DrawerTilePolicy.dropAt(fraction);
+                    int from = ownColumn();
+                    int drop = up ? columnUnder() : from;
+                    target = -1;
                     shell.animate().cancel();
+                    shell.setTranslationZ(0f);
                     shell.animate().scaleX(1f).scaleY(1f).translationX(0f).setDuration(140L)
                         .setInterpolator(new DecelerateInterpolator()).start();
-                    if (up && drop != drawerTilePosition && drawerTileListener != null)
-                        drawerTileListener.onDrawerTileMoved(drop);
+                    if (drop == from || from < 0 || drawerTileListener == null) {
+                        // Back where it was: the apps return to their own columns.
+                        reflowAroundCarriedTile(drawer, from);
+                        return true;
+                    }
+                    int[] moved = com.termux.app.dock.DrawerTilePolicy.dropped(drop, from,
+                        otherColumn());
+                    if (drawer) drawerTileListener.onTileColumnsMoved(moved[0], moved[1]);
+                    else drawerTileListener.onTileColumnsMoved(moved[1], moved[0]);
                     return true;
                 }
                 default:
                     return pickedUp;
             }
+        }
+    }
+
+    /**
+     * The page's apps and the other still tile eased to where they stand with the carried tile
+     * ({@code drawer}, else the palette tile) on {@code column}: the apps keep their order around
+     * the column it is over, which stands open for it, and the other tile takes the carried one's
+     * column where the drop would swap them. Called only when the column under the tile changes;
+     * {@code column} the tile's own puts everything back. Translations only: the row's layout is
+     * the stored one until a drop re-lays it.
+     */
+    private void reflowAroundCarriedTile(boolean drawer, int column) {
+        int ownDrawer = shownDrawerColumn();
+        int ownPalette = shownPaletteColumn();
+        int from = drawer ? ownDrawer : ownPalette;
+        int other = drawer ? ownPalette : ownDrawer;
+        if (from < 0) return;
+        int[] moved = com.termux.app.dock.DrawerTilePolicy.dropped(column, from, other);
+        int toDrawer = drawer ? moved[0] : moved[1];
+        int toPalette = drawer ? moved[1] : moved[0];
+        int columns = Math.max(1, getColumnCount());
+        float step = getWidth() / (float) columns
+            * (getLayoutDirection() == LAYOUT_DIRECTION_RTL ? -1f : 1f);
+        int apps = drawerTileAppSlots;
+        for (int i = 0; i < tileRowAppViews.size(); i++) {
+            View app = tileRowAppViews.get(i);
+            int was = com.termux.app.dock.DrawerTilePolicy.slotOf(i, ownDrawer, ownPalette, apps);
+            int now = com.termux.app.dock.DrawerTilePolicy.slotOf(i, toDrawer, toPalette, apps);
+            if (app == null || was < 0 || now < 0) continue;
+            app.animate().translationX((now - was) * step).setDuration(120L)
+                .setInterpolator(new DecelerateInterpolator()).start();
+        }
+        View otherTile = drawer ? paletteTileSlot : drawerTileSlot;
+        int otherTo = moved[1];
+        if (otherTile != null && other >= 0 && otherTo >= 0) {
+            otherTile.animate().translationX((otherTo - other) * step).setDuration(120L)
+                .setInterpolator(new DecelerateInterpolator()).start();
         }
     }
 
@@ -1492,7 +1662,8 @@ public final class SuggestionBarView extends GridLayout
         if (tile != null && drawerTileShown() && !drawerTileDragging
             && tile.getTranslationX() != hold) tile.setTranslationX(hold);
         View palette = paletteTileSlot;
-        if (palette != null && paletteTileShown() && palette.getTranslationX() != hold)
+        if (palette != null && paletteTileShown() && !drawerTileDragging
+            && palette.getTranslationX() != hold)
             palette.setTranslationX(hold);
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
@@ -1995,9 +2166,9 @@ public final class SuggestionBarView extends GridLayout
         this.appBarOpacity = appBarOpacity;
     }
 
-    public void setBlurConfig(boolean blurEnabled, int blurRadiusDp) {
-        this.blurEnabled = blurEnabled;
-        this.blurRadiusDp = Math.max(0, blurRadiusDp);
+    public void setBlurConfig(boolean wallpaperBlurs, int blurRadiusDp) {
+        this.wallpaperBlurs = wallpaperBlurs;
+        this.hostBlurRadiusDp = Math.max(0, blurRadiusDp);
     }
 
     /** Settings › Notifications › Badge style: a dot, or the number of notifications. */
@@ -4079,12 +4250,16 @@ public final class SuggestionBarView extends GridLayout
         drawerTileColumn = -1;
         drawerTileAppSlots = 0;
         paletteTileSlot = null;
-        // The Drawer tile, on a pinned page lying down: where it stands among the page's
-        // app slots, which keep their order around it.
-        boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePosition != null;
-        int homeAppSlots = drawerTileRow ? Math.max(1, pinnedItemsPerPage) : 0;
-        int homeColumn = drawerTileRow
-            ? com.termux.app.dock.DrawerTilePolicy.tileSlot(drawerTilePosition, homeAppSlots) : -1;
+        paletteTileColumn = -1;
+        tileRowAppViews.clear();
+        // The still tiles, on every pinned page lying down: each in its own column, the page's
+        // app slots keeping their order around them.
+        boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePlace != null;
+        boolean tileRow = drawerTileRow || (pinnedSurface && paletteTileActive());
+        int homeAppSlots = tileRow ? Math.max(1, pinnedItemsPerPage) : 0;
+        int[] stillColumns = tileRow ? tileColumns(homeAppSlots) : new int[] {-1, -1};
+        int homeColumn = drawerTileRow ? stillColumns[0] : -1;
+        int paletteHomeColumn = tileRow ? stillColumns[1] : -1;
         clearAzFocusedEntry();
         clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
@@ -4118,9 +4293,9 @@ public final class SuggestionBarView extends GridLayout
             View view = createEntryButton(entry);
             int renderCol = azPreview && azPriorityColumns != null
                 ? azPriorityColumns[col]
-                : drawerTileRow
-                    ? com.termux.app.dock.DrawerTilePolicy.slotOf(col, drawerTilePosition,
-                        homeAppSlots)
+                : tileRow
+                    ? com.termux.app.dock.DrawerTilePolicy.slotOf(col, homeColumn,
+                        paletteHomeColumn, homeAppSlots)
                     : (renderStartCol + col);
             LayoutParams param = createSlotParams(renderCol);
             view.setLayoutParams(param);
@@ -4166,10 +4341,12 @@ public final class SuggestionBarView extends GridLayout
             }
 
             addView(view);
+            if (tileRow && !azPreview) tileRowAppViews.add(view);
             if (renderCol >= 0 && renderCol < usedColumns.length) {
                 usedColumns[renderCol] = true;
             }
         }
+        if (tileRow) drawerTileAppSlots = homeAppSlots;
 
         if (drawerTileRow && homeColumn >= 0 && homeColumn < buttonCount) {
             View tile = createDrawerTileButton();
@@ -4178,18 +4355,17 @@ public final class SuggestionBarView extends GridLayout
             usedColumns[homeColumn] = true;
             drawerTileSlot = tile;
             drawerTileColumn = homeColumn;
-            drawerTileAppSlots = homeAppSlots;
         }
 
         if (pinnedSurface && paletteTileActive()) {
-            int paletteColumn = com.termux.app.dock.PaletteTilePolicy.column(
-                Math.max(1, pinnedItemsPerPage), drawerTileRow);
-            if (paletteColumn < buttonCount) {
+            int paletteColumn = paletteHomeColumn;
+            if (paletteColumn >= 0 && paletteColumn < buttonCount) {
                 View tile = createPaletteTileButton();
                 tile.setLayoutParams(createSlotParams(paletteColumn));
                 addView(tile);
                 usedColumns[paletteColumn] = true;
                 paletteTileSlot = tile;
+                paletteTileColumn = paletteColumn;
             }
         }
 
@@ -4459,9 +4635,9 @@ public final class SuggestionBarView extends GridLayout
         // The icon the dock handed over, which outranks the hint whenever it is set.
         signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
-        // Where the Drawer tile stands moves every slot after it.
-        signature = (31 * signature) + (drawerTileActive() ? drawerTilePosition.ordinal() + 1 : 0);
-        signature = (31 * signature) + (paletteTileActive() ? 1 : 0);
+        // Where the still tiles stand moves every slot after them.
+        signature = (31 * signature) + (drawerTileActive() ? drawerTilePlace.hashCode() + 1 : 0);
+        signature = (31 * signature) + (paletteTileActive() ? paletteTileStoredColumn + 2 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
         signature = (31 * signature) + lastInput.trim().hashCode();
@@ -7968,9 +8144,11 @@ public final class SuggestionBarView extends GridLayout
     /** The slot a drop at {@code localX} along the row lands on, from the page as drawn. */
     @NonNull
     private DropSlot dropSlotAt(float localX) {
-        boolean drawerTile = drawerTileShown();
-        int tail = paletteTileShown() ? 1 : 0;
-        int slotCount = drawerTile ? drawerTileAppSlots + 1 + tail : Math.max(1, maxButtonCount);
+        int drawerColumn = shownDrawerColumn();
+        int paletteColumn = shownPaletteColumn();
+        boolean tiles = drawerColumn >= 0 || paletteColumn >= 0;
+        int slotCount = tiles
+            ? pinnedColumnCount(drawerTileAppSlots) : Math.max(1, maxButtonCount);
         float width = Math.max(1f, getWidth());
         float x = Math.max(0f, Math.min(width, localX));
         float slotWidth = width / slotCount;
@@ -7978,21 +8156,21 @@ public final class SuggestionBarView extends GridLayout
         float slotStartX = hoveredSlot * slotWidth;
         float dropXRatio = slotWidth <= 0f ? 0.5f
             : Math.max(0f, Math.min(1f, (x - slotStartX) / slotWidth));
-        if (tail > 0 && hoveredSlot >= slotCount - tail) {
-            // The palette tile takes no drop: it lands on the last app's slot, after it.
-            hoveredSlot = Math.max(0, slotCount - tail - 1);
-            dropXRatio = 1f;
-        }
-        if (drawerTile) {
-            // Columns around the Drawer tile hold the page's apps in order; a drop on the tile
-            // itself lands beside it, on the side the finger is, or the other where none is.
-            int app = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot,
-                drawerTilePosition, drawerTileAppSlots);
+        if (tiles) {
+            // Columns around the still tiles hold the page's apps in order; a drop on a tile
+            // itself lands beside the nearest app, on the side the finger is, or the other where
+            // none is.
+            int app = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot, drawerColumn,
+                paletteColumn, drawerTileAppSlots);
             if (app < 0) {
-                int after = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot + 1,
-                    drawerTilePosition, drawerTileAppSlots);
-                int before = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot - 1,
-                    drawerTilePosition, drawerTileAppSlots);
+                int after = -1;
+                for (int c = hoveredSlot + 1; c < slotCount && after < 0; c++)
+                    after = com.termux.app.dock.DrawerTilePolicy.appAt(c, drawerColumn,
+                        paletteColumn, drawerTileAppSlots);
+                int before = -1;
+                for (int c = hoveredSlot - 1; c >= 0 && before < 0; c--)
+                    before = com.termux.app.dock.DrawerTilePolicy.appAt(c, drawerColumn,
+                        paletteColumn, drawerTileAppSlots);
                 boolean right = (dropXRatio >= 0.5f && after >= 0) || before < 0;
                 app = Math.max(0, right ? after : before);
                 dropXRatio = right ? 0f : 1f;

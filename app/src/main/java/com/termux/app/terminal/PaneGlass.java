@@ -144,15 +144,31 @@ public final class PaneGlass {
         // gradient rim here as well would put two borders on a lone pane.
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
-        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
-        // what that tint covers.
-        com.termux.app.chrome.GlassRefraction.Look refraction = style.paneGlassRefraction();
-        backdrop.setRefraction(refraction == null ? null
-            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
+        applyEdgeLight(style, frame, backdrop);
         backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
+        // The slab answers for this pane now; the bare frame's answer would count it twice.
+        if (terminalPane && style != null) style.paneGlassForget(frame);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /**
+     * The slab's refraction, and with it the gathered light along its edge, for {@code frame}: the
+     * style's while the edge shows, none while a terminal effect's bezel stands over it. Under the
+     * bezel the bend is hidden anyway, and the light along the outline leaks past the bezel's
+     * anti-aliased edge as a thin bright ring round the solid frame. The frost and tint inside the
+     * screen are drawn either way. Called by {@link #apply} and again when the effect comes or goes.
+     */
+    public static void applyEdgeLight(@NonNull PaneSurfaceStyle style, @NonNull View frame,
+                                      @NonNull PaneGlassBackdropView backdrop) {
+        boolean bezel = frame instanceof PaneContentFrame && ((PaneContentFrame) frame).bezelWorn();
+        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
+        // what that tint covers.
+        com.termux.app.chrome.GlassRefraction.Look refraction =
+            bezel ? null : style.paneGlassRefraction();
+        backdrop.setRefraction(refraction == null ? null
+            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
     }
 
     /** Scratch for {@link #measureBarePane}; main thread only, as every dress pass is. */
@@ -173,8 +189,23 @@ public final class PaneGlass {
             sBareRootLocation);
         sBareRect.set(sBareLocation[0], sBareLocation[1],
             sBareLocation[0] + frame.getWidth(), sBareLocation[1] + frame.getHeight());
-        style.paneGlassVeil(sBareRect);
+        style.paneGlassVeil(sBareRect, frame);
+        if (sForgetWired.put(frame, Boolean.TRUE) == null) {
+            frame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(@NonNull View v) {
+                    style.paneGlassPark(v, false);
+                }
+
+                @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                    style.paneGlassPark(v, true);
+                }
+            });
+        }
     }
+
+    /** Bare frames already watching for their detach, so each is wired once. */
+    private static final java.util.WeakHashMap<View, Boolean> sForgetWired =
+        new java.util.WeakHashMap<>();
 
     /**
      * {@code foreground} as the terminal renderer draws faint (SGR 2) text: each channel at two
@@ -197,12 +228,18 @@ public final class PaneGlass {
      * frost refresh or a new look reaches the tab in the same pass as the slab.
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
-                                @Nullable com.termux.app.wall.PaneControlsView tab) {
+                                @Nullable com.termux.app.wall.PaneControlsView tab,
+                                int pageId) {
         if (tab == null) return;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain());
+        // The window tab is a transient control over the pane (a Home float's too): the Sheets
+        // element's grain (ADR 0017), not the dock's.
+        tab.setGrainPercent(preferences == null ? 0 : preferences.getSurfaceValue(
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot.SHEETS,
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty.GRAIN,
+            pageId));
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;

@@ -165,6 +165,8 @@ public final class DockLayoutPolicy {
         public final boolean appsRowOnEdge;
         /** Of those, the ones that stand as a column on a side edge: the rail. */
         public final boolean appsOnRail;
+        /** The rail's icon, dp; 0 for the rail's own {@link #DOCK_RAIL_ICON_SIZE_DP}. */
+        public final float railIconDp;
         /**
          * The row shares its container with nothing else — the only dock row on the bottom edge, or
          * the only bar on its plank off the dock, which a rail always is. The extra keys beside it
@@ -198,6 +200,19 @@ public final class DockLayoutPolicy {
         public final float barHeightScale;
         /** Configured dock horizontal inset in dp, before clamping. */
         public final int dockHorizontalInsetDp;
+        /**
+         * The one icon size in dp (ADR 0020 §3), or 0 for the old height-scale curves. When set,
+         * the pinned row draws exactly this icon on every design and style, its band grows
+         * around it, and no slot fit shrinks it.
+         */
+        public final float iconDp;
+        /** The least distance in dp from the screen edge to the row's first slot (spec §8a). */
+        public final float minSideInsetDp;
+        /**
+         * Nonzero: the row holds as many slots as the Home grid has columns, and stands in by
+         * this inset (the grid's side margin, dp) so its icons sit on the grid's column centres.
+         */
+        public final float alignToGridDp;
         /** Configured dock corner radius in dp, negative for the follow-the-style radius. */
         public final int configuredCornerRadiusDp;
         /** Row switches as resolved for the place, before the edge gate. */
@@ -285,6 +300,7 @@ public final class DockLayoutPolicy {
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
             this.appsOnRail = b.appsOnRail;
+            this.railIconDp = b.railIconDp;
             this.appsRowAlone = b.appsRowAlone;
             this.appsRowNextToCanvas = b.appsRowNextToCanvas;
             this.appsRowPageStripShown = b.appsRowPageStripShown;
@@ -292,6 +308,9 @@ public final class DockLayoutPolicy {
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
+            this.iconDp = b.iconDp;
+            this.minSideInsetDp = b.minSideInsetDp;
+            this.alignToGridDp = b.alignToGridDp;
             this.configuredCornerRadiusDp = b.configuredCornerRadiusDp;
             this.appsRowEnabledPref = b.appsRowEnabledPref;
             this.azRowEnabledPref = b.azRowEnabledPref;
@@ -313,6 +332,7 @@ public final class DockLayoutPolicy {
             private boolean capsule;
             private boolean appsRowOnEdge;
             private boolean appsOnRail;
+            private float railIconDp;
             private boolean appsRowAlone;
             private boolean appsRowNextToCanvas;
             // Every row that lies down carries the ticks' band, whether or not it has a second
@@ -323,6 +343,9 @@ public final class DockLayoutPolicy {
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
+            private float iconDp;
+            private float minSideInsetDp;
+            private float alignToGridDp;
             private int configuredCornerRadiusDp =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
             private boolean appsRowEnabledPref;
@@ -376,6 +399,8 @@ public final class DockLayoutPolicy {
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
+            /** The rail's icon, dp; 0 keeps {@link #DOCK_RAIL_ICON_SIZE_DP}. */
+            public Builder railIconDp(float v) { this.railIconDp = v; return this; }
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
             public Builder appsRowNextToCanvas(boolean v) { this.appsRowNextToCanvas = v; return this; }
             public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
@@ -383,6 +408,9 @@ public final class DockLayoutPolicy {
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
+            public Builder iconDp(float v) { this.iconDp = v; return this; }
+            public Builder minSideInsetDp(float v) { this.minSideInsetDp = v; return this; }
+            public Builder alignToGridDp(float v) { this.alignToGridDp = v; return this; }
             public Builder configuredCornerRadiusDp(int v) { this.configuredCornerRadiusDp = v; return this; }
             public Builder appsRowEnabledPref(boolean v) { this.appsRowEnabledPref = v; return this; }
             public Builder azRowEnabledPref(boolean v) { this.azRowEnabledPref = v; return this; }
@@ -428,7 +456,10 @@ public final class DockLayoutPolicy {
 
         // Vertical paddings. Exactly preserves the previous top (6dp + 7dp*progress) plus a 1dp
         // bottom budget; without a preference store the padding sits at the full-progress value.
-        float paddingProgress = in.preferencesAvailable ? sizeProgress : 1f;
+        // With the one icon size (ADR 0020 §3) the capsule's padding follows the icon step, S to XL,
+        // not the retired dock height, so the capsule grows with its icon.
+        float paddingProgress = !in.preferencesAvailable ? 1f
+            : in.iconDp > 0f ? iconStepProgress(in.iconDp) : sizeProgress;
         int capsuleTotalPadding = capsuleTotalPaddingPx(paddingProgress, density);
         out.capsuleAppsTotalPaddingPx = capsuleTotalPadding;
         // Top space equals bottom padding plus the 3dp icon/A-Z indicator band. Together with the
@@ -503,6 +534,10 @@ public final class DockLayoutPolicy {
             out.appsRowIconPx = in.appsRowEnabledPref
                 ? rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density)
                 : hiddenRowIconPx(in, density);
+            // The one icon size: the same icon on every design and style, with no scale limit
+            // between it and the row (ADR 0020 §3); the band below grows around it.
+            if (in.iconDp > 0f && in.appsRowEnabledPref)
+                out.appsRowIconPx = Math.round(in.iconDp * density);
             // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
             // air either side of it, and nothing else. The dock's own height is that band while
             // the row is the dock's; a row standing along the top is the same band in another
@@ -592,16 +627,18 @@ public final class DockLayoutPolicy {
         // air either side of it, mirrored onto this axis (not the larger of the two, which left the
         // icons hard against the display edge). The floor is a column still worth aiming a thumb
         // at, which is what the air alone no longer guarantees.
+        int railIconPx = in.railIconDp > 0f ? Math.round(density * in.railIconDp)
+            : railIconSizePx(density);
         out.railWidthPx = out.railEdgeInsetPx
             + Math.max(Math.round(density * DOCK_RAIL_MIN_WIDTH_DP),
-                railIconSizePx(density) + 2 * loneAirPx);
+                railIconPx + 2 * loneAirPx);
 
         // The rail's own axis, so the vertical form of the pinned-apps row and the column it
         // stands in are sized from one place rather than each measuring its own icons.
         out.railBandPx = Math.max(0, out.railWidthPx - out.railEdgeInsetPx);
-        out.railIconSizePx = railIconSizePx(density);
+        out.railIconSizePx = railIconPx;
         out.railIconSpacingPx = railIconSpacingPx(density);
-        out.railSlotLengthPx = railSlotLengthPx(density);
+        out.railSlotLengthPx = railIconPx + 2 * out.railIconSpacingPx;
         // The rail is a lone row standing up: its own air on all four sides.
         out.railAirPx = loneAirPx;
 
@@ -619,6 +656,7 @@ public final class DockLayoutPolicy {
             out.peekRowSideInsetPx = PeekGlassGeometry.rowSideInsetPx(in.rowWidthPx, density);
             out.appsRowEdgeInsetPx = Math.max(out.appsRowEdgeInsetPx, out.peekRowSideInsetPx);
         }
+        if (!in.appsRowOnEdge) out.appsRowEdgeInsetPx = sideInsetPx(in, out, capsule, density);
         if (railActive) {
             out.slotIconPx = out.railIconSizePx;
         } else if (in.preferencesAvailable && !in.appsRowEnabledPref
@@ -628,8 +666,12 @@ public final class DockLayoutPolicy {
         } else {
             out.appsRowUsableWidthPx = in.rowWidthPx > 0
                 ? Math.max(0, in.rowWidthPx - 2 * out.appsRowEdgeInsetPx) : 0;
-            out.slotIconPx = slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
-                in.slotCount, in.surface.beads, density);
+            out.slotIconPx = in.iconDp > 0f
+                ? out.appsRowIconPx
+                : slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
+                    in.slotCount, in.surface.beads, density);
+            out.iconsOverflow = in.iconDp > 0f
+                && overflows(out.slotIconPx, out.appsRowUsableWidthPx, in.slotCount, density);
         }
 
         // The bar's own geometry owns this number in one place, for every edge and both styles;
@@ -855,6 +897,56 @@ public final class DockLayoutPolicy {
             return iconPx;
         int slotPx = rowWidthPx / Math.max(1, slotCount);
         return Math.max(1, Math.min(iconPx, slotPx - loneRowAirPx(density)));
+    }
+
+    /** Where {@code iconDp} stands between the smallest and the largest icon step, 0 to 1. */
+    static float iconStepProgress(float iconDp) {
+        float s = com.termux.app.place.layout.IconSize.S.dp;
+        float xl = com.termux.app.place.layout.IconSize.XL.dp;
+        return Math.max(0f, Math.min(1f, (iconDp - s) / (xl - s)));
+    }
+
+    /** The least gap between two pinned icons of the one icon size (spec §8a). */
+    public static final float MIN_ICON_GAP_DP = 4f;
+    /** The least side inset of a Docked (full-width) dock, from the screen edge (spec §8a). */
+    public static final float DOCKED_MIN_SIDE_INSET_DP = 16f;
+
+    /**
+     * The row's side inset under the spec §8a rule: the design's own, but never less than the
+     * least inset from the screen edge; on the grid's margin when the row holds as many slots as
+     * the grid has columns. A Floating capsule's own inset already stands between the screen
+     * edge and the row, so it counts toward the least.
+     */
+    private static int sideInsetPx(DockInputs in, DockLayout.Builder out, boolean capsule,
+                                   float density) {
+        // The row is not inside the capsule's glass: it stands in the row stack beside it, as
+        // wide as the screen, and the view applies this inset from the screen edge
+        // (DockLayout#appsRowSideInsetPx, TermuxActivity#applyDockRowHorizontalInsets). So nothing
+        // of the capsule's own margin counts toward the least.
+        int fromEdge = 0;
+        int least = Math.max(0, Math.round(in.minSideInsetDp * density) - fromEdge);
+        // On the grid's column centres: the grid shares its width less the gaps between its
+        // columns, so its column pitch is a column and a gap; slots of that pitch start half a
+        // gap outside the grid's margin (WidgetGridMetrics.GAP_DP). The icon, centred in its
+        // slot, still stands well inside the margin.
+        if (in.alignToGridDp > 0f)
+            return Math.max(0, Math.round(in.alignToGridDp * density)
+                - Math.round(com.termux.app.launcher.widget.WidgetGridMetrics.GAP_DP * density) / 2
+                - fromEdge);
+        return Math.max(out.appsRowEdgeInsetPx, least);
+    }
+
+    /**
+     * Whether {@code slotCount} icons of {@code iconPx} cannot stand in {@code usableWidthPx}
+     * with the least gap between them: the row shares its width evenly between its slots, each
+     * icon centred in its own, so two neighbours stand one slot less one icon apart. A slot
+     * narrower than the icon and that gap would clip or crowd it. Such a row is reported, never
+     * overflowed.
+     */
+    public static boolean overflows(int iconPx, int usableWidthPx, int slotCount, float density) {
+        if (usableWidthPx <= 0 || slotCount <= 0) return false;
+        int gapPx = Math.round(MIN_ICON_GAP_DP * Math.max(0f, density));
+        return usableWidthPx / slotCount - iconPx < gapPx;
     }
 
     /**

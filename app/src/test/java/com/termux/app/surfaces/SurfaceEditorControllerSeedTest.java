@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -48,6 +49,7 @@ public class SurfaceEditorControllerSeedTest {
         store = context.getSharedPreferences("surface-editor-seed-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         clear = AppearanceLooks.presetForStop(SurfacePresets.presets(), 0);
         mist = AppearanceLooks.presetForStop(SurfacePresets.presets(), 1);
         assertNotNull(clear);
@@ -79,7 +81,7 @@ public class SurfaceEditorControllerSeedTest {
         session.enter(preferences);
 
         assertEquals(tweaked, AppearanceSnapshot.signatureOf(preferences));
-        assertEquals(TWEAKED_BLUR, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
 
     @Test
@@ -167,7 +169,7 @@ public class SurfaceEditorControllerSeedTest {
         SurfacePresets.apply(preferences, mist);
         session.enter(preferences);
 
-        assertEquals(TWEAKED_BLUR, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
 
     private void tweak() {
@@ -176,20 +178,9 @@ public class SurfaceEditorControllerSeedTest {
             TWEAKED_DOCK_OPACITY);
     }
 
-    @Test
-    public void aScreenCardsFrostWritesItsOwnHalfOnly() {
-        TermuxAppSharedPreferences.WallHalf home = TermuxAppSharedPreferences.WallHalf.HOME;
-        TermuxAppSharedPreferences.WallHalf workspace =
-            TermuxAppSharedPreferences.WallHalf.WORKSPACE;
-        preferences.setSurfaceGlassPosition(null, 33);
-        int otherBlur = preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home);
-        int otherGrain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home);
-        SurfaceEditorController.writeScreenFrost(preferences, workspace, 90);
-        assertEquals("the shared position is the Appearance card's", 33,
-            preferences.getSurfaceGlassPosition(null));
-        assertEquals(otherBlur, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home));
-        assertEquals(otherGrain, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home));
-        assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, workspace));
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

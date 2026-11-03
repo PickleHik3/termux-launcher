@@ -2,7 +2,7 @@ package com.termux.app.place;
 
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockGeometry.Half;
-import com.termux.app.dock.DockGeometry.Side;
+import com.termux.app.wall.PageRef;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
@@ -62,7 +62,7 @@ public class StackLayoutTest {
     /** The Workspace at rest, a window with its extra keys row. */
     private static StackLayout.Input window(boolean keyboardShown) {
         Snapshot s = device(half(HOME, false), half(WINDOW, false))
-            .rows(Side.WORKSPACE).arrangement(WINDOW).build();
+            .rows(PageRef.TERMINAL).arrangement(WINDOW).build();
         StackLayout.Input in = new StackLayout.Input(s);
         in.toolbarShown = true;
         in.extraKeysRowEnabled = true;
@@ -285,7 +285,7 @@ public class StackLayoutTest {
 
     // ---- a half's rest, and a window not shown during a slide ----
 
-    private static StackLayout.RestInput rest(Snapshot s, Side side) {
+    private static StackLayout.RestInput rest(Snapshot s, PageRef side) {
         StackLayout.RestInput in = new StackLayout.RestInput(s, side);
         in.toolbarShown = true;
         in.extraKeysRowEnabled = true;
@@ -296,8 +296,8 @@ public class StackLayoutTest {
     }
 
     /** The two halves, Home carrying a Search field, committed to {@code committed}. */
-    private static Snapshot committedTo(Side committed, float fieldReveal) {
-        PlaceLayout arrangement = committed == Side.HOME ? HOME : WINDOW;
+    private static Snapshot committedTo(PageRef committed, float fieldReveal) {
+        PlaceLayout arrangement = committed == PageRef.HOME ? HOME : WINDOW;
         return device(half(HOME, true), half(WINDOW, false))
             .rows(committed).arrangement(arrangement).fieldReveal(fieldReveal).build();
     }
@@ -305,21 +305,21 @@ public class StackLayoutTest {
     @Test
     public void aHalfWithASearchFieldRestsTheSameWhicheverHalfIsCommitted() {
         // The live field ease is the committed half's: 1 on Home, 0 in the window.
-        int measuredFromTheWindow = StackLayout.restDockRowsPx(committedTo(Side.WORKSPACE, 0f),
-            Side.HOME);
-        int measuredFromHome = StackLayout.restDockRowsPx(committedTo(Side.HOME, 1f), Side.HOME);
+        int measuredFromTheWindow = StackLayout.restDockRowsPx(committedTo(PageRef.TERMINAL, 0f),
+            PageRef.HOME);
+        int measuredFromHome = StackLayout.restDockRowsPx(committedTo(PageRef.HOME, 1f), PageRef.HOME);
         assertEquals(measuredFromHome, measuredFromTheWindow);
         // The field is part of that rest: the same half without it is shorter.
         Snapshot noField = device(half(HOME, false), half(WINDOW, false))
-            .rows(Side.WORKSPACE).arrangement(WINDOW).build();
-        assertTrue(measuredFromHome > StackLayout.restDockRowsPx(noField, Side.HOME));
+            .rows(PageRef.TERMINAL).arrangement(WINDOW).build();
+        assertTrue(measuredFromHome > StackLayout.restDockRowsPx(noField, PageRef.HOME));
     }
 
     @Test
     public void theWindowRestsTheSameWhileHomeIsCommittedWithItsFieldUp() {
-        int fromWindow = StackLayout.restDockRowsPx(committedTo(Side.WORKSPACE, 0f),
-            Side.WORKSPACE);
-        int fromHome = StackLayout.restDockRowsPx(committedTo(Side.HOME, 1f), Side.WORKSPACE);
+        int fromWindow = StackLayout.restDockRowsPx(committedTo(PageRef.TERMINAL, 0f),
+            PageRef.TERMINAL);
+        int fromHome = StackLayout.restDockRowsPx(committedTo(PageRef.HOME, 1f), PageRef.TERMINAL);
         assertEquals("a window the slide does not show has no field under it", fromWindow,
             fromHome);
     }
@@ -329,13 +329,13 @@ public class StackLayoutTest {
      * with its bar along the top, committed to {@code committed}: the two halves differ in Style,
      * field and status band, so a rest read off the half on screen comes out wrong.
      */
-    private static Snapshot apartCommittedTo(Side committed) {
+    private static Snapshot apartCommittedTo(PageRef committed) {
         Half home = Half.builder(HOME_STATUS_BOTTOM).floating(true).dockHeightScale(1.95f)
             .design(DockStyle.GLASS_TRAY).searchField(true).build();
         Half window = half(WINDOW, false);
         return device(home, window).rows(committed)
-            .arrangement(committed == Side.HOME ? HOME_STATUS_BOTTOM : WINDOW)
-            .fieldReveal(committed == Side.HOME ? 1f : 0f).build();
+            .arrangement(committed == PageRef.HOME ? HOME_STATUS_BOTTOM : WINDOW)
+            .fieldReveal(committed == PageRef.HOME ? 1f : 0f).build();
     }
 
     /** A status bar's band in a Style: thicker Floating, so a Style mixed up shows. */
@@ -346,8 +346,8 @@ public class StackLayoutTest {
         // The pane gap: the window's room was read off the stack Home's rows made, 213 px short,
         // in Home's Style (Floating keeps the edge gap under the stack, Docked none) and with
         // Home's status band.
-        StackLayout.RestInput shown = rest(apartCommittedTo(Side.WORKSPACE), Side.WORKSPACE);
-        StackLayout.RestInput notShown = rest(apartCommittedTo(Side.HOME), Side.WORKSPACE);
+        StackLayout.RestInput shown = rest(apartCommittedTo(PageRef.TERMINAL), PageRef.TERMINAL);
+        StackLayout.RestInput notShown = rest(apartCommittedTo(PageRef.HOME), PageRef.TERMINAL);
         shown.statusBand = STATUS_BAND;
         notShown.statusBand = STATUS_BAND;
         // The window as a pass lays it out at rest: Docked, no status band on the stack.
@@ -371,17 +371,17 @@ public class StackLayoutTest {
         Half home = Half.builder(HOME).floating(true).dockHeightScale(1.95f)
             .design(DockStyle.GLASS_TRAY).build();
         Half window = half(WINDOW_STATUS_BOTTOM, false);
-        Snapshot fromHome = device(home, window).rows(Side.HOME).arrangement(HOME).build();
-        StackLayout.RestInput barred = rest(fromHome, Side.WORKSPACE);
+        Snapshot fromHome = device(home, window).rows(PageRef.HOME).arrangement(HOME).build();
+        StackLayout.RestInput barred = rest(fromHome, PageRef.TERMINAL);
         barred.statusBand = STATUS_BAND;
-        StackLayout.RestInput bare = rest(fromHome, Side.WORKSPACE);
+        StackLayout.RestInput bare = rest(fromHome, PageRef.TERMINAL);
         assertEquals("the window's band in its own Style, Docked", 47,
             StackLayout.restReservationPx(barred) - StackLayout.restReservationPx(bare));
     }
 
     @Test
     public void aRestReservationIsTheStackAPassLaysOutAtRest() {
-        StackLayout.RestInput in = rest(committedTo(Side.WORKSPACE, 0f), Side.WORKSPACE);
+        StackLayout.RestInput in = rest(committedTo(PageRef.TERMINAL, 0f), PageRef.TERMINAL);
         StackLayout.Result laid = run(window(false));
         assertEquals(laid.contentReservationPx, StackLayout.restReservationPx(in));
         in.keyboardShown = true;
@@ -391,7 +391,7 @@ public class StackLayoutTest {
     @Test
     public void homesChromeTakesNoRoomAtRest() {
         assertEquals(0, StackLayout.restReservationPx(
-            rest(committedTo(Side.HOME, 1f), Side.HOME)));
+            rest(committedTo(PageRef.HOME, 1f), PageRef.HOME)));
     }
 
     // ---- the Peek glass card under Floating (DockPlacement) ----
@@ -400,7 +400,7 @@ public class StackLayoutTest {
     private static Snapshot homeIn(DockStyle design, boolean floating, boolean searchField) {
         Half home = Half.builder(HOME).floating(floating).dockHeightScale(1.95f)
             .design(design).searchField(searchField).build();
-        return device(home, half(WINDOW, false)).rows(Side.HOME).arrangement(HOME)
+        return device(home, half(WINDOW, false)).rows(PageRef.HOME).arrangement(HOME)
             .fieldReveal(searchField ? 1f : 0f).build();
     }
 
@@ -436,7 +436,20 @@ public class StackLayoutTest {
         Snapshot peek = homeIn(DockStyle.PEEK_GLASS, true, false);
         StackLayout.Result tray = run(home(homeIn(DockStyle.GLASS_TRAY, true, false), false, 0));
         int gap = tray.stackEdgeGapPx;
-        assertEquals("the keyboard up", gap, run(home(peek, true, 0)).stackEdgeGapPx);
+        // D11 (ADR 0018 §4): on Home the keyboard no longer refuses the card; it stands on the
+        // keyboard, flush, and Floating's gap goes. The Workspace's tray keeps it (below).
+        assertEquals("the keyboard up on Home: the card stands on it", 0,
+            run(home(peek, true, 0)).stackEdgeGapPx);
+        // The Workspace in Peek, Floating, keyboard up: the card does not stand, the gap stays.
+        Half workspacePeek = Half.builder(WINDOW).floating(true).dockHeightScale(1.95f)
+            .design(DockStyle.PEEK_GLASS).build();
+        StackLayout.Input workspace = new StackLayout.Input(device(half(HOME, false),
+            workspacePeek).rows(PageRef.TERMINAL).arrangement(WINDOW).build());
+        workspace.toolbarShown = true;
+        workspace.keyboardShown = true;
+        workspace.keyboardHeightPx = KEYBOARD;
+        assertTrue("the keyboard up on the Workspace keeps Floating's gap",
+            run(workspace).stackEdgeGapPx > 0);
         StackLayout.Result lifted = run(home(peek, false, LIFT));
         assertEquals("lifted over the system keyboard", gap, lifted.stackEdgeGapPx);
         assertEquals(gap + LIFT, lifted.bottomMarginPx);
@@ -460,9 +473,9 @@ public class StackLayoutTest {
     @Test
     public void aFloatingPeekHalfRestsAsAPassLaysItOut() {
         Snapshot s = homeIn(DockStyle.PEEK_GLASS, true, false);
-        DockLayout rest = DockGeometry.compute(s.restOf(Side.HOME));
+        DockLayout rest = DockGeometry.compute(s.restOf(PageRef.HOME));
         for (boolean keyboardShown : new boolean[] {false, true}) {
-            StackLayout.RestInput in = new StackLayout.RestInput(s, Side.HOME);
+            StackLayout.RestInput in = new StackLayout.RestInput(s, PageRef.HOME);
             in.toolbarShown = true;
             in.keyboardShown = keyboardShown;
             in.keyboardHeightPx = keyboardShown ? KEYBOARD : 0;

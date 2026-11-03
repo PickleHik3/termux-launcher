@@ -10,6 +10,13 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Editor sliders (2026-10-31)
+- 2026-10-31 · horizontal slider rows (ef0f80ede) · on pong, the thumb on a card's slider: a
+  sideways drag takes the slider at once and never scrolls the card; an up or down swipe that
+  starts on a track scrolls the card or moves the sheet and leaves the value alone; a tap jumps
+  the handle there; the row's two-line layout reads right (or say to put the track on the name
+  line, `SliderRow.TWO_LINES`) · pong.
+
 ## Not drivable over adb (pong checker, 2026-10-26)
 - 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
   never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints
@@ -299,3 +306,23 @@ cut the developer works this list or accepts what is left (recorded as in
 ## Fix batch (2026-10-26 night)
 - 2026-10-26 · f8b7497f9 · The slimmer A–Z Pull tab (about 15 dp) is still easy to grab with a thumb · pong.
 - 2026-10-26 · 898eaa163 · Holding Backspace or a key's edge no longer repeats; is the 4 dp band the right size in the hand? · pong.
+
+## Look grid, editor redesign, landing and sound (2026-10-30/31)
+- 2026-10-31 · 7ad038290 · Home → Terminal with the keyboard up: no soft frame at the landing. The log shows one resize per crossing on pong; the frames at `~/reports/device-checks-2026-10-31/05-frames-h2t/sheet.png` look clean, but the eye decides · pong.
+- 2026-10-31 · c579644da · Launcher vibration off (Settings › General): no tick from the page overview, the strip row, the bars list or the window bar · pong; `dumpsys vibrator_manager` cannot tell which touch vibrated.
+- 2026-10-31 · 2760842ad.. · the editor's springs: the card swap Dock → Status bar (fade out and back, rows rising a little), the sheet's detent moves, the editor's enter and exit, Reset this row's overshoot, Reset card's rows one after another, the wallpaper page's rise and fall (watch for a flash at the end of the fall) · pong; frames at `~/reports/device-checks-2026-10-31/09-swap/sheet.png` and `17-open-editor-frames/sheet.png`.
+- 2026-10-31 · 2760842ad.. · "Reset this row" is reached by a long-press on a row's name; on pong the checker's long-press on the name moved the slider instead, and a hold higher up opened the What chip's popup. Is the name a big enough target with a thumb? · pong.
+- 2026-10-31 · a04acf498 · the terminal More sheet and Home's long-press card both wrap long labels onto two lines at pong's width ("Command palette", "Share transcript", "Kill process (8944)", "Launcher settings"): keep, shorten the labels, or drop to one column · pong, taste; shots `02-terminal-more-sheet.png`, `20-home-longpress-card.png`.
+- 2026-10-31 · 0f2cf4a04 · a sound longer than the 3 s grace (the checker's 5 s clip) ducks the music for 3 s and then pauses it, and VLC does not resume afterwards (its own choice on a permanent loss). Is 3 s the right grace, and should a short-sound stream ever be promoted? · pong, policy.
+- 2026-10-31 · f2b4cc385 · Home → Terminal swipe: Home's dock rides out with its page (gone at 0.43 s), the band under the arriving terminal stays empty until the landing (0.89 s), then the strip row and keyboard rise over about 0.16 s. One resize, invariants clean (pong, `~/reports/device-checks-2026-10-31/29-swipe2-dock-frames.png`). Does the half-second empty band before the rise read as a pause? If so, the rise could start on the settle's last stretch instead of at the landing. Also: a swipe turned back before landing, and Terminal → Home, by hand · pong.
+
+## AI low-memory retry (2026-11-01)
+- 2026-11-01 · 1ac2f4ef6 (#191 follow-up) · a GPU load that Android's low-memory killer ends
+  (503 `tai_runtime_crashed`, `exitReason: "low_memory"`) is tried again by the next automatic
+  load five minutes later at the full window, with `memoryBudget.retriedAfterLowMemory: true`;
+  within the five minutes an automatic load reports the GPU skipped for memory and loads on CPU.
+  Only a real kill shows it: the Saga reporter on #191 is the device, or pong with memory filled
+  by other apps during a cold GPU load · pong or the reporter's reply on #191.
+
+## Editor motion (2026-10-31, moved from device-checks.md)
+- 2026-10-31 · look grid W2/W3 editor springs · on pong, by eye: a card swap (dock, then the status bar) fades the title, glyph, chips and rows out and back relabelled with the rows rising a little and the ring flying from one to the other, the sheet staying at half; opening the editor drops the bar in and the Appearance ring grows to stand 4dp out round the whole frame, not clipped; changing page with a card up fades the ring out and back in on the new page's surface once it lands; the Wallpaper page rises over the card and falls on Back with no flash at the end and the card at its old detent, Done closing both in one reveal; Reset this row springs the slider with a small overshoot and fades the dot, Reset card moves the rows one after another, quickly, top to bottom; with Remove animations on, moves jump while fades still run · pong.

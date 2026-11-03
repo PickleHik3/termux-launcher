@@ -21,6 +21,7 @@ import androidx.annotation.StringRes;
 import androidx.core.view.ViewCompat;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.rows.EditorGlyphs;
@@ -94,24 +95,27 @@ public final class BarsList {
         @NonNull final LinearLayout header;
         @NonNull final ImageView glyph;
         @NonNull final TextView title;
-        @NonNull final MaterialButton sliders;
-        @NonNull final MaterialButton eye;
+        /** The trailing ›, turned down while the bar's settings stand open. */
+        @NonNull final ImageView chevron;
+        @NonNull final MaterialSwitch toggle;
         @NonNull final FrameLayout panel;
-        int eyeIcon;
 
         Item(@NonNull Element bar, @NonNull LinearLayout container, @NonNull LinearLayout header,
-             @NonNull ImageView glyph, @NonNull TextView title, @NonNull MaterialButton sliders,
-             @NonNull MaterialButton eye, @NonNull FrameLayout panel) {
+             @NonNull ImageView glyph, @NonNull TextView title, @NonNull ImageView chevron,
+             @NonNull MaterialSwitch toggle, @NonNull FrameLayout panel) {
             this.bar = bar;
             this.container = container;
             this.header = header;
             this.glyph = glyph;
             this.title = title;
-            this.sliders = sliders;
-            this.eye = eye;
+            this.chevron = chevron;
+            this.toggle = toggle;
             this.panel = panel;
         }
     }
+
+    /** A restatement sets the switches; only a touch reports. */
+    private boolean mRestating;
 
     private BarsList(@NonNull Context context, @NonNull Host host, int widthPx) {
         mContext = context;
@@ -225,19 +229,22 @@ public final class BarsList {
             item.glyph.setAlpha(alpha);
             item.title.setAlpha(alpha);
         }
-        int icon = shown ? R.drawable.ic_ms_visibility : R.drawable.ic_ms_visibility_off;
-        if (item.eyeIcon != icon) {
-            item.eyeIcon = icon;
-            item.eye.setIconResource(icon);
-            String name = mContext.getString(nameOf(bar));
-            CharSequence action = mContext.getString(shown ? R.string.editor_dock_bar_hide
-                : R.string.editor_dock_bar_show, name);
-            item.eye.setContentDescription(action);
-            GlyphNames.name(item.eye, action);
+        if (item.toggle.isChecked() != shown) {
+            mRestating = true;
+            try {
+                item.toggle.setChecked(shown);
+            } finally {
+                mRestating = false;
+            }
         }
+        String name = mContext.getString(nameOf(bar));
+        item.toggle.setContentDescription(mContext.getString(shown
+            ? R.string.editor_dock_bar_hide : R.string.editor_dock_bar_show, name));
         boolean open = bar == mExpanded;
-        if (item.sliders.isChecked() != open)
-            item.sliders.setChecked(open);
+        float turn = open ? 90f : 0f;
+        if (item.chevron.getRotation() != turn)
+            item.chevron.setRotation(turn);
+        item.header.setActivated(open);
         if (open && item.panel.getChildCount() == 0) {
             View settings = mHost.settings(bar, mRowWidthPx);
             if (settings.getParent() instanceof ViewGroup)
@@ -289,20 +296,26 @@ public final class BarsList {
         header.addView(title, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        MaterialButton sliders = iconButton(context, EditorGlyphs.BAR_SETTINGS,
-            context.getString(R.string.editor_dock_bar_settings, name));
-        sliders.setCheckable(true);
-        int[][] states = {{android.R.attr.state_checked}, {}};
-        sliders.setBackgroundTintList(new ColorStateList(states, new int[] {
-            RowKit.color(context, com.google.android.material.R.attr.colorSecondaryContainer), 0}));
-        sliders.setIconTint(new ColorStateList(states, new int[] {
-            RowKit.color(context, androidx.appcompat.R.attr.colorPrimary),
-            RowKit.color(context, com.google.android.material.R.attr.colorOnSurfaceVariant)}));
-        header.addView(sliders, new LinearLayout.LayoutParams(touch, touch));
+        // Show/hide is a switch, then the trailing › (overhaul §4); a tap on the rest of the
+        // row opens the bar's settings in place.
+        MaterialSwitch toggle = new MaterialSwitch(context);
+        toggle.setContentDescription(context.getString(R.string.editor_dock_bar_hide, name));
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        toggleParams.setMarginStart(RowKit.dp(context, 8));
+        header.addView(toggle, toggleParams);
 
-        MaterialButton eye = iconButton(context, R.drawable.ic_ms_visibility,
-            context.getString(R.string.editor_dock_bar_hide, name));
-        header.addView(eye, new LinearLayout.LayoutParams(touch, touch));
+        ImageView chevron = new ImageView(context);
+        chevron.setImageResource(R.drawable.ic_editor_chevron_right);
+        chevron.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant)));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+            RowKit.dp(context, RowKit.GLYPH_DP), RowKit.dp(context, RowKit.GLYPH_DP));
+        chevronParams.setMarginStart(RowKit.dp(context, 8));
+        chevronParams.setMarginEnd(RowKit.dp(context, 12));
+        header.addView(chevron, chevronParams);
+        header.setContentDescription(context.getString(R.string.editor_dock_bar_settings, name));
         container.addView(header, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -311,19 +324,20 @@ public final class BarsList {
         container.addView(panel, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Item item = new Item(bar, container, header, glyph, title, sliders, eye, panel);
-        item.eyeIcon = R.drawable.ic_ms_visibility;
+        Item item = new Item(bar, container, header, glyph, title, chevron, toggle, panel);
 
-        // The sliders glyph, or a tap on the row, opens the bar's settings in place.
-        View.OnClickListener toggle = v -> {
+        // A tap on the row opens the bar's settings in place.
+        View.OnClickListener open = v -> {
             Element next = BarOrder.toggled(mExpanded, bar);
             mExpanded = next;
             mHost.expanded(next);
             restate();
         };
-        sliders.setOnClickListener(toggle);
-        header.setOnClickListener(toggle);
-        eye.setOnClickListener(v -> mHost.setShown(bar, !mHost.shown(bar)));
+        header.setOnClickListener(open);
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (!mRestating)
+                mHost.setShown(bar, checked);
+        });
 
         handle.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
@@ -432,7 +446,7 @@ public final class BarsList {
             parent.requestDisallowInterceptTouchEvent(true);
         item.container.setElevation(RowKit.dp(mContext, DRAG_ELEVATION_DP));
         item.container.setBackground(dragBackground());
-        item.container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(item.container, android.view.HapticFeedbackConstants.LONG_PRESS);
     }
 
     private void moveDrag(float rawY) {

@@ -69,9 +69,9 @@ public class EditorFramePoseTest {
     }
 
     @Test
-    public void theHalfDetentLeavesTheWholeFrameAtPointSix() {
+    public void theHalfDetentLeavesTheWholeFrameAtPointFive() {
         EditorFramePose.Window window = pong(1f);
-        int full = EditorFramePose.fullSheetPx(window);
+        int full = EditorFramePose.fullSheetPx(window, 0);
         int half = EditorFramePose.halfSheetPx(window, dp(64 + 72 + 16) + NAV_PX, full);
         EditorFramePose.Pose pose = EditorFramePose.pose(window, WINDOW_H - half);
         assertEquals(EditorFramePose.HALF_SCALE, pose.scale, 0.01f);
@@ -81,9 +81,9 @@ public class EditorFramePoseTest {
     }
 
     @Test
-    public void theFullDetentLeavesTheWholeFrameAtPointFourFour() {
+    public void theFullDetentLeavesTheWholeFrameAtPointTwoEight() {
         EditorFramePose.Window window = pong(1f);
-        int full = EditorFramePose.fullSheetPx(window);
+        int full = EditorFramePose.fullSheetPx(window, 0);
         EditorFramePose.Pose pose = EditorFramePose.pose(window, WINDOW_H - full);
         assertEquals(EditorFramePose.FULL_SCALE, pose.scale, 0.01f);
         assertWholeFrameAbove(window, pose,
@@ -96,7 +96,7 @@ public class EditorFramePoseTest {
         EditorFramePose.Window window = pong(1.3f);
         assertTrue("the half line grows with the text",
             window.halfRowPx() > pong(1f).halfRowPx());
-        int full = EditorFramePose.fullSheetPx(window);
+        int full = EditorFramePose.fullSheetPx(window, 0);
         // A card whose first row needs more than the half detent would leave: the frame shrinks.
         int half = EditorFramePose.halfSheetPx(window, Math.round(WINDOW_H * 0.5f), full);
         EditorFramePose.Pose pose = EditorFramePose.pose(window, WINDOW_H - half);
@@ -104,11 +104,65 @@ public class EditorFramePoseTest {
         assertWholeFrameAbove(window, pose, WINDOW_H - half - window.gapPx() - window.halfRowPx());
     }
 
+    /** A window of {@code hDp} dp with a 52 dp status bar and a 24 dp navigation inset. */
+    private static EditorFramePose.Window dpWindow(float hDp, float fontScale) {
+        int h = Math.round(hDp * DENSITY);
+        int top = dp(52);
+        int nav = dp(24);
+        return new EditorFramePose.Window(h, top, nav, DENSITY, fontScale, top,
+            h - top - nav, 0, dp(48), dp(8));
+    }
+
+    @Test
+    public void theReferenceWindowGivesTheSpecsDetents() {
+        // 412 x 916 dp, inset 52, nav 24, a visible launcher of 840 dp: 396 and 580 dp.
+        EditorFramePose.Window window = new EditorFramePose.Window(dp(916), dp(52), dp(24),
+            DENSITY, 1f, dp(52), dp(840), 0, dp(48), dp(8));
+        int full = EditorFramePose.fullSheetPx(window, dp(100));
+        int half = EditorFramePose.halfSheetPx(window, dp(100), full);
+        System.out.println("reference half " + half / DENSITY + " full " + full / DENSITY);
+        // The spec's table counts the half line as 16 dp; the code makes it 20 dp at font scale 1
+        // (its label's line), so the sheets come out 4 dp shorter than the table's 396 and 580.
+        assertEquals(396f, half / DENSITY, 5f);
+        assertEquals(580f, full / DENSITY, 5f);
+        assertTrue(!EditorFramePose.collapsed(half, full));
+    }
+
+    @Test
+    public void aShortLargeFontWindowGrowsTheFullDetentToFitOneControl() {
+        EditorFramePose.Window window = dpWindow(640, 1.3f);
+        int minPx = dp(72 + 56 + 24 + 16 + 232);
+        int plain = EditorFramePose.sheetPxFor(window, EditorFramePose.FULL_SCALE);
+        int full = EditorFramePose.fullSheetPx(window, minPx);
+        int half = EditorFramePose.halfSheetPx(window, minPx, full);
+        System.out.println("360x640@1.3 plain full " + plain / DENSITY + " full " + full / DENSITY
+            + " half " + half / DENSITY + " min " + minPx / DENSITY);
+        assertTrue("grows past the plain detent", full > plain);
+        assertTrue("holds one control", full >= minPx && half >= minPx);
+        assertTrue(full <= EditorFramePose.sheetPxFor(window, EditorFramePose.MIN_SCALE));
+        float scale = EditorFramePose.pose(window, window.heightPx - full).scale;
+        assertTrue("the frame keeps its floor, was " + scale,
+            scale >= EditorFramePose.MIN_SCALE - 1e-4f);
+    }
+
+    @Test
+    public void aWindowTooShortForOneControlCollapsesToOneDetent() {
+        EditorFramePose.Window window = dpWindow(340, 1.3f);
+        int chrome = dp(72 + 56 + 24);
+        int minPx = chrome + dp(200);
+        int full = EditorFramePose.fullSheetPx(window, minPx);
+        int half = EditorFramePose.halfSheetPx(window, minPx, full);
+        assertEquals(half, full);
+        assertTrue(EditorFramePose.collapsed(half, full));
+        assertTrue("never a negative body", full - chrome >= 0);
+        assertEquals(EditorFramePose.sheetPxFor(window, EditorFramePose.MIN_SCALE), full);
+    }
+
     @Test
     public void aDraggedCardMovesTheFrameContinuouslyAndNeverUnderTheCard() {
         EditorFramePose.Window window = pong(1f);
         float last = Float.MAX_VALUE;
-        for (int top = WINDOW_H; top >= WINDOW_H - EditorFramePose.fullSheetPx(window); top -= 37) {
+        for (int top = WINDOW_H; top >= WINDOW_H - EditorFramePose.fullSheetPx(window, 0); top -= 37) {
             EditorFramePose.Pose pose = EditorFramePose.pose(window, top);
             assertTrue("shrinks as the card rises", pose.scale <= last + 1e-4f);
             last = pose.scale;

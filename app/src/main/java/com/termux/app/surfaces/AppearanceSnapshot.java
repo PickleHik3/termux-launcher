@@ -3,12 +3,17 @@ package com.termux.app.surfaces;
 import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.List;
 
@@ -30,6 +35,9 @@ import java.util.List;
  */
 final class AppearanceSnapshot {
 
+    /** How many switches {@link #statusSwitches} reads: the status bar's and the panes'. */
+    private static final int STATUS_SWITCH_COUNT = 12;
+
     private final String mLinks;
     private final int[] mBase;
     private final int[] mRaws;
@@ -39,6 +47,14 @@ final class AppearanceSnapshot {
     private final boolean mBorder;
     private final int mTerminalRadius;
     private final int mPaneGap;
+    /** The Pane borders card's colours and glow (#206). */
+    private final String mPaneBorderColour;
+    private final int mPaneBorderCustom;
+    private final String mPaneFocusColour;
+    private final int mPaneFocusCustom;
+    private final boolean mPaneGlow;
+    private final String mPaneGlowColour;
+    private final int mPaneGlowCustom;
     private final int mWallpaperTerminalOpacity;
     private final String mTint;
     private final String mRim;
@@ -83,6 +99,8 @@ final class AppearanceSnapshot {
      * half that followed the shared value at open follows it again after a restore.
      */
     private final java.util.TreeMap<String, Object> mHalfKeys;
+    /** Every look-grid cell the store held (ADR 0017), by key: put back exactly on restore. */
+    private final java.util.TreeMap<String, Integer> mGridCells;
 
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
@@ -99,12 +117,21 @@ final class AppearanceSnapshot {
             mRaws[i] = isKeyboardBlur(rows.get(i)) ? prefs.getInAppKeyboardBlurRadiusRaw()
                 : prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
         }
-        mMaterial = prefs.getSurfaceMaterial();
-        mIntensity = prefs.getSurfaceMaterialIntensity();
+        // Read at the scope restore writes them: the wall-wide value. Each page's own material
+        // and intensity are page keys, captured and put back with the others (L2).
+        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.PAGE_WALL);
+        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.PAGE_WALL);
         mDockStyle = prefs.getAppLauncherDockStyle();
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();
         mPaneGap = prefs.getTerminalPaneGap();
+        mPaneBorderColour = prefs.getTerminalPaneBorderColour();
+        mPaneBorderCustom = prefs.getTerminalPaneBorderCustom();
+        mPaneFocusColour = prefs.getTerminalPaneFocusColour();
+        mPaneFocusCustom = prefs.getTerminalPaneFocusCustom();
+        mPaneGlow = prefs.getTerminalPaneGlow();
+        mPaneGlowColour = prefs.getTerminalPaneGlowColour();
+        mPaneGlowCustom = prefs.getTerminalPaneGlowCustom();
         mWallpaperTerminalOpacity = prefs.getWallpaperEnabledTerminalBackgroundOpacity();
         mTint = prefs.getSurfaceGlassTint();
         mRim = prefs.getSurfaceGlassRim();
@@ -139,6 +166,64 @@ final class AppearanceSnapshot {
         mClockAlignment = prefs.getTopPaneClockAlignment();
         mStatusSwitches = statusSwitches(prefs);
         mHalfKeys = halfKeys(prefs);
+        mGridCells = gridCells(prefs);
+    }
+
+    /** A snapshot read back from {@link #toJson}; throws when it does not fit this build. */
+    private AppearanceSnapshot(@NonNull JSONObject in) throws JSONException {
+        mLinks = string(in, "links");
+        mBase = ints(in, "base");
+        mRaws = ints(in, "raws");
+        mMaterial = string(in, "material");
+        mIntensity = in.getInt("intensity");
+        mDockStyle = string(in, "dockStyle");
+        mBorder = in.getBoolean("border");
+        mTerminalRadius = in.getInt("terminalRadius");
+        mPaneGap = in.getInt("paneGap");
+        mPaneBorderColour = string(in, "paneBorderColour");
+        mPaneBorderCustom = in.getInt("paneBorderCustom");
+        mPaneFocusColour = string(in, "paneFocusColour");
+        mPaneFocusCustom = in.getInt("paneFocusCustom");
+        mPaneGlow = in.getBoolean("paneGlow");
+        mPaneGlowColour = string(in, "paneGlowColour");
+        mPaneGlowCustom = in.getInt("paneGlowCustom");
+        mWallpaperTerminalOpacity = in.getInt("wallpaperTerminalOpacity");
+        mTint = string(in, "tint");
+        mRim = string(in, "rim");
+        mMotion = string(in, "motion");
+        mTintHue = string(in, "tintHue");
+        mVibrancy = in.getInt("vibrancy");
+        mTextSize = in.getInt("textSize");
+        mGlassPositions = ints(in, "glassPositions");
+        mBend = in.getInt("bend");
+        mEdgeWidth = in.getInt("edgeWidth");
+        mEdgeLight = in.getInt("edgeLight");
+        mSpecular = in.getInt("specular");
+        mDispersion = in.getInt("dispersion");
+        mClarity = in.getInt("clarity");
+        mKeyboardBlurRaw = in.getInt("keyboardBlurRaw");
+        mKeyOpacity = in.getInt("keyOpacity");
+        mOpacityLinked = in.getBoolean("opacityLinked");
+        mKeyRadiusRaw = floatOf(in, "keyRadiusRaw");
+        mKeySpacingRaw = floatOf(in, "keySpacingRaw");
+        mDockButtonCount = in.getInt("dockButtonCount");
+        mDim = in.getInt("dim");
+        mSoft = in.getBoolean("soft");
+        mContrast = string(in, "contrast");
+        mTrailStyle = string(in, "trailStyle");
+        mTrailEnabled = in.getBoolean("trailEnabled");
+        mRetroEffect = string(in, "retroEffect");
+        mClockStyle = string(in, "clockStyle");
+        mClockAlignment = string(in, "clockAlignment");
+        mStatusSwitches = booleans(in, "statusSwitches");
+        mHalfKeys = halfKeysOf(in.getJSONObject("halfKeys"));
+        mGridCells = gridCellsOf(in.getJSONObject("gridCells"));
+        // Restore writes by position: a snapshot from a build with other rows or slots is refused.
+        if (mBase.length != SurfaceProperty.values().length
+            || mRaws.length != SurfaceEditorRows.rows().size()
+            || mGlassPositions.length != SurfaceSlot.values().length + 1
+            || mStatusSwitches.length != STATUS_SWITCH_COUNT)
+            throw new JSONException("appearance snapshot from another build");
     }
 
     /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
@@ -147,7 +232,9 @@ final class AppearanceSnapshot {
         return new boolean[] {prefs.isTopPaneClockAmPmEnabled(), prefs.isStatusClockSecondsEnabled(),
             prefs.isStatusWidgetWeatherFahrenheit(), prefs.isStatusWidgetCpuEnabled(),
             prefs.isStatusWidgetRamEnabled(), prefs.isStatusWidgetWeatherEnabled(),
-            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled()};
+            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled(),
+            prefs.isStatusClockShown(), prefs.isCompatibilityModeEnabled(),
+            prefs.isDwindleDefaultLayoutEnabled(), prefs.isFocusedPaneGrowsEnabled()};
     }
 
     /** Writes back the status bar's switches that differ from the store's now. */
@@ -162,6 +249,11 @@ final class AppearanceSnapshot {
         if (now[5] != kept[5]) prefs.setStatusWidgetWeatherEnabled(kept[5]);
         if (now[6] != kept[6]) prefs.setStatusWidgetMediaEnabled(kept[6]);
         if (now[7] != kept[7]) prefs.setStatusWidgetNotificationsEnabled(kept[7]);
+        if (now[8] != kept[8]) prefs.setStatusClockShown(kept[8]);
+        // The Terminal card's pane switches, plain prefs as the setup wizard writes them.
+        if (now[9] != kept[9]) prefs.setCompatibilityModeEnabled(kept[9]);
+        if (now[10] != kept[10]) prefs.setDwindleDefaultLayoutEnabled(kept[10]);
+        if (now[11] != kept[11]) prefs.setFocusedPaneGrowsEnabled(kept[11]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
@@ -189,6 +281,13 @@ final class AppearanceSnapshot {
         prefs.setTerminalBorderEnabled(mBorder);
         prefs.setTerminalCornerRadius(mTerminalRadius);
         prefs.setTerminalPaneGap(mPaneGap);
+        prefs.setTerminalPaneBorderColour(mPaneBorderColour);
+        prefs.setTerminalPaneBorderCustom(mPaneBorderCustom);
+        prefs.setTerminalPaneFocusColour(mPaneFocusColour);
+        prefs.setTerminalPaneFocusCustom(mPaneFocusCustom);
+        prefs.setTerminalPaneGlow(mPaneGlow);
+        prefs.setTerminalPaneGlowColour(mPaneGlowColour);
+        prefs.setTerminalPaneGlowCustom(mPaneGlowCustom);
         prefs.setWallpaperEnabledTerminalBackgroundOpacity(mWallpaperTerminalOpacity);
         prefs.setSurfaceGlassTint(mTint);
         prefs.setSurfaceGlassRim(mRim);
@@ -222,6 +321,7 @@ final class AppearanceSnapshot {
         restoreStatusSwitches(prefs, mStatusSwitches);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
+        restoreGridCells(prefs, mGridCells);
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -234,6 +334,10 @@ final class AppearanceSnapshot {
         return out.append('|').append(mMaterial).append('|').append(mIntensity)
             .append('|').append(mDockStyle).append('|').append(mBorder)
             .append('|').append(mTerminalRadius).append('|').append(mPaneGap)
+            .append('|').append(mPaneBorderColour).append(',').append(mPaneBorderCustom)
+            .append(',').append(mPaneFocusColour).append(',').append(mPaneFocusCustom)
+            .append(',').append(mPaneGlow).append(',').append(mPaneGlowColour)
+            .append(',').append(mPaneGlowCustom)
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mTintHue).append('|').append(mVibrancy)
@@ -250,8 +354,177 @@ final class AppearanceSnapshot {
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
-            .append('|').append(mHalfKeys)
+            .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
+    }
+
+    /**
+     * Every field as JSON, so the entry snapshot outlives a killed process
+     * ({@link AppearanceEntryStore}). Floats go as strings, which keeps NaN (an absent key).
+     */
+    @NonNull
+    JSONObject toJson() throws JSONException {
+        JSONObject out = new JSONObject();
+        putString(out, "links", mLinks);
+        out.put("base", intArray(mBase));
+        out.put("raws", intArray(mRaws));
+        putString(out, "material", mMaterial);
+        out.put("intensity", mIntensity);
+        putString(out, "dockStyle", mDockStyle);
+        out.put("border", mBorder);
+        out.put("terminalRadius", mTerminalRadius);
+        out.put("paneGap", mPaneGap);
+        putString(out, "paneBorderColour", mPaneBorderColour);
+        out.put("paneBorderCustom", mPaneBorderCustom);
+        putString(out, "paneFocusColour", mPaneFocusColour);
+        out.put("paneFocusCustom", mPaneFocusCustom);
+        out.put("paneGlow", mPaneGlow);
+        putString(out, "paneGlowColour", mPaneGlowColour);
+        out.put("paneGlowCustom", mPaneGlowCustom);
+        out.put("wallpaperTerminalOpacity", mWallpaperTerminalOpacity);
+        putString(out, "tint", mTint);
+        putString(out, "rim", mRim);
+        putString(out, "motion", mMotion);
+        putString(out, "tintHue", mTintHue);
+        out.put("vibrancy", mVibrancy);
+        out.put("textSize", mTextSize);
+        out.put("glassPositions", intArray(mGlassPositions));
+        out.put("bend", mBend);
+        out.put("edgeWidth", mEdgeWidth);
+        out.put("edgeLight", mEdgeLight);
+        out.put("specular", mSpecular);
+        out.put("dispersion", mDispersion);
+        out.put("clarity", mClarity);
+        out.put("keyboardBlurRaw", mKeyboardBlurRaw);
+        out.put("keyOpacity", mKeyOpacity);
+        out.put("opacityLinked", mOpacityLinked);
+        out.put("keyRadiusRaw", Float.toString(mKeyRadiusRaw));
+        out.put("keySpacingRaw", Float.toString(mKeySpacingRaw));
+        out.put("dockButtonCount", mDockButtonCount);
+        out.put("dim", mDim);
+        out.put("soft", mSoft);
+        putString(out, "contrast", mContrast);
+        putString(out, "trailStyle", mTrailStyle);
+        out.put("trailEnabled", mTrailEnabled);
+        putString(out, "retroEffect", mRetroEffect);
+        putString(out, "clockStyle", mClockStyle);
+        putString(out, "clockAlignment", mClockAlignment);
+        out.put("statusSwitches", booleanArray(mStatusSwitches));
+        out.put("halfKeys", halfKeysJson(mHalfKeys));
+        out.put("gridCells", new JSONObject(mGridCells));
+        return out;
+    }
+
+    /** The snapshot {@link #toJson} wrote; throws when it is malformed or from another build. */
+    @NonNull
+    static AppearanceSnapshot fromJson(@NonNull JSONObject in) throws JSONException {
+        return new AppearanceSnapshot(in);
+    }
+
+    private static void putString(@NonNull JSONObject out, @NonNull String key,
+                                  @Nullable String value) throws JSONException {
+        out.put(key, value == null ? JSONObject.NULL : value);
+    }
+
+    @Nullable
+    private static String string(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        if (!in.has(key))
+            throw new JSONException("missing " + key);
+        return in.isNull(key) ? null : in.getString(key);
+    }
+
+    private static float floatOf(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        try {
+            return Float.parseFloat(in.getString(key));
+        } catch (NumberFormatException e) {
+            throw new JSONException("bad float " + key);
+        }
+    }
+
+    @NonNull
+    private static JSONArray intArray(@NonNull int[] values) {
+        JSONArray out = new JSONArray();
+        for (int value : values) out.put(value);
+        return out;
+    }
+
+    @NonNull
+    private static int[] ints(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        JSONArray array = in.getJSONArray(key);
+        int[] out = new int[array.length()];
+        for (int i = 0; i < out.length; i++) out[i] = array.getInt(i);
+        return out;
+    }
+
+    @NonNull
+    private static JSONArray booleanArray(@NonNull boolean[] values) {
+        JSONArray out = new JSONArray();
+        for (boolean value : values) out.put(value);
+        return out;
+    }
+
+    @NonNull
+    private static boolean[] booleans(@NonNull JSONObject in, @NonNull String key) throws JSONException {
+        JSONArray array = in.getJSONArray(key);
+        boolean[] out = new boolean[array.length()];
+        for (int i = 0; i < out.length; i++) out[i] = array.getBoolean(i);
+        return out;
+    }
+
+    /** Each page key as {@code [type, value]}, so an Integer comes back an Integer, not a Long. */
+    @NonNull
+    private static JSONObject halfKeysJson(@NonNull java.util.Map<String, Object> keys)
+            throws JSONException {
+        JSONObject out = new JSONObject();
+        for (java.util.Map.Entry<String, Object> entry : keys.entrySet()) {
+            Object value = entry.getValue();
+            JSONArray typed = new JSONArray();
+            if (value instanceof Integer) typed.put("i").put(value);
+            else if (value instanceof Boolean) typed.put("b").put(value);
+            else if (value instanceof String) typed.put("s").put(value);
+            else if (value instanceof Float) typed.put("f").put(Float.toString((Float) value));
+            else if (value instanceof Long) typed.put("l").put(Long.toString((Long) value));
+            else continue; // restoreHalfKeys writes no other type either
+            out.put(entry.getKey(), typed);
+        }
+        return out;
+    }
+
+    @NonNull
+    private static java.util.TreeMap<String, Object> halfKeysOf(@NonNull JSONObject in)
+            throws JSONException {
+        java.util.TreeMap<String, Object> out = new java.util.TreeMap<>();
+        java.util.Iterator<String> keys = in.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            JSONArray typed = in.getJSONArray(key);
+            String type = typed.getString(0);
+            try {
+                switch (type) {
+                    case "i": out.put(key, typed.getInt(1)); break;
+                    case "b": out.put(key, typed.getBoolean(1)); break;
+                    case "s": out.put(key, typed.getString(1)); break;
+                    case "f": out.put(key, Float.parseFloat(typed.getString(1))); break;
+                    case "l": out.put(key, Long.parseLong(typed.getString(1))); break;
+                    default: throw new JSONException("bad type " + type + " for " + key);
+                }
+            } catch (NumberFormatException e) {
+                throw new JSONException("bad number for " + key);
+            }
+        }
+        return out;
+    }
+
+    @NonNull
+    private static java.util.TreeMap<String, Integer> gridCellsOf(@NonNull JSONObject in)
+            throws JSONException {
+        java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+        java.util.Iterator<String> keys = in.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            out.put(key, in.getInt(key));
+        }
+        return out;
     }
 
     /** The live state's signature, for the dirty test, without holding a snapshot of it. */
@@ -270,16 +543,15 @@ final class AppearanceSnapshot {
     static List<String> halfAbleKeys() {
         List<String> keys = new java.util.ArrayList<>();
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (TermuxAppSharedPreferences.isPerPageProperty(property))
                 keys.add(property.baseKey);
         }
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (own != null) keys.add(own);
-                keys.add(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key);
             }
         }
         keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
@@ -288,7 +560,31 @@ final class AppearanceSnapshot {
         return keys;
     }
 
-    /** Each half's own key that the store holds, by name, with its value. */
+    /** Every look-grid cell the store holds, everywhere and on every page. */
+    @NonNull
+    private static java.util.TreeMap<String, Integer> gridCells(
+            @NonNull TermuxAppSharedPreferences prefs) {
+        java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        for (String key : grid.gridKeys())
+            out.put(key, grid.store().getInt(key, 0));
+        return out;
+    }
+
+    /** Leaves the grid holding exactly {@code cells}: every other cell dropped, these written. */
+    private static void restoreGridCells(@NonNull TermuxAppSharedPreferences prefs,
+                                         @NonNull java.util.Map<String, Integer> cells) {
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        for (String key : grid.gridKeys()) {
+            if (!cells.containsKey(key)) grid.store().remove(key);
+        }
+        for (java.util.Map.Entry<String, Integer> cell : cells.entrySet()) {
+            if (grid.store().getInt(cell.getKey(), Integer.MIN_VALUE) != cell.getValue())
+                grid.store().putInt(cell.getKey(), cell.getValue());
+        }
+    }
+
+    /** Every page's own key that the store holds (any page, not only the Terminal's), by name. */
     @NonNull
     private static java.util.TreeMap<String, Object> halfKeys(
             @NonNull TermuxAppSharedPreferences prefs) {
@@ -296,17 +592,33 @@ final class AppearanceSnapshot {
         SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
         if (store == null)
             return out;
-        java.util.Map<String, ?> all = store.getAll();
-        for (String key : halfAbleKeys()) {
-            for (TermuxAppSharedPreferences.WallHalf half
-                    : TermuxAppSharedPreferences.WallHalf.values()) {
-                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
-                Object value = all.get(halfKey);
-                if (value != null)
-                    out.put(halfKey, value);
-            }
+        java.util.Set<String> able = pageAbleKeys();
+        for (java.util.Map.Entry<String, ?> entry : store.getAll().entrySet()) {
+            if (entry.getValue() != null && isPageKey(entry.getKey(), able))
+                out.put(entry.getKey(), entry.getValue());
         }
         return out;
+    }
+
+    /** The keys a page may hold its own copy of: the half-able ones and every detachable Look key. */
+    @NonNull
+    private static java.util.Set<String> pageAbleKeys() {
+        java.util.Set<String> able = new java.util.HashSet<>(halfAbleKeys());
+        able.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
+        return able;
+    }
+
+    /** Whether {@code key} is one page's override ({@code <able key>@<page id>}). */
+    static boolean isPageKey(@NonNull String key, @NonNull java.util.Set<String> able) {
+        String separator = com.termux.shared.termux.settings.preferences.PageLookKeys.PAGE_SEPARATOR;
+        int at = key.lastIndexOf(separator);
+        if (at <= 0 || at + separator.length() >= key.length())
+            return false;
+        for (int i = at + separator.length(); i < key.length(); i++) {
+            if (!Character.isDigit(key.charAt(i)))
+                return false;
+        }
+        return able.contains(key.substring(0, at));
     }
 
     /**
@@ -315,16 +627,18 @@ final class AppearanceSnapshot {
      * to put Home's glass back on the Look it wore when the editor opened.
      */
     void restoreHalfBase(@NonNull TermuxAppSharedPreferences prefs,
-                         @NonNull TermuxAppSharedPreferences.WallHalf half,
+                         int pageId,
                          @NonNull SurfaceProperty... properties) {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null)
             return;
         SharedPreferences.Editor editor = store.edit();
         for (SurfaceProperty property : properties) {
-            if (!TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (!TermuxAppSharedPreferences.isPerPageProperty(property))
                 continue;
-            String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(property.baseKey, half);
+            String halfKey = TermuxAppSharedPreferences.surfacePageKey(property.baseKey, pageId);
+            if (halfKey.equals(property.baseKey))
+                continue; // Base is the wall's: the shared restore puts it back
             Object value = mHalfKeys.get(halfKey);
             if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
             else if (store.contains(halfKey)) editor.remove(halfKey);
@@ -332,25 +646,29 @@ final class AppearanceSnapshot {
         editor.apply();
     }
 
-    /** Puts every half's own key back as it was, and drops the ones that were absent. */
+    /**
+     * Puts every page's own key back as it was, and drops the ones that were absent: an override
+     * written in the session on any page (Home, Display, Terminal) is gone after the restore.
+     */
     private static void restoreHalfKeys(@NonNull TermuxAppSharedPreferences prefs,
                                         @NonNull java.util.Map<String, Object> halfKeys) {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null)
             return;
+        java.util.Set<String> able = pageAbleKeys();
         SharedPreferences.Editor editor = store.edit();
-        for (String key : halfAbleKeys()) {
-            for (TermuxAppSharedPreferences.WallHalf half
-                    : TermuxAppSharedPreferences.WallHalf.values()) {
-                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
-                Object value = halfKeys.get(halfKey);
-                if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
-                else if (value instanceof Boolean) editor.putBoolean(halfKey, (Boolean) value);
-                else if (value instanceof String) editor.putString(halfKey, (String) value);
-                else if (value instanceof Float) editor.putFloat(halfKey, (Float) value);
-                else if (value instanceof Long) editor.putLong(halfKey, (Long) value);
-                else if (store.contains(halfKey)) editor.remove(halfKey);
-            }
+        for (String key : store.getAll().keySet()) {
+            if (isPageKey(key, able) && !halfKeys.containsKey(key))
+                editor.remove(key);
+        }
+        for (java.util.Map.Entry<String, Object> entry : halfKeys.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof Integer) editor.putInt(key, (Integer) value);
+            else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+            else if (value instanceof String) editor.putString(key, (String) value);
+            else if (value instanceof Float) editor.putFloat(key, (Float) value);
+            else if (value instanceof Long) editor.putLong(key, (Long) value);
         }
         editor.apply();
     }

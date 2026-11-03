@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 /**
  * The page overview's rules (Launcher3's overview for this wall; ADR 0008 "one wall, two
  * halves"): one strip of cards, Home's pages first and then the current session's windows, the
- * display window among them where {@link DisplaySlot} stands it. Pure, so the halves, where a
+ * row holding terminal windows only since ADR 0015 A3b (Display pages are wall pages). Pure, so the halves, where a
  * dragged card may land, where an added card goes, which cards can be removed and how, and when
  * a display can be added read as arithmetic.
  *
@@ -50,11 +50,10 @@ public final class PageOverviewPolicy {
         return position >= 0 && position < homeCount;
     }
 
-    /** The kind of card at {@code position}; the display slot is a row place, NONE when absent. */
+    /** The kind of card at {@code position}: a Home page's, else a terminal window's. */
     @NonNull
-    public static Kind kindAt(int position, int homeCount, int displaySlot) {
-        if (isHome(position, homeCount)) return Kind.HOME_PAGE;
-        return DisplaySlot.isDisplay(position - homeCount, displaySlot) ? Kind.DISPLAY : Kind.TERMINAL;
+    public static Kind kindAt(int position, int homeCount) {
+        return isHome(position, homeCount) ? Kind.HOME_PAGE : Kind.TERMINAL;
     }
 
     /** The row place of the window card at {@code position}. */
@@ -90,6 +89,105 @@ public final class PageOverviewPolicy {
         return sameHalf(from, over, homeCount) ? over : NONE;
     }
 
+    // ---- Free order (ADR 0015, A2a) --------------------------------------------------------
+    // The strip is the page list in wall order, the Terminal page's window cards (and the display
+    // window's) one contiguous block among the Home cards. These read the order off the strip's
+    // kinds instead of assuming Home first; for [Home...][windows] they equal the functions above.
+
+    /** The first and last positions of the window block, as {@code {first, last}}; null if none. */
+    @androidx.annotation.Nullable
+    public static int[] blockBounds(@NonNull java.util.List<Kind> strip) {
+        int first = -1;
+        int last = -1;
+        for (int i = 0; i < strip.size(); i++) {
+            if (strip.get(i) != Kind.TERMINAL) continue;
+            if (first < 0) first = i;
+            last = i;
+        }
+        return first < 0 ? null : new int[] {first, last};
+    }
+
+    /** Whether the card at {@code position} is a Home page's. */
+    public static boolean isHome(int position, @NonNull java.util.List<Kind> strip) {
+        return position >= 0 && position < strip.size() && strip.get(position) == Kind.HOME_PAGE;
+    }
+
+    /**
+     * Where a card dragged from {@code from} and dropped over {@code over} goes (its final
+     * position), or {@link #NONE}. A Home card may land anywhere outside the window block; a drop
+     * inside the block snaps to just before or just after it, whichever is nearer. A window card
+     * only reorders inside the block.
+     */
+    public static int dropTarget(int from, int over, @NonNull java.util.List<Kind> strip) {
+        int count = strip.size();
+        if (from < 0 || from >= count || over < 0 || over >= count) return NONE;
+        int[] block = blockBounds(strip);
+        if (strip.get(from) == Kind.DISPLAY) return NONE;
+        if (!isHome(from, strip)) {
+            return block != null && over >= block[0] && over <= block[1] ? over : NONE;
+        }
+        if (block == null) return over;
+        // The block's bounds once the dragged Home card has left the strip.
+        int shift = from < block[0] ? 1 : 0;
+        int first = block[0] - shift;
+        int last = block[1] - shift;
+        if (over > first && over <= last) {
+            return over - first <= (last - first + 1) / 2 ? first : last + 1;
+        }
+        return over;
+    }
+
+    /**
+     * Where the whole window block lands, as the block's first final position, when it is dragged
+     * and its label is dropped over strip position {@code over}: over a Home card it takes that
+     * card's place. Over the block itself, or outside the strip, {@link #NONE}.
+     */
+    public static int blockDropTarget(int over, @NonNull java.util.List<Kind> strip) {
+        int[] block = blockBounds(strip);
+        if (block == null || over < 0 || over >= strip.size()) return NONE;
+        if (over >= block[0] && over <= block[1]) return NONE;
+        int homes = strip.size() - (block[1] - block[0] + 1);
+        // Final first position: a Home card passed over moves to the other side of the block.
+        int target = over < block[0] ? over : over - (block[1] - block[0]);
+        return Math.max(0, Math.min(homes, target));
+    }
+
+    /**
+     * The page index (as {@link WallPages#move} counts, the block one page) of the card that
+     * stands at strip position {@code position}.
+     */
+    public static int pageIndexAt(int position, @NonNull java.util.List<Kind> strip) {
+        int[] block = blockBounds(strip);
+        if (block == null || position <= block[0]) return Math.max(0, position);
+        if (position <= block[1]) return block[0];
+        return position - (block[1] - block[0]);
+    }
+
+    /**
+     * The position "+ Add page" inserts a Home page at: right after the focused Home card, or
+     * after the last Home page when a window is focused (as before, whatever the order).
+     */
+    public static int addPageIndex(int focused, @NonNull java.util.List<Kind> strip) {
+        if (isHome(focused, strip)) return focused + 1;
+        for (int i = strip.size() - 1; i >= 0; i--) if (strip.get(i) == Kind.HOME_PAGE) return i + 1;
+        return 0;
+    }
+
+    /** The wall position a card's tap or Back lands on, given the strip's order. */
+    @NonNull
+    public static WallRow.Position wallPosition(int position, @NonNull java.util.List<Kind> strip) {
+        if (isHome(position, strip)) {
+            int n = 0;
+            for (int i = 0; i < position; i++) if (strip.get(i) == Kind.HOME_PAGE) n++;
+            return WallRow.homePage(n);
+        }
+        if (position >= 0 && position < strip.size() && strip.get(position) == Kind.DISPLAY) {
+            return new WallRow.Position(PaneWallPage.DISPLAY, 0);
+        }
+        int[] block = blockBounds(strip);
+        return WallRow.window(block == null ? 0 : Math.max(0, position - block[0]));
+    }
+
     /**
      * Where the card at {@code position} stands while the card from {@code from} is held at
      * {@code held} ({@link #dropTarget}; {@code from} itself while it is held across the seam, so
@@ -123,6 +221,37 @@ public final class PageOverviewPolicy {
     /** Whether "+ Add display" is offered: only while no display is open, as only one can exist. */
     public static boolean canAddDisplay(boolean displayOpen) {
         return !displayOpen;
+    }
+
+    /** Marks the window block's place in {@link #wallOrder}. */
+    public static final int BLOCK = Integer.MIN_VALUE;
+
+    /**
+     * The strip in wall order (ADR 0015: Display pages are wall pages): Home page {@code i} is
+     * {@code i}, Display page {@code j} (of {@code displays}, in wall order) is {@code -(j + 1)},
+     * the window block is {@link #BLOCK}. {@code homesBefore[j]} is how many Home pages stand
+     * before Display page {@code j} on the wall; {@code afterTerminal[j]} whether it stands after
+     * the Terminal page. {@code beforeTerminal} is how many Home pages stand before the Terminal
+     * page; {@code hasTerminal} false puts no block in the strip.
+     */
+    @NonNull
+    public static java.util.List<Integer> wallOrder(int pages, boolean hasTerminal,
+            int beforeTerminal, @NonNull int[] homesBefore, @NonNull boolean[] afterTerminal) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        int before = hasTerminal ? Math.max(0, Math.min(pages, beforeTerminal)) : -1;
+        for (int gap = 0; gap <= pages; gap++) {
+            for (int j = 0; j < homesBefore.length; j++) {
+                if (homesBefore[j] == gap && !(gap == before && afterTerminal[j])) out.add(-(j + 1));
+            }
+            if (gap == before) {
+                out.add(BLOCK);
+                for (int j = 0; j < homesBefore.length; j++) {
+                    if (homesBefore[j] == gap && afterTerminal[j]) out.add(-(j + 1));
+                }
+            }
+            if (gap < pages) out.add(gap);
+        }
+        return out;
     }
 
     /** Whether a card of {@code kind} shows the delete button: every card but the last Home page. */

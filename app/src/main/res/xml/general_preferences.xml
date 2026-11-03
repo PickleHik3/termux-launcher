@@ -19,6 +19,13 @@
             app:entryValues="@array/use_as_values"
             app:useSimpleSummaryProvider="true"
             android:defaultValue="home" />
+        <Preference
+            app:key="app_launcher_setup_rerun"
+            app:title="@string/setup_rerun_title"
+            app:summary="@string/setup_rerun_summary" />
+        <Preference
+            app:key="app_launcher_setup_cards"
+            app:title="@string/setup_cards_row_title" />
         <!-- Start in: the page a cold start shows (ADR 0008). -->
         <ListPreference
             app:key="app_launcher_start_in"
@@ -63,16 +70,6 @@
             app:key="in_app_keyboard_haptics_enabled"
             app:title="@string/settings_behavior_keyboard_vibration_title"
             app:summary="@string/settings_behavior_keyboard_vibration_summary" />
-    </PreferenceCategory>
-
-    <!-- Idle activity and the Low-memory preset live on Battery & performance. -->
-    <PreferenceCategory app:key="general_battery" app:title="@string/settings_behavior_battery_header">
-        <Preference
-            app:key="performance_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_performance"
-            app:summary="@string/settings_destination_performance_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="general_more" app:title="@string/settings_general_more_header">

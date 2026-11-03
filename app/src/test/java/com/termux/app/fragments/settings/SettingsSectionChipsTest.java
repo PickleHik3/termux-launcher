@@ -204,10 +204,10 @@ public class SettingsSectionChipsTest {
         SettingsSectionChips.FilteringAdapter adapter =
             (SettingsSectionChips.FilteringAdapter) fragment.getListView().getAdapter();
 
-        // Hiding every row of the battery section (as a page's own gating logic would) empties
+        // Hiding every row of the home-app section (as a page's own gating logic would) empties
         // it, so this also exercises "the selected section disappeared -> back to All" in the
         // same test.
-        Preference clipboardRow = fragment.findPreference("performance_link");
+        Preference clipboardRow = fragment.findPreference("app_launcher_set_home");
         assertNotNull(clipboardRow);
         PreferenceCategory clipboardSection = SettingsSectionChips.topCategoryOf(clipboardRow, screen);
         assertNotNull(clipboardSection);
@@ -216,7 +216,9 @@ public class SettingsSectionChipsTest {
         findChip(group, clipboardSection.getTitle()).performClick();
         assertEquals(clipboardSection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
-        clipboardRow.setVisible(false);
+        for (int i = 0; i < clipboardSection.getPreferenceCount(); i++) {
+            clipboardSection.getPreference(i).setVisible(false);
+        }
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 
         // The section has no visible rows, so it no longer qualifies: the filter must have fallen

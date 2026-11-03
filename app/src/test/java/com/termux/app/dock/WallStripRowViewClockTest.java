@@ -67,6 +67,17 @@ public class WallStripRowViewClockTest {
     }
 
     @Test
+    public void aHiddenStatusClockLeavesTheRow_andComesBack() {
+        WallStripRowView row = laidOut(1);
+        row.setClockAllowed(false);
+        assertFalse("the Clock toggle off: no clock in the row", row.rowNow().showsClock());
+        assertTrue(row.clockView().getVisibility() != View.VISIBLE);
+        row.setClockAllowed(true);
+        assertTrue(row.rowNow().showsClock());
+        assertEquals(View.VISIBLE, row.clockView().getVisibility());
+    }
+
+    @Test
     public void threeAndFourTerminals_haveSlidTheClockOut() {
         assertFalse(laidOut(3).rowNow().showsClock());
         assertFalse(laidOut(4).rowNow().showsClock());

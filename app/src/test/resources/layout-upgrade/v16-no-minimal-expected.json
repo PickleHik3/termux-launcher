@@ -1,0 +1,13 @@
+{
+  "terminal": {
+    "portrait": {
+      "status_bar": "top",
+      "apps_row": "bottom"
+    }
+  },
+  "absent": [
+    "terminal_minimal.portrait.status_bar",
+    "terminal_minimal.portrait.apps_row",
+    "terminal_minimal.landscape.status_bar"
+  ]
+}

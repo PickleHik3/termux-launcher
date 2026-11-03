@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -48,7 +49,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
     private PlaceLayoutStore current() {
         prefs.edit().putInt(PlaceLayoutStore.KEY_MIGRATED, PlaceLayoutStore.MIGRATION_VERSION)
             .commit();
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     /** The store as a build before version 14 left it, with the switch as given, then upgraded. */
@@ -57,42 +58,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         if (homeLayoutOn) editor.putBoolean(PlaceLayoutStore.homeLayoutKey(), true);
         else editor.remove(PlaceLayoutStore.homeLayoutKey());
         editor.commit();
-        return new PlaceLayoutStore(launcher);
-    }
-
-    @Test
-    public void aHomeOnTheSharedLayoutGetsACopyOfItSoNothingMoves() {
-        PlaceLayoutStore seed = current();
-        PlaceLayoutStore normal = seed.forVariant(LayoutVariant.NORMAL);
-        normal.setSlot(PlaceOrientation.PORTRAIT, Element.APPS, Slot.on(Edge.LEFT, 0));
-        normal.setSlot(PlaceOrientation.PORTRAIT, Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
-        normal.setSlot(PlaceOrientation.LANDSCAPE, Element.AZ, Slot.hiddenFrom(Edge.RIGHT, 1));
-        normal.setKeyboardChinDp(PlaceOrientation.PORTRAIT, 24);
-        normal.setDockStyle(DockStyle.CHOICES.get(1));
-        // A Home layout once turned on, edited and turned off again leaves a stale copy behind.
-        seed.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
-            Slot.on(Edge.RIGHT, 0));
-
-        PlaceLayoutStore upgraded = upgradedFrom13(false);
-
-        assertTrue(upgraded.hasHomeLayout());
-        assertEquals(LayoutVariant.HOME,
-            DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
-        PlaceLayoutStore from = upgraded.forVariant(LayoutVariant.NORMAL);
-        PlaceLayoutStore home = upgraded.forVariant(LayoutVariant.HOME);
-        for (PlaceOrientation orientation : PlaceOrientation.values()) {
-            for (Element element : Element.values()) {
-                if (!DressResolver.wornOn(LayoutVariant.HOME, element)) continue;
-                assertEquals(orientation + " " + element, from.slot(orientation, element),
-                    home.slot(orientation, element));
-            }
-        }
-        assertTrue("the hidden stack comes along",
-            home.slot(PlaceOrientation.PORTRAIT, Element.STATUS).hidden);
-        assertTrue(home.slot(PlaceOrientation.LANDSCAPE, Element.AZ).hidden);
-        assertEquals("Bottom padding is one value on both screens", 24,
-            home.keyboardChinDp(PlaceOrientation.PORTRAIT));
-        assertEquals(DockStyle.CHOICES.get(1), home.dockStyle());
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     @Test
@@ -103,34 +69,29 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         seed.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
             Slot.on(Edge.BOTTOM, 0));
 
-        PlaceLayoutStore upgraded = upgradedFrom13(true);
+        PlaceLayoutStore upgraded = KindFixtures.onHomePage(upgradedFrom13(true));
 
-        assertTrue(upgraded.hasHomeLayout());
-        assertEquals(Edge.BOTTOM, upgraded.forVariant(LayoutVariant.HOME)
+        // A Home layout that differs lives on as the Home page's own (version 16).
+        assertFalse(upgraded.hasHomeLayout());
+        assertEquals(KindFixtures.HOME_PAGE,
+            DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(Edge.BOTTOM, upgraded.forVariant(KindFixtures.HOME_PAGE)
             .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
     }
 
     @Test
-    public void theUpgradeCopiesOnceAndALaterStartKeepsHomesEdits() {
-        current().forVariant(LayoutVariant.NORMAL).setSlot(PlaceOrientation.PORTRAIT,
-            Element.APPS, Slot.on(Edge.LEFT, 0));
-        PlaceLayoutStore upgraded = upgradedFrom13(false);
-        upgraded.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
-            Slot.on(Edge.TOP, 0));
-
-        PlaceLayoutStore again = new PlaceLayoutStore(launcher);
-        assertEquals("Home's edit is not copied over again", Edge.TOP, again
-            .forVariant(LayoutVariant.HOME).slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
-        assertEquals(Edge.LEFT, again.forVariant(LayoutVariant.NORMAL)
-            .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
-    }
-
-    @Test
-    public void aNewInstallHoldsAHomeLayoutFromTheStart() {
-        PlaceLayoutStore fresh = new PlaceLayoutStore(launcher);
-        assertTrue(fresh.hasHomeLayout());
+    public void aNewInstallStartsWithHomeOnTheSharedLayout() {
+        PlaceLayoutStore fresh = KindFixtures.onHomePage(routed(new PlaceLayoutStore(launcher)));
+        assertFalse(fresh.hasHomeLayout());
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
         assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

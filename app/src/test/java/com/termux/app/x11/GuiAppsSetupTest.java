@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup.Distro;
 import com.termux.app.x11.GuiAppsSetup.Route;
 import com.termux.app.x11.GuiAppsSetup.StarterApp;
@@ -67,7 +67,7 @@ public class GuiAppsSetupTest {
             String termux = command(Route.X11_REPO, Distro.DEBIAN, starters);
             assertTrue(termux.contains(" fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio"));
             assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
-                TourEdition.VAJ).contains("fcitx5"));
+                AppEdition.VAJ).contains("fcitx5"));
             assertFalse(command(Route.DISTRO, Distro.DEBIAN, starters).contains("fcitx5"));
         }
     }
@@ -76,7 +76,7 @@ public class GuiAppsSetupTest {
         for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
             assertTrue(command(Route.X11_REPO, Distro.DEBIAN, starters).contains(" pulseaudio"));
             assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
-                TourEdition.VAJ).contains("pulseaudio"));
+                AppEdition.VAJ).contains("pulseaudio"));
         }
     }
 
@@ -344,30 +344,30 @@ public class GuiAppsSetupTest {
 
     @Test public void termuxOffersBothRoutes() {
         assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
-            GuiAppsSetup.routesFor(TourEdition.TERMUX));
-        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.TERMUX));
+            GuiAppsSetup.routesFor(AppEdition.TERMUX));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(AppEdition.TERMUX));
     }
 
     @Test public void vajOffersBothRoutesLikeTermux() {
         // Reversed 2026-09-21: repo.pathayam.xyz now carries xkeyboard-config and the x11 apps,
         // so VAJ's X11 route works there too.
         assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
-            GuiAppsSetup.routesFor(TourEdition.VAJ));
-        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
+            GuiAppsSetup.routesFor(AppEdition.VAJ));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(AppEdition.VAJ));
     }
 
     @Test public void nixOffersNoRoute() {
         // Decision, 2026-09-20: graphical apps on nix come from nixpkgs and home.nix, a third
         // way this class builds no command for.
-        assertTrue(GuiAppsSetup.routesFor(TourEdition.NIX).isEmpty());
-        assertEquals(null, GuiAppsSetup.defaultRoute(TourEdition.NIX));
+        assertTrue(GuiAppsSetup.routesFor(AppEdition.NIX).isEmpty());
+        assertEquals(null, GuiAppsSetup.defaultRoute(AppEdition.NIX));
     }
 
     // --- VAJ's edition-aware X11 command --------------------------------------------------------
 
     @Test public void vajsX11CommandHasNoSeparateRepoStepAndDefaultsToPcmanfmAndMousepad() {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
-            GuiAppsSetup.defaultStarters(), TourEdition.VAJ);
+            GuiAppsSetup.defaultStarters(), AppEdition.VAJ);
 
         assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }" + X11_MARKER, command);
     }
@@ -376,7 +376,7 @@ public class GuiAppsSetupTest {
         Set<StarterApp> starters = EnumSet.copyOf(GuiAppsSetup.defaultStarters());
         starters.add(StarterApp.TERMINAL);
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
-            TourEdition.VAJ);
+            AppEdition.VAJ);
 
         assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }" + X11_MARKER,
             command);
@@ -384,7 +384,7 @@ public class GuiAppsSetupTest {
 
     @Test public void vajsX11CommandDropsTheBrowserEvenWhenTicked() {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
-            EnumSet.of(StarterApp.BROWSER), TourEdition.VAJ);
+            EnumSet.of(StarterApp.BROWSER), AppEdition.VAJ);
 
         // VAJ ships no browser at all; ticking it adds nothing to the command.
         assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }" + X11_MARKER, command);
@@ -393,10 +393,10 @@ public class GuiAppsSetupTest {
 
     @Test public void termuxsX11CommandIsUnchangedByTheEditionAwareOverload() {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
-            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
                 + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal" + X11_MARKER,
-            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {

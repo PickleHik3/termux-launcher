@@ -35,7 +35,7 @@ public class WallStripRowViewTilesTest {
     private static List<WallStripModel.Entry> entries() {
         // Two row windows, then a minimised float on page 2.
         return WallStripModel.build(Arrays.asList(chip(TERMINAL + " nvim"),
-            chip(TERMINAL + " home"), chip(TERMINAL + " htop · 2")), 1, 2, -1,
+            chip(TERMINAL + " home"), chip(TERMINAL + " htop · 2")), 1, 2,
             new boolean[]{true}, "New window");
     }
 
@@ -83,7 +83,7 @@ public class WallStripRowViewTilesTest {
             WallStripModel.wallEntries(entries()), null);
         List<WallStripModel.Entry> asRow = WallStripModel.build(Arrays.asList(
             chip(TERMINAL + " nvim"), chip(TERMINAL + " home"), chip(TERMINAL + " htop · 2")),
-            1, 3, -1, null, "New window");
+            1, 3, null, "New window");
         List<WallStripRowView.Tile> asWindow = WallStripRowView.tilesOf(
             WallStripModel.wallEntries(asRow), null);
         assertFalse(asFloat.get(2).equals(asWindow.get(2)));

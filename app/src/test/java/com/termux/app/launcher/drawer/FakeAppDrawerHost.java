@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import com.termux.app.wall.PaneWallPage;
 import android.content.Context;
 import android.view.View;
 import android.widget.EditText;
@@ -42,6 +43,10 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
+    @Override public int restingPage() {
+        return TermuxAppSharedPreferences.terminalPageId();
+    }
+
     @Nullable @Override public TermuxAppSharedPreferences preferences() {
         return preferences;
     }
@@ -64,6 +69,25 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
 
     @Override public void setDecorNavStripAlpha(float alpha) {
         decorNavStripAlpha = alpha;
+    }
+
+    /** Whether the close puts down a keyboard the drawer's search raised. */
+    boolean closeLowersKeyboard;
+
+    @Override public boolean drawerCloseLowersKeyboard() {
+        return closeLowersKeyboard;
+    }
+
+    /** The terminal pane's gap and corner radius; negative means the host gives none. */
+    float paneGapPx = -1f;
+    float paneCornerRadiusPx = -1f;
+
+    @Override public float searchKeyboardGapPx() {
+        return paneGapPx;
+    }
+
+    @Override public float searchKeyboardCornerRadiusPx() {
+        return paneCornerRadiusPx;
     }
 
     @Override public void flushPendingAccessoryGeometry() {

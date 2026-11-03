@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 
 import com.termux.app.wall.UseAs;
+import com.termux.app.wall.WallPagesStore;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -25,6 +26,11 @@ public final class UseAsSetting {
     /** Stores {@code useAs}; the launcher's preference listener applies it to the wall. */
     public static void write(@NonNull Context context, @NonNull UseAs useAs) {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs != null) prefs.setUseAs(useAs.value);
+        if (prefs == null) return;
+        prefs.setUseAs(useAs.value);
+        // Terminal only sets the Home pages aside, Home screen brings them back: the pages and
+        // their ids stay, so nothing a page holds is lost. The launcher's store hears the write.
+        WallPagesStore.open(context).edit(pages ->
+            useAs.showsHomePage() ? pages.attachDetached() : pages.detachHomes());
     }
 }

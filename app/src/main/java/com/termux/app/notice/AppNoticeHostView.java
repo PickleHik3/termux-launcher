@@ -473,10 +473,19 @@ public final class AppNoticeHostView extends LinearLayout {
         // being swapped onto a view that is already on its way out — which is what a resolved key
         // chord does: the report comes down and the read-out of what the chord ran follows it by a
         // frame or two.
+        boolean fleeting = mActive.fleeting;
         mActive = null;
         boolean more = !mQueue.isEmpty();
         notifyOccupancy();
         animate().cancel();
+        if (fleeting) {
+            // A read-out (a drag's size, a key's name) goes in one frame. Its 160ms fade measured
+            // on pong as 16 frames of the whole page redrawn by the render thread after every
+            // divider drag (ADR 0019 follow-up B), for a label the user has already read.
+            if (more) showNext();
+            else hide();
+            return;
+        }
         animate()
             .alpha(0f)
             .translationY(-dp(RISE_DP * 0.5f))

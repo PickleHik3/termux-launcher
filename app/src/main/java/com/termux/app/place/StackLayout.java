@@ -4,12 +4,12 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.dock.DockGeometry;
-import com.termux.app.dock.DockGeometry.Side;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockPlacement;
 import com.termux.app.dock.DockRows;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
+import com.termux.app.wall.PageRef;
 
 /**
  * Stack layout (ADR 0011): the whole bottom stack as a pure function of one snapshot. The dock's
@@ -125,7 +125,7 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx);
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.isHome());
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -217,10 +217,11 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx) {
+             int imeLiftPx, boolean homePage) {
+            // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             boolean peekCardStands = DockPlacement.peekCardStands(
                 DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
-                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
+                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0, homePage);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
             lifted = toolbarShown || keyboardShown;
@@ -255,13 +256,14 @@ public final class StackLayout {
     // ---- A half at rest, for a slide ----
 
     /**
-     * {@code side}'s dock rows at rest, less the extra keys row itself: its own rows in its own
+     * {@code page}'s dock rows at rest, less the extra keys row itself: its own rows in its own
      * arrangement, its own Search field and Wall strip wholly in or out as its dress has them,
      * nothing squeezed. Worked out apart from the memo, which keeps the frame's answers. Whichever
      * half is committed, the answer is the same: a half's rest is its own.
      */
-    public static int restDockRowsPx(@NonNull DockGeometry.Snapshot snapshot, @NonNull Side side) {
-        return DockGeometry.compute(snapshot.restOf(side)).combinedHeight(0, false);
+    public static int restDockRowsPx(@NonNull DockGeometry.Snapshot snapshot,
+                                     @NonNull PageRef page) {
+        return DockGeometry.compute(snapshot.restOf(page)).combinedHeight(0, false);
     }
 
     /**
@@ -280,7 +282,8 @@ public final class StackLayout {
      */
     public static final class RestInput {
         @NonNull public final DockGeometry.Snapshot dock;
-        @NonNull public final Side side;
+        /** The page whose rest it is. */
+        @NonNull public final PageRef page;
         public boolean toolbarShown;
         public boolean extraKeysRowEnabled;
         public int toolbarHeightPx;
@@ -292,48 +295,71 @@ public final class StackLayout {
         public boolean keyboardOverlays;
         public int flushPaddingPx;
 
-        public RestInput(@NonNull DockGeometry.Snapshot dock, @NonNull Side side) {
+        public RestInput(@NonNull DockGeometry.Snapshot dock, @NonNull PageRef page) {
             this.dock = dock;
-            this.side = side;
+            this.page = page;
+        }
+
+        /**
+         * The half's own dock rows, as a pass on it sets them: whether its dock stands, whether
+         * its extra-keys row does, and that row at {@code measuredExtraKeysRowPx}. Read off the
+         * half's layout in the snapshot, never the half on screen: from Home, whose layout has no
+         * extra-keys row, the row is laid out 0 tall and the Terminal's rest came out a row short.
+         */
+        @NonNull
+        public RestInput ownRows(int measuredExtraKeysRowPx) {
+            PlaceLayout layout = dock.half(page).layout;
+            toolbarShown = PlaceChromePolicy.dockShown(layout);
+            extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
+            toolbarHeightPx = extraKeysRowPx(layout, measuredExtraKeysRowPx);
+            return this;
         }
     }
 
     /**
-     * The room {@code side}'s chrome leaves the content at rest, built from the stack's parts the
+     * The extra-keys row {@code layout} stands on its dock, at the height a pass gives the row
+     * ({@code measuredRowPx}: the device's row for its key rows and scale); 0 while it stands none.
+     */
+    public static int extraKeysRowPx(@NonNull PlaceLayout layout, int measuredRowPx) {
+        return PlaceChromePolicy.extraKeysRowShown(layout) ? Math.max(0, measuredRowPx) : 0;
+    }
+
+    /**
+     * The room {@code page}'s chrome leaves the content at rest, built from the stack's parts the
      * way {@link #layout} builds them: its own dock rows in its own Style, its own status band,
      * the terminal's padding, the keyboard when it is up and the margin under all of that. Home's
      * chrome takes none.
      */
     public static int restReservationPx(@NonNull RestInput in) {
-        DockGeometry.Half half = in.dock.half(in.side);
-        DockLayout rest = DockGeometry.compute(in.dock.restOf(in.side));
+        DockGeometry.Half half = in.dock.half(in.page);
+        DockLayout rest = DockGeometry.compute(in.dock.restOf(in.page));
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx);
+            in.imeLiftPx, in.page.isHome());
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
-        return KeyboardOverlayPolicy.restReservationPx(in.side == Side.HOME, dockContentPx,
+        return KeyboardOverlayPolicy.restReservationPx(in.page.isHome(), dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
             Math.max(0, in.keyboardHeightPx), base.marginPx);
     }
 
     /**
-     * The band of the widget pane {@code side}'s dock takes at rest, built the way {@link #layout}
+     * The band of the widget pane {@code page}'s dock takes at rest, built the way {@link #layout}
      * builds {@link Result#homeGridDockReservePx}: its own dock rows in its own Style
-     * ({@code rest}, {@code side}'s rest from {@code in}'s snapshot), its own status band and the
+     * ({@code rest}, {@code page}'s rest from {@code in}'s snapshot), its own status band and the
      * air under the keyboard, and the edge gap under them, while the stack shows. Only Home's dock
-     * floats over a grid; every other side takes none.
+     * floats over a grid; every other page takes none.
      */
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
-        DockGeometry.Half half = in.dock.half(in.side);
+        DockGeometry.Half half = in.dock.half(in.page);
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx);
+            in.imeLiftPx, in.page.isHome());
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
         boolean stackShown = DockRows.stackShown(in.toolbarShown, in.keyboardShown,
             statusBandPx > 0);
-        return KeyboardOverlayPolicy.homeGridDockReservePx(in.side == Side.HOME && stackShown,
+        return KeyboardOverlayPolicy.homeGridDockReservePx(in.page.isHome() && stackShown,
             dockContentPx, base.edgeGapPx);
     }
 

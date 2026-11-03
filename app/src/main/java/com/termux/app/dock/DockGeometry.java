@@ -11,7 +11,7 @@ import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.wall.PageRef;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -40,19 +40,8 @@ import java.util.Objects;
  */
 public final class DockGeometry {
 
-    /** The two halves of the wall. */
-    public enum Side {
-        HOME, WORKSPACE;
-
-        /** The half a wall page belongs to: Home's pages are Home's, every window the Workspace's. */
-        @NonNull
-        public static Side of(@NonNull PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
-        }
-    }
-
-    /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
-    private static final Side[] PUT_AWAY_ROW_OWNERS = {Side.HOME, Side.WORKSPACE};
+    /** The pages asked, in order, for the pinned-apps row a layout puts away: Home first. */
+    private static final PageRef[] PUT_AWAY_ROW_OWNERS = {PageRef.HOME, PageRef.TERMINAL};
 
     /**
      * One half's raw facts: its resolved arrangement (#141), which says its layout, Style, Dock
@@ -79,6 +68,11 @@ public final class DockGeometry {
         public final boolean searchField;
         /** The Wall strip's row height its layout keeps, dp; zero or less for the shipped one. */
         public final int wallStripHeightDp;
+        /** The one icon size in dp (ADR 0020 §3); 0 for the old height-scale curves. */
+        public final int iconDp;
+        /** The Home grid's side margin in dp and its column count (spec §8a); 0 where unknown. */
+        public final float gridEdgeDp;
+        public final int gridColumns;
 
         private Half(@NonNull Builder b) {
             arrangement = b.arrangement();
@@ -90,6 +84,9 @@ public final class DockGeometry {
             design = arrangement.design();
             searchField = arrangement.searchField();
             wallStripHeightDp = b.wallStripHeightDp;
+            iconDp = b.iconDp;
+            gridEdgeDp = b.gridEdgeDp;
+            gridColumns = b.gridColumns;
         }
 
         /** A half of {@code arrangement}: its layout, Style, design and Search field as resolved. */
@@ -106,14 +103,15 @@ public final class DockGeometry {
         public static Builder builder(@NonNull PlaceLayout layout) {
             return new Builder(ResolvedArrangement.of(layout, LayoutStyle.DOCKED,
                 DockStyle.GLASS_TRAY, false, false, PlaceOrientation.PORTRAIT,
-                LayoutVariant.NORMAL, false));
+                LayoutVariant.NORMAL, PageRef.TERMINAL));
         }
 
         /** This half with its facts as they are, to change one or two. */
         @NonNull
         public Builder toBuilder() {
             return new Builder(arrangement).dockHeightScale(dockHeightScale)
-                .marginDp(marginDp).cornersDp(cornersDp).wallStripHeightDp(wallStripHeightDp);
+                .marginDp(marginDp).cornersDp(cornersDp).wallStripHeightDp(wallStripHeightDp)
+                .iconDp(iconDp).grid(gridEdgeDp, gridColumns);
         }
 
         /** Equal on what the dock measures; the Drawer tile and where it was resolved are not. */
@@ -149,6 +147,9 @@ public final class DockGeometry {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
             private int cornersDp = -1;
             private int wallStripHeightDp;
+            private int iconDp;
+            private float gridEdgeDp;
+            private int gridColumns;
 
             private Builder(@NonNull ResolvedArrangement arrangement) {
                 base = arrangement;
@@ -164,15 +165,17 @@ public final class DockGeometry {
             public Builder design(@NonNull DockStyle v) { design = v; return this; }
             public Builder searchField(boolean v) { searchField = v; return this; }
             public Builder wallStripHeightDp(int v) { wallStripHeightDp = v; return this; }
+            public Builder iconDp(int v) { iconDp = v; return this; }
+            public Builder grid(float edgeDp, int columns) { gridEdgeDp = edgeDp; gridColumns = columns; return this; }
 
             /** The arrangement as handed in, or remade where the builder changed its dress. */
             @NonNull
             private ResolvedArrangement arrangement() {
                 if (floating == base.floating() && design == base.design()
                     && searchField == base.searchField()) return base;
-                return ResolvedArrangement.of(base.layout(),
+                return base.keepingSideBar(ResolvedArrangement.of(base.layout(),
                     floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED, design, searchField,
-                    base.drawerTile(), base.orientation(), base.variant(), base.home());
+                    base.drawerTile(), base.orientation(), base.variant(), base.page()));
             }
 
             @NonNull
@@ -193,8 +196,17 @@ public final class DockGeometry {
         public final boolean preferencesAvailable;
         @NonNull public final Half home;
         @NonNull public final Half workspace;
-        /** The half whose rows the frame shows, and whose dress they wear. */
-        @NonNull public final Side rows;
+        /**
+         * A second Home page's half, for a crossing between two Home pages (#173 slice E): it
+         * answers for the page its arrangement is resolved for ({@link #half}), {@link #home} for
+         * every other Home page. Null while the snapshot holds one Home half.
+         */
+        @Nullable public final Half otherHome;
+        /**
+         * The page whose rows the frame shows, and whose dress they wear: Home's half answers for
+         * a Home page, the Workspace's for every window ({@link #half}).
+         */
+        @NonNull public final PageRef rows;
         /**
          * The arrangement the frame stands its chrome in: the committed half's layout, or mid-slide
          * the layout the seam stands with the other half's rows ({@code SeamCrossing#layout}).
@@ -220,8 +232,10 @@ public final class DockGeometry {
             preferencesAvailable = b.preferencesAvailable;
             home = b.home;
             workspace = b.workspace;
+            otherHome = b.otherHome;
             rows = b.rows;
-            arrangement = b.arrangement != null ? b.arrangement : half(b.rows, b.home, b.workspace).layout;
+            arrangement = b.arrangement != null ? b.arrangement
+                : half(b.rows, b.home, b.otherHome, b.workspace).layout;
             density = b.density;
             widthPx = b.widthPx;
             cutoutLeftPx = b.cutoutLeftPx;
@@ -239,14 +253,24 @@ public final class DockGeometry {
             return new Builder(home, workspace);
         }
 
+        /**
+         * The half {@code page} stands in: Home's for a Home page, the Workspace's for a window;
+         * the second Home half ({@link #otherHome}) for the Home page it is resolved for, while a
+         * crossing between two Home pages holds one.
+         */
         @NonNull
-        public Half half(@NonNull Side side) {
-            return half(side, home, workspace);
+        public Half half(@NonNull PageRef page) {
+            return half(page, home, otherHome, workspace);
         }
 
         @NonNull
-        private static Half half(@NonNull Side side, @NonNull Half home, @NonNull Half workspace) {
-            return side == Side.HOME ? home : workspace;
+        private static Half half(@NonNull PageRef page, @NonNull Half home,
+                                 @Nullable Half otherHome, @NonNull Half workspace) {
+            if (!page.isHome()) return workspace;
+            if (otherHome != null && page.id >= 0
+                && otherHome.arrangement.page().equals(page)
+                && !home.arrangement.page().equals(page)) return otherHome;
+            return home;
         }
 
         /** The half whose rows the frame shows. */
@@ -256,13 +280,13 @@ public final class DockGeometry {
         }
 
         /**
-         * {@code side} at rest, on this device: its own rows in its own layout, its Search field
+         * {@code page} at rest, on this device: its own rows in its own layout, its Search field
          * and Wall strip wholly in or out as its dress has them, nothing squeezed.
          */
         @NonNull
-        public Snapshot restOf(@NonNull Side side) {
-            Half half = half(side);
-            return toBuilder().rows(side).arrangement(half.layout)
+        public Snapshot restOf(@NonNull PageRef page) {
+            Half half = half(page);
+            return toBuilder().rows(page).arrangement(half.layout)
                 .fieldReveal(half.searchField ? 1f : 0f)
                 .stripReveal(half.design == DockStyle.WALL_STRIP ? 1f : 0f)
                 .squeezePx(0)
@@ -271,7 +295,8 @@ public final class DockGeometry {
 
         @NonNull
         public Builder toBuilder() {
-            return new Builder(home, workspace).preferencesAvailable(preferencesAvailable)
+            return new Builder(home, workspace).otherHome(otherHome)
+                .preferencesAvailable(preferencesAvailable)
                 .rows(rows).arrangement(arrangement)
                 .density(density).widthPx(widthPx).cutouts(cutoutLeftPx, cutoutRightPx)
                 .baseToolbarHeightPx(baseToolbarHeightPx).landscape(landscape)
@@ -298,20 +323,22 @@ public final class DockGeometry {
                 && squeezePx == that.squeezePx
                 && arrangement.equals(that.arrangement)
                 && home.equals(that.home)
+                && Objects.equals(otherHome, that.otherHome)
                 && workspace.equals(that.workspace);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(preferencesAvailable, home, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
+            return Objects.hash(preferencesAvailable, home, otherHome, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
                 landscape, pinnedSlotCount, fieldReveal, stripReveal, squeezePx);
         }
 
         public static final class Builder {
             @NonNull private final Half home;
             @NonNull private final Half workspace;
+            @Nullable private Half otherHome;
             private boolean preferencesAvailable = true;
-            @NonNull private Side rows = Side.WORKSPACE;
+            @NonNull private PageRef rows = PageRef.TERMINAL;
             @Nullable private PlaceLayout arrangement;
             private float density = 1f;
             private int widthPx;
@@ -329,8 +356,10 @@ public final class DockGeometry {
                 this.workspace = workspace;
             }
 
+            /** A second Home page's half ({@link Snapshot#otherHome}); null for none. */
+            public Builder otherHome(@Nullable Half v) { otherHome = v; return this; }
             public Builder preferencesAvailable(boolean v) { preferencesAvailable = v; return this; }
-            public Builder rows(@NonNull Side v) { rows = v; return this; }
+            public Builder rows(@NonNull PageRef v) { rows = v; return this; }
             public Builder arrangement(@Nullable PlaceLayout v) { arrangement = v; return this; }
             public Builder density(float v) { density = v; return this; }
             public Builder widthPx(int v) { widthPx = v; return this; }
@@ -399,6 +428,9 @@ public final class DockGeometry {
             .capsule(prefs && rows.floating)
             .appsRowOnEdge(appsShown && PlaceChromePolicy.appsEdge(layout) != PlaceLayout.Edge.BOTTOM)
             .appsOnRail(rail)
+            // Home's side bar on a phone in landscape draws the one icon step (ADR 0020 §12);
+            // a rail the user stood on a side keeps the rail's own icon.
+            .railIconDp(prefs && rail && rows.arrangement.sideBarDock() ? rows.iconDp : 0)
             .appsRowAlone(appsRowAlone(layout))
             .appsRowNextToCanvas(appsRowNextToCanvas(layout))
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
@@ -411,6 +443,13 @@ public final class DockGeometry {
             .wallStripHeightDp(prefs ? rows.wallStripHeightDp : 0)
             .density(s.density)
             .barHeightScale(prefs ? rows.dockHeightScale : DockLayoutPolicy.sizePreset(2))
+            // The one icon size and the side-inset rule (ADR 0020 §3, spec §8a).
+            .iconDp(prefs ? rows.iconDp : 0)
+            .minSideInsetDp(prefs ? Math.max(rows.gridEdgeDp,
+                rows.floating ? 0f : DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP) : 0f)
+            .alignToGridDp(prefs && rows.gridColumns > 0 && s.pinnedSlotCount == rows.gridColumns
+                ? Math.max(rows.gridEdgeDp,
+                    rows.floating ? 0f : DockLayoutPolicy.DOCKED_MIN_SIDE_INSET_DP) : 0f)
             .dockHorizontalInsetDp(prefs
                 ? TermuxAppSharedPreferences.clampSurfaceHorizontalInset(rows.marginDp)
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET)
@@ -440,12 +479,12 @@ public final class DockGeometry {
      */
     private static void measurePutAwayRow(@NonNull Snapshot s,
                                           @NonNull DockLayoutPolicy.DockInputs.Builder in) {
-        for (Side side : PUT_AWAY_ROW_OWNERS) {
-            Half owner = s.half(side);
+        for (PageRef page : PUT_AWAY_ROW_OWNERS) {
+            Half owner = s.half(page);
             if (!PlaceChromePolicy.appsShown(owner.layout)) continue;
             in.hiddenRowAsShown(owner.floating, owner.dockHeightScale,
                 appsRowAlone(owner.layout));
-            DockLayout shown = compute(s.restOf(side));
+            DockLayout shown = compute(s.restOf(page));
             if (!shown.railActive)
                 in.hiddenRowSlot(shown.slotIconPx, shown.appsRowUsableWidthPx);
             return;

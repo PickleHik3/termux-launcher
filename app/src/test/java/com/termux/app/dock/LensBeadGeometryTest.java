@@ -349,14 +349,25 @@ public class LensBeadGeometryTest {
     }
 
     @Test
-    public void theRowWearsBeadsOnlyAloneOnTheDocksGlass() {
+    public void theRowWearsBeadsAloneOrOverTheAzRow() {
         com.termux.app.place.PlaceLayout.Edge bottom = com.termux.app.place.PlaceLayout.Edge.BOTTOM;
         com.termux.app.place.PlaceLayout.RowPlacement row =
             com.termux.app.place.PlaceLayout.RowPlacement.BOTTOM;
         // The A–Z row hidden, its edge still reading the bottom (pass 2's prefs): beads.
         assertTrue(LensBeadGeometry.rowWearsBeads(homeLayout(row, false, bottom), false, false));
-        // The A–Z row on the dock: the slab.
+        // The A–Z row on the dock under the icons (2026-11-03): Lens beads, each letter on a
+        // bead of its own; the Peek card's rule (rowWearsBeads) still wants the row alone.
+        assertTrue(LensBeadGeometry.rowWearsBeadsCuttingFrame(homeLayout(row, true, bottom),
+            false, false));
+        assertTrue(LensBeadGeometry.azRowWearsBeads(homeLayout(row, true, bottom)));
         assertTrue(!LensBeadGeometry.rowWearsBeads(homeLayout(row, true, bottom), false, false));
+        // A keyboard sharing the glass keeps the slab, letters or not.
+        assertTrue(!LensBeadGeometry.rowWearsBeadsCuttingFrame(homeLayout(row, true, bottom),
+            false, true));
+        // No A–Z row on the plank: no letter beads.
+        assertTrue(!LensBeadGeometry.azRowWearsBeads(homeLayout(row, false, bottom)));
+        assertTrue(!LensBeadGeometry.azRowWearsBeads(
+            homeLayout(row, true, com.termux.app.place.PlaceLayout.Edge.TOP)));
         // The A–Z row on another edge leaves the row alone: beads.
         assertTrue(LensBeadGeometry.rowWearsBeads(
             homeLayout(row, true, com.termux.app.place.PlaceLayout.Edge.TOP), false, false));

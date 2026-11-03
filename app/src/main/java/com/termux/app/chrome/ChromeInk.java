@@ -167,8 +167,12 @@ public final class ChromeInk {
         double fixedTarget;
     }
 
-    /** One terminal pane's standing answer, remembered on its own rect. */
+    /** One terminal pane's standing answer, remembered for the pane that asked and the rect it asked at. */
     private static final class PaneAnswer {
+        /** The root-space rect this answer was measured at. */
+        @NonNull Rect rect = new Rect();
+        /** Detached: kept for its return at the same rect, but not counted in the band. */
+        boolean parked;
         int wallpaper;
         boolean sampled;
         int dim;
@@ -286,9 +290,46 @@ public final class ChromeInk {
      */
     @Nullable
     public android.graphics.ColorMatrix evenOutMatrix(@NonNull Rect rootRect) {
+        return evenOutMatrix(rootRect, new Rect(rootRect));
+    }
+
+    /**
+     * {@link #evenOutMatrix(Rect)} for the pane {@code key} names; null when that pane's answer
+     * was measured at another rect (it is stale until the pane asks again).
+     */
+    @Nullable
+    public android.graphics.ColorMatrix evenOutMatrix(@NonNull Rect rootRect, @NonNull Object key) {
         if (mEvenOutPolicy == null) return null;
-        PaneAnswer answer = mPanes.get(rootRect);
-        return answer == null ? null : answer.evenOut;
+        PaneAnswer answer = mPanes.get(key);
+        return answer == null || !answer.rect.equals(rootRect) ? null : answer.evenOut;
+    }
+
+    /**
+     * Forgets the answer of the pane {@code key} for good (its slab stopped being measured or the
+     * pane closed), and re-publishes the band's ground from the panes that remain.
+     */
+    public void forgetPane(@NonNull Object key) {
+        PaneAnswer gone = mPanes.remove(key);
+        if (gone == null || mPanes.isEmpty()) return;
+        publishPaneBand(gone.tint);
+    }
+
+    /**
+     * Parks or unparks the pane {@code key}: a detached pane keeps its answer but stops counting in
+     * the band (means, polarity, ground, count); unparked it counts again with no new measure. The
+     * band's ground is re-published, and tells its listener only if the published values moved.
+     */
+    public void parkPane(@NonNull Object key, boolean parked) {
+        PaneAnswer answer = mPanes.get(key);
+        if (answer == null || answer.parked == parked) return;
+        answer.parked = parked;
+        if (liveCount() > 0) publishPaneBand(answer.tint);
+    }
+
+    private int liveCount() {
+        int n = 0;
+        for (PaneAnswer pane : mPanes.values()) if (!pane.parked) n++;
+        return n;
     }
 
     /** Panes a window can hold at once, and then some; an older rect is dropped, not an error. */
@@ -312,6 +353,46 @@ public final class ChromeInk {
          * its rows are read off the frame the status bar or the dock is drawn at.
          */
         int blurRadiusDp = -1;
+        /**
+         * The band's frame (its own opaque cut of the blurred wallpaper) is up ({@link
+         * #noteBandFrame}): it is drawn over the page's dim, so its content stands on no dim.
+         */
+        boolean framed;
+    }
+
+    /**
+     * The dim a band's content really stands on: none where the band draws its own frame, which
+     * covers the page's dim (measured 2026-10-28: under the dock and the keyboard the 45% page dim
+     * is not on screen); the page's ground dim where the band has no frame and the wallpaper
+     * shows through it dimmed.
+     */
+    @ColorInt
+    static int groundDim(boolean framed, @ColorInt int pageDim) {
+        return framed ? Color.TRANSPARENT : pageDim;
+    }
+
+    /** {@link #groundDim} for {@code band} under {@code rootRect}. */
+    @ColorInt
+    private int bandDim(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
+        return glassFor(band).framed ? Color.TRANSPARENT : dimUnder(rootRect);
+    }
+
+    /**
+     * Tells the ink whether {@code band}'s own frame is up (the keyboard's stack, the dock's
+     * backdrop). A frame covers the page's dim, so the band's ink, vote and even-out are then
+     * measured with no dim under them. Says whether that moved; a move asks for a redraw.
+     */
+    public boolean noteBandFrame(@NonNull GlassBackdropCache.Band band, boolean framed) {
+        BandGlass glass = glassFor(band);
+        if (glass.framed == framed) return false;
+        glass.framed = framed;
+        if (mOnVeilChanged != null) mOnVeilChanged.run();
+        return true;
+    }
+
+    /** Whether {@code band}'s own frame is up ({@link #noteBandFrame}). */
+    public boolean bandFramed(@NonNull GlassBackdropCache.Band band) {
+        return glassFor(band).framed;
     }
 
     /** The base colour {@code glass}'s tint is drawn in: the tinted one it told, or the mode's. */
@@ -339,7 +420,7 @@ public final class ChromeInk {
         new EnumMap<>(GlassBackdropCache.Band.class);
 
     /** Each terminal pane's answer by its root-space rect, eldest first. Cleared by {@link #invalidate}. */
-    @NonNull private final java.util.LinkedHashMap<Rect, PaneAnswer> mPanes =
+    @NonNull private final java.util.LinkedHashMap<Object, PaneAnswer> mPanes =
         new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
 
     @Nullable private Polarity mPolarity;
@@ -572,13 +653,55 @@ public final class ChromeInk {
     public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @ColorInt int tint,
                                            @ColorInt int veilColor, @ColorInt int ink,
                                            @ColorInt int dimInk) {
+        return terminalPane(rootRect, new Rect(rootRect), tint, veilColor, ink, dimInk);
+    }
+
+    /**
+     * {@link #terminalPane(Rect, int, int, int, int)} for the pane {@code key} names: one stable
+     * object per pane (its slab), equal to itself for as long as the pane lives. The key keeps one
+     * answer; asking at a new rect replaces that pane's own answer and touches no other pane's,
+     * so a float over a tiled pane does not evict it.
+     */
+    @NonNull
+    public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @NonNull Object key,
+                                           @ColorInt int tint, @ColorInt int veilColor,
+                                           @ColorInt int ink, @ColorInt int dimInk) {
+        android.os.Trace.beginSection("Ink.terminalPane");
+        try {
+            return terminalPaneImpl(rootRect, key, tint, veilColor, ink, dimInk);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    /** {@link GlassBackdropCache#sampleLightnessUncached}, named in traces. */
+    @Nullable
+    private GlassBackdropCache.Lightness sampleLightnessTraced(@NonNull Rect rootRect) {
+        android.os.Trace.beginSection("Ink.terminalPane.lightness");
+        try {
+            return mCache.sampleLightnessUncached(rootRect);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private OnGlass.Resolution terminalPaneImpl(@NonNull Rect rootRect, @NonNull Object key,
+                                       @ColorInt int tint,
+                                       @ColorInt int veilColor, @ColorInt int ink,
+                                       @ColorInt int dimInk) {
         readMode();
+        int dim = dimUnder(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
-        PaneAnswer answer = mPanes.get(rootRect);
-        if (answer == null) pruneResized(rootRect);
+        PaneAnswer answer = mPanes.get(key);
+        if (answer != null && !answer.rect.equals(rootRect)) {
+            // The same pane at a new rect: its old answer is replaced, nobody else's is touched.
+            mPanes.remove(key);
+            answer = null;
+        }
         if (answer != null && answer.sampled
-                && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)
+                && answer.matches(dim, tint, veilColor, ink, dimInk, target)
                 && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
+            if (answer.parked) parkPane(key, false);
             return answer.resolution;
         }
         int wallpaper;
@@ -587,11 +710,17 @@ public final class ChromeInk {
             wallpaper = answer.wallpaper;
             sampled = true;
         } else {
-            int read = mCache.sampleUncached(rootRect);
+            int read;
+            android.os.Trace.beginSection("Ink.terminalPane.sample");
+            try {
+                read = mCache.sampleUncached(rootRect);
+            } finally {
+                android.os.Trace.endSection();
+            }
             sampled = Color.alpha(read) != 0;
             wallpaper = sampled ? read : mCache.fallbackWallpaper();
         }
-        int meanFlat = OnGlass.backdrop(wallpaper, mDimColor, tint);
+        int meanFlat = OnGlass.backdrop(wallpaper, dim, tint);
         int flat = meanFlat;
         // Even-out (ADR 0014, wave 2): measured here so the veil, the ground and the palette all
         // see the band that is drawn. A pane that cannot be read keeps the mean, as does the
@@ -605,25 +734,25 @@ public final class ChromeInk {
         double shortDark = 0d;
         if (policy != null && sampled) {
             lightness = answer != null && answer.lightness != null
-                ? answer.lightness : mCache.sampleLightnessUncached(rootRect);
+                ? answer.lightness : sampleLightnessTraced(rootRect);
             if (lightness != null) {
                 // The limit is applied on the composited ground (after frost, dim and tint), and
                 // a side the chain cannot reach is not chosen over one it can.
-                EvenOut.Chain chain = compositeChain(lightness.meanColor, mDimColor, tint);
+                EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
                 shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
                     policy.level, chain);
                 shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
                     policy.level, chain);
                 // One polarity for the whole band: every live pane's shortfalls vote, this
                 // pane's fresh ones included (its old answer, if any, is replaced).
-                evenOutPolarity = bandPolarity(policy, rootRect, shortPale, shortDark);
+                evenOutPolarity = bandPolarity(policy, key, shortPale, shortDark);
                 mBandPolarity = evenOutPolarity;
                 boolean pale = evenOutPolarity == Polarity.PALE_INK;
                 EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
                     pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
                 mapping = mapping.toward(policy.strengthPercent / 100d);
                 evenOut = EvenOutMatrix.of(mapping);
-                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, mDimColor, tint), evenOutPolarity);
+                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, dim, tint), evenOutPolarity);
             }
         }
         // The normal foreground is body text; the dim one is text a program asked to recede, and
@@ -631,21 +760,29 @@ public final class ChromeInk {
         // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
         // the user made thin stays glass, and the ink is reported as capped instead.
         int cap255 = veilCeiling255(tint);
-        OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
-            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
+        android.os.Trace.beginSection("Ink.terminalPane.resolve");
+        OnGlass.Resolution resolution;
+        try {
+            resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
+                target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
+        } finally {
+            android.os.Trace.endSection();
+        }
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {
-                java.util.Iterator<Rect> eldest = mPanes.keySet().iterator();
+                java.util.Iterator<Object> eldest = mPanes.keySet().iterator();
                 eldest.next();
                 eldest.remove();
             }
-            mPanes.put(new Rect(rootRect), answer);
+            answer.rect.set(rootRect);
+            mPanes.put(key, answer);
         }
+        answer.parked = false;
         answer.resolution = resolution;
         answer.wallpaper = wallpaper;
         answer.sampled = sampled;
-        answer.dim = mDimColor;
+        answer.dim = dim;
         answer.tint = tint;
         answer.veilColor = veilColor;
         answer.ink = ink;
@@ -660,6 +797,13 @@ public final class ChromeInk {
         answer.shortPale = shortPale;
         answer.shortDark = shortDark;
         mEvenOutGeneration++;
+        publishPaneBand(tint);
+        return resolution;
+    }
+
+    /** Votes and publishes the pane band's ground and surface from every live pane's answer. */
+    private void publishPaneBand(@ColorInt int tint) {
+        EvenOutPolicy policy = mEvenOutPolicy;
         // The chrome's vote stays the mean (the keyboard, dock and status bar are not evened out
         // yet); the palette's ground is the worst end across panes when the stage is on.
         vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote(tint, true));
@@ -671,7 +815,6 @@ public final class ChromeInk {
             mPaneSurface = surface;
             if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
         }
-        return resolution;
     }
 
     /**
@@ -727,6 +870,18 @@ public final class ChromeInk {
         mOnPaneGroundChanged = listener;
     }
 
+    /**
+     * The ink the pane band chose on its last measurement, weighing every live pane's shortfall
+     * for both inks ({@link #bandPolarity(EvenOutPolicy, Rect, double, double)}); null before a
+     * pane is measured or while the even-out stage is off. The palette wears this ink outright:
+     * the ground it is handed ({@link #terminalPaneGround}) is the band's worst end for this ink,
+     * and judging the ink again there would send it to the other side.
+     */
+    @Nullable
+    public Polarity bandPolarity() {
+        return mEvenOutPolicy == null ? null : mBandPolarity;
+    }
+
     /** The band's polarity as last chosen, for tests. */
     @Nullable Polarity bandPolarityForTests() {
         return mBandPolarity;
@@ -734,7 +889,7 @@ public final class ChromeInk {
 
     /** Terminal panes remembered right now, for tests. */
     int paneAnswerCountForTests() {
-        return mPanes.size();
+        return liveCount();
     }
 
     // ------------------------------------------------------------------ the widget band
@@ -787,23 +942,24 @@ public final class ChromeInk {
                                      @ColorInt int veilColor, @ColorInt int textInk,
                                      @ColorInt int graphicInk) {
         readMode();
+        int dim = dimUnder(rootRect);
         double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
         WidgetAnswer answer = widgetSample(rootRect);
-        if (answer.answered && answer.resolution != null && answer.dim == mDimColor
+        if (answer.answered && answer.resolution != null && answer.dim == dim
                 && answer.body == body && answer.veilColor == veilColor
                 && answer.textInk == textInk && answer.graphicInk == graphicInk
                 && Double.compare(answer.textTarget, textTarget) == 0
                 && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
             return answer.resolution;
         }
-        int under = OnGlass.backdrop(answer.wallpaper, mDimColor, Color.TRANSPARENT);
+        int under = OnGlass.backdrop(answer.wallpaper, dim, Color.TRANSPARENT);
         OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
             graphicInk, graphicTarget, veilColor);
         // Answered for good only once the wallpaper was really read; a nominal answer asks again.
         answer.answered = answer.sampled;
         answer.resolution = resolution;
-        answer.dim = mDimColor;
+        answer.dim = dim;
         answer.body = body;
         answer.veilColor = veilColor;
         answer.textInk = textInk;
@@ -821,7 +977,8 @@ public final class ChromeInk {
     @ColorInt
     public int widgetWallpaper(@NonNull Rect rootRect) {
         readMode();
-        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mDimColor, Color.TRANSPARENT);
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, dimUnder(rootRect),
+            Color.TRANSPARENT);
     }
 
     /**
@@ -836,7 +993,7 @@ public final class ChromeInk {
         readMode();
         int read = mCache.sampleUncached(rootRect);
         if (Color.alpha(read) == 0) return Color.TRANSPARENT;
-        return OnGlass.backdrop(read, mDimColor, Color.TRANSPARENT);
+        return OnGlass.backdrop(read, dimUnder(rootRect), Color.TRANSPARENT);
     }
 
     /** What {@link #wallpaperSample} stands for while it reads nothing: the fallback, under the dim. */
@@ -899,7 +1056,7 @@ public final class ChromeInk {
         long red = 0, green = 0, blue = 0;
         int count = 0;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -920,7 +1077,7 @@ public final class ChromeInk {
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -945,7 +1102,7 @@ public final class ChromeInk {
         return pane.evenOutPolarity != bandPolarity(policy, null, 0d, 0d, pane);
     }
 
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Rect fresh,
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Object fresh,
                                   double shortPale, double shortDark) {
         return bandPolarity(policy, fresh, shortPale, shortDark, null);
     }
@@ -954,11 +1111,11 @@ public final class ChromeInk {
      * The band's one polarity: the palette's current ink when every live pane can reach it with
      * room, else the other side when every pane can reach that, else the side with the least
      * total shortfall (the current one on a tie). A pane being measured ({@code fresh}, with its
-     * new shortfalls) replaces any stored answer for that rect; panes with no measurement (no
+     * new shortfalls) replaces any stored answer of that pane; panes with no measurement (no
      * shortfalls stored) do not vote.
      */
     @NonNull
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Rect fresh,
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Object fresh,
                                   double freshPale, double freshDark, @Nullable PaneAnswer self) {
         double totalPale = 0d, totalDark = 0d;
         double worstPale = 0d, worstDark = 0d;
@@ -966,9 +1123,9 @@ public final class ChromeInk {
             totalPale = worstPale = freshPale;
             totalDark = worstDark = freshDark;
         }
-        for (java.util.Map.Entry<Rect, PaneAnswer> e : mPanes.entrySet()) {
+        for (java.util.Map.Entry<Object, PaneAnswer> e : mPanes.entrySet()) {
             PaneAnswer pane = e.getValue();
-            if (fresh != null && e.getKey().equals(fresh)) continue;
+            if (pane.parked || (fresh != null && e.getKey().equals(fresh))) continue;
             if (pane.evenOutPolicy == null || pane.evenOutPolarity == null) continue;
             totalPale += pane.shortPale;
             totalDark += pane.shortDark;
@@ -987,30 +1144,311 @@ public final class ChromeInk {
         return otherTotal < ownTotal ? other : current;
     }
 
-    /**
-     * A pane laid out anew replaces the answer of the rect it was resized from: any stored answer
-     * whose rect overlaps {@code fresh} by more than half of the smaller of the two is dropped.
-     * Split neighbours that merely touch or shift by a divider's width are kept.
-     */
-    private void pruneResized(@NonNull Rect fresh) {
-        java.util.Iterator<java.util.Map.Entry<Rect, PaneAnswer>> it = mPanes.entrySet().iterator();
-        while (it.hasNext()) {
-            Rect old = it.next().getKey();
-            Rect hit = new Rect();
-            if (!hit.setIntersect(old, fresh)) continue;
-            long overlap = (long) hit.width() * hit.height();
-            long smaller = Math.min((long) old.width() * old.height(),
-                (long) fresh.width() * fresh.height());
-            if (overlap * 2 > smaller) it.remove();
-        }
-    }
-
     /** Bumped whenever a pane is measured anew or the stage changes; panes poll it to re-dress. */
     private int mEvenOutGeneration;
 
     /** A cheap token that moves when any pane's even-out matrix may have; see PaneSurfaceStyle. */
     public int evenOutGeneration() {
         return mEvenOutGeneration;
+    }
+
+    // ------------------------------------------------------------------ even-out, chrome bands
+
+    /**
+     * Whether {@code band} is drawn by a surface with an Opacity of its own (a
+     * {@code TermuxAppSharedPreferences.SurfaceSlot}): the dock, the keyboard and the top pane the
+     * status strip stands on. Card widgets and the nav strip have none and always take the
+     * terminal's even-out.
+     */
+    static boolean hasOpacitySlot(@Nullable GlassBackdropCache.Band band) {
+        if (band == null) return false;
+        switch (band) {
+            case DOCK:
+            case KEYBOARD:
+            case STATUS_BAR:
+            case WINDOW_BAR:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * The even-out a chrome band draws with (ADR 0014, wave 2c; decided 2026-10-28), or null for
+     * none. {@code terminal} is the terminal pane's stage as the Developer switch and the Contrast
+     * level make it, at the terminal Opacity's strength — null while the switch is off, which
+     * turns every band off. By default a band copies it: the terminal palette's ceilings and the
+     * terminal's strength (the same instance, so a band and the panes are seen to share it). A band
+     * whose Opacity does not follow Base ({@code inheritsOpacity} false, a band with a slot only)
+     * keeps its own: the ceiling solved from its own body-text target at the Contrast level
+     * ({@link EvenOut#ceilingForTarget}), its strength from its own Opacity through
+     * {@link #evenOutStrengthPercent}. A strength of 0 is off for that band. Pure.
+     */
+    @Nullable
+    public static EvenOutPolicy bandEvenOutPolicy(@Nullable GlassBackdropCache.Band band,
+                                                  boolean inheritsOpacity, int ownOpacityPercent,
+                                                  @Nullable EvenOutPolicy terminal) {
+        if (terminal == null) return null;
+        if (inheritsOpacity || !hasOpacitySlot(band)) {
+            return terminal.strengthPercent > 0 ? terminal : null;
+        }
+        int strength = evenOutStrengthPercent(ownOpacityPercent);
+        if (strength <= 0) return null;
+        double target = LegibilityLevel.of(terminal.level).target(OnGlass.TARGET_BODY_TEXT);
+        return new EvenOutPolicy(terminal.level,
+            EvenOut.ceilingForTarget(target, Polarity.PALE_INK),
+            EvenOut.ceilingForTarget(target, Polarity.DARK_INK), terminal.current, strength);
+    }
+
+    /** One chrome band's even-out as last measured, kept for its rect, the frame and its inputs. */
+    private static final class BandEvenOut {
+        @NonNull final Rect rect = new Rect();
+        int generation = -1;
+        boolean measured;
+        @Nullable EvenOutPolicy policy;
+        int dim;
+        int tint;
+        @Nullable android.graphics.ColorMatrix matrix;
+        /** The side last mapped on; the next measure keeps it while it can still be reached. */
+        @Nullable Polarity polarity;
+        /** {@link #rowWallpapers} through {@link #matrix}; scratch, rewritten on every ask. */
+        @NonNull final int[] rows = new int[FACE_ROWS];
+    }
+
+    @NonNull private final Map<GlassBackdropCache.Band, EvenOutPolicy> mBandEvenOutPolicies =
+        new EnumMap<>(GlassBackdropCache.Band.class);
+    @NonNull private final Map<GlassBackdropCache.Band, BandEvenOut> mBandEvenOut =
+        new EnumMap<>(GlassBackdropCache.Band.class);
+    /** The decor nav strip's: it has no band, so it is kept on its own. */
+    @Nullable private EvenOutPolicy mStripEvenOutPolicy;
+    @NonNull private final BandEvenOut mStripEvenOut = new BandEvenOut();
+    @NonNull private final Rect mTmpEvenOutRect = new Rect();
+
+    /**
+     * Sets {@code band}'s even-out ({@link #bandEvenOutPolicy}); null is today's drawing and today's
+     * ink exactly. A change re-measures the band on its next ask. Cheap when nothing moved.
+     */
+    public void setBandEvenOutPolicy(@NonNull GlassBackdropCache.Band band,
+                                     @Nullable EvenOutPolicy policy) {
+        if (samePolicy(mBandEvenOutPolicies.get(band), policy)) return;
+        if (policy == null) mBandEvenOutPolicies.remove(band);
+        else mBandEvenOutPolicies.put(band, policy);
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo != null) {
+            memo.measured = false;
+            if (policy == null && memo.matrix != null) {
+                memo.matrix = null;
+                changedEvenOut();
+            }
+        }
+    }
+
+    /** {@link #setBandEvenOutPolicy} for the decor nav strip, which carries no band. */
+    public void setStripEvenOutPolicy(@Nullable EvenOutPolicy policy) {
+        if (samePolicy(mStripEvenOutPolicy, policy)) return;
+        mStripEvenOutPolicy = policy;
+        mStripEvenOut.measured = false;
+        if (policy == null && mStripEvenOut.matrix != null) {
+            mStripEvenOut.matrix = null;
+            changedEvenOut();
+        }
+    }
+
+    /**
+     * The even-out matrix {@code band}'s glass draws its frame through, ahead of the frost filter
+     * ({@link GlassFilters#withEvenOut}), measured on the band's own rect: {@code screenRect} where
+     * the drawing site knows it (the dock's backdrop), else the rect the band's content last asked
+     * about (the keyboard's host). Null when the band has no even-out, is not measured yet, or its
+     * mapping is the identity. Memoised: re-measured only when the rect, the frame, the launcher's
+     * dim, the band's tint or the policy moved, so a dress pass that changes nothing costs a few
+     * compares. The band's ink is then solved on the same evened ground ({@link #evened}).
+     */
+    @Nullable
+    public android.graphics.ColorMatrix bandEvenOutMatrix(@NonNull GlassBackdropCache.Band band,
+                                                          @Nullable Rect screenRect) {
+        EvenOutPolicy policy = mBandEvenOutPolicies.get(band);
+        if (policy == null) return null;
+        readMode();
+        Rect root;
+        if (screenRect != null) {
+            toRootSpace(screenRect, mTmpEvenOutRect);
+            root = mTmpEvenOutRect;
+        } else {
+            Contract contract = mContracts.get(band);
+            if (contract == null || !contract.seen) return null;
+            root = contract.rect;
+        }
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo == null) {
+            memo = new BandEvenOut();
+            mBandEvenOut.put(band, memo);
+        }
+        return measureEvenOut(memo, policy, root, glassFor(band), glassFor(band).framed);
+    }
+
+    /**
+     * {@link #bandEvenOutMatrix} for the decor nav strip at {@code screenRect}: the frost of the
+     * surface right above it, so measured on the dock's glass; its frame is up whenever this
+     * is asked (the strip's frost site), so it stands on no page dim.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix stripEvenOutMatrix(@NonNull Rect screenRect) {
+        EvenOutPolicy policy = mStripEvenOutPolicy;
+        if (policy == null) return null;
+        readMode();
+        toRootSpace(screenRect, mTmpEvenOutRect);
+        return measureEvenOut(mStripEvenOut, policy, mTmpEvenOutRect,
+            glassFor(GlassBackdropCache.Band.DOCK), true);
+    }
+
+    /**
+     * {@code band}'s matrix as last measured, measuring nothing: a Glass drag's tick keeps it
+     * until the release's pass re-measures. Null while the band has no even-out.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix lastBandEvenOutMatrix(
+            @NonNull GlassBackdropCache.Band band) {
+        if (!mBandEvenOutPolicies.containsKey(band)) return null;
+        BandEvenOut memo = mBandEvenOut.get(band);
+        return memo == null ? null : memo.matrix;
+    }
+
+    /** {@link #lastBandEvenOutMatrix} for the decor nav strip. */
+    @Nullable
+    public android.graphics.ColorMatrix lastStripEvenOutMatrix() {
+        return mStripEvenOutPolicy == null ? null : mStripEvenOut.matrix;
+    }
+
+    @Nullable
+    private android.graphics.ColorMatrix measureEvenOut(@NonNull BandEvenOut memo,
+                                                        @NonNull EvenOutPolicy policy,
+                                                        @NonNull Rect rootRect,
+                                                        @NonNull BandGlass glass, boolean framed) {
+        int dim = groundDim(framed, dimUnder(rootRect));
+        int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
+        boolean sameDress = memo.measured && memo.tint == tint && samePolicy(memo.policy, policy);
+        if (sameDress && memo.generation == mCache.generation() && memo.rect.equals(rootRect)
+                && memo.dim == dim) {
+            return memo.matrix;
+        }
+        // Held (holdEvenOut): only the ground under the band moved, as it does every frame the
+        // chrome travels over the wallpaper. It keeps the matrix it stands on and is measured once
+        // on release. A new dress (tint, policy) still measures: that is a frame the chrome is
+        // dressed whole anyway.
+        if (mEvenOutHeld && sameDress) {
+            mEvenOutHeldMoved = true;
+            return memo.matrix;
+        }
+        GlassBackdropCache.Lightness lightness = mCache.sampleLightnessUncached(rootRect);
+        android.graphics.ColorMatrix matrix = null;
+        if (lightness != null) {
+            // As the pane does: the limit is met on the composited ground (frost, dim, the band's
+            // base layer at its opacity), and a side the chain cannot reach is not chosen over one
+            // it can. One band, one voter; it keeps the side it was mapped on while that reaches.
+            EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
+            double shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
+                policy.level, chain);
+            double shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
+                policy.level, chain);
+            Polarity polarity = onePolarity(memo.polarity != null ? memo.polarity : policy.current,
+                shortPale, shortDark);
+            boolean pale = polarity == Polarity.PALE_INK;
+            EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
+                pale ? policy.pale : policy.dark, polarity, policy.level, chain);
+            matrix = EvenOutMatrix.of(mapping.toward(policy.strengthPercent / 100d));
+            memo.polarity = polarity;
+        }
+        boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
+            memo.matrix == null ? null : memo.matrix.getArray());
+        memo.rect.set(rootRect);
+        memo.generation = mCache.generation();
+        memo.measured = lightness != null;
+        memo.policy = policy;
+        memo.dim = dim;
+        memo.tint = tint;
+        memo.matrix = matrix;
+        if (moved) changedEvenOut();
+        return matrix;
+    }
+
+    /**
+     * A band's polarity on its own: {@code current} when it can reach its limit with room, else the
+     * other side when that can, else the side with the smaller shortfall ({@code current} on a
+     * tie). {@link #bandPolarity} with one voter.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Polarity onePolarity(@NonNull Polarity current, double shortPale, double shortDark) {
+        boolean paleCurrent = current == Polarity.PALE_INK;
+        double own = paleCurrent ? shortPale : shortDark;
+        double other = paleCurrent ? shortDark : shortPale;
+        if (own <= 0d) return current;
+        Polarity flipped = paleCurrent ? Polarity.DARK_INK : Polarity.PALE_INK;
+        if (other <= 0d || other < own) return flipped;
+        return current;
+    }
+
+    /**
+     * Holds every chrome band's even-out (and the nav strip's) on the matrix it was last measured
+     * with, while the chrome travels across the seam: each frame of that travel moves the band over
+     * new wallpaper, and every re-measure that moved the matrix asked for a whole apply of the
+     * chrome in that frame (pong 2026-11-03: 19-28 ms on every drag frame). A band that was never
+     * measured, or whose dress changes, is still measured.
+     */
+    public void holdEvenOut() {
+        mEvenOutHeld = true;
+    }
+
+    /**
+     * Lets a {@link #holdEvenOut} go. Says whether any band was asked for while held from ground
+     * other than the one it was measured on, so the caller books the one pass that settles it.
+     */
+    public boolean releaseEvenOut() {
+        boolean moved = mEvenOutHeldMoved;
+        mEvenOutHeld = false;
+        mEvenOutHeldMoved = false;
+        return moved;
+    }
+
+    /** Whether {@link #holdEvenOut} is in force. */
+    public boolean isEvenOutHeld() {
+        return mEvenOutHeld;
+    }
+
+    private boolean mEvenOutHeld;
+    private boolean mEvenOutHeldMoved;
+
+    /** A band's matrix moved: its frame is re-dressed and its ink re-solved on the next pass. */
+    private void changedEvenOut() {
+        mEvenOutGeneration++;
+        if (mOnVeilChanged != null) mOnVeilChanged.run();
+    }
+
+    /**
+     * {@code wallpaper}, a sample from under {@code band}, as the band's even-out draws it: what
+     * the band's ink is solved on. The sample already carries the frost's arithmetic and the
+     * matrix is applied after it rather than before, which moves a band end by at most a few
+     * 8-bit steps (the frost is near the identity in lightness). Unchanged while the band has no
+     * even-out, and for an unreadable sample.
+     */
+    @ColorInt
+    private int evened(@NonNull GlassBackdropCache.Band band, @ColorInt int wallpaper) {
+        if (mBandEvenOutPolicies.isEmpty() || Color.alpha(wallpaper) == 0) return wallpaper;
+        if (!mBandEvenOutPolicies.containsKey(band)) return wallpaper;
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo == null || memo.matrix == null) return wallpaper;
+        return EvenOutMatrix.applyTo(memo.matrix, wallpaper);
+    }
+
+    /** {@link #rowWallpapers} through {@link #evened}; the cached rows themselves are kept raw. */
+    @NonNull
+    private int[] evenedRows(@NonNull GlassBackdropCache.Band band, @NonNull int[] rows) {
+        if (!mBandEvenOutPolicies.containsKey(band)) return rows;
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo == null || memo.matrix == null) return rows;
+        for (int i = 0; i < rows.length && i < memo.rows.length; i++)
+            memo.rows[i] = evened(band, rows[i]);
+        return memo.rows;
     }
 
     /**
@@ -1053,21 +1491,42 @@ public final class ChromeInk {
             ? new EvenOut.BandEnds(low, high) : new EvenOut.BandEnds(high, low);
     }
 
-    /** {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass. */
+    /**
+     * {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass, weighted by
+     * the area each pane covers: moving a divider trades area between panes over the same
+     * wallpaper, so it must not move the mean, and a count-weighted mean drifted with it.
+     */
     @ColorInt
     private int meanPaneSurface(@ColorInt int tint) {
-        long red = 0, green = 0, blue = 0;
-        int count = 0;
+        int[] surfaces = new int[mPanes.size()];
+        long[] areas = new long[mPanes.size()];
+        int n = 0;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
-            int surface = pane.resolution.surface;
-            red += Color.red(surface);
-            green += Color.green(surface);
-            blue += Color.blue(surface);
-            count++;
+            Rect rect = pane.rect;
+            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+            long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
+            if (area == 0) continue;
+            surfaces[n] = pane.resolution.surface;
+            areas[n] = area;
+            n++;
         }
-        count = Math.max(1, count);
-        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+        return areaWeightedMean(surfaces, areas, n);
+    }
+
+    /** The mean of {@code colors[0..n)} weighted by {@code areas}; black when nothing counts. */
+    @VisibleForTesting
+    @ColorInt
+    static int areaWeightedMean(@NonNull int[] colors, @NonNull long[] areas, int n) {
+        double red = 0, green = 0, blue = 0, total = 0;
+        for (int i = 0; i < n; i++) {
+            red += (double) Color.red(colors[i]) * areas[i];
+            green += (double) Color.green(colors[i]) * areas[i];
+            blue += (double) Color.blue(colors[i]) * areas[i];
+            total += areas[i];
+        }
+        if (total == 0) return Color.rgb(0, 0, 0);
+        return Color.rgb((int) Math.round(red / total), (int) Math.round(green / total),
+            (int) Math.round(blue / total));
     }
 
     /** The user's legibility control as this answers by it. */
@@ -1168,8 +1627,9 @@ public final class ChromeInk {
         // What the band's own glass is laid on, and nothing of the glass itself: the base layer is
         // part of the tint that gets composited over this, so counting it here too would apply it
         // twice and pick the worst row off a band a shade lighter than the one being drawn.
-        int wallpaper = mCache.wallpaperUnder(band, screenRect);
-        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        // Through the band's even-out where it has one: the ink is solved on the ground drawn.
+        int wallpaper = evened(band, mCache.wallpaperUnder(band, screenRect));
+        int under = OnGlass.backdrop(wallpaper, bandDim(band, screenRect), Color.TRANSPARENT);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer in its tinted
         // colour. No light model, so the polarity vote is the same number whichever ink is
         // asking.
@@ -1217,8 +1677,12 @@ public final class ChromeInk {
         BandGlass glass = glassFor(band);
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
         int baseColor = baseOf(glass);
-        int wallpaper = mCache.wallpaperUnder(band, contract.rect);
-        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        // The keyboard's glass is measured on the rect its legends asked about (GlassStack reads
+        // the same), so the matrix is current before the face is: the legends are chosen on the
+        // evened ground, as the pane's palette is.
+        bandEvenOutMatrix(band, null);
+        int wallpaper = evened(band, mCache.wallpaperUnder(band, contract.rect));
+        int under = OnGlass.backdrop(wallpaper, bandDim(band, contract.rect), Color.TRANSPARENT);
         vote(band, OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under));
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
@@ -1226,7 +1690,7 @@ public final class ChromeInk {
         // Measured row by row, not on the band's mean: a keyboard's bottom row can stand on
         // wallpaper far darker (or paler) than the band's average, and a promise made on the mean
         // is broken there. The veil is bought on the row where the ink reads worst on its cap.
-        int[] rows = rowWallpapers(band, contract.rect);
+        int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         boolean ownCaps = contract.secondCap != contract.cap;
         int ink = contract.darkInk;
         int secondInk = contract.secondInk;
@@ -1326,7 +1790,8 @@ public final class ChromeInk {
         int worst = 0;
         double worstRatio = Double.MAX_VALUE;
         for (int i = 0; i < rows.length; i++) {
-            int rowUnder = OnGlass.backdrop(rows[i], mDimColor, Color.TRANSPARENT);
+            int rowUnder = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+                Color.TRANSPARENT);
             float stop = DockGlassRendering.worstLightModelStop(ink, rowUnder, baseColor,
                 baseAlpha, mAccentColor, top, mid, foot, rowPosition(glass, i),
                 rowPosition(glass, i + 1));
@@ -1704,10 +2169,11 @@ public final class ChromeInk {
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
-        int[] rows = rowWallpapers(band, contract.rect);
+        int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
-            int under = OnGlass.backdrop(rows[i], mDimColor, Color.TRANSPARENT);
+            int under = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+                Color.TRANSPARENT);
             float centre = (rowPosition(glass, i) + rowPosition(glass, i + 1)) / 2f;
             int surface = DockGlassRendering.glassSurfaceAt(centre, under, baseColor, baseAlpha,
                 mAccentColor, top, mid, foot);
@@ -1775,7 +2241,8 @@ public final class ChromeInk {
     @ColorInt
     private int flatFace(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
         BandGlass glass = glassFor(band);
-        return WallpaperInk.faceOf(mCache.wallpaperUnder(band, rootRect), mDimColor, baseOf(glass),
+        return WallpaperInk.faceOf(evened(band, mCache.wallpaperUnder(band, rootRect)),
+            bandDim(band, rootRect), baseOf(glass),
             glass.opacity);
     }
 
@@ -1957,6 +2424,16 @@ public final class ChromeInk {
      * new veil, and the targets it scales are part of every memo key, so the invalidate below is
      * only there to drop the veils recorded against the old one.</p>
      */
+    /**
+     * The ground under {@code rootRect} (page-chrome spec C): the wallpaper dim of whichever page,
+     * or both with a seam between, the rect stands on. {@link ChromeRenderer.Surfaces#groundUnder}
+     * answers it; {@link #mDimColor} stays the wall-wide dim for answers that have no rect.
+     */
+    @ColorInt
+    private int dimUnder(@NonNull Rect rootRect) {
+        return mSurfaces.groundUnder(rootRect);
+    }
+
     private void readMode() {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();

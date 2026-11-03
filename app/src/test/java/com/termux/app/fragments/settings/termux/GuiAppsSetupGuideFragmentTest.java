@@ -20,7 +20,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.termux.R;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup;
 import com.termux.app.x11.GuiAppsSetupGuide;
 import com.termux.app.x11.GuiAppsSetupGuide.Step;
@@ -60,31 +60,31 @@ public class GuiAppsSetupGuideFragmentTest {
 
     @Test public void aFullLinuxGetsAllFiveSteps() {
         assertEquals(Arrays.asList(Step.SOURCE, Step.DISTRO, Step.STARTERS, Step.COMMAND, Step.GRAPHICS),
-            GuiAppsSetupGuide.stepsFor(TourEdition.TERMUX, GuiAppsSetup.Route.DISTRO));
+            GuiAppsSetupGuide.stepsFor(AppEdition.TERMUX, GuiAppsSetup.Route.DISTRO));
     }
 
     @Test public void termuxsOwnAppsSkipThePickOfALinux() {
         assertEquals(Arrays.asList(Step.SOURCE, Step.STARTERS, Step.COMMAND, Step.GRAPHICS),
-            GuiAppsSetupGuide.stepsFor(TourEdition.TERMUX, GuiAppsSetup.Route.X11_REPO));
+            GuiAppsSetupGuide.stepsFor(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO));
         assertEquals(Arrays.asList(Step.SOURCE, Step.STARTERS, Step.COMMAND, Step.GRAPHICS),
-            GuiAppsSetupGuide.stepsFor(TourEdition.VAJ, GuiAppsSetup.Route.X11_REPO));
+            GuiAppsSetupGuide.stepsFor(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO));
     }
 
     @Test public void nixHasNoGuideSteps() {
-        assertTrue(GuiAppsSetupGuide.stepsFor(TourEdition.NIX, GuiAppsSetup.Route.DISTRO).isEmpty());
-        assertTrue(GuiAppsSetupGuide.stepsFor(TourEdition.NIX, null).isEmpty());
+        assertTrue(GuiAppsSetupGuide.stepsFor(AppEdition.NIX, GuiAppsSetup.Route.DISTRO).isEmpty());
+        assertTrue(GuiAppsSetupGuide.stepsFor(AppEdition.NIX, null).isEmpty());
     }
 
     @Test public void vajsOwnAppsOfferNoBrowser() {
         assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.FILE_MANAGER),
-            GuiAppsSetupGuide.startersOffered(TourEdition.VAJ, GuiAppsSetup.Route.X11_REPO));
+            GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO));
         assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.BROWSER, GuiAppsSetup.StarterApp.FILE_MANAGER),
-            GuiAppsSetupGuide.startersOffered(TourEdition.VAJ, GuiAppsSetup.Route.DISTRO));
+            GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.DISTRO));
     }
 
     @Test public void theProgressLineCountsOnlyTheStepsThatExist() {
         Context context = themed(1f);
-        GuiAppsSetupGuideFragment guide = guide(TourEdition.TERMUX, context);
+        GuiAppsSetupGuideFragment guide = guide(AppEdition.TERMUX, context);
         View root = build(guide, context);
         assertEquals(4, progress(root).getChildCount());
         prefs().edit().putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
@@ -105,7 +105,7 @@ public class GuiAppsSetupGuideFragmentTest {
         GuiAppsSetupGuide.markerPresent = () -> false;
         GuiAppsSetupGuide.fcitx5Installed = () -> true;
         GuiAppsSetupGuide.rootfsInstalled = d -> false;
-        assertFalse(GuiAppsSetupGuide.finished(prefs, TourEdition.TERMUX));
+        assertFalse(GuiAppsSetupGuide.finished(prefs, AppEdition.TERMUX));
     }
 
     @Test public void theSummaryNamesWhatWasSetUp() {
@@ -113,14 +113,14 @@ public class GuiAppsSetupGuideFragmentTest {
         SharedPreferences prefs = prefs();
         GuiAppsSetupGuide.markerPresent = () -> false;
         assertEquals("Not set up yet",
-            GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+            GuiAppsSetupGuide.rowSummary(context, prefs, AppEdition.TERMUX));
         prefs.edit().putBoolean(GuiAppsSetupGuide.KEY_COPIED, true)
             .putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
         GuiAppsSetupGuide.markerPresent = () -> false;
         GuiAppsSetupGuide.fcitx5Installed = () -> false;
         try {
             assertEquals("Command copied. Run it in a terminal",
-                GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+                GuiAppsSetupGuide.rowSummary(context, prefs, AppEdition.TERMUX));
             assertFalse(GuiAppsSetupGuide.isSetUp(context));
             GuiAppsSetupGuide.markerPresent = () -> true;
             GuiAppsSetupGuide.fcitx5Installed = () -> true;
@@ -131,13 +131,13 @@ public class GuiAppsSetupGuideFragmentTest {
             GuiAppsSetupGuide.fcitx5Installed = GuiAppsSetupGuide.FCITX5_ON_DISK;
         }
         assertEquals("Debian with a browser and a file manager",
-            GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+            GuiAppsSetupGuide.rowSummary(context, prefs, AppEdition.TERMUX));
         GuiAppsSetupGuide.markerPresent = () -> true;
         assertEquals("Debian with a browser and a file manager",
-            GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+            GuiAppsSetupGuide.rowSummary(context, prefs, AppEdition.TERMUX));
         prefs.edit().putBoolean("gui_apps_starter_browser", false).commit();
         assertEquals("Debian with a file manager",
-            GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+            GuiAppsSetupGuide.rowSummary(context, prefs, AppEdition.TERMUX));
     }
 
     // ---- fit -----------------------------------------------------------------------------
@@ -153,7 +153,7 @@ public class GuiAppsSetupGuideFragmentTest {
     private void assertEveryStepFits(float fontScale) {
         Context context = themed(fontScale);
         prefs().edit().putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
-        GuiAppsSetupGuideFragment guide = guide(TourEdition.TERMUX, context);
+        GuiAppsSetupGuideFragment guide = guide(AppEdition.TERMUX, context);
         View root = build(guide, context);
         List<Step> steps = guide.steps();
         assertEquals(5, steps.size());
@@ -208,7 +208,7 @@ public class GuiAppsSetupGuideFragmentTest {
     @Test public void theRecommendedBadgeWrapsUnderTheTitleAtLargeFont() {
         Context context = themed(2.0f);
         prefs().edit().putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
-        GuiAppsSetupGuideFragment guide = guide(TourEdition.TERMUX, context);
+        GuiAppsSetupGuideFragment guide = guide(AppEdition.TERMUX, context);
         View root = build(guide, context);
         guide.goTo(Step.DISTRO);
         layout(root, context);
@@ -236,7 +236,7 @@ public class GuiAppsSetupGuideFragmentTest {
             R.style.Theme_TermuxApp_DayNight_NoActionBar);
     }
 
-    private static GuiAppsSetupGuideFragment guide(TourEdition edition, Context context) {
+    private static GuiAppsSetupGuideFragment guide(AppEdition edition, Context context) {
         GuiAppsSetupGuideFragment guide = new GuiAppsSetupGuideFragment();
         Bundle args = new Bundle();
         args.putString(GuiAppsSetupGuideFragment.ARG_EDITION, edition.name());

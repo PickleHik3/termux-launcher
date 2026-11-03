@@ -43,7 +43,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * <p>Deliberately shaped like {@code TerminalCommandPaletteController} — one {@link Spring}
  * channel ticked on a {@link Choreographer} callback, one {@code applyFrame} that is the single
  * writer of every animated property, views bound lazily on first use and left {@code INVISIBLE}
- * rather than {@code GONE} so the host stays measured and {@code RealtimeBlurView} can gate its own
+ * rather than {@code GONE} so the host stays measured and the glass picture can gate its own
  * work on {@code isShown()}.
  *
  * <p><b>The transition is one number.</b> {@code p ∈ [0,1]}, 0 = dock, 1 = full drawer. Under a
@@ -103,6 +103,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /** The half of the wall the drawer opens over: Home's or the Workspace's look. */
+        int restingPage();
+
         /** The one dock-geometry snapshot the seed rect, radius and inset all come off. */
         @NonNull DockLayout dockLayout();
 
@@ -139,6 +142,31 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void setHomeContentAlpha(float alpha) {}
 
+        /**
+         * The gap the terminal pane leaves above the keyboard on the Workspace, in px: the plane
+         * ends this far above the built-in keyboard the search raised. Negative keeps the gap
+         * measured at the pull. See {@link AppDrawerKeyboardSeparation}.
+         */
+        default float searchKeyboardGapPx() {
+            return -1f;
+        }
+
+        /**
+         * The terminal pane's corner radius, in px: the Docked plane's bottom corners above the
+         * built-in keyboard. Negative keeps the drawer's own radius.
+         */
+        default float searchKeyboardCornerRadiusPx() {
+            return -1f;
+        }
+
+        /**
+         * The built-in keyboard card's corner radius, in px, for the hole the Floating scrim cuts
+         * around it; 0 for a square card.
+         */
+        default float inAppKeyboardCardRadiusPx() {
+            return 0f;
+        }
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
@@ -165,6 +193,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          * brought back on close (a pill tap asks for it again).
          */
         default void dismissSearchSystemKeyboard() {}
+
+        /**
+         * Whether the close will put the built-in keyboard down: the search raised it, the user
+         * has not claimed it since, and it is still up. See {@link AppDrawerKeyboardLowering}.
+         */
+        default boolean drawerCloseLowersKeyboard() { return false; }
 
         /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
@@ -229,7 +263,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private static final float DOCK_LIFT_DP = 8f;
 
     /** Glass handoff: two identical rectangles swapping over the first tenth of the transition. */
-    private static final float GLASS_FADE_END = 0.10f;
+    static final float GLASS_FADE_END = 0.10f;
     /**
      * The dock's rows leave early — they are the dock's, not the drawer's. One window for all of
      * them, ending where the pinned icons' own staggered wave ends, so no row on the glass is gone
@@ -307,6 +341,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * read the dock at all, so taking it on never moves the plane.
      */
     @Nullable private Frame mRaisedKeyboardDockRect;
+    /** The dock's rect at the pull: where it rests again once a keyboard the search raised is down. */
+    @Nullable private Frame mPullDockRect;
+    /**
+     * This close puts down the keyboard the search raised ({@link AppDrawerKeyboardLowering}).
+     * Set when a close starts; cleared at rest, open or closed.
+     */
+    private boolean mLowering;
     @Nullable private Frame mOpenRect;
     @Nullable private AppDrawerAccessoryChoreography.Band mExtraKeysBand;
     @Nullable private AppDrawerAccessoryChoreography.Band mKeyboardBand;
@@ -343,8 +384,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mEngaged;
     private boolean mOpen;
     private boolean mDragging;
-    /** The plane's live backdrop blur, held so the settle logic can rest and wake it per frame. */
-    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+    /** The plane's picture of what is beneath it; the settle logic freezes and retakes it. */
+    @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
     @NonNull private AppDrawerCommitPolicy.Direction mDirection =
         AppDrawerCommitPolicy.Direction.OPENING;
     private float mDownRawY;
@@ -440,6 +481,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = mProgress.value;
         mCloseTimeAnim = false;
         mEngaged = true;
+        if (!closing) applyBackdropMaterial();
+        else beginLoweringIfKeyboardGoes();
         // With the embedded keyboard the IME can never be up here; with the system keyboard it
         // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
         // drawer's own text field put up is the search's, and is put away with the search instead.
@@ -468,6 +511,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
         mEngaged = true;
+        applyBackdropMaterial();
         mHost.hideSystemKeyboard();
         applyFrame(0f);
         settle(true, 0f);
@@ -540,12 +584,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * a settling spring would otherwise be resumed against geometry that no longer exists.
      */
     public void closeImmediate() {
+        closeImmediate(false);
+    }
+
+    /** As {@link #closeImmediate()}; {@code homePress} also empties the search and scrolls to the top. */
+    public void closeImmediate(boolean homePress) {
         mDragging = false;
         mOpen = false;
         mProgress.reset(0f);
         if (!mEngaged) return;
         applyFrame(0f);
-        onClosed(false);
+        onClosed(false, homePress);
     }
 
     private void settle(boolean open, float velocityPxPerSec) {
@@ -560,6 +609,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             requestSearchKeyboardOnOpenIfEnabled();
             nudgeCategorizationIfPending();
         } else {
+            beginLoweringIfKeyboardGoes();
             endTextFieldSearchIfBegun();
         }
         retargetReveal();
@@ -784,21 +834,61 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyFrame(0f);
             // Reached only by a settle the finger asked for: a release, a cancelled drag, Back.
             // The lifecycle's own teardown goes through closeImmediate() and says so.
-            onClosed(true);
+            onClosed(true, false);
             return;
         }
         if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
-        // The live blur ghosts the terminal through the glass at the price of a full software
-        // re-draw of the decor hierarchy on every frame the window produces — including every
-        // frame of a grid scroll. Once the plane has settled fully open, what it blurs is static
-        // to the eye, so the blur rests on its last captured frame; any motion of the plane
-        // itself (a close, a drag, a re-open) drops the progress out of the settled band and the
-        // next frame here wakes it. Scrub and rope frames deliberately do not wake it — they move
-        // content above the glass, never what is behind it.
-        if (mLiveBlur != null) {
-            mLiveBlur.setUpdatesPaused(mOpen && !mDragging
-                && mProgress.target >= 1f && mProgress.value >= 0.999f);
-        }
+        // The plane's picture stands still while the plane moves (a Snapshot is taken on the open
+        // and once more when the plane comes to rest open; Live refreshes only when what is beneath
+        // it changes). Scrub and rope frames deliberately do not move it: they move content above
+        // the glass, never what is behind it.
+        applyBackdropRest();
+    }
+
+    /**
+     * Tells the plane's picture whether the plane is moving: a Snapshot is frozen for the whole
+     * motion and retaken once, when the plane comes to rest open; a close or a drag rests on that.
+     */
+    @VisibleForTesting
+    void applyBackdropRest() {
+        com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
+        if (backdrop == null) return;
+        backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
+    }
+
+    /** True for the length of one Snapshot's recording; see {@link #mSettledScene}. */
+    private boolean mCapturingSettledScene;
+
+    /**
+     * Every Snapshot shows the settled-open scene, whichever frame it is taken on: the dim at p = 1,
+     * the dock faded out, the keyboard where the reveal is going. The first capture of an open
+     * used to be taken at p ~ 0.03 — almost no dim, the dock still showing — and the settled one at
+     * p = 1, so the frost jumped from bright to dim just before the plane came to rest. The real
+     * frame is put back straight after; nothing of the swap reaches the screen.
+     */
+    private final com.termux.app.chrome.PanelBackdrop.Scene mSettledScene =
+        new com.termux.app.chrome.PanelBackdrop.Scene() {
+            private float mHeldReveal;
+
+            @Override public void beforeSnapshot() {
+                if (!mEngaged || mCapturingSettledScene) return;
+                mCapturingSettledScene = true;
+                mHeldReveal = mReveal.value;
+                mReveal.value = mReveal.target;
+                applyFrame(1f);
+            }
+
+            @Override public void afterSnapshot() {
+                if (!mCapturingSettledScene) return;
+                mReveal.value = mHeldReveal;
+                applyFrame(mProgress.value);
+                mCapturingSettledScene = false;
+            }
+        };
+
+    @VisibleForTesting
+    static boolean isSettledOpen(boolean open, boolean dragging, float target, float value) {
+        return open && !dragging && target >= 1f && value >= 0.999f;
     }
 
     /**
@@ -976,6 +1066,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyFrame(mProgress.value);
     }
 
+    /**
+     * The finger started dragging a list while the search keyboard is up: the user is browsing,
+     * not searching, so the keyboard goes at once — the way the keyboard-away scroll ends, which
+     * the reveal animates back to the keyboard-down card. The query stays.
+     */
+    @VisibleForTesting
+    void onListDragHidesKeyboard() {
+        AppDrawerContentView content = mContent;
+        if (!mOpen || content == null) return;
+        if (mImePinTopPx > 0f) {
+            if (mSystemImeScrolledAway) return;
+            mSystemImeScrolledAway = true;
+            content.dismissSearchKeyboardByScroll();
+            mHost.dismissSearchSystemKeyboard();
+            return;
+        }
+        if (!hasRevealableKeyboard() || mReveal.target <= 0f) return;
+        finishKeyboardScrollAway();
+    }
+
     /** The scroll came to rest: a keyboard held part-way finishes going, or springs back up. */
     private void onKeyboardScrollIdle() {
         mKeyboardScrollPx = 0f;
@@ -1111,6 +1221,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
             @Override public void onListScrolledDown(int dy) { onKeyboardScrollStep(dy); }
             @Override public void onListScrollIdle() { onKeyboardScrollIdle(); }
+            @Override public void onListDragStarted() { onListDragHidesKeyboard(); }
         });
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
@@ -1218,7 +1329,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame dockRect = frameOf(dock);
         if (dockRect == null) return false;
         mDockRect = dockRect;
+        mPullDockRect = dockRect;
         mRaisedKeyboardDockRect = null;
+        mLowering = false;
 
         // One dock-geometry snapshot for the whole capture: style, seed radius and (via
         // resolveOpenRect) the outer inset all come off the same value.
@@ -1404,6 +1517,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? (resting ? restingFrameOf(mExtraKeysView) : frameOf(mExtraKeysView)) : null;
         Frame keyboard = isBandVisible(mKeyboardView)
             ? (resting ? restingFrameOf(mKeyboardView) : frameOf(mKeyboardView)) : null;
+        // The card inside the keyboard band, at the band's resting place: the Floating scrim's hole
+        // adds the band's live translation to it each frame.
+        mKeyboardCardView = mHost.findView(R.id.inapp_keyboard_view_host);
+        Frame card = keyboard != null && isBandVisible(mKeyboardCardView)
+            ? frameOf(mKeyboardCardView) : null;
+        if (card != null && mKeyboardView != null) {
+            float dy = mKeyboardView.getTranslationY();
+            card = new Frame(card.left, card.top - dy, card.right, card.bottom - dy);
+        }
+        mKeyboardCardFrame = card;
         mHasBands = extraKeys != null || keyboard != null;
         if (!mHasBands) {
             mExtraKeysBand = null;
@@ -1453,6 +1576,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         float left = mViewLocation[0] - mHostLocation[0];
         float top = mViewLocation[1] - mHostLocation[1];
         return new Frame(left, top, left + view.getWidth(), top + view.getHeight());
+    }
+
+    /** {@link #frameOf} against the host's location now, not the one captured at the pull. */
+    @Nullable
+    private Frame liveFrameOf(@NonNull View view) {
+        FrameLayout host = mHostLayout;
+        if (host == null) return null;
+        host.getLocationOnScreen(mHostLocation);
+        return frameOf(view);
     }
 
     /** {@link #frameOf} less the view's own vertical translation. */
@@ -1593,6 +1725,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mRaisedKeyboardDockRect = null;
     }
 
+    /**
+     * A close is starting: if it will put down a keyboard the search raised, the dock and the
+     * keyboard go to their keyboard-down places with it rather than when it has finished.
+     */
+    private void beginLoweringIfKeyboardGoes() {
+        if (mLowering || mPullDockRect == null || mTextFieldSearch || mImePinTopPx > 0f) return;
+        mLowering = mHost.drawerCloseLowersKeyboard();
+    }
+
     /** {@code -1} on the preference means "follow the rounded-surface token", as the dock's does. */
     private float resolveOpenRadiusPx() {
         TermuxAppSharedPreferences preferences = mHost.preferences();
@@ -1624,13 +1765,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // Capped below the user's dock opacity so the drawer glass always stays see-through:
-        // the terminal keeps running visibly behind the open drawer.
-        float opacity = Math.min(0.45f,
-            preferences == null ? 0.5f : preferences.getAppBarOpacity() / 100f);
+        // The Sheets element's glass (ADR 0017): a detached dock no longer drags the drawer.
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(
+            preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
+            mHost.restingPage());
+        // Modifier: capped at 0.45 so the drawer glass always stays see-through: the terminal
+        // keeps running visibly behind the open drawer.
+        float opacity = Math.min(0.45f, preferences == null ? 0.5f : sheets.tintAlpha());
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
-            : preferences.getDockGlassGrain();
+            : sheets.grainPercent;
         plane.applyGlassMaterial(
             InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
             MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary,
@@ -1639,7 +1783,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
         applyDrawerSettings();
-        applyBackdropMaterial();
+        // The plane's picture is opened by the caller once the drawer is engaged: the open's
+        // Snapshot poses the settled scene (mSettledScene), which only an engaged drawer can pose.
+        // Opened here, the first Snapshot recorded Home as it stood (the dock showing, no dim) and
+        // the settled one replaced it, so the frost changed mid-open.
         prepareContent(plane);
         addHostLayoutListener();
     }
@@ -1698,6 +1845,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * or going: the vertical grid's metrics are width-only and skip the rebind, the paged layouts
      * re-chunk their rows for the height that is left.
      */
+    /**
+     * The height the category cards are sized for: the content's keyboard-down height. The reveal
+     * shortens the content rect above the keyboard, and sizing the cards from that squashed them.
+     */
+    @VisibleForTesting
+    float categoryMetricsHeightPx(@NonNull Frame rect) {
+        Frame base = resolveContentBaseRect(mOpenRect);
+        return base == null ? rect.height() : Math.max(rect.height(), base.height());
+    }
+
     private void applyContentMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
                                      boolean heightOnly) {
         float labelHeightPx = resolveCellLabelHeightPx();
@@ -1722,8 +1879,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 // gets AUTO geometry here and deliberately reads no vertical grid preference.
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
                     labelHeightPx, 0, config.iconSizeDp));
+                // Sized for the keyboard-down card, never for the space the keyboard leaves: the
+                // category cards keep their shape and size and scroll inside the shortened card.
                 content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
-                    content.horizontalPagerUsableHeight(rect.height()), mDensity,
+                    content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
                     resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
                     config.categoryColumns, config.iconSizeDp));
                 if (heightOnly) content.rebindCurrentResults();
@@ -1793,28 +1952,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
-     * Over the system wallpaper the plane's {@code RealtimeBlurView} can only blur the window's own
-     * (mostly transparent) content and renders grey mud, so a crop of the shared pre-blurred
-     * wallpaper frame stands in. When that crop cannot be cut — the user turned dock blur off, or a
-     * live wallpaper makes the pre-blur impossible — the live blur is <em>not</em> a fallback in
-     * wallpaper mode: the plane is simply tinted glass over whatever is behind it.
+     * The plane's glass shows what is drawn beneath it ({@link com.termux.app.chrome.PanelBackdrop}):
+     * a Snapshot taken on this open's first frame, of the settled-open scene ({@link #mSettledScene}),
+     * frozen while the plane moves and retaken once it rests; Live while Live blur is on. Over the
+     * system wallpaper the recording holds no wallpaper, so a crop of the shared pre-blurred
+     * wallpaper frame stands beneath it, and the picture ghosts the terminal through the glass over
+     * that; without the crop (dock blur off, a live wallpaper) the picture is not a fallback there
+     * and the plane is simply tinted glass. Where nothing can be recorded (below Android 12) the
+     * crop stands alone.
      */
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
         View blur = mHost.findView(R.id.app_drawer_blur);
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
-        if (blur == null) return;
-        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
-            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
-        // A fresh open always starts live; doFrame rests it again once the plane settles.
-        if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
+        if (!(blur instanceof ImageView)) return;
+        if (mBackdrop == null) {
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+            mBackdrop.setScene(mSettledScene);
+            // The scene dim is the host's background: beneath the glass on screen, but a recording
+            // holds only the views beneath, so the picture wears the settled dim itself.
+            mBackdrop.setVeil(com.termux.app.GlassBackdropTint.colorFor(1f));
+        }
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the
-        // window's own content (the running terminal), so it ghosts through the glass while the
-        // frost keeps covering the wallpaper the blur cannot see. Only the unfrosted live
-        // wallpaper case still drops the blur (grey mud).
-        blur.setVisibility(frosted || !wallpaperMode ? View.VISIBLE : View.GONE);
+        boolean wanted = frosted || !wallpaperMode;
+        if (wanted) blur.setVisibility(View.VISIBLE);
+        boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
+            mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
+        if (!pictured) {
+            mBackdrop.close();
+            blur.setVisibility(View.GONE);
+        }
     }
 
     // ------------------------------------------------------------------ per-frame
@@ -1829,43 +1997,91 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame openRect = mOpenRect;
         if (plane == null || mHostLayout == null || dockRect == null || openRect == null) return;
         float p = AppDrawerTransitionGeometry.clamp01(progress);
-        if (mRaisedKeyboardDockRect != null && p >= 1f) {
+        // Never from the settled-scene capture's p = 1: adopting the seed there would move the
+        // plane of the frame actually shown.
+        if (mRaisedKeyboardDockRect != null && p >= 1f && !mCapturingSettledScene) {
             adoptRaisedKeyboardDockRect(p);
             dockRect = mDockRect;
         }
 
+        // A close that has come back to rest open is no longer putting the keyboard down.
+        if (mLowering && p >= 1f && mOpen && !mDragging && !mCapturingSettledScene)
+            mLowering = false;
+        Frame pullDock = mPullDockRect;
+        boolean lowering = mLowering && pullDock != null;
+        // Where the dock is laid out now: above the raised keyboard once the stack was laid out
+        // for it, whether or not the plane's seed has taken that rect on yet.
+        Frame laidOutDock = mRaisedKeyboardDockRect != null ? mRaisedKeyboardDockRect : dockRect;
+        float stackOffset = lowering
+            ? AppDrawerKeyboardLowering.offsetPx(laidOutDock.top, pullDock.top, p) : 0f;
+        float seedOffset = lowering
+            ? AppDrawerKeyboardLowering.offsetPx(dockRect.top, pullDock.top, p) : 0f;
+        float keyboardExit = lowering && mKeyboardBand != null
+            ? AppDrawerKeyboardLowering.keyboardExitPx(mKeyboardBand.topPx,
+                mHostLayout.getHeight(), p) : 0f;
+
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
-        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p, lift);
+        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p,
+            lift + seedOffset);
         // The search keyboard's reveal only ever shortens the plane from the bottom. At k = 0 this
         // is skipped entirely, so an open drawer with nothing typed into it draws the same rectangle
         // it drew in B-1 — down to the allocation, which is why the branch is on k and not on
         // whether a keyboard exists.
         float k = revealFraction();
+        if (lowering) k = AppDrawerKeyboardLowering.reveal(k, p);
+        mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
+            mOpenRadiusPx, p);
+        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(mRoundedStyle, k,
+            mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
-            float pinTop = pinTopPx();
-            frame = new Frame(frame.left, frame.top, frame.right,
+            float pinTop = pinTopPx() + keyboardExit;
+            // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
+            // the top stays pushed past the bezel by whichever radius is larger.
+            if (mImePinTopPx <= 0f) {
+                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(mRoundedStyle,
+                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
+            }
+            frame = new Frame(frame.left,
+                AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
+                    mCurrentRadiusPx),
+                frame.right,
                 AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
                     revealGapPx(), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
-            // its own brightness rather than under the drawer's shade.
-            mHostClipScratch.set(0, 0, mHostLayout.getWidth(), Math.round(
-                AppDrawerTransitionGeometry.resolveRevealClipBottom(mHostLayout.getHeight(), pinTop, k)));
-            mHostLayout.setClipBounds(mHostClipScratch);
-            mHostClipped = true;
+            // its own brightness rather than under the drawer's shade. Under Floating the dim runs
+            // on below and around the keyboard card instead, with the card cut out of it (the
+            // scrim's hole, below): the plane never reaches below this clip, so the clip only ever
+            // decided the dim's extent.
+            if (scrimAroundKeyboard) {
+                if (mHostClipped) {
+                    mHostLayout.setClipBounds(null);
+                    mHostClipped = false;
+                }
+            } else {
+                mHostClipScratch.set(0, 0, mHostLayout.getWidth(), Math.round(
+                    AppDrawerTransitionGeometry.resolveRevealClipBottom(mHostLayout.getHeight(),
+                        pinTop, k)));
+                mHostLayout.setClipBounds(mHostClipScratch);
+                mHostClipped = true;
+            }
         } else if (mHostClipped) {
             mHostLayout.setClipBounds(null);
             mHostClipped = false;
         }
-        mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
-            mOpenRadiusPx, p);
         plane.setFrame(frame, mCurrentRadiusPx, p);
         if (mGlass != null) mGlass.invalidateOutline();
 
         // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
         // the drawer's own spring while the glass keeps its opacity. setBackgroundColor reuses
-        // the host's ColorDrawable after the first frame, so this stays allocation-free.
-        mHostLayout.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        // the host's ColorDrawable after the first frame, so this stays allocation-free. Around a
+        // Floating keyboard card the same colour is painted by the scrim with the card cut out.
+        // Never through a null background: a background arriving on a view that had none requests
+        // a layout, and the swap between the two drawables (same zero minimum size, no padding)
+        // does not.
+        if (!scrimAroundKeyboard) {
+            mHostLayout.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        }
 
         // Glass handoff: the host carries the fade so the frost/blur pane and the painted slab
         // cross over as one surface.
@@ -1878,19 +2094,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // row standing on the glass rises with it instead of off it. Never
         // accessory_stack_container: applyDockImeOffset owns that view's translationY, and writing
         // it here makes the dock jump by the IME lift.
-        applyGroupTranslationY(mDockLiftGroup, lift);
+        applyGroupTranslationY(mDockLiftGroup, lift + stackOffset);
 
         applyGroupAlpha(mDockRowFadeGroup,
             1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END));
 
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
-        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k);
+        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k, stackOffset,
+            keyboardExit, lowering);
+        // After the bands: the hole follows the keyboard card where this frame has put it.
+        if (scrimAroundKeyboard) applyKeyboardScrim(p);
         applyStatusBand(p);
         // The under-pill strip lives on the decor, above every pixel of this, so it is the one
         // surface that has to be faded rather than covered. Linear in p, which is what the plane's
-        // own bottom edge is: the two cross over exactly as the glass arrives underneath it.
-        mHost.setDecorNavStripAlpha(1f - p);
+        // own bottom edge is: the two cross over exactly as the glass arrives underneath it. The
+        // built-in keyboard's reveal gives it back: the plane and the host's clip then stop above
+        // the keyboard, nothing of the drawer lies over the band under the pill, and a strip faded
+        // to 0 there left bare wallpaper where the keyboard's glass runs on under the pill.
+        mHost.setDecorNavStripAlpha(AppDrawerKeyboardSeparation.navStripAlpha(p,
+            mImePinTopPx > 0f ? 0f : k));
         mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
@@ -1920,8 +2143,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mImePinTopPx > 0f ? mImePinTopPx : capturedPinTopPx();
     }
 
+    /**
+     * The air between the plane and the keyboard. The built-in keyboard's is the terminal pane's
+     * gap, so the drawer stands off the keyboard as the pane does on the Workspace; the system
+     * keyboard keeps its own.
+     */
     private float revealGapPx() {
-        return mImePinTopPx > 0f ? dp(IME_GAP_DP) : mCapturedGapPx;
+        if (mImePinTopPx > 0f) return dp(IME_GAP_DP);
+        return AppDrawerKeyboardSeparation.revealGapPx(mHost.searchKeyboardGapPx(), mCapturedGapPx);
     }
 
     /** The captured keyboard top; the plane covers the terminal extra-keys band above this edge. */
@@ -1930,16 +2159,64 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return keyboard == null ? 0f : keyboard.topPx;
     }
 
-    private void applyAccessoryBands(float p, float planeBottomPx, float reveal) {
+    /** The Floating scrim, made on first use. */
+    @Nullable private AppDrawerScrimDrawable mScrim;
+    /** The keyboard card's resting rect in host coordinates; null when no keyboard was measured. */
+    @Nullable private Frame mKeyboardCardFrame;
+    @Nullable private View mKeyboardCardView;
+    private final android.graphics.RectF mScrimHoleScratch = new android.graphics.RectF();
+
+    /**
+     * Whether the scene dim runs below and around the keyboard rather than stopping at its top:
+     * under Floating (the keyboard is a card of its own), while the built-in keyboard is being
+     * revealed, once its card has been measured. Docked keeps the clip at the keyboard's top.
+     */
+    @VisibleForTesting
+    static boolean scrimRunsAroundKeyboard(boolean rounded, float reveal, boolean systemIme,
+                                           boolean cardMeasured) {
+        return rounded && reveal > 0f && !systemIme && cardMeasured;
+    }
+
+    /** The dim over the whole host, the keyboard card cut out where this frame has put it. */
+    @VisibleForTesting
+    void applyKeyboardScrim(float p) {
+        FrameLayout host = mHostLayout;
+        Frame card = mKeyboardCardFrame;
+        if (host == null || card == null) return;
+        if (mScrim == null) mScrim = new AppDrawerScrimDrawable();
+        if (host.getBackground() != mScrim) host.setBackground(mScrim);
+        mScrim.setColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        // Where the card stands now, every translation above it included; the resting rect plus
+        // the band's translation only when it cannot be read (not attached).
+        View cardView = mKeyboardCardView;
+        Frame live = cardView != null && cardView.isAttachedToWindow() && isBandVisible(cardView)
+            ? liveFrameOf(cardView) : null;
+        if (live != null) {
+            mScrimHoleScratch.set(live.left, live.top, live.right, live.bottom);
+        } else {
+            float dy = mKeyboardView == null ? 0f : mKeyboardView.getTranslationY();
+            mScrimHoleScratch.set(card.left, card.top + dy, card.right, card.bottom + dy);
+        }
+        mScrim.setHole(mScrimHoleScratch, mHost.inAppKeyboardCardRadiusPx());
+    }
+
+    /**
+     * @param stackOffsetPx   the extra keys' way to their keyboard-down place, as the dock's
+     * @param keyboardExitPx  the keyboard's way out under a close that puts it down
+     */
+    private void applyAccessoryBands(float p, float planeBottomPx, float reveal,
+                                     float stackOffsetPx, float keyboardExitPx, boolean lowering) {
         if (!mHasBands || mExtraKeysBand == null || mKeyboardBand == null) return;
         AppDrawerAccessoryChoreography.Result result = AppDrawerAccessoryChoreography.resolve(
             mRoundedStyle, p, mExtraKeysBand, mKeyboardBand, mCapturedGapPx, planeBottomPx);
         // Byte-identical to `result` at reveal 0, so this is unconditional rather than branched.
         result = AppDrawerAccessoryChoreography.blendTowardIdentity(result, reveal);
-        applyBand(mExtraKeysView, result.extraKeysTranslationY, result.extraKeysClipTopPx,
-            result.extraKeysAlpha);
-        applyBand(mKeyboardView, result.keyboardTranslationY, result.keyboardClipTopPx,
-            result.keyboardAlpha);
+        applyBand(mExtraKeysView, result.extraKeysTranslationY + stackOffsetPx,
+            result.extraKeysClipTopPx, result.extraKeysAlpha);
+        applyBand(mKeyboardView, result.keyboardTranslationY + keyboardExitPx,
+            result.keyboardClipTopPx, lowering
+                ? AppDrawerKeyboardLowering.keyboardAlpha(result.keyboardAlpha, p)
+                : result.keyboardAlpha);
     }
 
     /**
@@ -1999,6 +2276,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     // ------------------------------------------------------------------ teardown
 
+    /** A close that is not a Home press; the drawer's own tests reach this form by reflection. */
+    private void onClosed(boolean userDriven) {
+        onClosed(userDriven, false);
+    }
+
     /**
      * Settled shut: hand every transformed view back exactly as it was found, drop the full-screen
      * frost bitmap, and replay the accessory geometry the freeze suppressed.
@@ -2008,7 +2290,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * {@code applyAccessoryGeometryIfNeeded} suppressed for the life of the activity — a dock that
      * silently stops responding to every style and height change.
      */
-    private void onClosed(boolean userDriven) {
+    private void onClosed(boolean userDriven, boolean homePress) {
         mHost.onDrawerOpenSettled(false, userDriven);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
@@ -2019,7 +2301,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 content.cancelCloseDrag();
                 // Routed through the grid rather than straight at the search, so the pill, the
                 // scroll position and the reveal request are emptied with the query.
-                content.resetSearch();
+                if (homePress) content.resetSearchToTop();
+                else content.resetSearch();
                 content.disarm();
                 content.stopOverpullSpring();
                 // A re-open must never start from a stale chain or a dim cell: the rope goes back to
@@ -2045,6 +2328,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             removeHostLayoutListener();
             stopAwaitingRaisedKeyboard();
             mRaisedKeyboardDockRect = null;
+            mLowering = false;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);
@@ -2062,6 +2346,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);
             }
+            if (mBackdrop != null) mBackdrop.close();
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
             ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
             if (frost != null) {

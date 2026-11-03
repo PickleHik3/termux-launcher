@@ -1,5 +1,6 @@
 package com.termux.app.surfaces.cards;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -11,7 +12,6 @@ import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.cards.ElementRows.Item;
 import com.termux.app.surfaces.cards.ElementRows.Visibility;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -31,12 +31,12 @@ public class ElementRowsTest {
 
     @Test
     public void eachScreenListsTheSharedRowsThenItsOwnContent() {
-        List<Item> workspace = ElementRows.rows(WallHalf.WORKSPACE);
+        List<Item> workspace = ElementRows.rows(PaneWallPage.TERMINAL);
         assertEquals(SHARED, workspace.subList(0, SHARED.size()));
         assertEquals(Item.TERMINAL, workspace.get(workspace.size() - 1));
         assertFalse(workspace.contains(Item.WIDGETS));
 
-        List<Item> home = ElementRows.rows(WallHalf.HOME);
+        List<Item> home = ElementRows.rows(PaneWallPage.WIDGETS);
         assertEquals(SHARED, home.subList(0, SHARED.size()));
         assertEquals(Item.WIDGETS, home.get(home.size() - 1));
         assertFalse(home.contains(Item.TERMINAL));
@@ -77,8 +77,9 @@ public class ElementRowsTest {
             assertTrue("the Dock card holds the Options " + tile + " scrolls to",
                 rowsOf(EditorCard.DOCK).contains(Row.DOCK_OPTIONS));
         }
-        assertEquals(EditorCard.HOME, Item.WIDGETS.card);
-        assertTrue(rowsOf(EditorCard.HOME).contains(Item.WIDGETS.section));
+        // The Widgets row opens the Widgets card (overhaul §4), at its top.
+        assertEquals(EditorCard.WIDGETS, Item.WIDGETS.card);
+        assertNull(Item.WIDGETS.section);
     }
 
     @Test
@@ -98,11 +99,14 @@ public class ElementRowsTest {
 
     @Test
     public void onlyTheScreenCardsHoldTheList() {
-        assertEquals(WallHalf.HOME, ElementRows.screenOf(EditorCard.HOME));
-        assertEquals(WallHalf.WORKSPACE, ElementRows.screenOf(EditorCard.WORKSPACE));
+        assertEquals(PaneWallPage.WIDGETS, ElementRows.screenOf(EditorCard.HOME));
+        assertEquals(PaneWallPage.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
-            boolean screen = ElementRows.screenOf(card) != null;
+            // The Terminal card's Layout is the Workspace's list, Customization's the whole
+            // app's (overhaul §2).
+            boolean screen = ElementRows.screenOf(card) != null || card == EditorCard.TERMINAL
+                || card == EditorCard.APPEARANCE;
             assertEquals(card + " holds the Elements list", screen,
                 rowsOf(card).contains(Row.ELEMENTS));
         }
@@ -113,13 +117,17 @@ public class ElementRowsTest {
     }
 
     @Test
-    public void theListStandsAfterTheMatchRowAndBeforeTheMoreChips() {
-        List<Row> home = rowsOf(EditorCard.HOME);
-        assertEquals(home.indexOf(Row.MATCH_WORKSPACE) + 1, home.indexOf(Row.ELEMENTS));
-        assertEquals(home.indexOf(Row.ELEMENTS) + 1, home.indexOf(Row.SECTION_MORE));
-        List<Row> workspace = rowsOf(EditorCard.WORKSPACE);
-        assertEquals(workspace.indexOf(Row.MATCH_HOME) + 1, workspace.indexOf(Row.ELEMENTS));
-        assertEquals(workspace.indexOf(Row.ELEMENTS) + 1, workspace.indexOf(Row.SECTION_MORE));
+    public void theListStandsBeforeTheLinkChips() {
+        // ADR 0017 (fb44e0fb2): every glass card's own rows go under More, after Grain and Rim,
+        // so the Elements list closes the More section and the link chips follow it.
+        for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.WORKSPACE}) {
+            List<Row> rows = rowsOf(card);
+            int list = rows.indexOf(Row.ELEMENTS);
+            // Overhaul §2: the list is the Layout section's, and no link repeats it.
+            assertEquals(card + ": the list is under Layout", Row.SECTION_LAYOUT,
+                rows.get(list - 1));
+            assertFalse(card + ": no Widgets link", rows.contains(Row.LINK_WIDGETS));
+        }
     }
 
     private static List<Row> rowsOf(EditorCard card) {

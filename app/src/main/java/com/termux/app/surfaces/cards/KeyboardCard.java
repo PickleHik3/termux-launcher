@@ -22,12 +22,17 @@ public final class KeyboardCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
-            .tier(1, Row.FORM, Row.SECTION_GLASS, Row.FROST, Row.TINT, Row.OPACITY,
-                Row.OPACITY_LINK, Row.KEY_OPACITY)
-            .tier(2, Row.SECTION_SHAPE, Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT,
-                Row.CORNERS, Row.MARGIN, Row.BOTTOM_PADDING)
-            .tier(3, Row.SECTION_MORE, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
+        // The opacity link stands between the two opacities it moves together.
+        EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN, Row.KEY_CORNERS,
+                Row.BOTTOM_PADDING)
+            .tier(3, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
+                Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
+        // Out for a setting the user can change: the way to it stands under them.
+        if (offers.refractionLink) rows.tier(3, Row.LINK_GLASS_REFRACTION);
+        return rows
+            .tier(3, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
             .build();
     }
 }

@@ -365,6 +365,7 @@ public final class AppDrawerContentView extends FrameLayout
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                     if (!mGridUserScrolling) {
+                        notifyListDragStarted();
                         // Decided once, as the drag starts: a list that fits has no scroll to give.
                         mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
                             recyclerView.computeVerticalScrollRange(),
@@ -419,6 +420,8 @@ public final class AppDrawerContentView extends FrameLayout
         mCategoryView = new AppDrawerCategoryView(context, dock);
         mCategoryView.setFrameRequestListener(this::requestFrames);
         mCategoryView.setPopupDismissCallback(this::dismissContextPopups);
+        hideKeyboardWhenDragged(mCategoryView.getOverview());
+        hideKeyboardWhenDragged(mCategoryView.getDetailList());
         mCategoryView.getDetailAdapter().setCategoryChoiceListener(
             this::showCategoryOverrideDialog);
         mCategoryView.getTileAdapter().setCategoryChoiceListener(
@@ -686,6 +689,28 @@ public final class AppDrawerContentView extends FrameLayout
         void onListScrolledDown(int dy);
         /** That scroll has come to rest. */
         void onListScrollIdle();
+
+        /**
+         * The finger began dragging a list (past touch slop): the user is browsing, not typing,
+         * so the search keyboard goes. Never sent for a tap, a scrub, or the search field.
+         */
+        default void onListDragStarted() {}
+    }
+
+    /** A list the finger started dragging: the keyboard's cue. Shared by every list. */
+    private void notifyListDragStarted() {
+        KeyboardScrollListener keyboard = mKeyboardScrollListener;
+        if (keyboard != null) keyboard.onListDragStarted();
+    }
+
+    /** Sends {@link KeyboardScrollListener#onListDragStarted} when {@code list} starts a drag. */
+    private void hideKeyboardWhenDragged(@NonNull RecyclerView list) {
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) notifyListDragStarted();
+            }
+        });
     }
 
     public void setKeyboardScrollListener(@Nullable KeyboardScrollListener listener) {
@@ -1139,11 +1164,26 @@ public final class AppDrawerContentView extends FrameLayout
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
     public void resetSearch() {
         captureReopenPosition();
-        resetSearchToTop();
+        clearSearchState();
         restoreReopenPosition();
     }
 
-    private void resetSearchToTop() {
+    /**
+     * A home press closed the drawer: no query in the model or the field, and the list back at the
+     * top whatever "remember position" says.
+     */
+    public void resetSearchToTop() {
+        clearSearchState();
+        mInput.mirror("", 0);
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            mGrid.stopScroll();
+            mGrid.scrollToPosition(0);
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalPager.setSelectedPage(0, false);
+        }
+    }
+
+    private void clearSearchState() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
         mKeyboardDismissedByScroll = false;

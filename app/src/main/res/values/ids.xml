@@ -1,5 +1,9 @@
 <resources>
     <item name="help_split_divider" type="id" />
+    <!-- The decor view's tag holding the panels' backdrop source (PanelBackdrop.install). -->
+    <item name="panel_backdrop_source" type="id" />
+    <!-- The Appearance editor header ⋮ menu's Reset item. -->
+    <item name="editor_header_reset" type="id" />
 
     <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
     <item name="tai_centre_list" type="id" />
@@ -44,4 +48,7 @@
     <item name="appearance_surface_host" type="id" />
     <!-- An app icon view's pending background render: which request it is waiting on, and its fade. -->
     <item name="launcher_icon_request" type="id" />
+    <!-- Edit pages' accessibility actions on the Terminal grip: move the Terminal page one page. -->
+    <item name="page_overview_action_move_terminal_left" type="id" />
+    <item name="page_overview_action_move_terminal_right" type="id" />
 </resources>

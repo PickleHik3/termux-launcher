@@ -49,12 +49,12 @@ public final class LookGlassSpec {
 
     /** The Workspace's Look as stored now; the shipped Base when there is no store to read. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences) {
-        return read(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+        return read(preferences, TermuxAppSharedPreferences.terminalPageId());
     }
 
     /** One half's Look as stored now (ADR 0013); the shipped Base when there is no store. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
-                                     @NonNull TermuxAppSharedPreferences.WallHalf half) {
+                                     int pageId) {
         if (preferences == null) {
             return of(false, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
                 TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
@@ -62,11 +62,27 @@ public final class LookGlassSpec {
                 TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
         }
         return of(preferences.isUseSystemWallpaperEnabled(),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, half),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, half),
-            preferences.getSurfaceBaseValue(SurfaceProperty.TINT, half),
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, pageId),
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, pageId),
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, pageId),
+            preferences.getSurfaceBaseValue(SurfaceProperty.TINT, pageId),
             preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+    }
+
+    /**
+     * One element's glass on one page as stored now (ADR 0017): its own cells where it holds them,
+     * Base where it follows; the shipped Base when there is no store.
+     */
+    public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
+                                     @NonNull TermuxAppSharedPreferences.SurfaceSlot slot,
+                                     int pageId) {
+        if (preferences == null) return read(null, pageId);
+        return of(preferences.isUseSystemWallpaperEnabled(),
+            preferences.getSurfaceValue(slot, SurfaceProperty.BLUR, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.OPACITY, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.GRAIN, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.TINT, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.CORNER_RADIUS, pageId));
     }
 
     /**

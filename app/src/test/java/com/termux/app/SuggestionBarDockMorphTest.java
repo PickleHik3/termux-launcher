@@ -85,8 +85,8 @@ public class SuggestionBarDockMorphTest {
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
             .pinnedSlotCount(SLOTS)
             .build();
-        home = DockGeometry.compute(snapshot.restOf(DockGeometry.Side.HOME));
-        workspace = DockGeometry.compute(snapshot.restOf(DockGeometry.Side.WORKSPACE));
+        home = DockGeometry.compute(snapshot.restOf(com.termux.app.wall.PageRef.HOME));
+        workspace = DockGeometry.compute(snapshot.restOf(com.termux.app.wall.PageRef.TERMINAL));
     }
 
     @After
@@ -245,8 +245,8 @@ public class SuggestionBarDockMorphTest {
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
             .pinnedSlotCount(SLOTS)
             .build();
-        return new DockLayout[] {DockGeometry.compute(snapshot.restOf(DockGeometry.Side.HOME)),
-            DockGeometry.compute(snapshot.restOf(DockGeometry.Side.WORKSPACE))};
+        return new DockLayout[] {DockGeometry.compute(snapshot.restOf(com.termux.app.wall.PageRef.HOME)),
+            DockGeometry.compute(snapshot.restOf(com.termux.app.wall.PageRef.TERMINAL))};
     }
 
     /** The beads the dock stands on the row's drawn boxes, on a surface clear of every edge. */

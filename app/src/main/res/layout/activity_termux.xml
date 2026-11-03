@@ -15,7 +15,7 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
-        <FrameLayout
+        <com.termux.app.place.BottomInsetFrameLayout
             android:id="@+id/terminal_root_container"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -33,6 +33,17 @@
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:visibility="invisible" />
+
+        <!-- The ground strip: each wall page's own ground (wallpaper dim; on the Terminal page the
+             canvas tint when it is not glass), with a soft seam that travels with the page edge.
+             Painted over the window's rect, above the wallpaper and below every page. Shown only
+             in wallpaper mode; opaque mode keeps the terminal's own background. -->
+        <com.termux.app.chrome.GroundStripView
+            android:id="@+id/ground_strip"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
 
         <!-- The joined Docked frame's glass: one sheet behind the status bar, the canvas band, the
              dock rows and the keyboard, so there is no seam between them. Dressed (and shown) by
@@ -52,9 +63,9 @@
             android:visibility="gone"
             android:background="?attr/termuxColorSurfaceBase">
 
-            <!-- Wallpaper-mode frost: RealtimeBlurView cannot sample the system wallpaper behind
-                 the transparent window, so this shows a crop of the dock's pre-blurred wallpaper
-                 frame instead. Populated in updateTopPaneWallpaperFrost(). -->
+            <!-- Wallpaper-mode frost: the dock's pre-blurred wallpaper frame at this band's place
+                 on screen (the Wallpaper backdrop kind). WallpaperFrostPainter.updateTopPane()
+                 installs it. -->
             <ImageView
                 android:id="@+id/terminal_status_bar_wallpaper_backdrop"
                 android:layout_width="match_parent"
@@ -63,20 +74,25 @@
                 android:importantForAccessibility="no"
                 android:visibility="gone" />
 
-            <com.github.mmin18.widget.RealtimeBlurView
-                android:id="@+id/terminal_status_bar_glass_blur"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:realtimeBlurRadius="10dp"
-                app:realtimeOverlayColor="@android:color/transparent" />
-
             <View
                 android:id="@+id/terminal_status_bar_glass_surface"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
         </FrameLayout>
 
-        <RelativeLayout
+        <!-- The deck look's band behind the system status bar (wave 8): the window bar's opaque
+             slab carried up under the clock while a terminal effect is drawn, over whatever glass
+             the strip or the joined Docked frame lays there. Owned by applyDeckBands alone; gone
+             off the deck. -->
+        <View
+            android:id="@+id/deck_status_band"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="top"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -86,7 +102,7 @@
             android:clipToPadding="false"
             android:orientation="vertical">
 
-        <LinearLayout
+        <com.termux.app.chrome.LiveBackdropLinearLayout
             android:id="@+id/terminal_content_column"
             android:layout_alignParentTop="true"
             android:layout_above="@+id/accessory_stack_container"
@@ -127,13 +143,6 @@
                     android:scaleType="fitXY"
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
-
-                <com.github.mmin18.widget.RealtimeBlurView
-                    android:id="@+id/terminal_window_bar_blur"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
 
                 <View
                     android:id="@+id/terminal_window_bar_background"
@@ -422,17 +431,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_az_bar_host_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this capsule's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_az_bar_host_frost"
                         android:layout_width="match_parent"
@@ -476,17 +477,9 @@
                     android:layout_alignTop="@+id/place_off_dock_plank_bars"
                     android:layout_alignBottom="@+id/place_off_dock_plank_bars">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_off_dock_plank_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this plank's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_off_dock_plank_frost"
                         android:layout_width="match_parent"
@@ -522,7 +515,7 @@
                  answers for the sides is structure rather than padding anyone applies. It clips:
                  a rail holds more icons than the screen is tall and scrolls them, and an unclipped
                  band let the scrolled ones out past the canvas to sit beside the dock. -->
-            <LinearLayout
+            <com.termux.app.chrome.LiveBackdropLinearLayout
                 android:id="@+id/terminal_canvas_band"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -586,7 +579,7 @@
 
             </com.termux.app.place.EdgeStackView>
 
-            <FrameLayout
+            <com.termux.app.chrome.LiveBackdropFrameLayout
                 android:id="@+id/terminal_surface_host"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -615,7 +608,7 @@
                     <!-- Split-pane host: TerminalPaneController inflates the recursive pane
                          tree (view_terminal_pane.xml per leaf) into this frame. A single
                          unsplit shell is just one pane filling the host. -->
-                    <FrameLayout
+                    <com.termux.app.chrome.LiveBackdropFrameLayout
                         android:id="@+id/terminal_pane_host"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
@@ -631,7 +624,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
-            </FrameLayout>
+            </com.termux.app.chrome.LiveBackdropFrameLayout>
 
             <com.termux.app.place.EdgeStackView
                 android:id="@+id/place_edge_stack_right"
@@ -640,16 +633,29 @@
                 app:edgeStackEdge="right"
                 android:clipChildren="false"
                 android:clipToPadding="false" />
-            </LinearLayout>
+            </com.termux.app.chrome.LiveBackdropLinearLayout>
 
             <!-- The content column ends at the canvas band. The whole bottom edge — the status
                  bar included — stands in accessory_row_stack below, because that is the one
                  container that keeps its bands above the in-app keyboard and on the dock's glass.
                  There used to be a second bottom stack here holding only the status bar, which is
                  what pinned it above the dock whatever order the user gave it. -->
-        </LinearLayout>
+        </com.termux.app.chrome.LiveBackdropLinearLayout>
 
-        <RelativeLayout
+        <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
+             accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's
+             opaque slab while a terminal effect is drawn. Owned by applyDeckBands alone; gone off
+             the deck. -->
+        <View
+            android:id="@+id/deck_nav_band"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@+id/accessory_stack_container"
+            android:layout_alignParentBottom="true"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/accessory_stack_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -1019,7 +1025,7 @@
                     android:clipToPadding="false"
                     android:visibility="gone" />
             </LinearLayout>
-        </RelativeLayout>
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
 
         <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
              pane's border, and the letters it slides out over the canvas while held. The whole
@@ -1147,7 +1153,7 @@
             android:clickable="false"
             android:focusable="false"
             android:visibility="gone" />
-        </RelativeLayout>
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,
@@ -1177,12 +1183,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/app_drawer_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1216,12 +1225,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/command_palette_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1264,12 +1276,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/terminal_sheet_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
 
             <!-- Cards, oldest first: a sheet opened from a sheet (the workspace picker's confirm)
@@ -1295,7 +1310,7 @@
             android:elevation="20dp"
             android:visibility="gone" />
 
-    </FrameLayout>
+    </com.termux.app.place.BottomInsetFrameLayout>
 
     <FrameLayout
         android:id="@+id/activity_termux_bottom_space_view"

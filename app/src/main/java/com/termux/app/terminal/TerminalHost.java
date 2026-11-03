@@ -256,6 +256,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     boolean isVisible();
 
     /**
+     * Re-dresses every glass surface (status bar, dock, keyboard, terminal, Home's widgets, sheets)
+     * from the stored Look, as the Appearance editor does on Done. Main thread only.
+     */
+    default void redressChrome() {
+    }
+
+    /**
      * Whether the terminal place's pixels can be on screen: the wall rests on the terminal, or it
      * is moving and the terminal may be sliding into or out of the frame. False only while another
      * place — Widgets, Display — is at rest in front of it.
@@ -587,6 +594,17 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default int terminalTextGround() {
         return android.graphics.Color.TRANSPARENT;
+    }
+
+    /**
+     * The ink the pane band decided on for {@link #terminalTextGround()}, weighing both inks
+     * against every pane; null while the terminal is opaque, before a pane is measured, or with
+     * the even-out stage off, when the palette judges the ground itself. The ground is the band's
+     * worst end for this ink, so the palette wears it as decided rather than judging it there.
+     */
+    @androidx.annotation.Nullable
+    default com.termux.app.chrome.ChromeInk.Polarity terminalBandPolarity() {
+        return null;
     }
 
     /**

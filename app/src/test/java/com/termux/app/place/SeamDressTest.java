@@ -191,17 +191,27 @@ public class SeamDressTest {
 
     @Test
     public void aStackDressDiffersByShapeOrByAnyOfItsSizes() {
-        WallHalfShape docked = WallHalfShape.of(LayoutStyle.DOCKED, -1, 8);
+        WallShape docked = WallShape.of(LayoutStyle.DOCKED, -1, 8);
         StackDress base = StackDress.of(docked, 1f, 1f, 0);
-        assertEquals(base, StackDress.of(WallHalfShape.of(LayoutStyle.DOCKED, -1, 8), 1f, 1f, 0));
-        assertNotEquals(base, StackDress.of(WallHalfShape.of(LayoutStyle.FLOATING, -1, 8),
+        assertEquals(base, StackDress.of(WallShape.of(LayoutStyle.DOCKED, -1, 8), 1f, 1f, 0));
+        assertNotEquals(base, StackDress.of(WallShape.of(LayoutStyle.FLOATING, -1, 8),
             1f, 1f, 0));
-        assertNotEquals(base, StackDress.of(WallHalfShape.of(LayoutStyle.DOCKED, 12, 8),
+        assertNotEquals(base, StackDress.of(WallShape.of(LayoutStyle.DOCKED, 12, 8),
             1f, 1f, 0));
-        assertNotEquals(base, StackDress.of(WallHalfShape.of(LayoutStyle.DOCKED, -1, 4),
+        assertNotEquals(base, StackDress.of(WallShape.of(LayoutStyle.DOCKED, -1, 4),
             1f, 1f, 0));
         assertNotEquals(base, StackDress.of(docked, 1.2f, 1f, 0));
         assertNotEquals(base, StackDress.of(docked, 1f, 0.9f, 0));
         assertNotEquals(base, StackDress.of(docked, 1f, 1f, 6));
+    }
+
+    /** L1: each surface reads the page it stands on, not the wall or the Terminal's for all. */
+    @Test
+    public void theLookIsReadUnderThePageTheSurfaceStandsOn() {
+        int wall = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.PAGE_WALL;
+        assertEquals(7, SeamDress.lookPageId(PaneWallPage.WIDGETS, 7, -1, 2));
+        assertEquals(wall, SeamDress.lookPageId(PaneWallPage.WIDGETS, -1, -1, 2));
+        assertEquals(5, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, 5, 2));
+        assertEquals(2, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, -1, 2));
     }
 }

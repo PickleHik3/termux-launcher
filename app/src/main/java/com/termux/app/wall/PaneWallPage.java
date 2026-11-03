@@ -16,7 +16,7 @@ public enum PaneWallPage {
     TERMINAL,
     /**
      * Not a page of the row (amended 2026-10-19): the place while the display window — a window
-     * of the Workspace, on {@link #TERMINAL}'s stretch ({@link DisplaySlot}) — is the one in front.
+     * of the Workspace, on {@link #TERMINAL}'s stretch (ADR 0008; since ADR 0015 A3b the Display pages) — is the one in front.
      */
     DISPLAY;
 

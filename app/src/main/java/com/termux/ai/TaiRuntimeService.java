@@ -631,8 +631,8 @@ public final class TaiRuntimeService extends Service {
         if (info == null) return;
         TaiMemInfo.Reading memory = TaiMemInfo.read(this);
         TaiLoadBudget.Conditions conditions = TaiMemInfo.conditions(this);
-        long hold = TaiLoadBudget.floorBytes(false, conditions);
-        long peak = TaiLoadBudget.floorBytes(true, conditions);
+        long hold = TaiLoadBudget.floorBytes(false, conditions, info.totalMem);
+        long peak = TaiLoadBudget.floorBytes(true, conditions, info.totalMem);
         long critical = TaiLoadBudget.criticalFloorBytes(conditions);
         TaiPressureWatch.Tier tier = TaiPressureWatch.tier(memory.availBytes, hold, peak, critical, info.lowMemory);
         applyTier(tier, residents, holding, memory.availBytes, hold, peak, critical, info.lowMemory, "poll");

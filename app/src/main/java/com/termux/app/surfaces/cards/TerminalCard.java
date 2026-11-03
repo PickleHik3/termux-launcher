@@ -47,12 +47,15 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.GLASS_SECTION, Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE,
-                Row.CORNERS, Row.MARGIN, Row.SPLIT_GAP)
-            .tier(2, Row.CONTRAST, Row.CURSOR_TRAIL);
+            .tier(1, Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
         if (offers.terminalEffect)
-            rows.tier(2, Row.EFFECT);
-        return rows.tier(3, Row.LINK_FONT).build();
+            rows.tier(1, Row.EFFECT);
+        rows.tier(1, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
+                Row.FOCUS_GROWS)
+            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
+        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT)
+            .build();
     }
 
     // ------------------------------------------------------------------------------ policy
@@ -142,10 +145,8 @@ public final class TerminalCard {
                 SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_default)),
                 SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_harder))),
             host.contrast(), widthPx, host::setContrast);
-        // The sheet's tier divider stands over the Contrast section.
-        View section = CardRowView.section(context,
-            context.getString(R.string.appearance_row_contrast), null, false, row.root);
-        return new CardRowView(section, () -> row.select(host.contrast()));
+        // The row's own title names it: no Contrast sub-label over it.
+        return new CardRowView(row.root, () -> row.select(host.contrast()));
     }
 
     @NonNull
@@ -175,13 +176,11 @@ public final class TerminalCard {
 
     @NonNull
     private static CardRowView more(@NonNull Context context, @NonNull Host host) {
-        ChipsRow chips = ChipsRow.build(context, Collections.singletonList(
-            new ChipsRow.Link(R.drawable.ic_ms_font_download,
-                context.getString(R.string.appearance_row_font))), index -> host.openFont());
-        // The sheet's tier divider stands over More.
-        View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_more), null, false, chips.root);
-        return new CardRowView(section, () -> {});
+        // Font ↗, a list row in the Links section (overhaul §4).
+        com.termux.app.surfaces.rows.LinkRow link = com.termux.app.surfaces.rows.LinkRow.build(
+            context, R.drawable.ic_ms_font_download, context.getString(R.string.appearance_row_font),
+            context.getString(R.string.editor_link_font_summary), true, v -> host.openFont());
+        return new CardRowView(link.root, () -> {});
     }
 
     // ---------------------------------------------------------------------------- previews

@@ -117,6 +117,12 @@ public final class TerminalWorkspaceStore {
     /** What the autosave slot holds; a missing, unreadable or invalid file is {@code NONE}. */
     @NonNull
     public Autosave loadAutosave() {
+        return loadAutosave(null);
+    }
+
+    /** {@link #loadAutosave()} with the Home pages a v4 file's float positions are read against. */
+    @NonNull
+    public Autosave loadAutosave(@Nullable TerminalWorkspace.HomePages pages) {
         try {
             File directory = workspaceDirectory(false);
             if (!directory.isDirectory()) return Autosave.NONE_SAVED;
@@ -128,7 +134,7 @@ public final class TerminalWorkspaceStore {
             JSONObject json = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
             JSONArray sessions = json.optJSONArray("sessions");
             if (sessions != null && sessions.length() == 0) return Autosave.EMPTY_SAVED;
-            return new Autosave(ArrangementRecovery.Saved.ARRANGEMENT, TerminalWorkspace.fromJson(json));
+            return new Autosave(ArrangementRecovery.Saved.ARRANGEMENT, TerminalWorkspace.fromJson(json, pages));
         } catch (IOException | JSONException | TerminalWorkspace.WorkspaceException e) {
             return Autosave.NONE_SAVED;
         }
@@ -181,6 +187,13 @@ public final class TerminalWorkspaceStore {
 
     @NonNull
     public TerminalWorkspace load(@NonNull String name) throws TerminalWorkspace.WorkspaceException {
+        return load(name, null);
+    }
+
+    /** {@link #load(String)} with the Home pages a v4 file's float positions are read against. */
+    @NonNull
+    public TerminalWorkspace load(@NonNull String name, @Nullable TerminalWorkspace.HomePages pages)
+        throws TerminalWorkspace.WorkspaceException {
         String cleanName = validateName(name);
         File directory = workspaceDirectory(false);
         if (directory.exists()) validateDirectory(directory);
@@ -209,7 +222,7 @@ public final class TerminalWorkspaceStore {
         }
         try {
             TerminalWorkspace workspace = TerminalWorkspace.fromJson(
-                new JSONObject(new String(bytes, StandardCharsets.UTF_8)));
+                new JSONObject(new String(bytes, StandardCharsets.UTF_8)), pages);
             if (!cleanName.equals(workspace.name))
                 throw error("invalid_workspace", "Workspace document name does not match file name");
             return workspace;

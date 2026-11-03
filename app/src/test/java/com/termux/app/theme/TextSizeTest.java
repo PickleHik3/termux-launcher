@@ -50,7 +50,7 @@ public class TextSizeTest {
 
     /** The start-up sequence TermuxApplication runs over the store. */
     private void launch() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         preferences.migrateLayoutStyle();
     }
 

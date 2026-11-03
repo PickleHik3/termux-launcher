@@ -615,4 +615,40 @@ public abstract class WallpaperPickerPageTestBase {
             for (int i = 0; i < g.getChildCount(); i++) assertInside(root, g.getChildAt(i));
         }
     }
+    @Test
+    public void thePhotoPickLeavesThePageUpAndItsPhotoLandsInPlace() {
+        WallpaperPickerPage page = open();
+        page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
+        assertEquals(Collections.singletonList("photo HOME"), mListener.calls);
+
+        File photo = photoFile("cropped.png");
+        WallpaperSlots.Slot expected = page.launcherOnly() ? WallpaperSlots.Slot.HOME : WallpaperSlots.Slot.LOCK;
+        page.takePhoto(WallpaperSlots.Slot.LOCK, photo);
+        settle();
+        assertEquals(expected, page.centredSlot());
+        assertEquals(photo, page.pending(expected).photoFile);
+        assertTrue(page.hasPendingChanges());
+    }
+
+    @Test
+    public void aCancelledPhotoPickLeavesThePageAsItWas() {
+        WallpaperPickerPage page = open();
+        WallpaperSlots.Choice before = page.pending(WallpaperSlots.Slot.HOME);
+        page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
+        page.takePhoto(WallpaperSlots.Slot.HOME, null);
+        assertEquals(before, page.pending(WallpaperSlots.Slot.HOME));
+        assertFalse(page.hasPendingChanges());
+    }
+
+    @Test
+    public void aHeldPageShowsItsProgressAndTakesNoChoice() {
+        WallpaperPickerPage page = open();
+        View progress = page.root().findViewById(R.id.wallpaper_picker_progress);
+        page.holdBusy(true);
+        assertEquals(View.VISIBLE, progress.getVisibility());
+        page.choose(WallpaperSlots.Choice.photo(photoFile("held.png")));
+        assertFalse("no choice while held", page.hasPendingChanges());
+        page.holdBusy(false);
+        assertEquals(View.INVISIBLE, progress.getVisibility());
+    }
 }

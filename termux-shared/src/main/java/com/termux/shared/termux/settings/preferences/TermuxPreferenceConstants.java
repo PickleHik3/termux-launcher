@@ -617,6 +617,22 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_TERMINAL_PANE_GAP = 24;
 
         /**
+         * Pane border colour choices, terminal panes only. A mode id (outline, primary, secondary,
+         * tertiary, custom; the glow also takes same_as_border) and, for custom, a stored ARGB.
+         */
+        public static final String KEY_TERMINAL_PANE_BORDER_COLOUR = "terminal_pane_border_colour";
+        public static final String DEFAULT_TERMINAL_PANE_BORDER_COLOUR = "outline";
+        public static final String KEY_TERMINAL_PANE_BORDER_CUSTOM = "terminal_pane_border_custom";
+        public static final String KEY_TERMINAL_PANE_FOCUS_COLOUR = "terminal_pane_focus_colour";
+        public static final String DEFAULT_TERMINAL_PANE_FOCUS_COLOUR = "primary";
+        public static final String KEY_TERMINAL_PANE_FOCUS_CUSTOM = "terminal_pane_focus_custom";
+        public static final String KEY_TERMINAL_PANE_GLOW = "terminal_pane_glow";
+        public static final boolean DEFAULT_TERMINAL_PANE_GLOW = false;
+        public static final String KEY_TERMINAL_PANE_GLOW_COLOUR = "terminal_pane_glow_colour";
+        public static final String DEFAULT_TERMINAL_PANE_GLOW_COLOUR = "same_as_border";
+        public static final String KEY_TERMINAL_PANE_GLOW_CUSTOM = "terminal_pane_glow_custom";
+
+        /**
          * Symmetric left/right inset in dp between a surface and the physical screen edges. The
          * default matches the floating capsule's redline outer margin; the edge-to-edge default
          * shape only honours whatever is configured beyond that baseline.
@@ -674,6 +690,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_CLOCK_SECONDS = "status_clock_seconds";
         public static final boolean DEFAULT_STATUS_CLOCK_SECONDS = true;
 
+        /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
+        public static final String KEY_STATUS_CLOCK_SHOWN = "status_clock_shown";
+        public static final boolean DEFAULT_STATUS_CLOCK_SHOWN = true;
+
         /**
          * Whose box the status row leaves its camera gap for when it shares the camera's band
          * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
@@ -725,6 +745,20 @@ public final class TermuxPreferenceConstants {
         /** Retro terminal effect id (none, crt, crt_green, crt_amber, crt_material, tft). Global, API 33+. */
         public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
+
+        /**
+         * Whether CRT panes play their short screen events (bell tear, power on, focus wobble,
+         * death static). Default true.
+         */
+        public static final String KEY_TERMINAL_SCREEN_EVENTS = "terminal_screen_events";
+        public static final boolean DEFAULT_VALUE_TERMINAL_SCREEN_EVENTS = true;
+
+        /**
+         * Whether CRT panes play their ambient parts (a gentle flicker, a tear every few
+         * minutes) while nothing happens. Costs battery. Default false.
+         */
+        public static final String KEY_IDLE_ANIMATIONS = "idle_animations";
+        public static final boolean DEFAULT_VALUE_IDLE_ANIMATIONS = false;
 
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
@@ -1343,6 +1377,23 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
 
         /**
+         * Live blur: the glass shows a live, blurred picture of whatever is drawn beneath it
+         * (pages, widgets, the terminal) instead of the stored wallpaper frame. Off by default; it
+         * costs a re-blur on every frame that draws under the glass. Takes effect only where
+         * Glass refraction does (see {@code LiveBlurPolicy}).
+         */
+        public static final String KEY_LIVE_BLUR = "live_blur";
+        public static final boolean DEFAULT_VALUE_LIVE_BLUR = false;
+
+        /**
+         * Live windows while swiping: the windows beside the one in front are kept ready and
+         * slide in live as the wall is dragged between windows. Off, a swipe shows them only
+         * once it lands.
+         */
+        public static final String KEY_LIVE_WINDOWS_WHILE_SWIPING = "live_windows_while_swiping";
+        public static final boolean DEFAULT_VALUE_LIVE_WINDOWS_WHILE_SWIPING = true;
+
+        /**
          * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
          * refraction knobs are global: one look for every glass surface, never per surface. Their
          * defaults are exactly the numbers the dock's refraction always used, so switching Fancier
@@ -1441,6 +1492,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
         public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
+
 
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
@@ -1717,8 +1769,6 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 
-        /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
-        public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
         /** A surface follows Base until the user moves that one control. */
         public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
 
@@ -1866,6 +1916,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED = true;
 
+        /** Whether motion events are logged (tag TermuxMotion and the in-memory ring buffer). */
+        public static final String KEY_MOTION_LOG_ENABLED = "motion_log_enabled";
+
+        public static final boolean DEFAULT_VALUE_MOTION_LOG_ENABLED = false;
+
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
          * for a decision the wallpaper-colours switch already makes, and the two could disagree —
@@ -1968,43 +2023,13 @@ public final class TermuxPreferenceConstants {
             "first_boot_tour_completed_version";
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
 
-        /**
-         * The version of the run an unfinished tour belongs to, or 0 for one started before the
-         * version was recorded. The card number alone says nothing across an update: card 3 of
-         * one run and card 3 of the next are different lessons.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_RUN_VERSION = "first_boot_tour_run_version";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION = 0;
-
-        /**
-         * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
-         * and restarted under the user constantly, so the run is written through on every move and
-         * resumes where it was rather than starting over.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP = "first_boot_tour_step";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP = -1;
-
-        /** How many of the current card's gestures have been observed. */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
+        /** The setup wizard version the user has finished or skipped, or 0 for never. */
+        public static final String KEY_SETUP_WIZARD_VERSION = "setup_wizard_version";
+        public static final int DEFAULT_SETUP_WIZARD_VERSION = 0;
 
         /** Whether the Appearance editor's "theme, colours and glass" hint has been dismissed. */
         public static final String KEY_APPEARANCE_THEME_HINT_SEEN = "first_run_appearance_theme_hint_seen";
         public static final boolean DEFAULT_APPEARANCE_THEME_HINT_SEEN = false;
-
-        /** Whether the user skipped past a card in the run they are on. */
-        public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
-
-        /**
-         * Whether the one-time migration that folds a completed run of the removed footage
-         * onboarding into {@link #KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION} has already run. Guarded
-         * by its own flag, never by the completed version itself, since Replay legitimately zeroes
-         * that version and must not be read back as "never migrated".
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
-            "first_boot_tour_legacy_onboarding_migrated";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
     }
 
     /**

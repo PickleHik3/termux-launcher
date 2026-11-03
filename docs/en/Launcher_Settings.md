@@ -18,15 +18,15 @@ Settings is grouped in three: **Your launcher** (Home, Dock, Terminal, Linux app
 ### Home
 
 "Pages, widgets, gestures and where you start". **Appearance** opens the Appearance editor on
-Home. Then **Icons and labels**, **Folders**, **Gestures**, **Home widgets** and **Pages** (**Page indicator**, **Edit pages**, **Wallpaper scrolls with pages**, **Lock Home layout** and **Start in**).
+Home. Then **Icons and labels**, **Folders**, **Gestures**, **Home widgets** and **Pages** (**Page indicator**, **Edit pages** (the order of the wall's pages), **Wallpaper scrolls with pages**, **Lock Home layout** and **Start in**).
 
 **Gestures** holds every gesture in one place: the five on a Home page's free area (swipe up,
 swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock** (its page picks
 the lock method), **Swipe up on app icons for quick reply** (on by default; off, a swipe up on an icon with a
 notification dot behaves like on any other icon) and **Swipe on the terminal to switch windows**.
 
-**Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart;
-**Terminal** opens the Workspace with one fresh shell window. See
+**Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart
+and where the Home button takes you; **Terminal** opens the Workspace with one fresh shell window. See
 [Home screen and apps](Home_Screen_And_Apps.md) and [Widgets](Widgets.md).
 
 ### Dock
@@ -101,7 +101,8 @@ launcher**.
 with shortcuts to the motion it trims. See
 [Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on,
 it sets the Solid look, an opaque terminal, no cursor trail or terminal effect, no wallpaper
-parallax and Reduce idle activity; off, it puts back what it replaced.
+parallax and Reduce idle activity; off, it puts back what it replaced. **Live blur** (Android 13 and later): glass blurs whatever
+moves behind it. Uses more battery.
 
 #### Backup & restore
 

@@ -16,9 +16,10 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.FrostStops;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -34,6 +35,7 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 
 /**
+ * (Workspace edits are its Terminal and Display pages' cells, overhaul §1.)
  * Edits live in the editing session until Done stores them or Discard reverts them: a screen card
  * that follows the page swipe, a card collapsed to peek, or a card raised by the page label
  * never puts a value back, and the bar keeps showing the session dirty.
@@ -52,13 +54,14 @@ public class EditorCardSwapKeepsEditsTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         places = new PlaceLayoutStore(preferences);
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 40);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.blurForGlass(20));
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.grainForGlass(20));
     }
 
@@ -69,14 +72,14 @@ public class EditorCardSwapKeepsEditsTest {
         moveStrip(editor, Row.OPACITY, 65);
         assertWorkspaceKept(editor);
 
-        swipe(editor, WallHalf.HOME);
+        swipe(editor, PaneWallPage.WIDGETS);
         assertEquals("the Home card followed the swipe", EditorCard.HOME, editor.shownCard());
         assertWorkspaceKept(editor);
 
-        swipe(editor, WallHalf.WORKSPACE);
+        swipe(editor, PaneWallPage.TERMINAL);
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
-        assertEquals("Frost reads back where it was left", 70, model(editor).value(Row.FROST));
+        assertEquals("Frost reads back where it was left", 75, model(editor).value(Row.FROST));
         assertEquals(65, model(editor).value(Row.OPACITY));
     }
 
@@ -85,22 +88,26 @@ public class EditorCardSwapKeepsEditsTest {
         SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
-        swipe(editor, WallHalf.HOME);
+        swipe(editor, PaneWallPage.WIDGETS);
         moveStrip(editor, Row.OPACITY, 33);
-        swipe(editor, WallHalf.WORKSPACE);
+        swipe(editor, PaneWallPage.TERMINAL);
+        // Home's 33 is Home pages' own cell; the Workspace keeps its 65 (overhaul §1).
         assertWorkspaceKept(editor);
-        assertEquals("Home's edit is kept too", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals("Home's edit is kept too", 33, kindValue(LookGrid.Property.OPACITY,
+            LookGrid.Kind.HOME));
 
         boolean[] done = {false};
         editor.setOnDone(() -> done[0] = true);
         editor.done();
         assertTrue(done[0]);
-        assertEquals(65,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        assertEquals(GlassControls.blurForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
-        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        for (LookGrid.Kind kind : WORKSPACE) {
+            assertEquals(kind.key, 65, kindValue(LookGrid.Property.OPACITY, kind));
+            assertEquals(kind.key, FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70)),
+                kindValue(LookGrid.Property.FROST, kind));
+        }
+        assertEquals(33, kindValue(LookGrid.Property.OPACITY, LookGrid.Kind.HOME));
+        assertEquals("Base is Customization's: neither screen card wrote it", 40,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
     }
 
     @Test
@@ -121,7 +128,7 @@ public class EditorCardSwapKeepsEditsTest {
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertEquals("a door naming the card raises it from peek", EditorCardSheet.DETENT_HALF,
             sheet.detent());
-        assertEquals(70, model(editor).value(Row.FROST));
+        assertEquals(75, model(editor).value(Row.FROST));
         assertEquals(65, model(editor).value(Row.OPACITY));
         assertWorkspaceKept(editor);
     }
@@ -140,18 +147,32 @@ public class EditorCardSwapKeepsEditsTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
-        assertEquals(70, model(editor).value(Row.FROST));
+        assertEquals(75, model(editor).value(Row.FROST));
     }
 
     // ------------------------------------------------------------------------------- the checks
 
     private void assertWorkspaceKept(SurfaceEditorController editor) {
-        assertEquals(65,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        assertEquals(GlassControls.blurForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
-        assertEquals(GlassControls.grainForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE));
+        assertWorkspaceKept(editor, 65);
+    }
+
+    /** The Workspace's kinds: its writes land on Terminal and Display pages together. */
+    private static final LookGrid.Kind[] WORKSPACE = {LookGrid.Kind.TERMINAL, LookGrid.Kind.DISPLAY};
+
+    private int kindValue(LookGrid.Property property, LookGrid.Kind kind) {
+        LookGrid grid = preferences.lookGrid();
+        assertTrue(property.key + "@" + kind.key + " is set", grid.has(property, null, kind));
+        return grid.value(property, null, kind);
+    }
+
+    private void assertWorkspaceKept(SurfaceEditorController editor, int opacity) {
+        for (LookGrid.Kind kind : WORKSPACE) {
+            assertEquals(kind.key, opacity, kindValue(LookGrid.Property.OPACITY, kind));
+            assertEquals(kind.key, FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70)),
+                kindValue(LookGrid.Property.FROST, kind));
+            assertEquals(kind.key, AppearanceLooks.grainPercent(GlassControls.grainForGlass(70)),
+                kindValue(LookGrid.Property.GRAIN, kind));
+        }
         assertTrue("the session is dirty",
             (Boolean) ReflectionHelpers.callInstanceMethod(editor, "isDirty"));
         EditorBar bar = ReflectionHelpers.getField(editor, "mBar");
@@ -185,12 +206,15 @@ public class EditorCardSwapKeepsEditsTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    /** The preview swiped to {@code half}: the page swipe's own path. */
-    private static void swipe(SurfaceEditorController editor, WallHalf half) {
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ClassParameter.from(WallHalf.class, half),
-            ClassParameter.from(boolean.class, true),
-            ClassParameter.from(boolean.class, true));
+    /**
+     * The editor shown {@code half}'s page by a door: the page swipe retired with the halves
+     * (ADR 0015 §6), and a door naming the other page is the one path left.
+     */
+    private static void swipe(SurfaceEditorController editor, PaneWallPage half) {
+        ReflectionHelpers.callInstanceMethod(editor, "showPage",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
+                half == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
@@ -226,5 +250,11 @@ public class EditorCardSwapKeepsEditsTest {
 
     private static EditorCardSheet.Model model(SurfaceEditorController editor) {
         return ReflectionHelpers.getField(editor, "mModel");
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

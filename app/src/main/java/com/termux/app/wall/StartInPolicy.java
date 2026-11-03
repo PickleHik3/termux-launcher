@@ -4,9 +4,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Which page is Home: the one place Start in is decided. Start in is the only store — Edit pages'
- * Home marker is read from it, and choosing a card as Home writes it — so the marker and Settings
- * can never disagree. Start in names Home ({@link WallRow#START_IN_HOME}, the Home page Home opens
+ * Which page is Home, where a cold start and a home press land: the one place Start in is decided.
+ * Start in is the only store — Edit pages' Home marker is read from it, and choosing a card as
+ * Home writes it — so the marker and Settings can never disagree. Start in names Home ({@link WallRow#START_IN_HOME}, the Home page Home opens
  * on), the Workspace ({@link WallRow#START_IN_WORKSPACE}, its first terminal window) or the
  * display window ({@link WallRow#START_IN_DISPLAY}).
  *
@@ -100,6 +100,16 @@ public final class StartInPolicy {
                 // Home always keeps a page; the Home page it opens on is clamped where it is read.
                 return null;
         }
+    }
+
+    /**
+     * The Home page the Home half opens on under Start in {@code effective}, counting from 0: the
+     * page Edit pages chose ({@code defaultPage}) while Home is Start in, else page 1. A choice
+     * made on a Home page that no longer wears the marker is not kept behind it: with a window as
+     * Home, the Home key on the extra keys and a cold start's Home half both open on page 1.
+     */
+    public static int homePage(int defaultPage, @Nullable String effective) {
+        return WallRow.START_IN_HOME.equals(read(effective)) ? Math.max(0, defaultPage) : 0;
     }
 
     /**

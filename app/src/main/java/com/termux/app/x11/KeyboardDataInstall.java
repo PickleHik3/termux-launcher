@@ -3,7 +3,7 @@ package com.termux.app.x11;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,7 +72,7 @@ public final class KeyboardDataInstall {
      * when that edition has no such command (nix).
      */
     @Nullable
-    public static List<String> command(@NonNull TourEdition edition) {
+    public static List<String> command(@NonNull AppEdition edition) {
         String script = script(edition);
         return script == null ? null
             : Collections.unmodifiableList(Arrays.asList(SHELL, "-c", script));
@@ -80,7 +80,7 @@ public final class KeyboardDataInstall {
 
     /** The script {@link #command} hands to {@link #SHELL}, or null on nix. */
     @Nullable
-    static String script(@NonNull TourEdition edition) {
+    static String script(@NonNull AppEdition edition) {
         switch (edition) {
             case NIX: return null;
             case VAJ: return "{ " + aptInstall(false) + "; } || " + ON_FAILURE;

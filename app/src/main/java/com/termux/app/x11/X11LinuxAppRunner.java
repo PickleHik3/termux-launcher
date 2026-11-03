@@ -115,6 +115,8 @@ public final class X11LinuxAppRunner {
          */
         boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app);
         void showNotice(@NonNull String message);
+        /** The launch gave up before a display came up: drop what it set up (a Display page). */
+        default void launchGaveUp() {}
         /**
          * Ask the user {@code message} — one plain sentence, already built — before a second
          * desktop takes the display from the one running. {@code onYes} runs on the main thread,
@@ -190,6 +192,7 @@ public final class X11LinuxAppRunner {
     private void giveUp() {
         if (pending == null) return;
         pending = null;
+        if (host != null) host.launchGaveUp();
         notice(context.getString(com.termux.R.string.termux_x11_app_display_failed));
     }
 

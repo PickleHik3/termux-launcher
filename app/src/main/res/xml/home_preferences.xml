@@ -13,14 +13,13 @@
 
     <!-- How the app icons and folders on Home pages are drawn; the dock draws its own. -->
     <PreferenceCategory app:key="home_icons" app:title="@string/settings_home_icons_header">
+        <!-- The one icon size (ADR 0020 §3), held in the layouts' sizes document: the row
+             stores nothing itself (HomePreferencesFragment.bindIconSize). -->
         <ListPreference
             app:key="app_launcher_home_icon_scale"
+            app:persistent="false"
             app:title="@string/settings_home_icon_scale_title"
-            app:dialogTitle="@string/settings_home_icon_scale_title"
-            app:entries="@array/editor_home_icon_size_entries"
-            app:entryValues="@array/editor_home_icon_size_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="small" />
+            app:dialogTitle="@string/settings_home_icon_scale_title" />
         <ListPreference
             app:key="app_launcher_home_label_size"
             app:title="@string/settings_home_label_size_title"

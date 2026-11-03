@@ -36,9 +36,6 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.StatusBarLensView;
-import com.termux.app.tour.TourFingerPainter;
-import com.termux.app.tour.TourFingerTrace;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -190,7 +187,7 @@ public final class HelpOverlayView extends FrameLayout {
     private float downX, downY;
     private boolean moved;
     private ValueAnimator gestureTrace;
-    private TourGesture gesture = TourGesture.NONE;
+    private HelpGesture gesture = HelpGesture.NONE;
     private Rect gestureRect;
     private float gestureProgress = 1f;
     /** Read once when the gesture starts: a setting is not something onDraw asks about. */
@@ -1333,8 +1330,8 @@ public final class HelpOverlayView extends FrameLayout {
         Rect rect = targetRect(entry.targetId);
         stopGesture();
         if (rect == null) return;
-        TourGesture wanted = gestureFor(entry, rect);
-        if (wanted == TourGesture.NONE) {
+        HelpGesture wanted = gestureFor(entry, rect);
+        if (wanted == HelpGesture.NONE) {
             HelpLog.d("no gesture for " + entry.id);
             return;
         }
@@ -1350,7 +1347,7 @@ public final class HelpOverlayView extends FrameLayout {
         }
         gestureProgress = 0f;
         gestureTrace = ValueAnimator.ofFloat(0f, 1f);
-        gestureTrace.setDuration(TourFingerTrace.TRACE_MS);
+        gestureTrace.setDuration(HelpFingerTrace.TRACE_MS);
         gestureTrace.addUpdateListener(animator -> {
             gestureProgress = (float) animator.getAnimatedValue();
             invalidate();
@@ -1363,12 +1360,12 @@ public final class HelpOverlayView extends FrameLayout {
      * that is a rail down one edge is swiped inward off the rail rather than pulled down.
      */
     @VisibleForTesting
-    TourGesture gestureFor(HelpTopics.Entry entry, Rect rect) {
-        if (entry == null || entry.gesture == null) return TourGesture.NONE;
-        if (entry.gesture == TourGesture.DRAG_DOWN && rect != null && snapshot != null) {
+    HelpGesture gestureFor(HelpTopics.Entry entry, Rect rect) {
+        if (entry == null || entry.gesture == null) return HelpGesture.NONE;
+        if (entry.gesture == HelpGesture.DRAG_DOWN && rect != null && snapshot != null) {
             HelpLeaderRouter.Side side = side(rect);
-            if (side == HelpLeaderRouter.Side.LEFT) return TourGesture.SWIPE_RIGHT;
-            if (side == HelpLeaderRouter.Side.RIGHT) return TourGesture.SWIPE_LEFT;
+            if (side == HelpLeaderRouter.Side.LEFT) return HelpGesture.SWIPE_RIGHT;
+            if (side == HelpLeaderRouter.Side.RIGHT) return HelpGesture.SWIPE_LEFT;
         }
         return entry.gesture;
     }
@@ -1376,19 +1373,19 @@ public final class HelpOverlayView extends FrameLayout {
     private void stopGesture() {
         if (gestureTrace != null) { gestureTrace.cancel(); gestureTrace = null; }
         gestureRect = null;
-        gesture = TourGesture.NONE;
+        gesture = HelpGesture.NONE;
         gestureProgress = 1f;
     }
 
     /** Whether a demonstration is on screen right now. */
     @VisibleForTesting
     boolean isShowingGesture() {
-        return gestureRect != null && gesture != TourGesture.NONE;
+        return gestureRect != null && gesture != HelpGesture.NONE;
     }
 
     /** Which movement is being played, for a test that asks what a rail gets. */
     @VisibleForTesting
-    TourGesture playingGesture() { return gesture; }
+    HelpGesture playingGesture() { return gesture; }
 
     // ---- pieces -----------------------------------------------------------------------------
 
@@ -1661,14 +1658,14 @@ public final class HelpOverlayView extends FrameLayout {
 
     private void drawGesture(Canvas canvas) {
         Rect rect = gestureRect;
-        if (rect == null || gesture == TourGesture.NONE) return;
+        if (rect == null || gesture == HelpGesture.NONE) return;
         if (gestureReducedMotion) {
-            TourFingerPainter.drawStaticCue(canvas, paint, arrowPath, gesture, rect.left, rect.top,
+            HelpFingerPainter.drawStaticCue(canvas, paint, arrowPath, gesture, rect.left, rect.top,
                 rect.right, rect.bottom, density, accent, fingerPoint, trailPoint);
             return;
         }
         if (gestureProgress >= 1f) { stopGesture(); return; }
-        TourFingerPainter.draw(canvas, paint, gesture, rect.left, rect.top, rect.right, rect.bottom,
+        HelpFingerPainter.draw(canvas, paint, gesture, rect.left, rect.top, rect.right, rect.bottom,
             density, gestureProgress, accent, fingerPoint, trailPoint);
     }
 

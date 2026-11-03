@@ -43,13 +43,27 @@ public final class HomeAppIconMetrics {
         int inset = Math.round(INSET_DP * density);
         int wanted = Math.round(ICON_DP * iconScale * density);
         int across = Math.max(0, widthPx - 2 * inset);
-        int labelled = heightPx - 2 * inset - labelPx - Math.round(LABEL_GAP_DP * density);
+        int gap = Math.round(LABEL_GAP_DP * density);
+        int labelled = heightPx - 2 * inset - labelPx - gap;
         int withLabel = Math.min(wanted, Math.min(across, labelled));
-        if (withLabel >= Math.round(MIN_LABELLED_ICON_DP * density)) {
+        // The label hides by Launcher3's rule (hideWorkspaceLabelsIfNotEnoughSpace) before the
+        // icon gives up its step for it: one grid serves both orientations (ADR 0020 §12), so a
+        // turn shortens the cells and the labels go, the icons stay the size chosen.
+        if (!labelsCrowded(heightPx, wanted, gap, labelPx)
+            && withLabel >= Math.round(MIN_LABELLED_ICON_DP * density)) {
             return new HomeAppIconMetrics(withLabel, true);
         }
         int bare = Math.min(wanted, Math.min(across, Math.max(0, heightPx - 2 * inset)));
         return new HomeAppIconMetrics(Math.max(1, bare), false);
+    }
+
+    /**
+     * Launcher3's rule for hiding the workspace's labels: the cell's height less the icon, its
+     * padding and the label leaves less than one label's height.
+     */
+    public static boolean labelsCrowded(int cellHeightPx, int iconPx, int drawablePaddingPx,
+                                        int labelPx) {
+        return cellHeightPx - iconPx - drawablePaddingPx - labelPx < labelPx;
     }
 
     /**

@@ -46,6 +46,21 @@ public final class TerminalSurfacePolicy {
     }
 
     /**
+     * One wall page's own ground (page-chrome spec C): its wallpaper dim, and on the Terminal page
+     * only, {@link #wallGround}'s rule for the canvas tint (folded in without glass, left on the
+     * slab with it). Any other page is its dim alone, so the terminal's tint never shows on Home.
+     *
+     * @param terminalPage whether the page is the Terminal page (or a window of it)
+     * @param glassPane whether every pane is a glass slab
+     * @param terminalSurfaceColor the canvas tint, ARGB (ignored off the Terminal page)
+     * @param wallpaperDim the page's own wallpaper dim, ARGB
+     */
+    public static int pageGround(boolean terminalPage, boolean glassPane, int terminalSurfaceColor,
+                                 int wallpaperDim) {
+        return terminalPage ? wallGround(glassPane, terminalSurfaceColor, wallpaperDim) : wallpaperDim;
+    }
+
+    /**
      * The terminal opacity below which the pane is more wallpaper than glass, and the theme's dark
      * text cannot be trusted to read on it. A light pane needs about 46% of its tint over a black
      * wallpaper before black text reaches 4.5:1 (WCAG AA) on it; a Material surface is a little

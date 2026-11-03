@@ -6,14 +6,11 @@ import com.termux.app.dock.PeekGlassGeometry;
 import com.termux.app.dock.PeekGlassPreferences;
 import com.termux.app.surfaces.cards.DockCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
  * What a card's header Reset puts back in the preference store, so that every key the card's rows
- * show is covered: the glass (the screens' own half of Base, a surface's own values and its Glass
- * position), and each card's own keys: the dock's, the keyboard's, the status bar's clock and
+ * show is covered: the glass (a surface's own values and its Glass position), and each card's own keys: the dock's, the keyboard's, the status bar's clock and
  * tiles, the terminal's contrast, trail, effect and sizes. What lives in the layout session (the
  * dock's height, style and type, the keyboard's type, height and bottom padding, Home's grid) or
  * in Settings' store (Home's rows, the dock's options) is reset by the controller. Where each bar
@@ -25,28 +22,11 @@ final class EditorCardReset {
 
     /** The glass rows' stored values back as they ship, then the card's other store keys. */
     static void resetStore(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card,
-                           @NonNull WallHalf half) {
-        switch (card) {
-            case HOME:
-                screenGlass(prefs, WallHalf.HOME);
-                break;
-            case WORKSPACE:
-                screenGlass(prefs, WallHalf.WORKSPACE);
-                break;
-            case APPEARANCE:
-                for (TermuxAppSharedPreferences.SurfaceSlot slot
-                        : TermuxAppSharedPreferences.SurfaceSlot.values()) {
-                    prefs.resetSurfaceToLook(slot, half);
-                    prefs.setSurfaceGlassPosition(slot, -1);
-                }
-                prefs.setSurfaceGlassPosition(null, -1);
-                break;
-            default:
-                if (card.slot != null) {
-                    prefs.resetSurfaceToLook(card.slot, half);
-                    prefs.setSurfaceGlassPosition(card.slot, -1);
-                }
-                break;
+                           int pageId) {
+        // Customization, Home and Workspace reset their grid cells in the controller.
+        if (card.slot != null) {
+            prefs.resetSurfaceToLook(card.slot, pageId);
+            prefs.setSurfaceGlassPosition(card.slot, -1);
         }
         switch (card) {
             case KEYBOARD:
@@ -87,10 +67,25 @@ final class EditorCardReset {
                 prefs.setTerminalRetroEffect(TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT);
                 prefs.setTextSizePercent(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT);
                 prefs.setTerminalPaneGap(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
+                resetPaneBorders(prefs);
                 break;
             default:
                 break;
         }
+    }
+
+    /**
+     * The Pane borders card's values as they ship (#206): the theme outline, Primary when
+     * focused, no glow, its colour the border's, and no custom colours.
+     */
+    public static void resetPaneBorders(@NonNull TermuxAppSharedPreferences prefs) {
+        prefs.setTerminalPaneBorderColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_BORDER_COLOUR);
+        prefs.setTerminalPaneBorderCustom(0);
+        prefs.setTerminalPaneFocusColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_FOCUS_COLOUR);
+        prefs.setTerminalPaneFocusCustom(0);
+        prefs.setTerminalPaneGlow(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW);
+        prefs.setTerminalPaneGlowColour(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW_COLOUR);
+        prefs.setTerminalPaneGlowCustom(0);
     }
 
     /** Drops {@code key}, so its getter answers the shipped default. */
@@ -98,16 +93,5 @@ final class EditorCardReset {
         android.content.SharedPreferences store = prefs.getSharedPreferences();
         if (store != null && store.contains(key))
             store.edit().remove(key).apply();
-    }
-
-    /** A screen's own half of Base back to the values it ships with. */
-    private static void screenGlass(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull WallHalf half) {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR);
-        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
-            TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN);
-        prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, half,
-            TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY);
-        prefs.setSurfaceBaseValue(SurfaceProperty.TINT, half, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
     }
 }

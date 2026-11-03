@@ -27,6 +27,7 @@ import com.termux.app.surfaces.rows.ChipsRow;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.RowKit;
 import com.termux.app.surfaces.rows.SectionHeader;
+import com.termux.app.surfaces.rows.PreviewTilesRow;
 import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.surfaces.rows.StepperRow;
 import com.termux.app.surfaces.rows.TileGrid;
@@ -59,6 +60,11 @@ public final class DockCard {
     /** The palette button on the dock. Stored now, drawn in wave 6. */
     public static final String KEY_COMMAND_PALETTE_BUTTON = "dock_command_palette_button";
     public static final boolean DEFAULT_COMMAND_PALETTE_BUTTON = true;
+    /**
+     * The palette tile's column in the dock row, an int, one for every layout (the Drawer tile's
+     * is per layout). Absent is the row's last ({@code PaletteTilePolicy.DEFAULT_COLUMN}).
+     */
+    public static final String KEY_COMMAND_PALETTE_COLUMN = "dock_command_palette_column";
 
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
@@ -83,6 +89,14 @@ public final class DockCard {
         }
     }
 
+    /**
+     * The Show/hide tiles, in the spec's order (overhaul §2 Dock); Monochrome icons is a switch
+     * row of its own ({@link Row#DOCK_MONOCHROME}).
+     */
+    public static final List<Option> SHOW_HIDE = java.util.Collections.unmodifiableList(
+        Arrays.asList(Option.COMMAND_PALETTE, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
+            Option.QUICK_REPLY, Option.SEARCH_FIELD));
+
     /** What the card reads and writes. */
     public interface Host {
         @NonNull Context context();
@@ -104,6 +118,17 @@ public final class DockCard {
         int appIconsFrom();
         int appIconsTo();
         void setAppIcons(int count);
+        /**
+         * The most apps that fit in the dock row at the icon size and style it wears now, no
+         * more than {@link #appIconsTo}; Apps in the dock's + stops there.
+         */
+        default int appIconsMostFitting() {
+            return appIconsTo();
+        }
+        /** The icon size's short name (S, M, L, XL), for the "At most N fit" hint. */
+        @NonNull default CharSequence iconSizeName() {
+            return "";
+        }
         boolean mostUsed();
         void setMostUsed(boolean on);
         /** The apps row's icon pack as its row names it. */
@@ -151,11 +176,16 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
-            .tier(1, Row.DOCK_STYLE, Row.DOCK_BARS, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT,
-                Row.CORNERS, Row.MARGIN, Row.REFLECTION)
-            .tier(2, Row.DOCK_TYPE)
-            .tier(3, Row.DOCK_OPTIONS)
+        EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
+                Row.DOCK_APP_ICONS)
+            .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
+                Row.DOCK_MONOCHROME)
+            .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);
+        // Reflection is Peek glass's own knob, shown only while Peek is the type.
+        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.REFLECTION)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL)
             .build();
     }
 
@@ -167,12 +197,13 @@ public final class DockCard {
 
     @NonNull private final Host mHost;
     @Nullable private Element mExpanded;
-    @Nullable private SegmentRow mStyle;
+    @Nullable private PreviewTilesRow mStyle;
     @Nullable private BarsList mBars;
-    @Nullable private TileGrid mType;
+    @Nullable private PreviewTilesRow mType;
     /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
     @Nullable private StepperRow mStripHeight;
     @Nullable private TileGrid mOptions;
+    @Nullable private com.termux.app.surfaces.rows.SwitchRow mMonochrome;
     @NonNull private final Map<Element, BarViews> mBarViews = new EnumMap<>(Element.class);
     /** A restatement sets the switches; only a touch reports. */
     private boolean mRestating;
@@ -181,12 +212,50 @@ public final class DockCard {
     private static final class BarViews {
         @Nullable SegmentRow position;
         @Nullable List<Position> positions;
-        @Nullable StepperRow appIcons;
         @Nullable MaterialSwitch mostUsed;
-        @Nullable ActionRow iconPack;
         @Nullable MaterialSwitch azGlass;
         @Nullable SegmentRow azShow;
     }
+
+    /** Apps in the dock, and the hint under it while + is out at the fit. */
+    @Nullable private StepperRow mAppIcons;
+    @Nullable private android.widget.TextView mAppIconsHint;
+
+    /** Apps in the dock's top: the most that fit, never under the bottom or over the top. */
+    private int appIconsTop() {
+        return clampAppIcons(mHost.appIconsMostFitting(), mHost.appIconsFrom(),
+            mHost.appIconsTo());
+    }
+
+    /** {@code count} kept inside {@code from}..{@code most}; {@code from} wins a clash. */
+    public static int clampAppIcons(int count, int from, int most) {
+        return Math.max(from, Math.min(count, most));
+    }
+
+    /** Whether "At most N fit at size X." shows: + is out at the fit, not at the hard top. */
+    static boolean fitHintShown(int value, int top, int hardTop) {
+        return value >= top && top < hardTop;
+    }
+
+    private void restateAppIcons() {
+        StepperRow row = mAppIcons;
+        android.widget.TextView hint = mAppIconsHint;
+        if (row == null || hint == null)
+            return;
+        int top = appIconsTop();
+        row.setTo(top);
+        row.setValue(mHost.appIcons());
+        boolean shown = fitHintShown(row.value(), top, mHost.appIconsTo());
+        if (shown)
+            RowKit.setText(hint, mHost.context().getString(R.string.editor_dock_apps_fit_hint,
+                top, mHost.iconSizeName()));
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (hint.getVisibility() != visibility)
+            hint.setVisibility(visibility);
+    }
+
+    /** Dock icon pack, under More options. */
+    @Nullable private ActionRow mDockIconPack;
 
     public DockCard(@NonNull Host host) {
         mHost = host;
@@ -214,15 +283,13 @@ public final class DockCard {
         Context context = mHost.context();
         switch (row) {
             case DOCK_STYLE: {
-                mStyle = SegmentRow.build(context, Row.DOCK_STYLE.iconRes,
-                    context.getString(R.string.editor_dock_row_style),
-                    Arrays.asList(
-                        SegmentRow.Segment.both(EditorGlyphs.KB_DOCKED,
-                            context.getString(R.string.appearance_editor_style_docked)),
-                        SegmentRow.Segment.both(EditorGlyphs.KB_FLOATING,
-                            context.getString(R.string.appearance_editor_style_floating))),
-                    mHost.floating() ? 1 : 0, widthPx, index -> mHost.setFloating(index == 1));
-                return mStyle.root;
+                mStyle = PreviewTilesRow.build(context, Arrays.asList(
+                        glyphTile(context, EditorGlyphs.KB_DOCKED,
+                            R.string.appearance_editor_style_docked),
+                        glyphTile(context, EditorGlyphs.KB_FLOATING,
+                            R.string.appearance_editor_style_floating)),
+                    mHost.floating() ? 1 : 0, index -> mHost.setFloating(index == 1));
+                return mStyle.picker(context, context.getString(R.string.editor_dock_row_style));
             }
             case DOCK_BARS: {
                 mBarViews.clear();
@@ -230,17 +297,11 @@ public final class DockCard {
                 return mBars.root;
             }
             case DOCK_TYPE: {
-                List<TileGrid.Tile> tiles = new ArrayList<>(TYPE_GLYPHS.length);
+                List<PreviewTilesRow.Tile> tiles = new ArrayList<>(TYPE_GLYPHS.length);
                 for (int i = 0; i < TYPE_GLYPHS.length; i++)
-                    tiles.add(new TileGrid.Tile(TYPE_GLYPHS[i], context.getString(TYPE_WORDS[i])));
-                boolean[] on = new boolean[tiles.size()];
-                int type = mHost.dockType();
-                if (type >= 0 && type < on.length)
-                    on[type] = true;
-                mType = TileGrid.build(context, tiles, on, widthPx, (index, checked) -> {
-                    // One type at a time: a tap on the chosen one keeps it.
-                    if (checked)
-                        mHost.setDockType(index);
+                    tiles.add(glyphTile(context, TYPE_GLYPHS[i], TYPE_WORDS[i]));
+                mType = PreviewTilesRow.build(context, tiles, mHost.dockType(), index -> {
+                    mHost.setDockType(index);
                     restateType();
                 });
                 mStripHeight = StepperRow.build(context, R.drawable.ic_ms_height,
@@ -251,23 +312,57 @@ public final class DockCard {
                     mHost::setStripHeightDp);
                 LinearLayout body = new LinearLayout(context);
                 body.setOrientation(LinearLayout.VERTICAL);
-                body.addView(mType.root, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                // Type is the Dock section's first row: its tiles, no label row above them.
+                mType.root.setContentDescription(context.getString(R.string.editor_dock_row_type));
+                body.addView(mType.root);
                 body.addView(mStripHeight.root);
                 restateStripHeight();
-                return section(context, R.string.editor_dock_row_type, body);
+                return body;
             }
             case DOCK_OPTIONS: {
                 List<TileGrid.Tile> tiles = new ArrayList<>();
-                boolean[] on = new boolean[Option.values().length];
-                for (Option option : Option.values()) {
+                boolean[] on = new boolean[SHOW_HIDE.size()];
+                for (int i = 0; i < SHOW_HIDE.size(); i++) {
+                    Option option = SHOW_HIDE.get(i);
                     tiles.add(new TileGrid.Tile(option.glyph, context.getString(option.word),
                         option.hint == 0 ? null : context.getString(option.hint)));
-                    on[option.ordinal()] = mHost.option(option);
+                    on[i] = mHost.option(option);
                 }
                 mOptions = TileGrid.build(context, tiles, on, widthPx, (index, checked) ->
-                    mHost.setOption(Option.values()[index], checked));
+                    mHost.setOption(SHOW_HIDE.get(index), checked));
                 return section(context, R.string.editor_dock_row_options, mOptions.root);
+            }
+            case DOCK_APP_ICONS: {
+                mAppIcons = StepperRow.build(context, R.drawable.ic_ms_tag,
+                    context.getString(R.string.editor_dock_apps_in_dock), mHost.appIconsFrom(),
+                    appIconsTop(), 1, mHost.appIcons(), String::valueOf, count -> {
+                        mHost.setAppIcons(count);
+                        // + may just have reached the fit: the hint comes with it.
+                        restateAppIcons();
+                    });
+                mAppIconsHint = RowKit.caption(context, null);
+                mAppIconsHint.setPadding(RowKit.dp(context, RowKit.ICON_COLUMN_DP), 0,
+                    RowKit.dp(context, RowKit.EDGE_DP), RowKit.dp(context, 8));
+                LinearLayout body = new LinearLayout(context);
+                body.setOrientation(LinearLayout.VERTICAL);
+                body.addView(mAppIcons.root);
+                body.addView(mAppIconsHint);
+                restateAppIcons();
+                return body;
+            }
+            case DOCK_ICON_PACK: {
+                // The pinned apps' pack, the same choice as the Apps row's own Icon pack.
+                mDockIconPack = ActionRow.build(context, R.drawable.ic_symbol_icon_pack,
+                    context.getString(R.string.editor_dock_icon_pack_row), mHost.iconPack(),
+                    v -> mHost.pickIconPack());
+                return mDockIconPack.root;
+            }
+            case DOCK_MONOCHROME: {
+                mMonochrome = com.termux.app.surfaces.rows.SwitchRow.build(context,
+                    Option.MONOCHROME.glyph, context.getString(Option.MONOCHROME.word),
+                    mHost.option(Option.MONOCHROME),
+                    on -> mHost.setOption(Option.MONOCHROME, on));
+                return mMonochrome.root;
             }
             default:
                 return null;
@@ -290,9 +385,20 @@ public final class DockCard {
                 break;
             case DOCK_OPTIONS:
                 if (mOptions != null) {
-                    for (Option option : Option.values())
-                        mOptions.setOn(option.ordinal(), mHost.option(option));
+                    for (int i = 0; i < SHOW_HIDE.size(); i++)
+                        mOptions.setOn(i, mHost.option(SHOW_HIDE.get(i)));
                 }
+                break;
+            case DOCK_MONOCHROME:
+                if (mMonochrome != null)
+                    mMonochrome.setOn(mHost.option(Option.MONOCHROME));
+                break;
+            case DOCK_APP_ICONS:
+                restateAppIcons();
+                break;
+            case DOCK_ICON_PACK:
+                if (mDockIconPack != null)
+                    mDockIconPack.setAction(mHost.iconPack());
                 break;
             default:
                 break;
@@ -300,13 +406,20 @@ public final class DockCard {
     }
 
     private void restateType() {
-        TileGrid type = mType;
+        PreviewTilesRow type = mType;
         if (type == null)
             return;
-        int chosen = mHost.dockType();
-        for (int i = 0; i < type.tiles.size(); i++)
-            type.setOn(i, i == chosen);
+        type.select(mHost.dockType());
         restateStripHeight();
+    }
+
+    /** A picker option that previews its choice by its glyph. */
+    @NonNull
+    private static PreviewTilesRow.Tile glyphTile(@NonNull Context context, int glyph, int word) {
+        android.widget.ImageView preview = new android.widget.ImageView(context);
+        preview.setImageResource(glyph);
+        preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        return new PreviewTilesRow.Tile(context.getString(word), preview);
     }
 
     /** The Strip height row shows with the Strip type alone, at the stored height. */
@@ -382,23 +495,9 @@ public final class DockCard {
                     column.addView(views.position.root);
                     break;
                 }
-                case APP_ICONS:
-                    views.appIcons = StepperRow.build(context, R.drawable.ic_ms_tag,
-                        context.getString(R.string.editor_dock_app_icons), mHost.appIconsFrom(),
-                        mHost.appIconsTo(), 1, mHost.appIcons(), String::valueOf,
-                        mHost::setAppIcons);
-                    column.addView(views.appIcons.root);
-                    break;
                 case MOST_USED:
                     views.mostUsed = switchRow(context, column, R.drawable.ic_ms_star,
                         R.string.editor_dock_most_used, mHost.mostUsed(), mHost::setMostUsed);
-                    break;
-                case ICON_PACK:
-                    views.iconPack = ActionRow.build(context, R.drawable.ic_symbol_icon_pack,
-                        context.getString(R.string.editor_dock_icon_pack), mHost.iconPack(),
-                        v -> mHost.pickIconPack());
-                    column.addView(views.iconPack.root);
-                    column.addView(hint(context, R.string.editor_dock_icon_pack_hint));
                     break;
                 case GLASS_BACKGROUND:
                     views.azGlass = switchRow(context, column, R.drawable.ic_ms_blur_on,
@@ -448,12 +547,8 @@ public final class DockCard {
     private void restateBar(@NonNull Element bar, @NonNull BarViews views) {
         if (views.position != null && views.positions != null)
             views.position.select(views.positions.indexOf(mHost.position(bar)));
-        if (views.appIcons != null)
-            views.appIcons.setValue(mHost.appIcons());
         if (views.mostUsed != null && views.mostUsed.isChecked() != mHost.mostUsed())
             views.mostUsed.setChecked(mHost.mostUsed());
-        if (views.iconPack != null)
-            views.iconPack.setAction(mHost.iconPack());
         if (views.azGlass != null && views.azGlass.isChecked() != mHost.azGlass())
             views.azGlass.setChecked(mHost.azGlass());
         if (views.azShow != null)

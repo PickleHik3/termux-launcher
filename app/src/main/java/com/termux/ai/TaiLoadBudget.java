@@ -113,6 +113,20 @@ public final class TaiLoadBudget {
     /** Relaxed hold floor: what a load that stays resident keeps free, a quarter gigabyte above the peak floor. */
     public static final long HOLD_FLOOR_BYTES = 768L * MIB;
     /**
+     * How long a crash record left by Android's low-memory killer holds an accelerator off for automatic
+     * loads: memory storms are transient, so a kill at the full window is retried once after this long,
+     * and a second kill leaves a fresh record that re-arms the wait.
+     */
+    public static final long LOW_MEMORY_RECOVERY_MS = 5L * 60L * 1000L;
+    /**
+     * The hold floor is at least this share of physical RAM, one sixth: on the 11.68 GB Solana Saga a
+     * 3.84 GB GPU load admitted at 5.55 GB available (the fixed floor needed 4.64) was followed by the
+     * low-memory killer taking the runtime and the launcher, so it now keeps 1.95 GB free and needs 5.78.
+     */
+    public static final long HOLD_FLOOR_DIVISOR = 6L;
+    /** The peak floor's share of physical RAM, one ninth (1.30 GB on the Saga), the hold floor's 2:3 ratio. */
+    public static final long PEAK_FLOOR_DIVISOR = 9L;
+    /**
      * Relaxed critical floor: where the runtime's watch stops a model that is loading or generating
      * ({@link TaiPressureWatch}). Under the peak floor, so idle residents are given up first; and one
      * fast poll ({@link TaiPressureWatch#POLL_BUSY_MS}) at the fastest load pong has shown — 5.7 to
@@ -187,11 +201,15 @@ public final class TaiLoadBudget {
     /**
      * What stays free for the rest of the phone: in {@link MemoryMode#RELAXED} the peak floor for a
      * momentary load and the hold floor for everything else; in {@link MemoryMode#UNRESTRICTED}
-     * nothing. Policy values, not derived limits.
+     * nothing. Each is a share of {@code physicalBytes} ({@link #HOLD_FLOOR_DIVISOR},
+     * {@link #PEAK_FLOOR_DIVISOR}) with the fixed value as the minimum, which is also what an unknown
+     * ({@code <= 0}) physical size gives. Policy values, not derived limits.
      */
-    public static long floorBytes(boolean momentary, @NonNull Conditions conditions) {
+    public static long floorBytes(boolean momentary, @NonNull Conditions conditions, long physicalBytes) {
         if (conditions.mode == MemoryMode.UNRESTRICTED) return 0L;
-        return momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
+        long fixed = momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
+        if (physicalBytes <= 0L) return fixed;
+        return Math.max(fixed, physicalBytes / (momentary ? PEAK_FLOOR_DIVISOR : HOLD_FLOOR_DIVISOR));
     }
 
     /**
@@ -383,6 +401,19 @@ public final class TaiLoadBudget {
          * counted as one: the next accelerator still needs its own measured reason.
          */
         @Nullable final String heldBackAccelerator;
+        /** How long ago that memory stop was, in ms; {@code 0} when unknown. Only reported with a skip. */
+        final long heldBackAgeMs;
+        /**
+         * The caller named the accelerator rather than leaving it to the ladder. A crash record does
+         * not skip it: it gets one try at the floor window.
+         */
+        final boolean explicitAccelerator;
+        /**
+         * The crash record is a low-memory kill ({@code exitReason} "low_memory"), and how long ago it was
+         * in ms; {@code 0} when unknown. Once {@link #LOW_MEMORY_RECOVERY_MS} old, an automatic load sets it aside.
+         */
+        final boolean lowMemoryCrash;
+        final long lowMemoryAgeMs;
 
         /**
          * @param accelerators       in the order to try them; one entry when the caller chose
@@ -422,7 +453,7 @@ public final class TaiLoadBudget {
                        @NonNull History history, @NonNull List<TaiResidency.Entry> evictable, boolean momentary) {
             this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                Conditions.RELAXED, 0L, false, null);
+                Conditions.RELAXED, 0L, false, null, 0L, false, false, 0L);
         }
 
         private Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
@@ -430,7 +461,8 @@ public final class TaiLoadBudget {
                         @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
                         @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
                         boolean momentary, @NonNull Conditions conditions, long kvBytesPerToken, boolean gpuless,
-                        @Nullable String heldBackAccelerator) {
+                        @Nullable String heldBackAccelerator, long heldBackAgeMs, boolean explicitAccelerator,
+                        boolean lowMemoryCrash, long lowMemoryAgeMs) {
             this.momentary = momentary;
             this.backend = backend;
             this.fileBytes = fileBytes;
@@ -448,6 +480,10 @@ public final class TaiLoadBudget {
             this.kvBytesPerToken = kvBytesPerToken;
             this.gpuless = gpuless;
             this.heldBackAccelerator = heldBackAccelerator;
+            this.heldBackAgeMs = heldBackAgeMs;
+            this.explicitAccelerator = explicitAccelerator;
+            this.lowMemoryCrash = lowMemoryCrash;
+            this.lowMemoryAgeMs = lowMemoryAgeMs;
         }
 
         /** This request with the memory limits the caller read ({@link TaiMemInfo#conditions}), which set the floors. */
@@ -455,7 +491,7 @@ public final class TaiLoadBudget {
         public Request withConditions(@NonNull Conditions newConditions) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                newConditions, kvBytesPerToken, gpuless, heldBackAccelerator);
+                newConditions, kvBytesPerToken, gpuless, heldBackAccelerator, heldBackAgeMs, explicitAccelerator, lowMemoryCrash, lowMemoryAgeMs);
         }
 
         /** This request with an MNN model's architecture KV bytes per token ({@code 0}: unknown). */
@@ -463,7 +499,7 @@ public final class TaiLoadBudget {
         public Request withKvBytesPerToken(long newKvBytesPerToken) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                conditions, newKvBytesPerToken, gpuless, heldBackAccelerator);
+                conditions, newKvBytesPerToken, gpuless, heldBackAccelerator, heldBackAgeMs, explicitAccelerator, lowMemoryCrash, lowMemoryAgeMs);
         }
 
         /** This request with whether the device lacks a GPU path, which lets the other accelerator be tried unmeasured. */
@@ -471,15 +507,82 @@ public final class TaiLoadBudget {
         public Request withGpuless(boolean newGpuless) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                conditions, kvBytesPerToken, newGpuless, heldBackAccelerator);
+                conditions, kvBytesPerToken, newGpuless, heldBackAccelerator, heldBackAgeMs, explicitAccelerator, lowMemoryCrash, lowMemoryAgeMs);
         }
 
         /** This request with {@code accelerator} held back after a memory stop; {@code null} holds nothing back. */
         @NonNull
         public Request withHeldBack(@Nullable String accelerator) {
+            return withHeldBack(accelerator, 0L);
+        }
+
+        /** {@link #withHeldBack(String)} with how long ago the memory stop was, which a refusal reports. */
+        @NonNull
+        public Request withHeldBack(@Nullable String accelerator, long ageMs) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
                 crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
-                conditions, kvBytesPerToken, gpuless, accelerator);
+                conditions, kvBytesPerToken, gpuless, accelerator, ageMs, explicitAccelerator, lowMemoryCrash, lowMemoryAgeMs);
+        }
+
+        /** This request with whether the crash record is a low-memory kill and how long ago it happened. */
+        @NonNull
+        public Request withLowMemoryCrash(boolean lowMemory, long ageMs) {
+            return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
+                conditions, kvBytesPerToken, gpuless, heldBackAccelerator, heldBackAgeMs, explicitAccelerator,
+                lowMemory, Math.max(0L, ageMs));
+        }
+
+        /**
+         * This request with whether the caller named the accelerator. A named one is not skipped for
+         * a crash record: it is tried once at the floor window.
+         */
+        @NonNull
+        public Request withExplicitAccelerator(boolean explicit) {
+            return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
+                conditions, kvBytesPerToken, gpuless, heldBackAccelerator, heldBackAgeMs, explicit, lowMemoryCrash, lowMemoryAgeMs);
+        }
+    }
+
+    /** An accelerator the ladder passed over without comparing it, and why. */
+    public static final class Skipped {
+        public static final String HELD_BACK = "held_back";
+        public static final String CRASHED = "crashed";
+        /** A {@link #CRASHED} skip whose kill was Android's low-memory killer; automatic loads retry it later. */
+        public static final String CRASHED_LOW_MEMORY = "crashed_low_memory";
+
+        @NonNull public final String accelerator;
+        /** {@link #HELD_BACK} or {@link #CRASHED}. */
+        @NonNull public final String reason;
+        /** For {@link #HELD_BACK}, how long ago the memory stop was in ms; {@code 0} when unknown. */
+        public final long stoppedAgeMs;
+        /** For {@link #CRASHED}, the window the killed load asked for. */
+        public final int crashedContext;
+        /** For {@link #CRASHED}, the smallest window a load may be given. */
+        public final int floorContext;
+
+        Skipped(@NonNull String accelerator, @NonNull String reason, long stoppedAgeMs, int crashedContext, int floorContext) {
+            this.accelerator = accelerator;
+            this.reason = reason;
+            this.stoppedAgeMs = stoppedAgeMs;
+            this.crashedContext = crashedContext;
+            this.floorContext = floorContext;
+        }
+
+        /** The skip as a sentence for the log, e.g. "gpu skipped, killed while loading at 4096, half is under the 4096 floor". */
+        @NonNull
+        public String text() {
+            if (HELD_BACK.equals(reason)) {
+                return accelerator + " skipped, stopped for memory " + stoppedAgeMs / 1000L + " s ago";
+            }
+            if (CRASHED_LOW_MEMORY.equals(reason)) {
+                return accelerator + " skipped, Android closed the runtime for memory while loading at "
+                    + crashedContext + "; automatic loads try it again after "
+                    + LOW_MEMORY_RECOVERY_MS / 60_000L + " min";
+            }
+            return accelerator + " skipped, killed while loading at " + crashedContext + ", half is under the "
+                + floorContext + " floor";
         }
     }
 
@@ -508,6 +611,10 @@ public final class TaiLoadBudget {
         @NonNull public final List<TaiResidency.Entry> evicted;
         /** It goes ahead only because the limits are unrestricted: free memory and evictions do not cover it. */
         public final boolean overcommitted;
+        /** The accelerators the ladder passed over without comparing, in the order it met them. */
+        @NonNull public final List<Skipped> skipped;
+        /** Whether any rung was compared against free memory; {@code false} when every listed accelerator was skipped. */
+        public final boolean compared;
 
         Plan(boolean fits, @Nullable String accelerator, int contextWindow, @NonNull Estimate estimate,
              long availableBytes, long reserveBytes, boolean measured, @NonNull List<TaiResidency.Entry> evicted) {
@@ -517,6 +624,13 @@ public final class TaiLoadBudget {
         Plan(boolean fits, @Nullable String accelerator, int contextWindow, @NonNull Estimate estimate,
              long availableBytes, long reserveBytes, boolean measured, @NonNull List<TaiResidency.Entry> evicted,
              boolean overcommitted) {
+            this(fits, accelerator, contextWindow, estimate, availableBytes, reserveBytes, measured, evicted,
+                overcommitted, Collections.<Skipped>emptyList(), true);
+        }
+
+        Plan(boolean fits, @Nullable String accelerator, int contextWindow, @NonNull Estimate estimate,
+             long availableBytes, long reserveBytes, boolean measured, @NonNull List<TaiResidency.Entry> evicted,
+             boolean overcommitted, @NonNull List<Skipped> skipped, boolean compared) {
             this.fits = fits;
             this.accelerator = accelerator;
             this.contextWindow = contextWindow;
@@ -528,6 +642,28 @@ public final class TaiLoadBudget {
             this.measured = measured;
             this.evicted = Collections.unmodifiableList(evicted);
             this.overcommitted = overcommitted;
+            this.skipped = Collections.unmodifiableList(skipped);
+            this.compared = compared;
+        }
+
+        /**
+         * The crash record of this accelerator was a low-memory kill old enough to set aside, and this plan
+         * loads that accelerator again.
+         */
+        public boolean retriedAfterLowMemory;
+
+        @NonNull
+        Plan withRetried(boolean retried) {
+            retriedAfterLowMemory = retried;
+            return this;
+        }
+
+        /** This plan with the rungs the ladder skipped and whether it compared any. */
+        @NonNull
+        Plan withSkips(@NonNull List<Skipped> newSkipped, boolean newCompared) {
+            return new Plan(fits, accelerator, contextWindow,
+                new Estimate(estimatedBytes, reclaimableBytes, estimateSource), availableBytes, reserveBytes, measured,
+                evicted, overcommitted, newSkipped, newCompared);
         }
 
         /** Free memory a load of {@link #estimatedBytes} would need with nothing evicted: the floor included. */
@@ -558,7 +694,7 @@ public final class TaiLoadBudget {
     public static Plan plan(@NonNull Request r) {
         int floor = floor(r.capContext);
         int cap = Math.max(floor, r.capContext);
-        long reserve = floorBytes(r.momentary, r.conditions);
+        long reserve = floorBytes(r.momentary, r.conditions, r.physicalBytes);
         String first = r.accelerators.isEmpty() ? null : r.accelerators.get(0);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (r.availableBytes <= 0L || r.physicalBytes <= 0L || r.fileBytes <= 0L) {
@@ -577,9 +713,17 @@ public final class TaiLoadBudget {
         // never lets it reach) told the user a figure that was never the one compared.
         String refusedAccelerator = null;
         Estimate refusedEstimate = null;
+        List<Skipped> skipped = new ArrayList<>();
+        // A low-memory kill says nothing about the accelerator, only that memory was short then: once it
+        // has recovered an automatic load evaluates that accelerator as if there were no record.
+        boolean setAside = !r.explicitAccelerator && r.lowMemoryCrash && r.crashedAccelerator != null
+            && r.lowMemoryAgeMs >= LOW_MEMORY_RECOVERY_MS;
         for (int i = 0; i < r.accelerators.size(); i++) {
             String accelerator = r.accelerators.get(i);
-            if (accelerator.equals(r.heldBackAccelerator)) continue;
+            if (accelerator.equals(r.heldBackAccelerator)) {
+                skipped.add(new Skipped(accelerator, Skipped.HELD_BACK, r.heldBackAgeMs, 0, floor));
+                continue;
+            }
             if (i > 0 && !otherAcceleratorAllowed(r, accelerator, floor, refusedNeed, previousCrashed)) continue;
             previousCrashed = false;
             int limit = i == 0 ? cap : floor;
@@ -589,11 +733,15 @@ public final class TaiLoadBudget {
             if ("cpu".equals(accelerator) && !r.explicitContext && TaiModelSpec.BACKEND_LITERT_LM.equals(r.backend)) {
                 limit = Math.min(limit, FLOOR_CONTEXT);
             }
-            if (accelerator.equals(r.crashedAccelerator)) {
+            if (!setAside && accelerator.equals(r.crashedAccelerator)) {
                 int crashedAt = r.crashedContext > 0 ? r.crashedContext : cap;
-                limit = Math.min(limit, crashedAt / 2);
+                // A named accelerator is not walked past on a crash record: it gets one try at the floor.
+                limit = r.explicitAccelerator ? Math.max(floor, Math.min(limit, crashedAt / 2))
+                    : Math.min(limit, crashedAt / 2);
                 if (limit < floor) {
                     previousCrashed = true;
+                    skipped.add(new Skipped(accelerator, r.lowMemoryCrash ? Skipped.CRASHED_LOW_MEMORY : Skipped.CRASHED,
+                        0L, crashedAt, floor));
                     continue;
                 }
             }
@@ -602,11 +750,13 @@ public final class TaiLoadBudget {
                 Estimate estimate = estimate(r.backend, accelerator, r.fileBytes, r.encoders, context, r.history, r.kvBytesPerToken);
                 long need = estimate.nonReclaimableBytes;
                 if (need <= spendable) {
-                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, none);
+                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, none)
+                        .withSkips(skipped, true).withRetried(setAside && accelerator.equals(r.crashedAccelerator));
                 }
                 List<TaiResidency.Entry> evicted = evictions(need - spendable, r.evictable);
                 if (evicted != null) {
-                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, evicted);
+                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, evicted)
+                        .withSkips(skipped, true).withRetried(setAside && accelerator.equals(r.crashedAccelerator));
                 }
                 if (context == floor) {
                     refusedNeed = need;
@@ -623,14 +773,18 @@ public final class TaiLoadBudget {
         // accelerator held back by one the load is refused.
         if (r.conditions.mode == MemoryMode.UNRESTRICTED && firstTried != null) {
             Estimate estimate = estimate(r.backend, firstTried, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-            return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, allIdle(r.evictable), true);
+            return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, allIdle(r.evictable), true)
+                .withSkips(skipped, true).withRetried(setAside && firstTried.equals(r.crashedAccelerator));
         }
         if (refusedEstimate != null) {
-            return new Plan(false, refusedAccelerator, floor, refusedEstimate, r.availableBytes, reserve, true, none);
+            return new Plan(false, refusedAccelerator, floor, refusedEstimate, r.availableBytes, reserve, true, none)
+                .withSkips(skipped, true);
         }
         Estimate untried = first == null ? Estimate.ratio(0L, 0L)
             : estimate(r.backend, first, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-        return new Plan(false, first, floor, untried, r.availableBytes, reserve, true, none);
+        // Every listed accelerator was skipped: this estimate was never compared, and the plan says so.
+        return new Plan(false, first, floor, untried, r.availableBytes, reserve, true, none)
+            .withSkips(skipped, false);
     }
 
     /**
@@ -662,7 +816,7 @@ public final class TaiLoadBudget {
     public static Plan planFixed(@NonNull Estimate estimate, @NonNull String accelerator, long physicalBytes,
                                  long availableBytes, @NonNull List<TaiResidency.Entry> evictable,
                                  @NonNull Conditions conditions) {
-        long reserve = floorBytes(false, conditions);
+        long reserve = floorBytes(false, conditions, physicalBytes);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (availableBytes <= 0L || physicalBytes <= 0L) {
             return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, false, none);

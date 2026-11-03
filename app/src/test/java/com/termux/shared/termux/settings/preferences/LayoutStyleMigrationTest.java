@@ -53,7 +53,7 @@ public class LayoutStyleMigrationTest {
     public void oldDefaultBecomesDocked() {
         putStyle("default");
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals("docked", store.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, null));
         assertEquals(LayoutStyle.DOCKED, preferences.getLayoutStyle());
@@ -63,7 +63,7 @@ public class LayoutStyleMigrationTest {
     public void oldRoundedBecomesFloating() {
         putStyle("rounded");
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals("floating", store.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, null));
         assertEquals(LayoutStyle.FLOATING, preferences.getLayoutStyle());
@@ -73,7 +73,7 @@ public class LayoutStyleMigrationTest {
     public void theLongGoneCapsuleValueBecomesFloating() {
         putStyle("valarie_capsule");
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals("floating", store.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, null));
     }
@@ -82,7 +82,7 @@ public class LayoutStyleMigrationTest {
     public void anInstallThatNeverChoseAStyleStaysWithoutOneAndReadsDocked() {
         store.edit().putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 10).commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(store.contains(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
         assertEquals(LayoutStyle.DOCKED, preferences.getLayoutStyle());
@@ -90,7 +90,7 @@ public class LayoutStyleMigrationTest {
 
     @Test
     public void aFreshInstallMigratesWithoutIncident() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals(LayoutStyle.DOCKED, preferences.getLayoutStyle());
         assertEquals("docked", preferences.getAppLauncherDockStyle());
@@ -108,7 +108,7 @@ public class LayoutStyleMigrationTest {
             .putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, 14)
             .commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(store.contains(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS));
         assertFalse(store.contains(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS));
@@ -116,7 +116,7 @@ public class LayoutStyleMigrationTest {
         assertFalse(store.contains(TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET));
         assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET));
         for (String key : store.getAll().keySet()) {
-            assertFalse(key, key.startsWith(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX)
+            assertFalse(key, key.startsWith("surface_inherit_")
                 && (key.endsWith("_corner_radius") || key.endsWith("_side_gap")));
         }
 
@@ -144,10 +144,10 @@ public class LayoutStyleMigrationTest {
             .putInt(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, 27)
             .commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
-        assertEquals(27, preferences.getStatusBarBlurRadius());
+        assertEquals(25, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -155,7 +155,7 @@ public class LayoutStyleMigrationTest {
         putStyle("default");
         store.edit().putBoolean(LEGACY_FLUSH_DOCK, true).commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(store.contains(LEGACY_FLUSH_DOCK));
         assertEquals(LEGACY_FLUSH_DOCK, TERMUX_APP.KEY_LEGACY_TERMINAL_FLUSH_DOCK);
@@ -163,13 +163,14 @@ public class LayoutStyleMigrationTest {
 
     @Test
     public void aDetachOfARetiredPropertyIsIgnored() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP, 3);
         preferences.setSurfaceValueExact(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS, 3);
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
+        // Corners joined the look values (ADR 0017): the status bar's own corner is a cell now.
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
             SurfaceProperty.CORNER_RADIUS));
         assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
             preferences.getDockHorizontalInset());
@@ -177,7 +178,7 @@ public class LayoutStyleMigrationTest {
 
     @Test
     public void aPerSurfaceSetterMovesBaseNowThatNothingCanDetach() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         preferences.setStatusBarCornerRadius(22);
 
@@ -193,10 +194,10 @@ public class LayoutStyleMigrationTest {
         putStyle("rounded");
         store.edit().putBoolean(LEGACY_FLUSH_DOCK, true).commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         assertTrue(store.getBoolean(TERMUX_APP.KEY_LAYOUT_STYLE_MIGRATED, false));
         preferences.setLayoutStyle(LayoutStyle.DOCKED);
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         preferences.migrateLayoutStyle();
 
         assertEquals("docked", store.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, null));
@@ -208,15 +209,15 @@ public class LayoutStyleMigrationTest {
         store.edit()
             .putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true)
             .putBoolean(TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true)
-            .putBoolean(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "dock_side_gap", false)
+            .putBoolean("surface_inherit_" + "dock_side_gap", false)
             .putInt(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, 4)
             .commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals(LayoutStyle.FLOATING, preferences.getLayoutStyle());
         assertFalse(store.contains(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET));
-        assertFalse(store.contains(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "dock_side_gap"));
+        assertFalse(store.contains("surface_inherit_" + "dock_side_gap"));
     }
 
     // ---------------------------------------------------------------- the accessor and writers

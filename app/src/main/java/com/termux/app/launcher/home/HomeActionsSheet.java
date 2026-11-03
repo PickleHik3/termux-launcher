@@ -12,6 +12,7 @@ import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
@@ -30,6 +31,7 @@ import com.termux.app.launcher.home.HomeActionsSheetPolicy.Item;
 import com.termux.app.material.M3;
 
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -66,6 +68,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
         /** The Lock layout switch was flipped; the sheet stays up and redraws its rows. */
         default void onLayoutLockChanged(boolean locked) { }
+
+        /** The sheet has settled away, by a row, the dim, a swipe down or Back. */
+        default void onSheetClosed() { }
     }
 
     /** The card's top corners: the M3 extra-large corner. */
@@ -91,6 +96,11 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     /** The rows for a layout that is locked (true) or not, so the switch can redraw in place. */
     @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
     private boolean locked;
+    /** Rows a caller other than Home filled the sheet with, or null while Home's own are up. */
+    @Nullable private List<ActionSheetRow> customRows;
+    @Nullable private Consumer<ActionSheetRow> onRowPicked;
+    @NonNull private final TextView titleView;
+    @NonNull private final CharSequence homeTitle;
 
     public HomeActionsSheet(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -124,6 +134,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         pageGroup.setClipToOutline(true);
         launcherGroup.setClipToOutline(true);
         TextView title = findViewById(R.id.home_actions_title);
+        titleView = title;
+        homeTitle = title.getText();
         ViewCompat.setAccessibilityHeading(title, true);
         ViewCompat.setAccessibilityPaneTitle(card, title.getText());
 
@@ -188,6 +200,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
      * the sheet up. Flipping the Lock layout switch asks it again, with the card still open.
      */
     public void open(@NonNull Function<Boolean, List<Item>> rowsFor, boolean layoutLocked) {
+        customRows = null;
+        onRowPicked = null;
+        setTitle(homeTitle);
         source = rowsFor;
         locked = layoutLocked;
         refill();
@@ -199,6 +214,32 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
         settleExpandedAfterLayout();
+    }
+
+    /**
+     * Fill the two groups with {@code rows} (by {@link ActionSheetRow#group}) under {@code title}
+     * and slide the sheet up; a tap puts it away and hands the row to {@code onPicked}.
+     */
+    public void openRows(@NonNull CharSequence title, @NonNull List<ActionSheetRow> rows,
+                         @NonNull Consumer<ActionSheetRow> onPicked) {
+        customRows = rows;
+        onRowPicked = onPicked;
+        locked = false;
+        setTitle(title);
+        refill();
+        boolean wasOpen = open;
+        open = true;
+        setVisibility(VISIBLE);
+        bringToFront();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        if (insets != null) applyInsets(insets);
+        if (wasOpen) return;
+        settleExpandedAfterLayout();
+    }
+
+    private void setTitle(@NonNull CharSequence title) {
+        if (!title.toString().contentEquals(titleView.getText())) titleView.setText(title);
+        ViewCompat.setAccessibilityPaneTitle(card, title);
     }
 
     /**
@@ -217,6 +258,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     }
 
     private void refill() {
+        if (customRows != null) {
+            fillRows(pageGroup, pageRows, customRows, 0);
+            fillRows(launcherGroup, launcherRows, customRows, 1);
+            if (lockedNote.getVisibility() == VISIBLE) lockedNote.setVisibility(GONE);
+            return;
+        }
         List<Item> items = source.apply(locked);
         fill(pageGroup, pageRows, HomeActionsSheetPolicy.inGroup(items, Group.PAGE));
         fill(launcherGroup, launcherRows, HomeActionsSheetPolicy.inGroup(items, Group.LAUNCHER));
@@ -248,6 +295,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** The sheet has settled hidden, by {@link #close()} or by being dragged down. */
     private void finishClosing() {
+        boolean wasShown = getVisibility() == VISIBLE;
         open = false;
         scrim.setAlpha(0f);
         setVisibility(GONE);
@@ -255,6 +303,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             reportedCover = 0f;
             listener.onNavBandCovered(0f);
         }
+        if (wasShown) listener.onSheetClosed();
     }
 
     @Override
@@ -288,6 +337,52 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             rows.addView(lineView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
+    }
+
+    /** One group of caller-supplied rows, laid out as Home's are. */
+    private void fillRows(@NonNull View group, @NonNull LinearLayout rows,
+                          @NonNull List<ActionSheetRow> all, int groupIndex) {
+        List<ActionSheetRow> mine = new java.util.ArrayList<>();
+        for (ActionSheetRow row : all) if (row.group == groupIndex) mine.add(row);
+        rows.removeAllViews();
+        group.setVisibility(mine.isEmpty() ? GONE : VISIBLE);
+        LayoutInflater inflater = LayoutInflater.from(getContext());
+        for (int i = 0; i < mine.size(); i += 2) {
+            LinearLayout lineView = new LinearLayout(getContext());
+            lineView.setOrientation(LinearLayout.HORIZONTAL);
+            for (int column = 0; column < 2; column++) {
+                if (i + column < mine.size()) {
+                    lineView.addView(customRow(inflater, lineView, mine.get(i + column)));
+                } else {
+                    lineView.addView(new View(getContext()),
+                        new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+                }
+            }
+            rows.addView(lineView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+    }
+
+    @NonNull
+    private View customRow(@NonNull LayoutInflater inflater, @NonNull ViewGroup line,
+                           @NonNull ActionSheetRow item) {
+        View row = inflater.inflate(R.layout.home_actions_sheet_row, line, false);
+        Context context = getContext();
+        ImageView icon = row.findViewById(R.id.home_actions_row_icon);
+        icon.setImageResource(item.icon);
+        icon.setImageTintList(ColorStateList.valueOf(item.accent
+            ? M3.primary(context) : M3.onSurfaceVariant(context)));
+        TextView label = row.findViewById(R.id.home_actions_row_label);
+        label.setText(item.label);
+        row.setContentDescription(item.label);
+        row.setTag(item.token);
+        row.setOnClickListener(view -> {
+            if (!open) return;
+            Consumer<ActionSheetRow> picked = onRowPicked;
+            close();
+            if (picked != null) picked.accept(item);
+        });
+        return row;
     }
 
     @NonNull
@@ -338,7 +433,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** The row for {@code item} while the sheet is up, or null. */
     @VisibleForTesting
-    View rowFor(@NonNull Item item) {
+    View rowFor(@NonNull Object item) {
         return findViewWithTag(item);
     }
 

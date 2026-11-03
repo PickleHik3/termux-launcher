@@ -215,11 +215,61 @@ public final class LayoutEditorController {
         return mPlan != null && !mPlan.shownLayout().slot(element).hidden;
     }
 
+    // ---------------------------------------------------------------------- the layout it edits
+
+    /** The editor's title, naming the layout it edits ("Home layout"), or null with no session. */
+    @Nullable
+    public String layoutTitle() {
+        return mPlan == null ? null : mPlan.layoutTitle();
+    }
+
+
+    /** The kind of the page the chip is about, or null with no session. */
+    @Nullable
+    public com.termux.app.wall.WallPages.PageKind pageLayoutKind() {
+        return mPlan == null ? null : mPlan.pageKind();
+    }
+
+    /** The name of the page the chip is about, or null. */
+    @Nullable
+    public String pageLayoutPageName() {
+        PlaceLayoutStore places = mHost.places();
+        return mPlan == null || places == null ? null : places.pageName(mPlan.pageId());
+    }
+
+
+
     /** Whether the page being edited wears {@code element} at all. */
     public boolean offers(@NonNull Element element) {
         PlaceLayoutStore places = mHost.places();
         return mPlan != null && places != null
             && com.termux.app.chrome.DressResolver.of(places).dressOf(mPlan.place()).wears(element);
+    }
+
+    /**
+     * Whether the edited page's kind can wear {@code element} at all, shown or put away: the
+     * Layout lists keep a hidden element's row (switch off) and drop only what the kind never
+     * wears (Home and the extra keys). {@link #offers} is whether it is worn now.
+     */
+    public boolean canWear(@NonNull Element element) {
+        return mPlan != null
+            && com.termux.app.chrome.DressResolver.wornOn(mPlan.variant(), element);
+    }
+
+    /**
+     * Whether {@code variant}'s layout shows {@code element} (the keyboard for null) in the
+     * orientation being edited, as the session's writes left it: what that kind's own Layout
+     * list reads. False with no session.
+     */
+    public boolean isShownOn(@NonNull com.termux.app.place.LayoutVariant variant,
+                             @Nullable Element element) {
+        PlaceLayoutStore places = mHost.places();
+        if (mPlan == null || places == null)
+            return false;
+        if (element == null)
+            return variant.isHomeKind() ? places.isHomeKeyboardAlwaysOn()
+                : places.forVariant(variant).isKeyboardShown();
+        return !places.forVariant(variant).slot(mPlan.shownOrientation(), element).hidden;
     }
 
     /** Puts {@code element} away, or brings it back to the edge it left. */
@@ -235,6 +285,27 @@ public final class LayoutEditorController {
             drop = plan.drop(MiniatureDragPolicy.Bar.of(element), null);
         }
         afterWrite(drop);
+    }
+
+    /**
+     * Customization › Layout: {@code element} (the keyboard for null) shown or put away on each
+     * of {@code variants}' layouts, through the session, so Undo, Discard and Done treat it as
+     * every other write.
+     */
+    public void setShownOnLayouts(@NonNull List<com.termux.app.place.LayoutVariant> variants,
+                                  @Nullable Element element, boolean shown) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null)
+            return;
+        LayoutEditorPlan.Drop result = LayoutEditorPlan.Drop.NONE;
+        for (com.termux.app.place.LayoutVariant variant : variants) {
+            LayoutEditorPlan.Drop drop = element == null
+                ? plan.setKeyboardShownOnLayout(variant, shown)
+                : plan.setShownOnLayout(variant, element, shown);
+            if (drop != LayoutEditorPlan.Drop.NONE)
+                result = LayoutEditorPlan.Drop.LIVE;
+        }
+        afterWrite(result);
     }
 
     /** Whether the keyboard is on (the switch the palette's Keyboard on/off flips). */

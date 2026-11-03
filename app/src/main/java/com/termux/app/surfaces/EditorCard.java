@@ -5,9 +5,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 /**
  * The objects the Appearance editor has a card for (appearance-and-settings-rework §2–§3): the
@@ -26,7 +26,7 @@ public enum EditorCard {
      * the Workspace wear while they follow it), and Match Home styling.
      */
     WORKSPACE("workspace", null, R.string.appearance_card_workspace,
-        R.drawable.ic_symbol_desktop_windows),
+        R.drawable.ic_editor_workspace),
     STATUS("status", SurfaceSlot.STATUS, R.string.appearance_card_status,
         R.drawable.ic_editor_status_bar),
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,
@@ -35,8 +35,14 @@ public enum EditorCard {
         R.drawable.ic_symbol_dock_glass_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
-    APPEARANCE("appearance", null, R.string.appearance_row_global,
-        R.drawable.ic_symbol_palette);
+    APPEARANCE("appearance", null, R.string.appearance_card_customization,
+        R.drawable.ic_symbol_palette),
+    /** The Card-form widgets' glass: a plain glass card (ADR 0017). */
+    WIDGETS("widgets", SurfaceSlot.WIDGETS, R.string.editor_element_widgets,
+        R.drawable.ic_symbol_stacks),
+    /** The sheets' glass (drawer, menus, palette): a plain glass card with no surface in the frame. */
+    SHEETS("sheets", SurfaceSlot.SHEETS, R.string.editor_element_sheets,
+        R.drawable.ic_symbol_grid_view);
 
     /** The name a door and a deep link use. */
     @NonNull public final String key;
@@ -73,19 +79,20 @@ public enum EditorCard {
     }
 
     /**
-     * Whether the card's object stands on {@code half}: Home only on Home, the Workspace and the
-     * terminal only on the Workspace, everything else on both.
+     * Whether the card's object stands on the {@code screen} kind of page ({@link
+     * PaneWallPage#WIDGETS} is Home's, anything else the Terminal's): Home only on Home, the
+     * Workspace and the terminal only on the Terminal's, everything else on both.
      */
-    public boolean standsOn(@NonNull WallHalf half) {
-        if (this == HOME) return half == WallHalf.HOME;
-        if (this == TERMINAL || this == WORKSPACE) return half == WallHalf.WORKSPACE;
+    public boolean standsOn(@NonNull PaneWallPage screen) {
+        if (this == HOME || this == WIDGETS) return screen == PaneWallPage.WIDGETS;
+        if (this == TERMINAL || this == WORKSPACE) return screen != PaneWallPage.WIDGETS;
         return true;
     }
 
-    /** The card of the screen {@code half} is: Home's on Home, the Workspace's on the Workspace. */
+    /** The card of the screen kind: Home's on Home, the Workspace's on the Terminal's. */
     @NonNull
-    public static EditorCard forScreen(@NonNull WallHalf half) {
-        return half == WallHalf.HOME ? HOME : WORKSPACE;
+    public static EditorCard forScreen(@NonNull PaneWallPage screen) {
+        return screen == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
     }
 
     /** The card a surface opens. */
@@ -116,6 +123,9 @@ public enum EditorCard {
                 return TERMINAL;
             case "sessions":
                 return STATUS;
+            case "display":
+                // The Display card is gone: Display pages are the Workspace's (overhaul §1).
+                return WORKSPACE;
             default:
                 break;
         }

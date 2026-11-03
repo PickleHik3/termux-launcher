@@ -144,6 +144,7 @@ public class LorieHost extends ContextWrapper {
                 previous.setOnHoverListener(null);
                 previous.setOnGenericMotionListener(null);
                 previous.setOnCapturedPointerListener(null);
+                previous.setOnKeyListener(null);
                 previous.setCallback(null);
             }
             return;
@@ -161,6 +162,11 @@ public class LorieHost extends ContextWrapper {
         view.setOnHoverListener((v, e) -> handler.handleTouchEvent(view, view, e));
         view.setOnGenericMotionListener((v, e) -> handler.handleTouchEvent(view, view, e));
         view.setOnCapturedPointerListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        // Upstream's key listener. With the hardware-keyboard scancodes workaround on (the
+        // default), LorieView.dispatchKeyEventPreIme declines every key so the IME sees it first,
+        // and the key comes back to the view through ordinary dispatch; this listener is what
+        // sends it to X from there. Without it a physical keyboard typed nothing on the display.
+        view.setOnKeyListener((v, keyCode, e) -> handleKey(e));
         if (prefs != null) handler.reloadPreferences(prefs);
         // The handler maps view pixels onto the X screen with the transform the view reports as
         // its viewport changes; without it every touch is scaled by zero and lands at the origin.

@@ -3,7 +3,9 @@ package com.termux.app.surfaces;
 import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -64,6 +66,7 @@ public final class GlassControlsMigration {
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs) {
         run(prefs);
+        SurfacePresets.rewriteStoredCustom(prefs);
         SurfacePresets.readoptMovedLooks(prefs);
     }
 
@@ -73,6 +76,9 @@ public final class GlassControlsMigration {
             : store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0);
         if (from >= FORMAT)
             return;
+        // The pages' own values the half upgrade wrote just before (ADR 0015 §6) are not this
+        // migration's: its wall-wide writes would drop them, so they are put back as they were.
+        Map<String, Object> pageValues = pageOverrides(store);
         SurfacePresets.Batch batch = new SurfacePresets.Batch(store);
         TermuxAppSharedPreferences into = SurfacePresets.writingInto(prefs, batch);
         if (from < 1) {
@@ -100,6 +106,44 @@ public final class GlassControlsMigration {
         }
         batch.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, FORMAT).apply();
         batch.applyToStore();
+        restore(store, pageValues);
+    }
+
+    /** Every page's own look value in {@code store} ({@code <detachable key>@<id>}). */
+    @NonNull
+    private static Map<String, Object> pageOverrides(@Nullable SharedPreferences store) {
+        Map<String, Object> values = new java.util.HashMap<>();
+        if (store == null) return values;
+        for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
+            String key = entry.getKey();
+            int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+                com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+            if ((at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+                    || (cell != null && cell.page >= 0))
+                values.put(key, entry.getValue());
+        }
+        return values;
+    }
+
+    /** Puts back each of {@code values} the migration removed; one it rewrote stays rewritten. */
+    private static void restore(@Nullable SharedPreferences store,
+                                @NonNull Map<String, Object> values) {
+        if (store == null || values.isEmpty()) return;
+        SharedPreferences.Editor editor = store.edit();
+        boolean changed = false;
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            if (store.contains(entry.getKey())) continue;
+            Object value = entry.getValue();
+            if (value instanceof Integer) editor.putInt(entry.getKey(), (Integer) value);
+            else if (value instanceof String) editor.putString(entry.getKey(), (String) value);
+            else if (value instanceof Float) editor.putFloat(entry.getKey(), (Float) value);
+            else if (value instanceof Boolean) editor.putBoolean(entry.getKey(), (Boolean) value);
+            else if (value instanceof Long) editor.putLong(entry.getKey(), (Long) value);
+            else continue;
+            changed = true;
+        }
+        if (changed) editor.apply();
     }
 
     /**
@@ -145,8 +189,8 @@ public final class GlassControlsMigration {
         if (scaledBase != base)
             prefs.setSurfaceBaseValue(SurfaceProperty.TINT, scaledBase);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT);
-            if (key == null || !store.contains(key))
+            if (prefs.isSurfaceInheriting(slot, SurfaceProperty.TINT,
+                    TermuxAppSharedPreferences.PAGE_WALL))
                 continue;
             int cell = prefs.getSurfaceOverrideValue(slot, SurfaceProperty.TINT);
             int scaled = com.termux.app.chrome.GlassLook.amountForLegacyPercent(cell);
@@ -158,14 +202,10 @@ public final class GlassControlsMigration {
     /** Writes the old default strength into every tint key the store never set. */
     private static void pinLegacyTintStrengths(@NonNull TermuxAppSharedPreferences prefs,
                                                @NonNull SharedPreferences store) {
-        if (!store.contains(TERMUX_APP.KEY_SURFACE_BASE_TINT))
+        // A surface following Base reads Base's pin; one with its own cell already has a number.
+        if (!prefs.lookGrid().has(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT,
+                null, com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE))
             prefs.setSurfaceBaseValue(SurfaceProperty.TINT, SurfacePresets.LEGACY_TINT_STRENGTH);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT);
-            if (key != null && !store.contains(key))
-                prefs.setSurfaceRawValue(slot, SurfaceProperty.TINT,
-                    SurfacePresets.LEGACY_TINT_STRENGTH);
-        }
     }
 
     /** The live look, not a shipped one, carried across with its look kept. */

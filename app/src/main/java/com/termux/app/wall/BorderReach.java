@@ -32,11 +32,11 @@ public final class BorderReach {
     public static final float FRAME_STRIP_DP = 1f;
 
     /**
-     * Whether the page in front at {@code page} owns everything inside its edges: the display
-     * window, standing as the Workspace's page. A terminal window and a Home page do not.
+     * Whether the page in front at {@code page} owns everything inside its edges: a Display page
+     * (ADR 0015, A3b). A terminal window and a Home page do not.
      */
-    public static boolean ownsContent(@NonNull PaneWallPage page, boolean displayInFront) {
-        return page == PaneWallPage.TERMINAL && displayInFront;
+    public static boolean ownsContent(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.DISPLAY;
     }
 
     /** {@link #FRAME_STRIP_DP} in px. */

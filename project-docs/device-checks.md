@@ -13,600 +13,181 @@ a device check. Before a drop or a cut, work through this list; an item two rele
 re-judged and dropped if nothing rides on it. The file stays under twenty items; past that, the
 oldest are re-judged first.
 
-The 2026-10-23/24 emulator sweep (staging `1.1.0-pre.6+dev.8f303c274`, three Android 16
-emulators) worked 332 Agent items: 116 passed, 148 passed on the part the emulator can show,
-28 were stale, 14 failed. Its failures and end-user findings are in "Found in the sweep" below
-and, with crops, at `~/reports/device-checks-2026-10-24/`. Items the sweep could not set up and
-items superseded by the chrome unification, the widget redesign and the glass rounds were
-dropped; what follows is what still owes a look.
+The 2026-10-23/24 and 10-26 emulator sweeps were worked and pruned on 2026-11-02; their
+unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
-- 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
-  screen's corners" (#163) · with the status bar along the top and Full screen on, screenshots in
-  portrait show a gap at the camera with the chips left of it and the readings right of it, and
-  the first and last items clear of the screen's rounded corners; landscape shows no gap; Full
-  screen off (row below the system bar) looks as before; at font scale 1.3 the chips ellipsize
-  and nothing sits under the camera; Settings › Status bar › Camera cutout shows Auto/Custom/Off
-  and the two sliders only on Custom · emulator with a punch-hole cutout (Display cutout:
-  Punch hole), then pong.
-- 2026-10-25 · commit "fix(graphics): skip the Vulkan wrapper on phones whose graphics driver is
-  older than Vulkan 1.3" · pong (Vulkan 1.1): the Phone's Vulkan card says "Needs a newer graphics
-  driver than this phone has" before and after a run; Run benchmark's sizes no longer count the
-  wrapper, the run never downloads it (step 2 lists it as not tried) · pong.
-- 2026-10-25 · commit "fix(x11): the virgl profiles draw through virgl, not Zink" · after a rerun
-  the virgl card's renderer reads "virgl (Adreno …)", and a Linux app started on the virgl profile
-  shows virgl in its GL renderer · pong (renderer already seen in the 12:55 run's results).
-- 2026-10-25 · commit "fix(wall): the display window's borders stop at its edge" · display
-  window in front with a Linux app maximised (a scrollable list at its foot, a menu bar at its
-  top, a scrollbar at its right edge): a vertical swipe a row up from the bottom edge under the
-  grabber scrolls the app and does not open the keyboard; one a row down from the top edge under
-  the top grabber reaches the app and does not unfold the status bar; a sideways drag starting on
-  the picture's outermost left/right pixels and in its last row reaches the app and does not page;
-  a hold there is the app's. Then from the air outside the window: a sideways swipe on the bottom
-  or top air and on the side air pages, a vertical swipe on the bottom air opens and closes the
-  keyboard, a sideways swipe off the dock's top pages. Keyboard up and down (Overlay and Resize),
-  Docked and Floating, portrait and landscape, alone in the row and beside terminal windows;
-  a terminal window still pages from its last row and opens the keyboard from a row above its
-  bottom edge · emulator.
-- 2026-10-25 · commit "fix(home): the long-press sheet runs under the navigation bar and the
-  Docked strip makes way for it" · with Beads or Strip: the sheet runs to the bottom edge, rows above
-  the pill; open the drawer after the sheet closes: the strip still fades under the plane and comes
-  back (Tray and Peek, the dismiss routes, Floating, keyboard up and three-button navigation seen on
-  emu 10-26) · emulator.
-- 2026-10-26 · commit "fix(peek): the Peek card rises from the screen's edge under Floating
-  too" · Floating + Peek: card rises from the screen edge; keyboard up falls back to the Floating
-  tray. Peek glass, Style Floating, keyboard down, Search field off: the card is the Docked one —
-  inset about 3% from each side, top edge through the icons' middles, no gap under it, the strip
-  under the gesture pill is its foot (inset as the card, reflection running on down to the screen
-  edge), no shelf or shadow, no lower corners on screen; the terminal pane above stays a Floating
-  card and does not overlap the dock, one pane and split. Then the in-app keyboard up: the full
-  Floating tray (side margins, rounded corners, the gap above the keyboard's bottom, nothing under
-  the pill) with no reflection left behind, and back down: the card again; note how far the icons
-  move at that switch (the Floating gap, 6 dp). Same for Search field on, and the system keyboard
-  lifting the dock. Margin 0 and Margin 48: the card's sides stay ~3% in and the end icons stand
-  on it. Home and Workspace halves wearing different designs (slide between them), Floating ↔
-  Docked, Peek ↔ Tray, light and dark · emulator, then pong.
-- 2026-10-25 · commit "refactor(settings): edge colours follow Wallpaper colors" · Settings ->
-  Terminal -> Text & display has no "Extend edge colors" row and the editor's Terminal card has no
-  Edge colours row. With Wallpaper colors on, run a full-screen TUI with its own background
-  (e.g. htop): the pane padding takes the edge colours; switch Wallpaper colors off (Settings or the
-  editor's Appearance card): after the restyle the padding is plain again, in one pane and in
-  split panes. A phone that had turned Extend edge colors off now follows the switch instead.
-- 2026-10-25 · commit "refactor(settings): remove the Wallpaper alignment control" · on a build
-  that still holds a stored non-100 alignment (or on Nothing OS), open Settings -> Appearance and
-  the Appearance editor: no Wallpaper alignment slider or row in either, search "alignment" finds
-  nothing, and the glass behind the surfaces still lines up with the wallpaper (self-drawn and
-  system-drawn wallpapers both).
-- 2026-10-25 · commit "feat(settings): grey Auto Keyboard until Linux apps are set up" · Settings,
-  Linux apps, Input: before running Set up Linux apps, "Auto Keyboard" is greyed with "Set up Linux
-  apps first"; once the guide's command has installed fcitx5 and you come back it is live and reads
-  "Automatic Keyboard show & hide when you tap text input field"; its stored on/off is unchanged · pong.
-- 2026-10-25 · commit "feat(wall): make the terminal or the display window Home from Edit pages"
-  · Edit pages: the home button sits on every Home page, the first terminal card and the display
-  card, and only one card is filled. Tap it on the first terminal: Settings › Home › Start in reads
-  Terminal; on the display card: Start in reads Display and Linux apps › Start with the launcher is
-  on; on a Home page: Start in reads Home. Pick each value in Settings and reopen Edit pages: the
-  marker moved to match. With Display chosen, turn Start with the launcher off: Start in reads
-  Terminal with a terminal open, else Home. Close the display card (let the undo lapse) while it
-  is Home: same fallback. Close every terminal while the Workspace is Home: Start in reads Home.
-  Force-stop with Start in = Display: the launcher comes back on the display window and the
-  display runs · emulator, then pong.
-- 2026-10-25 · commit "fix(wall): hold the wallpaper still while Edit pages is open" · with a
-  managed wallpaper and Wallpaper parallax on, Home with three pages and two windows: open Edit
-  pages and scroll from the first card to the last; the wallpaper behind the cards does not move
-  at all, and the live card's glass (dock, status bar, pane slabs) stays aligned with it. Close on
-  a far card: the wallpaper glides once to that page's place, like a page swipe, with no jump; a
-  swipe started during that glide carries on smoothly · pong or emulator (portrait).
-- 2026-10-25 · commit "fix(calendar): centre today's circle on its number" · Calendar widget month
-  grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
-  centred on the digits and holds both with a margin; at font scale 1.3 and in the narrowest span
-  it shrinks to its cell and touches no neighbour · pong.
-- 2026-10-25 · commit "fix(statusbar): the strip behind the system bar keeps the pane's look
-  after a trip to the Workspace" · Home and the Workspace with different status-bar looks
-  (Opacity or Tint on one half only), wallpaper mode, Docked: swipe Home → Workspace → Home, and
-  Home → part way → back: the strip behind the system status bar and the status pane below it read
-  as one sheet of glass each time, in Home's look; the Workspace still shows its own · pong or
-  emulator, keyboard down and up.
-- 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
-  every shell and distro" · in `proot-distro login debian`: the distro's
-  `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the cookie copy,
-  `paplay` of a wav plays, `PULSE_COOKIE=/dev/null paplay` is refused · pong (no distro installed
-  there on 10-25).
-- 2026-10-25 · commit "feat(dock): a new install starts on Peek glass, existing installs keep the
-  tray" · a fresh install (uninstall, then `adb install`, launch) opens on Peek glass
-  (`layout.dock_design=peek_glass`); an update over an install that never picked a design
-  (`adb install -r` over a build from before this commit) keeps the Glass tray and writes no
-  `dock_design` key; an install that picked a design keeps it · pong with the developer's go-ahead
-  (emulator banned).
-- 2026-10-24 · commit "feat(gestures): the drawer swipe is always on; quick reply gets its own
-  switch" · Home › Gestures no longer lists Swipe down for app drawer; a gesture's choices always
-  include Open drawer; swiping down on the apps row/dock opens the drawer (also after updating from
-  a profile that had it off) · emulator.
-- 2026-10-24 · same commit · Home › Gestures has "Swipe up on app icons for quick reply", on by
-  default: on, swiping up on a dock icon with a notification dot opens the reply card as before;
-  off, the same swipe does nothing special (no card; bottom-dock icon behaves like an unbadged one,
-  and on a rail the sideways drawer pull works from the badged icon); flip it back on and the card
-  returns without a restart · emulator.
-- 2026-10-22 · #133 review fixes (commit "fix(stack): a half's rest is measured in its own
-  Style…") · Home Floating with a status bar along the bottom, the window Docked with it along
-  the top: swipe Home → window with the window's pane not shown before → the pane meets the dock
-  with no gap and no jump at the settle · emulator (no checker found the route to opposite
-  bars per half; in the editor a sideways swipe on the frame or the page label switches halves).
-- 2026-10-22 · PR #99 (migrations 9–13) and the glass rounds · Upgrade from the shipped stable
-  (1.0.6 / 1.1.0 release APK) over a real profile with a Home dock height, Corners or Margin set
-  apart, a Prompt line or Taskbar dock style and a Custom Look → Home keeps its rows, Prompt line
-  → Tray + Search field, Taskbar → Tray + Drawer tile, the Look keeps its stop and colour, no
-  first-run tour · emulator with the release APK from the GitHub release (not on disk).
-- 2026-10-22 · #133 review fixes · Floating Tray's shelf (contact shadow and glow) shows under the
-  slab and goes with the keyboard up · pong: the emulator's CPU renderer drew none
-  (`~/reports/device-checks-2026-10-24/`, A29).
-- 2026-10-17 · commit "feat(panes): a glass titlebar on every float" · The float's strip glass
-  matches the pane under it, Docked and Floating, glass on and off: same frost, tint and corners,
-  wallpaper staying put under the strip while the float is dragged · emulator screenshots.
-- 2026-10-24 · sweep · A sideways drag between two windows: the arriving window's page card drew
-  blank, text only at the settle (E3-r4 `30-mid2.png`, E3-r2 `slide-w2w.png`) · pong, likely the
-  CPU renderer.
-- 2026-10-25 · commit "feat(clock): flip cards carry end pins at the split line" · a Flip Clock
-  widget at every size, 12h and 24h, light and dark theme, and the expanded status bar's Flip:
-  each card shows a small tab on its left and right rim at the split line, sized with the card, in
-  the rim's ink; no line or mark crosses a digit. With it, commit "keep the LCD period box inside
-  the column the fit measured": an LCD widget at 2×1, 12h, shows its whole period box · emulator.
-- 2026-10-25 · drawer keyboard (commits "lay the stack out for a keyboard raised under the open
-  drawer", "reveal the built-in keyboard the open raised") · Built-in keyboard + Open keyboard
-  automatically: the keyboard shows all four rows right above the nav inset and the list's last row
-  clears it; on close the plane lands on the dock above the keyboard, then the keyboard goes down
-  with the dock, no hop; same on the Workspace where the pass resizes the terminal once; Floating
-  and Docked, no visible jump from the one pass under the plane · emulator.
-- 2026-10-24 · "fix(terminal): a pane under a terminal effect wears a bezel" · the rest of the matrix: a
-  2×2 split, Floating, keyboard down, dark theme with a long line, CRT amber and TFT grid: each pane
-  framed, scanlines only inside the screen, text whole at the edges (one pane, CRT, keyboard up,
-  Docked, light seen on emu3 10-26) · emu.
-- 2026-10-24 · commits "feat(home): carry an app from the drawer onto a Home page" and
-  "feat(drawer): an app goes to Home only when carried out through the drawer's top" · open the
-  drawer from Home and from the Workspace, long-press an app and slide: the drag stays the
-  drawer's, so dropping it on another app makes a folder, on a folder fills it, and a folder tile
-  still moves, as before. Carry the app up past the top of the app list (onto the search pill) and
-  either rest there ~¼ s or go a thumb's width further: the drawer closes under the finger, Home
-  comes in and the icon keeps its size and place under the finger with no jump (it takes Home's
-  size only as it settles), with a white cell outline under it, and follows the finger while the
-  drawer is still closing. Dip back into the list before the ¼ s and nothing happens. Then on
-  Home: let go over a free cell and the icon settles there; over a taken cell it goes to the
-  nearest free one; rest at a side edge for ~350 ms and the page turns (past the last page a new
-  one is made and kept only if the icon lands there); a full page shows a red outline and "No room
-  on this page."; let go over the dock or off the grid and nothing is added. Opened from the
-  Workspace, a still finger during the wall's turn may let the icon ride the page until it moves.
-  With Home's layout locked the app never leaves the drawer · emulator.
-- 2026-10-24 · commit "feat(drawer): the search keyboard slides away as the list scrolls" · open
-  the drawer with the built-in keyboard revealed under the search (a pill tap), then scroll the
-  vertical list down: nothing moves for the first ~24 dp, then the keyboard slides down with the
-  finger until it is gone and the list grows to the full height without jumping; scrolling back up
-  does not bring it back, a pill tap does. A scroll stopped with the keyboard less than halfway down
-  springs it back up. With the Android keyboard (and with "Use system keyboard") the phone's
-  keyboard goes at the threshold and the pill brings it back · emulator.
-- 2026-10-24 · commit "fix(drawer): the search raises the built-in keyboard on every place" · with
-  Settings › Keyboard › On-screen keyboard = Built-in and the drawer's "Open keyboard
-  automatically" on, open the drawer on Home (keyboard down) and on the Workspace (keyboard up and
-  down): the built-in keyboard rises through the plane under the search and the phone's keyboard
-  never shows; typing filters; closing the drawer puts down a keyboard the drawer raised and keeps
-  one that was up before. With Android selected, and with "Use system keyboard" on, the phone's
-  keyboard shows instead · emulator.
-- 2026-10-25 · commit "the Glass widgets switch applies to every widget" · with a Clock widget whose
-  own Glass is On (its settings), the Home card's Glass widgets off makes it solid at once and its
-  settings read Page; Undo gives it On back; the row's note reads whole at 1.0 · emulator.
-- 2026-10-24 · fix commit "carry the editor's session across a theme relaunch" · Appearance card,
-  pick a Look stop, then Dark: the activity relaunches into dark and the editor comes back with
-  the Appearance card up and the Look still picked; Undo puts the theme and the Look back (a second
-  relaunch, the editor again comes back); Discard on leaving does the same · emulator.
 
-- 2026-10-24 · widgets on glass default (commit "feat(widgets): glass is on by default") · on an
-  install upgraded from a build that never stored the switch: widgets that never had a Glass choice
-  now wear the Look's glass over the wallpaper; one set to Off or Bare keeps its solid or bare
-  card; turning Widgets on glass off returns the unset ones to the solid card. A fresh install
-  opens with glass widgets.
-- 2026-10-24 · clock widget meta column (commit "feat(clock): widgets stack AM/PM over the
-  seconds") · on the emulator with a 12-hour clock widget in each face (Numerals, Slab, Minimal,
-  Tape, LED, LCD, Flip) at 2x1, 2x2 and 4x2: the period stands over the seconds like the expanded
-  status bar, nothing clips at the card's right edge; seconds off keeps the period on the digits'
-  row; a 24-hour clock shows the seconds alone and nothing shifts.
-- 2026-10-24 · same commit · a Home glass widget wears Home's Look (Base) and not the
-  Workspace's once the two differ · emulator.
-- 2026-10-24 · same round · General › Diagnostics with Termux:API installed shows its row (Log level and the no-API case seen on emu3 10-26) · emu.
-- 2026-10-24 · same round · About & help starts with Help, which opens the in-app help, Back
-  returns to About & help; General has no Help row; Keyboard shows Hardware keyboard in its own
-  group; Terminal › Text & display has no Full screen; Notifications has no Notification access
-  row · emulator, also at font scale 1.3.
-- 2026-10-23 · same commit · a diagonal thumb at 35° off the horizontal, under four slops of
-  travel (about 32 dp), does not turn a Home page or slide the wall from the bottom gap or the
-  status bar border; it pages once it carries on that way well past that; at 25° it pages at the
-  usual slop; a widget that scrolls vertically scrolls more readily under a diagonal · emulator.
-- 2026-10-23 · same commit · the drawer's fling threshold is the same in dp at 2.6 and 3.5
-  density (`wm density`, force-stop after each): a short quick pull off the dock opens it at the
-  same thumb speed on both · emulator.
-- 2026-10-23 · #151 (merge d9b5c4fb3) · the App menu on a dock-folder member, in the black theme
-  and with the scheme chrome, near the left edge, with 7+ shortcuts (collapse), and the
-  open/close motion in a frame recording (dock icon light/dark and a drawer cell at the top
-  right seen) · emulator.
-- 2026-10-23 · same commit · font scale 1.3 and a small density: labels on one line, ellipsized,
-  rows still 52 dp; an app with many shortcuts on a short landscape screen scrolls inside the card
-  rather than running off it · emulator.
-- 2026-10-23 · same commit · a window chip tapped on Home mid-slide, and a reversal past halfway:
-  the icons run back the way they came with no jump, the pane's bottom never stays clipped by the
-  dock on the window that comes back, and the keyboard pre-rolled for the slide goes away when the
-  wall returns; landscape with the rail on one half: the rail and the row each as laid out, no
-  icon scaling · emulator.
-- 2026-10-23 · same commit · a frame measurement of ten slides each way (gfxinfo framestats) on
-  the arm64 staging build against the #133 baseline (median 17 ms, 90th 24 ms, 99th 57 ms): no
-  worse, and no slide frame re-renders the row (a perfetto trace shows no `Wall.*` layout of the
-  apps row between the first frame and the settle) · pong, with the go-ahead.
-- 2026-10-23 · #146 (merges 56fcaf1cb, b1b829854) · landscape rail, seen 2026-10-23 on the
-  emulator except: the two ticks beside the rail follow the scroll (second warm at the end), a
-  tap on a most-used app at the column's end launches it, and in Floating the rail never
-  stands under the A–Z card; a long press still opens the menu and a sideways drag still
-  pulls the drawer · emulator.
-- 2026-10-24 · #146 round 3, commit "fix(dock): the rail's ticks follow the column as drawn" ·
-  Home, landscape, 7 pins + most-used, Drawer tile on: the two ticks beside the rail are there
-  at the top and at the end of the scroll (second warm at the end), including after an icon or
-  icon-pack change while on Home; at the true end (a further drag moves nothing) the last
-  most-used icon is whole with its air below it, then `dumpsys activity top` shows
-  `place_apps_bar_indicator` as `V` (round 2's dump at the true end already showed the column
-  12 slots of 152 px, viewport 4 slots, end aligned; the earlier cut-icon shot reads as a
-  scroll stopped 60 px short of it) · emulator.
-- 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
-  (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
-  Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as
-  the audit's shots at rest (no Element gained or lost, same Style, same dock) · emulator.
-- 2026-10-23 · same commit · a slow drag Home → window and back in Docked and in Floating, with
-  Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
-  audit's clips did not show; a Style or Dock type change on the editor's Dock card shows on the
-  next pass on both halves · emulator, frames recorded.
-- 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest with the capsule, folded and open:
-  row height, foot and slot the same as 52831bcac (Docked Tray and Floating seen) and the row
-  does not jump when a fold animation ends · emulator.
-- 2026-10-24 · commits "feat(settings): group each section's rows into one rounded tonal card" · under the launcher's scheme chrome (Wallpaper colours on): cards, icons and segments take the scheme (light, dark and font 1.3 seen on emu3 10-26; no Black theme any more) · emu.
-- 2026-10-24 · Set up Linux apps guide (commit "feat(settings): Set up Linux apps becomes a stepped
-  guide") and the Input copy · Settings › Linux apps › Set up Linux apps opens a full-screen guide:
-  Termux build shows Source, then (A full Linux) Pick a Linux, Starter apps, Copy the command,
-  Graphics, with the pill line counting 5 or 4 (Termux's own apps skip the Linux pick); Debian
-  wears "Recommended" and the badge drops under its name at font scale 2.0; Next reads Done on
-  Graphics; Copy puts the command on the clipboard and Done closes Settings with the notice; Back
-  on step 1 leaves; the Linux apps row then reads "Debian with a browser and a file manager"
-  (and "Not set up yet" on a fresh install); Graphics opens Graphics acceleration and its pick
-  shows on return. Nothing clips at font scale 1.3 and 2.0, light and dark, scheme chrome on.
-  nix build: one page with the advice and Read the docs, no progress line or footer; VAJ build:
-  Termux's own apps offer a file manager only. Input page: "Keyboard pops up", "Keyboard over the
-  window", Trackpad · Touch · Direct with a one-line summary that follows the pick · emulator,
-  one install per edition.
-- 2026-10-24 · "fix(glass): draw a lone band as a whole card under Fancier Glass" · Fancier Glass
-  on (bend 21, edge width 14), Floating, Corners 3, dock rows hidden, keyboard down: the extra-keys
-  bar alone has no chevron at either end and no line across its middle; same with the keyboard
-  up (the card under it), in Docked, and at a capsule Corners; a tall dock's small corners show no
-  crease running in from the corner · pong (the emulator never showed it).
+- **Live glass wave 4 owed (11-03).** (1) The bars at a cold start (force-stop, relaunch): no
+  see-through status or window bar before the stored frame lands. (2) Live widgets on pong (wave
+  3b): Live blur on, a widget shows the icons and widgets beneath it; off shows wallpaper only.
+  (3) Android 8-11 panels on a real device: drawer, palette, sheet and menus blur what is beneath
+  them and release on close (API 30 emulator only so far). (4) Contrast on custom schemes on pong
+  changes the terminal live. (5) The Wallpaper entries on pong: each opens the picker, and the
+  Workspace's More sheet has one.
+- **Fresh install opens on Clear (11-03).** Uninstall, install the build, open it: the Look is Clear
+  (Appearance shows Clear selected, 8dp margin); an install over pre.2 keeps its look (emulator).
+- **Live blur floats (11-03, wave 3).** Live blur on: a Workspace float over a terminal printing
+  (`yes`) shows the text scrolling blurred behind it; two overlapping Home floats, the upper shows
+  the lower's glass and text, raising swaps them; minimise, restore, close, dock back leave no stale
+  glass (a docked-back pane is on the stored frame); keyboard up (pong).
+- **Live blur on the dock (11-03, wave 2).** Live blur on, Floating dock, terminal text or a page
+  sliding under the dock: the dock shows it blurred and following; Live off shows wallpaper only;
+  blur strength the same either way (emulator or pong).
+- **Battery & performance at the root (11-03, a38b183c3).** Pong 11-03: root row in System
+  above General, page opens, glyphs read at 1.0× in dark. Still owed: two-pane (landscape)
+  Settings, search for "Glass refraction" lands on the page, glyphs at 1.3× font and in light.
+- **Dock glass after the GlassEffects move (11-03, 5559211a5).** Emulator was pixel-identical for
+  the four dock types, Docked; still owed: Floating style for the four types, and a held extra
+  key's lens on the dock still magnifies and fades (pong).
+- **Home key with Start in on the Terminal (11-02, 1d7506c51).** With two Home pages and Start in
+  set to the Terminal page (then to a Display page), the extra keys' house key from the Terminal
+  goes to Home 1, not the nearer Home 2; with Start in on Home 2 it goes to Home 2.
+- **One icon size (11-02, ADR 0020 §3; cap rule a6f81e3c3).** Pong 11-02: Dock card reads "7 pinned
+  apps fit up to M", L/XL off (Docked). Still owed: pin an 8th (drops to S), unpin (choice returns);
+  Floating with Lens beads on the Terminal caps 7 pins at S; Home grid icons equal the dock's; no
+  icon touches the edge. Pong's stored choice is S from the old migration: pick M once.
+- **Home in landscape (11-02, ADR 0020 §12; turn fix a364a4624).** Pong 11-02 on +dev.19df39d42: a
+  turn cut the grid to 5 columns and saved the reflow (fixed; emulator with pong's store: no write
+  through 90/270/0). Owed on pong with real widgets: rotate both ways and back, widget store
+  revision unchanged, every widget keeps its cell, no widget zooms. Pong's landscape keeps its own
+  dock setting (hidden there, developer 11-02), so no side bar on pong is expected.
+- **Glass controls reach + dark sections (11-03, 509b634db).** On pong, dark theme: the editor's
+  sections stand apart from the sheet (lighter fill, thin outline) and, with Appearance open, the
+  unselected Look tiles (Mist, Tint, Solid, Custom) still read as tiles on the lighter section.
+  Keyboard card › Applies to Global › Opacity and Blur move the keyboard on Home and on a Display
+  page as well as the Terminal; Customization Opacity moves the Home keyboard while no Keyboard ›
+  Home value was set. Turn Glass refraction off in Battery & performance: Depth and Edge read
+  "Glass refraction is off." and the card shows a Glass refraction link that lands on the switch;
+  with Reduce idle activity on they read "Off while Reduce idle activity is on." · pong, go-ahead.
 
-- 2026-10-24 · same · known small items from the emulator: Settings reopened after a force-stop
-  while inside the Set up Linux apps guide lands on the root, not Linux apps; after Done with a
-  theme change the Settings screen behind the editor keeps the old theme until reopened; the
-  "Windows restored" toast can overlap the editor bar right after a restart; the status bar's
-  hidden ghost was not exercised · pong or emulator.
-- 2026-10-24 · finding (emulator) · landscape window with the keyboard up: the terminal was a ~230 px
-  strip with blurred, unreadable text and the rail showed only the Terminal icon (evidence2/50-
-  landscape-window.png): confirm it is the emulator, or a real landscape-with-keyboard regression ·
-  pong, rotate with the keyboard up.
-- 2026-10-23 · finding (emulator, #151) · the App menu showed only after the injected finger
-  lifted, not at the long-press threshold (icon lifted at 2 s): confirm it is the injection, or a
-  real wait for release · pong, a hand on the icon.
-- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock type to Beads in the
-  editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
-  emulator state, or the resting page lost on a design change · emulator, fresh install.
-- 2026-10-23 · #150 (commit "fix(windows): a new window takes the keys…") · a Bluetooth keyboard
-  on the Surface, splits on: Ctrl+Alt+C, then type at once → the keystrokes land in the new
-  window's shell with no tap; the same from the + chip, and from a display window in front ·
-  Surface, hand on the keyboard.
-- 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
-  Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
-  notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
-  splits off and splits with them on · Surface, hand on the keyboard.
-- 2026-10-24 · 68fba2325 · the Home card has no Folder limit row; a folder that held 20 apps keeps
-  them and takes no more, one under 16 takes more up to 16; Settings › Home › Folders has no Max
-  folder size row · emulator.
+- **Removing a Display card (11-02, #193).** Edit pages › Display card × with Firefox on it: after
+  the Undo window a stop question (an app is open); Confirm: `wall_pages.xml` has no page 9 and no
+  `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
+  expiry leaves the display untouched.
 
-- 2026-10-25 · commit "clock sheet: Show date and Show next alarm" · the Clock widget's gear at 2×2:
-  two new rows after Show seconds (calendar and alarm glyphs, same card style, both on); turning
-  Show date off drops the date and leaves the alarm under the face; turning Show next alarm off
-  drops only the alarm; both off leaves the face alone, centred; the glyphs read at 24dp in both
-  themes; existing clocks show both lines unchanged · pong or emulator (set an alarm first).
-- 2026-10-25 · commit "flip: the AM/PM and the seconds share one centre axis" · Flip face, 12h,
-  seconds on, in the widget at 2×1/2×2 and in the expanded status bar: "AM"/"PM" is centred over
-  the two seconds digits, not left of them; with seconds off the period sits where it did · pong
-  or emulator.
+- **CRT wave 1 on pong (11-02, 41b6a6036).** Terminal effect CRT on a dark Look and on a bright
+  glass tint: the 8/10 dp bezel reads lit at the top and shaded at the bottom over glass and over a
+  solid fill; the screen edge has an inner shadow; box lines carry a faint orange/blue fringe; the
+  triad mask is a hair of colour fringe on glyphs, not a grid over the background (emulator 11-02
+  showed a grid over saturated green; judge on the phone); the dock, status bar and keyboard keep
+  crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
+  10-22 baseline (`project-docs/active/input-latency-study.md` method).
+- **Trail halo + decays on pong (11-02, 963e8329e).** Cursor trail Default and Comet on a dark Look
+  and on a bright glass tint: a faint additive glow (peak alpha 0.28 since the developer's 11-02
+  look, a bright core within a cell and a skirt two cells out with no visible edge) hugs the
+  trail quad on moves in both directions (no dark band, no glow only inside, no pale box); a
+  `cursor_trail_color` from kitty.conf colours the halo too; the other four styles are unchanged.
+  Typing feel at kitty's 0.10/0.40 s decays (the app's defaults again since 11-02): a newline's
+  streak settles well under a second over a slow ssh echo; a `cursor_trail_decay` line in
+  kitty.conf still wins. Known: an echo burst of 3+ cells starts a trail (kitty's 2-cell
+  `cursor_trail_start_threshold`), so fast typing over ssh trails now and then.
+- **CRT screen events on pong (11-02, 2b7484ebd).** Terminal effect CRT (also green, amber), more
+  than 1.5 s after the last key or scroll: a bell (`sleep 2; printf '\a'`) tears one 4–5 row band
+  sideways with a red/blue split for about 150 ms and nothing else moves (emulator: seen); a pane
+  opened by touch or `launcherctl pane open` powers on from a bright centre line over about 400 ms
+  (emulator: seen); tapping the other pane of a two-pane window shears it sideways for about
+  300 ms, strongest at the top and bottom (emulator: not resolvable at 4 fps); a shell killed from
+  outside (`kill -9 <pid>`) shows about 300 ms of grey snow before "[Process completed (signal 9)]"
+  (emulator: seen). Nothing within 1.5 s of a key or a scroll, nothing with Remove animations on,
+  nothing with Settings › Terminal › Text & display › Screen events off, nothing on TFT or on the
+  chrome. A pane at rest after an event draws no further frames (gfxinfo frame count flat).
+  Known gaps, not bugs: a plain `exit` closes the pane before the snow; power-off is unwired; a
+  split or focus change started from the keyboard is held by the typing rule.
+- **Idle animations + dim on pong (11-02, 88e25065e).** Battery and performance › Idle animations
+  off (default): a CRT pane at rest renders no frames (`dumpsys gfxinfo com.termux reset`, 30 s,
+  then `dumpsys gfxinfo com.termux`: 0; emulator: 0 in 20 s). On: the pane breathes very gently
+  with no flashes at a low steady rate (emulator: 120 frames in 20 s, 6 fps on CPU rendering; the
+  brief aimed at about 20); one small sideways tear within 2–5 minutes of idling (not waited for
+  on the emulator); everything stops on a key for 1.5 s, on screen off, Lazy mode, power save,
+  Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
+  unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
+  near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
+- **Solid CRT bezel on pong (11-03, wave 7).** Terminal effect CRT on a glass Look with a
+  visible wallpaper: the 8/10 dp band round the screen is a flat opaque panel tone (the drawer's
+  colour), no wallpaper or blur through it, lit at the top and shaded at the bottom as before, the
+  1 dp line still round the screen; the glass blur and tint still show inside the screen behind the
+  text, and the near-black tube face at the picture's pulled-in corners stands off the bezel. Same
+  with Glass off and on the light theme (a pale bezel). TFT: the same solid band.
+- **Deck keyboard on pong (11-03, wave 8a, 2734fdf36).** Terminal effect CRT, docked in-app
+  keyboard up: the keyboard bed is an opaque dark plastic in the drawer's tone (no wallpaper
+  through it), each key a raised push-button with a faint lighter top edge and a 2 dp darker foot,
+  6 dp corners; return is amber with dark ink; hold Ctrl: its label turns amber and a 2 dp amber bar
+  sits above its foot; release: plain. Docked form: the keyboard card's rounded corners still clip
+  the bed. Effect off: the Look's glass keyboard comes back exactly. CRT green / amber / Material:
+  return and the latched bar take green / amber / the theme's primary (emulator emu2, dark theme:
+  bed, bevel and amber return seen; latched bar and the other palettes not exercised).
+- **Deck window bar + extra keys on pong (11-03, waves 8b-8c).** Terminal effect CRT on the
+  Workspace: the window bar is an opaque dark slab (lit top, shaded bottom, no wallpaper through
+  it, the blur off); each window chip and the "+" a raised 4 dp button with a 2 dp foot; the chip
+  in front has an amber title and a lit 5 dp LED at its left; the sessions count square at the
+  bar's left is the same button without an LED; a window that rings its bell behind
+  lights its LED; a working window's LED breathes between a quarter and full; an idle one is dark.
+  CPU, RAM and weather sit in one near-black inset window in cyan with a soft glow, the dots dim
+  cyan; sizes as before. The extra keys row: opaque bed, raised buttons, the active mode button
+  (keyboard / mouse pad / ...) amber with a 2 dp bar, a latched CTRL amber. Docked: the bar card's
+  rounded corners still clip the slab. Effect off and on three times: the bar's glass and blur, the
+  stats cluster's padding and the row's look come back exactly. CRT green / amber / Material: the
+  lights and the display take green / amber / the theme's primary. Home page: everything plain.
+- **Deck bands + single frame on pong (11-03, wave 8e, e29a3379f).** Docked layout, CRT on, the
+  keyboard up: the band behind the system status bar (clock, signal) and the band behind the
+  navigation pill are the same opaque slab as the bar and the keyboard, no wallpaper through
+  either; look for a seam where the status band meets the bar's top (each band shades on its own).
+  The CRT pane's frame is one opaque ring: no thin light line outside it and no grey line between
+  it and the screen; the glass blur and tint still show inside the screen. Keyboard down (dock foot
+  showing): the foot keeps the dock's own glass. Effect off: both bands gone, the status strip's
+  glass and blur back, the pane's edge light back round the glass slab.
+- **Live windows while swiping (11-01).** Three Workspace windows, each running something that
+  prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
+  slides in live beside it, its output moving, at the same size and glass as the current one.
+  Release past half: no blank frame, no flash, the arriving window is in front with its prompt
+  where it was; the motion log shows no `pty-resize` at the landing. Open a window with the
+  keyboard down, go to another, raise the keyboard, then drag toward the first: its one
+  `pty-resize` comes as the drag begins, its rows fit its pane as it slides in (text the same
+  size as the current window's), and none comes at the landing. Release short: both
+  slide back and nothing changes. Repeat right, repeat with a split window and a Stacked window
+  as the neighbour, and with the keyboard up. A chip tap and a keyboard shortcut still switch at
+  once. Settings › Battery and performance › Live windows while swiping off: the swipe shows the
+  old empty slot then the slide at release (today's behaviour). At rest (`dumpsys gfxinfo`, no
+  touch) the idle frame count is unchanged from the setting off.
 
-## Graphics acceleration page (#162)
-Agent:
-- 2026-10-24 · commit "feat(settings): a Graphics acceleration page where the user benchmarks
-  and picks" · Settings → Terminal → Linux apps → Set up Linux apps: one Graphics acceleration
-  row (no copy or benchmark rows), its summary "Automatic (…) · Not measured yet"; tap it: the
-  phone's chip card, Automatic plus one card per profile with a radio, the software note, Draw in
-  software with one switch per Linux app, Run benchmark floating at the foot; nothing clipped or
-  overlapping in light, dark and at font scale 1.3 (force-stop after the font change) · emulator.
-- 2026-10-24 · same · Pick Software, Back, force-stop, reopen the page: Software is still
-  picked; `launcherctl x11 gpu` shows `"pick":"software"` and `in_use_env` with
-  LIBGL_ALWAYS_SOFTWARE=1; open a Linux app from the drawer and logcat `X11LinuxAppRunner` says
-  "with graphics software". Pick a profile that is not installed: the app opens with the notice
-  "Your graphics choice isn't installed…". Switch one app on under Draw in software with
-  Automatic picked: only that app's launch logs software · emulator.
-- 2026-10-24 · same · Run benchmark: a terminal session runs termux-x11-gpu-setup, Settings
-  closes and the notice shows; after it finishes, the page shows a score or outcome on every
-  tested profile and "Last benchmark …" on the chip card (on the emulator only software is
-  tried) · emulator.
-
-## Found in the sweep (2026-10-24), to triage
-Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a
-fix, then leaves this file.
-
-1. **Beads never renders on Home.** Editor → Dock card → Beads → Done (pref
-   `layout.dock_design=lens_beads`, also after a force-stop): Home draws one frosted slab with
-   icons; no shader errors. Seen on emu by two checkers.
-2. **Start in = Terminal lands on Home after a cold start.** Pref `app_launcher_start_in=workspace`
-   written; force-stop + launch (or HOME) shows Home page 1. Seen three times on emu3; the
-   usage-mode migration itself writes the right keys.
-3. **Wall strip clock row repaints at rest**: 65–70 frames per 12 s with the clock row (0 with
-   tiles only); a ticking seconds readout with a ghost digit.
-4. **Floats-only workspace Replace-load moves the wall to page 2** from Home page 1.
-5. **Notes widget 2x1**: "scratch.md1 min ago" with no gap; at font 2.0 the file label vanishes and
-   the age clips.
-6. **Split gap slider** (row labelled Frost): 0/13/24 dp persist but the gutter looks identical in
-   the miniature and a 4-pane window; may be the checker's drag.
-7. **Settings does not reopen on its last page after an upgrade install** (old build on Terminal ›
-   Status bar, install, `am start` → root); recents route untried.
-8. **Landscape sessions drawer, keyboard hidden**: Saved tab's Add to current and Replace shrink to
-   a 7 px sliver; keyboard up, the list is empty.
-9. **A–Z strip default mismatch**: Drawer layout shows Left checked on a fresh profile while the
-    strip draws on the right.
-10. **Text over the wallpaper**: Home icon labels (white with a grey shadow box) read as a smudge on
-    a light wallpaper and clip "Calendar"; folder title and "Remove from folder" bubble are dark on
-    the dimmed wallpaper, the bubble overlaps the title on a disabled app; the folder popup at font
-    1.3 + Large labels breaks words mid-word and clips its last row; the Home lock message is dark
-    on a bright wallpaper.
-11. **Display window draws over an open app drawer**; after × on the selected Display chip the chip
-    stays "Display", floats draw over a blank area and an extra float chip appears.
-12. **Tour**: the Workspace keyboard card shows no Skip or dots after 5 s and clips after one body
-    line; with split panes the "Tap ?" card points at pane controls.
-13. Smaller: Save sessions' Save sits under the keyboard (Enter works); the "Saved" toast covers the
-    Sessions drawer's +; the pinned-app menu hides Add to Home below the fold; LCD clock face bottom
-    segments look clipped; dragging an app onto a 14-app folder swapped cells instead of merging
-    (possibly injected-drag technique); overlapping floats show each other's text through the glass
-    (by design?).
-
-## Found in the emulator sweep (2026-10-26)
-Staging 1.1.0-pre.6, Android 16 x86_64; screenshots and logs at
-`~/reports/device-checks-2026-10-26/`.
-
-- Terminal only's tour starts on the Workspace but asks the user to swipe past their last Home
-  page, which this mode removes. Its final card still mentions a Home float and "Tap Layout",
-  whose control was retired. See `editor-fresh-terminal-tour-1.png` and
-  `editor-fresh-terminal-tour-2.png`.
-- Opening the first "icon pack" Settings search hit produced one ANR (SettingsActivity lost-focus
-  timeout, 5001 ms); the same route passed after a force-stop. Cause unconfirmed. Screenshot
-  `earlier/search-iconpack-raw.png`, log `earlier/logcat-anr.txt`, trace `earlier/anr-trace.txt`.
-- About & help › Help did nothing twice after a direct cold start of Settings. Starting the
-  launcher first, returning to the same Settings task and tapping Help opened HelpActivity.
-  See `earlier/help-tap-raw.png` and `earlier/help-warm-host-raw.png`.
-- A–Z Show is shared while Position is per screen: Pull tab chosen on the Workspace's Dock card
-  also turned Home to Pull tab, though the editor's rule is that an edit changes only the screen
-  you are on. Intended or not? `round2/emu/01-ws-right-pull-editor.png`, `01-home-left-pull-drag.png`.
-- With the status bar hidden, a long-press on Home's bare top opens the Home actions sheet;
-  opening the editor then leaves that sheet up over the preview frame until a tap outside.
-- The "Theme, colours and glass" tip bubble sits over the frame at peek and covers part of the
-  A–Z strip in it, portrait and landscape (`round2/emu/06-chip-tap.png`).
-- The A–Z Pull tab rests lower after each drag (y about 372, then about 420) and covers the end
-  of the terminal's text at the right edge.
-- The editor's "Workspace" page label is near-black on the dark editor background (about #1c1c20
-  on #131318), in both Use as modes (`round2/emu3/07-editor-swiperight-c.png`).
-- Under Terminal only the editor still shows two page dots, the first greyed, hinting at a Home
-  page that cannot be reached (same shot).
-- Extra keys editor at font scale 1.3: caps clip to "CT…" and "HO…", Edit key's On tap chip
-  shows "E…" for ESC, and the Display label hint reads "Blank shows the key na…"
-  (`round2/emu2/26-f13-editor.png`, `27-f13-sheet.png`). Row titles, page chips and Done are fine.
-- Widget picker with the in-app keyboard up: the sheet does not make room, and its last groups
-  sit behind the translucent keys with their text bleeding through (`round2/emu2/34-picker-kbd-bottom.png`).
-- Extra keys editor: Row options › Done shows "Key row saved" and disables Save changes, so the
-  page is committed with no Discard; the sheets' Done should only put the sheet down. A colour
-  edit, by contrast, enables Save (`round2/emu2/15-after-done.png`, `21-rowdown-done.png`).
-- Editor, Extra keys › Position › Right on a light wallpaper: the preview draws the keys'
-  icons near-white while Top, Bottom, Left and Rides apps row draw them dark, in both themes;
-  the saved Right on the live launcher was dark (`round2/emu3-b/33-dark-montage.png`,
-  `21-light-right-rail.png`, `22-night.png`).
-- Clock widget 2×2 with Show next alarm on and a 07:30 alarm the system reports as next
-  (`dumpsys alarm`): the widget shows only the date, no alarm line (`round2/emu3-b/64-clock.png`).
-- On a light #EEEEEE wallpaper the system status bar's clock and icons are near-white and barely
-  visible over Home and the Workspace (`round2/emu3-b/41-restored.png`, `50-home.png`).
-- Uninstall from a lifted Home icon does nothing: the target shows and reddens, the drop fires
-  the delete intent, and the system refuses it (`UninstallerActivity: Uid … does not have
-  android.permission.REQUEST_DELETE_PACKAGES`); the manifest does not declare that permission.
-  Any other Uninstall route through `ACTION_DELETE` is likely affected (`round2/emu2-b/01h.png`).
-- Lock layout at font scale 1.3: the refusal "Home is locked. Long-press an empty spot to unlock
-  it." wraps and its second line is cut at half height (`round2/emu2-b/02l-locked-drag.png`).
-- The "Removed from Home · Tap to undo" pill takes a tap only on its "Tap to undo" words; a tap
-  on its centre does nothing (`round2/emu2-b/02e-undo.png`).
-- A shortcut pinned from Chrome shows a dimmed Android-robot icon for about 5 s before its own.
-- The keyboard's long-press popup opens only from the frame's thin margin: a hold on the mode
-  strip's icons runs the icon (Mouse mode on, Go to Terminal) instead (`round2/emu-b/02-popup-kb.png`).
-- The keyboard popup looks stitched: Edit sits in its own card and the Hide card runs into the
-  Docked · Floating row (`round2/emu-b/02-pk-full.png`).
-- The A–Z Pull tab on the Workspace's left edge covers the terminal's `~ $` prompt
-  (`round2/emu-b/01-ws-top-pull.png`).
-- A–Z Position is kept per screen, per dock style and per orientation (switching to Floating showed
-  no Position chosen); the card does not say so. Intended?
-- Widget picker under Floating with the status bar unfolded: the sheet starts about 145 px lower
-  and its last group sits under the dock (folded, it clears the dock) (`round2/emu2-c/29-after-drag.png`).
-- Extra keys › Edit key: a stray dark vertical bar stands just right of the sheet's ✕, light and
-  dark themes (`round2/emu2-c/20-ek-light-sheet.png`, `22-ek-night-sheet.png`).
-- The "Theme, colours and glass" tip stays on screen over the dock after Back collapses the
-  editor to peek (`round2/emu3-c/05c*.png`, `07c*.png`).
-- A cold launch with no effect at terminal Opacity 10 shows the Workspace text heavily blurred for
-  about 3 s before it sharpens (`round2/emu3-c/45*.png` against `46*.png`).
-- The drawer opened on the Workspace (keyboard up, palette › open) has no backdrop: once it
-  settles the live terminal's text and boxes stay drawn through it, over the icon labels
-  (`round2/emu-c/01w*.png`).
-- Floating Style with the Peek glass dock (cold start, keyboard down, Search off): the dock is a
-  fully rounded floating card with a gap above the pill, not the card rising from the screen's edge
-  with the strip under the pill as its foot (`round2/emu-c/07a*.png`, `07d*.png`); the check for
-  commit "fix(peek): the Peek card rises from the screen's edge under Floating too" fails.
-- Drawer on Home over a two-tone wallpaper: the "Search apps" placeholder is nearly unreadable on
-  the dark half (`round2/emu-c/01g*.png`).
-
-## Peek glass with the keyboard up (pong)
-- Docked, Peek glass dock: raise the in-app keyboard. The extra keys bar sits on glass again and the
-  keyboard glass spans the full width with its normal corners; hide the keyboard, the card returns.
-- Same with the Search field open and with the system IME lifting the dock.
-
-## Peek glass host never padded by the card's rim (pong)
-- Peek glass dock, Docked, where the rim is drawn under the glass (below Android 13, or the glass
-  program not drawing the edge): raise the in-app keyboard. The extra keys bar sits on glass and
-  the keyboard glass reaches both screen sides (`dumpsys activity` shows `extrakeys_background` at
-  0,0 inside `accessory_surface_host`, not 32,95). Hide it: the card returns; raise it again:
-  still full width.
-- With the card standing (keyboard down): frost, tint and rim match the card exactly, and the
-  icons' reflections show on the card above the strip (the host's reflection view had been laid
-  out 95 px down by the same padding, a likely cause of 48bf23b83's "the card shows none").
-
-## Extra keys editor, streamlined (#164)
-Agent (Settings, Keyboard, Terminal extra keys; the page editor, five sheets and the renders are in
-`app/build/extra-keys-editor-renders` after `ExtraKeysEditorRenderTest`):
-- Material You (Wallpaper colours on, with a coloured wallpaper): caps, cards, sheets and the dashed + read; nothing keeps a fixed navy (light and dark seen on emu2 10-26; the app has no Black theme any more).
-
-## Power-user round, wave 1 (2026-10-25)
-Seen on emu (debug, 5ce4ce853): the drawer hides Home, the contrast floor on the welcome sheet, the
-widget picker ends above the dock, the theme hint shows once and clears the half's name, physical
-keys type into the drawer search (Backspace, Esc), the App menu's rows are in a windows dump, and
-A–Z icons arrive within a second. Still owed:
-
-Agent
-- 2026-10-25 · 0f30818a4 · TalkBack on: the command palette's field, rows, call chips and keycaps are reachable and double-tap runs them; "App menu" is announced on a dock long-press · emu.
-- 2026-10-25 · 4957e1b52 · Drawer opened by dock tile and by A–Z with the keyboard up: Home fades and returns at full opacity, no flash on a quick open-and-cancel · emu.
-- 2026-10-25 · 2d1caf678 · Theme hint under the Material You scheme: one line, legible, inside the screen (Light at font 1.3 seen on emu2 10-26, on the editor's palette button) · emu.
-
-## Power-user round, wave 2 and follow-ups (2026-10-25)
-Seen on emu (debug, d10b3e471): Launcher settings opens as a sheet over the live Home, Back steps
-up and closes from the root, dragging the handle takes it to full height, a tap above closes it,
-Settings › Home › Icon size changes Home behind the sheet; the Lock layout switch spans its line,
-hides the add/edit rows and the card stays up. Still owed:
-
-Agent
-- 2026-10-25 · bcc0cb94c · Terminal contrast Softer/Default/Harder visibly change body text with wallpaper colours on (faint reads quieter on light, seen on emu2 10-26) · emu.
-
-## Power-user round, wave 3 so far (2026-10-25)
-Seen on emu (debug, 0dcd99aaf): a Home icon's App menu offers Remove from Home and no Add to home;
-hold-and-drag lifts the icon above the status band; Remove turns red on hover; a drop removes it and
-Undo within the 5 s notice puts it back in its cell. Still owed:
-
-Agent
-- 2026-10-25 · 7c0873d3c · Pin requests with the front page full: the shortcut lands on the next page or a new one; an app's own "Add widget" button (one with a configure screen) ends with the widget on Home (card, landing and "Unlock and add" seen on emu2 10-26) · emu.
-
-## Power-user round, Home ↔ dock and shortcuts (2026-10-25)
-Seen on emu (debug, 6b6fc51b8): a dock app dragged to a free Home cell lands there and leaves the dock;
-a Home icon dragged into the dock inserts between two pins and leaves Home; Chrome's "New tab" shortcut
-dragged out of the App menu lands on Home and opens Chrome. Still owed:
-
-Agent
-- 2026-10-25 · 6b6fc51b8 · Home icon onto a full dock page: the last pin moves to the next dock page; holding at the dock's edge turns its page · emu.
-- 2026-10-25 · 6b6fc51b8 · Home icon released over the middle of a dock icon makes a dock folder; a dock app onto Remove unpins it and Undo pins it back · emu.
-- 2026-10-25 · 6b6fc51b8 · Both drags with the keyboard up, and in Docked and Floating dock styles · emu.
-- 2026-10-25 · 6b6fc51b8 · A pinned shortcut survives its app updating (`pinShortcuts`) · emu.
-
-## Editor redesign (2026-10-26)
-Built on feat/editor-redesign, waves 1 to 6; the emulator rounds are at `~/reports/editor-redesign-wave1/`,
-`-wave2a/`, `-wave2/` and `-waves3-6/`. Nothing below has been seen on pong. Still owed:
-
-Agent
-- 2026-10-26 · wave 5 (same commit) · A–Z Glass background off under Floating Style on a plainly light
-  and a plainly dark wallpaper, Dark and Light themes: the letters' ink flips to suit the wallpaper
-  (no capsule seen on emu 10-26; on a mid-tone two-colour wallpaper the ink stayed white with an
-  outline); on the dock's row, a shared plank or inside the Docked frame the shared sheet stays · emulator.
-- 2026-10-26 · wave 5 (same commit) · the old holds still win: an extra key opens its alternates, a
-  keyboard key its alternates, a window chip lifts, a pinned notification its menu (App menu ending on
-  Edit dock, A–Z scrub, dock swipe and status fold seen on emu 10-26) · emulator.
-- 2026-10-26 · wave 3 (commit "refactor(editor): retire Layout mode's canvas; rotate to edit") ·
-  turning the phone with the editor open feels right: no flash, the card keeps its place (chip,
-  landscape values, Position landing live, Undo across a turn and the chip hint seen on emu 10-26) · pong.
-- 2026-10-26 · wave 4 · Welcome: choose Terminal only, Continue: the Home page leaves behind the sheet and the wall stands on the Workspace; Show me around skips the two Home lessons · emu.
-- 2026-10-26 · wave 4 · Terminal only with no window: the home press starts one shell (home press, wall and editor swipes and the Workspace card seen on emu3 10-26; `launcherctl wall.go` does not exist, so that clause is gone) · emu.
-- 2026-10-26 · wave 4 · An upgrade over a build without Use as: no prompt, Home screen, Start in where it was · emu.
-- 2026-10-26 · wave 4b · Extra keys with nothing else left on the dock, on a light wallpaper: ink is dark at each Position (the five Positions on light and dark wallpapers, and hidden-dock on dark, seen on emu3 10-26; Right fails in the preview, see the findings) · emu.
-- 2026-10-26 · wave 4b · a folder popup's labels keep the popup's ink on a light and a dark wallpaper (Home labels and Label shadow seen on emu3 10-26) · emu.
-- 2026-10-26 · wave 4b · Change the wallpaper through the system picker while on Home: labels, hint, dots, extra keys and letters re-ink without a restart (the launcher's own `wallpaper set` seen on emu3 10-26) · emu.
-
-## Home ⇄ Workspace as one motion (2026-10-26, f30d90c1c)
-- 2026-10-26 · Both directions as a fling, a slow drag and a spring-back: no flash on the first frame (the leaving stack's picture takes over from the live stack) and none at landing (the picture is dropped and the stack re-dressed in one frame) · pong.
-- 2026-10-26 · Home → Workspace: no reflow or scroll jump after arrival; the terminal is laid out at its keyboard-up size before it shows · pong.
-- 2026-10-26 · Stack transition, both directions: the glass edge and the pane rims fade with the terminal text, never text without an edge · pong.
-
-## Fix batch (2026-10-26 night, after 898eaa163)
-- 2026-10-26 · 38a68469e · A pre build (versionName with "-pre") on a fresh install: the welcome choice sheet shows, no tour card ever does; Settings › Replay tour still works · emu.
-- 2026-10-26 · 5b14d637b · Font scale 1.3, light and dark: extra keys editor caps "HOME" and "CTRL" read whole; the Edit key sheet's On tap chip reads "ESC"; the Display label hint reads whole; the Home-locked notice shows two whole lines; a row of long-named caps never grows past the screen · emu.
-- 2026-10-26 · d6ee66a88 · Settings › Linux apps › Configure › Input with the guide not run: Auto keyboard is greyed with "Set up Linux apps first"; after the guide's copy and fcitx5 installed it enables · emu.
-- 2026-10-26 · d6ee66a88 · Calendar widget on dark glass: today's disc is visible and the digit reads; on light glass and a bright-primary scheme the primary disc is kept · emu, pong.
-- 2026-10-26 · 898eaa163 · Keyboard popup: a hold in a key gap, on a key's outer 4 dp, on the side margins, the bottom strip and the top band opens the popup; a hold on a key's centre still repeats or shows alternates; a quick tap on a key's outer 4 dp still types; the toolbar row and the keyboard height are unchanged; the same on the Floating keyboard · emu, pong.
-- 2026-10-26 · f8b7497f9 · Workspace, A–Z Pull tab on the right and on a bottom row: the tab rests at the same y after three drags and after a Home → Workspace swipe; it never covers `~ $` or the line ends · emu.
-
-## Full screen corners and camera (2026-10-27)
-- 2026-10-27 · 58b498715 · Full screen on, status row shown: toggling Full screen steps the row's ends in by the corner radius each time, no jump; the camera gap stays · pong.
-- 2026-10-27 · 9295241b2 · Full screen on, keyboard up: the keyboard's bottom corners follow the screen's curve once its bottom is within the corner band; above that its own radius; change the chin with the keyboard up and the curve follows on the same frame · pong.
-- 2026-10-27 · 2ddd83270 · Full screen on, status row hidden: the first terminal row sits below the camera with no reflow jump, taps land on the right cell, the glass still reaches the top; Full screen off restores everything · pong.
-- 2026-10-27 · c6cc6312f · Full screen on, window bar at the top: its chips step in from the corners; chips under the camera itself are not yet avoided (next drop) · pong.
-
-## Wallpaper picker and background windows (2026-10-27)
-- 2026-10-27 · ed7eaecc1 · Appearance editor, Global card at half and at peek › Change wallpaper: the picker covers the card sheet and the editor bar; Choose photo opens the photo picker; Back puts the picker down and the sheet is back · emu (passed), pong.
-- 2026-10-27 · c387378fc · Workspace in front, a wide managed wallpaper with parallax on: a window opened or closed in the background (`launcherctl window open --no-focus`, or `termux-x11 :0` from a script) glides the wallpaper to its new place on the page spring, never a jump; Reduce motion lands it at once; Home ⇄ Workspace still pans · emu (offsets logged, passed), pong (look at the glide).
-
-## Terminal legibility contract, wave 1 (2026-10-27)
-- 2026-10-27 · legibility pair table (LegibilityPairs) · run `sh project-docs/verification/legibility-card.sh` in a terminal pane on pong over the cloud wallpaper (bright patch), Contrast at Default then Softer and Harder, screenshot and read the pixel ratios with `python3 -I project-docs/verification/legibility-ratios.py shot.png NAME X0 Y0 X1 Y1 ...`: the dialog row (black, red, blue, bold blue on white) reads >= 3:1 on every cell; accents 31-36 and 91-96 and the grey and faint lines are listed with their ratios (the grey over the bright patch is wave 2) · pong. (pong 2026-10-27, Default: dialog row black 10.6, red 3.02, blue 3.01; Softer/Harder by unit grid only)
-
-## Display keyboard Resize reset (from pre, 1.3.0-pre.3; re-check on the merged pre.4)
-- 2026-10-23 · branch fix/display-keyboard-resize-reset (one-time portrait Resize reset, Layout editor
-  revert no longer saves the keyboard mode) · Emulator: in `shared_prefs`, seed
-  `layout.portrait.keyboard_mode` = `resize` and remove `place_keyboard_overlay_reset_done`, install,
-  open a Linux app in portrait and raise the keyboard: it floats, the key is gone and the flag is
-  set. Set Resize with the touchpad's mode button afterwards and relaunch: it stays Resize. Then open
-  the Layout editor on the display in portrait and Discard: no `keyboard_mode` key appears in the
-  prefs file · emulator.
-- 2026-10-23 · Settings row "Keyboard over the window" (Linux apps → Input; "Keyboard over display" on pre.3) · Emulator: open it,
-  pick Resize display and open a Linux app in portrait and then landscape: the keyboard makes room in
-  both. Pick Overlay: it floats in both. Switch one orientation with the touchpad's mode button and
-  reopen the row: the summary reads "Portrait: … · Landscape: …" and nothing is ticked. Change it
-  while a display is on screen, return to the launcher: the pad's mode button and the keyboard follow
-  without a restart · emulator.
-
-## From dev (1.2.1), merged into pre for 1.3.0-pre.4
-- 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
-  · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
-  Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
-  is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
-- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
-  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
-  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
-  not Zink · pong over adb, with the developer's go-ahead.
-- 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
-  `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
-  with no reset and the glass is kept; (2) with the display off, `pgrep -af termux-x11` and
-  `ls $PREFIX/tmp/.X11-unix` show nothing left afterwards; (3) the Vulkan wrapper is downloaded,
-  tested and removed again if it lost (kept if it won), and a wrong checksum is refused · pong,
-  by hand.
-- 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
-  in landscape and portrait: repeated short and long flicks scroll it and never raise the
-  keyboard; a still tap still raises it; a slow drag under a row still clicks · pong, by hand.
-
-## Linux display follows the upstream Termux:X11 docs (2026-10-27)
-- 2026-10-27 · 876a0006f · A display killed by SIGTERM/force-stop leaves `X0`; restarting the launcher still auto-starts the display (no "Not starting the display: one is already running") · pong (passed 4/4 over a dead X0).
-- 2026-10-27 · b7cd51250 · `termux-x11 :0 &` typed in a shell: within ~6 s openbox runs (pid in `$PREFIX/tmp/termux-x11-wm.pid`) and a new app fills the screen; a launcher-started display gets no second manager · pong (passed).
-- 2026-10-27 · d5b2807e0 · apt edition: the launcher writes two dpkg diversions; `apt install termux-x11-nightly` leaves the launcher's `termux-x11`/`termux-x11-preference` and puts the package's at `*.upstream` · emu tl16 (passed); pacman edition writes no diversions · pong (passed).
-- 2026-10-27 · efe83d95b · `proot-distro install debian` in a shell while the launcher runs, then back to the launcher: the distro has `/etc/pulse/client.conf.d/termux-launcher.conf` and the cookie, and `pactl info` inside it connects (no "Access denied") · pong.
-- 2026-10-27 · ed5f41715 · Open mousepad then xfce4-terminal from the drawer, tap mousepad again: it comes to the front, no second copy; long-press the Display chip: "Switch to …" lists the other window and raises it · pong.
-- 2026-10-27 · wave 2b · Glass even-out on the terminal pane, pong over the cloud wallpaper at Default: with Debugging → "Even out glass" on, the grey (colour 8) reads at 3:1 or better and body text at 4.5:1 or better everywhere in the pane (sample a dark, a mid and a bright corner); switch off and the pane looks as before, ground and palette included; flip the switch back and forth a few times, no palette flicker or loop. Also a frame-time check (a scroll or a typing burst) with the switch on and off, within today's budget · pong (pong 2026-10-27 on 5f5d55f08, bright test wallpaper: grey 5.08–5.62, body 7.31–7.66, faint 4.64; switch off/on applies without a restart; frame time not measured)
-- 2026-10-27 · card sheet content drag · Appearance editor card sheet: a finger moving up on the content at peek or half grows the sheet a stop (content stays at its top until full); at full, up scrolls the content; down with the content at its top shrinks it a stop (full, half, peek); down with the content scrolled scrolls it back first; sliders and segment strips still drag sideways and taps on rows still click; the header tab drags as before · pong.
-- 2026-10-27 · Home card Transition row · Appearance editor, Home card, tier 2 after Page dots: a "Transition" row shows five glyph tiles (Slide, Depth, Fade, Carousel, Stack), the current one marked; each choice changes the Home page swipe at once; Settings › General › Page transition (summary names the choice) opens the editor on the Home card, and a search for "Page transition" lands on that General row · pong.
-- 2026-10-27 · even-out follows terminal Opacity · Appearance, terminal card Opacity over a bright wallpaper with even-out on: at 0% the plain glass (no even-out, today's floors), at 17% half-evened, at 34% and above fully evened; each change applies without a restart · pong.
-
-## Sound server survives a service stop (2026-10-28)
-- 2026-10-28 · fix/sound-ghost-server · Exit in the notification with `pacat --raw /dev/zero &` playing, then open a new pane: `pactl info` answers and `pactl list sinks short` shows RUNNING after a new `pacat --raw /dev/zero &` · emulator pass 2026-10-28 (3e6eb6b52); pong owed.
-- 2026-10-28 · fix/sound-ghost-server · With a live server run `rm -rf $PREFIX/var/run/termux-launcher/sound`, then open a new pane: within ~15 s logcat `Termux.LauncherSound` shows the "pulseaudio is broken" restart and `pactl info` answers · emulator pass 2026-10-28 (3e6eb6b52); pong owed.
-- 2026-10-28 · fix/sound-ghost-server · After Exit in the notification, a new pane has `DBUS_SESSION_BUS_ADDRESS` and `dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames` lists names · emulator pass 2026-10-28 (3e6eb6b52); pong owed.
+- **Home → Terminal, one pane, keyboard closed: no bottom snap (11-01, flush padding).** On pong with
+  a single pane and the keyboard closed, swipe Home → Terminal (after one Terminal → Home trip
+  since the launcher started). The pane's bottom gap above the extra keys is there for the whole
+  slide and does not move at landing; the bottom text rows do not jump up. Was: the pane ran
+  flush onto the toolbar mid-slide and pulled up ~10 px (4dp) at landing.
+- 2026-11-01 · e9b879382 + 1a21b62f8 + 3c4454300, Home ⇄ Terminal keeps the terminal's rest; stacks ride with their pages; Home 2 wears Home's dock · emulator-verified 2026-11-01 with pong's prefs (Home 2 → Terminal, keyboard closed: no pty-resize between crossing-begin and land, the toolbar rides in under the pane, no band, no drop at landing; Home 2 draws Peek like Home 1). Owed on pong: the same swipe both ways with keyboard closed and open; Home 1 ⇄ Home 2 with no dock pop; the toolbar's glass while it slides sideways (Floating and Docked); a Home float terminal, if used, is not laid out short; reduced motion; the stack no longer rises after landing (f2b4cc385 reversed by 72682966b; revert that one commit to bring the rise back) · pong.
+- 2026-10-31 · Workspace terminal 4dp off its bars, padding favours rows, pills moved (merge after a6d1fa3d5) · pong, Terminal page, keyboard up and down, Floating and Docked status and dock, one pane and split, Corners 0 and bare glass, light/dark, font 1.0 and 1.3: 4dp above and below the pane, Margin at the sides; rows before vs after (expect +1 to +2); corner glyphs never cut; the keyboard pill sits on the pane's rim and the swipe still works (on a bare square pane it may touch the last row); the status pill hangs under the bar and the pull works from it; the Docked insert's glass matches the pane, also mid-slide Home ⇄ Workspace; the Floating side rails (A–Z, side apps) may stand ~8dp longer than the pane at each end; Home's spacing and pills unchanged; no terminal resize as a slide lands (motion-invariants.sh) · pong.
+- 2026-10-31 · 2e476b3dd + the Media polaroid merge, plan-hosted widgets keep their parts in place · pong: the Media card, at its size and after a few seconds of playback (a progress tick re-lays it), shows the art inset with its own corners and nothing over it, words beside it, the bar and back/play/next at the foot; an upright 2x2 card is a polaroid (square art across the top in a thin 8dp frame, title, artist, bar and controls centred below); the 255x160 Short card has square art on the start side with three controls beside; a long title ellipsizes; the art's corners stay concentric after a resize between the layouts; Resume, idle and paused; Clock, Calendar, Weather, Notifications stay put after a rebind or page change; back/next no longer wear discs, check they still read as buttons; light/dark/black, font 1.0 and 1.3 · pong.
+- 2026-10-31 · ADR 0018 wave D, the dock as one surface (2801c1f14; the root stops fitting the bottom inset, `BottomInsets`, the dock host reaches the screen's edge) · seen on pong 19:30: the seam loop reads +2.5 / +3.4 / +2.4 at opacity 34 / 0 / 100 (was +12), Home 2 wears Peek like Home 1, Home's Peek card stands on Home's keyboard. Still owed: `dockfoot-check.py` at row 2349 reads under 4 at dock opacity 0, 34 and 100; the dock never sits under the gesture pill after an insets change (rotate, the system IME shown and hidden, a notification shade pull) or a Peek ↔ Tray switch; Docked Tray, Floating Tray, Beads, Peek, keyboard down and up, one pane and split, light/dark/black look as before but for the seam (no band under the pill for the Floating Tray card); the terminal's rows, widgets, drawer, sheets, palette, A–Z tab and floating keyboard stop above the pill; the system keyboard over the terminal and over Home moves nothing and leaves no glass under it; Display with the system keyboard keeps its room; the editor's Dock card rings the dock and its rows change it live; `launcherctl look set opacity 95 --element dock` darkens the whole dock, foot included; `motion-invariants.sh` over a Home ⇄ Terminal round trip reports no new resize; `launcherctl keyboard show` once did not return for ten minutes although the keyboard came up: watch for it · pong.
+- 2026-10-30..31 · the look grid (ADR 0017 W1–W3: 322432562, ed18a80a3, 5672889bc, fb44e0fb2, 732a34e39, ef0f80ede) · emulator at font 1.0 and 1.3, light, dark and scheme chrome, then pong: installed over the previous build with no data cleared, Home, every page kind, dock, status bar, keyboard, terminal, Card widgets, drawer, folders, menus, sheets and the rename chip look as before (a blur of at most 2 dp may shift), and a fresh install shows Clear and Home's keyboard as Mist over widgets; every glass card shows the Where and What chips (the Appearance card only Where) and reads Look, Frost, Opacity, Tint, Colour, Corners, Depth, Edge, then More: Grain, Rim; every value slider is a horizontal row with no clipping; Dock card Look, Grain and Rim change the dock alone; What → All glass moves every glass element in the frame, Done keeps it, Undo returns it; the source dot goes tertiary on the dock and primary on its page; long-press a row name, "Reset this row" clears that cell only and is disabled where it holds nothing; Margin and Vibrancy are never greyed except Margin on the Dock card until What is All glass; Display pages show the keyboard Clear; the Keyboard card's Where chip offers Home pages and a kind value wears the secondary dot; `run-as` write `look.opacity.dock` 90 and `look.frost.dock` 0 (force-stop first): the dock turns solid, the drawer, folder popups, menus, terminal sheet and rename chip keep their glass; idle PSS (`dumpsys meminfo`, Home, one Card widget) within noise of before · emulator, pong.
+- 2026-10-31 · editor odds · an App menu on an app with many shortcuts shows four, then More shortcuts; the Widget editor's Back keeps the edit and its cross discards it; in the Appearance editor a tap on a Card-form widget raises the Widgets card with the ring round that widget, a tap on a Bare widget opens Home's card with no widget ring; a card swap (dock, then status bar) keeps the sheet at half · emulator.
+- 2026-10-30 · 418a2d7ef, the setup sheet fix after 47f2e0316 and b324fb00f · on pong: Appearance › Global › Change wallpaper › Choose photo › crop › Done shows no editor flash, shows its progress line, and ends on the Global card with the new wallpaper and accents (also with a photo whose colours match the old one, launcher-only mode, Choose photo then cancel, and the setup wizard's wallpaper card, whose Done still closes); with a setup card open and wallpaper mode off, applying a wallpaper rebuilds without opening the card sheet, and opening it from Settings › Setup then applying one that switches the mode brings it back; a long-press on the status bar's top offers Expand or Compact status bar, lands as the status swipe does, survives a restart, and is absent with the bar down a side · pong.
+- 2026-10-30 · ADR 0016, the wall's page stops (#183 to #187) · pong, with Home, a Terminal window and a Display page: from the Display page its key then Home lands on Home; the Terminal key then a left swipe on Home slides the Terminal page in; the Android home button from the Display page shows Home; a fling right on the Terminal page's seam slides and lands with no rubber-band; with two Home runs or two Display pages, the leaving page shows a still in the chrome's ink and the arriving one turns live on landing; with every Terminal window closed, reaching the empty Terminal page by swipe or by its key starts one shell on landing with no over-swipe; the extra keys show the go-to keys for the page kinds the wall has and fade those that cannot act · pong; emulator pass at https://amal-build.taild9c5dc.ts.net/reports/wall-cells-2026-10-30/.
+- 2026-10-29 · a11264eec (LorieView lastClipboardTimestamp starts at 0) · on pong: copy a URL in the terminal before the display starts, start Firefox, tap its address bar and use the keyboard's paste key: the URL appears; copy in Firefox and paste in the terminal · passes when both directions carry the text · pong.
+- 2026-10-29 · the terminal palette wears the pane band's ink (fix/contrast-polarity-flap) and the herdr theme hook keeps the user's rows (after c496185e3) · on pong with the blue wallpaper and herdr open: Appearance › Terminal › Contrast › Harder, Done, reopen the editor, Done again, leave and return: the terminal keeps one ink, the editor's miniature matches the live terminal, herdr re-themes at most once; Default and Softer unchanged. Then, with the developer's `claude` row in `~/.config/herdr/config.toml` commented `# launcher-material:` and the shadowing `~/.termux/theme-templates/herdr/` copy removed, toggle the herdr tool or flip light/dark: the row comes back plain, the `[theme.custom.*]` tables and `auto_switch` are still spliced, and herdr's Claude sidebar keeps the project folder in teal across a re-theme · pong.
+- 2026-10-29 · the home press and the extra keys' house follow Start in; Edit pages fixes (0ab0ea5f4, 7d753cc0c, 93c35220f and the overview round 6a688dc92..1504e53d4) · on pong: in Edit pages the terminal card's home button makes Start in read Terminal (the display card, Display); the home press then lands on the first terminal window (window 1 in front), on the display when it is marked, on a marked Home page as before; a return from another app shows the page left; after a force-stop the launcher opens where the marker is; the overview opens at once, the sheet folds to its header, the chips read Add page, Add terminal, Add display whole at font 1.3, a tap on a side card centres it and a tap on the centred card zooms in, Back asks no Discard, and with herdr running five swipes between Home and the terminal card write no `TermGeom` resize line until the card is zoomed into · pong.
+- 2026-10-28 · fix/sound-ghost-server (3e6eb6b52; emulator passed, pong owed) and 4a5918b59 · Exit in the notification with `pacat --raw /dev/zero &` playing, open a new pane: `pactl info` answers and a new `pacat` shows RUNNING; after `rm -rf $PREFIX/var/run/termux-launcher/sound` a new pane restarts the server within ~15 s (logcat `Termux.LauncherSound` "pulseaudio is broken"); a new pane after Exit has `DBUS_SESSION_BUS_ADDRESS` and `dbus-send` lists names. Separately, Home → Terminal with the pinned apps under the keyboard, Floating, extra keys off writes one `TermGeom` resize per crossing (pong-verified for the default layout only) · pong.
+- 2026-10-22 · PR #99 (migrations 9–13) and layouts step 17 · upgrade the shipped stable (1.0.6 / 1.1.0 release APK, from the GitHub release) over a real profile with a Home dock height, Corners or Margin set apart, a Prompt line or Taskbar dock style and a Custom Look: Home keeps its rows, Prompt line → Tray + Search field, Taskbar → Tray + Drawer tile, the Look keeps its stop and colour, no first-run tour · emulator.
+- 2026-11-01 · 1ac2f4ef6 (#191 follow-up) · on pong (11.5 GB MemTotal), with the launcher in
+  front, `tai status` then `POST /v1/ai/runtime/load` of the usual E4B model on `gpu`: the
+  response's `memoryBudget.reserveBytes` reads about 1,970,000,000 (a sixth of MemTotal, up from
+  805,306,368) and `neededFreeBytes` = `estimatedBytes` + that; the load still fits when
+  `availableBytes` clears it, and a refusal shows those three numbers in agreement (no
+  `fits:false` while available exceeds needed). Record the three numbers either way · pong, go-ahead,
+  curl from a shell on the phone with `~/.launcherctl/endpoint` and `token`.
+**Pane borders card (2026-11-01, #206).**
+Seen on the emulator (emu2, staging x86_64 of 9a8e5683c, 1080 × 2400 and 360 × 640 at font 1.3):
+the row and its label open the subcard, the back arrow and system Back return to the Terminal
+card scrolled to the row, Custom colour's dialog gets the keyboard and commits `#DC143C` /
+`#00AAFF` into the strip and the live float, garbage keeps the dialog open, Glow Steady shows on
+the live float, Back twice reaches Unsaved changes and Discard restores the entry values. At
+360 dp wide the six-swatch choosers fall into `SegmentRow`'s vertical stack (one swatch per row),
+nothing clipped. Still owed:
+- 2026-11-01 · 9a8e5683c · on pong: a crimson custom border on a single Terminal-page pane and on
+  a split (the focused pane Primary, the other crimson), Glow Steady, light and dark theme, the
+  launcher's scheme chrome on and off; the in-app keyboard comes back after the Custom colour
+  dialog's OK and after Cancel; Reset pane borders and the Terminal card's Reset put back the
+  theme outline, Primary and no glow · pong, go-ahead.
+- 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
+  drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
