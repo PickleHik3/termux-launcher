@@ -1,0 +1,236 @@
+package com.termux.app.chrome;
+
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Matrix;
+import android.graphics.PixelFormat;
+import android.graphics.RecordingCanvas;
+import android.graphics.Rect;
+import android.graphics.RenderEffect;
+import android.graphics.RenderNode;
+import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
+import android.os.Build;
+import android.view.View;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+
+import java.util.ArrayList;
+
+/**
+ * The live route's picture: what the window draws beneath one glass surface, blurred, drawn by
+ * that surface's backdrop view. {@link LiveBackdrop} hands one out per surface and re-records it.
+ *
+ * <p>Two nodes hold it. The <em>record</em> node is {@link LiveBackdrop#recordBelow}'s recording,
+ * in the surface's own coordinates plus a margin of one blur radius on every side (so the blur
+ * at the glass's edge has real pixels to reach). The <em>blur</em> node draws the record node at a
+ * quarter of its size and carries {@link RenderEffect#createBlurEffect} at a quarter of the radius
+ * (and the frost colour filter, chained after it); it is the one GPU layer this picture costs. The
+ * drawable draws the blur node back at four times, aimed so the recording's origin lands on the
+ * surface's. Both nodes are referenced, not copied: when the record node is re-recorded or anything
+ * it references redraws, the frame being drawn picks it up without anyone invalidating the
+ * surface.</p>
+ *
+ * <p>Nodes are made on the first recording and dropped by {@link #release}, so a picture that is
+ * handed out but never drawn holds no pixels.</p>
+ */
+public final class LivePicture implements GlassPicture {
+
+    /** The blur layer's scale against the recording: a quarter on each side, a sixteenth of the pixels. */
+    public static final int SCALE = 4;
+
+    @NonNull final View mSurface;
+    @NonNull private final LiveDrawable mDrawable = new LiveDrawable();
+    private float mRadiusPx;
+    private int mMarginPx;
+    @Nullable private ColorFilter mFilter;
+
+    @Nullable private RenderNode mRecord;
+    @Nullable private RenderNode mBlur;
+    private int mBlurWidth = -1;
+    private int mBlurHeight = -1;
+
+    /** What the last recording was made from; a pre-draw that finds the same skips re-recording. */
+    @NonNull final ArrayList<View> mRecordedBeneath = new ArrayList<>();
+    @NonNull final Matrix mRecordedMatrix = new Matrix();
+    int mRecordedWidth = -1;
+    int mRecordedHeight = -1;
+    int mRecordedMargin = -1;
+
+    LivePicture(@NonNull View surface, float blurRadiusPx) {
+        mSurface = surface;
+        setBlurRadiusPx(blurRadiusPx);
+    }
+
+    @NonNull
+    @Override
+    public Drawable drawable() {
+        return mDrawable;
+    }
+
+    /** A live picture has no stored frame; the recording is its frame. */
+    @Override
+    public void setFrame(@NonNull Bitmap frame, @NonNull Rect frameRect, boolean crossfade) {}
+
+    /** The blur radius at full scale, in px; the next recording follows it. */
+    public void setBlurRadiusPx(float radiusPx) {
+        float radius = Math.max(0f, radiusPx);
+        if (radius == mRadiusPx && mMarginPx > 0) return;
+        mRadiusPx = radius;
+        mMarginPx = Math.max(1, (int) Math.ceil(radius));
+        forgetRecording();
+        if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
+    }
+
+    /** The surface this picture shows what is beneath. */
+    @NonNull
+    public View surface() {
+        return mSurface;
+    }
+
+    int marginPx() {
+        return mMarginPx;
+    }
+
+    /** Whether {@code drawable} is this picture's. */
+    boolean owns(@Nullable Drawable drawable) {
+        return drawable == mDrawable;
+    }
+
+    /** The node a recording goes into, sized to {@code width} x {@code height}, made on first use. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    @NonNull
+    RenderNode recordNode(int width, int height) {
+        if (mRecord == null) mRecord = new RenderNode("LiveBackdrop.record");
+        mRecord.setPosition(0, 0, width, height);
+        RenderNode record = mRecord;
+        ensureBlurNode(width, height);
+        return record;
+    }
+
+    /** Re-cuts the quarter-scale blur node when the recording changes size; else it stands as is. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private void ensureBlurNode(int width, int height) {
+        int w = Math.max(1, (width + SCALE - 1) / SCALE);
+        int h = Math.max(1, (height + SCALE - 1) / SCALE);
+        boolean made = mBlur == null;
+        if (made) mBlur = new RenderNode("LiveBackdrop.blur");
+        if (!made && w == mBlurWidth && h == mBlurHeight && mBlur.hasDisplayList()) return;
+        mBlurWidth = w;
+        mBlurHeight = h;
+        mBlur.setPosition(0, 0, w, h);
+        if (made) applyEffect();
+        RecordingCanvas canvas = mBlur.beginRecording(w, h);
+        try {
+            canvas.scale(1f / SCALE, 1f / SCALE);
+            canvas.drawRenderNode(mRecord);
+        } finally {
+            mBlur.endRecording();
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private void applyEffect() {
+        if (mBlur == null) return;
+        float r = mRadiusPx / SCALE;
+        RenderEffect effect = r > 0f
+            ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
+        if (mFilter != null) {
+            RenderEffect tint = RenderEffect.createColorFilterEffect(mFilter);
+            effect = effect == null ? tint : RenderEffect.createChainEffect(tint, effect);
+        }
+        mBlur.setRenderEffect(effect);
+    }
+
+    /** Lets the next pre-draw re-record whatever it finds. */
+    void forgetRecording() {
+        mRecordedBeneath.clear();
+        mRecordedWidth = -1;
+        mRecordedHeight = -1;
+        mRecordedMargin = -1;
+    }
+
+    /**
+     * Drops both nodes' display lists, and with them the blur layer (a node with nothing to draw
+     * gives its layer back on the next frame), but keeps the nodes: the surface's own display list
+     * still references the blur node, so when the surface shows again and the next recording
+     * fills it, the picture is back without the surface being redrawn. For a surface that hid.
+     */
+    void trim() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (mBlur != null && mBlur.hasDisplayList()) mBlur.discardDisplayList();
+            if (mRecord != null && mRecord.hasDisplayList()) mRecord.discardDisplayList();
+        }
+        mBlurWidth = -1;
+        mBlurHeight = -1;
+        forgetRecording();
+    }
+
+    /** {@link #trim} and the nodes too: the picture is done with (Live off, memory short). */
+    void release() {
+        trim();
+        mBlur = null;
+        mRecord = null;
+    }
+
+    /** Whether the blur layer can exist now: what the budget counts. */
+    boolean holdsLayer() {
+        return mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mBlur.hasDisplayList();
+    }
+
+    /** Whether a view still draws this picture: a holder clears the callback when it lets go. */
+    boolean held() {
+        return mDrawable.getCallback() != null;
+    }
+
+    /** Draws the blur node at four times, the recording's origin on the surface's. */
+    private final class LiveDrawable extends Drawable {
+        private int mAlpha = 255;
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+            RenderNode blur = mBlur;
+            // A software canvas (a screenshot of the view) cannot draw a node: nothing, not a crash.
+            if (blur == null || !blur.hasDisplayList() || !(canvas instanceof RecordingCanvas)) return;
+            int save = canvas.save();
+            // The holder (an ImageView) has already moved the canvas to its content box.
+            canvas.translate(-mMarginPx - mSurface.getPaddingLeft(),
+                -mMarginPx - mSurface.getPaddingTop());
+            canvas.scale(SCALE, SCALE);
+            ((RecordingCanvas) canvas).drawRenderNode(blur);
+            canvas.restoreToCount(save);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            mAlpha = alpha;
+        }
+
+        @Override
+        public int getAlpha() {
+            return mAlpha;
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            if (colorFilter == mFilter) return;
+            mFilter = colorFilter;
+            if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
+        }
+
+        @Nullable
+        @Override
+        public ColorFilter getColorFilter() {
+            return mFilter;
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+}

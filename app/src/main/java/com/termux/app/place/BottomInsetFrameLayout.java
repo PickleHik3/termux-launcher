@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,12 +10,14 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.LiveBackdrop;
+
 /**
  * The content container: it keeps its bottom padding ({@link BottomInsets#keptPx}) clear for every
  * child but one, the stack's layout ({@link #setReachingChild}), which it measures and lays out
  * down to its own bottom edge so the dock's surface can reach the screen's bottom (ADR 0018 §1).
  */
-public class BottomInsetFrameLayout extends FrameLayout {
+public class BottomInsetFrameLayout extends FrameLayout implements LiveBackdrop.Container {
 
     @Nullable private View mReaching;
 
@@ -81,5 +84,11 @@ public class BottomInsetFrameLayout extends FrameLayout {
             || child.getLayoutParams().height != ViewGroup.LayoutParams.MATCH_PARENT)
             return null;
         return child;
+    }
+
+    /** Live blur records the children beneath a glass from here (the wallpaper first). */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

@@ -99,7 +99,7 @@
             android:importantForAccessibility="no"
             android:visibility="gone" />
 
-        <RelativeLayout
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -685,7 +685,7 @@
             android:importantForAccessibility="no"
             android:visibility="gone" />
 
-        <RelativeLayout
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/accessory_stack_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -1055,7 +1055,7 @@
                     android:clipToPadding="false"
                     android:visibility="gone" />
             </LinearLayout>
-        </RelativeLayout>
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
 
         <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
              pane's border, and the letters it slides out over the canvas while held. The whole
@@ -1183,7 +1183,7 @@
             android:clickable="false"
             android:focusable="false"
             android:visibility="gone" />
-        </RelativeLayout>
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,

@@ -29,7 +29,8 @@ import com.termux.app.dock.LensBeadGeometry;
  * and also held to the span the row draws its icons in ({@link #setBeadSpan}), so a bead leaves
  * and arrives exactly where its icon does.</p>
  */
-public final class DockSurfaceHostLayout extends FrameLayout {
+public final class DockSurfaceHostLayout extends FrameLayout
+    implements com.termux.app.chrome.LiveBackdrop.Container {
 
     @Nullable private LensBeadGeometry.Beads mBeads;
     /** The A–Z row's letter beads, and their lift: the finger's x (NaN for none) and peak. */
@@ -196,5 +197,11 @@ public final class DockSurfaceHostLayout extends FrameLayout {
             }
         }
         return super.drawChild(canvas, child, drawingTime);
+    }
+
+    /** Live blur records the children beneath the dock's backdrop from here. */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }
