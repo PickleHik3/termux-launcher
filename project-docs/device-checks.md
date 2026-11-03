@@ -18,6 +18,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live blur floats (11-03, wave 3).** Live blur on: a Workspace float over a terminal printing
+  (`yes`) shows the text scrolling blurred behind it; two overlapping Home floats, the upper shows
+  the lower's glass and text, raising swaps them; minimise, restore, close, dock back leave no stale
+  glass (a docked-back pane is on the stored frame); keyboard up (pong).
 - **Live blur on the dock (11-03, wave 2).** Live blur on, Floating dock, terminal text or a page
   sliding under the dock: the dock shows it blurred and following; Live off shows wallpaper only;
   blur strength the same either way (emulator or pong).
