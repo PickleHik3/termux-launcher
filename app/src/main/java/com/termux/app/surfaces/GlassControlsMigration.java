@@ -65,12 +65,29 @@ public final class GlassControlsMigration {
      * Look whose edge moved. The application calls this, not the two apart.
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs) {
-        run(prefs);
+        runAtStartUp(prefs, false);
+    }
+
+    /**
+     * As {@link #runAtStartUp(TermuxAppSharedPreferences)}, with freshness decided by the caller
+     * before any start-up migration wrote a key ({@link TermuxAppSharedPreferences#isFreshInstall}).
+     * A fresh install was just written whole in this build's format (Clear, every surface linked
+     * to Base), so it has no legacy Tint to pin or carry across: doing so gives every surface its
+     * own Tint cell, and the Look row then reads Custom.
+     */
+    public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs,
+                                    boolean freshInstall) {
+        run(prefs, freshInstall);
         SurfacePresets.rewriteStoredCustom(prefs);
         SurfacePresets.readoptMovedLooks(prefs);
     }
 
     public static void run(@NonNull TermuxAppSharedPreferences prefs) {
+        run(prefs, false);
+    }
+
+    /** As {@link #run(TermuxAppSharedPreferences)}; a fresh install skips the legacy Tint steps. */
+    public static void run(@NonNull TermuxAppSharedPreferences prefs, boolean freshInstall) {
         SharedPreferences store = prefs.getSharedPreferences();
         int from = store == null ? FORMAT
             : store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0);
@@ -82,14 +99,16 @@ public final class GlassControlsMigration {
         SurfacePresets.Batch batch = new SurfacePresets.Batch(store);
         TermuxAppSharedPreferences into = SurfacePresets.writingInto(prefs, batch);
         if (from < 1) {
-            pinLegacyTintStrengths(into, batch);
-            SurfacePresets.Preset shipped = SurfacePresets.lookAsShippedBeforeFormat5(into);
-            if (shipped != null) {
-                // A shipped Look as it ships now: its Tint is already on the stretched scale.
-                SurfacePresets.apply(into, shipped);
-            } else {
-                migrateLive(into);
-                rescaleTintAmounts(into, batch);
+            if (!freshInstall) {
+                pinLegacyTintStrengths(into, batch);
+                SurfacePresets.Preset shipped = SurfacePresets.lookAsShippedBeforeFormat5(into);
+                if (shipped != null) {
+                    // A shipped Look as it ships now: its Tint is already on the stretched scale.
+                    SurfacePresets.apply(into, shipped);
+                } else {
+                    migrateLive(into);
+                    rescaleTintAmounts(into, batch);
+                }
             }
             snapRememberedBlur(into, batch);
             writeGlassPositions(into);
