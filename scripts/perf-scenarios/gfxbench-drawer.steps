@@ -1,0 +1,8 @@
+# App drawer: from Home, swipe up to open, Back twice to close. Pong (1080x2412).
+# Live glass 2b's drawer gate (project-docs/active/live-glass-2026-11-03.md).
+cmd input swipe 540 1700 540 700 250
+sleep 2
+input keyevent BACK
+sleep 1.2
+input keyevent BACK
+sleep 1.5
