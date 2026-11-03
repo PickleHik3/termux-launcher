@@ -89,7 +89,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 - **Deck window bar + extra keys on pong (11-03, waves 8b-8c).** Terminal effect CRT on the
   Workspace: the window bar is an opaque dark slab (lit top, shaded bottom, no wallpaper through
   it, the blur off); each window chip and the "+" a raised 4 dp button with a 2 dp foot; the chip
-  in front has an amber title and a lit 5 dp LED at its left; a window that rings its bell behind
+  in front has an amber title and a lit 5 dp LED at its left; the sessions count square at the
+  bar's left is the same button without an LED; a window that rings its bell behind
   lights its LED; a working window's LED breathes between a quarter and full; an idle one is dark.
   CPU, RAM and weather sit in one near-black inset window in cyan with a soft glow, the dots dim
   cyan; sizes as before. The extra keys row: opaque bed, raised buttons, the active mode button
