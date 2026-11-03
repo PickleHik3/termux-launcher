@@ -420,6 +420,28 @@ public final class ChromeRenderer {
     }
 
     /**
+     * The chrome starts travelling across the seam: its bands keep the even-out they stand on
+     * ({@link ChromeInk#holdEvenOut}), so ground moving under them books no whole apply per frame.
+     */
+    public void holdEvenOut() {
+        mInk.holdEvenOut();
+    }
+
+    /**
+     * The travel is over and the landed frame is drawn: the even-out is let go, and if any band
+     * was held off ground it has since left, one pass measures it where it rests. Called after the
+     * landing frame, never in it, so the pass this books falls on a frame where nothing moves.
+     */
+    public void settleEvenOut() {
+        if (mInk.releaseEvenOut()) requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** Whether {@link #holdEvenOut} is in force and not yet settled. */
+    public boolean isEvenOutHeld() {
+        return mInk.isEvenOutHeld();
+    }
+
+    /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
      * drop the frames and leave the ink believing in a wallpaper that is no longer there.
