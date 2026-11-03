@@ -10,7 +10,7 @@ plain `adb -s <serial>` works the same. Add what you had to find out; fix what t
   others). Main activity `.app.TermuxActivity`; it is also the HOME activity.
 - Build for the emulator: `./gradlew :app:assembleDebug`, then install
   `app/build/outputs/apk/debug/termux-app_apt-android-7-debug_x86_64.apk` (`ad install` keeps
-  data). Pong takes release builds only; see AGENTS.md.
+  data). Pong runs staging or diagnostic builds during development; a clean build only at a cut or on request (AGENTS.md).
 - After installing on the emulator the launcher becomes home. Before handing the emulator over:
   `ad shell cmd package set-home-activity com.google.android.apps.nexuslauncher/.NexusLauncherActivity`.
 - Leases: `ad lease status` shows only the time left on a lease. Its true age is the `since=`

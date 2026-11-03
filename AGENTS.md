@@ -202,6 +202,9 @@ compatible with AGP 8.13.2; the code targets Java 11.
   1. *Development* runs a **staging** build, `DEVICE=<pong> scripts/dev-install.sh` (the default),
      named `<versionName>+dev.<sha>` so tlstore's `min-launcher` gating sees the same version
      string a release dev build shows. `run-as` works and stack traces are readable.
+     A **diagnostic** build (staging plus a branch's temporary logging commits, never merged) may
+     stay on pong between waves: a merged fix does not need a clean build put over it. A clean
+     build replaces it only when a release or pre-release is cut, or when the developer asks.
   2. A *drop candidate* gets a **release** build of the candidate commit,
      `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh`, for a day of real use before a
      pre-release cut. It builds one versioned `<versionName>+dev.<sha>` from HEAD. Do not
