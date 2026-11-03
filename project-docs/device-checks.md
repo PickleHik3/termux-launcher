@@ -78,6 +78,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   1 dp line still round the screen; the glass blur and tint still show inside the screen behind the
   text, and the near-black tube face at the picture's pulled-in corners stands off the bezel. Same
   with Glass off and on the light theme (a pale bezel). TFT: the same solid band.
+- **Deck keyboard on pong (11-03, wave 8a, 2734fdf36).** Terminal effect CRT, docked in-app
+  keyboard up: the keyboard bed is an opaque dark plastic in the drawer's tone (no wallpaper
+  through it), each key a raised push-button with a faint lighter top edge and a 2 dp darker foot,
+  6 dp corners; return is amber with dark ink; hold Ctrl: its label turns amber and a 2 dp amber bar
+  sits above its foot; release: plain. Docked form: the keyboard card's rounded corners still clip
+  the bed. Effect off: the Look's glass keyboard comes back exactly. CRT green / amber / Material:
+  return and the latched bar take green / amber / the theme's primary (emulator emu2, dark theme:
+  bed, bevel and amber return seen; latched bar and the other palettes not exercised).
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
