@@ -125,7 +125,7 @@ public final class MaterialTerminalColorScheme {
      * gamut narrows toward both ends and unevenly by hue — red at tone 90 holds about 15 — so a
      * fixed tone band alone still let red fade to a pink grey.
      */
-    private static final double ACCENT_CHROMA_KEPT = 0.6d;
+    static final double ACCENT_CHROMA_KEPT = 0.6d;
     /**
      * How far the cursor may move from the theme's primary to stay findable, and how deep it may
      * go: a cursor is a solid block, not a glyph, so a deep navy still reads as the accent.
