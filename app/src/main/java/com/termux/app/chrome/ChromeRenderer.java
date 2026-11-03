@@ -761,6 +761,9 @@ public final class ChromeRenderer {
         if (mCommitPending) {
             return;
         }
+        // TEMP DrawerOpen: who books the commit (its caller frames), inside an open's first frames.
+        com.termux.app.launcher.drawer.DrawerOpenTrace.end("chrome.scheduleCommit",
+            com.termux.app.launcher.drawer.DrawerOpenTrace.start());
         mCommitPending = true;
         View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         if (gate == null || !gate.isAttachedToWindow()) {
@@ -787,9 +790,12 @@ public final class ChromeRenderer {
         }
         Trace.beginSection("Chrome.commit");
         mCommitRunning = true;
+        // TEMP DrawerOpen: what the commit costs inside an open's first frames.
+        long tCommit = com.termux.app.launcher.drawer.DrawerOpenTrace.start();
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
         } finally {
+            com.termux.app.launcher.drawer.DrawerOpenTrace.end("chrome.commit", tCommit);
             mCommitRunning = false;
             Trace.endSection();
         }
