@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live glass wave 4 owed (11-03).** (1) The bars at a cold start (force-stop, relaunch): no
+  see-through status or window bar before the stored frame lands. (2) Live widgets on pong (wave
+  3b): Live blur on, a widget shows the icons and widgets beneath it; off shows wallpaper only.
+  (3) Android 8-11 panels on a real device: drawer, palette, sheet and menus blur what is beneath
+  them and release on close (API 30 emulator only so far). (4) Contrast on custom schemes on pong
+  changes the terminal live. (5) The Wallpaper entries on pong: each opens the picker, and the
+  Workspace's More sheet has one.
 - **Live blur floats (11-03, wave 3).** Live blur on: a Workspace float over a terminal printing
   (`yes`) shows the text scrolling blurred behind it; two overlapping Home floats, the upper shows
   the lower's glass and text, raising swaps them; minimise, restore, close, dock back leave no stale
