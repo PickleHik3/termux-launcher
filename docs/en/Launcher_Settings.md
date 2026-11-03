@@ -101,7 +101,8 @@ launcher**.
 with shortcuts to the motion it trims. See
 [Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on,
 it sets the Solid look, an opaque terminal, no cursor trail or terminal effect, no wallpaper
-parallax and Reduce idle activity; off, it puts back what it replaced.
+parallax and Reduce idle activity; off, it puts back what it replaced. **Live blur** (Android 13 and later): glass blurs whatever
+moves behind it. Uses more battery.
 
 #### Backup & restore
 
