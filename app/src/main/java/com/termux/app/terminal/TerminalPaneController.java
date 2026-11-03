@@ -286,6 +286,15 @@ public class TerminalPaneController {
          */
         default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
         /**
+         * Live blur's picture of what is drawn beneath {@code slab}, a floating window's glass,
+         * made if it has none; null while Live blur is off or every live picture is taken, and
+         * the slab keeps the stored frame.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) { return null; }
+        /** {@code slab} no longer shows a live picture: its layer goes. */
+        default void detachLiveGlass(@NonNull View slab) {}
+        /**
          * The shell of the float terminal widget {@code widgetId} hosts ended on its own: the
          * float is gone, and the widget shows the way to start a new shell.
          */
@@ -5680,6 +5689,24 @@ public class TerminalPaneController {
      * view is created once per pane and only re-fed here, so this can run on every editor slider
      * tick and on every frost refresh.
      */
+    /**
+     * A float's glass slab takes Live blur's picture of what is beneath it while the float can be
+     * seen and the slab is its own and shown ({@link FloatLiveGlass#wants}); otherwise it gives
+     * the picture back and draws the stored frame. A pane docked back into the tiled tree is no
+     * longer inside the float, so it gives its picture back too.
+     */
+    private void syncFloatLiveGlass(@NonNull FloatingPaneContainer container, boolean shown) {
+        PaneGlassBackdropView slab = mPaneGlassViews.get(container.mLeaf.session);
+        if (slab == null) return;
+        if (FloatLiveGlass.wants(shown, FloatLiveGlass.inside(slab, container),
+                slab.getVisibility() == View.VISIBLE)) {
+            slab.setLivePicture(mHost.attachLiveGlass(slab));
+        } else if (slab.livePicture() != null) {
+            slab.setLivePicture(null);
+            mHost.detachLiveGlass(slab);
+        }
+    }
+
     public void applyPaneGlass() {
         float radiusPx = paneRadiusPx();
         boolean active = paneGlassActive();
@@ -5697,11 +5724,16 @@ public class TerminalPaneController {
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx, true))
                 releasePanePlank(frame);
         }
-        // A float's titlebar is cut from the same glass as its pane, in the same pass.
-        for (FloatingPaneContainer container : mFloatContainers.values())
+        // A float's titlebar is cut from the same glass as its pane, in the same pass; and its
+        // slab takes Live blur's picture or the stored frame, as Live and the slab now stand.
+        for (FloatingPaneContainer container : mFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
-        for (FloatingPaneContainer container : mHomeFloatContainers.values())
+            syncFloatLiveGlass(container, container.isShown());
+        }
+        for (FloatingPaneContainer container : mHomeFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
+            syncFloatLiveGlass(container, container.isShown());
+        }
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
         // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
         if (mInteractionOverlay != null)
@@ -7465,7 +7497,8 @@ public class TerminalPaneController {
      * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
      * must keep reaching the shell — so only these chrome regions ever intercept.
      */
-    private final class FloatingPaneContainer extends FrameLayout {
+    private final class FloatingPaneContainer extends FrameLayout
+            implements com.termux.app.chrome.LiveBackdrop.Container {
 
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
@@ -7496,7 +7529,8 @@ public class TerminalPaneController {
             // The container itself stays transparent so the gap between the titlebar and the
             // pane shows what is behind; the surface color lives on a wrapper rather than the
             // shared pane frame, which must stay unstyled for tiled rendering.
-            FrameLayout content = new FrameLayout(getContext());
+            // On the slab's path to the root, so Live blur can record what is beneath the slab.
+            FrameLayout content = new com.termux.app.chrome.LiveBackdropFrameLayout(getContext());
             // On glass the float's fill would sit between the frost and the text and flatten the
             // slab back to a panel; the pane's own glass is the float's surface instead.
             if (!paneGlassActive()) {
@@ -7537,6 +7571,22 @@ public class TerminalPaneController {
 
         @NonNull FloatTitlebarView titlebar() {
             return mTitlebar;
+        }
+
+        @Override
+        public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+            drawChild(canvas, child, getDrawingTime());
+        }
+
+        /**
+         * Whether this float can be seen changed: attached or detached (opened, closed, docked
+         * back), shown or hidden (minimised, another Home page, the Home layer away). Its glass
+         * takes or gives back the live picture with it.
+         */
+        @Override
+        public void onVisibilityAggregated(boolean isVisible) {
+            super.onVisibilityAggregated(isVisible);
+            syncFloatLiveGlass(this, isVisible);
         }
 
         /**

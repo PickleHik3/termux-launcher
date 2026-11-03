@@ -23,6 +23,8 @@ import com.termux.app.chrome.GlassFilters;
 import com.termux.app.chrome.GlassMotionGate;
 import com.termux.app.chrome.GlassMotionLight;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.chrome.LiveGlassEffect;
+import com.termux.app.chrome.LivePicture;
 import com.termux.app.chrome.WallpaperParallax;
 import com.termux.app.chrome.scene.LiveSceneFrame;
 
@@ -52,6 +54,14 @@ import com.termux.app.chrome.scene.LiveSceneFrame;
  * veil that keeps the palette's foreground readable on whatever wallpaper is under it, under the
  * grain and the rim, in addition to the user's own terminal opacity — the order
  * {@code GlassSurfaceFactory} gives a chrome band's veil.
+ *
+ * <p>A floating window's slab may show Live blur's picture of what is drawn beneath it instead
+ * of the stored frame ({@link #setLivePicture}). A picture is a node, which a paint's program
+ * cannot sample, so the live slab takes the effect route: the picture is drawn into a node of the
+ * slab's own that carries the refraction as a {@code RenderEffect} ({@link LiveGlassEffect}), and
+ * that node is drawn where the frame would have been. Only the picture is bent: the tint, the
+ * veil, the grain and the rim are drawn over the node, on the slab's own canvas, as on the stored
+ * frame.</p>
  */
 public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge, LiveSceneFrame.Surface {
 
@@ -188,8 +198,120 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final int[] mVeilLocation = new int[2];
     private final int[] mVeilRootLocation = new int[2];
 
+    /** Live blur's picture of what is beneath this slab, or null for the stored frame. */
+    @Nullable private LivePicture mLivePicture;
+    /** The node the live picture is drawn into, carrying the refraction; made on first live draw. */
+    @Nullable private android.graphics.RenderNode mLiveNode;
+    /** Builds the live node's effect, made again only when its uniforms move. */
+    @Nullable private LiveGlassEffect mLiveEffect;
+    /** The effect last set on {@link #mLiveNode}; typed loosely so this class loads below Android 12. */
+    @Nullable private Object mLiveEffectSet;
+
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
+    }
+
+    /**
+     * Shows {@code picture}, Live blur's recording of what is drawn beneath this slab, in place of
+     * the stored frame, or puts the stored frame back for null. The slab holds the picture (its
+     * drawable's callback) while it shows it; the recorder drops a picture nobody holds. The frame
+     * keeps being dressed either way, so a picture released (Live off, memory short) falls back to
+     * it on the next draw.
+     */
+    public void setLivePicture(@Nullable LivePicture picture) {
+        if (picture == mLivePicture) return;
+        if (mLivePicture != null) mLivePicture.drawable().setCallback(null);
+        mLivePicture = picture;
+        if (picture != null) {
+            picture.drawable().setCallback(this);
+            picture.drawable().setColorFilter(mFramePaint.getColorFilter());
+        } else {
+            mLiveEffectSet = null;
+            if (mLiveNode != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                mLiveNode.setRenderEffect(null);
+                mLiveNode.discardDisplayList();
+            }
+        }
+        mAimStale = true;
+        tellEdge();
+        invalidate();
+    }
+
+    /** The live picture this slab was handed, or null. */
+    @Nullable
+    public LivePicture livePicture() {
+        return mLivePicture;
+    }
+
+    /**
+     * Whether a draw now takes the live route: a picture that is still live, a look to bend it
+     * with, and a phone that runs the program. A corner mask never does.
+     */
+    boolean drawsLive() {
+        LivePicture picture = mLivePicture;
+        return picture != null && !picture.released() && mLook != null && mCornerMaskRadiusPx <= 0f
+            && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+            && GlassRefraction.available();
+    }
+
+    @Override
+    protected boolean verifyDrawable(@NonNull Drawable who) {
+        return super.verifyDrawable(who) || (mLivePicture != null && who == mLivePicture.drawable());
+    }
+
+    /**
+     * The live route: the picture into {@link #mLiveNode} under the refraction effect, and the
+     * node drawn here. False, drawing nothing, when it cannot run now (a software canvas, the
+     * program refused), and the stored frame is drawn instead. The node is re-recorded on each
+     * draw of the slab (one node reference), which the slab only makes when it was invalidated;
+     * what is beneath it reaches the picture without the slab drawing at all.
+     */
+    private boolean drawLive(@NonNull Canvas canvas, int width, int height) {
+        if (!drawsLive() || !(canvas instanceof android.graphics.RecordingCanvas)) return false;
+        LivePicture picture = mLivePicture;
+        GlassRefraction.Look look = mLook;
+        float density = getResources().getDisplayMetrics().density;
+        LiveGlassEffect builder = mLiveEffect;
+        if (builder == null || builder.density() != density) {
+            builder = new LiveGlassEffect(density);
+            mLiveEffect = builder;
+        }
+        // The slab's light and tilt follow it as on the stored frame; at rest neither moves and
+        // the effect stands as it was.
+        GlassAnchor.place(this, mPlacement);
+        if (driveMotionLight(width, height)) {
+            PANEGLASS_MOTION.tick();
+            postInvalidateOnAnimation();
+        }
+        if (readTilt()) {
+            PANEGLASS_TILT.tick();
+            postInvalidateOnAnimation();
+        }
+        GlassMotionLight light = mMotionLight;
+        android.graphics.RenderEffect effect = builder.effect(width, height, mRadiusPx, look,
+            light == null ? 0f : light.lagXPx(), light == null ? 0f : light.lagYPx(),
+            mTilt[0], mTilt[1]);
+        if (effect == null) return false;
+        android.graphics.RenderNode node = mLiveNode;
+        if (node == null) {
+            node = new android.graphics.RenderNode("PaneGlass.live");
+            mLiveNode = node;
+        }
+        node.setPosition(0, 0, width, height);
+        if (effect != mLiveEffectSet) {
+            node.setRenderEffect(effect);
+            mLiveEffectSet = effect;
+        }
+        Drawable drawable = picture.drawable();
+        android.graphics.RecordingCanvas recording = node.beginRecording(width, height);
+        try {
+            drawable.setBounds(0, 0, width, height);
+            drawable.draw(recording);
+        } finally {
+            node.endRecording();
+        }
+        ((android.graphics.RecordingCanvas) canvas).drawRenderNode(node);
+        return true;
     }
 
     /** The inflated-from-XML constructor; the pane leaf layout declares this view. */
@@ -334,6 +456,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             GlassFilters.withEvenOut(mEvenOut, mFrostFilter), keptBrightness);
         mFramePaint.setColorFilter(filter);
         mPreviousFramePaint.setColorFilter(filter);
+        // The live picture wears the same frost and even-out, after its blur.
+        if (mLivePicture != null) mLivePicture.drawable().setColorFilter(filter);
     }
 
     /** The filter the frame is drawn through right now, for tests. */
@@ -548,8 +672,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     @Override
     public boolean drawsEdge() {
-        return getVisibility() == View.VISIBLE && mProgram != null && mFrame != null
-            && !mFrame.isRecycled();
+        return getVisibility() == View.VISIBLE && ((mProgram != null && mFrame != null
+            && !mFrame.isRecycled()) || drawsLive());
     }
 
     @Override
@@ -873,11 +997,13 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
-        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+        // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
+        boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
+        if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
             drawFramePlain(canvas, width, height);
         }
-        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+        if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
             BitmapShader aimShader = mFrameShader;
             Bitmap aimFrame = mFrame;
