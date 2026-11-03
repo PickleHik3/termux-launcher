@@ -63,9 +63,9 @@
             android:visibility="gone"
             android:background="?attr/termuxColorSurfaceBase">
 
-            <!-- Wallpaper-mode frost: RealtimeBlurView cannot sample the system wallpaper behind
-                 the transparent window, so this shows a crop of the dock's pre-blurred wallpaper
-                 frame instead. Populated in updateTopPaneWallpaperFrost(). -->
+            <!-- Wallpaper-mode frost: the dock's pre-blurred wallpaper frame at this band's place
+                 on screen (the Wallpaper backdrop kind). WallpaperFrostPainter.updateTopPane()
+                 installs it. -->
             <ImageView
                 android:id="@+id/terminal_status_bar_wallpaper_backdrop"
                 android:layout_width="match_parent"
@@ -73,13 +73,6 @@
                 android:scaleType="fitXY"
                 android:importantForAccessibility="no"
                 android:visibility="gone" />
-
-            <com.github.mmin18.widget.RealtimeBlurView
-                android:id="@+id/terminal_status_bar_glass_blur"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:realtimeBlurRadius="10dp"
-                app:realtimeOverlayColor="@android:color/transparent" />
 
             <View
                 android:id="@+id/terminal_status_bar_glass_surface"
@@ -150,13 +143,6 @@
                     android:scaleType="fitXY"
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
-
-                <com.github.mmin18.widget.RealtimeBlurView
-                    android:id="@+id/terminal_window_bar_blur"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
 
                 <View
                     android:id="@+id/terminal_window_bar_background"
@@ -445,17 +431,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_az_bar_host_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this capsule's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_az_bar_host_frost"
                         android:layout_width="match_parent"
@@ -499,17 +477,9 @@
                     android:layout_alignTop="@+id/place_off_dock_plank_bars"
                     android:layout_alignBottom="@+id/place_off_dock_plank_bars">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_off_dock_plank_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this plank's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_off_dock_plank_frost"
                         android:layout_width="match_parent"

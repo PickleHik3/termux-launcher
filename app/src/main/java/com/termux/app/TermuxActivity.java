@@ -73,7 +73,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.AndroidStockBlurImpl;
-import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.canhub.cropper.CropImage;
@@ -7715,45 +7714,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         edgeFx.setVisibility(View.VISIBLE);
     }
 
-    /**
-     * Rests a live blur on one more capture, taken once the next layout pass has landed: the pass
-     * a Style change sets going leaves the first capture showing the frame as it was.
-     */
-    private void restLiveBlurAfterLayout(@Nullable View blur) {
-        if (!(blur instanceof RealtimeBlurView) || mLiveBlurRefreshPending) return;
-        mLiveBlurRefreshPending = true;
-        final android.view.ViewTreeObserver.OnGlobalLayoutListener[] listener =
-            new android.view.ViewTreeObserver.OnGlobalLayoutListener[1];
-        listener[0] = () -> {
-            android.view.ViewTreeObserver observer = blur.getViewTreeObserver();
-            if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener[0]);
-            mLiveBlurRefreshPending = false;
-            blur.post(() -> restLiveBlur(blur, true));
-        };
-        blur.getViewTreeObserver().addOnGlobalLayoutListener(listener[0]);
-    }
-
-    /** Whether a one-shot re-capture of the status strip's resting blur is waiting on a layout. */
-    private boolean mLiveBlurRefreshPending;
-
-    /**
-     * Rests a live blur on one fresh capture, or wakes it. A resting blur draws its last frame
-     * instead of re-rasterising the whole decor every time the window draws.
-     */
-    private static void restLiveBlur(@Nullable View blur, boolean rest) {
-        if (!(blur instanceof RealtimeBlurView)) return;
-        if (rest) ((RealtimeBlurView) blur).refreshThenRest();
-        else ((RealtimeBlurView) blur).setUpdatesPaused(false);
-    }
-
-    private void configureBackgroundBlur(int blurViewId, int backgroundViewId, boolean isBlurEnabled, float surfaceAlpha, int blurRadiusDp) {
-        View blurView = findViewById(blurViewId);
-        View backgroundView = findViewById(backgroundViewId);
-        applyRealtimeBlurRadius(blurView, blurRadiusDp);
-        blurView.setVisibility(isBlurEnabled ? View.VISIBLE : View.GONE);
-        backgroundView.setAlpha(surfaceAlpha);
-    }
-
     @NonNull
     private ChromeSpec buildChromeSpec() {
         boolean keyboardShown = isInAppKeyboardShown();
@@ -10632,28 +10592,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    private void applyRealtimeBlurRadius(View blurView, int blurRadiusDp) {
-        if (!(blurView instanceof RealtimeBlurView)) {
-            return;
-        }
-        float radiusPx = ViewUtils.dpToPx(this, Math.max(0, blurRadiusDp));
-        ((RealtimeBlurView) blurView).setBlurRadius(radiusPx);
-    }
-
-    private void applyRealtimeBlurDownsampleFactor(View blurView, int downsampleFactor) {
-        if (!(blurView instanceof RealtimeBlurView)) {
-            return;
-        }
-        ((RealtimeBlurView) blurView).setDownsampleFactor(Math.max(1, downsampleFactor));
-    }
-
-    private void applyRealtimeBlurOverlayColor(View blurView, int overlayColor) {
-        if (!(blurView instanceof RealtimeBlurView)) {
-            return;
-        }
-        ((RealtimeBlurView) blurView).setOverlayColor(overlayColor);
-    }
-
     private boolean shouldUseWallpaperPassthroughMode() {
         return mPreferences != null
             && mPreferences.isUseSystemWallpaperEnabled();
@@ -10910,7 +10848,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET)
                 host.post(this::refreshOffDockGlass);
         }
-        View statusBlur = findViewById(R.id.terminal_status_bar_glass_blur);
         View statusSurface = findViewById(R.id.terminal_status_bar_glass_surface);
         if (lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE) {
             // Over the wallpaper this view is only ever the strip, so a strip that has just lost
@@ -10918,18 +10855,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (previous != lead && shouldUseWallpaperPassthroughMode())
                 statusGlass.setVisibility(View.GONE);
             statusGlass.setTranslationY(0f);
-            if (statusBlur != null) statusBlur.setVisibility(View.GONE);
             if (statusSurface != null) statusSurface.setVisibility(View.GONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
             return;
         }
         if (lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET) {
-            applyStatusInsetStripOverDockSheet(statusGlass, statusBlur, statusSurface);
+            applyStatusInsetStripOverDockSheet(statusGlass, statusSurface);
             return;
         }
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity(statusLookPage()) / 100f : 1f;
-        int blurRadiusDp = getEffectiveStatusBarBlurRadius();
-        boolean statusBlurEnabled = ChromePolicy.dockBlurEnabled(blurRadiusDp);
         int glassInset = resolveStatusBarHorizontalInsetPx();
         ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
         if (glassParams instanceof ViewGroup.MarginLayoutParams) {
@@ -10943,30 +10877,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
         statusGlass.setBackgroundColor(Color.TRANSPARENT);
         statusGlass.setVisibility(View.VISIBLE);
-        applyRealtimeBlurRadius(statusBlur, blurRadiusDp);
-        applyRealtimeBlurDownsampleFactor(statusBlur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        // Same tinted-overlay treatment as the dock's extraKeysBackgroundBlur: colored when blur
-        // is actually contributing, transparent otherwise.
-        // Blur only — no tint. The glass drawable built below already paints the material wash at
-        // this opacity, and the dock reaches the same place by a different route: its overlay call
-        // sits behind `!useRenderEffectBlur`, so on any device with RenderEffect the dock's blur is
-        // untinted and the shader owns the colour. The status bar had no such guard, so it stacked
-        // a full-strength surface colour (alpha 127 at 50%%) under its own tint and went opaque
-        // while the dock stayed glass at identical settings.
-        applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
-        if (statusBlur != null) {
-            statusBlur.setVisibility(statusBlurEnabled ? View.VISIBLE : View.GONE);
-            // Behind the status band there is only the window's own ground, so one capture is
-            // the whole picture. A Style change re-lays the chrome after this pass, so the
-            // capture rested here would be of the Floating-era frame: it is taken again once
-            // that layout has landed.
-            restLiveBlur(statusBlur, true);
-            restLiveBlurAfterLayout(statusBlur);
-            // Under the deck's opaque band the live blur would draw unseen: it rests hidden, and
-            // the next pass off the deck shows it again.
-            if (mDeckLook != null && statusBlur.getVisibility() == View.VISIBLE)
-                statusBlur.setVisibility(View.INVISIBLE);
-        }
         if (statusSurface != null) {
             // Mid-crossing the fade holds the strip's glass (and the bar's): both are built once
             // in the arriving half's dress and cross with the finger (TopBandFade).
@@ -10985,10 +10895,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ({@link #statusInsetSheetSliceStart}). The frost is the painter's, at the dock's radius.
      */
     private void applyStatusInsetStripOverDockSheet(@NonNull View statusGlass,
-                                                    @Nullable View statusBlur,
                                                     @Nullable View statusSurface) {
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         int glassInset = appliedDockLayout().horizontalInsetPx;
         ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
         if (glassParams instanceof ViewGroup.MarginLayoutParams) {
@@ -11002,16 +10910,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
         statusGlass.setBackgroundColor(Color.TRANSPARENT);
         statusGlass.setVisibility(View.VISIBLE);
-        applyRealtimeBlurRadius(statusBlur, blurRadiusDp);
-        applyRealtimeBlurDownsampleFactor(statusBlur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        // Blur only, no tint: the drawable below paints the dock's wash, as on the sheet itself.
-        applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
-        if (statusBlur != null) {
-            statusBlur.setVisibility(ChromePolicy.dockBlurEnabled(blurRadiusDp)
-                ? View.VISIBLE : View.GONE);
-            restLiveBlur(statusBlur, true);
-            restLiveBlurAfterLayout(statusBlur);
-        }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().dockSurface(opacity, 0f,
                 statusInsetSheetSliceStart(topEdgeStackLeadView()), false,
@@ -12835,7 +12733,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View plank = findViewById(R.id.place_off_dock_plank_host);
         if (plank != null && plank.getVisibility() == View.VISIBLE) {
             applyOffDockPlankGlass(R.id.place_off_dock_plank_glass,
-                R.id.place_off_dock_plank_blur, R.id.place_off_dock_plank_frost,
+                R.id.place_off_dock_plank_frost,
                 R.id.place_off_dock_plank_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
                 mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx(),
@@ -12844,7 +12742,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
                 && !hasDockedFrameCard() && azGlassBackground()) {
-            applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
+            applyOffDockPlankGlass(R.id.place_az_bar_host_glass,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
                 mAzBarHostOutline, mAzBarEdge, azBarThicknessPx(),
@@ -12958,13 +12856,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>The blur is the shared wallpaper frame at the sheet's own place on screen, as every other
      * sheet's is, through Fancier Glass's refraction when that is on, rimmed along the sheet's own
-     * outline. The live blur the sheet used to wear is only the fallback now — no frame yet, or a
-     * wallpaper the launcher cannot see — as the palette's is: while the frost shows it is GONE,
-     * so its whole-window software capture no longer runs behind these bars at all.
+     * outline (the Wallpaper backdrop kind). With no frame yet, or with wallpaper mode off, the
+     * sheet wears its wash alone: only the launcher's own flat ground is behind it then.
      */
     private void applyOffDockPlankGlass(
         int glassId,
-        int blurId,
         int frostId,
         int surfaceId,
         @NonNull com.termux.app.chrome.SurfaceDirtyLedger.FrostRect frostKey,
@@ -12975,7 +12871,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull PlaceLayout layout
     ) {
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         // Floating's card radius is Corners, clamped to half of the sheet being glazed. Under
         // Docked the sheet carries no radius of its own: its glass view clips to its slice of
         // the frame below, and the frost beneath it stays square.
@@ -12995,30 +12890,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.chrome.LiveChromeShape.seamEdges(shape, pieces);
         float sliceStart = continuesStrip ? statusInsetSheetSliceStart(sheetHost) : 0f;
         View frostView = findViewById(frostId);
-        // Under a joined Docked frame the frame's glass is this sheet: frost, blur and wash go.
+        // Under a joined Docked frame the frame's glass is this sheet: frost and wash go.
         if (frameStandsDown()) {
             if (frostView instanceof ImageView)
                 mChrome.frost().hideOffDockSheet((ImageView) frostView, frostKey);
-            View ownBlur = findViewById(blurId);
-            if (ownBlur != null) ownBlur.setVisibility(View.GONE);
             View ownSurface = findViewById(surfaceId);
             if (ownSurface != null) ownSurface.setBackground(null);
             return;
         }
-        boolean frosted = frostView instanceof ImageView && mChrome.frost().applyOffDockSheet(
-            (ImageView) frostView, frostKey, cornerRadiusPx, seams);
-        View blur = findViewById(blurId);
-        applyRealtimeBlurRadius(blur, blurRadiusDp);
-        applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        // Blur only, no tint: the glass drawable below paints the material wash at this opacity,
-        // exactly as the dock's own extra-keys background does.
-        applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
-        if (blur != null) {
-            boolean live = !frosted && ChromePolicy.dockBlurEnabled(blurRadiusDp);
-            blur.setVisibility(live ? View.VISIBLE : View.GONE);
-            // Only the wallpaper is behind a bar off the dock, so one capture is the whole picture.
-            if (live) restLiveBlur(blur, true);
-        }
+        // The Wallpaper kind: the stored pre-blurred frame at the sheet's own place on screen.
+        if (frostView instanceof ImageView)
+            mChrome.frost().applyOffDockSheet((ImageView) frostView, frostKey, cornerRadiusPx, seams);
         View surface = findViewById(surfaceId);
         if (surface != null) {
             // Without the dark foot: this is a plank floating clear of the screen's edges, not a
@@ -24293,7 +24175,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Under the deck look the window bar is an opaque slab in the bezel's tone instead of glass:
-     * the slab replaces the glass drawable and the live blur rests hidden. Runs at the end of every
+     * the slab replaces the glass drawable. Runs at the end of every
      * glass pass, so a Look or ink refresh that rebuilds the glass cannot undo it; off the deck it
      * does nothing and the pass's own background and blur stand. The host's outline still clips the
      * slab, so a Docked card keeps its shape.
@@ -24309,9 +24191,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
                 background.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
         }
-        View blur = findViewById(R.id.terminal_window_bar_blur);
-        if (blur != null && blur.getVisibility() == View.VISIBLE)
-            blur.setVisibility(View.INVISIBLE);
     }
 
     /**
@@ -31775,27 +31654,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ({@link #refreshTerminalWindowBarGlass}).
      */
     private void applyTerminalWindowBarGlass(@NonNull View host) {
-        // The merge rule: a bar standing on the bottom edge lands on the dock, so it wears the
-        // dock's glass rather than its own. Same wash, same blur, no seam between them.
-        boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
-        // And ordered between the dock's own rows it wears no glass at all: the plank's sheet is
-        // already under it, so a sheet here would be a second wash and a second blur over the
-        // first. The bar keeps a sheet only as the band touching the canvas, where the dock's
-        // glass is inset below it (dockGlassTopInsetPx) — which is where it has always stood.
-        boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
-        int blurRadiusDp = joinsDock
-            ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
-        boolean windowBarBlurEnabled = !onPlank && ChromePolicy.dockBlurEnabled(blurRadiusDp);
-        View blur = findViewById(R.id.terminal_window_bar_blur);
-        applyRealtimeBlurRadius(blur, blurRadiusDp);
-        applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        // Same tinted-overlay treatment as the dock's extraKeysBackgroundBlur: colored when blur
-        // is actually contributing, transparent otherwise.
-        // Blur only; the glass drawable below owns the tint. See the status-glass caller above.
-        applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
-        if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
-        // Nothing moves behind the bar at rest, so its blur rests too instead of repainting.
-        restLiveBlur(blur, true);
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null && !topFadeTakesRedress()) {
             background.setBackground(buildTerminalWindowBarBackground(host));
