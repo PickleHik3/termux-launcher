@@ -605,9 +605,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             long t = DrawerOpenTrace.start();
             mHost.onDrawerOpenSettled(true, true);
             DrawerOpenTrace.end("settle.onDrawerOpenSettled", t);
-            t = DrawerOpenTrace.start();
-            requestSearchKeyboardOnOpenIfEnabled();
-            DrawerOpenTrace.end("settle.requestSearchKeyboardOnOpen", t);
+            // Not here: the raise costs 10-20 ms (the keyboard's own raise and the chrome pass it
+            // books), and here it ran inside the open, before the drawer's first frame.
+            // payDeferredKeyboardOnOpen asks for it once the drawer has drawn.
+            mKeyboardOnOpenFramesToWait = KEYBOARD_ON_OPEN_FRAME_DELAY;
             t = DrawerOpenTrace.start();
             nudgeCategorizationIfPending();
             DrawerOpenTrace.end("settle.nudgeCategorization", t);
@@ -828,6 +829,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             && content.advanceDrawerFx(mProgress.value, dt, reducedMotion);
         DrawerOpenTrace.end("doFrame.advanceDrawerFx", tFx);
         applyFrame(mProgress.value);
+        payDeferredKeyboardOnOpen();
         payPendingTextFieldFocus();
         // The !mDragging guard is the single most dangerous line in this slice. Before B-3 the loop
         // never ran during a drag, so this branch could not be reached with a finger down. The rope
@@ -945,6 +947,29 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mCapturingSettledScene = false;
             }
         };
+
+    /**
+     * Frames the open waits before asking for the keyboard: the first is the drawer's own first
+     * frame, which must not carry the raise; the raise goes on the second.
+     */
+    private static final int KEYBOARD_ON_OPEN_FRAME_DELAY = 2;
+    /** Frames left before the keyboard-on-open ask; 0 when none is owed. */
+    private int mKeyboardOnOpenFramesToWait;
+
+    /** One drawer frame towards the deferred keyboard-on-open ask; asks on the last. */
+    @VisibleForTesting
+    void payDeferredKeyboardOnOpen() {
+        if (mKeyboardOnOpenFramesToWait <= 0) return;
+        if (!mOpen || !mEngaged) {
+            mKeyboardOnOpenFramesToWait = 0;
+            return;
+        }
+        if (--mKeyboardOnOpenFramesToWait > 0) {
+            kick();
+            return;
+        }
+        requestSearchKeyboardOnOpenIfEnabled();
+    }
 
     @VisibleForTesting
     static boolean isSettledOpen(boolean open, boolean dragging, float target, float value) {

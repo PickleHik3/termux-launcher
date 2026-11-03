@@ -345,6 +345,24 @@ public class AppDrawerKeyboardSeparationTest {
         assertTrue(AppDrawerController.settledRefreshNeeded(false));
     }
 
+    /** The raise ran inside open(), before the drawer's first frame; it now waits for frame two. */
+    @Test public void keyboardOnOpenWaitsForTheDrawersSecondFrame() {
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(controller, "mKeyboardOnOpenFramesToWait", 2);
+
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(1, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(0, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+
+        // A drawer closed before its second frame owes nothing.
+        ReflectionHelpers.setField(controller, "mKeyboardOnOpenFramesToWait", 2);
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(0, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+    }
+
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
