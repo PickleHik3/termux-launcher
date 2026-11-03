@@ -186,6 +186,13 @@ Checked and dropped from the drawer session's list: `PaneGlassBackdropView` buil
 when its still is captured, and the scene layers' per-frame recording is one `drawRect` for a
 shader that animates by design. None allocates per draw.
 
+**Before 2b on pong** (`+dev.05dbf9eac`, 2026-11-03, `gfxbench.sh`, 3 cycles each, Terminal page,
+keyboard up): **command palette** (space-bar swipe up, Back): 213 frames, 10.3% janky, p50 23 /
+p90 31 / p99 46 ms, 18 slow-UI; in one cycle 40 of 72 frames over 20 ms, each with ~10 ms of `trav`
+and no layout: RealtimeBlurView's capture on every frame while it is open. **Terminal sheet**
+(long-press, More…, Back): 374 frames, 8.3% janky, p50 11 / p90 20 / p99 69 ms. **App drawer** (the
+drawer session, `+dev.1ea98b0d9`): 12.4% janky, p50 12 ms, one 36 ms settle capture.
+
 **Measurement guard.** `scripts/perf-frametime.sh` scenarios for the drawer, palette, sheet and the
 Home ↔ Workspace swipe (plus `gfxbench.sh`'s phase split, which shows a capture as `trav` time with
 no layout), each with a frame budget, run before and after each move.
