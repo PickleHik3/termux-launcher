@@ -86,6 +86,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   the bed. Effect off: the Look's glass keyboard comes back exactly. CRT green / amber / Material:
   return and the latched bar take green / amber / the theme's primary (emulator emu2, dark theme:
   bed, bevel and amber return seen; latched bar and the other palettes not exercised).
+- **Deck window bar + extra keys on pong (11-03, waves 8b-8c).** Terminal effect CRT on the
+  Workspace: the window bar is an opaque dark slab (lit top, shaded bottom, no wallpaper through
+  it, the blur off); each window chip and the "+" a raised 4 dp button with a 2 dp foot; the chip
+  in front has an amber title and a lit 5 dp LED at its left; a window that rings its bell behind
+  lights its LED; a working window's LED breathes between a quarter and full; an idle one is dark.
+  CPU, RAM and weather sit in one near-black inset window in cyan with a soft glow, the dots dim
+  cyan; sizes as before. The extra keys row: opaque bed, raised buttons, the active mode button
+  (keyboard / mouse pad / ...) amber with a 2 dp bar, a latched CTRL amber. Docked: the bar card's
+  rounded corners still clip the slab. Effect off and on three times: the bar's glass and blur, the
+  stats cluster's padding and the row's look come back exactly. CRT green / amber / Material: the
+  lights and the display take green / amber / the theme's primary. Home page: everything plain.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.

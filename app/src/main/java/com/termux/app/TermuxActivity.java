@@ -21940,6 +21940,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyExtraKeysFeedbackAccent(extraKeysView);
         applyExtraKeysPlaceEligibility(extraKeysView);
+        applyExtraKeysDeck(extraKeysView);
     }
 
     public void setExtraKeysView(ExtraKeysView extraKeysView) {
@@ -23617,6 +23618,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_status_stats_cluster), deck);
         if (!changed)
             return;
+        // The extra keys row, every page of it (a page made later is dressed as it is set).
+        for (ExtraKeysView keys : mExtraKeysViews) applyExtraKeysDeck(keys);
         // Off the deck the glass pass puts the bar's own background and blur back; on it, the
         // same pass ends by laying the slab (applyWindowBarDeckSlab). A hidden bar gets its pass
         // when it is next shown.
@@ -23625,6 +23628,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The deck the chrome is wearing now; null while no terminal effect is drawn (wave 8). */
     @Nullable private com.termux.app.terminal.DeckLook mDeckLook;
+
+    /** The extra keys row wears the deck with the keyboard (wave 8c); off it, its own look. */
+    private void applyExtraKeysDeck(@Nullable ExtraKeysView keys) {
+        if (keys == null)
+            return;
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        if (deck == null)
+            keys.setDeckLook(false, 0, 0, 0, 0, 0, 0, 0);
+        else
+            keys.setDeckLook(true, deck.bed, deck.bedTop, deck.key, deck.keyTop, deck.keyFoot,
+                deck.lit, deck.litInk);
+    }
 
     /**
      * Under the deck look the window bar is an opaque slab in the bezel's tone instead of glass:
