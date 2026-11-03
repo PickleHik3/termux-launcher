@@ -272,7 +272,12 @@ public final class CommandPaletteView extends View {
     }
 
     // Geometry, in dp, from the handoff's 412 x 920 dp reference frame.
-    private static final float FILTER_ROW_H = 34f;
+    /**
+     * The filter row, and so the closed palette: Material's 48dp minimum touch height, tall enough
+     * that a mid-range Corner radius reads as a rounded rect rather than a pill. Its type is
+     * single-line and ellipsized and its baseline is centred in it, so it holds at 1.3x font scale.
+     */
+    private static final float FILTER_ROW_H = 48f;
     private static final float ARG_ROW_H = 30f;
     private static final float CATEGORY_H = 22f;
     private static final float ROW_PAD_V = 6f;
