@@ -142,6 +142,40 @@ Each wave is one worker, merged and shot before the next starts.
 2. **Trail**: decision 9 (halo + decays), plus the side-by-side measurement.
 3. **Events**: decision 7's five events and the Screen events switch.
 4. **Idle animations**: the switch, ambient glitch, flicker, and decision 8's dim.
+5. **Solid bezel + rim drop** (wave 7, 7b): done, 54c5ce312 and c4e60f78f.
+6. **Deck look** (wave 8): three workers on disjoint seams: `DeckLook` + strip (dock/statusbar),
+   keyboard (inapp-keyboard module + TermuxInAppKeyboard), extra keys (termux-shared
+   ExtraKeysView); then the TermuxActivity wiring.
+
+## Wave 8: the deck look (decided 2026-11-03)
+
+While a terminal effect is on, the Workspace's strip (window chips and metric cards) and the
+in-app keyboard with its extra keys row stop being glass and become the CRT's accessories: a
+deck above the set and a unit below it, in black plastic. Decided from the OpenDesign mockups
+(project "CRT solid frame: status bar and keyboard", page `deck.html`, cut A); the developer:
+nothing is drawn for looks alone, every light means something; no mockups beyond this.
+
+- **Material**: an opaque fill in the frame's own tone (`termuxColorSurfacePanelHigh`, the
+  bezel's colour) with the bezel's shade (lit 8 % at the top, 18 % black at the bottom), so the
+  strip, the CRT card and the keyboard read as one stack. Off the effect everything returns to
+  the Look's glass. No new setting.
+- **Chips as deck buttons**: a rounded-4 dp raised button (1 dp lighter top edge, 2 dp darker
+  foot) per window and for "+". The window in front: label in the lit colour. A 5 dp LED dot at
+  the chip's left, lit on the window in front; on the others it carries what the chip's ring and
+  dot carry today (attention / bell) and the working state (`WallStripModel.isWorking`): lit for
+  attention, half-lit for working, dark otherwise.
+- **Metrics in a display window**: CPU, RAM and weather in one dark inset window (near-black,
+  1 dp inner shadow) in the display colour with a soft glow, same text sizes as today.
+- **Keys as push-buttons**: opaque key fill one step lighter than the bed, 1 dp lighter top
+  edge, 2 dp darker foot, corner radius 6 dp; legends as today. A latched modifier: label in
+  the lit colour plus a 2 dp bar near the key's foot. Return: filled in the lit colour with dark
+  ink. Extra keys row: the same buttons; the active mode button lit with the bar.
+- **Palette per effect** (the display colour / the lit colour): CRT and TFT cyan `#7CF5D8` /
+  amber `#FFB020`; CRT green: green `#8CF0A4` / `#6EF08E`; CRT amber: amber `#FFBE5C` /
+  `#FFB020`; Material CRT: the theme's primary for both. One pure class `DeckLook` (style ->
+  colours) beside `PaneRetroStyle`, JVM-tested.
+- **Scope**: Workspace only, like `ChromeRetroEffect` (the Home page keeps the Look); the bezel
+  thickness (8/10 dp) is unchanged.
 
 ## Owed device checks
 
