@@ -335,3 +335,15 @@ A miss is reported red with the numbers; the next step is the developer's call.
    attrs read directly (`CommandPaletteView.refreshPalette` ~508); surface-container tones and the
    M3 type scale for rows and chips; selected row and chips on secondary-container pairs. Checked
    in light, dark, black and Material You. Before/after shots to the developer before merge.
+
+**2b delivered (2026-11-03, merged 28e7cae83, d8e87f67d).** Part 2: the status bar, window bar, A–Z host
+and plank wear only the Wallpaper kind; `RealtimeBlurView`, `BlurImpl` and `EmptyBlurImpl` are deleted
+(`AndroidStockBlurImpl` stays: it pre-blurs the stored frame). Android 8–11 panels take a software
+Snapshot (`LiveBackdrop.drawBelow` on a software canvas, blurred with RenderScript, ~2.1 MB while a
+panel is open, released on close; failure falls back to the frost or tint), so they blur what is
+beneath them again; checked on the API 30 emulator. Every recording now draws the window's ground
+first (`LiveBackdrop.drawGround`), so a flat or self-drawn ground no longer leaves the picture
+see-through. Drawer: the open's Snapshot is taken in the settled scene (no frost jump; pong frames),
+and a slow close brings the dock and the search keyboard down with the plane
+(`AppDrawerKeyboardLowering`; pong frames). Guard scenarios: `scripts/perf-scenarios/gfxbench*.`
+Owed: the bars at a cold start before the stored frame lands.
