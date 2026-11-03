@@ -23602,6 +23602,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The window bar: its chips, the stats' display window, and the slab under them.
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) bar.setDeckLook(deck);
+        View sessionsIndicator = findViewById(R.id.terminal_sessions_indicator);
+        if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
+            ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
         for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
                 R.id.terminal_status_widget_weather}) {
             View widget = findViewById(id);
