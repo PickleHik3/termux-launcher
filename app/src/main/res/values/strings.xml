@@ -956,8 +956,8 @@
 
     <string name="action_set_background_image">Set wallpaper</string>
     <string name="action_apply">Apply</string>
-    <string name="action_enable_background_image">Enable wallpaper</string>
-    <string name="action_disable_background_image">Disable wallpaper</string>
+    <string name="action_enable_background_image">Show wallpaper</string>
+    <string name="action_disable_background_image">Hide wallpaper</string>
     <string name="wallpaper_target_home_screen">Home screen</string>
     <string name="wallpaper_target_lock_screen">Lock screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>

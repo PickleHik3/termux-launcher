@@ -29,20 +29,25 @@ import java.util.Locale;
 public enum EditorDoor {
     /** Long-press Home, then the Home sheet's Appearance. */
     HOME_SHEET_APPEARANCE("home-sheet-appearance"),
-    /** Long-press Home, then the Home sheet's Wallpaper. */
+    /** Long-press Home, then the Home sheet's Wallpaper: the picker. */
     HOME_SHEET_WALLPAPER("home-sheet-wallpaper"),
     /**
      * The terminal's action sheet, then Appearance: what a long-press on the terminal raises and
      * what the menu key (the terminal's More) raises, one sheet and one handler.
      */
     TERMINAL_SHEET_APPEARANCE("terminal-sheet-appearance"),
+    /**
+     * The terminal's action sheet (the Workspace's More), then Wallpaper: the picker, for those
+     * who use the launcher as a terminal only and have no Home sheet.
+     */
+    TERMINAL_SHEET_WALLPAPER("terminal-sheet-wallpaper"),
     /** The legacy terminal context-menu item for the editor, which no sheet lists today. */
     TERMINAL_CONTEXT_MENU("terminal-context-menu"),
     /** A pane's or window's controls, then Appearance: the Workspace card. */
     PANE_CONTROLS("pane-controls-appearance"),
     /** {@code launcherctl appearance.surface_editor}: the page's own card. */
     LAUNCHERCTL("launcherctl-surface-editor"),
-    /** {@code launcherctl appearance.set_wallpaper}: Global, whose Wallpaper row leads on. */
+    /** {@code launcherctl appearance.set_wallpaper} and the palette's Wallpaper: the picker. */
     LAUNCHERCTL_WALLPAPER("launcherctl-wallpaper"),
     /** In the editor: the palette pill. */
     EDITOR_PALETTE("editor-palette"),
@@ -112,6 +117,7 @@ public enum EditorDoor {
             case SETTINGS_HOME:
                 return EditorCard.HOME;
             case HOME_SHEET_WALLPAPER:
+            case TERMINAL_SHEET_WALLPAPER:
             case LAUNCHERCTL_WALLPAPER:
             case EDITOR_PALETTE:
             case EDITOR_GLOBAL_CHIP:
@@ -144,6 +150,22 @@ public enum EditorDoor {
             case SECTION_INTENT:
             default:
                 return named;
+        }
+    }
+
+    /**
+     * Whether this door opens the wallpaper picker, over the Global card ({@link #cardFor}), rather
+     * than a card. No editor card holds a Change wallpaper row (cards overhaul §1), so every door
+     * named Wallpaper goes straight to the picker; its Done closes the editor.
+     */
+    public boolean opensWallpaperPicker() {
+        switch (this) {
+            case HOME_SHEET_WALLPAPER:
+            case TERMINAL_SHEET_WALLPAPER:
+            case LAUNCHERCTL_WALLPAPER:
+                return true;
+            default:
+                return false;
         }
     }
 

@@ -58,7 +58,8 @@ public class TerminalActionsSheetTest {
         List<ActionSheetRow> rows = TerminalActionsSheet.rows(themed, false, true, 4242);
         assertEquals(Arrays.<Object>asList(Action.COMMAND_PALETTE, Action.SELECT_URL,
             Action.SHARE_TRANSCRIPT, Action.RESET, Action.KILL_PROCESS, Action.APPEARANCE,
-            Action.WALLPAPER, Action.STYLE, Action.SETTINGS), tokens(rows));
+            Action.SET_WALLPAPER, Action.SHOW_WALLPAPER, Action.STYLE, Action.SETTINGS),
+            tokens(rows));
         for (ActionSheetRow row : rows) {
             assertEquals(row.token.toString(), ((Action) row.token).group, row.group);
             assertEquals(false, row.accent);
@@ -70,7 +71,7 @@ public class TerminalActionsSheetTest {
     @Test public void styleIsLeftOutWithoutTheCompanion() {
         assertEquals(Arrays.<Object>asList(Action.COMMAND_PALETTE, Action.SELECT_URL,
             Action.SHARE_TRANSCRIPT, Action.RESET, Action.KILL_PROCESS, Action.APPEARANCE,
-            Action.WALLPAPER, Action.SETTINGS),
+            Action.SET_WALLPAPER, Action.SHOW_WALLPAPER, Action.SETTINGS),
             tokens(TerminalActionsSheet.rows(themed, false, false, 1)));
     }
 
@@ -84,13 +85,27 @@ public class TerminalActionsSheetTest {
         assertEquals(themed.getString(R.string.action_kill_process, 4242), rows.get(4).label.toString());
         assertEquals(R.drawable.ic_symbol_stop, rows.get(4).icon);
         assertEquals(R.drawable.ic_symbol_palette, rows.get(5).icon);
-        assertEquals(themed.getString(R.string.action_disable_background_image),
-            rows.get(6).label.toString());
+        assertEquals(themed.getString(R.string.home_actions_wallpaper), rows.get(6).label.toString());
         assertEquals(R.drawable.ic_symbol_wallpaper, rows.get(6).icon);
-        assertEquals(R.drawable.ic_symbol_tune, rows.get(7).icon);
-        assertEquals(R.drawable.ic_settings, rows.get(8).icon);
+        assertEquals(themed.getString(R.string.action_disable_background_image),
+            rows.get(7).label.toString());
+        assertEquals(R.drawable.ic_ed_show_wallpaper, rows.get(7).icon);
+        assertEquals(R.drawable.ic_symbol_tune, rows.get(8).icon);
+        assertEquals(R.drawable.ic_settings, rows.get(9).icon);
         assertEquals(themed.getString(R.string.action_enable_background_image),
-            TerminalActionsSheet.rows(themed, false, true, 1).get(6).label.toString());
+            TerminalActionsSheet.rows(themed, false, true, 1).get(7).label.toString());
+    }
+
+    @Test public void wallpaperOpensThePickerAndReadsApartFromTheSwitch() {
+        assertEquals("Wallpaper", themed.getString(R.string.home_actions_wallpaper));
+        assertEquals("Show wallpaper", themed.getString(R.string.action_enable_background_image));
+        assertEquals("Hide wallpaper", themed.getString(R.string.action_disable_background_image));
+        assertNotNull(Action.SET_WALLPAPER.door());
+        assertTrue(Action.SET_WALLPAPER.door().opensWallpaperPicker());
+        assertNull("the switch opens nothing", Action.SHOW_WALLPAPER.door());
+        // No Home page is needed: the item stands whatever the sheet is given.
+        assertTrue(tokens(TerminalActionsSheet.rows(themed, false, false, 1))
+            .contains(Action.SET_WALLPAPER));
     }
 
     @Test public void theSheetDrawsTheRowsUnderItsTitleAndHandsBackTheTappedOne() {

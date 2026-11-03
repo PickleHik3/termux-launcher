@@ -390,9 +390,9 @@ public final class AppearanceSurfaceController {
     }
 
     /**
-     * Brings the picker back over the Appearance card, for the picker's own Photo… on its way
-     * back from the photo pick when the session it interrupted could not be carried. No door
-     * opens the picker: it is the Wallpaper row's Change.
+     * Opens the picker over the Global card: for every door named Wallpaper
+     * ({@link EditorDoor#opensWallpaperPicker}), the setup wizard, and the picker's own Photo… on
+     * its way back from the photo pick when the session it interrupted could not be carried.
      */
     public void resumeWallpaper() {
         if (mOpen) {

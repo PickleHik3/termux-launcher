@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -29,11 +30,28 @@ public class EditorDoorTest {
     @Test
     public void theWallpaperThePaletteAndSettingsLookOpenGlobal() {
         for (EditorDoor door : new EditorDoor[] {EditorDoor.HOME_SHEET_WALLPAPER,
-                EditorDoor.EDITOR_PALETTE, EditorDoor.EDITOR_GLOBAL_CHIP, EditorDoor.SETTINGS_LOOK,
+                EditorDoor.TERMINAL_SHEET_WALLPAPER, EditorDoor.EDITOR_PALETTE, EditorDoor.EDITOR_GLOBAL_CHIP, EditorDoor.SETTINGS_LOOK,
                 EditorDoor.LAUNCHERCTL_WALLPAPER}) {
             for (PaneWallPage page : pagesAndNone())
                 assertEquals(door.doorName, EditorCard.APPEARANCE, door.cardFor(page, null));
         }
+    }
+
+    @Test
+    public void everyWallpaperDoorOpensThePicker() {
+        // Home long-press › Wallpaper, the palette's Wallpaper (launcherctl set_wallpaper) and
+        // the Workspace's More › Wallpaper: no card holds a Change row, so each opens the picker.
+        for (EditorDoor door : new EditorDoor[] {EditorDoor.HOME_SHEET_WALLPAPER,
+                EditorDoor.LAUNCHERCTL_WALLPAPER, EditorDoor.TERMINAL_SHEET_WALLPAPER}) {
+            assertTrue(door.doorName, door.opensWallpaperPicker());
+        }
+        int pickers = 0;
+        for (EditorDoor door : EditorDoor.values()) {
+            if (door.opensWallpaperPicker()) pickers++;
+        }
+        assertEquals("only the Wallpaper doors", 3, pickers);
+        assertFalse(EditorDoor.HOME_SHEET_APPEARANCE.opensWallpaperPicker());
+        assertFalse(EditorDoor.TERMINAL_SHEET_APPEARANCE.opensWallpaperPicker());
     }
 
     @Test
