@@ -468,6 +468,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = mProgress.value;
         mCloseTimeAnim = false;
         mEngaged = true;
+        if (!closing) applyBackdropMaterial();
         // With the embedded keyboard the IME can never be up here; with the system keyboard it
         // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
         // drawer's own text field put up is the search's, and is put away with the search instead.
@@ -496,6 +497,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
         mEngaged = true;
+        applyBackdropMaterial();
         mHost.hideSystemKeyboard();
         applyFrame(0f);
         settle(true, 0f);
@@ -1755,7 +1757,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
         applyDrawerSettings();
-        applyBackdropMaterial();
+        // The plane's picture is opened by the caller once the drawer is engaged: the open's
+        // Snapshot poses the settled scene (mSettledScene), which only an engaged drawer can pose.
+        // Opened here, the first Snapshot recorded Home as it stood (the dock showing, no dim) and
+        // the settled one replaced it, so the frost changed mid-open.
         prepareContent(plane);
         addHostLayoutListener();
     }
