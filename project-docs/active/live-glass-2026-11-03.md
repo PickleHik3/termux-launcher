@@ -235,6 +235,26 @@ Staging `2.0.0-pre.1+dev.a38b183c3` (wave 1 + the settings move), same Home, 47%
 
 Within noise on every row: wave 1 passes its gate.
 
+## Wave 2 on pong (2026-11-03 ~10:55Z)
+
+Staging `+dev.b1722d5bb` (v2-redesign f22511230 + feat/live-blur-dock with the radius calibration),
+36–41% battery. Live blur toggled through Settings, no restart.
+
+| What | Live off | Live on |
+|---|---|---|
+| Home swipe ×5 (Home 1 ↔ 2), janky | 3.1% / 3.1% (wave 1: 3.3 / 3.1) | not run: the Home dock wears no glass on pong |
+| Home 2 ↔ Terminal swipe ×5 (new scenario), janky | 5.7% / 6.1% | 6.2% / 5.7% |
+| same, p50 / p90 / p99 | 16 / 23–24 / 89 ms | 16 / 22–23 / 93–105 ms |
+| At rest on the Terminal, 30 s | 0 frames | 4 frames |
+| PSS mean (Terminal page) | 237.0 MB | 231.7 MB |
+
+Within noise everywhere but the p99 (one or two long frames a run, 89 → 93–105 ms): passes the
+gates. On pong's layout nothing moves beneath the dock or the keyboard glass (the terminal pane stops
+above it), so Live on looks the same as off (the calibrated blur matches the stored strength;
+~0.1% of the keyboard crop differs). The visible payoff arrives with floating windows (wave 3) and
+panels (2b). Owed: the emulator's Floating dock over moving terminal content (the content column can
+reach under the stack, `applyContentBottomMargin`).
+
 ## Gates on pong (90 Hz, 11.1 ms budget)
 
 Live **off** must equal wave 0 within noise on every row. Live **on**, against wave 0:
