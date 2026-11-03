@@ -154,7 +154,8 @@ public class TermuxApplication extends Application {
                     surfacePreferences.getSharedPreferences()), freshInstall);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
-            com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
+            com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
+                freshInstall);
             // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
             // installs alike (ADR 0018 §3); after every freshness check above.
             com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(
