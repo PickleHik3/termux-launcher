@@ -1730,6 +1730,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * or going: the vertical grid's metrics are width-only and skip the rebind, the paged layouts
      * re-chunk their rows for the height that is left.
      */
+    /**
+     * The height the category cards are sized for: the content's keyboard-down height. The reveal
+     * shortens the content rect above the keyboard, and sizing the cards from that squashed them.
+     */
+    @VisibleForTesting
+    float categoryMetricsHeightPx(@NonNull Frame rect) {
+        Frame base = resolveContentBaseRect(mOpenRect);
+        return base == null ? rect.height() : Math.max(rect.height(), base.height());
+    }
+
     private void applyContentMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
                                      boolean heightOnly) {
         float labelHeightPx = resolveCellLabelHeightPx();
@@ -1754,8 +1764,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 // gets AUTO geometry here and deliberately reads no vertical grid preference.
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
                     labelHeightPx, 0, config.iconSizeDp));
+                // Sized for the keyboard-down card, never for the space the keyboard leaves: the
+                // category cards keep their shape and size and scroll inside the shortened card.
                 content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
-                    content.horizontalPagerUsableHeight(rect.height()), mDensity,
+                    content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
                     resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
                     config.categoryColumns, config.iconSizeDp));
                 if (heightOnly) content.rebindCurrentResults();

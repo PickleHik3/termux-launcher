@@ -1,6 +1,7 @@
 package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 import android.app.Activity;
 import android.app.Application;
@@ -132,6 +133,42 @@ public class AppDrawerKeyboardSeparationTest {
         Frame content = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
 
         assertEquals(KEYBOARD_TOP - 26f, content.bottom, 1e-3f);
+    }
+
+    @Test public void midAnimationFramesRequestNoLayout() {
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        root.addView(plane, new FrameLayout.LayoutParams(WIDTH, HEIGHT));
+        for (boolean rounded : new boolean[] {false, true}) {
+            if (rounded) floating(); else docked();
+            reveal(0f);
+            applyFrame(0.3f);
+            layOut(root);
+            for (float p : new float[] {0.35f, 0.5f, 0.75f, 0.99f}) {
+                reveal(p);
+                applyFrame(p);
+                assertFalse("p=" + p + " rounded=" + rounded, root.isLayoutRequested());
+                assertFalse(plane.isLayoutRequested());
+            }
+        }
+    }
+
+    private static void layOut(FrameLayout root) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, WIDTH, HEIGHT);
+    }
+
+    @Test public void categoryCardsAreSizedForTheKeyboardDownCard() {
+        floating();
+        host.paneGapPx = 11f;
+        reveal(1f);
+
+        Frame shortened = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
+        float sized = controller.categoryMetricsHeightPx(shortened);
+
+        assertEquals(KEYBOARD_TOP - 11f, shortened.bottom, 1e-3f);
+        // The full card's height, not the shortened one: no card is squashed by the keyboard.
+        assertEquals(HEIGHT - 62f - 125f, sized, 1e-3f);
     }
 
     @Test public void keyboardDownLeavesThePlaneAsItWas() {

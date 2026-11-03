@@ -20198,7 +20198,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public float searchKeyboardGapPx() {
-            return dpToPx(terminalPaneGapDp());
+            // A hairline of air, the keyboard's own 4dp gap: the card reads as ending above the
+            // keyboard, not as a pane standing off it.
+            return com.termux.app.dock.UnderKeyboardBand.keyboardGapPx(
+                getResources().getDisplayMetrics().density);
         }
 
         @Override public float searchKeyboardCornerRadiusPx() {
