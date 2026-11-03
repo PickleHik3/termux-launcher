@@ -222,9 +222,6 @@ public class AppDrawerRaisedKeyboardLayoutTest {
         ReflectionHelpers.callInstanceMethod(controller, "settle",
             ReflectionHelpers.ClassParameter.from(boolean.class, true),
             ReflectionHelpers.ClassParameter.from(float.class, 0f));
-        // The ask waits for the drawer's first frame and goes on the second.
-        controller.payDeferredKeyboardOnOpen();
-        controller.payDeferredKeyboardOnOpen();
         frame();
     }
 
