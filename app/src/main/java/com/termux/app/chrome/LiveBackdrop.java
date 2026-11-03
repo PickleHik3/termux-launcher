@@ -33,6 +33,12 @@ import java.util.ArrayList;
  * containers on a live surface's path implement {@link Container}; an ancestor that does not
  * contributes nothing beneath.</p>
  *
+ * <p><b>Ground.</b> Under the root's children every recording first draws the window's ground: the
+ * backgrounds of the root and of every view above it up to the decor, whose background is the
+ * window background (the opaque mode's surface base; transparent in wallpaper mode, where the
+ * ground is the wallpaper and ground strip views inside the root). Without it a recording is only
+ * as opaque as the views in it, and the live screen shows through the glass.</p>
+ *
  * <p><b>When.</b> Surfaces are re-recorded in a pre-draw of a frame that is already being drawn,
  * and only when what is beneath them moved: the views drawn beneath (a sibling shown, hidden or
  * raised) or where the surface stands among them. Anything that merely redraws beneath (a page
@@ -302,8 +308,9 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         mBeneath.clear();
         collectLevel(mRoot, null, mBeneath);
         try {
-            canvas.translate(marginPx + rootX - mLocation[0] - mRoot.getScrollX(),
-                marginPx + rootY - mLocation[1] - mRoot.getScrollY());
+            canvas.translate(marginPx + rootX - mLocation[0], marginPx + rootY - mLocation[1]);
+            drawGround(canvas);
+            canvas.translate(-mRoot.getScrollX(), -mRoot.getScrollY());
             if (z) enableZ(canvas);
             for (int i = 0; i < mBeneath.size(); i++) {
                 ((Container) mRoot).drawChildForBackdrop(canvas, mBeneath.get(i));
@@ -312,6 +319,27 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         } finally {
             mBeneath.clear();
         }
+    }
+
+    /**
+     * The ground under the root's children, bottom first: the background of each view from the
+     * decor down to the root, at its place. {@code canvas} is in the root's own coordinates.
+     */
+    private void drawGround(@NonNull Canvas canvas) {
+        mRoot.getLocationInWindow(mRootLocation);
+        drawGroundOf(canvas, mRoot);
+    }
+
+    private void drawGroundOf(@NonNull Canvas canvas, @NonNull View view) {
+        ViewParent parent = view.getParent();
+        if (parent instanceof View) drawGroundOf(canvas, (View) parent);
+        Drawable background = view.getBackground();
+        if (background == null || view.getVisibility() != View.VISIBLE) return;
+        view.getLocationInWindow(mLocation);
+        int save = canvas.save();
+        canvas.translate(mLocation[0] - mRootLocation[0], mLocation[1] - mRootLocation[1]);
+        background.draw(canvas);
+        canvas.restoreToCount(save);
     }
 
     /** Shadows and Z order among the views drawn, as a parent's own hardware draw has them. */
@@ -324,6 +352,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     }
 
     @NonNull private final int[] mLocation = new int[2];
+    @NonNull private final int[] mRootLocation = new int[2];
 
     /**
      * Fills {@link #mPath} (surface first, root last), {@link #mBeneath} (per level from the root
@@ -439,6 +468,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     private void drawPath(@NonNull Canvas canvas, int marginPx, boolean z) {
         canvas.translate(marginPx, marginPx);
         canvas.concat(mInverse);
+        drawGround(canvas);
         int next = 0;
         for (int i = mPath.size() - 1; i >= 1; i--) {
             ViewGroup parent = (ViewGroup) mPath.get(i);
