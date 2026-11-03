@@ -3741,10 +3741,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mHeldCustomCells.add(mChips);
             } else {
                 mHeldCustomCells.remove(mChips);
+                // One editor: a page card's Look first clears the element values beneath it on
+                // its kinds (developer, 2026-11-03), then lands in its cells.
+                SharedPreferences store = prefs.getSharedPreferences();
+                SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
+                com.termux.shared.termux.settings.preferences.LookGrid into = batch == null ? grid
+                    : SurfacePresets.writingInto(prefs, batch).lookGrid();
+                if (mChips.element == null && mChips.onKind())
+                    SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
                 com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties = {com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
                     for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(properties[i]))
-                        grid.write(cell, look[i]);
+                        into.write(cell, look[i]);
+                if (batch != null)
+                    batch.applyToStore();
             }
         } else {
             com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.cellProperty(row);
@@ -4288,14 +4298,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return true;
         }
         int current = wornStop(into, half);
-        if (stop == current)
-            return false;
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
             stop);
+        // The wall may wear the Look while a page or element look hides it: picking it again
+        // still resets what is beneath.
+        if (stop == current
+                && (look == null || !SurfacePresets.holdsCellsBeneathLook(into.lookGrid())))
+            return false;
         if (look != null) {
             if (AppearanceLooks.isCustomStop(current))
                 mSessionCustom.leave(into);
-            SurfacePresets.applyLook(into, look, half);
+            SurfacePresets.applyGlobalLook(into, look, half);
             forgetGlassEdgePositions();
             return true;
         }

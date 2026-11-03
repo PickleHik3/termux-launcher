@@ -47,7 +47,7 @@
     <string name="appearance_card_collapse">Collapse</string>
     <string name="appearance_card_reset">Reset</string>
     <!-- Appearance cards overhaul §1: the header rows. -->
-    <string name="appearance_card_customization">Customization</string>
+    <string name="appearance_card_customization">Global</string>
     <string name="appearance_header_show">Show</string>
     <string name="appearance_header_more">More options</string>
     <string name="appearance_header_back">Back</string>

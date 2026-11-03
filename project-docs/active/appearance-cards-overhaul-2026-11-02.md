@@ -38,6 +38,11 @@ still hold. One Reset per card (8) holds, and moves into the ⋮ menu.
   (Customization) → shipped(kind). Before this, the page-wide cell was read before the element's
   Global value. A value set on an element card therefore wins over the Home or Workspace card on
   that page, and the page card wins over Customization.
+- **A Look resets beneath it (decided 11-03, developer).** Element-over-page precedence still
+  holds for individual rows, but picking a Look resets the cells beneath it: a Look on Global
+  (Customization) clears the Home and Workspace looks and every element value; a Look on Home or
+  Workspace clears the element values on its kinds, and an element's Global value moves to the
+  other kinds' cells so it stops reaching them.
 - **What each card writes**: Customization → Base cells (Vibrancy and Margin are Base-only);
   Home → all-glass@kind:home; Workspace → all-glass@kind:terminal *and* @kind:display (reads
   show Terminal's); Widgets → widgets@kind:home; Terminal → terminal@kind:terminal and
