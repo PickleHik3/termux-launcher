@@ -8,6 +8,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -129,5 +132,32 @@ public class PaneContentFrameBezelTest {
         frame.retroScreen(screen);
         assertEquals(0f, screen[0], 0f);
         assertEquals(FRAME_HEIGHT, screen[3], 0f);
+    }
+
+    /** Whether the frame's foreground puts any pixel down when drawn at the frame's size. */
+    private static boolean foregroundDraws(PaneContentFrame frame) {
+        Drawable border = frame.getForeground();
+        assertNotNull(border);
+        int size = 200;
+        border.setBounds(0, 0, size, size);
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        border.draw(new Canvas(bitmap));
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                if ((bitmap.getPixel(x, y) >>> 24) > 0) return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void theSharedRimDrawsNothingWhileTheBezelIsWorn() {
+        PaneContentFrame frame = frameAround(terminal());
+        new PaneRim().apply(frame, false, RADIUS_PX, PaneBorderStyle.lone(), null);
+        assertTrue("no effect: the rim is the pane's outline", foregroundDraws(frame));
+        frame.setRetroStyle(PaneRetroStyle.CRT);
+        assertFalse("CRT: the solid bezel is the outline, the rim yields", foregroundDraws(frame));
+        frame.setRetroStyle(PaneRetroStyle.NONE);
+        assertTrue("and comes back with the effect off", foregroundDraws(frame));
     }
 }
