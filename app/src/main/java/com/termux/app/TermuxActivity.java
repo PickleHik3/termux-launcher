@@ -23589,14 +23589,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * chrome is plain, Home included.
      */
     private void applyDeckLook() {
-        if (mInAppKeyboard == null)
-            return;
         com.termux.app.terminal.PaneRetroStyle style = mChromeRetroEffect == null
             ? com.termux.app.terminal.PaneRetroStyle.NONE : mChromeRetroEffect.drawnStyle();
-        mInAppKeyboard.setDeckLook(com.termux.app.terminal.DeckLook.of(style,
+        com.termux.app.terminal.DeckLook deck = com.termux.app.terminal.DeckLook.of(style,
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
                 R.color.termux_surface_panel_high),
-            MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4)));
+            MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4));
+        if (mInAppKeyboard != null) mInAppKeyboard.setDeckLook(deck);
+        boolean changed = !java.util.Objects.equals(mDeckLook, deck);
+        mDeckLook = deck;
+        // The window bar: its chips, the stats' display window, and the slab under them.
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) bar.setDeckLook(deck);
+        for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+                R.id.terminal_status_widget_weather}) {
+            View widget = findViewById(id);
+            if (widget instanceof com.termux.app.statusbar.StatusBarWidgetView)
+                ((com.termux.app.statusbar.StatusBarWidgetView) widget).setDeckLook(deck);
+        }
+        for (int id : new int[]{R.id.terminal_status_dot_cpu_ram,
+                R.id.terminal_status_dot_ram_weather}) {
+            View dot = findViewById(id);
+            if (dot instanceof com.termux.app.statusbar.MaterialDotSeparatorView)
+                ((com.termux.app.statusbar.MaterialDotSeparatorView) dot).setDeckLook(deck);
+        }
+        com.termux.app.statusbar.DeckDisplayWindow.apply(
+            findViewById(R.id.terminal_status_stats_cluster), deck);
+        if (!changed)
+            return;
+        // Off the deck the glass pass puts the bar's own background and blur back; on it, the
+        // same pass ends by laying the slab (applyWindowBarDeckSlab). A hidden bar gets its pass
+        // when it is next shown.
+        refreshTerminalWindowBarGlass();
+    }
+
+    /** The deck the chrome is wearing now; null while no terminal effect is drawn (wave 8). */
+    @Nullable private com.termux.app.terminal.DeckLook mDeckLook;
+
+    /**
+     * Under the deck look the window bar is an opaque slab in the bezel's tone instead of glass:
+     * the slab replaces the glass drawable and the live blur rests hidden. Runs at the end of every
+     * glass pass, so a Look or ink refresh that rebuilds the glass cannot undo it; off the deck it
+     * does nothing and the pass's own background and blur stand. The host's outline still clips the
+     * slab, so a Docked card keeps its shape.
+     */
+    private void applyWindowBarDeckSlab() {
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        if (deck == null)
+            return;
+        View background = findViewById(R.id.terminal_window_bar_background);
+        if (background != null) {
+            android.graphics.drawable.Drawable current = background.getBackground();
+            if (!(current instanceof com.termux.app.terminal.DeckSlabDrawable)
+                    || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
+                background.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
+        }
+        View blur = findViewById(R.id.terminal_window_bar_blur);
+        if (blur != null && blur.getVisibility() == View.VISIBLE)
+            blur.setVisibility(View.INVISIBLE);
     }
 
     /**
@@ -30993,6 +31043,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         // as the last frost pass found it, the bar lays no stroke beside it.
                         mWindowBarFrostDrawsEdge));
         }
+        applyWindowBarDeckSlab();
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
     }
