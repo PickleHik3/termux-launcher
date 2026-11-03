@@ -324,6 +324,67 @@ public class AppDrawerKeyboardSeparationTest {
         assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
     }
 
+    @Test public void aFreshFirstFrameCaptureIsNotTakenAgainAtSettle() {
+        com.github.mmin18.widget.RealtimeBlurView blur =
+            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
+        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(progress, "target", 1f);
+        ReflectionHelpers.setField(progress, "value", 1f);
+        ReflectionHelpers.setField(controller, "mFreshCaptureThisOpen", true);
+        blur.setUpdatesPaused(true);
+
+        controller.applyLiveBlurRest();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1,
+            java.util.concurrent.TimeUnit.SECONDS);
+
+        assertTrue(blur.isUpdatesPaused());
+        assertFalse(AppDrawerController.settledRefreshNeeded(true));
+        assertTrue(AppDrawerController.settledRefreshNeeded(false));
+    }
+
+    /** The raise ran inside open(), before the drawer's first frame; it now waits for frame two. */
+    @Test public void keyboardOnOpenWaitsForTheDrawersSecondFrame() {
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(controller, "mKeyboardOnOpenFramesToWait", 2);
+
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(1, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(0, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+
+        // A drawer closed before its second frame owes nothing.
+        ReflectionHelpers.setField(controller, "mKeyboardOnOpenFramesToWait", 2);
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        controller.payDeferredKeyboardOnOpen();
+        assertEquals(0, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
+    }
+
+    /**
+     * The chrome's ink is held from the moment the drawer engages until it has closed, once each
+     * way: the even-out of the bands under the plane books no chrome commit during the motion
+     * (pong: three whole applies of 22-34 ms inside one open).
+     */
+    @Test public void theChromeInkIsHeldForTheWholeEngagementOnceEachWay() {
+        ReflectionHelpers.callInstanceMethod(controller, "settle",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(float.class, 0f));
+        // A second settle while engaged (a re-open mid-close) holds nothing more.
+        ReflectionHelpers.callInstanceMethod(controller, "settle",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(float.class, 0f));
+        assertEquals(java.util.Collections.singletonList(true), host.chromeHolds);
+
+        ReflectionHelpers.callInstanceMethod(controller, "onClosed",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(boolean.class, false));
+
+        assertEquals(java.util.Arrays.asList(true, false), host.chromeHolds);
+    }
+
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
