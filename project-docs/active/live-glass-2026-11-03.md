@@ -145,15 +145,32 @@ build on pong after the wave with the numbers below.
 | 3 | **Dock styles on Live.** Tray, Beads, Wall strip, Peek (with its reflection), keyboard up and down, Docked and Floating. | each style shot with Live on over moving content; pong numbers |
 | 4 | **ADR 0021, docs, checks.** ADR; `performance.md` rule 3 narrowed and the Live budget row added; `docs/en/` line; owed items to `device-checks.md` / `developer-checks.md`. | merged |
 
+## Wave 0: pong baseline (2026-11-03 09:05Z)
+
+Build `2.0.0-pre.1+dev.deb750a6e` (staging), Home page 1 of 2 with clock (seconds hand), weather,
+calendar and Messages widgets on glass, keyboard down, charging at 27–31%, battery saver off. Display
+mode 120 Hz.
+
+| What | Reading |
+|---|---|
+| Idle PSS (3 readings) | 218.1 / 198.8 / 198.3 MB, mean 205.1; native heap mean 127.4 |
+| At rest, 30 s untouched | 34 frames: the clock widget's seconds hand (~1/s), not the glass. This Home's rest floor; the 5-frame doc row is a terminal place |
+| `pong-home-swipe-widgets.txt` ×5, run 1 | 681 frames (49/s), 26 janky (3.8%); p50 19, p90 25, p95 25, p99 57 ms |
+| same, run 2 | 687 frames (49/s), 22 janky (3.2%); p50 17, p90 25, p95 26, p99 44 ms |
+
+`pong.txt` was not run: its swipes are measured for a terminal place with the keyboard up, and pong
+was on Home. Each later wave re-measures this build back to back with its own, since the baseline
+build is a pong merge, not the wave's base commit.
+
 ## Gates on pong (90 Hz, 11.1 ms budget)
 
 Live **off** must equal wave 0 within noise on every row. Live **on**, against wave 0:
 
 | What | Wave 0 reference | Live on must hold |
 |---|---|---|
-| At rest, launcher in front | 5 frames / 30 s | the same: nothing draws at rest |
+| At rest, launcher in front | 34 frames / 30 s on this Home (seconds hand) | the same: nothing draws at rest |
 | Sliding between places | median 15–16 ms, worst page-change frame 47 ms | median no worse than +1 ms; worst frame no worse |
-| Home swipe with widgets (new) | measured in wave 0 | janky % no worse than +1 point |
+| Home swipe with widgets (new) | 3.2–3.8% janky, p50 17–19 ms, p99 44–57 ms | janky % no worse than +1 point |
 | Idle PSS | ~207 MB | no more than + the budget's layer bytes |
 | `pong.txt` gestures | 2.4% janky, p90 22 ms | no worse than +1 point janky |
 
