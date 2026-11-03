@@ -4940,14 +4940,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link com.termux.app.chrome.GlassRefraction}; these two keep the effect route because the
      * key-press lens rides it.
      */
-    @Nullable private com.termux.app.chrome.GlassRefraction.Program mDockRefraction;
-
-    /**
-     * The under-pill strip's own program. It used to share the dock's, and was right only because
-     * a {@code RenderEffect} copies the uniforms at creation: a dock lens rebuild between the two
-     * would have handed the strip the dock's rect and the pressed key's lens.
-     */
-    @Nullable private com.termux.app.chrome.GlassRefraction.Program mNavStripRefraction;
+    private final com.termux.app.chrome.GlassEffects mGlassEffects =
+        new com.termux.app.chrome.GlassEffects(new com.termux.app.chrome.GlassEffects.Host() {
+            @Override public float density() {
+                return getResources().getDisplayMetrics().density;
+            }
+            @Nullable @Override public View dockBackdrop() {
+                return findViewById(R.id.accessory_blur_backdrop);
+            }
+            @Nullable @Override public float[] peekGlassRect() {
+                return TermuxActivity.this.peekGlassRect();
+            }
+            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
+                return mFancierGlassLook;
+            }
+            @Override public float dockCover() {
+                return mDockGlassCover;
+            }
+            @Override public float navStripCover() {
+                return mNavStripGlassCover;
+            }
+            @Override public void applyDockSurfaceGlass(
+                @NonNull com.termux.app.chrome.GlassRefraction.Program program) {
+                TermuxActivity.this.applyDockSurfaceGlass(program);
+            }
+            @Override public boolean keyLensActive() {
+                return mKeyLensActive;
+            }
+            @Override public float keyLensIntensity() {
+                return mKeyLensIntensity;
+            }
+            @NonNull @Override public float[] keyLens() {
+                return new float[] {mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius};
+            }
+        });
 
     /**
      * Whether the dock's backdrop is on screen with a refraction effect installed right now, so
@@ -4984,91 +5010,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float dockGlassCover() {
         if (mPreferences == null) return 0f;
         return mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-    }
-
-    // Last dock-glass params, so the lens can rebuild the backdrop effect without recapturing.
-    private boolean mGlassParamsValid = false;
-    private float mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx;
-
-    /**
-     * Build the glass RenderEffect: refraction shader fed by a blur of the backdrop. Returns null on
-     * pre-33 devices or if the shader fails to compile, so the caller falls back to a plain blur.
-     */
-    @Nullable
-    private RenderEffect buildGlassRefractionEffect(float blurPx, float capLeft, float capTop,
-                                                    float capRight, float capBottom, float radiusPx) {
-        return buildRefractionEffect(false, blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
-    }
-
-    /** The under-pill strip's effect: its own program, square, and never a key's lens. */
-    @Nullable
-    private RenderEffect buildNavStripRefractionEffect(float left, float top, float right,
-                                                       float bottom) {
-        return buildRefractionEffect(true, 0f, left, top, right, bottom, 0f);
-    }
-
-    @Nullable
-    private RenderEffect buildRefractionEffect(boolean navStrip, float blurPx, float capLeft,
-                                               float capTop, float capRight, float capBottom,
-                                               float radiusPx) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return null;
-        }
-        try {
-            com.termux.app.chrome.GlassRefraction.Program program =
-                navStrip ? mNavStripRefraction : mDockRefraction;
-            if (program == null) {
-                program = com.termux.app.chrome.GlassRefraction.Program.create(
-                    getResources().getDisplayMetrics().density);
-                if (navStrip) mNavStripRefraction = program;
-                else mDockRefraction = program;
-            }
-            if (program == null) {
-                return null;
-            }
-            // The view's own pixels are the content here, so the aim is identity.
-            program.setAim(1f, 1f, 0f, 0f);
-            // Peek glass: the dock's glass is the card, its rim on the card's top and sides.
-            float[] peek = navStrip ? null : peekGlassRect();
-            if (peek != null) {
-                program.setRect(peek[0], peek[1], peek[2], peek[3], peek[4]);
-            } else {
-                program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
-            }
-            // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
-            // otherwise; either way its gathered edge is raised by what the dock's tint covers
-            // of it, the one rule every glass surface's edge follows. The cover is the one
-            // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
-            // preference.
-            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
-                .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The Dock design's own glass (the Tray's soft rim and shelf); the keyboard's strip
-            // under the pill wears none of it.
-            if (navStrip) {
-                program.setDockSurface(0f, 0f);
-            } else {
-                applyDockSurfaceGlass(program);
-            }
-            // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
-            if (!navStrip && mKeyLensActive && mKeyLensIntensity > 0f) {
-                program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
-                    mKeyLensIntensity);
-                // A held key's lens owns the dock's glass: an icon's touch light yields to it.
-                program.clearTouch();
-            } else {
-                program.clearLens();
-            }
-            // Built afresh each time: the effect copies the program's uniforms as they are now.
-            RenderEffect shaderEffect = RenderEffect.createRuntimeShaderEffect(program.shader(), "content");
-            if (blurPx > 0f) {
-                RenderEffect blur = RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP);
-                return RenderEffect.createChainEffect(shaderEffect, blur);
-            }
-            return shaderEffect;
-        } catch (Throwable t) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Glass refraction shader failed; falling back to blur", t);
-            return null;
-        }
     }
 
     /**
@@ -5132,7 +5073,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.accessory_surface_host);
         // Beads always float, so each keeps its shadow under Docked too.
         boolean beads = mDockBeads != null;
-        boolean show = state != null && mGlassParamsValid && host != null
+        boolean show = state != null && mGlassEffects.paramsValid() && host != null
             && mDockRows.surfaceShown() && !state.keyboardShown
             && (dockFloats() || beads) && dockSlabSpec().contactShadow;
         shelf.setBeads(show ? dockBeadsShadowed() : null);
@@ -6027,7 +5968,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * shows its thin-border bubble. Called on the UI thread from the ExtraKeysView lens listener.
      */
     private void setExtraKeyLens(float screenLeft, float screenTop, float screenRight, float screenBottom) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassEffects.paramsValid()) {
             return;
         }
         View surfaceHost = findViewById(R.id.accessory_surface_host);
@@ -6064,20 +6005,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildBackdropGlassEffectForLens();
     }
 
-    /** Rebuild + re-apply the backdrop glass RenderEffect with the current lens state (no recapture). */
     private void rebuildBackdropGlassEffectForLens() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid) {
-            return;
-        }
-        View backdrop = findViewById(R.id.accessory_blur_backdrop);
-        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) {
-            return;
-        }
-        RenderEffect glass = buildGlassRefractionEffect(
-            mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx);
-        if (glass != null) {
-            backdrop.setRenderEffect(glass);
-        }
+        mGlassEffects.rebuildForLens();
     }
 
     /** The dock icons' touch light; built on the first press that may light, see {@link #dockTouchFade}. */
@@ -6126,8 +6055,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private float[] dockTouchLightPoint(float rawX, float rawY) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid
-            || mDockRefraction == null || mKeyLensActive || isAppDrawerEngaged()) return null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassEffects.paramsValid()
+            || mGlassEffects.dockProgram() == null || mKeyLensActive || isAppDrawerEngaged()) return null;
         SuggestionBarView bar = mSuggestionBarView;
         View container = hotView(R.id.accessory_stack_container);
         View surfaceHost = hotView(R.id.accessory_surface_host);
@@ -6159,7 +6088,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockTouchFade = new com.termux.app.chrome.DockTouchFade(this, getWindow().getDecorView(),
             new com.termux.app.chrome.DockTouchFade.Sink() {
                 @Override public void light(float x, float y, float intensity) {
-                    com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+                    com.termux.app.chrome.GlassRefraction.Program program = mGlassEffects.dockProgram();
                     if (program == null) return;
                     // A key's lens took the glass meanwhile: no light, and no rebuild of its effect.
                     if (mKeyLensActive) {
@@ -6172,7 +6101,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public void clear() {
-                    com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+                    com.termux.app.chrome.GlassRefraction.Program program = mGlassEffects.dockProgram();
                     if (program == null) return;
                     program.clearTouch();
                     if (!mKeyLensActive) rebuildBackdropGlassEffectForLens();
@@ -7891,7 +7820,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the dock's own glass draws its outline: its backdrop is up with a refraction effect
-     * installed ({@link #buildGlassRefractionEffect}), whose gathered light is then the dock's
+     * installed ({@link com.termux.app.chrome.GlassEffects}), whose gathered light is then the dock's
      * edge, so the host lays no {@code rimUnderGlass} under it. What is installed, not the rule
      * that would install it: a backdrop gone while a blur is in flight, an effect that threw or a
      * driver that refused the program all leave the rim.
@@ -7930,7 +7859,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.GONE);
         // No frame: the dock's content stands on the page's dim again.
         mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, false);
-        mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
+        mGlassEffects.invalidateParams(); // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         setDockProgramEdge(false);
         syncDockShelf(null);
@@ -9538,7 +9467,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,
                 stripSeams);
-            RenderEffect glass = buildNavStripRefractionEffect(rect[0], rect[1], rect[2], rect[3]);
+            RenderEffect glass = mGlassEffects.buildNavStrip(rect[0], rect[1], rect[2], rect[3]);
             backdrop.setRenderEffect(glass);
         }
 
@@ -10191,16 +10120,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // is aimed by it.
             mGlassOriginLeft = capLeft;
             mGlassOriginTop = 0f;
-            RenderEffect glass = buildGlassRefractionEffect(0f, capRect[0], capRect[1], capRect[2],
-                capRect[3], radiusPx);
-            // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
-            mGlassBlurPx = 0f;
-            mGlassCapLeft = capRect[0];
-            mGlassCapTop = capRect[1];
-            mGlassCapRight = capRect[2];
-            mGlassCapBottom = capRect[3];
-            mGlassRadiusPx = radiusPx;
-            mGlassParamsValid = (glass != null);
+            // Remembers the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
+            RenderEffect glass = mGlassEffects.buildDockAndRemember(0f, capRect[0], capRect[1],
+                capRect[2], capRect[3], radiusPx);
             backdrop.setRenderEffect(glass);
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic —
@@ -10208,7 +10130,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setColorFilter(dockFrostFilter(surfaceHost));
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
-        setDockProgramEdge(mGlassParamsValid);
+        setDockProgramEdge(mGlassEffects.paramsValid());
         syncDockShelf(state);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
@@ -10244,8 +10166,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && !ReducedMotion.isEnabled(this);
             installed.setFrame(frame, frameRect, crossfade);
         } else {
-            backdrop.setImageDrawable(new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
-                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.layout(backdrop, mAccessoryStackLift)));
+            backdrop.setImageDrawable(new com.termux.app.chrome.StoredPicture(frame, frameRect,
+                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.layout(backdrop, mAccessoryStackLift))
+                .drawable());
         }
         // The surface moved or the geometry changed, or this would not have run: re-aim now, since
         // a view whose ancestor moved is not redrawn on its own.
