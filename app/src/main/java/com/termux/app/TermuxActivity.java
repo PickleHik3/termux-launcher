@@ -3759,9 +3759,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Leaves the apps row's band out of the joined frame's glass while the row wears Lens beads
      * on it ({@link #dockBeadsCutFrame}), and puts it back otherwise: the band spans the frame's
-     * width and reaches over the row and its beads (and the Search field's capsule under them),
-     * so the frame continues above and under it (the A–Z row, the gesture strip's foot) and the
-     * beads stand on the wallpaper as they do under Floating.
+     * width and reaches over the row and its beads (the Search field's capsule under them, and
+     * the A–Z row under the icons with its letter beads), so the frame continues above and under
+     * it (the gesture strip's foot) and the beads stand on the wallpaper as under Floating.
      */
     private void syncFrameBeadCut() {
         if (!(mFrameGutterDrawable instanceof com.termux.app.dock.FrameBandCutDrawable)) return;
@@ -3787,6 +3787,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (beads.hasCapsule()) {
             top = Math.min(top, hostY + beads.capsuleTop);
             bottom = Math.max(bottom, hostY + beads.capsuleBottom);
+        }
+        // The A–Z row under the icons wears letter beads too: its band leaves the frame as well,
+        // with the room its beads rise into.
+        com.termux.app.dock.AzBeadRow az = mDockAzBeads;
+        View azRow = az != null ? findViewById(R.id.apps_bar_az_row) : null;
+        if (az != null && azRow != null) {
+            azRow.getLocationOnScreen(at);
+            float liftRoom = com.termux.app.dock.AzBeadRow.LIFT_PEAK_DP
+                * getResources().getDisplayMetrics().density;
+            top = Math.min(top, Math.min(at[1], hostY + az.centerY - az.radiusPx - liftRoom));
+            bottom = Math.max(bottom, Math.max(at[1] + azRow.getHeight(),
+                hostY + az.centerY + az.radiusPx));
         }
         frame.setCut(new RectF(0f, top - bodyY, body.getWidth(), bottom - bodyY));
     }
@@ -5096,6 +5108,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             } else {
                 program.clearBeadCapsule();
             }
+            // The A–Z row's letter beads under them, risen by the finger's lift.
+            com.termux.app.dock.AzBeadRow az = mDockAzBeads;
+            if (az != null) {
+                program.setAzBeads(az.firstCenterX + mGlassOriginLeft, az.pitchPx, az.count,
+                    az.centerY + mGlassOriginTop, az.radiusPx,
+                    Float.isNaN(mDockAzLiftX) ? Float.NaN : mDockAzLiftX + mGlassOriginLeft,
+                    mDockAzLiftPeakPx);
+            } else {
+                program.clearAzBeads();
+            }
         } else {
             // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
             float softRim = spec.beads
@@ -5352,7 +5374,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockBeadsWatchedRow = row;
             if (row != null) row.addOnLayoutChangeListener(mDockBeadsLayoutListener);
         }
+        // The A–Z row's letter beads follow its layout too.
+        View azRow = beads ? findViewById(R.id.apps_bar_az_row) : null;
+        if (mDockBeadsWatchedAzRow != azRow) {
+            if (mDockBeadsWatchedAzRow != null)
+                mDockBeadsWatchedAzRow.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
+            mDockBeadsWatchedAzRow = azRow;
+            if (azRow != null) azRow.addOnLayoutChangeListener(mDockBeadsLayoutListener);
+        }
     }
+
+    @Nullable private View mDockBeadsWatchedAzRow;
 
     /** A layout moved the host or the row: the beads are read again before the next draw. */
     private void scheduleDockBeadsRefresh() {
@@ -5419,10 +5451,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean refreshDockBeads() {
         syncDockBeadsListeners();
         com.termux.app.dock.LensBeadGeometry.Beads beads = resolveDockBeads();
+        // The A–Z row's letter beads under the icons', where it shares their plank.
+        boolean azChanged = applyDockAzBeads(resolveDockAzBeads(beads));
         if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) {
             // The same beads, but the row may have moved on the screen under the frame's cut.
             syncFrameBeadCut();
-            return false;
+            return azChanged;
         }
         boolean modeChanged = (beads == null) != (mDockBeads == null);
         mDockBeads = beads;
@@ -5514,6 +5548,103 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (beads == null || fieldAt == null) return beads;
         return com.termux.app.dock.LensBeadGeometry.withCapsule(beads, fieldAt[0], fieldAt[1],
             fieldAt[0] + field.getWidth(), fieldAt[1] + field.getHeight(), density);
+    }
+
+    // ------------------------------------------------------------------ Letter beads
+    //
+    // Under Lens beads with the A–Z row on the dock's plank under the icons
+    // (LensBeadGeometry.azRowWearsBeads), each letter stands on a small bead of the icons' glass
+    // (AzBeadRow): the host clips its frost to them as to the icons' beads, the dock's one glass
+    // program draws their rims from the row's first centre and pitch (Program#setAzBeads), and
+    // a finger on the row lifts the bead under it and its neighbours with their letters
+    // (AzScrubRowView#setBeadLift). A lift's frame re-cuts the host's clip in place and rebuilds
+    // the dock's effect once, as a page swipe's frame does; no layout runs, and at rest nothing.
+
+    /** The letter beads in the host's coordinates, or null where the row has none. */
+    @Nullable private com.termux.app.dock.AzBeadRow mDockAzBeads;
+    /** The A–Z row's x in the host, so a finger along the row is a finger in the host. */
+    private float mDockAzRowDx;
+    /** The lift as last drawn: the finger's x in the host (NaN for none) and the peak, px. */
+    private float mDockAzLiftX = Float.NaN;
+    private float mDockAzLiftPeakPx;
+    /** The row the letter beads were last handed to, so it can be let go of. */
+    @Nullable private AzScrubRowView mDockAzBeadRowView;
+    private final AzScrubRowView.BeadLiftListener mDockAzBeadLift = this::onDockAzBeadLift;
+
+    /**
+     * The letter beads for the A–Z row as laid out now, in the host's coordinates, or null: no
+     * icons' beads ({@code beads}), the row not under the icons on the dock's plank, not shown,
+     * or too crowded for a bead to read as a lens.
+     */
+    @Nullable
+    private com.termux.app.dock.AzBeadRow resolveDockAzBeads(
+            @Nullable com.termux.app.dock.LensBeadGeometry.Beads beads) {
+        if (beads == null) return null;
+        View view = findViewById(R.id.apps_bar_az_row);
+        if (!(view instanceof AzScrubRowView)) return null;
+        AzScrubRowView az = (AzScrubRowView) view;
+        View host = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (host == null || container == null || !az.isShown() || az.isVerticalBar()
+            || az.getWidth() <= 0 || az.getHeight() <= 0
+            || !com.termux.app.dock.LensBeadGeometry.azRowWearsBeads(arrangement().layout()))
+            return null;
+        float[] azAt = layoutOffsetIn(az, container);
+        float[] hostAt = layoutOffsetIn(host, container);
+        if (azAt == null || hostAt == null) return null;
+        float dx = azAt[0] - hostAt[0];
+        float dy = azAt[1] - hostAt[1];
+        mDockAzRowDx = dx;
+        return com.termux.app.dock.AzBeadRow.compute(dx + az.letterCenterPx(0),
+            az.letterPitchPx(), az.letterCount(), dy + az.getHeight() * 0.5f, az.getHeight(),
+            getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * Hands the letter beads to the host and the row (and lets go of them with null); true when
+     * they changed. The dock's effect is rebuilt by the caller, as for the icons' beads.
+     */
+    private boolean applyDockAzBeads(@Nullable com.termux.app.dock.AzBeadRow azBeads) {
+        View rowView = findViewById(R.id.apps_bar_az_row);
+        AzScrubRowView row = azBeads != null && rowView instanceof AzScrubRowView
+            ? (AzScrubRowView) rowView : null;
+        if (mDockAzBeadRowView != null && mDockAzBeadRowView != row)
+            mDockAzBeadRowView.setBeadLift(false, null);
+        mDockAzBeadRowView = row;
+        if (row != null) row.setBeadLift(true, mDockAzBeadLift);
+        if (azBeads == null ? mDockAzBeads == null : azBeads.equals(mDockAzBeads)) return false;
+        mDockAzBeads = azBeads;
+        if (azBeads == null) {
+            mDockAzLiftX = Float.NaN;
+            mDockAzLiftPeakPx = 0f;
+        }
+        View host = findViewById(R.id.accessory_surface_host);
+        if (host instanceof DockSurfaceHostLayout) {
+            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
+            beadHost.setAzBeadLift(mDockAzLiftX, mDockAzLiftPeakPx);
+            beadHost.setAzBeads(azBeads);
+        }
+        return true;
+    }
+
+    /**
+     * One frame of the letter beads' lift (AzScrubRowView#setBeadLift): the finger along the row
+     * and the spring's share. The host's clip is re-cut in place and the dock's effect rebuilt
+     * once; nothing is laid out.
+     */
+    private void onDockAzBeadLift(float fingerAlongPx, float strength) {
+        if (mDockAzBeads == null) return;
+        float x = Float.isNaN(fingerAlongPx) ? Float.NaN : fingerAlongPx + mDockAzRowDx;
+        float peak = strength * com.termux.app.dock.AzBeadRow.LIFT_PEAK_DP
+            * getResources().getDisplayMetrics().density;
+        if (Float.compare(x, mDockAzLiftX) == 0 && Float.compare(peak, mDockAzLiftPeakPx) == 0)
+            return;
+        mDockAzLiftX = x;
+        mDockAzLiftPeakPx = peak;
+        View host = hotView(R.id.accessory_surface_host);
+        if (host instanceof DockSurfaceHostLayout)
+            ((DockSurfaceHostLayout) host).setAzBeadLift(x, peak);
+        rebuildBackdropGlassEffectForLens();
     }
 
     /**
