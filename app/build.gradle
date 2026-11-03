@@ -159,6 +159,13 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+            all {
+                // Robolectric keeps every sandbox (one android-all class loader per SDK, graphics
+                // mode, looper mode and shadow set) for the life of the worker, and the suite uses
+                // about fourteen. A fresh worker every 150 classes lets them go.
+                forkEvery = 150
+                maxHeapSize = "2g"
+            }
         }
     }
 
