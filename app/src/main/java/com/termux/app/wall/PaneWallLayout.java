@@ -631,6 +631,8 @@ public final class PaneWallLayout extends ViewGroup
     private boolean mInnerStepping;
     /** The nudge under way began inside an inner step, so the neighbours ride beside it. */
     private boolean mNudgeCarriesNeighbours;
+    /** The released drag's wall speed while an inner step runs (stepInside), else NaN. */
+    private float mInnerStepVelocity = Float.NaN;
 
     /**
      * Whether this pass measures and lays out {@code child}: a page on screen, and a live
@@ -1346,13 +1348,31 @@ public final class PaneWallLayout extends ViewGroup
         // shortcut's switch stays the picture it always was.
         mNudgeCarriesNeighbours = mInnerStepping;
         applyPagePositions();
-        ValueAnimator nudge = ValueAnimator.ofFloat(fromPx, 0f);
-        nudge.setDuration(durationMs);
-        if (interpolator != null) nudge.setInterpolator(interpolator);
-        nudge.addUpdateListener(animation -> {
-            mNudgePx = (Float) animation.getAnimatedValue();
-            applyPagePositions();
-        });
+        // A released drag whose leaving window rides live beside the arriving one carries on at
+        // the finger's speed: the same page spring a cross-cell settle takes (startSlide), so the
+        // first nudge frame moves as the last drag frame did. Everything else (a chip, a key, a
+        // step whose leaving window is a picture on its own clock) keeps its curve.
+        final SettleSpring handoff = releaseHandoff(fromPx);
+        ValueAnimator nudge;
+        if (handoff != null) {
+            final long springMs = handoff.durationMs(SettleSpring.PAGE_REST_PX);
+            nudge = ValueAnimator.ofFloat(0f, 1f);
+            nudge.setDuration(Math.max(1L, springMs));
+            nudge.setInterpolator(null);
+            nudge.addUpdateListener(animation -> {
+                long playTime = animation.getCurrentPlayTime();
+                mNudgePx = playTime >= springMs ? 0f : handoff.displacementAt(playTime / 1000f);
+                applyPagePositions();
+            });
+        } else {
+            nudge = ValueAnimator.ofFloat(fromPx, 0f);
+            nudge.setDuration(durationMs);
+            if (interpolator != null) nudge.setInterpolator(interpolator);
+            nudge.addUpdateListener(animation -> {
+                mNudgePx = (Float) animation.getAnimatedValue();
+                applyPagePositions();
+            });
+        }
         nudge.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
                 if (mNudge == animation) mNudge = null;
@@ -1375,6 +1395,22 @@ public final class PaneWallLayout extends ViewGroup
             });
         }
         return true;
+    }
+
+    /**
+     * The spring a released inner step's nudge runs on ({@link PaneWallPolicy#innerStepSettle}),
+     * or null: not inside a released step, or the leaving window is not standing live in the
+     * slot on the far side of the arriving one (a departure picture then runs its own clock).
+     */
+    @Nullable
+    private SettleSpring releaseHandoff(float fromPx) {
+        if (!mInnerStepping || Float.isNaN(mInnerStepVelocity) || fromPx == 0f) return null;
+        View leaving = mInnerNeighbours[LiveNeighbourPolicy.slotOf(fromPx < 0f ? 1 : -1)];
+        if (!(leaving instanceof ViewGroup) || ((ViewGroup) leaving).getChildCount() == 0) {
+            return null;
+        }
+        return PaneWallPolicy.innerStepSettle(fromPx, mInnerStepVelocity,
+            com.termux.app.AnimationSpeed.springTime(getContext()));
     }
 
     private void stopNudge() {
@@ -1596,7 +1632,7 @@ public final class PaneWallLayout extends ViewGroup
             return;
         }
         if (hasInnerPage(steps)) {
-            stepInside(steps);
+            stepInside(steps, velocity);
             return;
         }
         int id = neighbourId(steps);
@@ -1618,7 +1654,7 @@ public final class PaneWallLayout extends ViewGroup
      * page under it, and the listener brings the arriving page in from where the drag had
      * brought it, so the travel carries on from the finger.
      */
-    private void stepInside(int steps) {
+    private void stepInside(int steps, float releaseVelocityPxPerSec) {
         int width = getWidth();
         // Where the arriving page stands now: one width beyond the departing one, on the side
         // the drag pulled it in from.
@@ -1628,12 +1664,14 @@ public final class PaneWallLayout extends ViewGroup
         // The live neighbours stay out through the settle: the arriving one is about to become
         // the page, and the one leaving carries on beside it in the nudge.
         mInnerStepping = true;
+        mInnerStepVelocity = releaseVelocityPxPerSec;
         try {
             finishSink();
             settleImmediately();
             if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
         } finally {
             mInnerStepping = false;
+            mInnerStepVelocity = Float.NaN;
         }
         // No nudge followed (reduced motion, the display in front): they go away now.
         applyPagePositions();

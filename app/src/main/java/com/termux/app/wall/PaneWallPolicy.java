@@ -342,4 +342,15 @@ public final class PaneWallPolicy {
                 return null;
         }
     }
+
+    /**
+     * The settle of a released drag that stepped to the next window: the arriving page from
+     * {@code fromPx} beside its rest, starting at the wall's speed at the release (clamped, see
+     * {@link SettleSpring#page}), so the release is one continuous motion. Land it with
+     * {@code durationMs(SettleSpring.PAGE_REST_PX)}.
+     */
+    public static SettleSpring innerStepSettle(float fromPx, float releaseVelocityPxPerSec,
+                                               float springTime) {
+        return SettleSpring.page(fromPx, releaseVelocityPxPerSec, springTime);
+    }
 }
