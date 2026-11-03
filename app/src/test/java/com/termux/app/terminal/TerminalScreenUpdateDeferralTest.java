@@ -240,4 +240,25 @@ public class TerminalScreenUpdateDeferralTest {
         assertEquals("and the pane owed a frame gets exactly one on return",
             1, client.updatesFor(view));
     }
+
+    /**
+     * Lazy mode posts the redraw to the pane's frame clock. A view off the window has no frame
+     * clock, and the post waits in the view's own queue for an attach that may never come; the
+     * session stayed in the coalescing set meanwhile, so every later burst was swallowed and the
+     * pane showed nothing new until a resize or a stop jogged it.
+     */
+    @Test
+    public void lazyModeRedrawsAPaneThatIsOffTheWindowWhenItsOutputArrives() {
+        host.preferences.setLazyModeEnabled(true);
+        host.terminalPlaceOnScreen = true;
+
+        client.onTextChanged(session);
+        drainMainLooper();
+        assertEquals(1, client.updatesFor(view));
+
+        client.onTextChanged(session);
+        drainMainLooper();
+        assertEquals("a later burst is not swallowed by the first one's lost post",
+            2, client.updatesFor(view));
+    }
 }
