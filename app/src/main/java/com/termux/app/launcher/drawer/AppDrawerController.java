@@ -475,7 +475,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // than snapping to an end.
         mGrabProgress = mProgress.value;
         mCloseTimeAnim = false;
-        if (!mEngaged) mHost.holdChromeForDrawer(true);
+        if (!mEngaged) engageChromeHoldTemp();
         mEngaged = true;
         // With the embedded keyboard the IME can never be up here; with the system keyboard it
         // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
@@ -504,7 +504,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mDragging = false;
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
-        if (!mEngaged) mHost.holdChromeForDrawer(true);
+        if (!mEngaged) engageChromeHoldTemp();
         mEngaged = true;
         mHost.hideSystemKeyboard();
         applyFrame(0f);
@@ -603,7 +603,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             // Not here: the raise costs 10-20 ms (the keyboard's own raise and the chrome pass it
             // books), and here it ran inside the open, before the drawer's first frame.
             // payDeferredKeyboardOnOpen asks for it once the drawer has drawn.
-            mKeyboardOnOpenFramesToWait = KEYBOARD_ON_OPEN_FRAME_DELAY;
+            if (mDebugKbFirst) {
+                // TEMP toggle debug.tl.drawer.kbfirst=1: the ask inside settle(), as before.
+                requestSearchKeyboardOnOpenIfEnabled();
+            } else {
+                mKeyboardOnOpenFramesToWait = KEYBOARD_ON_OPEN_FRAME_DELAY;
+            }
             nudgeCategorizationIfPending();
         } else {
             endTextFieldSearchIfBegun();
@@ -617,7 +622,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // downward flick launch the spring away from the target it was just told to reach.
         float sign = mDirection == AppDrawerCommitPolicy.Direction.CLOSING ? -1f : 1f;
         mProgress.vel = mTravelPx > 0f ? (velocityPxPerSec / mTravelPx) * sign : 0f;
-        if (!mEngaged) mHost.holdChromeForDrawer(true);
+        if (!mEngaged) engageChromeHoldTemp();
         mEngaged = true;
         kick();
     }
@@ -940,6 +945,28 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private static final int KEYBOARD_ON_OPEN_FRAME_DELAY = 2;
     /** Frames left before the keyboard-on-open ask; 0 when none is owed. */
     private int mKeyboardOnOpenFramesToWait;
+
+    // TEMP bench toggles, never merge: read once per engagement from system properties.
+    private boolean mDebugKbFirst;
+    private boolean mDebugNoHold;
+
+    private void engageChromeHoldTemp() {
+        mDebugKbFirst = "1".equals(debugProp("debug.tl.drawer.kbfirst"));
+        mDebugNoHold = "1".equals(debugProp("debug.tl.drawer.nohold"));
+        android.util.Log.d("DrawerToggle", "kbfirst=" + mDebugKbFirst + " nohold=" + mDebugNoHold);
+        if (!mDebugNoHold) mHost.holdChromeForDrawer(true);
+    }
+
+    @Nullable
+    private static String debugProp(@NonNull String key) {
+        try {
+            Class<?> props = Class.forName("android.os.SystemProperties");
+            Object value = props.getMethod("get", String.class).invoke(null, key);
+            return value instanceof String ? (String) value : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
 
     /** One drawer frame towards the deferred keyboard-on-open ask; asks on the last. */
     @VisibleForTesting
@@ -2392,7 +2419,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mStatusInsetStripView = null;
         } finally {
             mEngaged = false;
-            mHost.holdChromeForDrawer(false);
+            if (!mDebugNoHold) mHost.holdChromeForDrawer(false);
             mHost.flushPendingAccessoryGeometry();
             mHost.restoreSystemKeyboard();
         }
