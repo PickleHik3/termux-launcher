@@ -54,6 +54,41 @@ public class FreshInstallLookTest {
         SurfacePresets.readoptMovedLooks(preferences);
     }
 
+    /** The start-up chain's look steps, in TermuxApplication's order, deciding freshness first. */
+    private void startUp() {
+        boolean fresh = preferences.isFreshInstall();
+        com.termux.app.WallReworkMigration.migrateIfNeeded(store);
+        store.edit().putInt(com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID, 0).apply();
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), fresh);
+        com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore grid =
+            new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(store);
+        com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(grid, fresh);
+        com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(grid,
+            SurfacePresets.SHIPPED_BY_KIND);
+        SurfacePresets.readoptMovedLooks(preferences);
+    }
+
+    @Test
+    public void aFreshInstallStaysOnClearAcrossARestart() {
+        startUp();
+        java.util.Map<String, ?> afterFirst = new java.util.HashMap<>(store.getAll());
+        assertTrue(SurfacePresets.matches(preferences, clear()));
+
+        // The second start-up finds a store that is no longer fresh.
+        assertFalse(preferences.isFreshInstall());
+        startUp();
+
+        // The two look migrations now mark themselves done (their folds find the grid held and
+        // move nothing); every other stored value, the LookGrid cells included, is untouched.
+        java.util.Map<String, Object> afterSecond = new java.util.HashMap<>(store.getAll());
+        assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_migrated"));
+        assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_kind_migrated"));
+        assertEquals("every stored value, the LookGrid cells included", afterFirst, afterSecond);
+        assertEquals(90, GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp(),
+            preferences.getFancierGlassEdgeWidthDp()));
+        assertTrue(SurfacePresets.matches(preferences, clear()));
+    }
+
     private static SurfacePresets.Preset clear() {
         for (SurfacePresets.Preset preset : SurfacePresets.presets())
             if ("minimal".equals(preset.id)) return preset;
