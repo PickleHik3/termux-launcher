@@ -142,6 +142,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void setHomeContentAlpha(float alpha) {}
 
+        /**
+         * The gap the terminal pane leaves above the keyboard on the Workspace, in px: the plane
+         * ends this far above the built-in keyboard the search raised. Negative keeps the gap
+         * measured at the pull. See {@link AppDrawerKeyboardSeparation}.
+         */
+        default float searchKeyboardGapPx() {
+            return -1f;
+        }
+
+        /**
+         * The terminal pane's corner radius, in px: the Docked plane's bottom corners above the
+         * built-in keyboard. Negative keeps the drawer's own radius.
+         */
+        default float searchKeyboardCornerRadiusPx() {
+            return -1f;
+        }
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
@@ -1852,9 +1869,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // it drew in B-1 — down to the allocation, which is why the branch is on k and not on
         // whether a keyboard exists.
         float k = revealFraction();
+        mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
+            mOpenRadiusPx, p);
         if (k > 0f) {
             float pinTop = pinTopPx();
-            frame = new Frame(frame.left, frame.top, frame.right,
+            // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
+            // the top stays pushed past the bezel by whichever radius is larger.
+            if (mImePinTopPx <= 0f) {
+                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(mRoundedStyle,
+                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
+            }
+            frame = new Frame(frame.left,
+                AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
+                    mCurrentRadiusPx),
+                frame.right,
                 AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
                     revealGapPx(), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
@@ -1868,8 +1896,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHostLayout.setClipBounds(null);
             mHostClipped = false;
         }
-        mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
-            mOpenRadiusPx, p);
         plane.setFrame(frame, mCurrentRadiusPx, p);
         if (mGlass != null) mGlass.invalidateOutline();
 
@@ -1900,8 +1926,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyStatusBand(p);
         // The under-pill strip lives on the decor, above every pixel of this, so it is the one
         // surface that has to be faded rather than covered. Linear in p, which is what the plane's
-        // own bottom edge is: the two cross over exactly as the glass arrives underneath it.
-        mHost.setDecorNavStripAlpha(1f - p);
+        // own bottom edge is: the two cross over exactly as the glass arrives underneath it. The
+        // built-in keyboard's reveal gives it back: the plane and the host's clip then stop above
+        // the keyboard, nothing of the drawer lies over the band under the pill, and a strip faded
+        // to 0 there left bare wallpaper where the keyboard's glass runs on under the pill.
+        mHost.setDecorNavStripAlpha(AppDrawerKeyboardSeparation.navStripAlpha(p,
+            mImePinTopPx > 0f ? 0f : k));
         mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
@@ -1931,8 +1961,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mImePinTopPx > 0f ? mImePinTopPx : capturedPinTopPx();
     }
 
+    /**
+     * The air between the plane and the keyboard. The built-in keyboard's is the terminal pane's
+     * gap, so the drawer stands off the keyboard as the pane does on the Workspace; the system
+     * keyboard keeps its own.
+     */
     private float revealGapPx() {
-        return mImePinTopPx > 0f ? dp(IME_GAP_DP) : mCapturedGapPx;
+        if (mImePinTopPx > 0f) return dp(IME_GAP_DP);
+        return AppDrawerKeyboardSeparation.revealGapPx(mHost.searchKeyboardGapPx(), mCapturedGapPx);
     }
 
     /** The captured keyboard top; the plane covers the terminal extra-keys band above this edge. */

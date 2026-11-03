@@ -4085,13 +4085,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGapDp() {
-                // Margin between panes, never past 24dp and never under 10dp: air between Floating
-                // cards, the gutter of frame glass between Docked inserts, and the strip the
-                // divider is dragged by.
-                return Math.max(Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP),
-                    Math.min(Math.round(layoutMarginPx(com.termux.app.place.SeamDress.Surface.FRAME) / getResources()
-                        .getDisplayMetrics().density),
-                        Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
+                return terminalPaneGapDp();
             }
 
             @Override @NonNull public com.termux.app.chrome.LookGlassStyle lookGlass() {
@@ -6985,6 +6979,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private float layoutMarginPx(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return dpToPx(Math.max(0, chromeMarginDp(surface)));
+    }
+
+    /**
+     * The terminal pane's gap, in dp: margin between panes, never past 24dp and never under 10dp —
+     * air between Floating cards, the gutter of frame glass between Docked inserts, and the strip
+     * the divider is dragged by. The app drawer stands this far off the keyboard too.
+     */
+    private int terminalPaneGapDp() {
+        return Math.max(Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP),
+            Math.min(Math.round(layoutMarginPx(com.termux.app.place.SeamDress.Surface.FRAME)
+                    / getResources().getDisplayMetrics().density),
+                Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
     }
 
     /** The device's screen radius, which a Docked frame's outer corners take; 28dp when unknown. */
@@ -20189,6 +20195,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void setDecorNavStripAlpha(float alpha) {
             setAppDrawerDecorNavStripAlpha(alpha);
+        }
+
+        @Override public float searchKeyboardGapPx() {
+            return dpToPx(terminalPaneGapDp());
+        }
+
+        @Override public float searchKeyboardCornerRadiusPx() {
+            // The corners the terminal pane wears under both Styles (paneCornerRadiusDp).
+            return layoutCornersPx(com.termux.app.place.SeamDress.Surface.FRAME);
         }
 
         @Override public void setHomeContentAlpha(float alpha) {
