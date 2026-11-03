@@ -14038,6 +14038,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || !mPreferences.isInAppKeyboardEnabled())
             return;
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
+        // The effect was applied before the keyboard existed; it comes up in the deck look too.
+        applyDeckLook();
         mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
         // Every way the keyboard goes up or down that is not the Display place's own text-focus
         // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
@@ -22016,6 +22018,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyExtraKeysFeedbackAccent(extraKeysView);
         applyExtraKeysPlaceEligibility(extraKeysView);
+        applyExtraKeysDeck(extraKeysView);
     }
 
     public void setExtraKeysView(ExtraKeysView extraKeysView) {
@@ -23652,10 +23655,94 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 settledWallPage() == com.termux.app.wall.PaneWallPage.WIDGETS);
             mChromeRetroEffect.setStyle(com.termux.app.terminal.PaneRetroStyle.fromId(retroEffect));
         }
+        applyDeckLook();
         if (mPaneController == null)
             return;
         mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
         mPaneController.setRetroEffectPreference(retroEffect);
+    }
+
+    /**
+     * Dresses the in-app keyboard as the CRT's accessory while the chrome draws a terminal effect
+     * (wave 8, the deck look): the bezel's panel colour, the effect's lights. Plain everywhere the
+     * chrome is plain, Home included.
+     */
+    private void applyDeckLook() {
+        com.termux.app.terminal.PaneRetroStyle style = mChromeRetroEffect == null
+            ? com.termux.app.terminal.PaneRetroStyle.NONE : mChromeRetroEffect.drawnStyle();
+        com.termux.app.terminal.DeckLook deck = com.termux.app.terminal.DeckLook.of(style,
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                R.color.termux_surface_panel_high),
+            MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4));
+        if (mInAppKeyboard != null) mInAppKeyboard.setDeckLook(deck);
+        boolean changed = !java.util.Objects.equals(mDeckLook, deck);
+        mDeckLook = deck;
+        // The window bar: its chips, the stats' display window, and the slab under them.
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (bar != null) bar.setDeckLook(deck);
+        View sessionsIndicator = findViewById(R.id.terminal_sessions_indicator);
+        if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
+            ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
+        for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+                R.id.terminal_status_widget_weather}) {
+            View widget = findViewById(id);
+            if (widget instanceof com.termux.app.statusbar.StatusBarWidgetView)
+                ((com.termux.app.statusbar.StatusBarWidgetView) widget).setDeckLook(deck);
+        }
+        for (int id : new int[]{R.id.terminal_status_dot_cpu_ram,
+                R.id.terminal_status_dot_ram_weather}) {
+            View dot = findViewById(id);
+            if (dot instanceof com.termux.app.statusbar.MaterialDotSeparatorView)
+                ((com.termux.app.statusbar.MaterialDotSeparatorView) dot).setDeckLook(deck);
+        }
+        com.termux.app.statusbar.DeckDisplayWindow.apply(
+            findViewById(R.id.terminal_status_stats_cluster), deck);
+        if (!changed)
+            return;
+        // The extra keys row, every page of it (a page made later is dressed as it is set).
+        for (ExtraKeysView keys : mExtraKeysViews) applyExtraKeysDeck(keys);
+        // Off the deck the glass pass puts the bar's own background and blur back; on it, the
+        // same pass ends by laying the slab (applyWindowBarDeckSlab). A hidden bar gets its pass
+        // when it is next shown.
+        refreshTerminalWindowBarGlass();
+    }
+
+    /** The deck the chrome is wearing now; null while no terminal effect is drawn (wave 8). */
+    @Nullable private com.termux.app.terminal.DeckLook mDeckLook;
+
+    /** The extra keys row wears the deck with the keyboard (wave 8c); off it, its own look. */
+    private void applyExtraKeysDeck(@Nullable ExtraKeysView keys) {
+        if (keys == null)
+            return;
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        if (deck == null)
+            keys.setDeckLook(false, 0, 0, 0, 0, 0, 0, 0);
+        else
+            keys.setDeckLook(true, deck.bed, deck.bedTop, deck.key, deck.keyTop, deck.keyFoot,
+                deck.lit, deck.litInk);
+    }
+
+    /**
+     * Under the deck look the window bar is an opaque slab in the bezel's tone instead of glass:
+     * the slab replaces the glass drawable and the live blur rests hidden. Runs at the end of every
+     * glass pass, so a Look or ink refresh that rebuilds the glass cannot undo it; off the deck it
+     * does nothing and the pass's own background and blur stand. The host's outline still clips the
+     * slab, so a Docked card keeps its shape.
+     */
+    private void applyWindowBarDeckSlab() {
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        if (deck == null)
+            return;
+        View background = findViewById(R.id.terminal_window_bar_background);
+        if (background != null) {
+            android.graphics.drawable.Drawable current = background.getBackground();
+            if (!(current instanceof com.termux.app.terminal.DeckSlabDrawable)
+                    || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
+                background.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
+        }
+        View blur = findViewById(R.id.terminal_window_bar_blur);
+        if (blur != null && blur.getVisibility() == View.VISIBLE)
+            blur.setVisibility(View.INVISIBLE);
     }
 
     /**
@@ -25371,6 +25458,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The terminal effect is the Workspace's: Home's chrome lands plain (ChromeRetroEffect).
             if (mChromeRetroEffect != null)
                 mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
+            applyDeckLook();
         } finally {
             Trace.endSection();
         }
@@ -31081,6 +31169,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         // as the last frost pass found it, the bar lays no stroke beside it.
                         mWindowBarFrostDrawsEdge));
         }
+        applyWindowBarDeckSlab();
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
     }

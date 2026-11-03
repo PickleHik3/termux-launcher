@@ -3,9 +3,11 @@ package com.termux.app.terminal;
 import androidx.annotation.NonNull;
 
 /**
- * The bezel a pane wears while a terminal effect is on: a band of the pane's own glass round the
- * "screen" the effect is drawn on, so the CRT's bend and the scanlines stop at a frame instead of
- * running into the pane's edge, where the bend used to pull text past the slab.
+ * The bezel a pane wears while a terminal effect is on: a solid band in the theme's panel colour
+ * round the "screen" the effect is drawn on, so the CRT's bend and the scanlines stop at a frame
+ * instead of running into the pane's edge, where the bend used to pull text past the slab. Solid
+ * rather than the pane's glass (wave 7): a monitor's frame is plastic, not a window on the
+ * wallpaper, and the picture reads deeper set into an opaque frame.
  *
  * <p>The bezel is {@link #SIDE_DP} at the sides and {@link #TOP_BOTTOM_DP} top and bottom; the
  * screen inside it is rounded at {@link #SCREEN_RADIUS_DP} (capped like any pane,
@@ -104,13 +106,12 @@ public final class PaneBezel {
     }
 
     /**
-     * What the bezel is filled with under the terminal: nothing while the terminal's glass has
-     * opacity to show (the bezel is that glass), the theme's surface colour, opaque, while it has
-     * none, so the bezel still reads as a frame. A pane with no slab stands on its own ground,
-     * which shows through the bezel as it does through the screen.
+     * What the bezel is filled with under the terminal: {@code panelColour} made opaque, whatever
+     * the pane's glass is doing. The theme's raised panel tone (the drawer's and popups', a step
+     * lighter than the surface in the dark theme) stands off the tube face inside the screen,
+     * which is near black, and off the pane's own surface colour behind it.
      */
-    public static int fill(boolean glassActive, int glassTint, int surfaceColour) {
-        if (!glassActive || (glassTint >>> 24) > 0) return 0;
-        return surfaceColour | 0xFF000000;
+    public static int fill(int panelColour) {
+        return panelColour | 0xFF000000;
     }
 }

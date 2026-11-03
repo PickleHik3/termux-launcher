@@ -106,9 +106,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         });
 
     /**
-     * What the bezel's band is filled with under the terminal: transparent while the pane's slab
-     * shows through it (the bezel is the pane's own glass), the theme's surface colour while the
-     * terminal's glass has no opacity to show ({@link #setBezelFill}).
+     * What the bezel's band is filled with under the terminal: the theme's panel colour, opaque,
+     * over whatever the pane's slab is ({@link #setBezelFill}); 0 until the first dress.
      */
     private int mBezelFill;
     /** The screen edge's line colour, resolved on each dress rather than on each draw. */
@@ -198,9 +197,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /**
-     * The bezel's fill under the terminal: 0 while the pane's slab shows through it, an opaque
-     * colour (the theme's surface) while the terminal's glass has no opacity, so the bezel still
-     * reads as a frame round the screen.
+     * The bezel's fill under the terminal: an opaque colour (the theme's panel), so the bezel reads
+     * as a solid frame round the screen whatever the pane's glass is doing.
      */
     public void setBezelFill(int argb) {
         // Re-read with every dress, so a theme or scheme change reaches the screen's edge too.
@@ -615,12 +613,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /**
-     * The bezel, over the pane's glass and under the terminal: its fill while the glass has no
-     * opacity to show ({@link #setBezelFill}), and the screen's edge, the pane rim's own line laid
-     * just outside the screen so the effect inside never touches it, with the band lit at its top
-     * and shaded at its bottom between the two ({@link PaneBezel#SHADE_COLOURS}). The band is
-     * otherwise the slab itself, which the effect leaves as it is
-     * ({@link RetroEffectBinder.ScreenShape}).
+     * The bezel, over the pane's glass and under the terminal: its opaque fill
+     * ({@link #setBezelFill}), and the screen's edge, the pane rim's own line laid just outside
+     * the screen so the effect inside never touches it, with the band lit at its top and shaded at
+     * its bottom between the two ({@link PaneBezel#SHADE_COLOURS}). The effect leaves the band as
+     * it is ({@link RetroEffectBinder.ScreenShape}); the slab under it shows only until the first
+     * dress sets the fill.
      */
     private void drawBezel(@NonNull Canvas canvas) {
         if (!bezelWorn() || getWidth() <= 0 || visibleHeight() <= 0) return;
@@ -648,8 +646,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             mBezelFillPaint.setColor(mBezelFill);
             canvas.drawPath(mBezelPath, mBezelFillPaint);
         }
-        // Lit at the top and shaded at the bottom, over the fill or the bare glass; the screen's
-        // own lip shadow is the effect's recess (PaneRetroEffect#RECESS_SHADE).
+        // Lit at the top and shaded at the bottom, over the fill; the screen's own lip shadow is
+        // the effect's recess (PaneRetroEffect#RECESS_SHADE).
         canvas.drawPath(mBezelPath, mBezelShadePaint);
         if (mBezelLineColour == 0) mBezelLineColour = PaneRim.lineColour(getContext());
         mBezelLinePaint.setStrokeWidth(stroke);

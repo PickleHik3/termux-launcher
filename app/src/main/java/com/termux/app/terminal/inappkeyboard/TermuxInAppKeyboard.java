@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.terminal.DeckLook;
 import com.termux.app.terminal.TerminalClipboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -1613,7 +1614,8 @@ public final class TermuxInAppKeyboard {
             && a.lockedModifierColor == b.lockedModifierColor
             && a.borderColor == b.borderColor
             && a.keyGradientTopOverlay == b.keyGradientTopOverlay
-            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay;
+            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay
+            && a.deck == b.deck && a.deckKey == b.deckKey && a.deckLit == b.deckLit;
     }
 
     /** {@link #createPalette()} for the view, remembered as the one it draws. */
@@ -1632,7 +1634,29 @@ public final class TermuxInAppKeyboard {
                 mGlassTone);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
-        return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
+        if (scheme.shouldApplyImportedPalette(theme))
+            palette = scheme.applyToPalette(palette);
+        // After the scheme: while a terminal effect is on, the deck's colours win over its keys'.
+        DeckLook deck = mDeckLook;
+        return deck == null ? palette : palette.withDeck(deck.bed, deck.bedTop, deck.key,
+            deck.keyTop, deck.keyFoot, deck.lit, deck.litInk, deck.litFoot);
+    }
+
+    /** The deck look the keyboard wears while a terminal effect is on; null for none. */
+    @Nullable private DeckLook mDeckLook;
+
+    /**
+     * Dresses the keyboard as the CRT's accessory (an opaque bed, push-button keys, lights in
+     * the effect's palette) while {@code look} is non-null; null restores the Look's palette.
+     */
+    public void setDeckLook(@Nullable DeckLook look) {
+        if (java.util.Objects.equals(look, mDeckLook))
+            return;
+        mDeckLook = look;
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        mKeyboardView.setPalette(recordedPalette());
+        if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */

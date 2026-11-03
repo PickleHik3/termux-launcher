@@ -91,6 +91,8 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     @Nullable private Integer mLabelInk;
     @Nullable private Integer mIconInk;
     @Nullable private Integer mMutedInk;
+    /** The deck look's display colour while a terminal effect is on; null otherwise (wave 8). */
+    @Nullable private Integer mDeckDisplay;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
     /** The widget's own room at each end along a row, and what it keeps of it in a tight row. */
@@ -330,6 +332,21 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         applyColors();
     }
 
+    /**
+     * The deck look (wave 8): the reading lit in the display window's colour with a soft glow
+     * while a terminal effect is on; {@code null} puts the chrome's ink back. Sizes unchanged.
+     */
+    public void setDeckLook(@Nullable com.termux.app.terminal.DeckLook deck) {
+        Integer display = deck == null ? null : deck.display;
+        if (java.util.Objects.equals(mDeckDisplay, display)) return;
+        mDeckDisplay = display;
+        float glow = display == null ? 0f : dp(4);
+        int glowColour = display == null ? 0 : ColorUtils.setAlphaComponent(display, 153);
+        mValue.setShadowLayer(glow, 0f, 0f, glowColour);
+        mGlyph.setShadowLayer(glow, 0f, 0f, glowColour);
+        applyColors();
+    }
+
     /** Accent styling used while the widget's detail card is open. */
     public void setAccent(boolean accent) {
         if (mAccent == accent) return;
@@ -366,6 +383,16 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         // The trailing stats read as one status cluster. Color and dot separators provide the
         // grouping, so individual pill backgrounds only add visual noise.
         setBackground(null);
+
+        // The deck's display window: every reading lit in the display colour, a muted one dimmed.
+        if (mDeckDisplay != null) {
+            int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
+            ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
+            mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
+            mGlyph.setTextColor(lit);
+            mValue.setTextColor(lit);
+            return;
+        }
 
         // Measured ink wins outright. It was resolved on what this band is really drawn over and
         // it carries whatever alpha that leaves room for, so laying the tier's old alpha over it

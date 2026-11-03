@@ -191,8 +191,13 @@ public final class PaneRim {
                     mDrawable = new PaneDividerEdges(frame, decision.colour != PaneBorderStyle.NO_COLOUR
                         ? decision.colour : lineColour(frame.getContext()), density);
                 } else {
+                    // A pane wearing the CRT bezel is framed by it: the resting rim would be a
+                    // second outline a few px outside the solid band, so it draws nothing while
+                    // the bezel is worn (asked on every draw; the frame redraws when it changes).
                     mDrawable = new SharedRim(frame.getContext(), openingLine ? null : style, radius,
-                        density, openingLine ? null : slab, decision.colour);
+                        density, openingLine ? null : slab, decision.colour,
+                        frame instanceof PaneContentFrame
+                            ? ((PaneContentFrame) frame)::bezelWorn : null);
                 }
                 break;
         }
@@ -341,6 +346,8 @@ public final class PaneRim {
      * Over a slab whose program draws the edge ({@link SlabEdge#drawsEdge}) it draws nothing, asked
      * on every draw and redrawn when the slab says it changed: the frame still carries its border,
      * so the decision and its reuse read as for any rim, and a slab that goes plain gets it back.
+     * Likewise under a frame that says it is {@code framed} on its own (a pane wearing the CRT
+     * bezel, {@link PaneContentFrame#bezelWorn}): the solid band is the pane's outline then.
      */
     private static final class SharedRim extends Drawable {
         private final PaneSurfaceStyle mStyle;
@@ -351,18 +358,22 @@ public final class PaneRim {
         private final int mTint;
         /** The slab whose own edge this rim yields to, or null for none. */
         @Nullable private final SlabEdge mSlab;
+        /** Whether the frame draws its own outline right now (the bezel), or null for never. */
+        @Nullable private final java.util.function.BooleanSupplier mFramed;
         private Drawable mInner;
         private float mInnerRadiusPx = -1f;
         private int mAlpha = 255;
 
         SharedRim(@NonNull Context context, @Nullable PaneSurfaceStyle style, float radiusPx,
-                  float density, @Nullable SlabEdge slab, int tint) {
+                  float density, @Nullable SlabEdge slab, int tint,
+                  @Nullable java.util.function.BooleanSupplier framed) {
             mStyle = style;
             mTint = tint;
             mRequestedRadiusPx = radiusPx;
             mDensity = density;
             mFallbackColour = tint != PaneBorderStyle.NO_COLOUR ? tint : lineColour(context);
             mSlab = slab;
+            mFramed = framed;
             if (slab != null) slab.setOnEdgeChanged(this::invalidateSelf);
         }
 
@@ -394,6 +405,7 @@ public final class PaneRim {
         @Override
         public void draw(@NonNull Canvas canvas) {
             if (mSlab != null && mSlab.drawsEdge()) return;
+            if (mFramed != null && mFramed.getAsBoolean()) return;
             if (mInner != null) mInner.draw(canvas);
         }
 

@@ -72,6 +72,32 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
   unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
   near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
+- **Solid CRT bezel on pong (11-03, wave 7).** Terminal effect CRT on a glass Look with a
+  visible wallpaper: the 8/10 dp band round the screen is a flat opaque panel tone (the drawer's
+  colour), no wallpaper or blur through it, lit at the top and shaded at the bottom as before, the
+  1 dp line still round the screen; the glass blur and tint still show inside the screen behind the
+  text, and the near-black tube face at the picture's pulled-in corners stands off the bezel. Same
+  with Glass off and on the light theme (a pale bezel). TFT: the same solid band.
+- **Deck keyboard on pong (11-03, wave 8a, 2734fdf36).** Terminal effect CRT, docked in-app
+  keyboard up: the keyboard bed is an opaque dark plastic in the drawer's tone (no wallpaper
+  through it), each key a raised push-button with a faint lighter top edge and a 2 dp darker foot,
+  6 dp corners; return is amber with dark ink; hold Ctrl: its label turns amber and a 2 dp amber bar
+  sits above its foot; release: plain. Docked form: the keyboard card's rounded corners still clip
+  the bed. Effect off: the Look's glass keyboard comes back exactly. CRT green / amber / Material:
+  return and the latched bar take green / amber / the theme's primary (emulator emu2, dark theme:
+  bed, bevel and amber return seen; latched bar and the other palettes not exercised).
+- **Deck window bar + extra keys on pong (11-03, waves 8b-8c).** Terminal effect CRT on the
+  Workspace: the window bar is an opaque dark slab (lit top, shaded bottom, no wallpaper through
+  it, the blur off); each window chip and the "+" a raised 4 dp button with a 2 dp foot; the chip
+  in front has an amber title and a lit 5 dp LED at its left; the sessions count square at the
+  bar's left is the same button without an LED; a window that rings its bell behind
+  lights its LED; a working window's LED breathes between a quarter and full; an idle one is dark.
+  CPU, RAM and weather sit in one near-black inset window in cyan with a soft glow, the dots dim
+  cyan; sizes as before. The extra keys row: opaque bed, raised buttons, the active mode button
+  (keyboard / mouse pad / ...) amber with a 2 dp bar, a latched CTRL amber. Docked: the bar card's
+  rounded corners still clip the slab. Effect off and on three times: the bar's glass and blur, the
+  stats cluster's padding and the row's look come back exactly. CRT green / amber / Material: the
+  lights and the display take green / amber / the theme's primary. Home page: everything plain.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.
