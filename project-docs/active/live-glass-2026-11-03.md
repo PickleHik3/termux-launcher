@@ -40,7 +40,7 @@ tuned away.
 
 | Surface | Where the picture comes from | Anchor | Code |
 |---|---|---|---|
-| Dock, every style (Tray, Beads, Wall strip, Peek) and the under-pill strip | The backdrop view's own pixels, through `RenderEffect` blur chained into the refraction shader (`"content"`) | none, identity aim | `TermuxActivity.buildRefractionEffect` (~5017), `applyDockSurfaceGlass`; per-style numbers from `DockSurfaceSpec` |
+| Dock, every style (Tray, Beads, Wall strip, Peek) and the under-pill strip | The backdrop `ImageView` (`accessory_blur_backdrop`) draws a `SharedFrameDrawable`; a `RenderEffect` on that view chains a blur into the refraction shader (`"content"` = those drawn pixels), then the dock's frost colour filter | the drawable's own anchor; identity aim in the program | `TermuxActivity.buildRefractionEffect` 5011, `applyDockSurfaceGlass` 5081, `rebuildBackdropGlassEffectForLens` 6068 (11 callers), `updateAccessoryRenderEffectBackdrop` 10078, `installAccessoryBackdropFrame` 10237; nav strip 9541 |
 | Built-in widgets (and terminal pane slabs) | Its own `BitmapShader` over the shared frame | `GlassAnchor.place` | `terminal/PaneGlassBackdropView.java` (~116, ~239–273, ~601, ~840); built by `BuiltinWidgetView` ~766, dressed by `PaneGlass.apply` ~777 |
 | Bars, palette, sheet, drawer | `SharedFrameDrawable` over the shared frame | `screen` / `layout` | `chrome/SharedFrameDrawable.java`, `WallpaperFrostPainter` |
 
@@ -53,30 +53,43 @@ Third-party AppWidgets wear no glass today and stay out of scope.
 
 ## Design
 
-### One seam: `GlassBackdrop`
+### Two routes, one picture seam (revised 2026-11-03 after reading the dock path)
 
-A new deep module in `app/chrome/`: *what picture is behind this surface, and where is it aimed*.
+There are two ways a surface runs the one `GlassRefraction.Program`, and both stay:
+
+- **The effect route** (dock, nav strip): a backdrop view *draws the picture*, and a `RenderEffect`
+  on that view blurs and bends whatever it drew. One offscreen layer per surface.
+- **The paint route** (panes, widgets, bars): the program is the paint shader over a
+  `BitmapShader` of the stored frame, aimed per draw. No offscreen layer; this is why the stored
+  default is cheap and stays as it is.
+
+A live picture is a `RenderNode`, and a `RenderNode` cannot be an AGSL child shader. So a live
+surface always takes the effect route, and the seam sits at **what the backdrop view draws**, not at
+the program's input:
 
 ```
-interface GlassBackdrop {
-    // Bind the program's picture input for a surface at this aim; the program bends and lights it.
-    void bind(GlassRefraction.Program program, GlassAnchor.Aim aim);
-    // Whether the picture changed since the surface last drew (the surface redraws only then).
-    boolean changedSince(long stamp);
-}
+// app/chrome/GlassPicture.java — the picture behind a surface, drawn at the surface's aim.
+interface GlassPicture { Drawable drawable(); }   // StoredPicture wraps SharedFrameDrawable
 ```
 
-Two implementations:
+- **`StoredPicture`**: the `SharedFrameDrawable` the dock's backdrop draws today, unchanged.
+- **`LivePicture`**: draws the shared live `RenderNode` at the surface's aim (below).
 
-- **`StoredBackdrop`**: today's shared frame and its `BitmapShader`. What `SharedFrameDrawable` and
-  `PaneGlassBackdropView` do now, moved behind the interface with no behaviour change.
-- **`LiveBackdrop`**: a `RenderNode` recording of what lies under the glass, blurred.
+And the effect builder leaves the activity:
 
-`PaneGlassBackdropView` (widgets) and the dock both draw **through the program with a picture input
-from `GlassBackdrop`**. The dock stops blurring its own pixels: it becomes a frame-shader surface
-like the panes, aimed with `GlassAnchor.layout` (it is moved by the dock's own transforms). That one
-move is the architecture fix: after it, every dock style and every widget asks the same question
-of the same seam, and switching Live on is one choice in one place.
+- **`GlassEffects`** (`app/chrome/`): `buildRefractionEffect`, `applyDockSurfaceGlass`'s inputs and
+  the lens/touch rebuild, moved out of `TermuxActivity` behind a small Host for the values the
+  activity owns (dock rect, Peek rect, lens, touch, cover). Every dock style already shares this one
+  builder (a style only changes `DockSurfaceSpec` numbers), so after the move there is one effect
+  route for every dock style, the nav strip and, in live mode, the widgets.
+
+In live mode a widget's `PaneGlassBackdropView` adds an effect-route layer (a `LivePicture` plus a
+`GlassEffects` effect) in place of its paint-route draw; with Live off it draws exactly as today.
+This answers decision 4: one picture seam and one effect builder, no per-style or per-surface copy.
+
+Rejected: moving the dock onto the paint route. Its blur and frost colour filter run over drawn
+pixels (`updateAccessoryRenderEffectBackdrop` ~10210), and a `BitmapShader` would change both: a
+visible change for no gain, since live mode needs the effect route anyway.
 
 ### `LiveBackdrop`
 
@@ -85,9 +98,9 @@ of the same seam, and switching Live on is one choice in one place.
   surfaces and what they carry**. While the backdrop records, glass hosts draw nothing
   (`LiveBackdrop.isRecording()`), so no glass sees itself or recurses.
 - **How.** One `RenderNode` per frame of change for the whole wall area (recording reuses the child
-  views' display lists, so it does not repaint them). Each live surface draws that node, offset by
-  its aim, into its own node with `RenderEffect.createBlurEffect(radius)` chained into
-  `createRuntimeShaderEffect(program.shader(), "content")`. Blur and bend run on the RenderThread on
+  views' display lists, so it does not repaint them). Each live surface's backdrop view draws that node
+  through a `LivePicture`, offset by its aim, and its `GlassEffects` effect (blur chained into
+  the program) runs over it. Blur and bend run on the RenderThread on
   the GPU.
 - **When.** Re-recorded only when something under the glass changed: a wall slide, a parallax
   offset, an invalidation of a view under a live surface, a wallpaper change. At rest it records
@@ -140,7 +153,7 @@ build on pong after the wave with the numbers below.
 | Wave | What | Done when |
 |---|---|---|
 | 0 | **Pong baseline.** `scripts/perf-baseline.sh memory frames` and `perf-frametime.sh` on `pong.txt`, plus a new scenario `pong-home-swipe-widgets.txt`: swipe across two Home pages with widgets and back, ×5. Current staging build. | numbers recorded in this file |
-| 1 | **Seam, no visible change.** `GlassBackdrop` + `StoredBackdrop`; `PaneGlassBackdropView` and `SharedFrameDrawable` bind through it; the dock moves from blurring its own pixels to a frame-shader surface through the seam. Tests: aim parity for the dock between the old and new path; all four dock styles + nav strip shot before/after on the emulator, pixel-diffed. | shots identical within noise; pong numbers within noise of wave 0 |
+| 1 | **Seam, no visible change.** `GlassEffects` out of `TermuxActivity` (the builder, the dock surface glass inputs, the lens/touch rebuild path, the nav strip's use); `GlassPicture` + `StoredPicture`, and `installAccessoryBackdropFrame` installs the picture it is given. Tests: the effect's program uniforms equal before and after for each dock style + nav strip; emulator shots of the four styles, keyboard up and down, before/after. | shots identical; pong numbers within noise of wave 0 |
 | 2 | **`LiveBackdrop` + switch, widgets.** Recording, exclusion of glass hosts, ¼-scale blur, invalidation on change, policy + fallback, budget test, the switch row. | swipe shows the next page's widgets/icons blurred through the glass; rest frames unchanged (0.17 fps); memory and swipe numbers measured with Live on and off |
 | 3 | **Dock styles on Live.** Tray, Beads, Wall strip, Peek (with its reflection), keyboard up and down, Docked and Floating. | each style shot with Live on over moving content; pong numbers |
 | 4 | **ADR 0021, docs, checks.** ADR; `performance.md` rule 3 narrowed and the Live budget row added; `docs/en/` line; owed items to `device-checks.md` / `developer-checks.md`. | merged |
