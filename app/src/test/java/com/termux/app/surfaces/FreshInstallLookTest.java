@@ -9,6 +9,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
+import com.termux.app.wall.PaneWallPage;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -63,9 +64,36 @@ public class FreshInstallLookTest {
         com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore grid =
             new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(store);
         com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(grid, fresh);
+        // The glass controls' migration (and its re-adoption of moved Looks), then the kind seed,
+        // as TermuxApplication runs them.
+        GlassControlsMigration.runAtStartUp(preferences, fresh);
         com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(grid,
             SurfacePresets.SHIPPED_BY_KIND);
-        SurfacePresets.readoptMovedLooks(preferences);
+    }
+
+    @Test
+    public void aFirstRunWearsClearOnBothHalvesAfterTheGlassMigration() {
+        startUp();
+
+        // Clear names no Tint cell, so no surface may hold one of its own: a per-surface Tint
+        // detaches that row and the Look row reads Custom.
+        for (TermuxAppSharedPreferences.SurfaceSlot slot : TermuxAppSharedPreferences.SurfaceSlot.values())
+            assertTrue(slot + " follows Base's Tint",
+                preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
+        assertEquals(Integer.valueOf(GlassControlsMigration.FORMAT),
+            store.getAll().get(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT));
+        // What the editor's Look row reads on Home and on the Workspace.
+        for (PaneWallPage half : new PaneWallPage[]{PaneWallPage.WIDGETS, PaneWallPage.TERMINAL}) {
+            assertTrue(half + " wears Clear", SurfacePresets.wornOn(preferences, clearFor(), half));
+            assertTrue(half + " matches Clear", SurfacePresets.matches(preferences, clearFor(), half));
+        }
+    }
+
+    /** Clear as the editor lists it for this store's glass theme. */
+    private SurfacePresets.Preset clearFor() {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(preferences))
+            if ("minimal".equals(preset.id)) return preset;
+        throw new AssertionError("Clear is a shipped Look");
     }
 
     @Test
