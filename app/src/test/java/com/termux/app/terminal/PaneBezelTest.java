@@ -90,11 +90,10 @@ public class PaneBezelTest {
     }
 
     @Test
-    public void theBezelIsFilledOnlyWhenTheGlassHasNoOpacity() {
-        int surface = 0x00123456;
-        assertEquals(0xFF123456, PaneBezel.fill(true, 0x00FFFFFF, surface));
-        assertEquals(0, PaneBezel.fill(true, 0x40000000, surface));
-        assertEquals(0, PaneBezel.fill(false, 0x00000000, surface));
+    public void theBezelIsAlwaysFilledOpaqueInThePanelColour() {
+        assertEquals(0xFF123456, PaneBezel.fill(0x00123456));
+        assertEquals(0xFF123456, PaneBezel.fill(0x40123456));
+        assertEquals(0xFF123456, PaneBezel.fill(0xFF123456));
     }
 
     @Test

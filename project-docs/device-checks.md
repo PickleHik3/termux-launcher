@@ -72,6 +72,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
   unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
   near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
+- **Solid CRT bezel on pong (11-03, wave 7).** Terminal effect CRT on a glass Look with a
+  visible wallpaper: the 8/10 dp band round the screen is a flat opaque panel tone (the drawer's
+  colour), no wallpaper or blur through it, lit at the top and shaded at the bottom as before, the
+  1 dp line still round the screen; the glass blur and tint still show inside the screen behind the
+  text, and the near-black tube face at the picture's pulled-in corners stands off the bezel. Same
+  with Glass off and on the light theme (a pale bezel). TFT: the same solid band.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.

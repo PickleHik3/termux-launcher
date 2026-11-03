@@ -30,6 +30,14 @@ termux_crt's `uv(1-uv)` curve, full across the middle third and 30 % down at the
 tint's colour lights the middle (clamped to the picture's alpha, so glass panes keep their glass).
 The bezel band, line and shade are unchanged.
 
+Wave 7 (11-03; the developer, from pong: "I like solid borders more than glass borders for the
+terminal"). The bezel band is a solid fill in the theme's raised panel colour
+(`termuxColorSurfacePanelHigh`, the drawer's and popups' tone; `PaneBezel.fill` takes only that
+colour and always returns it opaque), whatever the pane's glass is doing; the shade overlay, the
+1 dp line and the glass's recess and sheen inside the screen are unchanged. The pane's glass now
+shows only inside the screen. Before, the band was the pane's own glass and took an opaque fill
+(the surface colour) only while the terminal's glass had no opacity.
+
 Builds on [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md)
 and amends two of its decisions (see "Amendments"). Everything here is built-in AGSL picked in
 settings (its decision 4); nothing reads user shader files.

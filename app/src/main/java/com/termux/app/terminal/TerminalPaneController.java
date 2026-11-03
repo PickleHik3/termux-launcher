@@ -698,16 +698,14 @@ public class TerminalPaneController {
     }
 
     /**
-     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): nothing while
-     * the glass shows, the theme's surface while the terminal's glass has no opacity.
+     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): the theme's
+     * raised panel colour, opaque, whether or not the pane's glass shows.
      */
     private int bezelFill() {
         android.content.Context context = mHostView.getContext();
-        int surface = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfaceBase,
-            ContextCompat.getColor(context, R.color.termux_surface_base));
-        return PaneBezel.fill(paneGlassActive(),
-            mSurfaceStyle != null ? mSurfaceStyle.paneGlassTintColor() : 0, surface);
+        return PaneBezel.fill(MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high)));
     }
 
     /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
