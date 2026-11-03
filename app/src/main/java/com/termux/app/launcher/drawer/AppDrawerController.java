@@ -486,19 +486,32 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     public void open(@NonNull AppDrawerGestureArbiter.Pull pull,
                      @NonNull AppDrawerPullGeometry.Seed seed) {
+        DrawerOpenTrace.arm();
+        long t = DrawerOpenTrace.start();
         if (!bindViews()) return;
+        DrawerOpenTrace.end("open.bindViews", t);
         if (mEngaged || mOpen) return;
+        t = DrawerOpenTrace.start();
         if (!captureGeometry(pull, seed)) return;
+        DrawerOpenTrace.end("open.captureGeometry", t);
         mDirection = AppDrawerCommitPolicy.Direction.OPENING;
         mProgress.reset(0f);
+        t = DrawerOpenTrace.start();
         prepareOverlay();
+        DrawerOpenTrace.end("open.prepareOverlay", t);
         mDragging = false;
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
         mEngaged = true;
+        t = DrawerOpenTrace.start();
         mHost.hideSystemKeyboard();
+        DrawerOpenTrace.end("open.hideSystemKeyboard", t);
+        t = DrawerOpenTrace.start();
         applyFrame(0f);
+        DrawerOpenTrace.end("open.applyFrame0", t);
+        t = DrawerOpenTrace.start();
         settle(true, 0f);
+        DrawerOpenTrace.end("open.settle", t);
     }
 
     /** Every {@code ACTION_MOVE} of a claimed drag. The plane tracks this 1:1, unsmoothed. */
@@ -589,9 +602,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // typed into a drawer that is on its way out.
         applyContentOpenState();
         if (open) {
+            long t = DrawerOpenTrace.start();
             mHost.onDrawerOpenSettled(true, true);
+            DrawerOpenTrace.end("settle.onDrawerOpenSettled", t);
+            t = DrawerOpenTrace.start();
             requestSearchKeyboardOnOpenIfEnabled();
+            DrawerOpenTrace.end("settle.requestSearchKeyboardOnOpen", t);
+            t = DrawerOpenTrace.start();
             nudgeCategorizationIfPending();
+            DrawerOpenTrace.end("settle.nudgeCategorization", t);
         } else {
             endTextFieldSearchIfBegun();
         }
@@ -760,10 +779,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Override
     public void doFrame(long frameTimeNanos) {
         mInFrame = true;
+        long t = DrawerOpenTrace.start();
         try {
             doFrameInner(frameTimeNanos);
         } finally {
             mInFrame = false;
+            DrawerOpenTrace.end("doFrame p=" + mProgress.value + " k=" + mReveal.value, t);
         }
     }
 
@@ -802,8 +823,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The rope and the scrub highlight, on this loop rather than one of their own — the growing
         // rectangle and the letters inside it are one surface.
         AppDrawerContentView content = mContent;
+        long tFx = DrawerOpenTrace.start();
         boolean fxMoving = content != null
             && content.advanceDrawerFx(mProgress.value, dt, reducedMotion);
+        DrawerOpenTrace.end("doFrame.advanceDrawerFx", tFx);
         applyFrame(mProgress.value);
         payPendingTextFieldFocus();
         // The !mDragging guard is the single most dangerous line in this slice. Before B-3 the loop
@@ -890,7 +913,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         new com.github.mmin18.widget.RealtimeBlurView.CaptureScene() {
             private float mHeldReveal;
 
+            private long mTraceStart;
+
             @Override public void beforeCapture() {
+                mTraceStart = DrawerOpenTrace.start();
                 if (!mEngaged || mCapturingSettledScene) return;
                 mCapturingSettledScene = true;
                 mHeldReveal = mReveal.value;
@@ -899,6 +925,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             }
 
             @Override public void afterCapture() {
+                // The capture's decor draw (blur excluded), between the two hooks.
+                DrawerOpenTrace.end("blur.captureDraw", mTraceStart);
                 if (!mCapturingSettledScene) return;
                 mReveal.value = mHeldReveal;
                 applyFrame(mProgress.value);
@@ -1163,8 +1191,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean heightOnly = mContentRect != null && mContentRect.left == rect.left
             && mContentRect.right == rect.right && mContentRect.top == rect.top;
         mContentRect = rect;
+        long t = DrawerOpenTrace.start();
         plane.setContentInsets(rect);
         applyContentMetrics(content, rect, heightOnly);
+        DrawerOpenTrace.end("applyContentInsets heightOnly=" + heightOnly, t);
     }
 
     @Nullable
@@ -1635,7 +1665,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The stack was frozen at the pull with the keyboard down, and a keyboard raised inside it
         // is measured against that height: whole rows cut off the bottom. It is laid out for the
         // keyboard once here, and the bands are measured on the layout that pass books.
+        long tStack = DrawerOpenTrace.start();
         if (keyboard.getVisibility() != View.GONE) mHost.layOutAccessoryStackForRaisedKeyboard();
+        DrawerOpenTrace.end("raised.layOutAccessoryStack", tStack);
         if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
                 isLayoutPending(keyboard))) {
             stopAwaitingRaisedKeyboard();
@@ -1700,6 +1732,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Nullable private View mRaisedKeyboardView;
 
     private void recaptureBandsForRaisedKeyboard() {
+        long t = DrawerOpenTrace.start();
+        try {
+            recaptureBandsForRaisedKeyboardInner();
+        } finally {
+            DrawerOpenTrace.end("recaptureBands", t);
+        }
+    }
+
+    private void recaptureBandsForRaisedKeyboardInner() {
         Frame dockRect = mDockRect;
         FrameLayout host = mHostLayout;
         if (!mEngaged || dockRect == null || host == null) return;
@@ -1784,16 +1825,24 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : sheets.grainPercent;
+        long t = DrawerOpenTrace.start();
         plane.applyGlassMaterial(
             InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
             MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary,
                 ContextCompat.getColor(mHost.context(), R.color.termux_primary)),
             opacity, grain);
+        DrawerOpenTrace.end("prepareOverlay.glassMaterial", t);
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
+        t = DrawerOpenTrace.start();
         applyDrawerSettings();
+        DrawerOpenTrace.end("prepareOverlay.drawerSettings", t);
+        t = DrawerOpenTrace.start();
         applyBackdropMaterial();
+        DrawerOpenTrace.end("prepareOverlay.backdropMaterial", t);
+        t = DrawerOpenTrace.start();
         prepareContent(plane);
+        DrawerOpenTrace.end("prepareOverlay.prepareContent", t);
         addHostLayoutListener();
     }
 
@@ -1823,7 +1872,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setTextFieldSearch(mTextFieldSearch);
         content.setViewType(mLayoutConfig.viewType);
         applyContentMetrics(content, contentRect, false);
+        long tBind = DrawerOpenTrace.start();
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
+        DrawerOpenTrace.end("prepareContent.bind", tBind);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
         // from mOpen alone. The plane's own alpha-driven visibility flip on the content host keeps
         // this hidden until the sprout has actually reached it.
