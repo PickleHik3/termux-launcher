@@ -99,4 +99,31 @@ public class PerformanceRowPolicyTest {
         assertEquals("the glass reads the picked wallpaper, not the mode",
             Reason.NONE, PerformanceRowPolicy.glassRefraction(facts));
     }
+
+    @Test
+    public void liveBlurIsOfferedWhereGlassRefractionWorksAndIsOn() {
+        assertEquals(Reason.NONE, PerformanceRowPolicy.liveBlur(new Facts(T, false, false, true, true, true)));
+    }
+
+    @Test
+    public void liveBlurTakesGlassRefractionsReasons() {
+        assertEquals(Reason.NEEDS_ANDROID_13,
+            PerformanceRowPolicy.liveBlur(new Facts(S, false, false, true, true, true)));
+        assertEquals(Reason.NEEDS_PICKED_WALLPAPER,
+            PerformanceRowPolicy.liveBlur(new Facts(T, false, false, false, true, true)));
+    }
+
+    @Test
+    public void liveBlurNeedsGlassRefractionOn() {
+        assertEquals(Reason.NEEDS_GLASS_REFRACTION,
+            PerformanceRowPolicy.liveBlur(new Facts(T, false, false, true, false, true)));
+    }
+
+    @Test
+    public void liveBlurIsOffWhileIdleIsReducedAndUnderThePreset() {
+        assertEquals(Reason.OFF_WHILE_IDLE_REDUCED,
+            PerformanceRowPolicy.liveBlur(new Facts(T, true, false, true, true, true)));
+        assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET,
+            PerformanceRowPolicy.liveBlur(new Facts(T, false, true, true, true, true)));
+    }
 }
