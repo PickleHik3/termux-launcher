@@ -655,6 +655,14 @@ public final class GlassRefraction {
         // deeper in it than in its nearest bead, so a melt's swelling beads take it over.
         // setBeadCapsule in Java.
         "uniform float4 uBeadCap;\n" +
+        // The A–Z row's letter beads under the icons' (com.termux.app.dock.AzBeadRow): uAzBead
+        // the first centre x, the pitch, the count and the row's centre line y; uAzLift every
+        // letter bead's radius (0: none), the finger's x and the lift's peak, px (up positive).
+        // A letter bead rises by the raised cosine AzBeadRow.liftShare about the finger. One
+        // more shape of the beads' glass, chosen as the capsule is. setAzBeads in Java.
+        "uniform float4 uAzBead;\n" +
+        "uniform float4 uAzLift;\n" +
+        "const float kAzLiftReach = " + com.termux.app.dock.AzBeadRow.LIFT_REACH_SLOTS + ";\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -901,6 +909,22 @@ public final class GlassRefraction {
         "                b = capB;\n" +
         "                cr = capR;\n" +
         "                onCap = true;\n" +
+        "            }\n" +
+        "        }\n" +
+        // The letter bead nearest this pixel along the row (its slot), risen by its lift; it
+        // takes the pixel where the pixel stands deeper in it than in the shape chosen so far.
+        "        if (uAzLift.x > 0.0 && uAzBead.y > 0.0) {\n" +
+        "            float ai = clamp(floor((fragCoord.x - uAzBead.x) / uAzBead.y + 0.5), 0.0, uAzBead.z - 1.0);\n" +
+        "            float ax = uAzBead.x + ai * uAzBead.y;\n" +
+        "            float ad = abs(ax - uAzLift.y) / uAzBead.y;\n" +
+        "            float al = ad < kAzLiftReach ? uAzLift.z * (0.5 + 0.5 * cos(3.14159265 * ad / kAzLiftReach)) : 0.0;\n" +
+        "            float2 aC = float2(ax, uAzBead.w - al);\n" +
+        "            float2 aB = float2(uAzLift.x, uAzLift.x);\n" +
+        "            if (sdRoundRect(fragCoord - aC, aB, uAzLift.x) < sdRoundRect(fragCoord - center, b, cr)) {\n" +
+        "                center = aC;\n" +
+        "                b = aB;\n" +
+        "                cr = uAzLift.x;\n" +
+        "                onCap = false;\n" +
         "            }\n" +
         "        }\n" +
         "    }\n" +
@@ -2105,6 +2129,10 @@ public final class GlassRefraction {
         private final float[] mBeadWritten = new float[3 + BEAD_SLOTS + 4];
         private boolean mBeadWrittenValid;
         private final float[] mBeadNext = new float[3 + BEAD_SLOTS + 4];
+        /** The letter beads as last written ({@code uAzBead}, then {@code uAzLift}), and next. */
+        private final float[] mAzWritten = new float[7];
+        private final float[] mAzNext = new float[7];
+        private boolean mAzWrittenValid;
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -2178,6 +2206,50 @@ public final class GlassRefraction {
             Arrays.fill(mBeadNext, 0f);
             System.arraycopy(beadSlots(new float[0], 0), 0, mBeadNext, 3, BEAD_SLOTS);
             writeBeads();
+            clearAzBeads();
+        }
+
+        /**
+         * The A–Z row's letter beads under the icons' ({@code com.termux.app.dock.AzBeadRow}):
+         * {@code count} beads of {@code radiusPx}, the first centred at {@code firstCenterX},
+         * {@code pitchPx} apart, on the line {@code centerY}, each risen by the lift about
+         * {@code fingerX} (far off every bead for none) at {@code peakPx}. Read only while beads
+         * are on. Written only on a change; a lift's frame writes one uniform.
+         */
+        public void setAzBeads(float firstCenterX, float pitchPx, int count, float centerY,
+                               float radiusPx, float fingerX, float peakPx) {
+            if (count <= 0 || !(radiusPx > 0f) || !(pitchPx > 0f)) {
+                clearAzBeads();
+                return;
+            }
+            float finger = Float.isNaN(fingerX) ? BEAD_UNUSED_X : fingerX;
+            float peak = Float.isNaN(peakPx) ? 0f : peakPx;
+            mAzNext[0] = firstCenterX;
+            mAzNext[1] = pitchPx;
+            mAzNext[2] = count;
+            mAzNext[3] = centerY;
+            mAzNext[4] = radiusPx;
+            mAzNext[5] = finger;
+            mAzNext[6] = peak;
+            writeAzBeads();
+        }
+
+        /** No letter beads. */
+        public void clearAzBeads() {
+            Arrays.fill(mAzNext, 0f);
+            writeAzBeads();
+        }
+
+        private void writeAzBeads() {
+            float[] n = mAzNext;
+            float[] w = mAzWritten;
+            boolean row = !mAzWrittenValid || n[0] != w[0] || n[1] != w[1] || n[2] != w[2]
+                || n[3] != w[3];
+            boolean lift = !mAzWrittenValid || n[4] != w[4] || n[5] != w[5] || n[6] != w[6];
+            mAzWrittenValid = true;
+            if (row) mShader.setFloatUniform("uAzBead", n[0], n[1], n[2], n[3]);
+            if (lift) mShader.setFloatUniform("uAzLift", n[4], n[5], n[6], 0f);
+            System.arraycopy(n, 0, w, 0, n.length);
         }
 
         /** Whether beads are on: the dock draws one lens per icon rather than its slab. */
