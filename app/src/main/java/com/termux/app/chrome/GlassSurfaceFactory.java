@@ -337,6 +337,20 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The glass a band's surface is continued by below it, on a strip no content stands on (the
+     * one under the navigation pill): the same tint, slice and grain, and the band's veil so the
+     * two read as one sheet, but no rim and no measurement under the band's name.
+     */
+    @NonNull
+    public Drawable continuationSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                        boolean withFoot, int grain,
+                                        @Nullable GlassBackdropCache.Band veilOf,
+                                        int tintStrengthPercent) {
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, 0f, ChromeEdgeRule.NONE,
+            null, veilOf, tintStrengthPercent);
+    }
+
+    /**
      * @param glassBand the band whose glass this surface <em>is</em> — it reports its opacity, its
      *     foot and its slice under this name, and a measurement of that band is a measurement of
      *     this material. Null for a surface nothing is measured against.

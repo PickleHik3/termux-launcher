@@ -7940,6 +7940,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDecorNavBarSurfaceOverlay = surfaceOverlay;
         mDecorNavBarBlurBackdrop = blurBackdrop;
         mDecorNavBarTintOverlay = tintOverlay;
+        // The strip is the docked keyboard's background run on under the pill, so it wears the
+        // terminal effect the keyboard does; it lives outside the chrome's root, so it is adopted.
+        if (mChromeRetroEffect != null) mChromeRetroEffect.adopt(surfaceOverlay);
         mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
     }
 
@@ -7969,6 +7972,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         clearDecorNavBarBackdrop();
+        if (mChromeRetroEffect != null) mChromeRetroEffect.drop(mDecorNavBarSurfaceOverlay);
         ViewParent parent = mDecorNavBarSurfaceOverlay.getParent();
         if (parent instanceof ViewGroup) {
             ((ViewGroup) parent).removeView(mDecorNavBarSurfaceOverlay);
@@ -8307,32 +8311,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildDecorNavBarTint(@NonNull ChromeSpec state) {
-        float foot = defaultDockGlassFootFraction();
         // A keyboard overlaying its place is an opaque panel that answers to neither the slider
         // nor the scheme colour, so the strip takes the same fill: at the glass alpha it would
         // leave the material stopping at the keyboard's bottom edge, which is the very seam
         // this method exists to close.
         if (inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.SOLID)
             return buildInAppKeyboardSolidSurface(0f);
-        // Same three values buildInAppKeyboardSurfaceBackground resolves, so the strip cannot
-        // disagree with the keyboard about its own material.
-        boolean normalized = isInAppKeyboardOpacityLinked();
+        // The keyboard's own stack, continued below it: the same spec, scheme colour, stack
+        // alpha and band veil included, on the rest of the light model. Its frame and frost are
+        // the backdrop view's (updateDecorNavBarBackdrop, navStripFrostFilter).
+        return com.termux.app.chrome.GlassStack.buildContinuation(mChrome.glass(),
+            navStripSpec(state));
+    }
+
+    /**
+     * The docked keyboard's glass as {@link #buildInAppKeyboardSurfaceBackground} builds it, with
+     * the band it is drawn as given by the caller (the keyboard notes its own, the strip only
+     * repeats it). One place, so the strip under the pill cannot disagree with the keyboard about
+     * a single value of its material.
+     */
+    @NonNull
+    private com.termux.app.chrome.GlassStack.Spec inAppKeyboardGlassSpec(@NonNull ChromeSpec state,
+            boolean capsule, float cornerRadiusPx,
+            @Nullable com.termux.app.chrome.GlassBackdropCache.Band band) {
+        // While the keyboard's opacity still follows Base it renders the shared material, so its
+        // own background colour and opacity are ignored here exactly as in the unified path. An
+        // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
+        // how much of the wallpaper shows through.
+        boolean normalized = isInAppKeyboardOpacityLinked()
+            || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays(),
+                inAppKeyboardOnHome());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
-        // The keyboard's own Opacity (background) row fades this same strip along with the
-        // keyboard, so the seam the whole method exists to close stays closed at any setting.
-        int stackAlpha = Math.round(255f * getInAppKeyboardBackdropOpacityPercent() / 100f);
-        if (schemeBackground != null) {
-            int tintAlpha = Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
-            return new ColorDrawable(withAlphaComponent(schemeBackground,
-                Math.round(tintAlpha * stackAlpha / 255f)));
-        }
-        // The keyboard's own grain, not the dock's — it may now have its own.
-        Drawable strip = mChrome.glass().surface(inAppKeyboardGlassAlpha(state), foot, 1f, false,
-            getInAppKeyboardGrainPercent(), getInAppKeyboardTintStrengthPercent());
-        // Each layer's own alpha scaled, never replaced: a plain setAlpha on the stack put the
-        // faint grain layer at full strength, several times coarser than the keyboard's.
-        com.termux.app.chrome.GlassStack.applyStackAlpha(strip, stackAlpha);
-        return strip;
+        int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
+        // Render only the keyboard's slice of the shared light model; the under-pill nav strip
+        // renders the remainder so the single foot lands under the pill (navStripSpec).
+        // Docked, the keyboard is a slice of the frame: only the edge the model says faces the
+        // opening wears a rim, and the rest (its joins, the screen's edges and the strip under
+        // the pill it continues into) are seams. A card keeps its rim all round.
+        boolean floating = isKeyboardFloating();
+        int modelRim = capsule ? com.termux.app.chrome.ChromeEdgeRule.ALL
+            : chromeRimEdges(KEYBOARD_PIECES);
+        return com.termux.app.chrome.GlassStack.keyboard(
+                mPreferences, stackLookPage(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
+            .withBlur(blurRadiusDp)
+            // A card is a card: its fill and rim are never faded out by the stack alpha a
+            // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
+            .withStackAlpha(capsule && !floating ? 100
+                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
+            .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
+            .withSlice(defaultDockGlassFootFraction(), false)
+            .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
+                : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
+            .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
+                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
+            .withBand(band);
+    }
+
+    /**
+     * The under-pill strip's glass: the docked keyboard's spec continued below it
+     * ({@link com.termux.app.chrome.GlassStack.Spec#continuedBelow}), so one foot lands under the
+     * pill and the strip reads as the keyboard's own background. It repeats the keyboard band's
+     * veil where the keyboard's last pass asked for one (the unified glass's veil-only layer asks
+     * too), and no veil otherwise.
+     */
+    @NonNull
+    private com.termux.app.chrome.GlassStack.Spec navStripSpec(@NonNull ChromeSpec state) {
+        return inAppKeyboardGlassSpec(state, false, 0f, mKeyboardBandAskedThisPass
+                ? com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD : null)
+            .continuedBelow();
     }
 
     /**
@@ -8951,37 +8997,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Drawable buildInAppKeyboardSurfaceBackground(@NonNull ChromeSpec state,
                                                          @NonNull View surfaceHost,
                                                          boolean capsule, float cornerRadiusPx) {
-        // While the keyboard's opacity still follows Base it renders the shared material, so its
-        // own background colour and opacity are ignored here exactly as in the unified path. An
-        // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
-        // how much of the wallpaper shows through.
-        boolean normalized = isInAppKeyboardOpacityLinked()
-            || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays(),
-                inAppKeyboardOnHome());
-        Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
-        int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
-        // Render only the keyboard's slice of the shared light model — the under-pill nav strip
-        // renders the remainder so the single foot lands under the pill (see the slice overload).
-        // Docked, the keyboard is a slice of the frame: only the edge the model says faces the
-        // opening wears a rim, and the rest (its joins, the screen's edges and the strip under
-        // the pill it continues into) are seams. A card keeps its rim all round.
-        boolean floating = isKeyboardFloating();
-        int modelRim = capsule ? com.termux.app.chrome.ChromeEdgeRule.ALL
-            : chromeRimEdges(KEYBOARD_PIECES);
-        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
-                mPreferences, stackLookPage(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
-            .withBlur(blurRadiusDp)
-            // A card is a card: its fill and rim are never faded out by the stack alpha a
-            // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
-            .withStackAlpha(capsule && !floating ? 100
-                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
-            .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
-            .withSlice(defaultDockGlassFootFraction(), false)
-            .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
-                : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
-            .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
-                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
-            .withBand(noteInAppKeyboardBand(surfaceHost));
+        com.termux.app.chrome.GlassStack.Spec spec = inAppKeyboardGlassSpec(state, capsule,
+            cornerRadiusPx, noteInAppKeyboardBand(surfaceHost));
+        int blurRadiusDp = spec.blurRadiusDp;
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         if (ChromePolicy.dockBlurEnabled(blurRadiusDp)) {
             Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
@@ -9217,7 +9235,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || overlay == null || wallpaperFrame == null) {
             return;
         }
-        backdrop.setAlpha(1f);
+        // The keyboard's stack alpha fades its frame with its tint (GlassStack.build); the strip's
+        // frame is this view, so it is faded here by the same share the tint is.
+        backdrop.setAlpha(state.keyboardShown && isInAppKeyboardGlassSurface()
+            && !stackStandsDownOnFrame() ? navStripSpec(state).stackAlphaPercent / 100f : 1f);
         // The frost of the surface right above: the keyboard's radius while it is up.
         int stripRadiusDp = navStripBlurRadiusDp(state);
         // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
@@ -9260,7 +9281,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.getDrawable() != null) {
             // Frost and even-out as now; mid-drag the matrix last measured. The same instance
             // when nothing moved, which re-dresses nothing.
-            backdrop.setColorFilter(navStripFrostFilter(!mGlassDragPreview));
+            backdrop.setColorFilter(navStripFrostFilter(state, !mGlassDragPreview));
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
@@ -9322,7 +9343,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Same content-aware light scatter the dock and keyboard backdrops apply, so the
         // under-pill strip reads as the same glass material rather than a plain blur; evened out
         // first on its own rect, as the dock is (ADR 0014).
-        backdrop.setColorFilter(navStripFrostFilter(true));
+        backdrop.setColorFilter(navStripFrostFilter(state, true));
         backdrop.setVisibility(View.VISIBLE);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, stripRadiusDp,
             usingManagedWallpaperSource, targetRect);
@@ -10103,8 +10124,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // dock, still take their ink from the face under them (the plank wears the dock's
             // glass), not from the theme they were built in.
             syncDockGlassInks(state.barAlpha);
-            applyDecorNavBarSurfaceState(state);
+            // The keyboard first: the strip under the pill continues its glass, veil and frost
+            // included, and reads them as this pass leaves them.
             applyInAppKeyboardSurfaceState(state);
+            applyDecorNavBarSurfaceState(state);
             mKeyboardGeometry.completePendingOpenReveal(state);
             mKeyboardGeometry.completePendingCloseGeometry(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
@@ -10136,8 +10159,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDockGlassInks(state.barAlpha);
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
-        applyDecorNavBarSurfaceState(state);
+        // The keyboard first, as above: the strip continues what it was just dressed in.
         applyInAppKeyboardSurfaceState(state);
+        applyDecorNavBarSurfaceState(state);
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
         // the live blur views have nothing left to contribute — and each one that keeps capturing
         // redraws the whole window, terminal text included, on the UI thread.
@@ -23782,7 +23806,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@code measure} false (a drag's tick) the matrix last measured.
      */
     @Nullable
-    private android.graphics.ColorFilter navStripFrostFilter(boolean measure) {
+    private android.graphics.ColorFilter navStripFrostFilter(@NonNull ChromeSpec state,
+                                                             boolean measure) {
+        // Under the docked keyboard's own glass the strip is that glass continued: its frame goes
+        // through the matrix the surface right above drew its frame through, so the same blurred
+        // picture comes out the same on both sides of the keyboard's bottom edge. That surface is
+        // the unified dock glass where the keyboard stands transparent on it, and the keyboard's
+        // own stack otherwise. Under the joined Docked frame the strip keeps its own measure.
+        if (mChrome != null && state.keyboardShown && isInAppKeyboardGlassSurface()
+                && !stackStandsDownOnFrame()) {
+            com.termux.app.chrome.GlassBackdropCache.Band above =
+                shouldUseUnifiedDefaultKeyboardGlassSurface(state)
+                    && isUnifiedAccessoryBackdropReady(state)
+                    ? com.termux.app.chrome.GlassBackdropCache.Band.DOCK
+                    : mKeyboardBandAskedThisPass
+                        ? com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD : null;
+            return com.termux.app.chrome.GlassStack.frostFilter(navStripSpec(state),
+                above == null ? null : mChrome.ink().lastBandEvenOutMatrix(above));
+        }
         android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
             mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) : 100);
         if (mChrome == null) return frost;
@@ -23881,6 +23922,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChromeRetroEffect == null) {
             View root = findViewById(R.id.activity_termux_root_view);
             if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
+            // The under-pill strip, when the decor already holds it (ensureDecorNavBarSurfaceOverlay).
+            if (mChromeRetroEffect != null && mDecorNavBarSurfaceOverlay != null)
+                mChromeRetroEffect.adopt(mDecorNavBarSurfaceOverlay);
         }
         if (mChromeRetroEffect != null) {
             mChromeRetroEffect.setOnHome(
