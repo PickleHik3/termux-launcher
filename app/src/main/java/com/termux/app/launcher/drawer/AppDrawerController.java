@@ -825,10 +825,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // itself (a close, a drag, a re-open) drops the progress out of the settled band and the
         // next frame here wakes it. Scrub and rope frames deliberately do not wake it — they move
         // content above the glass, never what is behind it.
-        if (mLiveBlur != null) {
-            mLiveBlur.setUpdatesPaused(mOpen && !mDragging
-                && mProgress.target >= 1f && mProgress.value >= 0.999f);
+        applyLiveBlurRest();
+    }
+
+    /** True once the blur has taken its one capture of the settled-open scene. */
+    private boolean mLiveBlurRefreshedAtRest;
+
+    /**
+     * The live blur's capture is a software draw of the whole decor in its pre-draw hook — about
+     * 13 ms a frame on a 120 Hz phone, which is what every open and close frame spent between the
+     * traversal's start and its draw. It no longer runs while the plane moves: the capture taken on
+     * the first frame of the open (the host turning visible clears the old one) stands under the
+     * frost for the whole motion, the settled-open scene is captured once, and a close or a drag
+     * rests on that.
+     */
+    @VisibleForTesting
+    void applyLiveBlurRest() {
+        com.github.mmin18.widget.RealtimeBlurView blur = mLiveBlur;
+        if (blur == null) return;
+        if (!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value)) {
+            // Nothing to pause: every capture asked for here is refreshThenRest, which rests the
+            // view itself after its one capture. Pausing here would cancel the open's first one.
+            mLiveBlurRefreshedAtRest = false;
+        } else if (!mLiveBlurRefreshedAtRest) {
+            mLiveBlurRefreshedAtRest = true;
+            blur.refreshThenRest();
         }
+    }
+
+    @VisibleForTesting
+    static boolean isSettledOpen(boolean open, boolean dragging, float target, float value) {
+        return open && !dragging && target >= 1f && value >= 0.999f;
     }
 
     /**
@@ -1855,8 +1882,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (blur == null) return;
         mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
             ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
-        // A fresh open always starts live; doFrame rests it again once the plane settles.
-        if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
+        // A fresh open takes one capture on its first frame and rests on it for the whole motion;
+        // applyLiveBlurRest takes one more once the plane settles. Never live while it moves.
+        if (mLiveBlur != null) {
+            mLiveBlurRefreshedAtRest = false;
+            mLiveBlur.refreshThenRest();
+        }
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the

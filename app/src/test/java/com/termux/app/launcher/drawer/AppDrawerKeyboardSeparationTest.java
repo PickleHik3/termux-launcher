@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
@@ -150,6 +151,53 @@ public class AppDrawerKeyboardSeparationTest {
                 assertFalse(plane.isLayoutRequested());
             }
         }
+    }
+
+    /**
+     * The live blur's capture is a software draw of the decor in its pre-draw hook; on pong it
+     * cost ~13 ms of every open and close frame. It must never be woken while the plane moves.
+     */
+    @Test public void liveBlurNeverCapturesWhileThePlaneMoves() {
+        com.github.mmin18.widget.RealtimeBlurView blur =
+            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
+        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(progress, "target", 1f);
+        // The open's one capture has been taken and the view rested itself.
+        blur.setUpdatesPaused(true);
+
+        for (float p : new float[] {0.03f, 0.26f, 0.5f, 0.9f, 0.998f}) {
+            ReflectionHelpers.setField(progress, "value", p);
+            controller.applyLiveBlurRest();
+            assertTrue("open p=" + p, blur.isUpdatesPaused());
+        }
+
+        // Settled open: exactly one fresh capture, then rest.
+        ReflectionHelpers.setField(progress, "value", 1f);
+        controller.applyLiveBlurRest();
+        assertFalse(blur.isUpdatesPaused());
+        blur.setUpdatesPaused(true);
+        controller.applyLiveBlurRest();
+        assertTrue(blur.isUpdatesPaused());
+
+        // Close: rests on the settled capture all the way down.
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        ReflectionHelpers.setField(progress, "target", 0f);
+        for (float p : new float[] {0.9f, 0.5f, 0.1f}) {
+            ReflectionHelpers.setField(progress, "value", p);
+            controller.applyLiveBlurRest();
+            assertTrue("close p=" + p, blur.isUpdatesPaused());
+        }
+    }
+
+    @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
+        assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
+        assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
+        assertFalse(AppDrawerController.isSettledOpen(true, false, 1f, 0.5f));
+        assertFalse(AppDrawerController.isSettledOpen(true, true, 1f, 1f));
+        assertFalse(AppDrawerController.isSettledOpen(false, false, 0f, 1f));
+        assertFalse(AppDrawerController.isSettledOpen(true, false, 0f, 1f));
     }
 
     private static void layOut(FrameLayout root) {
