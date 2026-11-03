@@ -23,6 +23,10 @@
     <string name="editor_section_clock_weather">Clock &amp; Weather</string>
     <string name="editor_row_outer_margin">Outer margin</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
+    <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
+    <string name="editor_row_refraction_off_lazy">Off while Reduce idle activity is on.</string>
+    <string name="editor_row_refraction_off_wallpaper">Needs a wallpaper set in the launcher.</string>
+    <string name="editor_link_glass_refraction_summary">Settings › Battery &amp; performance</string>
     <string name="editor_st_hours">Clock format</string>
     <string name="editor_st_hours_12">12 h</string>
     <string name="editor_st_hours_24">24 h</string>

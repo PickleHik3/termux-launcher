@@ -539,12 +539,12 @@ public final class LookGrid {
 
     /** Sets one cell, clamped: a page's value goes to its kind's cell. */
     public void write(@NonNull Property property, @Nullable Element element, int page, int value) {
-        mStore.putInt(cellKey(property, element, page), property.clamp(value));
+        put(cellKey(property, element, page), property.clamp(value));
     }
 
     /** Resets one cell: it follows again. */
     public void clear(@NonNull Property property, @Nullable Element element, int page) {
-        mStore.remove(cellKey(property, element, page));
+        drop(cellKey(property, element, page));
     }
 
     /** Whether a kind's cell holds a value of its own. */
@@ -555,12 +555,12 @@ public final class LookGrid {
     /** Sets one kind's cell, clamped. */
     public void write(@NonNull Property property, @Nullable Element element, @Nullable Kind kind,
                       int value) {
-        mStore.putInt(key(property, element, kind), property.clamp(value));
+        put(key(property, element, kind), property.clamp(value));
     }
 
     /** Resets one kind's cell: it follows again. */
     public void clear(@NonNull Property property, @Nullable Element element, @Nullable Kind kind) {
-        mStore.remove(key(property, element, kind));
+        drop(key(property, element, kind));
     }
 
     /** Whether {@code cell} holds a value of its own. */
@@ -570,12 +570,82 @@ public final class LookGrid {
 
     /** Sets {@code cell}, clamped. */
     public void write(@NonNull Key cell, int value) {
-        mStore.putInt(cell.text(), cell.property.clamp(value));
+        put(cell.text(), cell.property.clamp(value));
     }
 
     /** Resets {@code cell}: it follows again. */
     public void clear(@NonNull Key cell) {
-        mStore.remove(cell.text());
+        drop(cell.text());
+    }
+
+    // ------------------------------------------------------------------ seeded cells
+
+    /**
+     * The element cells {@link LookGridKindSeed} wrote and nobody has written since, as one
+     * comma-separated list of grid keys. A seeded cell is the shipped look of an element on a
+     * kind (the keyboard's Mist on Home pages), not a choice: a write from Customization, Home or
+     * the Workspace may take its place ({@link #clearSeeded}). Any write or clear of the cell
+     * makes it the user's.
+     */
+    public static final String KEY_SEEDED_CELLS = "look_grid_seeded_cells";
+
+    /** Whether {@code key} still holds the value the kind seed wrote. */
+    public boolean isSeeded(@NonNull String key) {
+        return seeded().contains(key);
+    }
+
+    /** Marks {@code key} as written by the kind seed. */
+    public void markSeeded(@NonNull String key) {
+        Set<String> cells = seeded();
+        if (cells.add(key)) storeSeeded(cells);
+    }
+
+    /**
+     * Drops every seeded element cell of {@code property} on {@code kind}: those elements then
+     * follow all glass on the kind again. Cells the user wrote are kept. Returns how many went.
+     */
+    public int clearSeeded(@NonNull Property property, @NonNull Kind kind) {
+        Set<String> cells = seeded();
+        if (cells.isEmpty()) return 0;
+        int dropped = 0;
+        for (Element element : Element.values()) {
+            String key = key(property, element, kind);
+            if (cells.remove(key)) {
+                mStore.remove(key);
+                dropped++;
+            }
+        }
+        if (dropped > 0) storeSeeded(cells);
+        return dropped;
+    }
+
+    private void put(@NonNull String key, int value) {
+        mStore.putInt(key, value);
+        unseed(key);
+    }
+
+    private void drop(@NonNull String key) {
+        mStore.remove(key);
+        unseed(key);
+    }
+
+    private void unseed(@NonNull String key) {
+        Set<String> cells = seeded();
+        if (cells.remove(key)) storeSeeded(cells);
+    }
+
+    @NonNull
+    private Set<String> seeded() {
+        String text = mStore.getString(KEY_SEEDED_CELLS, null);
+        Set<String> out = new java.util.LinkedHashSet<>();
+        if (text == null || text.isEmpty()) return out;
+        for (String key : text.split(",")) if (!key.isEmpty()) out.add(key);
+        return out;
+    }
+
+    private void storeSeeded(@NonNull Set<String> cells) {
+        if (cells.isEmpty()) mStore.remove(KEY_SEEDED_CELLS);
+        else mStore.putString(KEY_SEEDED_CELLS, String.join(",", cells));
     }
 
     /** Drops every cell a page holds, all glass and element alike. */

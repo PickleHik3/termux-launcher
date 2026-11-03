@@ -24,8 +24,10 @@ public final class GlassRows {
     @NonNull
     public static EditorRows.CardRows appearance(@NonNull EditorRows.CardRows rows,
                                                  @NonNull Offers offers, int tier) {
-        return rows.tier(tier, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
+        rows.tier(tier, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
             Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
+        // Out for a setting the user can change: the way to it stands under them.
+        return offers.refractionLink ? rows.tier(tier, Row.LINK_GLASS_REFRACTION) : rows;
     }
 
     /** Whether {@code row} is drawn only where the phone draws the glass edge. */

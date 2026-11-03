@@ -2,6 +2,8 @@ package com.termux.app.chrome;
 
 import android.os.Build;
 
+import androidx.annotation.NonNull;
+
 /**
  * When the Fancier Glass switch does anything.
  *
@@ -45,5 +47,35 @@ public final class FancierGlassPolicy {
      */
     public static boolean active(int sdkInt, boolean toggleOn, boolean managedWallpaperOnScreen) {
         return flippable(sdkInt, managedWallpaperOnScreen) && toggleOn;
+    }
+
+    /** Why the glass does not refract now, as the editor tells the user. */
+    public enum Off {
+        /** It refracts. */
+        NONE,
+        /** The phone's Android cannot draw it. */
+        PHONE,
+        /** Reduce idle activity (lazy mode) puts it out with the other effects. */
+        LAZY,
+        /** The Glass refraction switch is off. */
+        SWITCH,
+        /** The wallpaper on screen is not one set from the launcher. */
+        WALLPAPER;
+
+        /** Whether a setting the user can change brings it back (all but {@link #PHONE}). */
+        public boolean userCanChange() {
+            return this != NONE && this != PHONE;
+        }
+    }
+
+    /** {@link #active}'s answer with its reason, lazy mode included; the phone's limit first. */
+    @NonNull
+    public static Off off(int sdkInt, boolean toggleOn, boolean managedWallpaperOnScreen,
+                          boolean lazy) {
+        if (!offered(sdkInt)) return Off.PHONE;
+        if (lazy) return Off.LAZY;
+        if (!toggleOn) return Off.SWITCH;
+        if (!managedWallpaperOnScreen) return Off.WALLPAPER;
+        return Off.NONE;
     }
 }

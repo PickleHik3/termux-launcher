@@ -153,6 +153,9 @@ public final class EditorRows {
         /** The Appearance card's way to the Sheets card. */
         LINK_SHEETS(Kind.LINK, R.string.editor_element_sheets, R.drawable.ic_symbol_grid_view),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
+        /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
+        LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
+            R.drawable.ic_symbol_tune),
         LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),
         LINK_FONT(Kind.LINK, R.string.appearance_row_font, R.drawable.ic_editor_text_size),
         LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
@@ -348,6 +351,19 @@ public final class EditorRows {
 
         public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
                       boolean overviewUp) {
+            this(glassEdge, terminalEffect, homeShown, overviewUp, false);
+        }
+
+        /**
+         * Whether Depth and Edge are out for a setting the user can change (Glass refraction off,
+         * Reduce idle activity on, a wallpaper not set from the launcher): the Appearance block
+         * then links to that setting.
+         */
+        public final boolean refractionLink;
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
+                      boolean overviewUp, boolean refractionLink) {
+            this.refractionLink = refractionLink;
             this.overviewUp = overviewUp;
             this.glassEdge = glassEdge;
             this.terminalEffect = terminalEffect;
