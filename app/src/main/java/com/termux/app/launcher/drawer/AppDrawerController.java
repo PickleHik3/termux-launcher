@@ -1038,6 +1038,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         float target = content != null && mOpen && hasRevealableKeyboard()
             ? AppDrawerTransitionGeometry.clamp01(content.getRevealFraction()) : 0f;
+        diagKbd("retarget to=" + target, mProgress.value, revealFraction(), null);
         if (mReveal.target == target) return;
         mReveal.target = target;
         applyContentInsets();
@@ -1504,6 +1505,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * under the plane. The wait is a pre-draw check instead, which the flip's redraw reaches.
      */
     public void onBuiltInKeyboardRaised() {
+        diagKbd("raised engaged=" + mEngaged, mProgress.value, revealFraction(), null);
         if (!mEngaged || mTextFieldSearch) return;
         View keyboard = mHost.findView(R.id.inapp_keyboard_container);
         if (keyboard == null) return;
@@ -1595,6 +1597,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         retargetReveal();
         applyContentInsets();
         applyFrame(mProgress.value);
+        diagKbd("recapture", mProgress.value, revealFraction(), mPlane == null ? null
+            : mPlane.getFrame());
         kick();
     }
 
@@ -1897,6 +1901,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHostClipped = false;
         }
         plane.setFrame(frame, mCurrentRadiusPx, p);
+        // TEMP DrawerKbd: only at rest points, so the log costs nothing mid-animation.
+        if (p >= 1f || p <= 0f) diagKbd("frame", p, k, frame);
         if (mGlass != null) mGlass.invalidateOutline();
 
         // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
@@ -1948,6 +1954,43 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float revealFraction() {
         if (!hasRevealableKeyboard()) return 0f;
         return AppDrawerTransitionGeometry.clamp01(mReveal.value);
+    }
+
+    // TEMP DrawerKbd diagnostic: revert before merge.
+    private String mDiagLast = "";
+
+    private void diagKbd(@NonNull String where, float p, float k, @Nullable Frame frame) {
+        View kb = mHost.findView(R.id.inapp_keyboard_container);
+        String state = where
+            + " p=" + Math.round(p * 100) / 100f
+            + " k=" + Math.round(k * 100) / 100f
+            + " revTarget=" + mReveal.target
+            + " rounded=" + mRoundedStyle
+            + " hasBands=" + mHasBands
+            + " kbBand=" + (mKeyboardBand == null ? "null"
+                : mKeyboardBand.topPx + "+" + mKeyboardBand.heightPx)
+            + " xkBand=" + (mExtraKeysBand == null ? "null"
+                : mExtraKeysBand.topPx + "+" + mExtraKeysBand.heightPx)
+            + " gap=" + mCapturedGapPx
+            + " imePin=" + mImePinTopPx
+            + " textField=" + mTextFieldSearch
+            + " kbView=" + (kb == null ? "null" : kb.getVisibility() + "@" + kb.getTop() + "h"
+                + kb.getHeight() + " ty=" + kb.getTranslationY() + " z=" + kb.getZ())
+            + " host=" + (mHostLayout == null ? "null" : mHostLayout.getHeight() + " z="
+                + mHostLayout.getZ() + " clip=" + mHostLayout.getClipBounds())
+            + " plane=" + (frame == null ? "null" : frame.top + ".." + frame.bottom)
+            + " r=" + mCurrentRadiusPx
+            + " open=" + mOpenRect;
+        if (state.equals(mDiagLast)) return;
+        mDiagLast = state;
+        StringBuilder frames = new StringBuilder();
+        StackTraceElement[] trace = new Throwable().getStackTrace();
+        for (int i = 1; i < Math.min(trace.length, 7); i++) {
+            frames.append(" <").append(trace[i].getMethodName()).append(':')
+                .append(trace[i].getLineNumber());
+        }
+        android.util.Log.d("DrawerKbd", android.os.SystemClock.uptimeMillis() + " " + state
+            + frames);
     }
 
     private boolean hasRevealableKeyboard() {
