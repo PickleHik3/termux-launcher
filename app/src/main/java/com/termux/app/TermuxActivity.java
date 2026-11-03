@@ -4244,10 +4244,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncFancierGlassLook() {
         com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
-        if (java.util.Objects.equals(look, mFancierGlassLook)) return;
+        boolean live = currentLiveBlur(look != null);
+        if (java.util.Objects.equals(look, mFancierGlassLook) && live == mLiveBlur) return;
         mFancierGlassLook = look;
+        if (live != mLiveBlur) {
+            mLiveBlur = live;
+            // Off: every live layer goes now; the pass below puts the stored frames back up.
+            if (!live && mLiveBackdrop != null) mLiveBackdrop.releaseAll();
+        }
         mChrome.ledger().markAllBackdropsDirty();
         mAppliedPaneStyleKey = null;
+    }
+
+    /** {@link com.termux.app.chrome.LiveBlurPolicy} as it stands this instant; the switch first, so off costs nothing. */
+    private boolean currentLiveBlur(boolean fancierGlassActive) {
+        if (mPreferences == null || !mPreferences.isLiveBlurEnabled() || !fancierGlassActive)
+            return false;
+        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+        return com.termux.app.chrome.LiveBlurPolicy.live(Build.VERSION.SDK_INT, true, true,
+            wallpaperBackdropMode() == WallpaperBackdropPolicy.Mode.SELF_DRAWN,
+            power != null && power.isPowerSaveMode(), mPreferences.isLowMemoryPresetEnabled(),
+            isLazyModeEnabled());
+    }
+
+    /**
+     * The dock backdrop's live picture, attached at the stored frame's blur radius; null when Live
+     * is off or the recorder is full, and the stored frame stands.
+     */
+    @Nullable
+    private android.graphics.drawable.Drawable liveDockPicture(@NonNull ImageView backdrop,
+                                                               int blurRadiusDp) {
+        if (!mLiveBlur) {
+            if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+            return null;
+        }
+        if (mLiveBackdrop == null) {
+            View root = findViewById(R.id.terminal_root_container);
+            if (!(root instanceof ViewGroup)) return null;
+            mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
+        }
+        com.termux.app.chrome.LivePicture picture = mLiveBackdrop.attach(backdrop,
+            blurRadiusDp * getResources().getDisplayMetrics().density);
+        return picture == null ? null : picture.drawable();
+    }
+
+    /** Whether the dock's backdrop shows a picture now, stored or live. */
+    private boolean accessoryPictureUp(@NonNull ImageView backdrop) {
+        return com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable()) != null
+            || (mLiveBackdrop != null && mLiveBackdrop.shows(backdrop.getDrawable()));
     }
 
     /**
@@ -4995,6 +5039,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * wallpaper id, and every glass surface in a pass reads it.
      */
     @Nullable private com.termux.app.chrome.GlassRefraction.Look mFancierGlassLook;
+
+    /** Whether glass takes the live picture this pass ({@link com.termux.app.chrome.LiveBlurPolicy}). */
+    private boolean mLiveBlur;
+
+    /** Live blur's recorder, made the first time a surface goes live. */
+    @Nullable private com.termux.app.chrome.LiveBackdrop mLiveBackdrop;
 
     // --- Active extra-key lens state (drives the per-key refraction in the backdrop shader). ---
     private boolean mKeyLensActive = false;
@@ -7868,6 +7918,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             backdrop.setRenderEffect(null);
         }
+        if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
         // No frame: the dock's content stands on the page's dim again.
@@ -10037,7 +10088,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
             if (backdrop != null && shouldUseAccessoryRenderEffectBlur(state)
-                && com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable()) != null) {
+                && accessoryPictureUp(backdrop)) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
                 clearAccessoryRenderEffectBackdrop();
@@ -10072,7 +10123,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp) &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, backdropTargetRect) &&
-            installed != null) {
+            accessoryPictureUp(backdrop)) {
             // The frost filter follows Opacity live, and the even-out the wallpaper under the dock
             // now asks for (mid-drag the one last measured, re-measured on the release's pass);
             // the same filter instance when neither moved, which re-dresses nothing.
@@ -10085,9 +10136,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
         Rect frameRect = mChrome.blurCache().frameRectRef();
         if (frame == null) {
-            if (installed != null && installed.frameRect().equals(frameRect)) {
+            if ((installed != null && installed.frameRect().equals(frameRect))
+                || (mLiveBlur && accessoryPictureUp(backdrop))) {
                 // A blur in flight: the frame already up still describes this screen, and it is
-                // sampled where the view is now, so a moved dock shows the right wallpaper.
+                // sampled where the view is now, so a moved dock shows the right wallpaper. A live
+                // picture needs no frame at all.
                 backdrop.invalidate();
                 backdrop.setVisibility(View.VISIBLE);
             } else {
@@ -10173,7 +10226,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
                                                @NonNull Bitmap frame, @NonNull Rect frameRect,
                                                int blurRadiusDp) {
-        if (installed != null) {
+        android.graphics.drawable.Drawable live = liveDockPicture(backdrop, blurRadiusDp);
+        if (live != null) {
+            // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
+            if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
+        } else if (installed != null) {
             boolean crossfade = installed.frame() != frame
                 && mChrome.blurCache().isCrossfadedRadius(blurRadiusDp)
                 && !ReducedMotion.isEnabled(this);
@@ -11403,6 +11460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
+        if (mLiveBackdrop != null) mLiveBackdrop.releaseAll();
     }
 
     /** Drop every session's kitty animation frames, keeping the still image each rests on. */

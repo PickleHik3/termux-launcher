@@ -9,6 +9,8 @@
 
     <string name="settings_performance_glass_refraction_title">Glass refraction</string>
     <string name="settings_performance_glass_refraction_summary">Turn off for smoother swipes. Glass edges stop bending the wallpaper.</string>
+    <string name="settings_performance_live_blur_title">Live blur</string>
+    <string name="settings_performance_live_blur_summary">Glass blurs whatever moves behind it. Uses more battery.</string>
     <string name="settings_performance_live_windows_title">Live windows while swiping</string>
     <string name="settings_performance_live_windows_summary">Show the next window\'s live output as you swipe between windows. Turn off to save battery.</string>
     <string name="settings_performance_living_glass_summary">Turn off for smoother swipes. Glass stops flexing and catching light as you move.</string>

@@ -1377,6 +1377,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
 
         /**
+         * Live blur: the glass shows a live, blurred picture of whatever is drawn beneath it
+         * (pages, widgets, the terminal) instead of the stored wallpaper frame. Off by default; it
+         * costs a re-blur on every frame that draws under the glass. Takes effect only where
+         * Glass refraction does (see {@code LiveBlurPolicy}).
+         */
+        public static final String KEY_LIVE_BLUR = "live_blur";
+        public static final boolean DEFAULT_VALUE_LIVE_BLUR = false;
+
+        /**
          * Live windows while swiping: the windows beside the one in front are kept ready and
          * slide in live as the wall is dragged between windows. Off, a swipe shows them only
          * once it lands.
