@@ -52,7 +52,10 @@ import java.util.ArrayList;
  */
 public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
-    /** The dock plus the widgets on the visible page. */
+    /**
+     * The dock, the floats and the widgets on the visible page, in that order of claim
+     * ({@link #RANK_CHROME}).
+     */
     public static final int MAX_LIVE_SURFACES = 8;
 
     /** The panel the budget is sized for: 1440 x 3200, the largest phone screen in common use. */
@@ -88,6 +91,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private boolean[] mDrawn = new boolean[16];
     @NonNull private int[] mOut = new int[16];
     @NonNull private int[] mOrder = new int[16];
+    @NonNull private final int[] mRanks = new int[MAX_LIVE_SURFACES];
 
     public LiveBackdrop(@NonNull ViewGroup root) {
         mRoot = root;
@@ -116,16 +120,68 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      */
     @Nullable
     public LivePicture attach(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
+        return attach(surface, blurRadiusPx, panelRadius, RANK_CHROME);
+    }
+
+    /**
+     * {@link #attach(View, float)} at a place in the budget's order ({@link #RANK_CHROME},
+     * {@link #RANK_FLOAT}, {@link #RANK_WIDGET}). When every picture is taken, a surface of a
+     * better rank takes the place of the newest picture of the worst rank below it, which is
+     * released and falls back to its stored frame on its next draw; a surface no better than any
+     * live one gets null.
+     */
+    @Nullable
+    public LivePicture attach(@NonNull View surface, float blurRadiusPx, int rank) {
+        return attach(surface, blurRadiusPx, false, rank);
+    }
+
+    @Nullable
+    private LivePicture attach(@NonNull View surface, float blurRadiusPx, boolean panelRadius,
+                               int rank) {
         LivePicture picture = find(surface);
         if (picture == null) {
-            if (mPictures.size() >= MAX_LIVE_SURFACES) return null;
+            if (mPictures.size() >= MAX_LIVE_SURFACES) {
+                int count = mPictures.size();
+                for (int i = 0; i < count; i++) mRanks[i] = mPictures.get(i).mRank;
+                int evict = evictIndex(mRanks, count, rank);
+                if (evict < 0) return null;
+                LivePicture evicted = mPictures.remove(evict);
+                evicted.release();
+                // Its view draws the stored frame again on its next draw; ask for that draw.
+                evicted.mSurface.invalidate();
+            }
             picture = new LivePicture(surface, blurRadiusPx, panelRadius);
             mPictures.add(picture);
             listen(true);
         } else {
             picture.setBlurRadiusPx(blurRadiusPx);
         }
+        picture.mRank = rank;
         return picture;
+    }
+
+    /**
+     * The budget's order, best first. Chrome is the dock, the nav strip and the panels (drawer,
+     * palette, sheet, menus): one each, always in front of whatever else is live. Then the
+     * floating windows, which stand over the page. Then the built-in widgets of the page on
+     * screen, which fill what is left; past that they keep the stored frame.
+     */
+    public static final int RANK_CHROME = 0;
+    public static final int RANK_FLOAT = 1;
+    public static final int RANK_WIDGET = 2;
+
+    /**
+     * Which of {@code count} live pictures, at {@code ranks}, gives its place to a surface of
+     * {@code rank}: the newest of the worst rank, when that rank is worse than {@code rank};
+     * -1 when none is. Pure.
+     */
+    @VisibleForTesting
+    static int evictIndex(@NonNull int[] ranks, int count, int rank) {
+        int worst = -1;
+        for (int i = 0; i < count; i++) {
+            if (ranks[i] > rank && (worst < 0 || ranks[i] >= ranks[worst])) worst = i;
+        }
+        return worst;
     }
 
     /** Drops {@code surface}'s picture and its layer. */
