@@ -673,10 +673,10 @@ public final class PaneWallLayout extends ViewGroup
             float x = LiveNeighbourPolicy.slidePx(side, workspaceSlide, width);
             poseOnWall(view, x, width);
             view.setAlpha(mPose.alpha);
-            boolean onScreen = LiveNeighbourPolicy.onScreen(x, width);
-            boolean wasOnScreen = view.getVisibility() == VISIBLE;
-            view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
-            if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
+            // No layout is asked for coming on screen: an INVISIBLE neighbour is laid out with
+            // the pages (isLaidOutNow), and one leaving GONE asks for its own pass. A released
+            // step brings the leaving window on screen this way, and a pass there cost the frame.
+            view.setVisibility(LiveNeighbourPolicy.onScreen(x, width) ? VISIBLE : INVISIBLE);
         }
     }
 
@@ -1660,21 +1660,26 @@ public final class PaneWallLayout extends ViewGroup
         // the drag pulled it in from.
         float fromPx = mOffsetPx + steps * (float) width;
         PaneWallPage page = mCurrent;
-        if (mListener != null) mListener.onInnerStepBegin(page, steps);
-        // The live neighbours stay out through the settle: the arriving one is about to become
-        // the page, and the one leaving carries on beside it in the nudge.
-        mInnerStepping = true;
-        mInnerStepVelocity = releaseVelocityPxPerSec;
+        Trace.beginSection("Wall.innerStep");
         try {
-            finishSink();
-            settleImmediately();
-            if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
+            if (mListener != null) mListener.onInnerStepBegin(page, steps);
+            // The live neighbours stay out through the settle: the arriving one is about to
+            // become the page, and the one leaving carries on beside it in the nudge.
+            mInnerStepping = true;
+            mInnerStepVelocity = releaseVelocityPxPerSec;
+            try {
+                finishSink();
+                settleImmediately();
+                if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
+            } finally {
+                mInnerStepping = false;
+                mInnerStepVelocity = Float.NaN;
+            }
+            // No nudge followed (reduced motion, the display in front): they go away now.
+            applyPagePositions();
         } finally {
-            mInnerStepping = false;
-            mInnerStepVelocity = Float.NaN;
+            Trace.endSection();
         }
-        // No nudge followed (reduced motion, the display in front): they go away now.
-        applyPagePositions();
     }
 
     /**
