@@ -1511,6 +1511,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_REMOVE_WALLPAPER_ID = 3;
 
+    private static final int CONTEXT_MENU_SET_WALLPAPER_ID = 12;
+
     private static final int CONTEXT_MENU_SETTINGS_ID = 6;
 
     private static final int CONTEXT_MENU_RESET_TERMINAL_ID = 7;
@@ -19752,6 +19754,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
                 return true;
+            case CONTEXT_MENU_SET_WALLPAPER_ID:
+                // The picker, whether or not there is a Home page (Use as Terminal only).
+                openSurfaceEditor(java.util.Objects.requireNonNull(
+                    com.termux.app.launcher.home.TerminalActionsSheet.Action.SET_WALLPAPER.door()));
+                return true;
             case CONTEXT_MENU_SETTINGS_ID:
                 openSettingsHome();
                 return true;
@@ -19892,7 +19899,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case RESET: return CONTEXT_MENU_RESET_TERMINAL_ID;
             case KILL_PROCESS: return CONTEXT_MENU_KILL_PROCESS_ID;
             case APPEARANCE: return CONTEXT_MENU_APPEARANCE_ID;
-            case WALLPAPER: return CONTEXT_MENU_REMOVE_WALLPAPER_ID;
+            case SET_WALLPAPER: return CONTEXT_MENU_SET_WALLPAPER_ID;
+            case SHOW_WALLPAPER: return CONTEXT_MENU_REMOVE_WALLPAPER_ID;
             case STYLE: return CONTEXT_MENU_STYLE_ID;
             case SETTINGS: default: return CONTEXT_MENU_SETTINGS_ID;
         }
@@ -23570,9 +23578,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The picker's Photo… came back and the session it interrupted could not be carried: the
-     * editor opens on the Appearance card with the picker over it again, {@code restore} as its
-     * pending choice.
+     * The editor opens on the Global card with the picker over it: for a Wallpaper door
+     * ({@code restore} null), or when the picker's Photo… came back and the session it interrupted
+     * could not be carried ({@code restore} as its pending choice).
      */
     private void resumeWallpaper(
             @Nullable com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore) {
@@ -24257,7 +24265,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * page-led door: the page's own object), and logs the door's line.
      */
     void openSurfaceEditor(@NonNull com.termux.app.surfaces.EditorDoor door) {
-        openSurfaceEditor(door.route(currentWallPlace(), null));
+        com.termux.app.surfaces.EditorCard card = door.route(currentWallPlace(), null);
+        if (door.opensWallpaperPicker()) {
+            // The picker over that card, as the wizard opens it; its Done closes the editor.
+            resumeWallpaper(null);
+            return;
+        }
+        openSurfaceEditor(card);
     }
 
     /** Opens the editor with {@code card} up, or at rest for null. */
@@ -29470,7 +29484,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
             case LOCK_LAYOUT: break; // a switch on the card; see onLayoutLockChanged
             case WALLPAPER:
-                // The Appearance card: its Wallpaper row is in view, and Change leads to the picker.
+                // The wallpaper picker: no editor card has a Change row.
                 openSurfaceEditor(com.termux.app.surfaces.EditorDoor.HOME_SHEET_WALLPAPER);
                 break;
             case APPEARANCE:
@@ -35236,7 +35250,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openWallpaperPicker() {
-            // The Appearance card, whose Wallpaper row leads to the picker.
+            // The wallpaper picker, over the Global card.
             TermuxActivity.this.openSurfaceEditor(
                 com.termux.app.surfaces.EditorDoor.LAUNCHERCTL_WALLPAPER);
         }
