@@ -796,7 +796,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         boolean fxMoving = content != null
             && content.advanceDrawerFx(mProgress.value, dt, reducedMotion);
+        // TEMP DrawerKbd: which views already ask for a layout before this frame's writes, and
+        // which after; the deepest flagged views are the ones that called requestLayout.
+        boolean diagMid = mProgress.value > 0.001f && mProgress.value < 0.999f;
+        if (diagMid) diagLayoutRequesters("pre");
         applyFrame(mProgress.value);
+        if (diagMid) diagLayoutRequesters("post");
         payPendingTextFieldFocus();
         // The !mDragging guard is the single most dangerous line in this slice. Before B-3 the loop
         // never ran during a drag, so this branch could not be reached with a finger down. The rope
@@ -2003,6 +2008,59 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
         android.util.Log.d("DrawerKbd", android.os.SystemClock.uptimeMillis() + " " + state
             + frames);
+    }
+
+    /** TEMP DrawerKbd: the deepest views with a pending layout, by id name and class. */
+    private void diagLayoutRequesters(@NonNull String when) {
+        FrameLayout host = mHostLayout;
+        if (host == null) return;
+        View root = host.getRootView();
+        if (root == null || !root.isLayoutRequested()) {
+            android.util.Log.d("DrawerKbd", android.os.SystemClock.uptimeMillis() + " layout "
+                + when + " p=" + mProgress.value + " none");
+            return;
+        }
+        StringBuilder out = new StringBuilder();
+        int[] count = {0};
+        collectDeepestRequesters(root, out, count);
+        android.util.Log.d("DrawerKbd", android.os.SystemClock.uptimeMillis() + " layout "
+            + when + " p=" + mProgress.value + " requesters:" + out);
+    }
+
+    private static void collectDeepestRequesters(@NonNull View view, @NonNull StringBuilder out,
+                                                 int[] count) {
+        if (!view.isLayoutRequested() || count[0] >= 8) return;
+        boolean childFlagged = false;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.isLayoutRequested()) {
+                    childFlagged = true;
+                    collectDeepestRequesters(child, out, count);
+                }
+            }
+        }
+        if (childFlagged) return;
+        count[0]++;
+        String id;
+        try {
+            id = view.getId() == View.NO_ID ? "no-id"
+                : view.getResources().getResourceEntryName(view.getId());
+        } catch (RuntimeException e) {
+            id = String.valueOf(view.getId());
+        }
+        View parent = view.getParent() instanceof View ? (View) view.getParent() : null;
+        String parentId = "-";
+        if (parent != null && parent.getId() != View.NO_ID) {
+            try {
+                parentId = parent.getResources().getResourceEntryName(parent.getId());
+            } catch (RuntimeException e) {
+                parentId = String.valueOf(parent.getId());
+            }
+        }
+        out.append(" [").append(view.getClass().getSimpleName()).append(' ').append(id)
+            .append(" in ").append(parentId).append(']');
     }
 
     private boolean hasRevealableKeyboard() {
