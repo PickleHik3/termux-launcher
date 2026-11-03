@@ -6858,6 +6858,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The Floating Style for one surface's dress: the arrangement of the half it wears. */
+    /**
+     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
+     * style), and whether the style is Floating: what the command palette's corners follow.
+     */
+    public int commandPaletteCornersDp() {
+        return com.termux.app.chrome.ElementGlass.of(mPreferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage())
+            .cornersDp;
+    }
+
+    /** Whether chrome is in the Floating style (rounded cards) rather than Docked. */
+    public boolean isFloatingStyle() {
+        return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
+    }
+
     private boolean isRoundedStyle(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return arrangementOf(chromeWearsHomeShape(surface) ? com.termux.app.wall.PageRef.HOME
             : com.termux.app.wall.PageRef.TERMINAL).floating();
@@ -7557,9 +7572,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The Floating card's radius for a surface this tall, Corners capped at half of it. Also the
-     * command palette's open-state radius, so the glass surfaces read as one kit. Under Docked no
-     * surface carries a radius of its own: the frame's outer corners are the model's.
+     * The Floating card's radius for a surface this tall, Corners capped at half of it. Under
+     * Docked no surface carries a radius of its own: the frame's outer corners are the model's.
      */
     public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
         return Math.min(layoutCornersPx(), Math.max(0, surfaceHeightPx) / 2f);

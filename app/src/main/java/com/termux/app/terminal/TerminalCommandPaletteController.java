@@ -82,7 +82,6 @@ public final class TerminalCommandPaletteController
      */
     private static final float MIN_HEIGHT = 120f;
     private static final float MAX_HEIGHT = 296f;
-    private static final float RADIUS_SEED = 6f;
     private static final float SEED_WIDTH = 161f;
     private static final float SEED_HEIGHT = 52f;
     private static final float STRIP_RESERVE = 46f;
@@ -190,6 +189,8 @@ public final class TerminalCommandPaletteController
      */
     private float mMaxHeightPx = Float.MAX_VALUE;
     private float mCurrentRadius;
+    /** The open radius, read once per open: the Menus and dialogs surface's Corners. */
+    private float mOpenRadiusPx;
 
     private final List<CommandPaletteFilter.Entry> mEntries = new ArrayList<>();
     /** Parallel to {@link #mRows}: the entry a row runs, or null for a rule or notice. */
@@ -489,6 +490,8 @@ public final class TerminalCommandPaletteController
         }
 
         mView.refreshPalette();
+        mOpenRadiusPx = dp(CommandPaletteShape.openRadiusDp(mActivity.commandPaletteCornersDp(),
+            mActivity.isFloatingStyle()));
         mView.setArgumentMode(false, "", "");
         mView.setQuery("", mActivity.getString(R.string.palette_search_hint));
         rebuildKeycaps(false);
@@ -734,10 +737,9 @@ public final class TerminalCommandPaletteController
             lerp(mSeed.top, openTop, p),
             lerp(mSeed.right, openRight, p),
             lerp(mSeed.bottom, openBottom, p));
-        // Open radius matches the dock capsule, so the palette reads as the same glass kit.
-        float openRadius = mActivity.resolveDockCapsuleCornerRadiusPx(
-            Math.max(1, Math.round(mHeight.value)));
-        mCurrentRadius = lerp(dp(RADIUS_SEED), openRadius, p);
+        // Open radius follows the Menus and dialogs surface's Corners, never past a pill.
+        mCurrentRadius = CommandPaletteShape.radiusPx(dp(CommandPaletteShape.SEED_RADIUS_DP),
+            mOpenRadiusPx, p, mFrame.height());
         // No platform elevation shadow. The caster would be this full-screen glass pane, and the
         // shadow it produced was a flat 8dp band under the bottom edge with square ends that
         // ignored the rounded corners and cut off hard instead of falling off. CommandPaletteView
