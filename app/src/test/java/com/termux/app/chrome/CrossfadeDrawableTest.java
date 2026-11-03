@@ -61,6 +61,56 @@ public class CrossfadeDrawableTest {
         assertEquals(1f, blend.share(), 0f);
     }
 
+    /**
+     * The band behind the system bar across Home 2 to the Workspace: Home's glass, the
+     * Workspace's beside it, crossing with the finger and resting on the Workspace's.
+     */
+    @Test
+    public void theBandCrossesWithTheFingerAndLandsOnTheArrivingDress() {
+        ColorDrawable home = new ColorDrawable(0x22FFFFFF);
+        ColorDrawable workspace = new ColorDrawable(0xAA000000);
+        CrossfadeDrawable band = new CrossfadeDrawable(home, workspace, 0f);
+        int last = -1;
+        for (int i = 0; i <= 20; i++) {
+            band.setShare(com.termux.app.place.SeamFade.share(i / 20f));
+            assertTrue("the arriving dress only grows", band.thereAlpha() >= last);
+            last = band.thereAlpha();
+        }
+        assertEquals(255, band.thereAlpha());
+        assertEquals(0, band.hereAlpha());
+        assertTrue(band.endpoint() == workspace);
+    }
+
+    /** A cancelled crossing fades back the same way and rests on the dress it began in. */
+    @Test
+    public void aCancelFadesBackAndRestsOnTheLeavingDress() {
+        ColorDrawable home = new ColorDrawable(0x22FFFFFF);
+        ColorDrawable workspace = new ColorDrawable(0xAA000000);
+        CrossfadeDrawable band = new CrossfadeDrawable(home, workspace, 0f);
+        band.setShare(com.termux.app.place.SeamFade.share(0.6f));
+        assertTrue(band.thereAlpha() > 0 && band.hereAlpha() > 0);
+        assertTrue("past the middle it would rest on the arriving one", band.endpoint() == workspace);
+        int last = 256;
+        for (int i = 12; i >= 0; i--) {
+            band.setShare(com.termux.app.place.SeamFade.share(i / 20f));
+            assertTrue("the arriving dress only shrinks", band.thereAlpha() <= last);
+            last = band.thereAlpha();
+        }
+        assertEquals(0, band.thereAlpha());
+        assertEquals(255, band.hereAlpha());
+        assertTrue(band.endpoint() == home);
+    }
+
+    /** A band the leaving half did not show rests on nothing after a cancel. */
+    @Test
+    public void aBandThatWasNotThereRestsOnNothingAfterACancel() {
+        CrossfadeDrawable band = new CrossfadeDrawable(null, new ColorDrawable(Color.BLACK), 0.4f);
+        band.setShare(0f);
+        assertTrue(band.endpoint() == null);
+        band.setShare(1f);
+        assertTrue(band.endpoint() == band.there());
+    }
+
     @Test
     public void itDrawsAtEveryShareWithItsLayersAtItsBounds() {
         CrossfadeDrawable blend = new CrossfadeDrawable(new ColorDrawable(Color.RED),

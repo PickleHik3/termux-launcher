@@ -43,6 +43,15 @@ public final class CrossfadeDrawable extends Drawable {
         return mShare;
     }
 
+    /**
+     * The dress the blend has come to rest on, for a holder ending it: {@code there} once the
+     * share has gone past the middle, {@code here} before (a cancelled crossing, faded back).
+     * At either end that is exactly what the blend draws.
+     */
+    @Nullable public Drawable endpoint() {
+        return mShare >= 0.5f ? mThere : mHere;
+    }
+
     /** The share moved; whether it did. */
     public boolean setShare(float share) {
         float s = clamp01(share);
