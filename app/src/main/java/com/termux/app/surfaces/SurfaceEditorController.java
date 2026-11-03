@@ -4972,7 +4972,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (group == null || group.getVisibility() != View.VISIBLE)
                 continue;
             EditorCard card = cardOfGroup(i);
-            if (card == null) {
+            // No square round the page while its halo stands: the glow is the page's outline.
+            if (card == null || (card == EditorCard.HOME && SelectionRingShape.wearsHalo(mCard))) {
                 if (group.getBackground() != null) group.setBackground(null);
                 continue;
             }
@@ -5019,25 +5020,48 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float scale = mTargetScale > 0f ? mTargetScale : 1f;
         // The Appearance card rings the whole frame, its outline standing 4dp out (SPEC 1).
         int frameOut = Math.round(dp(FRAME_RING_OUTSET_DP) / scale);
+        boolean halo = SelectionRingShape.wearsHalo(card);
         int[] rect = card == null ? null : card == EditorCard.APPEARANCE
             ? new int[] {-frameOut, -frameOut, overlay.getWidth() + frameOut,
                 overlay.getHeight() + frameOut}
-            : targetRect(card, overlay);
+            : halo ? miniUiRect(overlay) : targetRect(card, overlay);
         if (rect == null) {
             EditorViews.setVisible(outline, false);
             return;
         }
         int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
-        int grow = card == EditorCard.APPEARANCE ? 0 : isScreenCard(card) ? -stroke : stroke;
+        int grow = card == EditorCard.APPEARANCE || halo ? 0 : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
-        placeInOverlay(outline, overlay, grown);
-        GradientDrawable ring = new GradientDrawable();
-        ring.setColor(0);
-        ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
-            R.color.termux_primary));
-        ring.setCornerRadius(card == EditorCard.APPEARANCE ? dp(FRAME_RING_RADIUS_DP) / scale
-            : isScreenCard(card) ? 0f : Math.max(0f, outlineRadiusPx(card) + grow));
-        outline.setBackground(ring);
+        int primary = mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
+            R.color.termux_primary);
+        if (halo) {
+            // The halo runs along the frame's clip, which reaches past the overlay into the band
+            // above and the display's inset below: the overlay lets the ring view out, and the
+            // frame's own clip (the same round rect) keeps the glow inside the mini UI.
+            if (overlay instanceof ViewGroup && ((ViewGroup) overlay).getClipChildren())
+                ((ViewGroup) overlay).setClipChildren(false);
+            placeInOverlay(outline, overlay, grown);
+            if (mHalo == null) mHalo = new SelectionHaloDrawable();
+            View root = mFrame == null ? null : mFrame.root();
+            float radius = root == null ? 0f : AppearanceEditorFrame.deviceCornerRadiusPx(root);
+            mHalo.set(primary, radius, dp(SelectionRingShape.HALO_WIDTH_DP) / scale);
+            if (outline.getBackground() != mHalo) outline.setBackground(mHalo);
+        } else {
+            placeInOverlay(outline, overlay, grown);
+            GradientDrawable ring = new GradientDrawable();
+            ring.setColor(0);
+            ring.setStroke(stroke, primary);
+            if (card == EditorCard.APPEARANCE) {
+                ring.setCornerRadius(dp(FRAME_RING_RADIUS_DP) / scale);
+            } else {
+                View root = mFrame == null ? null : mFrame.root();
+                float screen = root == null ? 0f
+                    : AppearanceEditorFrame.deviceCornerRadiusPx(root);
+                ring.setCornerRadii(SelectionRingShape.cornerRadii(card, layoutDocked(),
+                    outlineRadiusPx(card), screen, grow));
+            }
+            outline.setBackground(ring);
+        }
         EditorViews.setVisible(outline, true);
         outline.animate().cancel();
         int width = Math.max(1, grown[2] - grown[0]);
@@ -5060,6 +5084,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         outline.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
             .setDuration(EditorMotion.Use.RING_MOVE.durationMs(false))
             .setInterpolator(EditorMotion.Use.RING_MOVE.curve(false)).start();
+    }
+
+    /** The page card's halo, reused across selections. */
+    @Nullable private SelectionHaloDrawable mHalo;
+
+    /**
+     * The mini UI's outline in the overlay's space: the frame's clip (the container widened by
+     * the band it shows above and the display's insets), or the overlay itself when the frame
+     * cannot say.
+     */
+    @NonNull
+    private int[] miniUiRect(@NonNull View overlay) {
+        View root = mFrame == null ? null : mFrame.root();
+        int[] offset = new int[2];
+        if (root == null || !AppearanceEditorFrame.offsetIn(overlay, root, offset))
+            return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
+        float[] clip = AppearanceEditorFrame.outlineRect(root.getWidth(), root.getHeight(),
+            mDisplayInsetLeftPx, mRevealTopPx, mDisplayInsetRightPx, mDisplayInsetBottomPx);
+        return new int[] {Math.round(clip[0]) - offset[0], Math.round(clip[1]) - offset[1],
+            Math.round(clip[2]) - offset[0], Math.round(clip[3]) - offset[1]};
+    }
+
+    /** Whether the launcher wears the Docked layout style: bars meet the screen's edges. */
+    private boolean layoutDocked() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs != null
+            && prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.DOCKED;
     }
 
     /** The screen a screen card stands for: Home's page for Home, the Terminal's else. */
