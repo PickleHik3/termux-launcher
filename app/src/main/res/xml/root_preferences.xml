@@ -79,6 +79,13 @@
     <PreferenceCategory app:key="root_system" app:title="@string/settings_root_system_header">
 
         <Preference
+            app:key="performance"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_destination_performance"
+            app:summary="@string/settings_destination_performance_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
+
+        <Preference
             app:key="general"
             app:icon="@drawable/ic_symbol_tune"
             app:title="@string/settings_section_general"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded style; drawn for the Battery & performance rows -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateX="0" android:translateY="960">
+        <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M240 -760 H600 A40 40 0 0 1 600 -680 H260 Q210 -680 206 -630 Q200 -540 200 -500 Q200 -420 206 -370 Q210 -320 260 -320 H700 Q750 -320 754 -370 Q760 -450 760 -560 A40 40 0 0 1 840 -560 Q840 -450 834 -360 Q827 -240 710 -240 H250 Q133 -240 126 -360 Q120 -430 120 -500 Q120 -570 126 -640 Q133 -760 240 -760 Z M480 -280 H480 Q520 -280 520 -240 V-200 Q520 -160 480 -160 H480 Q440 -160 440 -200 V-240 Q440 -280 480 -280 Z M400 -200 L560 -200 A40 40 0 0 1 560 -120 L400 -120 A40 40 0 0 1 400 -200 Z M280 -600 L440 -600 A40 40 0 0 1 440 -520 L280 -520 A40 40 0 0 1 280 -600 Z M480 -560 L480 -480 A40 40 0 0 1 400 -480 L400 -560 A40 40 0 0 1 480 -560 Z M440 -520 L680 -520 A40 40 0 0 1 680 -440 L440 -440 A40 40 0 0 1 440 -520 Z M752 -828 Q760 -852 768 -828 L784 -796 Q788 -788 796 -784 L828 -768 Q852 -760 828 -752 L796 -736 Q788 -732 784 -724 L768 -692 Q760 -668 752 -692 L736 -724 Q732 -732 724 -736 L692 -752 Q668 -760 692 -768 L724 -784 Q732 -788 736 -796 Z" />
+    </group>
+</vector>
