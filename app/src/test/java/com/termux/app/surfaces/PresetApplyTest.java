@@ -17,7 +17,6 @@ import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -33,9 +32,9 @@ import java.util.List;
 /**
  * A Look picked on the Look slider shows: what the Home page, the Workspace page and a Display
  * page resolve to for every glass element, as the renderers read it ({@link ElementGlass}), on a
- * store shaped like a real install after the kind seed (509b634db). The ignored cases show a
- * Look hidden by a cell the precedence reads first (element@kind, element, all-glass@kind, then
- * Base): they wait on whether a Look picked there should clear those cells.
+ * store shaped like a real install after the kind seed (509b634db). A Look resets the cells read
+ * before its own (developer, 2026-11-03): the Global card's clears the Home and Workspace looks
+ * and every element value; a page card's clears the element values reaching its kinds.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
@@ -82,7 +81,6 @@ public class PresetApplyTest {
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }
 
-    @Ignore("Intent owed (preset-apply 11-03): the 11-02 precedence lets a Home or Workspace card's cell win over the Look")
     @Test
     public void customizationLookShowsAfterTheWorkspaceAndHomeHeldTheirOwn() {
         List<String> wrong = new ArrayList<>();
@@ -141,7 +139,6 @@ public class PresetApplyTest {
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }
 
-    @Ignore("Intent owed (preset-apply 11-03): the 11-02 precedence lets a element card's cell win over the Look")
     @Test
     public void customizationLookShowsAfterAnElementCardHeldItsOwn() {
         List<String> wrong = new ArrayList<>();
@@ -155,7 +152,6 @@ public class PresetApplyTest {
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }
 
-    @Ignore("Intent owed (preset-apply 11-03): the 11-02 precedence lets a element card's cell win over the Look")
     @Test
     public void workspaceLookShowsAfterAnElementCardHeldItsOwn() {
         List<String> wrong = new ArrayList<>();
@@ -166,6 +162,12 @@ public class PresetApplyTest {
             tap(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE), stop);
             expectEverywhere(prefs, stop, new int[] {TERMINAL_PAGE, DISPLAY_PAGE},
                 "Workspace after Dock " + where, wrong);
+            if (where == EditorChips.AppliesTo.GLOBAL || where == EditorChips.AppliesTo.HOME) {
+                int home = prefs.lookGrid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
+                    HOME_PAGE);
+                if (home != 23)
+                    wrong.add("Dock " + where + " left Home pages: dock opacity " + home);
+            }
         }
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }

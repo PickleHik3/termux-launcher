@@ -1305,6 +1305,85 @@ public final class SurfacePresets {
     }
 
     /**
+     * A Look picked on the Global (Customization) card: {@link #applyLook(TermuxAppSharedPreferences,
+     * Preset, PaneWallPage)} after clearing the cells read before Base ({@link #clearBeneathLook}),
+     * in the same one editor, so every surface on every page wears it (developer, 2026-11-03).
+     */
+    public static void applyGlobalLook(@NonNull TermuxAppSharedPreferences prefs,
+                                       @NonNull Preset preset, @NonNull PaneWallPage half) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        Batch batch = store == null ? null : new Batch(store);
+        TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
+        clearBeneathLook(into.lookGrid());
+        applyAtHalf(into, halfOf(preset, half), half);
+        resetSurfaceExtras(into);
+        if (batch != null)
+            batch.applyToStore();
+    }
+
+    /** The glass numbers a Look stands for, which a Look resets beneath it. */
+    private static final LookGrid.Property[] LOOK_PROPERTIES = {LookGrid.Property.FROST,
+        LookGrid.Property.OPACITY, LookGrid.Property.GRAIN, LookGrid.Property.TINT};
+
+    /**
+     * Whether a Global Look would clear anything ({@link #clearBeneathLook}): a Home or Workspace
+     * look, or an element's own value, on any of a Look's numbers.
+     */
+    static boolean holdsCellsBeneathLook(@NonNull LookGrid grid) {
+        for (LookGrid.Property property : LOOK_PROPERTIES) {
+            if (!property.perElement) continue;
+            for (LookGrid.Kind kind : LookGrid.Kind.values())
+                if (grid.has(property, null, kind)) return true;
+            for (LookGrid.Element element : LookGrid.Element.values()) {
+                if (grid.has(property, element, (LookGrid.Kind) null)) return true;
+                for (LookGrid.Kind kind : LookGrid.Kind.values())
+                    if (grid.has(property, element, kind)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Before a Global Look: the Home and Workspace looks (all glass on each kind) and every
+     * element's own value, everywhere and on each kind, go, for each of a Look's numbers.
+     */
+    static void clearBeneathLook(@NonNull LookGrid grid) {
+        for (LookGrid.Property property : LOOK_PROPERTIES) {
+            if (!property.perElement) continue;
+            for (LookGrid.Kind kind : LookGrid.Kind.values())
+                grid.clear(property, null, kind);
+            for (LookGrid.Element element : LookGrid.Element.values()) {
+                grid.clear(property, element, (LookGrid.Kind) null);
+                for (LookGrid.Kind kind : LookGrid.Kind.values())
+                    grid.clear(property, element, kind);
+            }
+        }
+    }
+
+    /**
+     * Before a Look on a page card (Home, Workspace) for {@code kinds}: each element's own value
+     * on those kinds goes, and an element's everywhere value stops reaching them. That value
+     * moves to the element's cell on every other kind that holds none, so those kinds look as
+     * they did.
+     */
+    static void clearBeneathKindLook(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds) {
+        for (LookGrid.Property property : LOOK_PROPERTIES) {
+            if (!property.perElement) continue;
+            for (LookGrid.Element element : LookGrid.Element.values()) {
+                for (LookGrid.Kind kind : kinds)
+                    grid.clear(property, element, kind);
+                if (!grid.has(property, element, (LookGrid.Kind) null)) continue;
+                int everywhere = grid.store().getInt(
+                    LookGrid.key(property, element, (LookGrid.Kind) null), property.shipped);
+                for (LookGrid.Kind other : LookGrid.Kind.values())
+                    if (!kinds.contains(other) && !grid.has(property, element, other))
+                        grid.write(property, element, other, everywhere);
+                grid.clear(property, element, (LookGrid.Kind) null);
+            }
+        }
+    }
+
+    /**
      * A Look put on one page (the editor's scope chip on the page side, ADR 0015 §6): each surface
      * cell a page may hold (the blur, opacity, grain and tint of the dock, status bar and keyboard)
      * gets the Look's number as that page's {@code @id} override. Base, the links, the material,
