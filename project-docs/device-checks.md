@@ -98,6 +98,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   rounded corners still clip the slab. Effect off and on three times: the bar's glass and blur, the
   stats cluster's padding and the row's look come back exactly. CRT green / amber / Material: the
   lights and the display take green / amber / the theme's primary. Home page: everything plain.
+- **Deck bands + single frame on pong (11-03, wave 8e, e29a3379f).** Docked layout, CRT on, the
+  keyboard up: the band behind the system status bar (clock, signal) and the band behind the
+  navigation pill are the same opaque slab as the bar and the keyboard, no wallpaper through
+  either; look for a seam where the status band meets the bar's top (each band shades on its own).
+  The CRT pane's frame is one opaque ring: no thin light line outside it and no grey line between
+  it and the screen; the glass blur and tint still show inside the screen. Keyboard down (dock foot
+  showing): the foot keeps the dock's own glass. Effect off: both bands gone, the status strip's
+  glass and blur back, the pane's edge light back round the glass slab.
 - **Live windows while swiping (11-01).** Three Workspace windows, each running something that
   prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
   slides in live beside it, its output moving, at the same size and glass as the current one.

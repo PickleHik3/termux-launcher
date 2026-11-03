@@ -87,6 +87,18 @@
                 android:layout_height="match_parent" />
         </FrameLayout>
 
+        <!-- The deck look's band behind the system status bar (wave 8): the window bar's opaque
+             slab carried up under the clock while a terminal effect is drawn, over whatever glass
+             the strip or the joined Docked frame lays there. Owned by applyDeckBands alone; gone
+             off the deck. -->
+        <View
+            android:id="@+id/deck_status_band"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="top"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <RelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
@@ -659,6 +671,19 @@
                  There used to be a second bottom stack here holding only the status bar, which is
                  what pinned it above the dock whatever order the user gave it. -->
         </LinearLayout>
+
+        <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
+             accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's
+             opaque slab while a terminal effect is drawn. Owned by applyDeckBands alone; gone off
+             the deck. -->
+        <View
+            android:id="@+id/deck_nav_band"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@+id/accessory_stack_container"
+            android:layout_alignParentBottom="true"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
 
         <RelativeLayout
             android:id="@+id/accessory_stack_container"

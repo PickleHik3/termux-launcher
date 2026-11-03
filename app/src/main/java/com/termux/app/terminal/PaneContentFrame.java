@@ -110,15 +110,11 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * over whatever the pane's slab is ({@link #setBezelFill}); 0 until the first dress.
      */
     private int mBezelFill;
-    /** The screen edge's line colour, resolved on each dress rather than on each draw. */
-    private int mBezelLineColour;
     private final Paint mBezelFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mBezelLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** The bezel's depth ({@link PaneBezel#SHADE_COLOURS}), rebuilt with {@link #mBezelPath}. */
     private final Paint mBezelShadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    /** The band between the pane's outline and the screen, and the screen's own edge. */
+    /** The band between the pane's outline and the screen. */
     private final Path mBezelPath = new Path();
-    private final Path mBezelLinePath = new Path();
     private boolean mBezelPathDirty = true;
     /** Scratch for the screen's rect, {@code left, top, right, bottom, bendBottom}. */
     private final float[] mScreenScratch = new float[5];
@@ -156,7 +152,6 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     private void initPaddingFillPaint() {
         mPaddingFillPaint.setAntiAlias(false);
         mBezelFillPaint.setStyle(Paint.Style.FILL);
-        mBezelLinePaint.setStyle(Paint.Style.STROKE);
         mBezelShadePaint.setStyle(Paint.Style.FILL);
     }
 
@@ -201,11 +196,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * as a solid frame round the screen whatever the pane's glass is doing.
      */
     public void setBezelFill(int argb) {
-        // Re-read with every dress, so a theme or scheme change reaches the screen's edge too.
-        int line = PaneRim.lineColour(getContext());
-        if (mBezelFill == argb && mBezelLineColour == line) return;
+        if (mBezelFill == argb) return;
         mBezelFill = argb;
-        mBezelLineColour = line;
         if (bezelWorn()) invalidate();
     }
 
@@ -614,15 +606,14 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     /**
      * The bezel, over the pane's glass and under the terminal: its opaque fill
-     * ({@link #setBezelFill}), and the screen's edge, the pane rim's own line laid just outside
-     * the screen so the effect inside never touches it, with the band lit at its top and shaded at
-     * its bottom between the two ({@link PaneBezel#SHADE_COLOURS}). The effect leaves the band as
+     * ({@link #setBezelFill}), lit at its top and shaded at its bottom
+     * ({@link PaneBezel#SHADE_COLOURS}). No line runs round the screen: the bezel is one solid
+     * frame, and the effect's recess is the screen's only edge. The effect leaves the band as
      * it is ({@link RetroEffectBinder.ScreenShape}); the slab under it shows only until the first
      * dress sets the fill.
      */
     private void drawBezel(@NonNull Canvas canvas) {
         if (!bezelWorn() || getWidth() <= 0 || visibleHeight() <= 0) return;
-        float stroke = PaneRim.stockStrokePx(density());
         if (mBezelPathDirty) {
             int height = visibleHeight();
             float outer = cardRadiusPx(height);
@@ -633,11 +624,6 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             mBezelPath.addRoundRect(0f, 0f, getWidth(), height, outer, outer, Path.Direction.CW);
             mBezelPath.addRoundRect(mScreenScratch[0], mScreenScratch[1], mScreenScratch[2],
                 mScreenScratch[3], radius, radius, Path.Direction.CW);
-            float half = stroke / 2f;
-            mBezelLinePath.reset();
-            mBezelLinePath.addRoundRect(mScreenScratch[0] - half, mScreenScratch[1] - half,
-                mScreenScratch[2] + half, mScreenScratch[3] + half, radius + half, radius + half,
-                Path.Direction.CW);
             mBezelShadePaint.setShader(new LinearGradient(0f, 0f, 0f, height,
                 PaneBezel.SHADE_COLOURS, PaneBezel.SHADE_POSITIONS, Shader.TileMode.CLAMP));
             mBezelPathDirty = false;
@@ -649,10 +635,6 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         // Lit at the top and shaded at the bottom, over the fill; the screen's own lip shadow is
         // the effect's recess (PaneRetroEffect#RECESS_SHADE).
         canvas.drawPath(mBezelPath, mBezelShadePaint);
-        if (mBezelLineColour == 0) mBezelLineColour = PaneRim.lineColour(getContext());
-        mBezelLinePaint.setStrokeWidth(stroke);
-        mBezelLinePaint.setColor(mBezelLineColour);
-        canvas.drawPath(mBezelLinePath, mBezelLinePaint);
     }
 
     /** Where the terminal child's first row of cells starts below its own top edge, if it is one. */
