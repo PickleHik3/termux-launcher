@@ -556,10 +556,9 @@ public final class PanelBackdrop {
         private void releaseBitmap() {
             mDrawable.show(null, 0, LivePicture.SCALE);
             mCanvas = null;
-            if (mBitmap != null) {
-                mBitmap.recycle();
-                mBitmap = null;
-            }
+            // Not recycled: a display list recorded before this may still draw it this frame. From
+            // API 26 its pixels sit on the native heap and go with the last reference.
+            mBitmap = null;
         }
 
         void release() {
