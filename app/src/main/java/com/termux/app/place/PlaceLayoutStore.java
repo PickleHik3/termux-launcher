@@ -229,8 +229,9 @@ public final class PlaceLayoutStore {
      */
     private static final String KEY_DRAWER_TILE = "drawer_tile";
     /**
-     * Where a layout's Drawer tile stands in the dock row, a
-     * {@link DrawerTilePolicy.Position} value. Absent is the start.
+     * Where a layout's Drawer tile stands in the dock row: a {@link DrawerTilePolicy.Position}
+     * value (from before the tile took any column, or never dragged), or a column's decimal
+     * index ({@link DrawerTilePolicy#parsePlace}). Absent is the start.
      */
     private static final String KEY_DRAWER_TILE_POSITION = "drawer_tile_position";
     /**
@@ -1196,13 +1197,36 @@ public final class PlaceLayoutStore {
 
     /**
      * Where the Drawer tile stands in this view's layout's dock row, whether or not the tile is
-     * on, so it comes back where it was; the start until the user drags it.
+     * on, so it comes back where it was; the start until the user drags it. A tile dragged to a
+     * column reads as the start here: the row asks {@link #drawerTilePlace}.
      */
     @NonNull
     public DrawerTilePolicy.Position drawerTilePosition() {
         if (mStore == null) return DrawerTilePolicy.DEFAULT;
         return DrawerTilePolicy.parse(mStore.getString(
             dockReadKey(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION)), null));
+    }
+
+    /**
+     * Where the Drawer tile stands in this view's layout's dock row, an anchor or a column
+     * ({@link DrawerTilePolicy#parsePlace}); the start until the user drags it.
+     */
+    @NonNull
+    public DrawerTilePolicy.Place drawerTilePlace() {
+        if (mStore == null) return DrawerTilePolicy.DEFAULT_PLACE;
+        return DrawerTilePolicy.parsePlace(mStore.getString(
+            dockReadKey(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION)), null));
+    }
+
+    /**
+     * The tile dropped on {@code column} of the row. Not a layout change: the dock row re-lays
+     * its slots itself.
+     */
+    public void setDrawerTileColumn(int column) {
+        DrawerTilePolicy.Place place = DrawerTilePolicy.Place.at(column);
+        if (mStore == null || place.equals(drawerTilePlace())) return;
+        mStore.edit().putString(layoutWideKey(dockVariant(), KEY_DRAWER_TILE_POSITION),
+            DrawerTilePolicy.persisted(place)).apply();
     }
 
     /**
@@ -2308,7 +2332,7 @@ public final class PlaceLayoutStore {
             || home.dockStyle() != shared.dockStyle()
             || home.searchField() != shared.searchField()
             || home.drawerTile() != shared.drawerTile()
-            || home.drawerTilePosition() != shared.drawerTilePosition();
+            || !home.drawerTilePlace().equals(shared.drawerTilePlace());
     }
 
     /**

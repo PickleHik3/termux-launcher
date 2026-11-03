@@ -15,6 +15,8 @@ import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.launcher.LauncherEntries;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.model.AppRef;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
 
@@ -33,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -52,13 +55,13 @@ public class SuggestionBarDrawerTileTest {
     private Activity activity;
     private SuggestionBarView bar;
     private int taps;
-    private final List<DrawerTilePolicy.Position> moves = new ArrayList<>();
+    private final List<int[]> moves = new ArrayList<>();
 
     private final SuggestionBarView.DrawerTileListener listener =
         new SuggestionBarView.DrawerTileListener() {
             @Override public void onDrawerTileTapped() { taps++; }
-            @Override public void onDrawerTileMoved(@NonNull DrawerTilePolicy.Position p) {
-                moves.add(p);
+            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn) {
+                moves.add(new int[] {drawerColumn, paletteColumn});
             }
         };
 
@@ -184,6 +187,114 @@ public class SuggestionBarDrawerTileTest {
         bar.setVerticalForm(true);
         idle();
         assertEquals("a rail holds neither", 0, bar.stillTileCentersX(stills));
+    }
+
+    /** Both tiles stand in their own columns on every page, the apps around them in order. */
+    @Test public void theTilesStandInTheirColumnsOnEveryPage() {
+        List<LauncherAppEntry> apps = pinApps(12);
+        bar.setDrawerTileAt(DrawerTilePolicy.Place.at(4), listener);
+        bar.setPaletteTile(true, 1, () -> { });
+        idle();
+        assertEquals("two tiles: five apps a page", 5, bar.computePinnedItemsPerPage());
+        for (int page = 0; page < 3; page++) {
+            ReflectionHelpers.setField(bar, "pinnedPageIndex", page);
+            ReflectionHelpers.setField(bar, "lastSurfaceRenderSignature", 0);
+            bar.reload();
+            idle();
+            assertNotNull("page " + page + ": the Drawer tile", drawerTile());
+            assertNotNull("page " + page + ": the palette tile", paletteTile());
+            assertEquals(4, (int) ReflectionHelpers.getField(bar, "drawerTileColumn"));
+            assertEquals(1, (int) ReflectionHelpers.getField(bar, "paletteTileColumn"));
+            float step = bar.getWidth() / 7f;
+            int[] row = new int[2];
+            bar.getLocationOnScreen(row);
+            assertEquals(row[0] + step * 4.5f, centreX(drawerTile()), 2f);
+            assertEquals(row[0] + step * 1.5f, centreX(paletteTile()), 2f);
+            int[] expected = {0, 2, 3, 5, 6};
+            for (int i = 0; i < 5 && page * 5 + i < apps.size(); i++) {
+                View app = findNamed(bar, apps.get(page * 5 + i).label);
+                assertNotNull("page " + page + " app " + i, app);
+                assertEquals("page " + page + " app " + i, row[0] + step * (expected[i] + 0.5f),
+                    centreX(app), 2f);
+            }
+        }
+    }
+
+    /** A drag drops the tile on the column nearest its centre; the apps make way meanwhile. */
+    @Test public void aDragDropsTheTileOnTheNearestColumn() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
+        idle();
+        View tile = drawerTile();
+        float step = bar.getWidth() / 7f;
+        View terminalSlot = (View) terminal().getParent();
+        drag(tile, 2f * step, false);
+        assertEquals("over column 2 the Terminal steps into the open column 0", -step,
+            terminalSlot.getTranslationX(), 1f);
+        assertTrue("not dropped yet", moves.isEmpty());
+        drag(tile, 2f * step, true);
+        assertEquals(1, moves.size());
+        assertArrayEquals(new int[] {2, -1}, moves.get(0));
+    }
+
+    /** A drop on the other tile's column swaps the two; a drop where it stood moves nothing. */
+    @Test public void aDropOnTheOtherTileSwapsThem() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
+        bar.setPaletteTile(true, () -> { });
+        idle();
+        float step = bar.getWidth() / 7f;
+        drag(drawerTile(), 6f * step, true);
+        assertArrayEquals("the drawer to the last, the palette to the first",
+            new int[] {6, 0}, moves.get(0));
+
+        drag(paletteTile(), -6f * step, true);
+        assertArrayEquals("the palette onto the drawer", new int[] {6, 0}, moves.get(1));
+
+        drag(drawerTile(), 0.2f * step, true);
+        assertEquals("back on its own column: no move", 2, moves.size());
+    }
+
+    /** Long-presses {@code tile}, carries it {@code dx} along the row, and lets go if {@code up}. */
+    private void drag(View tile, float dx, boolean up) {
+        int[] at = new int[2];
+        tile.getLocationOnScreen(at);
+        float x = at[0] + tile.getWidth() / 2f;
+        float y = at[1] + tile.getHeight() / 2f;
+        long t = android.os.SystemClock.uptimeMillis();
+        tile.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50L));
+        for (int i = 1; i <= 4; i++) {
+            tile.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 600 + i * 16,
+                android.view.MotionEvent.ACTION_MOVE, x + dx * i / 4f, y, 0));
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        if (!up) return;
+        tile.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 700,
+            android.view.MotionEvent.ACTION_UP, x + dx, y, 0));
+        idle();
+    }
+
+    /** {@code count} apps pinned, resolved as installed. */
+    private List<LauncherAppEntry> pinApps(int count) {
+        List<LauncherAppEntry> apps = new ArrayList<>();
+        List<PinnedItem> pinned = new ArrayList<>();
+        java.util.Map<String, LauncherAppEntry> cache =
+            ReflectionHelpers.getField(bar, "resolvedRefCache");
+        for (int i = 0; i < count; i++) {
+            LauncherAppEntry entry = new LauncherAppEntry(
+                new AppRef("com.example.app" + i, "Main"), "App " + i, null);
+            apps.add(entry);
+            cache.put(entry.appRef.stableId(), entry);
+            pinned.add(new PinnedAppItem(entry.appRef));
+        }
+        LauncherConfigRepository store = new LauncherConfigRepository(new Store());
+        store.savePinnedItems(pinned);
+        bar.setConfigRepository(store);
+        for (LauncherAppEntry entry : apps) cache.put(entry.appRef.stableId(), entry);
+        bar.reload();
+        idle();
+        return apps;
     }
 
     private static void assertBoxed(float centre, float[] boxes, int count) {

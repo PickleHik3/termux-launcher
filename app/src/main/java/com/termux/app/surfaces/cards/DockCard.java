@@ -60,6 +60,11 @@ public final class DockCard {
     /** The palette button on the dock. Stored now, drawn in wave 6. */
     public static final String KEY_COMMAND_PALETTE_BUTTON = "dock_command_palette_button";
     public static final boolean DEFAULT_COMMAND_PALETTE_BUTTON = true;
+    /**
+     * The palette tile's column in the dock row, an int, one for every layout (the Drawer tile's
+     * is per layout). Absent is the row's last ({@code PaletteTilePolicy.DEFAULT_COLUMN}).
+     */
+    public static final String KEY_COMMAND_PALETTE_COLUMN = "dock_command_palette_column";
 
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
