@@ -18370,9 +18370,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDrawerTileRowsPage = rowsPage;
         boolean on = mPreferences != null && arrangementOf(rowsPage).drawerTile();
         PlaceLayoutStore store = dockStoreOf(rowsPage);
-        bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
-                : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
-            on ? mDrawerTileListener : null);
+        // The listener stands with the tile off too: it hears the palette tile's drops.
+        bar.setDrawerTileAt(on ? (store != null ? store.drawerTilePlace()
+                : com.termux.app.dock.DrawerTilePolicy.DEFAULT_PLACE) : null,
+            mDrawerTileListener);
         syncPaletteTile(bar);
     }
 
@@ -18405,8 +18406,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
             : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
                 com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
-        bar.setPaletteTile(on, on ? () -> getCommandPaletteController().openFromField(null, true)
-            : null);
+        // Its column is one for every layout; absent, the row's last.
+        int column = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
+            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
+                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
+        bar.setPaletteTile(on, column,
+            on ? () -> getCommandPaletteController().openFromField(null, true) : null);
     }
 
     /**
@@ -18436,10 +18441,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 openAppDrawerFromHome();
             }
 
-            @Override public void onDrawerTileMoved(
-                    @NonNull com.termux.app.dock.DrawerTilePolicy.Position position) {
+            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn) {
+                // The Drawer tile's column is the layout's own; the palette tile's is global.
                 PlaceLayoutStore store = committedDockStore();
-                if (store != null) store.setDrawerTilePosition(position);
+                if (store != null && drawerColumn >= 0) store.setDrawerTileColumn(drawerColumn);
+                android.content.SharedPreferences prefs =
+                    mPreferences == null ? null : mPreferences.getSharedPreferences();
+                if (prefs != null && paletteColumn >= 0) {
+                    prefs.edit().putInt(
+                        com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
+                        paletteColumn).apply();
+                }
                 syncDrawerTile();
             }
         };
