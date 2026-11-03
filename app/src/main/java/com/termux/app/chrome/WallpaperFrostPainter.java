@@ -147,7 +147,7 @@ public final class WallpaperFrostPainter {
         return applyFrost(frost, glassOf(frost, null), topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets());
+            sheetsCover(), sheets(), true);
     }
 
     /**
@@ -162,7 +162,7 @@ public final class WallpaperFrostPainter {
             topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets());
+            sheetsCover(), sheets(), true);
     }
 
     /**
@@ -179,7 +179,7 @@ public final class WallpaperFrostPainter {
         return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
             SurfaceDirtyLedger.FrostRadius.APP_DRAWER, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets());
+            sheetsCover(), sheets(), true);
     }
 
     /**
@@ -278,8 +278,23 @@ public final class WallpaperFrostPainter {
                                @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
                                float cornerRadiusPx, int seams, float cover,
                                @NonNull ElementOn glass) {
+        return applyFrost(frost, boundsView, blurRadiusDp, rectKey, radiusKey, cornerRadiusPx, seams,
+            cover, glass, false);
+    }
+
+    /**
+     * @param panel a panel's glass ({@link PanelBackdrop}): where it cannot record what is beneath
+     *     it (below Android 12) the frost is its picture over the launcher's own wallpaper too
+     */
+    private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
+                               @NonNull SurfaceDirtyLedger.FrostRect rectKey,
+                               @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
+                               float cornerRadiusPx, int seams, float cover,
+                               @NonNull ElementOn glass, boolean panel) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
-        if (!mSurfaces.wallpaperPassthroughEnabled() || blurRadiusDp <= 0 || wallpaperFrame == null
+        boolean wanted = mSurfaces.wallpaperPassthroughEnabled()
+            || (panel && !PanelBackdropPolicy.canRecord(android.os.Build.VERSION.SDK_INT));
+        if (!wanted || blurRadiusDp <= 0 || wallpaperFrame == null
             || boundsView == null || boundsView.getVisibility() != View.VISIBLE
             || boundsView.getWidth() <= 0 || boundsView.getHeight() <= 0) {
             hide(frost, rectKey);

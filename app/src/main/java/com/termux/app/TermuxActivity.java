@@ -1928,6 +1928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         sLiveActivity = new java.lang.ref.WeakReference<>(this);
         registerRotationListener();
         setContentView(R.layout.activity_termux);
+        com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
         // to right in every locale. Reading-order overlays added here (help, tour, notices, the
@@ -4289,14 +4290,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
             return null;
         }
+        com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
+        return recorder == null ? null : recorder.attach(surface,
+            blurRadiusDp * getResources().getDisplayMetrics().density);
+    }
+
+    /** The window's recorder, made on first use; null before the content root exists. */
+    @Nullable
+    private com.termux.app.chrome.LiveBackdrop liveBackdrop() {
         if (mLiveBackdrop == null) {
             View root = findViewById(R.id.terminal_root_container);
             if (!(root instanceof ViewGroup)) return null;
             mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
         }
-        return mLiveBackdrop.attach(surface,
-            blurRadiusDp * getResources().getDisplayMetrics().density);
+        return mLiveBackdrop;
     }
+
+    /** The panels' recorder and Live switch ({@link com.termux.app.chrome.PanelBackdrop}). */
+    private final com.termux.app.chrome.PanelBackdrop.Source mPanelBackdropSource =
+        new com.termux.app.chrome.PanelBackdrop.Source() {
+            @Nullable @Override public com.termux.app.chrome.LiveBackdrop recorder() {
+                return liveBackdrop();
+            }
+
+            @Override public boolean liveBlur() {
+                return mLiveBlur;
+            }
+        };
 
     /** Whether the dock's backdrop shows a picture now, stored or live. */
     private boolean accessoryPictureUp(@NonNull ImageView backdrop) {
