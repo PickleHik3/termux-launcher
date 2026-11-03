@@ -1461,6 +1461,29 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
+    public void theDrawerTilesColumnIsEachLayoutsOwn() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        assertEquals("never dragged: the start", DrawerTilePolicy.DEFAULT_PLACE,
+            store.drawerTilePlace());
+        prefs.edit().putString("layout.drawer_tile_position", "end").commit();
+        assertEquals("an anchor stored before columns reads as it",
+            DrawerTilePolicy.Place.of(DrawerTilePolicy.Position.END), store.drawerTilePlace());
+
+        home.setDrawerTileColumn(4);
+        assertEquals(DrawerTilePolicy.Place.at(4), home.drawerTilePlace());
+        assertEquals(DrawerTilePolicy.Place.at(4),
+            store().forVariant(LayoutVariant.HOME).drawerTilePlace());
+        assertEquals("the Workspace keeps its own",
+            DrawerTilePolicy.Place.of(DrawerTilePolicy.Position.END), store.drawerTilePlace());
+
+        store.setDrawerTileColumn(2);
+        assertEquals("2", prefs.getString("layout.drawer_tile_position", null));
+        assertEquals(DrawerTilePolicy.Place.at(2), store().drawerTilePlace());
+        assertEquals(DrawerTilePolicy.Place.at(4), home.drawerTilePlace());
+    }
+
+    @Test
     public void twoArrangementsDifferInTheDockRowsTheyBothWear() {
         PlaceLayoutStore store = store();
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);

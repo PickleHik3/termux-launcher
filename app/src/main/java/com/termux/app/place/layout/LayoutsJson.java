@@ -320,7 +320,7 @@ public final class LayoutsJson {
     /**
      * The closed sets and ranges a known field reads (the type is already right). Each set is
      * what the store's own reader accepts: {@code DockStyle.parse} (every id, legacy ones too),
-     * {@code DrawerTilePolicy.Position.parse}, {@code Edge.parse} (plus "hidden" for the rows'
+     * {@code DrawerTilePolicy.parsePlace}, {@code Edge.parse} (plus "hidden" for the rows'
      * own key), {@code KeyboardMode.parse}, {@code KeyboardForm.parse}, {@code IconSize.forKey}.
      * A key this build does not know is not checked, so a newer document still loads.
      */
@@ -332,11 +332,8 @@ public final class LayoutsJson {
             return badValue(key, value, dockDesigns());
         }
         if (DRAWER_TILE_POSITION.equals(key)) {
-            String v = ((String) value).trim().toLowerCase(java.util.Locale.ROOT);
-            for (com.termux.app.dock.DrawerTilePolicy.Position p
-                : com.termux.app.dock.DrawerTilePolicy.Position.values())
-                if (p.value.equals(v)) return null;
-            return badValue(key, value, "start, middle, end");
+            if (com.termux.app.dock.DrawerTilePolicy.isPlaceValue((String) value)) return null;
+            return badValue(key, value, "start, middle, end, or a column number");
         }
         if (IconSize.FIELD.equals(key)) {
             if (value instanceof String && IconSize.forKey((String) value) != null) return null;
