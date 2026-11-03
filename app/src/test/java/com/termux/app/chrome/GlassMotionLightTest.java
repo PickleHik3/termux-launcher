@@ -322,13 +322,13 @@ public class GlassMotionLightTest {
         assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;"));
         // The resting expressions are untouched, and every live term sits behind its gate.
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
-        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
         assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;"));
-        assertTrue(agsl.contains("float2 sn = n;"));
+        assertTrue(agsl.contains("float2 sn = nb;"));
         int liveGate = agsl.indexOf("if (live) {");
         assertTrue(liveGate > 0);
         assertTrue(agsl.indexOf("pull = bent;") > liveGate);
-        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : n;") > agsl.lastIndexOf("if (live) {"));
+        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : nb;") > agsl.lastIndexOf("if (live) {"));
         // The constants are the Java ones.
         assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
         assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);

@@ -29,6 +29,57 @@ import static org.junit.Assert.assertTrue;
 public class TerminalWindowBarTest {
 
     @Test
+    public void aMinimisedChipWearsASolidDotInItsTopEndCorner() {
+        android.content.Context context = ApplicationProvider.getApplicationContext();
+        TextView chip = new TextView(context);
+        chip.setTextColor(android.graphics.Color.argb(148, 200, 200, 200));
+        MinimisedDotDrawable.wear(chip, true);
+        android.graphics.drawable.Drawable dot = chip.getForeground();
+        assertTrue(dot instanceof MinimisedDotDrawable);
+        assertSame(dot, wearAgain(chip));
+        chip.measure(android.view.View.MeasureSpec.makeMeasureSpec(120, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(40, android.view.View.MeasureSpec.EXACTLY));
+        chip.layout(0, 0, 120, 40);
+        final float[] circle = new float[4];
+        final int[] drawn = {0};
+        chip.draw(new android.graphics.Canvas() {
+            @Override public void drawCircle(float cx, float cy, float r,
+                                             android.graphics.Paint paint) {
+                drawn[0]++;
+                circle[0] = cx; circle[1] = cy; circle[2] = r; circle[3] = paint.getAlpha();
+            }
+        });
+        assertEquals(1, drawn[0]);
+        assertFalse(dot.getBounds().isEmpty());
+        float density = context.getResources().getDisplayMetrics().density;
+        assertEquals(TerminalWindowBar.WindowItem.MINIMISED_DOT_DP * density / 2f, circle[2], 0.01f);
+        assertTrue(circle[0] > 60f && circle[1] < 20f);
+        assertEquals(255f, circle[3], 0f);
+        MinimisedDotDrawable.wear(chip, false);
+        assertEquals(null, chip.getForeground());
+    }
+
+    private static android.graphics.drawable.Drawable wearAgain(TextView chip) {
+        MinimisedDotDrawable.wear(chip, true);
+        return chip.getForeground();
+    }
+
+    @Test
+    public void aMinimisedFloatsChipIsDimmedAndSurvivesTheCopies() {
+        TerminalWindowBar.WindowItem open = new TerminalWindowBar.WindowItem("~", "home")
+            .withHomeFloat(0, "Home float, page 1");
+        TerminalWindowBar.WindowItem parked = open.withMinimised(true);
+        org.junit.Assert.assertEquals(1f, open.restAlpha(), 0f);
+        org.junit.Assert.assertEquals(TerminalWindowBar.WindowItem.MINIMISED_ALPHA,
+            parked.restAlpha(), 0f);
+        org.junit.Assert.assertNotEquals("the dot is part of what a chip draws", open, parked);
+        org.junit.Assert.assertTrue(parked.withBusy(true).withAttention(true).withDone(true)
+            .withProgress(5, false).withIcon(null).minimised);
+        org.junit.Assert.assertSame(parked, parked.withMinimised(true));
+        org.junit.Assert.assertFalse(parked.withMinimised(false).minimised);
+    }
+
+    @Test
     public void setWindows_marksSelectionAndDispatchesClicks() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         assertTrue(bar.getClipToPadding());

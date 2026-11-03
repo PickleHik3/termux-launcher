@@ -35,6 +35,19 @@ public class LorieHost extends ContextWrapper {
         default void toggleKeyboardVisibility() { }
         /** A hardware key arrived on the display surface; true when the host consumed it. */
         default boolean handleKey(@NonNull KeyEvent event) { return false; }
+        /**
+         * Text the phone's keyboard committed into the view, before it is typed into X: the
+         * launcher UI open over the display takes what it wants and gets the rest back.
+         *
+         * @return what is left for X; the argument itself when nothing took any of it
+         */
+        @NonNull
+        default String textLeftAfterLayer(@NonNull String text) { return text; }
+        /**
+         * Whether the view may take the focus for itself, as it does whenever its window gains
+         * focus. False while something of the launcher's that is typed into holds it.
+         */
+        default boolean mayTakeFocus() { return true; }
         /** Pointer capture was turned on or off. */
         default void setCapturingEnabled(boolean enabled) { }
         /** A hardware keyboard came or went. */
@@ -131,6 +144,7 @@ public class LorieHost extends ContextWrapper {
                 previous.setOnHoverListener(null);
                 previous.setOnGenericMotionListener(null);
                 previous.setOnCapturedPointerListener(null);
+                previous.setOnKeyListener(null);
                 previous.setCallback(null);
             }
             return;
@@ -148,6 +162,11 @@ public class LorieHost extends ContextWrapper {
         view.setOnHoverListener((v, e) -> handler.handleTouchEvent(view, view, e));
         view.setOnGenericMotionListener((v, e) -> handler.handleTouchEvent(view, view, e));
         view.setOnCapturedPointerListener((v, e) -> handler.handleTouchEvent(view, view, e));
+        // Upstream's key listener. With the hardware-keyboard scancodes workaround on (the
+        // default), LorieView.dispatchKeyEventPreIme declines every key so the IME sees it first,
+        // and the key comes back to the view through ordinary dispatch; this listener is what
+        // sends it to X from there. Without it a physical keyboard typed nothing on the display.
+        view.setOnKeyListener((v, keyCode, e) -> handleKey(e));
         if (prefs != null) handler.reloadPreferences(prefs);
         // The handler maps view pixels onto the X screen with the transform the view reports as
         // its viewport changes; without it every touch is scaled by zero and lands at the origin.
@@ -189,6 +208,29 @@ public class LorieHost extends ContextWrapper {
         if (callbacks.handleKey(event)) return true;
         InputEventSender injector = mInjector;
         return injector != null && injector.sendKeyEvent(event);
+    }
+
+    /**
+     * A key the phone's keyboard stands in for (a backspace it sends as a deletion), offered to
+     * the launcher alone: it never reaches X from here.
+     *
+     * @return true when the launcher took the press and its release
+     */
+    public boolean offerKeyToLauncher(int keyCode) {
+        if (!callbacks.handleKey(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode))) return false;
+        callbacks.handleKey(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
+        return true;
+    }
+
+    /** What of {@code text} the launcher left for X. */
+    @NonNull
+    public String textLeftForX(@NonNull String text) {
+        return callbacks.textLeftAfterLayer(text);
+    }
+
+    /** Whether the view may take the focus for itself. */
+    public boolean mayTakeFocus() {
+        return callbacks.mayTakeFocus();
     }
 
     public void setCapturingEnabled(boolean enabled) {

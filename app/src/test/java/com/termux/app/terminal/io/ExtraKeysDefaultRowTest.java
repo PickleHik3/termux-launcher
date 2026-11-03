@@ -71,15 +71,15 @@ public class ExtraKeysDefaultRowTest {
     }
 
     @Test
-    public void aWallOfOnePlaceCarriesNoSwitchAtAll() {
+    public void aWallOfOnePlaceKeepsOnlyItsOwnSwitch() {
         String row = ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(true, true, false));
         List<String> tools = tools(row);
         assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertFalse("a single place needs no switch for itself",
+        assertTrue("the kind the wall has keeps its key (ADR 0016 section 7)",
             tools.contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
         assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-        // The keyboard, mouse, split and session keys are what is left, and the row is one row.
-        assertEquals(tools(SHIPPED).size() - 3, tools.size());
+        // Only the two absent kinds' keys go; the row is one row.
+        assertEquals(tools(SHIPPED).size() - 2, tools.size());
         assertEquals(1, ExtraKeysLayoutModel.parse(row).rowCount());
     }
 

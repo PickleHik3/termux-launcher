@@ -143,6 +143,41 @@ public class KeyboardGeometryChoreographerTest {
     }
 
     @Test
+    public void aKeyboardOpeningBelowTheScreenIsRevealedAtOnceWithOneRenderPassAndNoGate() {
+        // A seam crossing's pre-roll: the travel holds the keyboard below the screen, so no frame
+        // of the drag is held back for its backdrop, and no chrome pass runs inside a frame.
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = false;
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mChoreographer.isOpenRevealPending());
+        assertNull("a below-screen open arms no pre-draw gate", mChoreographer.openPreDrawListener());
+        assertFalse("no chrome pass runs synchronously", mSurface.log.contains("applyChromeSpec"));
+        assertEquals("one posted render pass cuts its crop", 1,
+            java.util.Collections.frequency(mSurface.log, "requestAccessoryRenderSync"));
+        assertEquals("no backstop for a reveal that already happened", 0, mSurface.posted.size());
+    }
+
+    @Test
+    public void aBelowScreenOpenReleasesAGateAnEarlierOpenLeftArmed() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = false;
+        mChoreographer.onVisibilityRequested(true);
+        assertNotNull(mChoreographer.openPreDrawListener());
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mChoreographer.isOpenRevealPending());
+        assertNull(mChoreographer.openPreDrawListener());
+        assertEquals(0, mSurface.posted.size());
+    }
+
+    @Test
     public void openGateRevealsAnywayOnceItHasHeldTheCapNumberOfFrames() {
         mSurface.glassSurface = true;
         mSurface.blurEnabled = true;

@@ -440,4 +440,124 @@ public class OnGlassTest {
 
     // ------------------------------------------------------------------ opacity-based ceiling
 
+    // ------------------------------------------------------------------ the widget band
+
+    /** A day scheme's widget card, its body-and-label ink and its accent. */
+    private static final int LIGHT_CARD = 0xFFECEEF4;
+    private static final int LIGHT_CARD_TEXT = 0xFF44474E;
+    /** The same card on the dark side (a pale page by day, or night). */
+    private static final int DARK_CARD = 0xFF1D2024;
+    private static final int DARK_CARD_TEXT = 0xFFC4C6D0;
+    /** The Look's day glass base at Base's opacity 30: the slab tint under a widget. */
+    private static final int DAY_TINT_30 = 0x4DE1E7F2;
+    /** A busy, mid-tone wallpaper: neither ink reads on it bare. */
+    private static final int BUSY_GLASS = 0xFF7A6E66;
+
+    /** What a glass widget lays over the wallpaper: the slab tint and the body's lift over it. */
+    private static int glassBody(int card) {
+        int lift = OnGlass.withAlpha(card, OnGlass.widgetLiftAlpha255(Color.alpha(DAY_TINT_30)));
+        return OnGlass.composite(lift, DAY_TINT_30);
+    }
+
+    /**
+     * Spec #101, seam 2: text at 4.5:1 and hero numerals and graphics at 3:1, on light, dark,
+     * busy, glass and solid backdrops, on either side of the card. The inks are the card's own
+     * roles, never moved: the veil carries it.
+     */
+    @Test
+    public void aWidgetHoldsTextAndGraphicsContrastOnEveryBackdrop() {
+        int[] backdrops = {VERY_BRIGHT_GLASS, GLASS_NIGHT, BUSY_GLASS, STATUS_GLASS_LIGHT,
+            Color.WHITE, Color.BLACK};
+        int[][] cards = {
+            {LIGHT_CARD, LIGHT_CARD_TEXT, LIGHT_INK},
+            {DARK_CARD, DARK_CARD_TEXT, NIGHT_INK},
+        };
+        for (int backdrop : backdrops) {
+            for (int[] card : cards) {
+                for (boolean glass : new boolean[] {true, false}) {
+                    int body = glass ? glassBody(card[0]) : card[0];
+                    OnGlass.Resolution answer = OnGlass.resolveWidget(backdrop, body, card[1],
+                        OnGlass.TARGET_BODY_TEXT, card[2], OnGlass.TARGET_LARGE_TEXT, card[0]);
+                    String where = String.format("#%08X %s card #%08X: %s", backdrop,
+                        glass ? "glass" : "solid", card[0], answer);
+                    assertFalse(where, answer.shortfall);
+                    assertTrue(where, OnGlass.ratio(card[1], answer.surface)
+                        >= OnGlass.TARGET_BODY_TEXT);
+                    assertTrue(where, OnGlass.ratio(card[2], answer.surface)
+                        >= OnGlass.TARGET_LARGE_TEXT);
+                    if (!glass) assertTrue("the solid card needs no veil: " + where,
+                        answer.isBare());
+                }
+            }
+        }
+    }
+
+    /**
+     * The device's defect: dark text on day glass over a dark wallpaper vanished (Scratchpad).
+     * The light card's veil now lifts the glass until it reads, and is the smallest that does.
+     */
+    @Test
+    public void darkInkOnDayGlassOverADarkWallpaperBuysTheSmallestVeil() {
+        int body = glassBody(LIGHT_CARD);
+        assertTrue("the bare glass is the defect", OnGlass.ratio(LIGHT_CARD_TEXT,
+            OnGlass.backdrop(GLASS_NIGHT, Color.TRANSPARENT, body)) < OnGlass.TARGET_BODY_TEXT);
+        OnGlass.Resolution answer = OnGlass.resolveWidget(GLASS_NIGHT, body, LIGHT_CARD_TEXT,
+            OnGlass.TARGET_BODY_TEXT, LIGHT_INK, OnGlass.TARGET_LARGE_TEXT, LIGHT_CARD);
+
+        int alpha = Color.alpha(answer.veil);
+        assertTrue("veiled: " + answer, alpha > 0);
+        assertEquals("in the card's own colour", LIGHT_CARD, OnGlass.opaque(answer.veil));
+        int ground = OnGlass.backdrop(GLASS_NIGHT, Color.TRANSPARENT, body);
+        int less = OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(LIGHT_CARD, alpha - 1),
+            ground));
+        assertTrue("one step less misses", OnGlass.ratio(LIGHT_CARD_TEXT, less)
+            < OnGlass.TARGET_BODY_TEXT || OnGlass.ratio(LIGHT_INK, less) < OnGlass.TARGET_LARGE_TEXT);
+    }
+
+    /** The pale side on a dark wallpaper reads on the glass as it is: no veil is spent. */
+    @Test
+    public void paleInkOnGlassOverADarkWallpaperIsBare() {
+        OnGlass.Resolution answer = OnGlass.resolveWidget(GLASS_NIGHT, glassBody(DARK_CARD),
+            DARK_CARD_TEXT, OnGlass.TARGET_BODY_TEXT, NIGHT_INK, OnGlass.TARGET_LARGE_TEXT,
+            DARK_CARD);
+        assertTrue(answer.toString(), answer.isBare());
+    }
+
+    /** The body is Base's opacity plus the fixed lift, whatever Base is; an opaque Base is whole. */
+    @Test
+    public void theWidgetBodyIsBaseOpacityPlusTheLift() {
+        for (int base : new int[] {0, 26, 77, 128, 230}) {
+            int lift = OnGlass.widgetLiftAlpha255(base);
+            float combined = 1f - (1f - base / 255f) * (1f - lift / 255f);
+            float wanted = Math.min(1f, base / 255f + OnGlass.WIDGET_BODY_LIFT);
+            assertEquals("Base " + base, wanted, combined, 1.5f / 255f);
+        }
+        assertEquals(0, OnGlass.widgetLiftAlpha255(255));
+    }
+
+    /** The lift and the veil are one fill of the card's colour at their combined alpha. */
+    @Test
+    public void theLiftAndTheVeilStackAsOneLayer() {
+        int lift = OnGlass.withAlpha(LIGHT_CARD, 77);
+        int veil = OnGlass.withAlpha(LIGHT_CARD, 128);
+        int one = OnGlass.stackAlpha(lift, veil);
+        assertEquals(LIGHT_CARD, OnGlass.opaque(one));
+        int twice = OnGlass.composite(veil, OnGlass.composite(lift, GLASS_NIGHT));
+        int once = OnGlass.composite(one, GLASS_NIGHT);
+        assertTrue(twice + " vs " + once, Math.abs(Color.red(twice) - Color.red(once)) <= 2
+            && Math.abs(Color.blue(twice) - Color.blue(once)) <= 2);
+        assertEquals(lift, OnGlass.stackAlpha(lift, Color.TRANSPARENT));
+        assertEquals(veil, OnGlass.stackAlpha(Color.TRANSPARENT, veil));
+    }
+
+    /** The card's edge: under 1.5:1 against its wallpaper the rim is wanted. */
+    @Test
+    public void aCardThatWouldVanishIntoItsWallpaperShowsNoEdge() {
+        assertFalse("a light card on a light wallpaper",
+            OnGlass.cardShowsEdge(LIGHT_CARD, VERY_BRIGHT_GLASS));
+        assertTrue("a light card on a dark one", OnGlass.cardShowsEdge(LIGHT_CARD, GLASS_NIGHT));
+        assertFalse("a dark card on a dark one", OnGlass.cardShowsEdge(DARK_CARD, GLASS_NIGHT));
+        assertTrue("a dark card on a light one",
+            OnGlass.cardShowsEdge(DARK_CARD, VERY_BRIGHT_GLASS));
+    }
 }

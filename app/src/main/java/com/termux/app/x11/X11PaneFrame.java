@@ -3,18 +3,20 @@ package com.termux.app.x11;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -22,7 +24,7 @@ import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.app.wall.SurfacePage;
 import com.termux.app.wall.SurfaceStandIn;
@@ -30,7 +32,7 @@ import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
 /**
- * The wall's Display page: the embedded X server's surface, wearing a terminal pane's rim, radius
+ * The wall's display window: the embedded X server's surface, wearing a terminal pane's rim, radius
  * and gap.
  *
  * <p>It carries the same glass slab the panes and the Widgets page do, taken from the same
@@ -67,11 +69,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * since that is where the doc actually lives.
      */
     private static final String KEYBOARD_DATA_GUIDE_URL =
-        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
+        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#set-it-up";
 
     private static final int ACTION_HELP = 2;
-    /** "Appearance", which opens the wallpaper picker; package-private so a test can find it. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
+    /** "Appearance", which opens the Appearance editor; package-private so a test can find it. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_APPEARANCE = 5;
     /** Minimal mode on or off for the Display place; the glyph shows which. */
     @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
 
@@ -93,10 +95,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
-        /** The grid: open the Layout editor on this place, as every corner tab does. */
-        default void openLayoutEditor() {}
-        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
-        default void openWallpaperPicker() {}
         /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */
@@ -167,18 +165,30 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean mWatchMoved;
     private boolean mWatchIsDisplays;
     private boolean mRunning;
+    /** Why the last Start died before a display connected; null until one does, and after Start. */
+    @Nullable private String mStartFailure;
     /** True while the wall is showing this place; the place it has left is INVISIBLE. */
     private boolean mPageOnScreen = true;
     /** The Linux display setting. Off, the page is still a place — it just says so. */
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
     private int mFrozenWidth = -1, mFrozenHeight = -1;
+    /** Lets go of a {@link #holdHostSizeOverNextLayout} hold; null while there is none. */
+    @Nullable private Runnable mNextLayoutRelease;
+    /** Watches for the frame's new height under that hold; null along with it. */
+    @Nullable private View.OnLayoutChangeListener mNextLayoutFollower;
     /** When the still copy stands in for the surface ({@link SurfaceStandIn}). */
     private final SurfaceStandIn mStill = new SurfaceStandIn();
     /** The copy's view, just above the display and below the corner mask; drawn only while up. */
     @Nullable private StandInView mStandIn;
     /** The one copy kept, standing in or not; null once it is dropped. */
     @Nullable private android.graphics.Bitmap mStillBitmap;
+    /**
+     * The Display page's own still (ADR 0015 A3c2, stories 28/29): the bound page's last picture,
+     * or its card, while the display is not live there. Above the slide's stand-in and the empty
+     * state, below the corner mask; null where the frame has no display view.
+     */
+    @Nullable private PageStillView mPageStill;
     /** What the wall asked to be told once the copy on its way is up. */
     @Nullable private Runnable mOnStill;
     /** The copies land, and the swap's timers run, on the main thread. */
@@ -234,6 +244,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mStandIn.setVisibility(INVISIBLE);
             addView(mStandIn, indexOfChild(mDisplay) + 1,
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            mPageStill = new PageStillView(getContext());
+            mPageStill.setVisibility(INVISIBLE);
+            int mask = mCornerMask == null ? -1 : indexOfChild(mCornerMask);
+            addView(mPageStill, mask >= 0 ? mask : indexOfChild(mStandIn) + 1,
+                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
             // After the display's own callback, which hands the surface to X first.
             mDisplay.getHolder().addCallback(mStillSurfaceCallback);
         }
@@ -251,6 +266,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         });
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setOnClickListener(v -> openKeyboardDataGuide());
+        View support = findViewById(R.id.x11_pane_support);
+        if (support != null) support.setOnClickListener(v -> {
+            if (mHost != null) mHost.openDisplaySettings();
+        });
         View install = findViewById(R.id.x11_pane_install);
         if (install != null) install.setOnClickListener(v -> installKeyboardData());
         View setup = findViewById(R.id.x11_pane_setup);
@@ -271,7 +290,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                         : R.string.pane_controls_enter_minimal_mode)),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
                 getContext().getString(R.string.pane_controls_open_settings)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+            PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
@@ -280,7 +299,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             // Help first, the tab second: help reads the ? it was opened from while it is still
             // out, and puts the tab away itself.
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-            else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+            else if (id == ACTION_APPEARANCE) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
@@ -677,7 +696,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     @NonNull
     public LorieView display() {
-        if (mDisplay == null) throw new IllegalStateException("Display page is not inflated");
+        if (mDisplay == null) throw new IllegalStateException("display window is not inflated");
         return mDisplay;
     }
 
@@ -723,17 +742,35 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     /**
+     * Say why the last Start ended before a display connected, in place of "No display is
+     * running"; null clears it (the next Start, or a display that connected).
+     */
+    public void setStartFailure(@Nullable String reason) {
+        mStartFailure = reason;
+        if (!mRunning) applyEmptyState();
+    }
+
+    /**
      * Apply {@link DisplayEmptyStatePolicy}'s answer to the message and the start control. The
      * probe behind it is disk I/O, so this must only ever run off a user arrival or a
      * running-state change — never a hot path.
      */
     private void applyEmptyState() {
         DisplayEmptyStatePolicy.State state = DisplayEmptyStatePolicy.decide(mEnabled,
-            X11CliInstaller.hasKeyboardData(), TourEdition.of(getContext().getPackageName()));
+            X11CliInstaller.hasKeyboardData(), AppEdition.of(getContext().getPackageName()),
+            mStartFailure);
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
-            ((android.widget.TextView) message).setText(state.messageRes);
+            if (state.failed()) {
+                ((android.widget.TextView) message).setText(
+                    getContext().getString(R.string.termux_x11_start_failed) + "\n"
+                        + state.failureReason);
+            } else {
+                ((android.widget.TextView) message).setText(state.messageRes);
+            }
         }
+        View support = findViewById(R.id.x11_pane_support);
+        if (support != null) support.setVisibility(state.failed() ? VISIBLE : GONE);
         View start = findViewById(R.id.x11_pane_start);
         if (start instanceof android.widget.TextView) {
             ((android.widget.TextView) start).setText(mEnabled
@@ -781,7 +818,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void openDistroSetup() {
         try {
-            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+            getContext().startActivity(GuiAppsSetupGuideFragment.intent(getContext())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
             // A home screen's empty state is not worth a crash; the row in Settings is still there.
@@ -797,7 +834,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void installKeyboardData() {
         if (mHost == null) return;
         java.util.List<String> command =
-            KeyboardDataInstall.command(TourEdition.of(getContext().getPackageName()));
+            KeyboardDataInstall.command(AppEdition.of(getContext().getPackageName()));
         if (command != null) mHost.installKeyboardData(command);
     }
 
@@ -876,27 +913,135 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * folding). The display keeps the size it has, pinned to the page's bottom edge, so the X
      * screen is resized once at the end instead of on every frame; until then the bar simply
      * covers it.
+     *
+     * <p>A {@link #holdHostSizeOverNextLayout} hold still waiting for its layout is taken over:
+     * the size stays held, and from here on it is this caller's {@link #finishHostResize} that
+     * lets it go, not the hold's own release.
      */
     public void beginHostResize() {
-        if (mDisplay == null || mDisplay.getWidth() <= 0 || mDisplay.getHeight() <= 0) return;
+        if (mDisplay == null) return;
+        beginHostResize(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #beginHostResize()} for a display of this size; the seam the tests hold through. */
+    @VisibleForTesting
+    void beginHostResize(int width, int height) {
+        if (width <= 0 || height <= 0) return;
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) {
-            mFrozenWidth = mDisplay.getWidth();
-            mFrozenHeight = mDisplay.getHeight();
+            mFrozenWidth = width;
+            mFrozenHeight = height;
         }
     }
 
     /** The frame has its final height: the display takes it, in one resize. */
     public void finishHostResize() {
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) return;
         mFrozenWidth = -1;
         mFrozenHeight = -1;
         requestLayout();
     }
 
+    /** True while the display keeps a size of its own rather than following the frame. */
+    @VisibleForTesting
+    boolean isHostSizeHeld() {
+        return mFrozenWidth >= 0;
+    }
+
+    /**
+     * Holds the display's size over a change of the frame's height that lands in a pass or two
+     * rather than over many frames — the keyboard mode switched under the touchpad. Taken now,
+     * and let go once the frame's height has held still for {@link #NEXT_LAYOUT_SETTLE_MS} after
+     * its last move, so whatever the passes after the first still move lands before the X screen
+     * is resized, once. A frame whose height
+     * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}; the caller leaves the hold out
+     * altogether when it knows the height cannot move. A hold that is already taken — the status
+     * bar folding — is left to whoever took it, and one that begins while this waits takes it
+     * over ({@link #beginHostResize()}).
+     */
+    public void holdHostSizeOverNextLayout() {
+        if (mDisplay == null) return;
+        holdHostSizeOverNextLayout(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #holdHostSizeOverNextLayout()} for a display of this size; the tests' seam. */
+    @VisibleForTesting
+    void holdHostSizeOverNextLayout(int width, int height) {
+        if (mFrozenWidth >= 0) return;
+        beginHostResize(width, height);
+        if (mFrozenWidth < 0) return;
+        final int heldHeight = getHeight();
+        final Runnable release = new Runnable() {
+            @Override
+            public void run() {
+                // Only its own hold: one that was taken over or finished meanwhile is not this.
+                if (mNextLayoutRelease != this) return;
+                finishHostResize();
+            }
+        };
+        final long backstopAt = SystemClock.uptimeMillis() + NEXT_LAYOUT_BACKSTOP_MS;
+        final int[] last = {heldHeight};
+        View.OnLayoutChangeListener follower = (v, l, t, r, b, ol, ot, or, ob) -> {
+            int now = b - t;
+            if (now == last[0]) return;
+            last[0] = now;
+            // A docked keyboard moves the height once; the wait is for a height that takes more
+            // than one pass to land (the pad's host, the accessory stack, the overlay decision),
+            // each its own layout. Every one that moves it starts the wait again, so the release
+            // falls after the last, never between two.
+            removeCallbacks(release);
+            postDelayed(release, Math.max(0L,
+                Math.min(NEXT_LAYOUT_SETTLE_MS, backstopAt - SystemClock.uptimeMillis())));
+        };
+        mNextLayoutRelease = release;
+        mNextLayoutFollower = follower;
+        addOnLayoutChangeListener(follower);
+        postDelayed(release, NEXT_LAYOUT_BACKSTOP_MS);
+    }
+
+    /**
+     * How long a {@link #holdHostSizeOverNextLayout} hold waits for a height that never comes —
+     * the keyboard reveal gate's backstop, for the same reason: a layout that never comes must
+     * not keep the display frozen.
+     */
+    private static final long NEXT_LAYOUT_BACKSTOP_MS = 160L;
+
+    /** How long the frame's height must hold still, after its last move, before the hold lets go. */
+    private static final long NEXT_LAYOUT_SETTLE_MS = 48L;
+
+    private void dropNextLayoutHold() {
+        if (mNextLayoutRelease != null) removeCallbacks(mNextLayoutRelease);
+        if (mNextLayoutFollower != null) removeOnLayoutChangeListener(mNextLayoutFollower);
+        mNextLayoutRelease = null;
+        mNextLayoutFollower = null;
+    }
+
+    /**
+     * A held display is measured at its held size and never at the frame's. The display sends the
+     * X server every size it is measured at, so measuring it at the frame's new height first and
+     * putting the held one back after resized the X screen there and back on every held pass.
+     */
+    @Override
+    protected void measureChildWithMargins(View child, int parentWidthMeasureSpec, int widthUsed,
+                                           int parentHeightMeasureSpec, int heightUsed) {
+        if (mFrozenWidth > 0 && child.getId() == R.id.x11_display_view) {
+            child.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+            return;
+        }
+        super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed,
+            parentHeightMeasureSpec, heightUsed);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (mFrozenWidth > 0 && mDisplay != null) {
+        // A frame measured other than exactly re-measures its match-parent children directly,
+        // past measureChildWithMargins; the wall measures its pages exactly, so this is a guard.
+        if (mFrozenWidth > 0 && mDisplay != null
+            && (mDisplay.getMeasuredWidth() != mFrozenWidth
+                || mDisplay.getMeasuredHeight() != mFrozenHeight)) {
             mDisplay.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
         }
@@ -917,6 +1062,86 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mStandIn != null && mDisplay != null) {
             mStandIn.layout(mDisplay.getLeft(), mDisplay.getTop(), mDisplay.getRight(),
                 mDisplay.getBottom());
+        }
+    }
+
+    // ---- The Display page's own still (A3c2) --------------------------------------------------
+
+    /**
+     * Stand the bound Display page's picture in front of the display, or its card when it has
+     * none ({@code picture} null: {@code icon} and {@code name}). The bitmap stays the caller's:
+     * it is drawn, never recycled here; call {@link #forgetPagePicture} before recycling it.
+     */
+    public void showPageStill(@Nullable android.graphics.Bitmap picture,
+                              @Nullable android.graphics.drawable.Drawable icon,
+                              @NonNull String name) {
+        if (mPageStill == null) return;
+        mPageStill.set(picture, icon, name);
+        mPageStill.setVisibility(VISIBLE);
+    }
+
+    /** The display is live on the bound page: its still goes. */
+    public void hidePageStill() {
+        if (mPageStill == null) return;
+        mPageStill.setVisibility(INVISIBLE);
+        mPageStill.set(null, null, "");
+    }
+
+    public boolean isPageStillShown() {
+        return mPageStill != null && mPageStill.getVisibility() == VISIBLE;
+    }
+
+    /** {@code bitmap} is about to be recycled: a still drawing it goes first. */
+    public void forgetPagePicture(@Nullable android.graphics.Bitmap bitmap) {
+        if (mPageStill != null && bitmap != null && mPageStill.picture() == bitmap) hidePageStill();
+    }
+
+    /**
+     * A picture of what the display shows now, for the page the frame is leaving: a fresh bitmap
+     * handed to {@code onCopied} (the caller's to keep and recycle), or null when there is nothing
+     * to copy. While the slide's stand-in covers the surface, its copy is the picture.
+     */
+    public void copyPagePicture(@NonNull androidx.core.util.Consumer<android.graphics.Bitmap> onCopied) {
+        android.graphics.Bitmap kept = mStillBitmap;
+        if (!isSurfaceLive()) {
+            android.graphics.Bitmap copy = null;
+            if (mRunning && kept != null && !kept.isRecycled()) {
+                try {
+                    copy = kept.copy(android.graphics.Bitmap.Config.ARGB_8888, false);
+                } catch (OutOfMemoryError e) {
+                    copy = null;
+                }
+            }
+            onCopied.accept(copy);
+            return;
+        }
+        LorieView display = mDisplay;
+        int width = display.getWidth();
+        int height = display.getHeight();
+        if (width <= 0 || height <= 0) {
+            onCopied.accept(null);
+            return;
+        }
+        final android.graphics.Bitmap destination;
+        try {
+            destination = android.graphics.Bitmap.createBitmap(width, height,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            onCopied.accept(null);
+            return;
+        }
+        try {
+            android.view.PixelCopy.request(display, destination, result -> {
+                if (result == android.view.PixelCopy.SUCCESS) {
+                    onCopied.accept(destination);
+                } else {
+                    destination.recycle();
+                    onCopied.accept(null);
+                }
+            }, mStillHandler);
+        } catch (RuntimeException e) {
+            destination.recycle();
+            onCopied.accept(null);
         }
     }
 
@@ -1172,6 +1397,78 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     /**
+     * A Display page's still: its last picture filling the frame, or, without one, a card with
+     * the bound app's icon and name ("Display" unbound) on a plain ground. Opaque, so neither the
+     * display beneath nor the empty state shows through; it takes no touch.
+     */
+    private static final class PageStillView extends View {
+        @Nullable private android.graphics.Bitmap mPicture;
+        @Nullable private android.graphics.drawable.Drawable mIcon;
+        @NonNull private String mName = "";
+        private final android.graphics.Paint mPaint =
+            new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+        private final android.graphics.Paint mText =
+            new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Rect mBounds = new android.graphics.Rect();
+        private final int mGround;
+
+        PageStillView(@NonNull Context context) {
+            super(context);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            float density = context.getResources().getDisplayMetrics().scaledDensity;
+            mText.setTextSize(16f * density);
+            mText.setTextAlign(android.graphics.Paint.Align.CENTER);
+            // The theme's tokens, as the frame's empty state wears them.
+            mText.setColor(themeColor(context,
+                com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFE8EAED));
+            mGround = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase,
+                0xFF15171A);
+        }
+
+        private static int themeColor(@NonNull Context context, int attr, int fallback) {
+            android.util.TypedValue value = new android.util.TypedValue();
+            if (!context.getTheme().resolveAttribute(attr, value, true)) return fallback;
+            if (value.resourceId != 0) {
+                return androidx.core.content.ContextCompat.getColor(context, value.resourceId);
+            }
+            return value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT ? value.data : fallback;
+        }
+
+        void set(@Nullable android.graphics.Bitmap picture,
+                 @Nullable android.graphics.drawable.Drawable icon, @NonNull String name) {
+            mPicture = picture;
+            mIcon = icon;
+            mName = name;
+            invalidate();
+        }
+
+        @Nullable android.graphics.Bitmap picture() {
+            return mPicture;
+        }
+
+        @Override
+        protected void onDraw(@NonNull android.graphics.Canvas canvas) {
+            android.graphics.Bitmap picture = mPicture;
+            mBounds.set(0, 0, getWidth(), getHeight());
+            if (picture != null && !picture.isRecycled()) {
+                canvas.drawBitmap(picture, null, mBounds, mPaint);
+                return;
+            }
+            canvas.drawColor(mGround);
+            float density = getResources().getDisplayMetrics().density;
+            int size = Math.round(56f * density);
+            int cx = getWidth() / 2;
+            int cy = getHeight() / 2;
+            if (mIcon != null) {
+                mIcon.setBounds(cx - size / 2, cy - size, cx + size / 2, cy);
+                mIcon.draw(canvas);
+            }
+            canvas.drawText(mName, cx, cy + 16f * density - mText.ascent(), mText);
+        }
+    }
+
+    /**
      * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
      * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
      */
@@ -1188,7 +1485,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
-     * Display page follows the Canvas surface with the rest of the wall.
+     * display window follows the Canvas surface with the rest of the wall.
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
@@ -1211,7 +1508,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mControls.setPaneBorder(radiusPx, glass
                 ? com.termux.app.GlassRimRenderer.strokePx(density)
                 : border ? PaneRim.stockStrokePx(density) : 0f);
-            PaneGlass.dressTab(style, mControls);
+            PaneGlass.dressTab(style, mControls, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,
@@ -1266,6 +1563,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         cancelHold();
+        // A frame taken off the window lets go of the display rather than leave it frozen.
+        if (mNextLayoutRelease != null) {
+            dropNextLayoutHold();
+            finishHostResize();
+        }
         mRim.cancel();
         // A surface-sized bitmap is not carried out of the window.
         resetStill();

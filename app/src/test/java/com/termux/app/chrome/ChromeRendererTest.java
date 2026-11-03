@@ -499,4 +499,54 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
         assertFalse(chrome.isFrostHeldForFirstFrame());
     }
+
+    /**
+     * Across the seam, the ink measuring a band's new dress inside the frame's commit asked for a
+     * second whole apply before the draw (24 ms of a drag frame on pong). While the even-out is
+     * held for the crossing, that request is the post-layout pass that follows: two applies, not
+     * three.
+     */
+    @Test
+    public void anApplyAskedInsideACommitWhileTravellingFoldsIntoTheRenderPass() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;   // the commit's apply asks once
+        chrome.holdEvenOut();
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        mainLooper().idle();
+
+        assertEquals("the frame's commit, then the render pass it folded into",
+            2, surfaces.applied.size());
+        assertEquals("the second apply is the render pass", 1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** At rest nothing changes: an apply asked inside a commit books a commit of its own. */
+    @Test
+    public void anApplyAskedInsideACommitAtRestStillBooksACommit() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("two commits", 2, surfaces.applied.size());
+        assertEquals("neither is the render pass", 0, surfaces.invariantsEnforced);
+    }
+
+    /** An apply asked outside a commit, even mid-crossing, is a commit as ever. */
+    @Test
+    public void anApplyAskedOutsideACommitWhileTravellingIsACommit() {
+        chrome.holdEvenOut();
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(0, surfaces.invariantsEnforced);
+    }
 }

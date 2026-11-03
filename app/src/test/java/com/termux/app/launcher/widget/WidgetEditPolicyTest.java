@@ -281,4 +281,96 @@ public class WidgetEditPolicyTest {
             new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.BOTTOM, 400, 1, 1);
         assertEquals(new WidgetCellRect(0, 0, 1, 4), candidate.rect);
     }
+
+    // A refused ask names the widgets in its way, so edit mode can show what said no instead of
+    // springing back without a word.
+
+    /** A 4x4 page with no hole anywhere: the weather on row 1, the media under it. */
+    private static List<LauncherWidgetRecord> fullPageWithWeatherOverMedia() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(2, 1, 4, 2)));
+        records.add(record(2, new WidgetCellRect(2, 2, 4, 3)));
+        records.add(record(3, new WidgetCellRect(0, 0, 4, 1)));
+        records.add(record(4, new WidgetCellRect(0, 1, 2, 3)));
+        records.add(record(5, new WidgetCellRect(0, 3, 4, 4)));
+        return records;
+    }
+
+    @Test public void aGrowIntoANeighbourWithNowhereToGoNamesThatNeighbour() {
+        List<LauncherWidgetRecord> records = fullPageWithWeatherOverMedia();
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(2, 1, 4, 2), WidgetEditPolicy.Handle.BOTTOM, 300, 1, 1);
+        assertEquals(new WidgetCellRect(2, 1, 4, 2), candidate.rect);
+        assertEquals(Collections.singleton(2), candidate.refusedBy);
+    }
+
+    @Test public void aGrowIntoFreeCellsIsRefusedByNobody() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 300, 1, 1);
+        assertEquals(new WidgetCellRect(0, 0, 3, 1), candidate.rect);
+        assertTrue(candidate.refusedBy.isEmpty());
+    }
+
+    @Test public void aGrowThatPushesTheNeighbourAsideIsRefusedByNobody() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        records.add(record(2, new WidgetCellRect(1, 0, 2, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 200, 1, 1);
+        assertEquals(new WidgetCellRect(0, 0, 2, 1), candidate.rect);
+        assertFalse(candidate.displaced.isEmpty());
+        assertTrue(candidate.refusedBy.isEmpty());
+    }
+
+    @Test public void aGrowThatStopsShortOfAStuckNeighbourStillNamesIt() {
+        // One free column, then a blocker that fits nowhere: the edge takes the free column and
+        // the finger, reaching past it, is told who stopped it.
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        records.add(record(2, new WidgetCellRect(2, 0, 4, 4)));
+        records.add(record(3, new WidgetCellRect(0, 1, 2, 4)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1);
+        assertEquals(new WidgetCellRect(0, 0, 2, 1), candidate.rect);
+        assertEquals(Collections.singleton(2), candidate.refusedBy);
+    }
+
+    @Test public void aFingerHalfwayToAStuckNeighbourIsNotARefusal() {
+        // Equally far from the edge it holds and the one it cannot have: nothing was asked for.
+        List<LauncherWidgetRecord> records = fullPageWithWeatherOverMedia();
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(2, 1, 4, 2), WidgetEditPolicy.Handle.BOTTOM, 250, 1, 1);
+        assertEquals(new WidgetCellRect(2, 1, 4, 2), candidate.rect);
+        assertTrue(candidate.refusedBy.isEmpty());
+    }
+
+    @Test public void aMoveOntoAStuckNeighbourNamesIt() {
+        List<LauncherWidgetRecord> records = fullPageWithWeatherOverMedia();
+        // The weather dropped on the 2x2 to its left, which has no 2x2 hole to step into.
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.snapMove(metrics(), records, 1,
+            new WidgetCellRect(2, 1, 4, 2), new Rect(0, 100, 200, 200));
+        assertEquals(new WidgetCellRect(2, 1, 4, 2), candidate.rect);
+        assertTrue(candidate.displaced.isEmpty());
+        assertEquals(Collections.singleton(4), candidate.refusedBy);
+    }
+
+    @Test public void aMoveThatPushesTheNeighbourAsideIsRefusedByNobody() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        records.add(record(2, new WidgetCellRect(2, 2, 3, 3)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.snapMove(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), new Rect(200, 200, 300, 300));
+        assertFalse(candidate.displaced.isEmpty());
+        assertTrue(candidate.refusedBy.isEmpty());
+    }
+
+    @Test public void aMoveIntoFreeSpaceIsRefusedByNobody() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 2, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.snapMove(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 2, 1), new Rect(190, 195, 390, 295));
+        assertTrue(candidate.refusedBy.isEmpty());
+    }
 }

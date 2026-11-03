@@ -6,7 +6,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.RelativeLayout;
 
-import com.github.mmin18.widget.RealtimeBlurView;
 import com.termux.R;
 
 import org.junit.Test;
@@ -18,6 +17,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -68,30 +68,31 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
     }
 
     /**
-     * Every live blur view left in the layout has a surface that turns it on. The sessions
-     * drawer's, the dock's and the bottom space's were retired: the drawer never blurred, the dock
-     * moved to RenderEffect, the bottom space never had a reader, and each still cost a per-frame
-     * pre-draw callback on the decor for nothing.
+     * The status strip, the window bar, the off-dock plank and the A–Z host wear the Wallpaper
+     * backdrop kind and nothing else: each glass sheet holds its frost and no view of its own
+     * that captures the window. A capturing blur view cost a per-frame pre-draw callback on the
+     * decor and a whole-window software draw.
      */
     @Test
-    public void everyRemainingLiveBlurViewHasAReader() {
+    public void wallpaperKindBarsCarryOnlyTheirFrost() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.setContentView(R.layout.activity_termux);
 
-        java.util.Set<Integer> expected = new java.util.HashSet<>(java.util.Arrays.asList(
-            R.id.terminal_status_bar_glass_blur, R.id.terminal_window_bar_blur,
-            R.id.app_drawer_blur, R.id.command_palette_blur, R.id.terminal_sheet_blur,
-            R.id.place_az_bar_host_blur, R.id.place_off_dock_plank_blur));
-        java.util.Set<Integer> found = new java.util.HashSet<>();
-        collectBlurViews(activity.findViewById(R.id.activity_termux_root_view), found);
-        assertEquals(expected, found);
-    }
-
-    private static void collectBlurViews(View view, java.util.Set<Integer> out) {
-        if (view instanceof RealtimeBlurView) out.add(view.getId());
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) collectBlurViews(group.getChildAt(i), out);
+        int[][] sheets = {
+            {R.id.terminal_status_bar_background, R.id.terminal_status_bar_wallpaper_backdrop},
+            {R.id.terminal_window_bar_host, R.id.terminal_window_bar_wallpaper_backdrop},
+            {R.id.place_az_bar_host_glass, R.id.place_az_bar_host_frost},
+            {R.id.place_off_dock_plank_glass, R.id.place_off_dock_plank_frost},
+        };
+        for (int[] sheet : sheets) {
+            ViewGroup glass = activity.findViewById(sheet[0]);
+            View frost = activity.findViewById(sheet[1]);
+            assertTrue(frost instanceof android.widget.ImageView);
+            assertSame(glass, frost.getParent());
+            for (int i = 0; i < glass.getChildCount(); i++) {
+                String name = glass.getChildAt(i).getClass().getName();
+                assertFalse(name, name.contains("Blur"));
+            }
         }
     }
 

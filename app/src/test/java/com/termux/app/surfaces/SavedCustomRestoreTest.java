@@ -128,7 +128,7 @@ public class SavedCustomRestoreTest {
         assertFalse("a forgotten position is not saved", blob.containsKey(
             TermuxAppSharedPreferences.surfaceGlassPositionKey(SurfaceSlot.DOCK)));
         assertEquals(KEYS, blob.get(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY));
-        assertEquals(TINT, blob.get(TermuxAppSharedPreferences.surfaceOverrideKey(
+        assertEquals(TINT, blob.get(SurfacePresets.cellKey(
             SurfaceSlot.CANVAS, SurfaceProperty.TINT)));
         assertTrue("positions never decide a match",
             SurfacePresets.matches(prefs, SurfacePresets.custom(prefs)));
@@ -147,9 +147,9 @@ public class SavedCustomRestoreTest {
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
         session.enter(prefs);
 
-        assertEquals(21, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(prefs.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals("no Keys saved reads as the theme's",
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY, prefs.getInAppKeyboardKeyOpacity());
@@ -209,7 +209,8 @@ public class SavedCustomRestoreTest {
     }
 
     private TermuxAppSharedPreferences freshPreferences() {
-        return new TermuxAppSharedPreferences(context, store, null);
+        return com.termux.app.look.TerminalPageIdFixture.give(
+            new TermuxAppSharedPreferences(context, store, null));
     }
 
     /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook). */
@@ -244,8 +245,8 @@ public class SavedCustomRestoreTest {
                 assertFalse(slot + " " + property, prefs.isSurfaceInheriting(slot, property));
             assertEquals(slot.toString(), GLASS, prefs.getSurfaceGlassPosition(slot));
         }
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
-        assertEquals(TINT, prefs.getInAppKeyboardTintStrength());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(TINT, prefs.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(OPACITY, prefs.getTerminalBackgroundOpacity());
         assertEquals(TINT, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
         assertEquals(KEYS, prefs.getInAppKeyboardKeyOpacity());
@@ -262,5 +263,11 @@ public class SavedCustomRestoreTest {
             prefs.getInAppKeyboardKeyOpacity());
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS,
             prefs.getInAppKeyboardBlurRadiusRaw());
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

@@ -32,6 +32,11 @@ public class SettingsActivityRetainedIntentTest {
     private static final int STALE_RESOURCE_ID = 0x7f7fffff;
     private static final String REMOVED_FRAGMENT = "com.termux.removed.SettingsFragment";
 
+    @org.junit.Before
+    public void forgetLastClose() {
+        SettingsActivity.setLastClosedAtMs(SettingsReopenPolicy.NO_CLOSE);
+    }
+
     @Test
     public void onCreateFallsBackForResourceAndFragmentFromPreviousBuild() {
         Intent retainedIntent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
@@ -152,6 +157,7 @@ public class SettingsActivityRetainedIntentTest {
         seedSavedBackStack(System.currentTimeMillis(), new SettingsBackStackState.Entry(
             BenignPreferencesFragment.class.getName(),
             R.string.termux_ai_preferences_title, null, null, null));
+        SettingsActivity.setLastClosedAtMs(android.os.SystemClock.elapsedRealtime());
 
         Intent plainIntent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class);
         try (ActivityController<SettingsActivity> controller =

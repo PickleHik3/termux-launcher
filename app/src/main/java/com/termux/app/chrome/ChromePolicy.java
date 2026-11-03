@@ -4,6 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.DockGlassRendering;
+import com.termux.shared.termux.settings.preferences.FrostStops;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -168,10 +170,10 @@ public final class ChromePolicy {
             // with it, then place the surfaces that remembered something different. Writing these
             // through the plain setters would have made each one overwrite the last, because while
             // they are linked they all name the same Base value.
-            preferences.setSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
-            preferences.setSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
+            // Base is named outright: all glass, everywhere (the grid's first cell).
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, appBar);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+                FrostStops.nearestStopByBlur(blur));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
@@ -180,15 +182,14 @@ public final class ChromePolicy {
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
             preferences.setWallpaperEnabledTerminalBackgroundOpacity(preferences.getTerminalBackgroundOpacity());
-            preferences.setWallpaperEnabledAppBarOpacity(preferences.getAppBarOpacity());
-            preferences.setWallpaperEnabledExtraKeysBlurRadius(preferences.getExtraKeysBlurRadius());
+            preferences.setWallpaperEnabledAppBarOpacity(preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
+            preferences.setWallpaperEnabledExtraKeysBlurRadius(preferences.getExtraKeysBlurRadius(TermuxAppSharedPreferences.terminalPageId()));
             preferences.setUseSystemWallpaperEnabled(false);
             // Opaque and unblurred is a uniform state, so it belongs on the shared layer: every
             // surface goes opaque, including the ones this policy never named individually.
-            preferences.setSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
-            preferences.setSurfaceBaseValue(
-                TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, 100);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+                FrostStops.nearestStopByBlur(0));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,

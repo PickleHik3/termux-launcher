@@ -195,6 +195,10 @@ public final class AppDrawerCategoryClassifier {
         // what its name or label scores against the heuristics below. A whole desktop is the one
         // split inside that package — it takes the display rather than opening a window — and it
         // is told apart by the marker its id carries, never by anything read out of its name.
+        // The launcher's own Terminal and Display entries are listed with the Linux apps.
+        if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef))
+            return new AppDrawerCategoryAssignment(AppDrawerCategory.LINUX_APPS,
+                Source.LINUX_APP, 1f);
         if (X11Apps.isLinuxApp(entry.appRef))
             return new AppDrawerCategoryAssignment(
                 X11Apps.isSessionId(X11Apps.desktopId(entry.appRef))

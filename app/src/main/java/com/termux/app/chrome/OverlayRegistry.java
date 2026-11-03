@@ -45,6 +45,13 @@ public final class OverlayRegistry {
 
         /** Drops the overlay with no animation for {@code reason}; do nothing to ignore it. */
         default void closeImmediately(@NonNull CloseReason reason) { }
+
+        /**
+         * Whether the overlay is up now, as a layer over the page below: what asks it is a page
+         * that has to leave Back and the keys to it. Default false, for an overlay that has not
+         * said.
+         */
+        default boolean isOpen() { return false; }
     }
 
     /**
@@ -120,6 +127,13 @@ public final class OverlayRegistry {
         for (Overlay overlay : mOverlays)
             if (overlay instanceof TypedOverlay
                 && ((TypedOverlay) overlay).onCodePoint(codePoint, ctrlDown)) return true;
+        return false;
+    }
+
+    /** Whether any overlay is up: a layer is open over the page, and takes Back and keys first. */
+    public boolean anyOpen() {
+        for (Overlay overlay : mOverlays)
+            if (overlay.isOpen()) return true;
         return false;
     }
 

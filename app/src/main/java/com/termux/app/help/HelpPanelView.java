@@ -16,7 +16,6 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import java.util.ArrayList;
@@ -407,7 +406,7 @@ public final class HelpPanelView extends FrameLayout {
                 style.button(string(R.string.help_show_on_screen), true,
                     () -> { if (listener != null) listener.onShowOnScreen(id); })));
         }
-        if (entry.gesture != null && entry.gesture != TourGesture.NONE) {
+        if (entry.gesture != null && entry.gesture != HelpGesture.NONE) {
             actions.addView(add(string(R.string.help_show_gesture),
                 style.button(string(R.string.help_show_gesture), true,
                     () -> { if (listener != null) listener.onShowGesture(id); })),
@@ -525,7 +524,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonTitle(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_title;
-            case HelpTopics.LESSON_BORDER_DRAG: return R.string.help_lesson_border_drag_title;
+            case HelpTopics.LESSON_PAGE_SWIPE: return R.string.help_lesson_border_drag_title;
             case HelpTopics.LESSON_STATUS_SWIPE: return R.string.help_lesson_status_swipe_title;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_title;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_title;
@@ -537,7 +536,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonSummary(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_summary;
-            case HelpTopics.LESSON_BORDER_DRAG: return R.string.help_lesson_border_drag_summary;
+            case HelpTopics.LESSON_PAGE_SWIPE: return R.string.help_lesson_border_drag_summary;
             case HelpTopics.LESSON_STATUS_SWIPE: return R.string.help_lesson_status_swipe_summary;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_summary;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_summary;

@@ -1,0 +1,46 @@
+{
+  "home": {
+    "wide": {
+      "search_field": true,
+      "keyboard_shown": true,
+      "keyboard_rows": 2
+    },
+    "portrait": {
+      "apps_row": "bottom"
+    }
+  },
+  "terminal": {
+    "wide": {
+      "search_field": false,
+      "keyboard_open": true
+    },
+    "portrait": {
+      "apps_row": "hidden",
+      "extra_keys": "bottom",
+      "dress.extra_keys": true
+    }
+  },
+  "terminal_minimal": {
+    "wide": {
+      "keyboard_open": true
+    },
+    "portrait": {
+      "extra_keys": "hidden",
+      "apps_row": "hidden"
+    }
+  },
+  "display": {
+    "wide": {
+      "search_field": false
+    },
+    "portrait": {
+      "apps_row": "hidden",
+      "dress.extra_keys": false
+    }
+  },
+  "absent": [
+    "display.wide.keyboard_open",
+    "home.wide.keyboard_open",
+    "terminal_minimal.portrait.dress.extra_keys"
+  ]
+}

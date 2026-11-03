@@ -1,7 +1,7 @@
 name: Build X11 native (Xlorie)
 
 # Builds libXlorie.so — the Xorg "Xlorie" DDX that backs the launcher's Display page — from
-# termux/termux-x11 at the commit pinned in x11-server/UPSTREAM.md, for arm64-v8a and x86_64
+# termux/termux-x11 at the commit pinned in x11-server/UPSTREAM.md, for arm64-v8a, x86_64, armeabi-v7a and x86
 # (the emulator is the only way to try the Display page without a phone). Artifacts are
 # committed into app/src/main/jniLibs/<abi>/ by hand after a green run, exactly like
 # build_mnn_native.yml does for libMNN.so.
@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64-v8a, x86_64]
+        abi: [arm64-v8a, x86_64, armeabi-v7a, x86]
     steps:
       - name: Checkout termux-x11
         uses: actions/checkout@v6

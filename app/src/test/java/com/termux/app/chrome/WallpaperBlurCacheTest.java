@@ -65,16 +65,16 @@ public class WallpaperBlurCacheTest {
 
     @Test
     public void theLeastRecentlyUsedRadiusIsEvictedAtTheCap() {
-        for (int radius : new int[] {4, 8, 12, 16, 20, 24}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {4, 8, 12, 16, 20, 24, 28, 32}) cache.obtain(radius, wallpaperFrame);
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
 
         // Touch the oldest so recency, not insertion order, decides what goes.
         cache.obtain(4, wallpaperFrame);
-        cache.obtain(28, wallpaperFrame);
+        cache.obtain(36, wallpaperFrame);
 
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
         assertFalse("the least recently used radius should be gone", cache.hasRadius(8));
-        for (int radius : new int[] {4, 12, 16, 20, 24, 28}) assertTrue(cache.hasRadius(radius));
+        for (int radius : new int[] {4, 12, 16, 20, 24, 28, 32, 36}) assertTrue(cache.hasRadius(radius));
     }
 
     @Test
@@ -97,7 +97,7 @@ public class WallpaperBlurCacheTest {
     public void anEvictedFrameSomeViewIsStillDrawingIsDroppedWithoutRecycling() {
         Bitmap doomed = cache.obtain(8, wallpaperFrame);
         source.inUse.add(doomed);
-        for (int radius : new int[] {12, 16, 20, 24, 28, 32}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {12, 16, 20, 24, 28, 32, 36, 40}) cache.obtain(radius, wallpaperFrame);
 
         assertFalse(cache.hasRadius(8));
         assertFalse("recycling a frame a view holds crashes its next draw", doomed.isRecycled());
@@ -564,7 +564,7 @@ public class WallpaperBlurCacheTest {
     @Test
     public void anEvictedFrameIsDroppedNeverRecycled() {
         Bitmap first = cache.obtain(4, wallpaperFrame);
-        for (int radius : new int[] {8, 12, 16, 20, 24, 28}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {8, 12, 16, 20, 24, 28, 32, 36}) cache.obtain(radius, wallpaperFrame);
 
         assertFalse(cache.hasRadius(4));
         assertFalse(first.isRecycled());

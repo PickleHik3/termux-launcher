@@ -56,12 +56,13 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
             case "terminal_margin_adjustment":
                 mPreferences.setTerminalMarginAdjustment(value);
                 break;
-            case "terminal_padding_fill":
-                mPreferences.setTerminalPaddingFillEnabled(value);
-                // Applied through the same reload path "fullscreen" uses above: immediately if the
-                // activity is in front, on its next resume otherwise — see
-                // TermuxActivity#reloadActivityStyling and #applyPaddingFillPolicyToVisiblePanes.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+            case "terminal_screen_events":
+                // Read by each pane when an event fires; nothing to restyle.
+                mPreferences.setTerminalScreenEventsEnabled(value);
+                break;
+            case "idle_animations":
+                // Each pane re-reads it when its window shows again (PaneContentFrame#refreshAmbient).
+                mPreferences.setIdleAnimationsEnabled(value);
                 break;
             default:
                 break;
@@ -110,8 +111,10 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                     TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "terminal_margin_adjustment":
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
-            case "terminal_padding_fill":
-                return mPreferences.isTerminalPaddingFillEnabled();
+            case "terminal_screen_events":
+                return mPreferences.isTerminalScreenEventsEnabled();
+            case "idle_animations":
+                return mPreferences.isIdleAnimationsEnabled();
             default:
                 return defValue;
         }

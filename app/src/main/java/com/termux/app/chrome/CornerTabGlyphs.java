@@ -8,7 +8,7 @@ import com.termux.R;
 
 /**
  * What a corner tab's buttons are marked with. Every place on the wall answers a corner tap with
- * the same tab — the Widgets page, the Display page and a terminal pane — and each of them used to
+ * the same tab — the Widgets page, the display window and a terminal pane — and each of them used to
  * carry its own copy of the code points, so the glyph that opens the editor was spelled out in
  * three files and the terminal drew its own by hand. Adding a button is one edit here.
  *

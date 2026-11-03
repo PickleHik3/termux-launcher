@@ -15,7 +15,7 @@ import juloo.keyboard2.KeyValue;
 /**
  * Types from the launcher's own keyboard into X.
  *
- * <p>The in-app keyboard speaks {@link KeyValue}, so while the Display page is showing it is
+ * <p>The in-app keyboard speaks {@link KeyValue}, so while the display window is showing it is
  * intercepted here instead of reaching the terminal — the same seam the command palette uses.
  * Characters and strings go over the server's text path, which handles anything the keyboard can
  * produce including emoji; keys that have no character go over the key path with their Android
@@ -245,7 +245,7 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         return true;
     }
 
-    /** The sink the launcher runs on: the Display page's own view. */
+    /** The sink the launcher runs on: the display window's own view. */
     static final class ViewSink implements Sink {
 
         @NonNull private final LorieView view;

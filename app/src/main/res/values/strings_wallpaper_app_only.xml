@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Appearance Overview while the launcher is not the phone's home app: one preview, the
+     launcher's own, and the choice to send a pick to the phone's wallpapers too
+     (WallpaperPickerPage, wallpaper_picker_page.xml). -->
+<resources>
+    <!-- The label over the one preview card, where "Home screen" and "Lock screen" stand otherwise. -->
+    <string name="wallpaper_picker_slot_launcher">Termux Launcher</string>
+    <string name="wallpaper_picker_also_set_phone">Also set as phone wallpaper</string>
+    <string name="wallpaper_picker_also_set_phone_hint">Your home and lock screens keep their own wallpaper unless this is ticked.</string>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home dock style Lens beads: no plate, each icon on its own round lens. The Layout editor's
+     dock style chip; tinted by the chip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M1.6,12a1.8,1.8 0 1 0 3.6,0a1.8,1.8 0 1 0 -3.6,0zM5.9,12a1.8,1.8 0 1 0 3.6,0a1.8,1.8 0 1 0 -3.6,0zM10.2,12a1.8,1.8 0 1 0 3.6,0a1.8,1.8 0 1 0 -3.6,0zM14.5,12a1.8,1.8 0 1 0 3.6,0a1.8,1.8 0 1 0 -3.6,0zM18.8,12a1.8,1.8 0 1 0 3.6,0a1.8,1.8 0 1 0 -3.6,0z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.1" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2.6,12a0.8,0.8 0 1 0 1.6,0a0.8,0.8 0 1 0 -1.6,0zM6.9,12a0.8,0.8 0 1 0 1.6,0a0.8,0.8 0 1 0 -1.6,0zM11.2,12a0.8,0.8 0 1 0 1.6,0a0.8,0.8 0 1 0 -1.6,0zM15.5,12a0.8,0.8 0 1 0 1.6,0a0.8,0.8 0 1 0 -1.6,0zM19.8,12a0.8,0.8 0 1 0 1.6,0a0.8,0.8 0 1 0 -1.6,0z" />
+</vector>

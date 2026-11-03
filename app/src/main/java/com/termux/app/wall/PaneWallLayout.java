@@ -27,6 +27,8 @@ import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.place.PageTopInsets;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -34,12 +36,14 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
- * The pane wall: fixed, full-size places side by side — Widgets, Terminal, Display — of which
- * exactly one is on screen at rest. It wraps the terminal's pane host as its middle page, so the
- * terminal never resizes for the wall and {@code TerminalPaneController} never learns the wall
- * exists.
+ * The pane wall: fixed, full-size places side by side — Home and the Workspace — of which
+ * exactly one is on screen at rest. It wraps the terminal's pane host as the Workspace's page, so
+ * the terminal never resizes for the wall and {@code TerminalPaneController} never learns the wall
+ * exists. The display's frame is the Display page's view ({@link PaneWallPage#DISPLAY}, ADR 0015
+ * A3b), a page of its own beside the others; the Workspace's page is the pane host alone.
  *
  * <p>Not a {@code ViewPager2}: its pages must never be recycled (a recreated terminal or X
  * surface is a lost session), and its centre page runs its own
@@ -65,26 +69,15 @@ import java.util.Map;
  * {@link MarginLayoutParams} and applies them to all of its pages; margins on the other pages are
  * ignored.
  */
-public final class PaneWallLayout extends ViewGroup {
+public final class PaneWallLayout extends ViewGroup
+        implements com.termux.app.chrome.LiveBackdrop.Container {
 
-    /**
-     * A slide is a spring ({@link SettleSpring}) that starts where the finger let go and at the
-     * finger's own speed, so the release has no seam, and lands without passing its rest. From
-     * still — a tile, a key, {@code wall.go} — a whole width takes about the 560 ms the terminal's
-     * window pan takes; a flick is carried on by its own speed, and one thrown hard near its rest
-     * stiffens the spring rather than overshooting. The same time whatever the destination, too:
-     * the slide keeps its own clock ({@link WallSlideClock}), so the frames an arrival costs
-     * stretch it rather than skip it.
-     */
-    static final float SLIDE_OMEGA = 18f;
-    static final float SLIDE_MAX_OMEGA = 60f;
-    /** How close to rest, in px, the slide counts as landed. */
-    private static final float SLIDE_REST_PX = 0.5f;
-    /**
-     * The fastest release, in px per second, the slide carries on from: a stray tracker reading
-     * is not a throw.
-     */
-    private static final float SLIDE_MAX_VELOCITY_PX_PER_SEC = 12000f;
+    // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
+    // starts where the finger let go and at the finger's own speed, so the release has no seam,
+    // and lands without passing its rest. The same time whatever the destination, too: the slide
+    // keeps its own clock (WallSlideClock), so the frames an arrival costs stretch it rather than
+    // skip it.
+
     /**
      * How much longer than its way the slide's ticker is allowed to run before the slide is cut
      * short and settles where it stands: the ceiling under which a run of long frames can stretch
@@ -97,6 +90,22 @@ public final class PaneWallLayout extends ViewGroup {
         default void onWallPageChanged(@NonNull PaneWallPage page) { }
         /** The slide has stopped, with {@code page} at rest on screen. */
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
+        /**
+         * The wall has committed to the cell of page {@code pageId}, of kind {@code page}
+         * (ADR 0016); the slide may still be running. Tells {@link #onWallPageChanged} unless
+         * overridden.
+         */
+        default void onWallCellChanged(int pageId, @NonNull PaneWallPage page) {
+            onWallPageChanged(page);
+        }
+        /**
+         * The slide has stopped on the cell of page {@code pageId}, of kind {@code page}: the
+         * moment a still there gives way to its kind's view. Tells {@link #onWallPageSettled}
+         * unless overridden.
+         */
+        default void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
+            onWallPageSettled(page);
+        }
         /** The wall moved: {@code offsetPx} is signed distance from the current page's rest. */
         default void onWallOffsetChanged(float offsetPx) { }
         /**
@@ -189,24 +198,139 @@ public final class PaneWallLayout extends ViewGroup {
          * pages is aimed past their transforms and re-aims here.
          */
         default void onPagePoseChanged() { }
+        /**
+         * Whether {@code page} holds another page of its own kind {@code steps} away on the row:
+         * the next or previous window inside the Workspace's view ({@link WallRow}). A border
+         * drag toward it moves the wall as toward any page, and its commit is a step inside
+         * {@code page} ({@link #onInnerStep}) rather than a slide to another view.
+         */
+        default boolean hasInnerPage(@NonNull PaneWallPage page, int steps) { return false; }
+        /**
+         * A border drag committed to the page {@code steps} away inside {@code page}, and the
+         * wall still stands where the finger left it: the moment to take a picture of what is
+         * leaving. {@link #onInnerStep} follows at once, with the wall back at rest.
+         */
+        default void onInnerStepBegin(@NonNull PaneWallPage page, int steps) { }
+        /**
+         * The wall is back at rest on {@code page} after an inner step: the arriving page comes in
+         * from {@code fromPx} beside its rest ({@link #nudgePage}), which is where the drag had
+         * already brought it.
+         */
+        default void onInnerStep(@NonNull PaneWallPage page, int steps, float fromPx) { }
+        /**
+         * Whether a border drag on {@code page} pages the wall. A Home page has no border: it
+         * pages by a plain swipe anywhere, which its own view reads ({@link #beginPlainDrag}).
+         * The keyboard and status swipes off its borders are asked separately.
+         */
+        default boolean isBorderPagingEnabled(@NonNull PaneWallPage page) { return true; }
+        /**
+         * Whether a sideways swipe that starts at the screen point ({@code rawX}, {@code rawY})
+         * inside {@code page} — on a terminal's text — pages the wall as a slide off a border
+         * does ({@link BorderDrag}): the terminal there gives the swipe away
+         * ({@link com.termux.app.terminal.TerminalBodySwipe}). Asked once as a finger lands
+         * inside the page, on a wall that can page; it may look the point up in the views.
+         */
+        default boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+            return false;
+        }
+        /**
+         * Whether a clearly sideways swipe that starts at the screen point ({@code rawX}, {@code
+         * rawY}) in {@code page}'s last row, on the seam band above the bottom border ({@link
+         * SeamSwipe}), pages the wall: the terminal there gives the swipe away. The band is the
+         * border's, so the body swipe's setting does not turn it off. Asked once as a finger
+         * lands there, on a wall that can page.
+         */
+        default boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+            return isBodySwipePaging(page, rawX, rawY);
+        }
+        /**
+         * A drag is taking the wall from {@code page}, a border drag or Home's plain swipe past
+         * its last page: the moment to put the neighbouring view on the page beside the seam
+         * (the first window when leaving Home) while it is still off screen.
+         */
+        default void onWallDragBegin(@NonNull PaneWallPage page) { }
+        /**
+         * A drag on {@code page} now heads {@code steps} away (-1 bringing in the page on the
+         * left, +1 the one on the right): on its first move, and again on each reversal. Asked
+         * before the frame's offset is worked out, so the listener may re-build the page list
+         * ({@link #setPages}) to put the page that way in place (ADR 0015: one Home frame,
+         * re-bound to the Home run the drag heads for).
+         */
+        default void onWallDragHeading(@NonNull PaneWallPage page, int steps) { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
-    private List<PaneWallPage> mPages = Collections.singletonList(PaneWallPage.TERMINAL);
+    /** No page: a cell id that is none of the wall's. */
+    public static final int NO_PAGE = Integer.MIN_VALUE;
+    /** A cell's position while a far jump leaves it out of the slide (W3). */
+    private static final int HIDDEN = Integer.MAX_VALUE;
+    /** One cell per page of the wall, in order (ADR 0016). */
+    private List<Cell> mCells = Collections.singletonList(
+        new Cell(kindPageId(PaneWallPage.TERMINAL), PaneWallPage.TERMINAL, null));
+    /** The page kinds the cells hold, in the order of their first cell. */
+    private List<PaneWallPage> mKinds = Collections.singletonList(PaneWallPage.TERMINAL);
+    /** The page whose cell the wall is on. */
+    private int mCurrentId = kindPageId(PaneWallPage.TERMINAL);
+    /** The kind of {@link #mCurrentId}'s page. */
     @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
+    /** The binding: the page whose cell each kind's one view stands at. */
+    private final Map<PaneWallPage, Integer> mBoundIds = new EnumMap<>(PaneWallPage.class);
+    /**
+     * The kinds whose view has nothing to show yet (the Terminal page with no window): the page
+     * their view is bound to shows its card still on top of it, not live (ADR 0016 section 6).
+     */
+    private final java.util.Set<PaneWallPage> mUnreadyKinds = java.util.EnumSet.noneOf(PaneWallPage.class);
+    /** The card still of each page whose cell has needed one, by page id. */
+    private final Map<Integer, PageCardView> mCards = new java.util.HashMap<>();
+    /**
+     * Each page's last picture, taken as its kind's view left it (ADR 0016 section 2), shown in
+     * its still; half the wall's size. The bitmaps are this layout's to recycle.
+     */
+    private final PageStillPolicy.Pictures<android.graphics.Bitmap> mPictures =
+        new PageStillPolicy.Pictures<>();
+    /** Told of each picture just before this layout recycles it; see {@link #setOnPictureDropped}. */
+    @Nullable private androidx.core.util.Consumer<android.graphics.Bitmap> mOnPictureDropped;
+    /**
+     * During a far jump's slide (W3), the page the wall left: it stands one width beside the
+     * arriving cell, and every other cell is out of the slide. {@link #NO_PAGE} otherwise.
+     */
+    private int mJumpFromId = NO_PAGE;
+    /** Where that page stands from the arriving cell, in widths: -1 or +1. */
+    private int mJumpSide;
+    {
+        mBoundIds.put(PaneWallPage.TERMINAL, kindPageId(PaneWallPage.TERMINAL));
+    }
     @Nullable private Listener mListener;
 
     /** Signed distance from the current page's rest position, in px. */
     private float mOffsetPx;
     @Nullable private ValueAnimator mSlide;
     private boolean mSliding;
+    /** Where the slide under way started, from the current page's rest; NaN while none runs. */
+    private float mSlideFromPx = Float.NaN;
     private boolean mDragging;
     /** One page slid in from beside its place on top of wherever the wall puts it. */
     @Nullable private PaneWallPage mNudgePage;
     private float mNudgePx;
     @Nullable private ValueAnimator mNudge;
+    /**
+     * The view a nudge carries off beside the one it brings in; null for a nudge that carries
+     * nothing off.
+     */
+    @Nullable private View mNudgeLeaving;
+    /** A swap and its nudge are being set up: their positions are applied once, together. */
+    private boolean mDeferPositions;
+    /** The Workspace's pane host: its page's view while a terminal window is in front. */
+    @Nullable private View mTerminalHost;
     private boolean mReducedMotion;
     private boolean mGesturesEnabled = true;
+    /**
+     * A slide from one view to another ({@link #goTo} to a different page) is under way. Outside
+     * one, a view standing beside a page with more pages of its own on that side is placed one
+     * further out ({@link #applyPagePositions}), so a drag toward the next window shows the
+     * window's arrival and not the view after the windows.
+     */
+    private boolean mCrossSlide;
     /**
      * Whether the last {@link #applyPagePositions} call reported the Terminal page off screen, or
      * {@code null} before the first call, so that first call always tells the listener where it
@@ -276,6 +400,21 @@ public final class PaneWallLayout extends ViewGroup {
     /** The page the glow is drawn on: the one the wall rested on when the finger landed. */
     @Nullable private View mGlowPage;
     /**
+     * The glow's page's size when the press lit it: the frame the glow stays in
+     * ({@link BorderGlow#heldExtent}).
+     */
+    private int mGlowPageWidth;
+    private int mGlowPageHeight;
+    /**
+     * Where the bottom border's glow lies for the press that lit it, in its page's own pixels: the
+     * pressed pane's {@code left, right, bottom} ({@link PaneEdges}), and how far down the air
+     * below the page reached ({@link BorderGlow#belowBand}).
+     */
+    private final float[] mGlowEdge = new float[3];
+    private float mGlowAirBottom;
+    /** Where the terminal page's panes stand along its bottom border; null: the page's frame. */
+    @Nullable private PaneEdges mTerminalEdges;
+    /**
      * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
      * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
      * keyboard's reveal arithmetic ({@link KeyboardReveal}) with the direction turned over, since
@@ -288,6 +427,24 @@ public final class PaneWallLayout extends ViewGroup {
     private float mFold;
     /** Reused for the wall's place in its window, so a press allocates nothing. */
     private final int[] mWindowLocation = new int[2];
+    /** Scratch for {@link #dockTopInWall}: the dock's place in the window. */
+    private final int[] mDockLocation = new int[2];
+    /** A Home page's grabber at rest and the box its swipe starts in ({@link #loadHomeGrabber}). */
+    private final float[] mHomePill = new float[4];
+    private final float[] mHomeHit = new float[4];
+    /** The dock's top the Home grabber was last drawn over, so a dock that moves redraws it. */
+    private float mDrawnDockTop = Float.NaN;
+    /** Whether the dock's page dashes stood in for Home's grabber when it was last drawn. */
+    private boolean mDrawnHomeDashes;
+    /**
+     * Watches the dock while Home shows its grabber: the dock rides up and down with the keyboard
+     * by its own layout and translation, which the wall is not told of, and the grabber stands on
+     * it.
+     */
+    private final android.view.ViewTreeObserver.OnPreDrawListener mDockWatch = () -> {
+        watchDock();
+        return true;
+    };
     /**
      * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
      * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
@@ -315,7 +472,7 @@ public final class PaneWallLayout extends ViewGroup {
     /** The held side border for the plank's press: -1 left, +1 right, 0 top or bottom. */
     private int mSinkSide;
     /**
-     * Whether the sunk page is dimmed, on a hardware layer. Not a Display page showing its live
+     * Whether the sunk page is dimmed, on a hardware layer. Not the display window showing its live
      * surface: a SurfaceView follows a scale on its frame but would be stranded by a layer. Its
      * stand-in ({@link SurfacePage}) takes the layer, from the moment it is up.
      */
@@ -332,6 +489,29 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private final java.util.EnumSet<PaneWallPage> mStillPlaces =
         java.util.EnumSet.noneOf(PaneWallPage.class);
+    /** Settings' Page transition, which poses the pages as they slide ({@link WallPageTransition}). */
+    @NonNull private HomePageTransition mTransition = HomePageTransition.DEFAULT;
+    /** Scratch for one page's pose; main thread only. */
+    private final HomePageTransition.Transform mPose = new HomePageTransition.Transform();
+    /**
+     * Each page view's {@code {slide, scale}}: where the slide puts it, in px from its rest — the
+     * position an effect poses it from, and what every reader of "where is this page" reads, since
+     * its translation is the effect's — and the scale its pose gives it, which the sink multiplies.
+     * Weak, so a view that leaves the wall is not kept for it.
+     */
+    private final Map<View, float[]> mSlides = new WeakHashMap<>();
+    /** The pages an effect poses now (scaled, faded or turned), each on a hardware layer. */
+    private final List<View> mPosedPages = new ArrayList<>(3);
+    /** Whether a page or window waits on the side the wall is moving toward, this frame. */
+    private boolean mTurning;
+    /** Whether the wall is moving across the seam between Home and the Workspace, this frame. */
+    private boolean mSeamSlide;
+    /**
+     * Two children whose drawing is swapped while they share the screen, so the page the effect
+     * puts on top is drawn over the other ({@link WallPageTransition#topSide}); -1 while none are.
+     */
+    private int mSwapLow = -1;
+    private int mSwapHigh = -1;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -350,6 +530,57 @@ public final class PaneWallLayout extends ViewGroup {
         mListener = listener;
     }
 
+    /**
+     * Settings' Page transition: how the pages turn as the wall slides between Home and the
+     * Workspace and between windows. Read as the launcher comes to the front.
+     */
+    public void setPageTransition(@NonNull HomePageTransition effect) {
+        if (effect == mTransition) return;
+        mTransition = effect;
+        applyPagePositions();
+    }
+
+    @NonNull
+    public HomePageTransition pageTransition() {
+        return mTransition;
+    }
+
+    /**
+     * Where {@code view}'s slide puts it, in px from its rest: its translation under the slide,
+     * and the position an effect poses it from under any other. What "where is this page" means.
+     */
+    public float slidePx(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        return slide == null ? view.getTranslationX() : slide[0];
+    }
+
+    /**
+     * The terminal page's alpha as the wall last placed it ({@link #placePage}): its pose's while
+     * a transition fades it, 0 while it is parked off screen, 1 otherwise and before it is added.
+     */
+    public float terminalPageAlpha() {
+        return mTerminalHost == null ? 1f : mTerminalHost.getAlpha();
+    }
+
+    /**
+     * A window is about to be pictured as it leaves ({@code DepartureCard}): the Workspace's page
+     * drops its pose for the capture and stands flat at
+     * {@link WallPageTransition#departureCaptureSlidePx}, so the card can be posed from there and
+     * begin where the page stood. Nothing changes under the slide. The next placement poses the
+     * page again; nothing is drawn in between.
+     */
+    public void flattenForDeparture() {
+        View page = mPageViews.get(PaneWallPage.TERMINAL);
+        if (page == null || !mPosedPages.contains(page)) return;
+        page.setTranslationX(WallPageTransition.departureCaptureSlidePx(mTransition,
+            slidePx(page), getWidth()));
+        float sink = page == mSinkPage ? PageSink.scale(mSink) : 1f;
+        page.setScaleX(sink);
+        page.setScaleY(sink);
+        page.setRotationY(0f);
+        page.setAlpha(1f);
+    }
+
     public void setReducedMotion(boolean reduced) {
         mReducedMotion = reduced;
     }
@@ -360,6 +591,96 @@ public final class PaneWallLayout extends ViewGroup {
      * layout file, the others are added by their controllers).
      */
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
+        if (page == PaneWallPage.TERMINAL) mTerminalHost = view;
+        registerPageView(page, view);
+    }
+
+    /**
+     * The live neighbour windows' views, previous then next ({@link LiveNeighbourPolicy}):
+     * containers the pane controller fills with the adjacent windows' pane trees. The wall adds
+     * them as its children, lays them out as the Workspace page and stands them one width either
+     * side of it while it moves; at rest they are {@code GONE}. An empty container is never shown.
+     *
+     * @param prepare run as a drag takes the wall from the Workspace, before anything moves, so
+     *                the containers hold the windows beside the one in front now
+     */
+    public void setInnerNeighbourViews(@Nullable View previous, @Nullable View next,
+                                       @Nullable Runnable prepare) {
+        View[] views = {previous, next};
+        for (int slot = 0; slot < 2; slot++) {
+            View old = mInnerNeighbours[slot];
+            View view = views[slot];
+            if (old == view) continue;
+            if (old != null && old.getParent() == this) removeView(old);
+            mInnerNeighbours[slot] = view;
+            if (view == null) continue;
+            if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+            view.setVisibility(GONE);
+            // Right after the Workspace page, so it draws as the page beside it would.
+            int at = mTerminalHost == null ? -1 : indexOfChild(mTerminalHost);
+            addView(view, at < 0 ? getChildCount() : at + 1);
+        }
+        mPrepareInnerNeighbours = prepare;
+        applyPagePositions();
+    }
+
+    /** See {@link #setInnerNeighbourViews}: previous, next. */
+    private final View[] mInnerNeighbours = new View[2];
+    @Nullable private Runnable mPrepareInnerNeighbours;
+    /** Between a released inner step's settle and its nudge (stepInside): the neighbours stay. */
+    private boolean mInnerStepping;
+    /** The nudge under way began inside an inner step, so the neighbours ride beside it. */
+    private boolean mNudgeCarriesNeighbours;
+    /** The released drag's wall speed while an inner step runs (stepInside), else NaN. */
+    private float mInnerStepVelocity = Float.NaN;
+
+    /**
+     * Whether this pass measures and lays out {@code child}: a page on screen, and a live
+     * neighbour out beside the Workspace page even while it is off screen (INVISIBLE), so both
+     * neighbours take the host's size as a drag begins rather than one of them mid-way.
+     */
+    private boolean isLaidOutNow(@NonNull View child) {
+        int visibility = child.getVisibility();
+        return visibility == VISIBLE || (visibility == INVISIBLE && isInnerNeighbour(child));
+    }
+
+    private boolean isInnerNeighbour(@NonNull View child) {
+        return child == mInnerNeighbours[0] || child == mInnerNeighbours[1];
+    }
+
+    /**
+     * Stands each live neighbour one width beside the Workspace page while the wall moves it,
+     * as the page beside it would stand, and puts it away ({@code GONE}) otherwise.
+     */
+    private void placeInnerNeighbours(int width) {
+        boolean workspaceInFront = mCurrent == PaneWallPage.TERMINAL && mTerminalHost != null
+            && mPageViews.get(PaneWallPage.TERMINAL) == mTerminalHost;
+        boolean shown = LiveNeighbourPolicy.shown(workspaceInFront, mDragging, mSliding,
+            mNudgePage == PaneWallPage.TERMINAL && mNudgeCarriesNeighbours, mInnerStepping);
+        float workspaceSlide = workspaceInFront ? slideOf(mTerminalHost)[0] : 0f;
+        for (int slot = 0; slot < 2; slot++) {
+            View view = mInnerNeighbours[slot];
+            if (view == null) continue;
+            int side = LiveNeighbourPolicy.sideOf(slot);
+            boolean filled = view instanceof ViewGroup && ((ViewGroup) view).getChildCount() > 0;
+            if (!shown || !filled || !hasInnerPage(side)) {
+                if (view.getVisibility() != GONE) {
+                    unpose(view);
+                    view.setVisibility(GONE);
+                }
+                continue;
+            }
+            float x = LiveNeighbourPolicy.slidePx(side, workspaceSlide, width);
+            poseOnWall(view, x, width);
+            view.setAlpha(mPose.alpha);
+            // No layout is asked for coming on screen: an INVISIBLE neighbour is laid out with
+            // the pages (isLaidOutNow), and one leaving GONE asks for its own pass. A released
+            // step brings the leaving window on screen this way, and a pass there cost the frame.
+            view.setVisibility(LiveNeighbourPolicy.onScreen(x, width) ? VISIBLE : INVISIBLE);
+        }
+    }
+
+    private void registerPageView(@NonNull PaneWallPage page, @Nullable View view) {
         View previous = mPageViews.get(page);
         if (previous != null && previous == mSinkPage && previous != view) finishSink();
         if (previous != null && previous != view && mTiltPages.contains(previous)) {
@@ -370,6 +691,8 @@ public final class PaneWallLayout extends ViewGroup {
             mGlow.reset();
             mGlowPage = null;
         }
+        // The view leaving this place is put flat; wherever it goes next places it again.
+        if (previous != null && previous != view) unpose(previous);
         // A surface page leaving the wall lets go of its stand-in and the copy it kept.
         if (previous instanceof SurfacePage && previous != view) {
             mStillPlaces.remove(page);
@@ -377,7 +700,28 @@ public final class PaneWallLayout extends ViewGroup {
         }
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
+        if (view != null && mUnreadyKinds.contains(page)) syncCards();
         applyPagePositions();
+    }
+
+    /**
+     * Whether {@code kind}'s view is ready to show its page (true unless said otherwise): the
+     * Terminal page's view with no window is not, and its cell shows its card still, on top of
+     * the view, until a window arrives and the card gives way.
+     */
+    public void setKindReady(@NonNull PaneWallPage kind, boolean ready) {
+        if (ready ? !mUnreadyKinds.remove(kind) : !mUnreadyKinds.add(kind)) return;
+        syncCards();
+        applyPagePositions();
+    }
+
+    private boolean isReady(@NonNull PaneWallPage kind) {
+        return !mUnreadyKinds.contains(kind);
+    }
+
+    /** Where the terminal page's panes stand, for the bottom border's glow ({@link PaneEdges}). */
+    public void setTerminalPaneEdges(@Nullable PaneEdges edges) {
+        mTerminalEdges = edges;
     }
 
     @Nullable
@@ -386,30 +730,490 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * The places this install has, in spatial order (see {@link PaneWallPolicy#availablePages}).
-     * A page that goes away while it is showing hands the wall back to the terminal.
+     * One page of the wall as the layout lays it out (ADR 0016): a cell, keyed by its page id,
+     * of a page kind, with the name its card still shows.
+     */
+    public static final class Cell {
+        /** The page's id; a kind-only id ({@link #kindPageId}) before the page list is known. */
+        public final int pageId;
+        /** The page kind whose view shows this page when it is bound. */
+        @NonNull public final PaneWallPage kind;
+        /** The page's name, as its card still shows it; null for the kind's own. */
+        @Nullable public final String name;
+
+        /** The cell of page {@code pageId}, of {@code kind}, named {@code name} on its card. */
+        public Cell(int pageId, @NonNull PaneWallPage kind, @Nullable String name) {
+            this.pageId = pageId;
+            this.kind = kind;
+            this.name = name;
+        }
+
+        @Override public boolean equals(Object o) {
+            if (!(o instanceof Cell)) return false;
+            Cell other = (Cell) o;
+            return pageId == other.pageId && kind == other.kind
+                && java.util.Objects.equals(name, other.name);
+        }
+
+        @Override public int hashCode() { return java.util.Objects.hash(pageId, kind, name); }
+
+        @Override public String toString() { return "Cell(" + pageId + ":" + kind + ")"; }
+    }
+
+    /**
+     * The page id of the one cell of {@code kind} in a kind-only page list ({@link #setPages}):
+     * a wall whose pages are not known, and the tests.
+     */
+    public static int kindPageId(@NonNull PaneWallPage kind) {
+        return -100 - kind.ordinal();
+    }
+
+    /**
+     * A kind-only page list: one cell per kind, each with its kind's view bound to it. A page
+     * that goes away while it is showing hands the wall to its neighbour on the left.
      */
     public void setPages(@NonNull List<PaneWallPage> pages) {
-        List<PaneWallPage> resolved = new ArrayList<>(pages);
-        if (!resolved.contains(PaneWallPage.TERMINAL)) resolved.add(PaneWallPage.TERMINAL);
-        if (resolved.equals(mPages)) return;
-        mPages = Collections.unmodifiableList(resolved);
-        if (!mPages.contains(mCurrent)) {
-            mCurrent = PaneWallPolicy.homePage();
-            notifyPageChanged();
+        List<Cell> cells = new ArrayList<>(pages.size());
+        for (PaneWallPage page : pages) cells.add(new Cell(kindPageId(page), page, null));
+        setCells(cells);
+    }
+
+    /**
+     * Lay out one cell per page, in order (ADR 0016). The wall stays on the current page's cell.
+     * When a kind-only list gives way to the real pages (or back), the pages are the same and
+     * only their ids changed: the wall moves to its kind's bound page if it stays, else its
+     * first page, and announces nothing, since the chrome keys off the page kind (ADR 0012).
+     * When a real page the wall is on is removed, the wall is handed to the nearest page on its
+     * left that stays, else the first, and that is announced once if the kind changed. Each kind
+     * keeps its binding while its page stays; a kind whose bound page went is bound to the
+     * current page when it is of that kind, else to its first page.
+     */
+    public void setCells(@NonNull List<Cell> cells) {
+        List<Cell> resolved = new ArrayList<>(cells);
+        if (resolved.isEmpty()) {
+            PaneWallPage home = PaneWallPolicy.homePage();
+            resolved.add(new Cell(kindPageId(home), home, null));
         }
+        if (resolved.equals(mCells)) return;
+        List<Cell> before = mCells;
+        mCells = Collections.unmodifiableList(resolved);
+        List<PaneWallPage> kinds = new ArrayList<>(3);
+        for (Cell cell : mCells) if (!kinds.contains(cell.kind)) kinds.add(cell.kind);
+        mKinds = Collections.unmodifiableList(kinds);
+        // A far jump's stand-off is drawn against the list it was made on: a changed list mid-slide
+        // drops it, and the cells between may come into the rest of the slide.
+        clearJump();
+        PaneWallPage was = mCurrent;
+        boolean moved = false;
+        if (indexOfCell(mCurrentId) < 0) {
+            int sameKind = NO_PAGE;
+            if (isKindOnly(before) || isKindOnly(mCells)) {
+                sameKind = boundPageId(was);
+                if (kindOf(sameKind) != was) sameKind = firstPageOf(was);
+            }
+            if (sameKind != NO_PAGE) {
+                mCurrentId = sameKind;
+            } else {
+                mCurrentId = cellAfterRemoval(before, mCurrentId);
+                moved = true;
+            }
+        }
+        mCurrent = mCells.get(indexOfCell(mCurrentId)).kind;
+        moved &= mCurrent != was;
+        resolveBindings();
+        syncCards();
+        if (moved) notifyPageChanged();
         applyPagePositions();
         publishBackExclusion();
     }
 
-    @NonNull
-    public List<PaneWallPage> pages() {
-        return mPages;
+    /** Whether {@code cells} is a kind-only list: every id its kind's ({@link #kindPageId}). */
+    private static boolean isKindOnly(@NonNull List<Cell> cells) {
+        for (Cell cell : cells) if (cell.pageId != kindPageId(cell.kind)) return false;
+        return true;
     }
 
+    /** The cells, in order. */
+    @NonNull
+    List<Cell> cells() {
+        return mCells;
+    }
+
+    /**
+     * The page kinds the wall holds, in the order of their first cell: the controller's alone
+     * to read; everything else reads the page list (ADR 0016).
+     */
+    @NonNull
+    List<PaneWallPage> pages() {
+        return mKinds;
+    }
+
+    /** The index of page {@code pageId}'s cell; -1 when the wall has no such page. */
+    int indexOfCell(int pageId) {
+        List<Cell> cells = mCells;
+        for (int i = 0; i < cells.size(); i++) if (cells.get(i).pageId == pageId) return i;
+        return -1;
+    }
+
+    /**
+     * Whether a wall {@code offsetPx} from its rest is moving across the seam: toward a page, not
+     * a window inside this one, of the other half (Home on one side, the Workspace or the
+     * display on the other).
+     */
+    boolean seamAhead(float offsetPx) {
+        if (offsetPx == 0f || Float.isNaN(offsetPx)) return false;
+        int heading = offsetPx > 0f ? -1 : 1;
+        if (hasInnerPage(heading)) return false;
+        int there = neighbourId(heading);
+        if (there == NO_PAGE) return false;
+        PaneWallPage toward = kindOf(there);
+        return toward != null
+            && (mCurrent == PaneWallPage.WIDGETS) != (toward == PaneWallPage.WIDGETS);
+    }
+
+    /**
+     * Whether the wall slides flat across the seam this frame, the page transition set aside, so
+     * the chrome follows the wall there as it does under the slide.
+     */
+    public boolean slidesAcrossSeam() {
+        return mSeamSlide;
+    }
+
+    /** The kind of page {@code pageId}; null when the wall has no such page. */
+    @Nullable
+    PaneWallPage kindOf(int pageId) {
+        int at = indexOfCell(pageId);
+        return at < 0 ? null : mCells.get(at).kind;
+    }
+
+    /** The page {@code steps} cells from the current one; {@link #NO_PAGE} past either end. */
+    int neighbourId(int steps) {
+        int at = indexOfCell(mCurrentId) + steps;
+        return at < 0 || at >= mCells.size() ? NO_PAGE : mCells.get(at).pageId;
+    }
+
+    /** The page {@code kind}'s view is bound to; {@link #NO_PAGE} when the wall has none of it. */
+    public int boundPageId(@NonNull PaneWallPage kind) {
+        Integer bound = mBoundIds.get(kind);
+        return bound == null ? NO_PAGE : bound;
+    }
+
+    /**
+     * Bind {@code kind}'s view to page {@code pageId}: the view stands at that cell, and the cell
+     * it left shows its card still. Nothing when the page is not of that kind.
+     */
+    public void bind(@NonNull PaneWallPage kind, int pageId) {
+        if (kindOf(pageId) != kind) return;
+        Integer was = mBoundIds.put(kind, pageId);
+        if (was != null && was == pageId) return;
+        // Live again: its picture is stale from here on. Not a Display page's: the display
+        // frame shows that picture in its own still until the page's app comes forward.
+        if (kind != PaneWallPage.DISPLAY) keepPicture(pageId, null);
+        syncCards();
+        applyPagePositions();
+    }
+
+    /**
+     * The binding of {@code kind}'s view is about to move to page {@code nextPageId}: keep a
+     * picture of the page it leaves, drawn from the view while it still shows that page (W5:
+     * before the view turns, so the picture is never the arriving page's). Called before
+     * anything turns the view. Half the wall's size. Nothing for the display, whose surface
+     * does not draw into a picture; its frame hands its own in through {@link #keepPicture}.
+     */
+    public void takePicture(@NonNull PaneWallPage kind, int nextPageId) {
+        int leaving = PageStillPolicy.pictureOnRebind(boundPageId(kind), nextPageId);
+        if (leaving < 0 || kind == PaneWallPage.DISPLAY) return;
+        View view = mPageViews.get(kind);
+        if (view == null || getWidth() <= 0 || getHeight() <= 0) return;
+        // Still bound to the leaving page here, so stored without keepPicture's live check.
+        storePicture(leaving, drawPicture(view, getWidth(), getHeight()));
+    }
+
+    /**
+     * Page {@code pageId}'s last picture (null: none, it is live again), shown in its still while
+     * its kind's view is bound elsewhere. The layout owns the bitmap from here and recycles the
+     * one it replaces; a picture for a page that is live, or not on the wall, is let go at once.
+     * A Display page's picture is its one copy (ADR 0016 section 2): kept while the page is bound
+     * too, for the display frame's still, until the next one replaces it.
+     */
+    public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+        boolean liveHere = isBoundHere(pageId) && kindOf(pageId) != PaneWallPage.DISPLAY;
+        if (picture != null && (kindOf(pageId) == null || liveHere)) {
+            if (!picture.isRecycled()) picture.recycle();
+            return;
+        }
+        storePicture(pageId, picture);
+    }
+
+    /** Keep {@code picture} as page {@code pageId}'s and show it in the page's still. */
+    private void storePicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log(picture == null ? "still-dropped" : "still-kept",
+                "page=" + pageId + (picture == null ? ""
+                    : " size=" + picture.getWidth() + "x" + picture.getHeight()));
+        }
+        PageCardView card = mCards.get(pageId);
+        if (card != null) card.setPicture(picture);
+        releasePicture(mPictures.put(pageId, picture));
+    }
+
+    /** Page {@code pageId}'s picture, kept for its still; null while it has none. */
+    @Nullable
+    public android.graphics.Bitmap pictureOf(int pageId) {
+        return mPictures.get(pageId);
+    }
+
+    /** Whether page {@code pageId}'s kind's view is bound to it. */
+    private boolean isBoundHere(int pageId) {
+        PaneWallPage kind = kindOf(pageId);
+        return kind != null && boundPageId(kind) == pageId;
+    }
+
+    /**
+     * Tells {@code onDropped} of each kept picture just before this layout recycles it, so a view
+     * that draws one of them (the display frame's still) lets it go first; null for none.
+     */
+    public void setOnPictureDropped(
+            @Nullable androidx.core.util.Consumer<android.graphics.Bitmap> onDropped) {
+        mOnPictureDropped = onDropped;
+    }
+
+    private void releasePicture(@Nullable android.graphics.Bitmap picture) {
+        if (picture == null || picture.isRecycled()) return;
+        if (mOnPictureDropped != null) mOnPictureDropped.accept(picture);
+        picture.recycle();
+    }
+
+    /**
+     * {@code full} at half of {@code wallWidth} by {@code wallHeight} (the picture's own size
+     * for a side the wall does not have yet), the full one recycled; null when it could not be
+     * scaled. For a picture handed in from outside, as the display frame's.
+     */
+    @Nullable
+    public static android.graphics.Bitmap halfPicture(@NonNull android.graphics.Bitmap full,
+                                                      int wallWidth, int wallHeight) {
+        int sideWidth = wallWidth > 0 ? wallWidth : full.getWidth();
+        int sideHeight = wallHeight > 0 ? wallHeight : full.getHeight();
+        if (full.getWidth() == PageStillPolicy.pictureSide(sideWidth)
+                && full.getHeight() == PageStillPolicy.pictureSide(sideHeight)) {
+            return full;
+        }
+        android.graphics.Bitmap half = newPicture(sideWidth, sideHeight);
+        if (half != null) {
+            new android.graphics.Canvas(half).drawBitmap(full, null,
+                new Rect(0, 0, half.getWidth(), half.getHeight()),
+                new Paint(Paint.FILTER_BITMAP_FLAG));
+        }
+        full.recycle();
+        return half;
+    }
+
+    /**
+     * An empty picture half of {@code wallWidth} by {@code wallHeight} ({@link
+     * PageStillPolicy#pictureSide}); null when there is no memory for it.
+     */
+    @Nullable
+    private static android.graphics.Bitmap newPicture(int wallWidth, int wallHeight) {
+        try {
+            return android.graphics.Bitmap.createBitmap(PageStillPolicy.pictureSide(wallWidth),
+                PageStillPolicy.pictureSide(wallHeight), android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * {@code view} drawn into a picture half of {@code wallWidth} by {@code wallHeight}
+     * ({@link PageStillPolicy#pictureSide}); null when it cannot be drawn. A synchronous draw on
+     * a scaled canvas: no window needed, and a still is only seen in motion.
+     */
+    @Nullable
+    static android.graphics.Bitmap drawPicture(@NonNull View view, int wallWidth, int wallHeight) {
+        int viewWidth = view.getWidth() > 0 ? view.getWidth() : wallWidth;
+        int viewHeight = view.getHeight() > 0 ? view.getHeight() : wallHeight;
+        android.graphics.Bitmap picture = newPicture(wallWidth, wallHeight);
+        if (picture == null) return null;
+        try {
+            android.graphics.Canvas canvas = new android.graphics.Canvas(picture);
+            canvas.scale(picture.getWidth() / (float) viewWidth,
+                picture.getHeight() / (float) viewHeight);
+            view.draw(canvas);
+        } catch (RuntimeException e) {
+            // A view that only draws in hardware: the page keeps its card.
+            picture.recycle();
+            return null;
+        }
+        return picture;
+    }
+
+    /**
+     * The current kind's view turned to page {@code pageId} of its own (the Home frame paging
+     * inside its run): the wall stands on that cell, the view bound to it, with no page change
+     * announced. Nothing when the page is not of the current kind.
+     */
+    public void follow(int pageId) {
+        if (pageId == mCurrentId || kindOf(pageId) != mCurrent) return;
+        mCurrentId = pageId;
+        mBoundIds.put(mCurrent, pageId);
+        keepPicture(pageId, null);
+        syncCards();
+        applyPagePositions();
+    }
+
+    /** Whether page {@code pageId}'s cell shows its kind's view, live, rather than a still. */
+    public boolean isLive(int pageId) {
+        PaneWallPage kind = kindOf(pageId);
+        return kind != null && boundPageId(kind) == pageId && mPageViews.get(kind) != null
+            && isReady(kind);
+    }
+
+    /** The card still of page {@code pageId}, once its cell has needed one; else null. */
+    @Nullable
+    public PageCardView cardOf(int pageId) {
+        return mCards.get(pageId);
+    }
+
+    /** Whether {@code kind}'s view has a cell to stand at. */
+    private boolean isLaid(@NonNull PaneWallPage kind) {
+        return mBoundIds.containsKey(kind);
+    }
+
+    /** The kind whose view stands live at the cell {@code steps} from the current; else null. */
+    @Nullable
+    private PaneWallPage liveKindAt(int steps) {
+        int id = steps == 0 ? mCurrentId : neighbourId(steps);
+        if (id == NO_PAGE) return null;
+        PaneWallPage kind = kindOf(id);
+        return kind != null && boundPageId(kind) == id ? kind : null;
+    }
+
+    /** The first page of {@code kind} among the cells; {@link #NO_PAGE} when there is none. */
+    private int firstPageOf(@NonNull PaneWallPage kind) {
+        for (Cell cell : mCells) if (cell.kind == kind) return cell.pageId;
+        return NO_PAGE;
+    }
+
+    /** Where the wall goes when page {@code removedId} leaves it; see {@link #setCells}. */
+    private int cellAfterRemoval(@NonNull List<Cell> before, int removedId) {
+        int was = -1;
+        for (int i = 0; i < before.size(); i++) if (before.get(i).pageId == removedId) was = i;
+        for (int i = was - 1; i >= 0; i--) {
+            if (indexOfCell(before.get(i).pageId) >= 0) return before.get(i).pageId;
+        }
+        for (int i = was + 1; was >= 0 && i < before.size(); i++) {
+            if (indexOfCell(before.get(i).pageId) >= 0) return before.get(i).pageId;
+        }
+        return mCells.get(0).pageId;
+    }
+
+    /** Every kind bound to a page of its kind that the wall holds; see {@link #setCells}. */
+    private void resolveBindings() {
+        for (PaneWallPage kind : PaneWallPage.values()) {
+            Integer bound = mBoundIds.get(kind);
+            if (bound != null && kindOf(bound) == kind) continue;
+            int id = NO_PAGE;
+            if (mCurrent == kind) {
+                id = mCurrentId;
+            } else {
+                for (Cell cell : mCells) {
+                    if (cell.kind == kind) { id = cell.pageId; break; }
+                }
+            }
+            if (id == NO_PAGE) mBoundIds.remove(kind);
+            else mBoundIds.put(kind, id);
+        }
+    }
+
+    /**
+     * A still for every cell whose kind's view is bound to another page, made the first time it
+     * is needed, showing the page's picture when it has one; the stills and pictures of pages
+     * that left go with them. The bound cell of a kind whose view is not ready (the Terminal
+     * page with no window) shows its card too, on top of the view and without a picture. The
+     * bound cell of a kind whose view is not built yet shows nothing, as it always has.
+     */
+    private void syncCards() {
+        java.util.Iterator<Map.Entry<Integer, PageCardView>> it = mCards.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, PageCardView> entry = it.next();
+            if (kindOf(entry.getKey()) != entry.getValue().kind()) {
+                entry.getValue().setPicture(null);
+                removeView(entry.getValue());
+                it.remove();
+            }
+        }
+        // A page that left the wall takes its picture with it.
+        List<Integer> ids = new java.util.ArrayList<>();
+        for (Cell cell : mCells) ids.add(cell.pageId);
+        for (android.graphics.Bitmap dropped : mPictures.retain(ids)) releasePicture(dropped);
+        for (Cell cell : mCells) {
+            boolean bound = boundPageId(cell.kind) == cell.pageId;
+            boolean unready = bound && !isReady(cell.kind);
+            PageCardView card = mCards.get(cell.pageId);
+            if (card != null) {
+                card.setName(cell.name);
+                card.setPicture(unready ? null : mPictures.get(cell.pageId));
+                if (unready) raiseAboveView(card, cell.kind);
+                continue;
+            }
+            if (bound && !unready) continue;
+            card = new PageCardView(getContext(), cell.pageId, cell.kind, cell.name);
+            card.setPicture(unready ? null : mPictures.get(cell.pageId));
+            card.setVisibility(GONE);
+            mCards.put(cell.pageId, card);
+            // Under the kinds' views: a card is only ever seen beside them, but for the card of
+            // a view not ready, which stands over that view at its cell.
+            addView(card, 0);
+            if (unready) raiseAboveView(card, cell.kind);
+        }
+    }
+
+    /** Puts {@code card} above {@code kind}'s view in the drawing, when it is under it. */
+    private void raiseAboveView(@NonNull PageCardView card, @NonNull PaneWallPage kind) {
+        View view = mPageViews.get(kind);
+        if (view == null || indexOfChild(view) < 0 || indexOfChild(card) > indexOfChild(view)) {
+            return;
+        }
+        removeView(card);
+        addView(card, indexOfChild(view) + 1);
+    }
+
+    /**
+     * Where the cell at {@code index} stands from the current one, in widths: its distance in
+     * cells, but during a far jump only the arriving cell and the one left are in the slide.
+     */
+    private int cellPosition(int index, int current) {
+        int jumpFrom = jumpFromId();
+        if (jumpFrom != NO_PAGE) {
+            if (index == current) return 0;
+            if (mCells.get(index).pageId == jumpFrom) return mJumpSide;
+            return HIDDEN;
+        }
+        return index - current;
+    }
+
+    /**
+     * The page a far jump left, while its slide is under way: the stand-off belongs to that slide
+     * alone, so at rest (no slide, the wall on its rest) it is {@link #NO_PAGE} whatever was left
+     * behind, and every cell stands at its distance.
+     */
+    private int jumpFromId() {
+        return mSliding || mOffsetPx != 0f ? mJumpFromId : NO_PAGE;
+    }
+
+    /** Drops a far jump's stand-off: the slide it belonged to is over or no longer its own. */
+    private void clearJump() {
+        mJumpFromId = NO_PAGE;
+    }
+
+    /** The kind of the page whose cell the wall is on. */
     @NonNull
     public PaneWallPage currentPage() {
         return mCurrent;
+    }
+
+    /** The page whose cell the wall is on. */
+    public int currentPageId() {
+        return mCurrentId;
     }
 
     /** True while the wall is anywhere but at rest on its current page. */
@@ -423,11 +1227,37 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
+     * Where the slide under way started, in px from the current page's rest as {@link #offsetPx}
+     * reads: the offset a tap's slide or a released finger's settle set off from. NaN while no
+     * slide runs: at rest, and under a finger.
+     */
+    public float slideFromPx() {
+        return mSlideFromPx;
+    }
+
+    /**
      * Signed distance of the wall from the current page's rest, in px: positive when the pages
      * sit to the right of where they will land, so the current page is arriving from the right.
      */
     public float offsetPx() {
         return mOffsetPx;
+    }
+
+    /**
+     * Whether a slide from one view to another ({@link #goTo} to a different page) is under way:
+     * then the view beside the current page is the other kind's, never a window of the current
+     * page's own, which is how the pages are placed ({@link #applyPagePositions}).
+     */
+    public boolean isCrossSlide() {
+        return mCrossSlide;
+    }
+
+    /**
+     * How far {@code page} stands off its place right now by a {@link #nudgePage}, in px,
+     * positive to the right; 0 when it is not being nudged.
+     */
+    public float nudgePx(@NonNull PaneWallPage page) {
+        return page == mNudgePage ? mNudgePx : 0f;
     }
 
     /**
@@ -442,10 +1272,22 @@ public final class PaneWallLayout extends ViewGroup {
      */
     public boolean isPageOnScreen(@NonNull PaneWallPage page) {
         View view = mPageViews.get(page);
-        if (view == null || !mPages.contains(page)) return false;
+        if (view == null || !isLaid(page)) return false;
         int width = getWidth();
         if (width <= 0) return page == mCurrent;
-        return view.getVisibility() == VISIBLE && Math.abs(view.getTranslationX()) < width;
+        return view.getVisibility() == VISIBLE && Math.abs(slidePx(view)) < width;
+    }
+
+    /**
+     * Whether the terminal's pane host has pixels on screen: the Workspace's page while a terminal
+     * window is in front, or the window a nudge is carrying off.
+     */
+    public boolean isTerminalHostOnScreen() {
+        View view = mTerminalHost;
+        if (view == null || !isLaid(PaneWallPage.TERMINAL)) return false;
+        int width = getWidth();
+        if (width <= 0) return mCurrent == PaneWallPage.TERMINAL;
+        return view.getAlpha() > 0f && Math.abs(slidePx(view)) < width;
     }
 
     /** True while the wall is at rest but not where its record says: a slide was cut short. */
@@ -463,35 +1305,112 @@ public final class PaneWallLayout extends ViewGroup {
     public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
                           @Nullable android.view.animation.Interpolator interpolator,
                           @Nullable Runnable onEnd) {
+        nudgePage(page, fromPx, durationMs, interpolator, onEnd, null);
+    }
+
+    /**
+     * {@link #nudgePage}, its clock held behind {@code clock} (#173): the page is posed at
+     * {@code fromPx} now and moves from the frame after the gate opens, so the frame the arriving
+     * page first draws in does not eat the nudge. A null gate starts the clock at once.
+     */
+    public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                          @Nullable android.view.animation.Interpolator interpolator,
+                          @Nullable Runnable onEnd, @Nullable FirstDrawGate clock) {
+        startNudge(page, fromPx, durationMs, interpolator, onEnd, null, clock);
+    }
+
+    /**
+     * {@link #nudgePage}, carrying {@code leaving} off beside the page coming in when it is the
+     * Workspace's other view. False when no nudge could start; {@code onEnd} has run then.
+     */
+    private boolean startNudge(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                               @Nullable android.view.animation.Interpolator interpolator,
+                               @Nullable Runnable onEnd, @Nullable View leaving) {
+        return startNudge(page, fromPx, durationMs, interpolator, onEnd, leaving, null);
+    }
+
+    private boolean startNudge(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                               @Nullable android.view.animation.Interpolator interpolator,
+                               @Nullable Runnable onEnd, @Nullable View leaving,
+                               @Nullable FirstDrawGate clock) {
         stopNudge();
         // Only the page the wall rests on is nudged: a page the wall has put away would otherwise
         // slide across the place the user is looking at.
         if (mPageViews.get(page) == null || page != mCurrent || isMoving() || mOffsetPx != 0f
                 || fromPx == 0f) {
             if (onEnd != null) onEnd.run();
-            return;
+            return false;
         }
         mNudgePage = page;
         mNudgePx = fromPx;
+        mNudgeLeaving = leaving;
+        // Only a released drag's own nudge carries the live neighbours; a chip's or a
+        // shortcut's switch stays the picture it always was.
+        mNudgeCarriesNeighbours = mInnerStepping;
         applyPagePositions();
-        ValueAnimator nudge = ValueAnimator.ofFloat(fromPx, 0f);
-        nudge.setDuration(durationMs);
-        if (interpolator != null) nudge.setInterpolator(interpolator);
-        nudge.addUpdateListener(animation -> {
-            mNudgePx = (Float) animation.getAnimatedValue();
-            applyPagePositions();
-        });
+        // A released drag whose leaving window rides live beside the arriving one carries on at
+        // the finger's speed: the same page spring a cross-cell settle takes (startSlide), so the
+        // first nudge frame moves as the last drag frame did. Everything else (a chip, a key, a
+        // step whose leaving window is a picture on its own clock) keeps its curve.
+        final SettleSpring handoff = releaseHandoff(fromPx);
+        ValueAnimator nudge;
+        if (handoff != null) {
+            final long springMs = handoff.durationMs(SettleSpring.PAGE_REST_PX);
+            nudge = ValueAnimator.ofFloat(0f, 1f);
+            nudge.setDuration(Math.max(1L, springMs));
+            nudge.setInterpolator(null);
+            nudge.addUpdateListener(animation -> {
+                long playTime = animation.getCurrentPlayTime();
+                mNudgePx = playTime >= springMs ? 0f : handoff.displacementAt(playTime / 1000f);
+                applyPagePositions();
+            });
+        } else {
+            nudge = ValueAnimator.ofFloat(fromPx, 0f);
+            nudge.setDuration(durationMs);
+            if (interpolator != null) nudge.setInterpolator(interpolator);
+            nudge.addUpdateListener(animation -> {
+                mNudgePx = (Float) animation.getAnimatedValue();
+                applyPagePositions();
+            });
+        }
         nudge.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
                 if (mNudge == animation) mNudge = null;
                 mNudgePage = null;
                 mNudgePx = 0f;
+                mNudgeLeaving = null;
+                mNudgeCarriesNeighbours = false;
                 applyPagePositions();
                 if (onEnd != null) onEnd.run();
             }
         });
         mNudge = nudge;
-        nudge.start();
+        if (clock == null) {
+            nudge.start();
+        } else {
+            // Posed at fromPx above until the gate opens; a nudge stopped before then is not
+            // started by it.
+            clock.then(() -> {
+                if (mNudge == nudge && !nudge.isStarted()) nudge.start();
+            });
+        }
+        return true;
+    }
+
+    /**
+     * The spring a released inner step's nudge runs on ({@link PaneWallPolicy#innerStepSettle}),
+     * or null: not inside a released step, or the leaving window is not standing live in the
+     * slot on the far side of the arriving one (a departure picture then runs its own clock).
+     */
+    @Nullable
+    private SettleSpring releaseHandoff(float fromPx) {
+        if (!mInnerStepping || Float.isNaN(mInnerStepVelocity) || fromPx == 0f) return null;
+        View leaving = mInnerNeighbours[LiveNeighbourPolicy.slotOf(fromPx < 0f ? 1 : -1)];
+        if (!(leaving instanceof ViewGroup) || ((ViewGroup) leaving).getChildCount() == 0) {
+            return null;
+        }
+        return PaneWallPolicy.innerStepSettle(fromPx, mInnerStepVelocity,
+            com.termux.app.AnimationSpeed.springTime(getContext()));
     }
 
     private void stopNudge() {
@@ -499,8 +1418,14 @@ public final class PaneWallLayout extends ViewGroup {
         mNudge = null;
         mNudgePage = null;
         mNudgePx = 0f;
+        mNudgeLeaving = null;
+        mNudgeCarriesNeighbours = false;
+        if (nudge == null) return;
+        // A nudge still held behind its gate has not started, and cancelling an animator that
+        // never started tells nobody: started here, so its end listener runs on the cancel.
+        if (!nudge.isStarted()) nudge.start();
         // Cancelling runs the end listener, which repositions the page and runs onEnd.
-        if (nudge != null) nudge.cancel();
+        nudge.cancel();
     }
 
     /** Off while another surface owns the gesture (the surface editor, for one). */
@@ -534,31 +1459,55 @@ public final class PaneWallLayout extends ViewGroup {
 
     // ---- Navigation ------------------------------------------------------------------------
 
-    /** Go to {@code page}, sliding unless {@code animate} is false or motion is reduced. */
+    /**
+     * Go to the cell of a page of kind {@code page}, sliding unless {@code animate} is false or
+     * motion is reduced: the current cell when it is of that kind, else the page its view is
+     * bound to.
+     */
     public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
-        return goTo(page, animate, 0f);
+        int id = mCurrent == page ? mCurrentId : boundPageId(page);
+        return id != NO_PAGE && goToCell(id, animate, 0f);
+    }
+
+    /** Go to page {@code pageId}'s cell, sliding unless {@code animate} is false. */
+    public boolean goToCell(int pageId, boolean animate) {
+        return goToCell(pageId, animate, 0f);
     }
 
     /**
      * The same, with the slide starting at {@code velocityPxPerSec}: a released drag's own speed,
-     * so its settle carries on from the finger rather than from still.
+     * so its settle carries on from the finger rather than from still. A cell more than one away
+     * is a far jump (W3): it arrives one width from a stand-off, beside the cell it left, and the
+     * cells between are neither shown nor announced.
      */
-    private boolean goTo(@NonNull PaneWallPage page, boolean animate, float velocityPxPerSec) {
-        if (!mPages.contains(page)) return false;
+    private boolean goToCell(int pageId, boolean animate, float velocityPxPerSec) {
+        int to = indexOfCell(pageId);
+        if (to < 0) return false;
         interruptDrag();
         // The wall is about to move: a keyboard still settling from a swipe lands first, and a
         // status bar fold under a finger goes back.
         settleKeyboardRevealNow();
         settleStatusFoldNow();
-        if (page == mCurrent && mOffsetPx == 0f) return true;
+        if (pageId == mCurrentId && mOffsetPx == 0f) return true;
         stopNudge();
-        // Carry the current visual position across the page change: the new page's rest is one
-        // width away per step, so the wall keeps drawing where it already was and springs from
-        // there instead of jumping. On a ring the step is the shorter way round, which is also
-        // the side the page's tile sits on.
-        mOffsetPx += PaneWallPolicy.relativePosition(mPages, mCurrent, page) * (float) getWidth();
-        mCurrent = page;
-        notifyPageChanged();
+        if (pageId != mCurrentId) {
+            mCrossSlide = true;
+            int steps = to - indexOfCell(mCurrentId);
+            // Carry the current visual position across the page change: the new cell's rest is
+            // one width away per step, so the wall keeps drawing where it already was and
+            // springs from there instead of jumping.
+            if (Math.abs(steps) > 1) {
+                mJumpFromId = mCurrentId;
+                mJumpSide = -Integer.signum(steps);
+                mOffsetPx += Integer.signum(steps) * (float) getWidth();
+            } else {
+                mJumpFromId = NO_PAGE;
+                mOffsetPx += steps * (float) getWidth();
+            }
+            mCurrentId = pageId;
+            mCurrent = mCells.get(to).kind;
+            notifyPageChanged();
+        }
         if (!animate || mReducedMotion || getWidth() <= 0) {
             // A jump lands everything at rest at once, a sunk page included.
             finishSink();
@@ -569,9 +1518,27 @@ public final class PaneWallLayout extends ViewGroup {
         return true;
     }
 
+    /**
+     * Stands the current page {@code side} widths off its rest (+1: arriving from the right), so
+     * the {@link #goTo goTo(current)} that must follow slides it in: a frame re-bound to another
+     * run of its kind (a home press to a Home page of another run, W9) arrives as a page from
+     * elsewhere on the row does. Nothing at rest to move from (no width), nothing changes.
+     */
+    public void standOff(int side) {
+        if (side == 0 || getWidth() <= 0) return;
+        stopSlide();
+        stopNudge();
+        // The far jump's slide this stops is over: the page now stands off on its own.
+        clearJump();
+        mOffsetPx = Integer.signum(side) * (float) getWidth();
+        mCrossSlide = true;
+        applyPagePositions();
+    }
+
     /** Go one place left ({@code -1}) or right ({@code +1}). */
     public boolean goBy(int steps, boolean animate) {
-        return goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), animate);
+        int id = neighbourId(steps);
+        return id != NO_PAGE && goToCell(id, animate);
     }
 
     // ---- Dragging (the border drag) ----------------------------------------------------------
@@ -595,8 +1562,18 @@ public final class PaneWallLayout extends ViewGroup {
             settleKeyboardRevealNow();
             settleStatusFoldNow();
             mDragging = true;
+            mDragHeading = 0;
             stopSlide();
             stopNudge();
+            if (mJumpFromId != NO_PAGE) {
+                clearJump();
+                applyPagePositions();
+            }
+            if (mListener != null) mListener.onWallDragBegin(mCurrent);
+            // The windows beside the one in front are made ready before the first move shows them.
+            if (mCurrent == PaneWallPage.TERMINAL && mPrepareInnerNeighbours != null) {
+                mPrepareInnerNeighbours.run();
+            }
             // Before the plank and the sink look: a surface page with a copy to hand is still at
             // once, and takes them from the first frame.
             holdStillAround();
@@ -606,15 +1583,22 @@ public final class PaneWallLayout extends ViewGroup {
         }
     }
 
+    /** Which way the drag under way last headed: -1, +1, or 0 before it has moved. */
+    private int mDragHeading;
+
     /** Move the wall for a finger that has travelled {@code dxPx} since it went down. */
     public void dragTo(float dxPx) {
         if (!mDragging) return;
         Trace.beginSection("Wall.dragTo");
         try {
             int width = getWidth();
-            mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width,
-                PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
-                PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
+            // A finger moving right brings in the page on the left.
+            int heading = dxPx > 0f ? -1 : dxPx < 0f ? 1 : 0;
+            if (heading != 0 && heading != mDragHeading) {
+                mDragHeading = heading;
+                if (mListener != null) mListener.onWallDragHeading(mCurrent, heading);
+            }
+            mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width, canStep(-1), canStep(1));
             applyPagePositions();
         } finally {
             Trace.endSection();
@@ -623,14 +1607,22 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Release the drag at {@code velocityPxPerSec} (positive to the right). */
     public void endDrag(float velocityPxPerSec) {
+        endDrag(velocityPxPerSec, 0f);
+    }
+
+    /**
+     * {@link #endDrag(float)}, for a drag claimed once the finger had already gone {@code
+     * leadPx} sideways ({@link BorderDrag#claimLead}), which the flick's least distance counts.
+     */
+    public void endDrag(float velocityPxPerSec, float leadPx) {
         if (!mDragging) return;
         mDragging = false;
         // The finger let go: a sunk page springs back up as the wall carries it.
         riseSink();
-        boolean previousExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1);
-        boolean nextExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1);
+        boolean previousExists = canStep(-1);
+        boolean nextExists = canStep(1);
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
-            getResources().getDisplayMetrics().density, previousExists, nextExists);
+            getResources().getDisplayMetrics().density, previousExists, nextExists, leadPx);
         // The wall's own speed at the release, which the settle carries on from.
         float velocity = PaneWallPolicy.wallVelocity(mOffsetPx, velocityPxPerSec, previousExists,
             nextExists);
@@ -639,7 +1631,65 @@ public final class PaneWallLayout extends ViewGroup {
             else startSlide(velocity);
             return;
         }
-        goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), true, velocity);
+        if (hasInnerPage(steps)) {
+            stepInside(steps, velocity);
+            return;
+        }
+        int id = neighbourId(steps);
+        if (id != NO_PAGE) goToCell(id, true, velocity);
+    }
+
+    /** Whether a drag {@code steps} away from the current page has a page to land on. */
+    private boolean canStep(int steps) {
+        return hasInnerPage(steps) || neighbourId(steps) != NO_PAGE;
+    }
+
+    private boolean hasInnerPage(int steps) {
+        return mListener != null && mListener.hasInnerPage(mCurrent, steps);
+    }
+
+    /**
+     * A released drag committed to the next page inside the current view (the next window): the
+     * listener pictures what is leaving where it stands, the wall comes back to rest with the
+     * page under it, and the listener brings the arriving page in from where the drag had
+     * brought it, so the travel carries on from the finger.
+     */
+    private void stepInside(int steps, float releaseVelocityPxPerSec) {
+        int width = getWidth();
+        // Where the arriving page stands now: one width beyond the departing one, on the side
+        // the drag pulled it in from.
+        float fromPx = mOffsetPx + steps * (float) width;
+        PaneWallPage page = mCurrent;
+        Trace.beginSection("Wall.innerStep");
+        try {
+            if (mListener != null) mListener.onInnerStepBegin(page, steps);
+            // The live neighbours stay out through the settle: the arriving one is about to
+            // become the page, and the one leaving carries on beside it in the nudge.
+            mInnerStepping = true;
+            mInnerStepVelocity = releaseVelocityPxPerSec;
+            try {
+                finishSink();
+                settleImmediately();
+                if (mListener != null) mListener.onInnerStep(page, steps, fromPx);
+            } finally {
+                mInnerStepping = false;
+                mInnerStepVelocity = Float.NaN;
+            }
+            // No nudge followed (reduced motion, the display in front): they go away now.
+            applyPagePositions();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * A drag a page's own view started rather than a border: Home's plain swipe carrying on past
+     * its last page into the row. No plank and no sink, since no border was pressed; the view
+     * then moves the wall with {@link #dragTo} and lets go with {@link #endDrag} or
+     * {@link #cancelDrag}.
+     */
+    public void beginPlainDrag() {
+        beginDrag(false, 0f);
     }
 
     /** The claimant let go without a release (its stream was cancelled). */
@@ -684,9 +1734,13 @@ public final class PaneWallLayout extends ViewGroup {
      * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
      * it had begun, and every later event is read here and goes no further.
      *
-     * <p>On the top and bottom borders out in the air beyond the page, a finger that sets off
-     * sideways before the hold claims the wall by that move ({@link BorderDrag#slidePages}), and
-     * the drag begins there as the hold's would ({@link #takeBorderDrag}).
+     * <p>On any border outside the page's text — the air beyond the top and bottom edges, and the
+     * air and clearance beside the left and right ones — a finger that sets off sideways before
+     * the hold claims the wall by that move ({@link BorderDrag#slidePages}), and the drag begins
+     * there as the hold's would ({@link #takeBorderDrag}). So does one on the page's text that
+     * sets off clearly sideways, where the listener says the terminal under it gives the swipe
+     * away ({@link Listener#isBodySwipePaging}): the terminal has had the DOWN and the moves
+     * inside the slop, and is sent the cancel at the claim like any child under a border hold.
      *
      * <p>The keyboard swipe is claimed by the move rather than by the timer too: a
      * finger that sets off up or down from the bottom border, or from the box by its grabber a row
@@ -725,6 +1779,15 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 if (mBorderDrag.isStatusSwipe()) {
                     if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    if (mStatusEngageDeferred) {
+                        // Claimed by the second finger, so the way is known from the first move.
+                        if (Math.abs(event.getY() - mBorderDownY)
+                            >= ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                            mStatusEngageDeferred = false;
+                            engageStatusFold(event.getY());
+                        }
+                        return true;
+                    }
                     trackStatusFold(event.getY());
                     return true;
                 }
@@ -738,8 +1801,9 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (claim == BorderDrag.Claim.PAGING) {
-                    // Slid sideways off the top or bottom border: the wall's at once, no hold.
+                    // Slid sideways off a border outside the text: the wall's at once, no hold.
                     mHoldHandler.removeCallbacks(mHoldElapsed);
+                    if (mBorderDrag.seamSlides()) lightSeamGlow(event.getX());
                     if (takeBorderDrag(event.getX()) && mBorderVelocity != null) {
                         mBorderVelocity.addMovement(event);
                     }
@@ -751,7 +1815,12 @@ public final class PaneWallLayout extends ViewGroup {
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
                 if (isBorderClaimed()) return true;
-                if (mBorderDrag.secondPointer() == BorderDrag.Claim.ABANDONED) {
+                BorderDrag.Claim second = mBorderDrag.secondPointer();
+                if (second == BorderDrag.Claim.STATUS) {
+                    claimStatusSwipe(event);
+                    return true;
+                }
+                if (second == BorderDrag.Claim.ABANDONED) {
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                 }
                 break;
@@ -768,14 +1837,7 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (mBorderDrag.isPaging()) {
-                    float velocity = 0f;
-                    if (mBorderVelocity != null) {
-                        mBorderVelocity.addMovement(event);
-                        mBorderVelocity.computeCurrentVelocity(1000);
-                        velocity = mBorderVelocity.getXVelocity();
-                    }
-                    releaseBorderDrag();
-                    endDrag(velocity);
+                    releasePagingDrag(event);
                     return true;
                 }
                 break;
@@ -809,7 +1871,145 @@ public final class PaneWallLayout extends ViewGroup {
         return handled;
     }
 
+    /**
+     * The flick's release of a border drag the wall owns: the finger's speed, and the travel its
+     * claim left out ({@link BorderDrag#claimLead}), decide where the wall lands.
+     */
+    private void releasePagingDrag(@NonNull MotionEvent event) {
+        float velocity = 0f;
+        if (mBorderVelocity != null) {
+            mBorderVelocity.addMovement(event);
+            mBorderVelocity.computeCurrentVelocity(1000);
+            velocity = mBorderVelocity.getXVelocity();
+        }
+        float lead = mBorderDrag.claimLead();
+        releaseBorderDrag();
+        endDrag(velocity, lead);
+    }
+
+    /**
+     * Whether the wall is following a finger the dock has, from the dock's top in the seam band
+     * ({@link #dispatchDockSeamTouch}); cleared by the wall's own next press.
+     */
+    private boolean mDockSeamPress;
+    /** Scratch for {@link #dispatchDockSeamTouch}: the wall's place on screen. */
+    private final int[] mDockSeamLocation = new int[2];
+
+    /**
+     * Every touch on the window, before any view has it, from whoever routes it (the activity),
+     * so the seam band reaches into the dock's top ({@link SeamSwipe}): the dock keeps a finger
+     * that lands there, and the wall watches it alongside. While this returns false the event
+     * goes on to the views as usual. It returns true from the move that sets off clearly sideways
+     * on the current window's seam ({@link BorderDrag#downOnDock}) to the lift: the wall has the
+     * drag, exactly as from the border's air, and the router owes the dock a cancel and sends it
+     * nothing more. A tap, a still finger, a steeper start or a second finger leave the dock its
+     * gesture, and the hold never pages from there.
+     */
+    public boolean dispatchDockSeamTouch(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            armDockSeam(event);
+            return false;
+        }
+        if (!mDockSeamPress) return false;
+        getLocationOnScreen(mDockSeamLocation);
+        float x = event.getRawX() - mDockSeamLocation[0];
+        float y = event.getRawY() - mDockSeamLocation[1];
+        boolean paging = mBorderDrag.isPaging();
+        switch (action) {
+            case MotionEvent.ACTION_MOVE:
+                if (paging) {
+                    if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    dragTo(mBorderDrag.travel(x));
+                    return true;
+                }
+                BorderDrag.Claim claim = mBorderDrag.move(x, y);
+                if (claim == BorderDrag.Claim.PAGING) {
+                    lightSeamGlow(x);
+                    if (takeBorderDrag(x) && mBorderVelocity != null) {
+                        mBorderVelocity.addMovement(event);
+                    }
+                    syncBorderGlow();
+                    return true;
+                }
+                if (claim != BorderDrag.Claim.PENDING) endDockSeam();
+                return false;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (paging) return true;
+                endDockSeam();
+                return false;
+            case MotionEvent.ACTION_POINTER_UP:
+                return paging;
+            case MotionEvent.ACTION_UP:
+                if (paging) {
+                    releasePagingDrag(event);
+                    mDockSeamPress = false;
+                    syncBorderGlow();
+                    return true;
+                }
+                endDockSeam();
+                return false;
+            case MotionEvent.ACTION_CANCEL:
+                if (paging) {
+                    releaseBorderDrag();
+                    cancelDrag();
+                    mDockSeamPress = false;
+                    syncBorderGlow();
+                    return true;
+                }
+                endDockSeam();
+                return false;
+            default:
+                return paging;
+        }
+    }
+
+    /**
+     * A finger landed somewhere on the window: the wall follows it only where it is on the
+     * dock's top in the current window's seam band, on a wall that can page, while no finger of
+     * the wall's own is pressing.
+     */
+    private void armDockSeam(@NonNull MotionEvent event) {
+        mDockSeamPress = false;
+        if (!mGesturesEnabled || mBorderDrag.isArmed() || mDragging) return;
+        if (mCells.size() <= 1 || mCurrent == PaneWallPage.WIDGETS) return;
+        if (mListener != null && !mListener.isBorderPagingEnabled(mCurrent)) return;
+        if (!isShown() || !loadBorderZone(true)) return;
+        getLocationOnScreen(mDockSeamLocation);
+        float x = event.getRawX() - mDockSeamLocation[0];
+        float y = event.getRawY() - mDockSeamLocation[1];
+        if (!mBorderDrag.downOnDock(x, y, mBorderZone,
+                ViewConfiguration.get(getContext()).getScaledTouchSlop(), true)) {
+            return;
+        }
+        mDockSeamPress = true;
+        mBorderDownX = x;
+        mBorderDownY = y;
+    }
+
+    /** The dock's press turned out to be the dock's: the wall lets it go. */
+    private void endDockSeam() {
+        mDockSeamPress = false;
+        releaseBorderDrag();
+    }
+
+    /**
+     * A clearly sideways start on the seam band beyond the air — the window's last row or the
+     * dock's top — claimed the wall: no glow was lit at the touch, since a tap there is the
+     * content's, so the bottom border lights now, under the pane at {@code x}, full at once.
+     */
+    private void lightSeamGlow(float x) {
+        if (mGlow.isHeld()) return;
+        mGlowPage = mPageViews.get(mCurrent);
+        mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
+        mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
+        loadGlowEdge(mGlowPage, x);
+        mGlow.light(BorderDrag.Border.BOTTOM);
+    }
+
     /** Whether the wall owns the finger: the page drag, or one of the border swipes. */
+    private boolean mStatusEngageDeferred;
+
     private boolean isBorderClaimed() {
         return mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()
             || mBorderDrag.isStatusSwipe();
@@ -840,16 +2040,30 @@ public final class PaneWallLayout extends ViewGroup {
      * zone reaches in, and keeps it unless the finger sets off up or down before the hold.
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
+        // A finger of the wall's own comes first: whatever the dock's press was following is
+        // the dock's from here.
+        mDockSeamPress = false;
         releaseBorderDrag();
         if (!mGesturesEnabled) return;
-        boolean canPage = mPages.size() > 1;
+        boolean canPage = mCells.size() > 1
+            && (mListener == null || mListener.isBorderPagingEnabled(mCurrent));
         boolean keyboardSwipe = mListener != null && mListener.isBorderKeyboardSwipeEnabled();
         boolean statusSwipe = mListener != null && mListener.isBorderStatusSwipeEnabled();
         if (!canPage && !keyboardSwipe && !statusSwipe) return;
         if (!loadBorderZone(true)) return;
+        // On the page's text, the terminal there is asked whether it gives a sideways swipe away.
+        boolean bodySwipe = canPage && mListener != null
+            && mBorderZone.holds(event.getX(), event.getY())
+            && mListener.isBodySwipePaging(mCurrent, event.getRawX(), event.getRawY());
+        // On the seam band's last row, the terminal there is asked the same, whatever the
+        // setting: the band is the bottom border's.
+        boolean seamSwipe = canPage && mListener != null
+            && mBorderZone.seamAt(event.getX(), event.getY()) == SeamSwipe.Start.PANE
+            && (bodySwipe
+                || mListener.isSeamSwipePaging(mCurrent, event.getRawX(), event.getRawY()));
         boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
-            statusSwipe, topGestureLimit());
+            statusSwipe, topGestureLimit(), bodySwipe, seamSwipe);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
@@ -859,6 +2073,9 @@ public final class PaneWallLayout extends ViewGroup {
         // and filling over the hold where only the hold does.
         if (mBorderDrag.holdPages()) {
             mGlowPage = mPageViews.get(mCurrent);
+            mGlowPageWidth = mGlowPage == null ? 0 : mGlowPage.getWidth();
+            mGlowPageHeight = mGlowPage == null ? 0 : mGlowPage.getHeight();
+            loadGlowEdge(mGlowPage, event.getX());
             if (mBorderDrag.slidePages()) {
                 mGlow.light(mBorderDrag.border());
             } else {
@@ -886,14 +2103,121 @@ public final class PaneWallLayout extends ViewGroup {
         float slide = withSlide ? page.getTranslationX() : 0f;
         mBorderZone.page(page.getLeft() + slide, page.getTop(), page.getRight() + slide,
                 page.getBottom())
-            .gaps(page.getLeft(), page.getTop(), getWidth() - page.getRight(),
-                getHeight() - page.getBottom())
+            // The air above stops at the status bar's edge, not under the bar the canvas
+            // reaches up behind (PageTopInsets).
+            .gaps(page.getLeft(), page.getTop() - pageTopInsetPx(page),
+                getWidth() - page.getRight(), getHeight() - page.getBottom())
             .minBand(BorderDrag.MIN_BAND_DP * density)
             .sideReach(BorderDrag.SIDE_REACH_DP * density)
             .corner(CornerZones.paneSizePx(density))
             .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
+        // The display window's picture is the Linux app's to its rim: its borders stay in the
+        // air around it (BorderReach). A terminal window shares its edges as it always has.
+        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent),
+            density);
+        // A window's bottom border is a seam band a fingertip tall, reaching into its last row
+        // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
+        // Home page has no border.
+        if (withSlide && mCurrent != PaneWallPage.WIDGETS) {
+            float dockTop = dockGlassTopInWall();
+            boolean dockBelow = !Float.isNaN(dockTop) && dockTop >= page.getBottom();
+            float airBottom = dockBelow ? Math.min(getHeight(), dockTop) : getHeight();
+            mBorderZone.seam(dockBelow ? dockTop : Float.NaN,
+                SeamSwipe.paneReachPx(airBottom - page.getBottom(), density),
+                SeamSwipe.dockReachPx(density));
+        } else {
+            mBorderZone.clearSeam();
+        }
+        // A Home page's grabber stands over the dock, and its swipe starts by it there.
+        if (mCurrent == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+            mBorderZone.bottomPill(mHomeHit[0] + slide, mHomeHit[1], mHomeHit[2] + slide,
+                mHomeHit[3]);
+        } else {
+            mBorderZone.clearBottomPill();
+        }
         return true;
+    }
+
+    /**
+     * Fills {@link #mHomePill} and {@link #mHomeHit} for the Home page {@code page} at rest
+     * ({@link BorderDrag#homeGrabber}): centred on the screen's width, and standing on the dock's
+     * top edge where the dock is on screen.
+     *
+     * @return false where {@code page} is not Home's
+     */
+    private boolean loadHomeGrabber(@NonNull View page) {
+        if (page != mPageViews.get(PaneWallPage.WIDGETS)) return false;
+        View root = getRootView();
+        getLocationInWindow(mWindowLocation);
+        float leftInset = mWindowLocation[0];
+        float rightInset = root != null && root != this && root.getWidth() > 0
+            ? root.getWidth() - mWindowLocation[0] - getWidth() : 0f;
+        float density = getResources().getDisplayMetrics().density;
+        BorderDrag.homeGrabber(getWidth(), leftInset, Math.max(0f, rightInset), page.getBottom(),
+            dockTopInWall(), density, mHomePill, mHomeHit);
+        return true;
+    }
+
+    /**
+     * The top of the dock as it stands on screen, in the wall's coordinates: the dock's glass, or
+     * the whole stack below the content where that is not drawn — up with the keyboard too, since
+     * the dock rides on it. NaN where there is no dock on screen.
+     */
+    private float dockTopInWall() {
+        View root = getRootView();
+        if (root == null || root == this) return Float.NaN;
+        View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
+        if (!isOnScreen(dock)) dock = root.findViewById(com.termux.R.id.accessory_stack_container);
+        if (!isOnScreen(dock)) return Float.NaN;
+        dock.getLocationInWindow(mDockLocation);
+        getLocationInWindow(mWindowLocation);
+        return mDockLocation[1] - mWindowLocation[1];
+    }
+
+    /**
+     * The top of the dock's glass on screen, in the wall's coordinates; NaN where the glass is not
+     * shown. Unlike {@link #dockTopInWall} it never falls back to the whole stack, whose top may
+     * be the keyboard's: the seam band reaches into the dock's top and nothing else's.
+     */
+    private float dockGlassTopInWall() {
+        View root = getRootView();
+        if (root == null || root == this) return Float.NaN;
+        View dock = root.findViewById(com.termux.R.id.accessory_surface_host);
+        if (!isOnScreen(dock)) return Float.NaN;
+        dock.getLocationInWindow(mDockLocation);
+        getLocationInWindow(mWindowLocation);
+        return mDockLocation[1] - mWindowLocation[1];
+    }
+
+    /**
+     * Whether the dock's page dashes are on screen: the dock has more than one page, so its
+     * dashes float just over the slab where Home's grabber would stand, and they are the cue.
+     */
+    private boolean homeDockShowsPageDashes() {
+        View root = getRootView();
+        if (root == null || root == this) return false;
+        View dashes = root.findViewById(com.termux.R.id.apps_bar_indicator_band);
+        return dashes instanceof com.termux.app.launcher.paging.PageTickStripView
+            && isOnScreen(dashes)
+            && ((com.termux.app.launcher.paging.PageTickStripView) dashes).getPageCount() > 1;
+    }
+
+    private static boolean isOnScreen(@Nullable View view) {
+        return view != null && view.isShown() && view.getHeight() > 0;
+    }
+
+    /** Before a frame: a dock that moved under Home's grabber redraws it. */
+    private void watchDock() {
+        if (!isGrabberShown()) return;
+        View home = mPageViews.get(PaneWallPage.WIDGETS);
+        if (home == null || home.getVisibility() != VISIBLE) return;
+        float top = dockTopInWall();
+        boolean dashes = homeDockShowsPageDashes();
+        if (Float.compare(top, mDrawnDockTop) == 0 && dashes == mDrawnHomeDashes) return;
+        mDrawnDockTop = top;
+        mDrawnHomeDashes = dashes;
+        invalidate();
     }
 
     /**
@@ -977,7 +2301,7 @@ public final class PaneWallLayout extends ViewGroup {
      *         gesture is swallowed
      */
     private boolean takeBorderDrag(float fingerX) {
-        if (!mGesturesEnabled || mPages.size() <= 1) {
+        if (!mGesturesEnabled || mCells.size() <= 1) {
             mBorderDrag.abandon();
             syncBorderGlow();
             return false;
@@ -1079,7 +2403,9 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
         mBorderVelocity.addMovement(event);
-        engageStatusFold(event.getY());
+        // A second finger's landing has no direction yet: the fold waits for the first move.
+        mStatusEngageDeferred = event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN;
+        if (!mStatusEngageDeferred) engageStatusFold(event.getY());
     }
 
     /**
@@ -1365,6 +2691,25 @@ public final class PaneWallLayout extends ViewGroup {
     // ---- The hold's glow ---------------------------------------------------------------------
 
     /**
+     * Where the bottom border's glow goes for a press at the wall's {@code x} on {@code page}:
+     * under the pane there ({@link PaneEdges}), or under the whole page where it has no panes of
+     * its own; and the air below the page, down to the wall's own bottom edge, which meets the
+     * dock, the keyboard or the screen's edge. Measured at the press, in the page's own pixels.
+     */
+    private void loadGlowEdge(@Nullable View page, float x) {
+        mGlowAirBottom = 0f;
+        if (page == null) return;
+        float inPage = x - page.getLeft() - page.getTranslationX();
+        if (page != mTerminalHost || mTerminalEdges == null
+            || !mTerminalEdges.bottomEdgeAt(inPage, mGlowEdge)) {
+            mGlowEdge[0] = 0f;
+            mGlowEdge[1] = page.getWidth();
+            mGlowEdge[2] = page.getHeight();
+        }
+        mGlowAirBottom = getHeight() - page.getTop();
+    }
+
+    /**
      * The glow follows the press it was lit for ({@link BorderGlow}): full once the wall claims
      * the finger, and fading out once the press is given up, handed to the keyboard's or the
      * status bar's grabber, or the drag ends — whatever made the finger anything but a pending
@@ -1383,7 +2728,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * The glow along the held edge of the page it was lit on, as that page is drawn now: slid,
      * sunk about its pivot, tilted with the plank, and faded with its outline as it leaves its
-     * rest.
+     * rest. Inside the frame the press found, never beyond it: a page that grew since the press
+     * leaves the glow where the finger was.
      */
     private void drawBorderGlow(@NonNull android.graphics.Canvas canvas) {
         View page = mGlowPage;
@@ -1391,15 +2737,19 @@ public final class PaneWallLayout extends ViewGroup {
         if (page.getVisibility() != VISIBLE || page.getWidth() <= 0 || page.getHeight() <= 0) {
             return;
         }
-        float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), getWidth());
+        float visibility = PaneWallPolicy.pageOutlineAlpha(slidePx(page), getWidth());
         // Drawn in the page's own space, through the page's whole transform: its slide, its sink
         // and the plank's tilt (rotationY under a camera), so the glow stays on the edge the
         // page actually shows rather than where that edge would be flat.
         int save = canvas.save();
         canvas.translate(page.getLeft(), page.getTop());
         canvas.concat(page.getMatrix());
-        mGlow.draw(canvas, 0f, 0f, page.getWidth(), page.getHeight(), 1f, visibility,
-            SystemClock.uptimeMillis());
+        // The bottom border's lies in the air below the pane pressed, which ends where it ended
+        // at the press or higher, should the keyboard have come up since.
+        mGlow.drawBelow(canvas, 0f, 0f, BorderGlow.heldExtent(mGlowPageWidth, page.getWidth()),
+            BorderGlow.heldExtent(mGlowPageHeight, page.getHeight()), mGlowEdge[0], mGlowEdge[1],
+            mGlowEdge[2], BorderGlow.heldExtent(mGlowAirBottom, getHeight() - page.getTop()), 1f,
+            visibility, SystemClock.uptimeMillis());
         canvas.restoreToCount(save);
     }
 
@@ -1437,20 +2787,34 @@ public final class PaneWallLayout extends ViewGroup {
         boolean top = isStatusGrabberShown();
         if (!bottom && !top) return;
         int width = getWidth();
-        for (PaneWallPage place : mPages) {
+        for (PaneWallPage place : mKinds) {
             View page = mPageViews.get(place);
             if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
-            float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), width);
+            float visibility = PaneWallPolicy.pageOutlineAlpha(slidePx(page), width);
             if (!(visibility > 0f)) continue;
             float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
-            if (bottom) {
+            if (bottom && place == PaneWallPage.WIDGETS && loadHomeGrabber(page)) {
+                // Home's stands over the dock, centred on the screen, and slides with its page.
+                // Where the dock has pages its dashes stand there and are the cue themselves
+                // (one cue, never two stacked); the swipe that starts by it is unchanged.
+                mDrawnHomeDashes = homeDockShowsPageDashes();
+                if (!mDrawnHomeDashes) {
+                    mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2],
+                        mHomePill[3], page.getTranslationX(), visibility);
+                }
+            } else if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
                 mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
             }
-            if (top) {
+            if (top && place == PaneWallPage.WIDGETS) {
                 float topY = pivotY - page.getPivotY() * page.getScaleY();
                 mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), visibility);
+            } else if (top) {
+                // Over a window it hangs from the status bar's bottom border, which stays put as
+                // the page sinks.
+                mStatusGrabber.drawUnderBorder(canvas, centreX, statusBorderY(page),
+                    page.getScaleY(), visibility);
             }
         }
     }
@@ -1468,6 +2832,7 @@ public final class PaneWallLayout extends ViewGroup {
     private void releaseBorderDrag() {
         mHoldHandler.removeCallbacks(mHoldElapsed);
         mBorderDrag.reset();
+        mStatusEngageDeferred = false;
         if (mBorderVelocity != null) {
             mBorderVelocity.recycle();
             mBorderVelocity = null;
@@ -1486,21 +2851,24 @@ public final class PaneWallLayout extends ViewGroup {
      * A border drag claimed the finger at {@code fingerX}: the page the wall rests on and the
      * pages beside it become planks, each one the listener lets tip, until the settle lays them
      * flat — the page arriving tips with the page leaving, toward the same finger. A surface page
-     * (the Display place) tips only while its stand-in is up ({@link SurfacePage}), from whichever
-     * frame that is; a Display page without one never does. Each tipping page is on
+     * (the display window) tips only while its stand-in is up ({@link SurfacePage}), from whichever
+     * frame that is. Each tipping page is on
      * a hardware layer for the length of the motion, so a screen of glyphs and glass is drawn flat
      * once per change and the tilt is a textured quad per frame rather than every glyph
      * re-rendered under a perspective matrix.
      */
     private void engagePlank(float fingerX) {
-        if (mReducedMotion || getWidth() <= 0 || mListener == null) return;
+        // The plank is the slide's own dressing: another effect is the page's motion, and a turn
+        // of its own would fight the plank's.
+        if (mReducedMotion || getWidth() <= 0 || mListener == null
+            || mTransition != HomePageTransition.SLIDE) return;
         View held = mPageViews.get(mCurrent);
         if (held == null || held.getWidth() <= 0 || held.getHeight() <= 0) return;
         // Planks still lying down from the last drag are laid flat first.
         releasePlank();
         for (int steps = -1; steps <= 1; steps++) {
-            PaneWallPage place = PaneWallPolicy.neighbour(mPages, mCurrent, steps);
-            if (steps != 0 && place == mCurrent) continue;
+            PaneWallPage place = liveKindAt(steps);
+            if (place == null || (steps != 0 && place == mCurrent)) continue;
             if (mListener.isPlankTiltEnabled(place)) mPlankPlaces.add(place);
         }
         if (!mPlankPlaces.isEmpty()) {
@@ -1527,7 +2895,7 @@ public final class PaneWallLayout extends ViewGroup {
         float weightPx = (weightPage == null ? 0f : weightPage.getTranslationX()) + mWeightOffsetPx;
         for (PaneWallPage place : mPlankPlaces) {
             View page = mPageViews.get(place);
-            if (page == null || !mPages.contains(place)) continue;
+            if (page == null || !isLaid(place)) continue;
             if (!mTiltPages.contains(page)) {
                 if (page.getWidth() <= 0 || page.getHeight() <= 0) continue;
                 // A live surface a rotation leaves flat and a layer strands: it joins once its
@@ -1566,12 +2934,13 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A hardware layer while the page tips or is dimmed, carrying the dim as its paint; none
-     * otherwise. Only ever called for a page the plank or the sink has touched.
+     * A hardware layer while the page tips, is dimmed or is posed by the page transition, carrying
+     * the dim as its paint; none otherwise. Only ever called for a page the plank, the sink or the
+     * transition has touched.
      */
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        if (mTiltPages.contains(page) || dimmed) {
+        if (mTiltPages.contains(page) || dimmed || mPosedPages.contains(page)) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
             page.setLayerType(View.LAYER_TYPE_NONE, null);
@@ -1662,8 +3031,10 @@ public final class PaneWallLayout extends ViewGroup {
         if (page == null) return;
         mSink = sink;
         float scale = PageSink.scale(sink);
-        page.setScaleX(scale);
-        page.setScaleY(scale);
+        // On top of the scale the page transition gives the page, where it poses it.
+        float posed = scale * poseScale(page);
+        page.setScaleX(posed);
+        page.setScaleY(posed);
         if (mSinkLayered) applySinkDim(page, sink);
         if (mTiltPages.contains(page)) applyPlanks();
         invalidateGrabberIfMoved();
@@ -1710,8 +3081,8 @@ public final class PaneWallLayout extends ViewGroup {
         mSinkSide = 0;
         mSinkDimLevel = -1;
         mSinkPaint.setColorFilter(null);
-        page.setScaleX(1f);
-        page.setScaleY(1f);
+        page.setScaleX(poseScale(page));
+        page.setScaleY(poseScale(page));
         boolean tipping = mTiltPages.contains(page);
         // The press lies down with the sink; the travel's own tip stays where the wall is.
         if (tipping) applyPlanks();
@@ -1749,19 +3120,19 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Whether {@code page} can take a hardware layer and a rotation now. Every page can but one
-     * whose picture is a live surface: a surface page while its stand-in is not up, and a Display
-     * page that has no stand-in at all, which keeps to what a surface allows — a scale.
+     * whose picture is a live surface — the display window — while its stand-in is not up, which
+     * keeps to what a surface allows: a scale.
      */
     private static boolean canTransform(@NonNull PaneWallPage place, @NonNull View page) {
-        if (page instanceof SurfacePage) return ((SurfacePage) page).isStill();
-        return place != PaneWallPage.DISPLAY;
+        return !(page instanceof SurfacePage) || ((SurfacePage) page).isStill();
     }
 
     /** A drag begins: the page it holds and the pages that can arrive beside it hold still. */
     private void holdStillAround() {
         if (mReducedMotion) return;
         for (int steps = -1; steps <= 1; steps++) {
-            holdStill(PaneWallPolicy.neighbour(mPages, mCurrent, steps));
+            PaneWallPage place = liveKindAt(steps);
+            if (place != null) holdStill(place);
         }
     }
 
@@ -1777,14 +3148,14 @@ public final class PaneWallLayout extends ViewGroup {
             View page = entry.getValue();
             if (!(page instanceof SurfacePage)) continue;
             boolean onScreen = page.getVisibility() == VISIBLE
-                && Math.abs(page.getTranslationX()) < width;
+                && Math.abs(slidePx(page)) < width;
             if (entry.getKey() == mCurrent || onScreen) holdStill(entry.getKey());
         }
     }
 
     private void holdStill(@NonNull PaneWallPage place) {
         View page = mPageViews.get(place);
-        if (!(page instanceof SurfacePage) || !mPages.contains(place)) return;
+        if (!(page instanceof SurfacePage) || !isLaid(place)) return;
         mStillPlaces.add(place);
         ((SurfacePage) page).holdStill(() -> onStillReady(place));
     }
@@ -1842,11 +3213,10 @@ public final class PaneWallLayout extends ViewGroup {
         }
         stopSlide();
         holdStillForSlide();
-        float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
-            Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
-        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA,
-            SLIDE_MAX_OMEGA);
-        final long duration = spring.durationMs(SLIDE_REST_PX);
+        // General › Animation speed: a slower or faster spring, read once per slide.
+        final SettleSpring spring = SettleSpring.page(mOffsetPx, velocityPxPerSec,
+            com.termux.app.AnimationSpeed.springTime(getContext()));
+        final long duration = spring.durationMs(SettleSpring.PAGE_REST_PX);
         // The animator is the ticker only. The slide reads its own clock off the ticker's play
         // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls
         // the arriving place's chrome and lays its page out — cannot swallow the take-off. The
@@ -1884,11 +3254,13 @@ public final class PaneWallLayout extends ViewGroup {
         });
         mSlide = slide;
         mSliding = true;
+        mSlideFromPx = mOffsetPx;
         slide.start();
     }
 
     private void stopSlide() {
         mSliding = false;
+        mSlideFromPx = Float.NaN;
         ValueAnimator slide = mSlide;
         mSlide = null;
         if (slide != null) slide.cancel();
@@ -1899,6 +3271,8 @@ public final class PaneWallLayout extends ViewGroup {
         try {
             stopSlide();
             mOffsetPx = 0f;
+            mCrossSlide = false;
+            clearJump();
             applyPagePositions();
             // A page still springing up keeps its plank until it lands (finishSink), so its
             // press lies down with the spring rather than snapping flat here.
@@ -1906,7 +3280,7 @@ public final class PaneWallLayout extends ViewGroup {
                 releasePlank();
                 releaseStills();
             }
-            if (mListener != null) mListener.onWallPageSettled(mCurrent);
+            if (mListener != null) mListener.onWallCellSettled(mCurrentId, mCurrent);
         } finally {
             Trace.endSection();
         }
@@ -1916,7 +3290,7 @@ public final class PaneWallLayout extends ViewGroup {
         // The side stretches are the current page's: pages are only moved, never laid out again,
         // so a page change is the one moment they would otherwise go stale.
         publishBackExclusion();
-        if (mListener != null) mListener.onWallPageChanged(mCurrent);
+        if (mListener != null) mListener.onWallCellChanged(mCurrentId, mCurrent);
     }
 
     /**
@@ -1934,45 +3308,64 @@ public final class PaneWallLayout extends ViewGroup {
      * nothing and misses vsync. The Terminal page is instead kept {@code VISIBLE} always and faded
      * with {@code alpha} to 0 while off screen: a zero-alpha node is skipped by the renderer but
      * keeps its display lists, so coming back repaints instead of re-recording. The other places
-     * keep 707920f7's INVISIBLE behaviour unchanged — the Display page in particular owns its own
-     * surface, which INVISIBLE is exactly right for. Because the Terminal page no longer goes
-     * INVISIBLE, nothing in the view hierarchy notices it leaving on its own any more, which is
-     * what {@link Listener#onTerminalOffScreenChanged} is for.
+     * keep 707920f7's INVISIBLE behaviour unchanged — the display window's frame in particular
+     * owns its own surface, which INVISIBLE is exactly right for. Because the Terminal page no
+     * longer goes INVISIBLE, nothing in the view hierarchy notices it leaving on its own any more,
+     * which is what {@link Listener#onTerminalOffScreenChanged} is for.
      */
     private void applyPagePositions() {
+        if (mDeferPositions) return;
         int width = getWidth();
+        // A turn has a page to turn to: a window arriving, or a place or window on the side the
+        // wall is moving toward. A pull into either end of the row only slides. The slide asks
+        // nothing, so its frames cost what they always did.
+        // Across the seam between Home and the Workspace the pages turn as Home's pages are
+        // seen to: side by side with the finger, whatever the effect (decided 2026-11-02).
+        mSeamSlide = seamAhead(mOffsetPx);
+        mTurning = mTransition != HomePageTransition.SLIDE && !mSeamSlide && (mNudgePage != null
+            || (mOffsetPx != 0f && canStep(mOffsetPx > 0f ? -1 : 1)));
+        int current = indexOfCell(mCurrentId);
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
             View view = entry.getValue();
-            if (!mPages.contains(entry.getKey())) {
-                view.setVisibility(GONE);
+            int at = indexOfCell(boundPageId(entry.getKey()));
+            if (at < 0) {
+                if (view == mTerminalHost) {
+                    parkTerminalPage(view, width);
+                } else {
+                    unpose(view);
+                    view.setVisibility(GONE);
+                }
                 continue;
             }
-            // On a ring each page is placed the shorter way round from the current one, so the
-            // page past the outer edge is already waiting on the other side when a drag reaches
-            // for it.
-            float x = PaneWallPolicy.relativePosition(mPages, mCurrent, entry.getKey())
-                * (float) width + mOffsetPx
-                + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
-            view.setTranslationX(x);
-            boolean onScreen = width <= 0 || Math.abs(x) < width;
-            if (entry.getKey() == PaneWallPage.TERMINAL) {
-                view.setVisibility(VISIBLE);
-                view.setAlpha(onScreen ? 1f : 0f);
-                boolean offScreen = !onScreen;
-                if (mListener != null
-                        && (mTerminalOffScreen == null || mTerminalOffScreen != offScreen)) {
-                    mTerminalOffScreen = offScreen;
-                    mListener.onTerminalOffScreenChanged(offScreen);
-                }
-            } else {
-                boolean wasOnScreen = view.getVisibility() == VISIBLE;
-                view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
-                // A page coming back was skipped by every layout pass while it was parked, so
-                // the frame may have moved under it: it is laid out again before it is drawn.
-                // Inside a layout pass, onLayout lays it out itself once the positions are set.
-                if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
+            // Each kind's view stands at the cell of the page it is bound to.
+            int position = cellPosition(at, current);
+            if (position == HIDDEN) {
+                placePage(view, 2f * Math.max(1, width), width);
+                continue;
             }
+            // The windows between the page in front and this view stand there too, unseen: the
+            // view waits one width further out while the next step is still a window.
+            if (position != 0 && !mCrossSlide && hasInnerPage(Integer.signum(position))) {
+                position += Integer.signum(position);
+            }
+            float x = position * (float) width + mOffsetPx
+                + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
+            placePage(view, x, width);
         }
+        // Every other cell shows its card still.
+        for (PageCardView card : mCards.values()) {
+            int at = indexOfCell(card.pageId());
+            if (at < 0 || (boundPageId(card.kind()) == card.pageId() && isReady(card.kind()))) {
+                unpose(card);
+                card.setVisibility(GONE);
+                continue;
+            }
+            int position = cellPosition(at, current);
+            placePage(card, position == HIDDEN ? 2f * Math.max(1, width)
+                : position * (float) width + mOffsetPx, width);
+        }
+        placeInnerNeighbours(width);
+        syncDrawingOrder(width);
         // The planks' angles are a function of where the pages stand, so the drag, the spring
         // back and the carry-out all read the same number and they are flat wherever they rest —
         // plus the held side's press, while the page is sunk. After every page has moved, since
@@ -1980,6 +3373,179 @@ public final class PaneWallLayout extends ViewGroup {
         applyPlanks();
         invalidateGrabberIfMoved();
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
+    }
+
+    /** One page's view at {@code x}: drawn while on screen, parked as its kind parks otherwise. */
+    private void placePage(@NonNull View view, float x, int width) {
+        poseOnWall(view, x, width);
+        boolean onScreen = width <= 0 || Math.abs(x) < width;
+        if (view == mTerminalHost) {
+            view.setVisibility(VISIBLE);
+            view.setAlpha(onScreen ? mPose.alpha : 0f);
+            boolean offScreen = !onScreen;
+            if (mListener != null
+                    && (mTerminalOffScreen == null || mTerminalOffScreen != offScreen)) {
+                mTerminalOffScreen = offScreen;
+                mListener.onTerminalOffScreenChanged(offScreen);
+            }
+        } else {
+            boolean wasOnScreen = view.getVisibility() == VISIBLE;
+            view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+            // A page coming back was skipped by every layout pass while it was parked, so
+            // the frame may have moved under it: it is laid out again before it is drawn.
+            // Inside a layout pass, onLayout lays it out itself once the positions are set.
+            if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
+        }
+    }
+
+    /**
+     * The Workspace's view while the row has no window: off the row, but kept laid out and
+     * VISIBLE at zero alpha as it is off screen anywhere else, so the terminal keeps its size and
+     * its display lists for the window that brings the Workspace back.
+     */
+    private void parkTerminalPage(@NonNull View view, int width) {
+        parkFlat(view, 2f * Math.max(1, width));
+        view.setVisibility(VISIBLE);
+        view.setAlpha(0f);
+        if (mListener != null && (mTerminalOffScreen == null || !mTerminalOffScreen)) {
+            mTerminalOffScreen = true;
+            mListener.onTerminalOffScreenChanged(true);
+        }
+    }
+
+    // ---- The page transition -----------------------------------------------------------------
+
+    /**
+     * {@code view} where its slide puts it, posed by the page transition
+     * ({@link WallPageTransition}). Under the slide — and for a page alone on screen, parked, or a
+     * live surface — that is its translation alone, written exactly as the wall always wrote it.
+     * Under another effect, while the page shares the screen, it is scaled, faded or turned too,
+     * on a hardware layer for those frames only. The Terminal page's alpha is its caller's, which
+     * also parks it by alpha ({@link #placePage}); {@link #mPose} holds the alpha to give it.
+     */
+    private void poseOnWall(@NonNull View view, float slidePx, int width) {
+        float[] slide = slideOf(view);
+        slide[0] = slidePx;
+        HomePageTransition effect = WallPageTransition.effectFor(mTransition,
+            view instanceof SurfacePage);
+        WallPageTransition.pose(effect, slidePx, width, mTurning, mPose);
+        boolean posed = !WallPageTransition.isFlat(mPose);
+        boolean wasPosed = mPosedPages.contains(view);
+        view.setTranslationX(mPose.translationX);
+        if (!posed && !wasPosed) return;
+        slide[1] = mPose.scale;
+        float scale = mPose.scale * (view == mSinkPage ? PageSink.scale(mSink) : 1f);
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        view.setRotationY(mPose.rotationY);
+        view.setPivotX(mPose.pivotXFraction * (view.getWidth() > 0 ? view.getWidth() : width));
+        view.setPivotY(view.getHeight() / 2f);
+        if (view != mTerminalHost) view.setAlpha(mPose.alpha);
+        if (posed == wasPosed) return;
+        if (posed) {
+            mPosedPages.add(view);
+            view.setCameraDistance(HomePageTransition.CAMERA_DISTANCE_DP
+                * getResources().getDisplayMetrics().density);
+        } else {
+            mPosedPages.remove(view);
+        }
+        syncPageLayer(view);
+    }
+
+    /** {@code view} parked flat at {@code slidePx}, as a page off screen always is. */
+    private void parkFlat(@NonNull View view, float slidePx) {
+        unpose(view);
+        slideOf(view)[0] = slidePx;
+        view.setTranslationX(slidePx);
+    }
+
+    /**
+     * {@code view} loses any pose the transition gave it: full size bar a sink, unfaded, flat,
+     * and off its layer unless the plank or the sink still wants one. Its translation is left.
+     */
+    private void unpose(@NonNull View view) {
+        if (!mPosedPages.remove(view)) return;
+        slideOf(view)[1] = 1f;
+        float scale = view == mSinkPage ? PageSink.scale(mSink) : 1f;
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        view.setRotationY(0f);
+        view.setPivotX(view.getWidth() / 2f);
+        view.setPivotY(view.getHeight() / 2f);
+        if (view != mTerminalHost) view.setAlpha(1f);
+        syncPageLayer(view);
+    }
+
+    @NonNull
+    private float[] slideOf(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        if (slide == null) {
+            slide = new float[] {view.getTranslationX(), 1f};
+            mSlides.put(view, slide);
+        }
+        return slide;
+    }
+
+    /** The scale the transition's pose gives {@code view}: 1 unless it is posed. */
+    private float poseScale(@NonNull View view) {
+        float[] slide = mSlides.get(view);
+        return slide == null || !mPosedPages.contains(view) ? 1f : slide[1];
+    }
+
+    /**
+     * Two pages sharing the screen under an effect that lays one over the other are drawn in that
+     * order ({@link WallPageTransition#topSide}); every other frame keeps the children's order.
+     */
+    private void syncDrawingOrder(int width) {
+        int low = -1;
+        int high = -1;
+        int side = WallPageTransition.topSide(mTransition);
+        if (side != 0 && width > 0) {
+            int first = -1;
+            int second = -1;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                float[] slide = mSlides.get(child);
+                if (slide == null || child.getVisibility() != VISIBLE
+                    || !(Math.abs(slide[0]) < width)) continue;
+                if (first < 0) {
+                    first = i;
+                } else if (second < 0) {
+                    second = i;
+                } else {
+                    first = -1;
+                    break;
+                }
+            }
+            if (first >= 0 && second >= 0) {
+                float firstX = mSlides.get(getChildAt(first))[0];
+                float secondX = mSlides.get(getChildAt(second))[0];
+                // The child drawn first is to go on top: the two swap places in the drawing.
+                if (side > 0 ? firstX > secondX : firstX < secondX) {
+                    low = first;
+                    high = second;
+                }
+            }
+        }
+        if (low == mSwapLow && high == mSwapHigh) return;
+        mSwapLow = low;
+        mSwapHigh = high;
+        setChildrenDrawingOrderEnabled(low >= 0);
+        invalidate();
+    }
+
+    @Override
+    protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+        if (mSwapLow < 0 || mSwapHigh >= childCount) return drawingPosition;
+        if (drawingPosition == mSwapLow) return mSwapHigh;
+        if (drawingPosition == mSwapHigh) return mSwapLow;
+        return drawingPosition;
+    }
+
+    /** The pages the transition poses now, for tests. */
+    @NonNull
+    List<View> posedPages() {
+        return Collections.unmodifiableList(new ArrayList<>(mPosedPages));
     }
 
     // ---- Layout ----------------------------------------------------------------------------
@@ -1990,7 +3556,7 @@ public final class PaneWallLayout extends ViewGroup {
      */
     @NonNull
     private MarginLayoutParams pageMargins() {
-        View terminal = mPageViews.get(PaneWallPage.TERMINAL);
+        View terminal = mTerminalHost;
         ViewGroup.LayoutParams params = terminal == null ? null : terminal.getLayoutParams();
         if (params instanceof MarginLayoutParams) return (MarginLayoutParams) params;
         return new MarginLayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
@@ -1998,8 +3564,10 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Air the terminal page keeps inside its own margins for the line drawn around it (the
-     * terminal border's stroke and gap). Every other page's card stands at the frame itself, which
-     * is the shape model's opening, so it sits that much further out than the terminal's content.
+     * terminal border's stroke and gap). The display window's card stands at the frame itself,
+     * which is the shape model's opening, so it sits that much further out than the terminal's
+     * content;
+     * a Home page has no frame and stands at the wall's edge ({@link PaneWallPolicy#pageInsetPx}).
      */
     private int mTerminalFrameAirPx;
 
@@ -2011,10 +3579,106 @@ public final class PaneWallLayout extends ViewGroup {
         requestLayout();
     }
 
-    /** The air a page's frame keeps from the wall's edge on one side: the margin, less the terminal's own air. */
+    /**
+     * The air a page keeps from the wall's edge on one side (PaneWallPolicy#pageInsetPx): the pane
+     * host its margin, in front or not, so the terminal never resizes for the display window; the
+     * display window's frame the opening (the margin less the terminal's own air); and a Home page
+     * none, since it has no frame and its grid's rim is Home's Margin.
+     */
     private int frameMarginPx(@NonNull View child, int marginPx) {
-        return child == mPageViews.get(PaneWallPage.TERMINAL)
-            ? marginPx : Math.max(0, marginPx - mTerminalFrameAirPx);
+        return PaneWallPolicy.pageInsetPx(pageKindOf(child), marginPx, mTerminalFrameAirPx);
+    }
+
+    /**
+     * What {@code child} stands as for its frame and its top: the pane host the terminal page
+     * wherever it is parked, and anything else the page it is registered as (the display's frame
+     * the Display page, which stands at the opening).
+     */
+    @Nullable
+    private PaneWallPage pageKindOf(@NonNull View child) {
+        return child == mTerminalHost || isInnerNeighbour(child) ? PaneWallPage.TERMINAL
+            : pageOf(child);
+    }
+
+    /**
+     * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
+     * the status bar's band while the canvas reaches up under the bar, so the terminal and the
+     * display window keep their place on screen whichever way the canvas stands; a Home page
+     * starts at {@link #mHomeTopInsetPx}. 0 while the canvas stands below the bar.
+     */
+    private int mWorkspaceTopInsetPx;
+
+    /** See {@link #mWorkspaceTopInsetPx}. */
+    public void setWorkspaceTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mWorkspaceTopInsetPx) return;
+        mWorkspaceTopInsetPx = inset;
+        requestLayout();
+    }
+
+    /**
+     * How far a Home page starts below the wall's top (PageTopInsets.homeTopInsetPx): the band of
+     * the bar Home wears along the top while the canvas reaches up under it, so Home starts below
+     * its bar as a window's page does (#90), and its top border, where the status swipe starts,
+     * is at the bar's foot. 0 for a Home without a bar along the top, and while the canvas stands
+     * below the bar.
+     */
+    private int mHomeTopInsetPx;
+
+    /** See {@link #mHomeTopInsetPx}. */
+    public void setHomeTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mHomeTopInsetPx) return;
+        mHomeTopInsetPx = inset;
+        requestLayout();
+    }
+
+    /**
+     * How much shorter than the wall the terminal's page is laid out at its bottom: the room the
+     * chrome of the place a slide is arriving on will take from the content, given to the page
+     * ahead of the settle so its panes take their final size while the page arrives
+     * ({@code Crossing#preSizeTerminal}). 0 at rest.
+     */
+    private int mTerminalBottomInsetPx;
+
+    /** See {@link #mTerminalBottomInsetPx}. */
+    public void setTerminalBottomInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mTerminalBottomInsetPx) return;
+        mTerminalBottomInsetPx = inset;
+        requestLayout();
+    }
+
+    /** How far {@code child} ends above the wall's bottom, beyond its frame. */
+    private int pageBottomInsetPx(@NonNull View child) {
+        // A live neighbour stands at the size the Workspace page does, so its shells never resize.
+        return child == mTerminalHost || isInnerNeighbour(child) ? mTerminalBottomInsetPx : 0;
+    }
+
+    /**
+     * The status bar's bottom border above a window {@code page}, in the wall's coordinates: where
+     * the page's frame starts. The frame's top margin is the opening's air from the bar
+     * ({@code LiveChromeShape.terminalOpeningInsetPx}), measured from the bar's capsule under
+     * Floating and from the bar itself under Docked, so its top is the bar's edge by construction;
+     * the border swipe's air above the page ({@link #loadBorderZone}) starts at the same line.
+     */
+    float statusBorderY(@NonNull View page) {
+        return getPaddingTop() + pageTopInsetPx(page);
+    }
+
+    /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
+    private int pageTopInsetPx(@NonNull View child) {
+        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+            mHomeTopInsetPx);
+    }
+
+    /** The page {@code child} is registered as, or null for a view that is no page. */
+    @Nullable
+    private PaneWallPage pageOf(@NonNull View child) {
+        for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
+            if (entry.getValue() == child) return entry.getKey();
+        }
+        return null;
     }
 
     @Override
@@ -2026,12 +3690,13 @@ public final class PaneWallLayout extends ViewGroup {
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
-            if (child.getVisibility() != VISIBLE) continue;
+            if (!isLaidOutNow(child)) continue;
             int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
                 - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
                 - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
-                - getPaddingBottom() - frameMarginPx(child, margins.topMargin)
+                - getPaddingBottom() - pageTopInsetPx(child) - pageBottomInsetPx(child)
+                - frameMarginPx(child, margins.topMargin)
                 - frameMarginPx(child, margins.bottomMargin)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
         }
@@ -2048,12 +3713,13 @@ public final class PaneWallLayout extends ViewGroup {
         MarginLayoutParams margins = pageMargins();
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
-            if (child.getVisibility() != VISIBLE) continue;
+            if (!isLaidOutNow(child)) continue;
             int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin);
-            int top = getPaddingTop() + frameMarginPx(child, margins.topMargin);
+            int top = getPaddingTop() + pageTopInsetPx(child)
+                + frameMarginPx(child, margins.topMargin);
             int right = Math.max(left, r - l - getPaddingRight()
                 - frameMarginPx(child, margins.rightMargin));
-            int bottom = Math.max(top, b - t - getPaddingBottom()
+            int bottom = Math.max(top, b - t - getPaddingBottom() - pageBottomInsetPx(child)
                 - frameMarginPx(child, margins.bottomMargin));
             // A page that came on screen during this pass was not measured by it.
             if (child.getMeasuredWidth() != right - left || child.getMeasuredHeight() != bottom - top) {
@@ -2075,7 +3741,9 @@ public final class PaneWallLayout extends ViewGroup {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
         Rect left = new Rect();
         Rect right = new Rect();
-        if (mGesturesEnabled && mPages.size() > 1) {
+        // A Home page has no border to hold, so it leaves the back swipe its whole edge.
+        if (mGesturesEnabled && mCells.size() > 1
+                && (mListener == null || mListener.isBorderPagingEnabled(mCurrent))) {
             int stretch = Math.round(SIDE_BACK_EXCLUSION_DP
                 * getResources().getDisplayMetrics().density);
             centredStretch(BorderDrag.Border.LEFT, stretch, left);
@@ -2128,13 +3796,18 @@ public final class PaneWallLayout extends ViewGroup {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (isRestingOffPage()) settleImmediately();
+        getViewTreeObserver().addOnPreDrawListener(mDockWatch);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        getViewTreeObserver().removeOnPreDrawListener(mDockWatch);
+        mDrawnDockTop = Float.NaN;
         mSliding = false;
         stopSlide();
+        // The slide stopped here never settles: its stand-off goes with it.
+        clearJump();
         stopNudge();
         // A keyboard the finger or its settle was carrying lands where it was going.
         settleKeyboardRevealNow();
@@ -2147,5 +3820,12 @@ public final class PaneWallLayout extends ViewGroup {
         mStatusGrabber.reset();
         mGlow.reset();
         mGlowPage = null;
+    }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

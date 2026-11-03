@@ -8,6 +8,7 @@ import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreferenceCompat;
 import androidx.preference.TwoStatePreference;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
@@ -34,6 +35,26 @@ public final class SettingsLayoutUtils {
         PreferenceScreen screen = fragment.getPreferenceScreen();
         if (screen == null) return;
         applyLayouts(screen, false);
+    }
+
+    /** Gives the page's list its grouped tonal cards ({@link SettingsGroupDecoration}), once its
+     *  list exists. */
+    public static void applyGroups(@NonNull PreferenceFragmentCompat fragment) {
+        RecyclerView list = fragment.getListView();
+        if (list != null) SettingsGroupDecoration.attach(list);
+    }
+
+    /** A row added after the page was built (a search result) gets a sub-page row's look. */
+    public static void applyRowLayout(@NonNull Preference preference) {
+        applyItemLayout(preference, false);
+    }
+
+    /** A section header added after the page was built; the first on a page has no hairline. */
+    public static void applyCategoryLayout(@NonNull PreferenceCategory category, boolean first) {
+        category.setIconSpaceReserved(false);
+        category.setLayoutResource(first
+            ? R.layout.preference_settings_category_first
+            : R.layout.preference_settings_category);
     }
 
     private static void applyLayouts(@NonNull PreferenceGroup screen, boolean rootRows) {
@@ -66,6 +87,12 @@ public final class SettingsLayoutUtils {
 
     private static void applyItemLayout(@NonNull Preference preference, boolean rootRows) {
         preference.setIconSpaceReserved(false);
+
+        // Every row leads with an icon; a row that declares its own keeps it.
+        if (preference.getIcon() == null) {
+            int icon = SettingsRowIcons.forPreference(preference);
+            if (icon != 0) preference.setIcon(icon);
+        }
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
@@ -132,7 +159,7 @@ public final class SettingsLayoutUtils {
      */
     private static final Set<String> ACTION_ROW_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
         "app_launcher_category_refresh", "gui_apps_copy",
-        "tai_welcome_card", "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
+        "tai_models_card", "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
         "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs",
         "settings_backup_export", "settings_backup_import",
         "settings_backup_export_models", "settings_backup_import_models"));

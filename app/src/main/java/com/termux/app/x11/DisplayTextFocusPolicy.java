@@ -18,27 +18,56 @@ import androidx.annotation.Nullable;
  *       only decides something in the {@value #TAP_WINDOW_MS} ms after a tap, and the last one
  *       inside that window is the answer.
  *   <li><b>An input method's own focus.</b> {@code keyboard.show --source focus} and its hide,
- *       which a script on the Linux side wires to fcitx5's focus-in and focus-out. That signal is
- *       exact, so it needs no window.
+ *       which the {@code termux-x11-im} helper sends when fcitx5 shows or hides its virtual
+ *       keyboard, that is on a field's focus-in and focus-out. That signal is exact, so it needs
+ *       no window.
  * </ul>
+ *
+ * <p><b>Focus decides, once it has been heard.</b> Focus is present from the first focus signal,
+ * in or out, that reaches the policy while it is active, until it next goes inert: leaving the
+ * place, or the setting going off. The policy learns this from the signal itself, so the host has
+ * no fact to pass and none to get wrong. A host flag such as "the helper's bus is up" could be
+ * true while fcitx5 is gone, or while the app in front has no input-method module and never
+ * reports; and a focus heard on an earlier visit could be stale by now, since nothing reaches the
+ * policy while the wall is away. The cost: until the first signal of a visit, taps follow the
+ * cursor rules, so a tap on read-only text can still raise the keyboard once. While focus is
+ * present:
+ *
+ * <ul>
+ *   <li>focus-in shows the keyboard;
+ *   <li>focus-out hides it after {@value #HIDE_GRACE_MS} ms, and a focus-in inside that grace
+ *       cancels the hide, so moving from one field to the next never drops the keyboard;
+ *   <li>a tap over a text cursor shows the keyboard only if the last focus signal was a focus-in,
+ *       which brings back a keyboard put down while the field kept focus. After a focus-out the
+ *       text under the finger is read-only (a terminal, page text), so the tap shows nothing;
+ *   <li>a tap or a drag anywhere else hides nothing: hiding is focus-out's.
+ * </ul>
+ *
+ * <p>A tap and a focus signal in either order come to one decision. Focus-in first shows the
+ * keyboard, and the tap that follows finds it up. A tap first opens its window, and the focus
+ * signal that lands inside it closes the window and decides alone: focus is the better answer
+ * than the cursor's name. A tap during the grace opens no window at all, since with focus out a
+ * tap cannot show anything and only a focus-in can, which shows by itself. So the tap window and
+ * the grace are never pending together, and one timer serves both.
  *
  * <p>The keyboard is only ever put down again if this is what raised it — a keyboard the user
  * asked for is theirs, and a tap on the desktop must not take it away. Asking for it pins it:
  * from then on focus is ignored until it is asked down again, or until the wall leaves the place.
+ * "Keyboard off" is not this policy's to keep: the launcher drops a focus-in while the keyboard is
+ * off, and the keyboard itself refuses to rise for anything this policy asks.
  *
- * <p>Inert unless the Display place is on screen, the setting is on, and either the touch mode is
- * Touchscreen or mouse mode's touchpad holds the keyboard frame: in Trackpad and Direct touch a
- * tap on the display is not a tap on a widget, and the two modes are meant to behave exactly as
- * they always have. A tap on the touchpad is a click wherever the pointer is standing, in every
- * touch mode, so while the pad is up it counts as a tap on a widget like a Touchscreen tap.
+ * <p>Inert unless the Display place is on screen and the setting is on, whatever the touch mode.
+ * A tap is a click where it lands: under the finger in Touchscreen and Direct touch, at the
+ * pointer in Trackpad and on mouse mode's touchpad, so in every case the cursor name read after it
+ * is the name of the widget that was clicked.
  */
 public final class DisplayTextFocusPolicy {
 
     /** How long after a tap a cursor name still counts as that tap's answer. */
     public static final long TAP_WINDOW_MS = 150L;
 
-    /** {@code touchMode} 2 — Touchscreen. The policy sleeps through Trackpad and Direct touch. */
-    public static final int TOUCH_MODE_TOUCHSCREEN = 2;
+    /** How long a focus-out waits for the focus-in that would cancel it. */
+    public static final long HIDE_GRACE_MS = 150L;
 
     /** The cursor names an X client draws over text. Anything else, or nothing, is not text. */
     private static final String[] TEXT_CURSORS = {"xterm", "text", "ibeam", "vertical-text"};
@@ -57,7 +86,10 @@ public final class DisplayTextFocusPolicy {
         boolean isKeyboardUp();
     }
 
-    /** The tap window's timer, handed in so the window can be stepped in a test. */
+    /**
+     * The timer for the tap window and the hide grace, which are never pending together. Handed
+     * in so both can be stepped in a test.
+     */
     public interface Scheduler {
         /** Run {@code action} in {@code delayMs}; only ever one is pending. */
         void schedule(long delayMs, @NonNull Runnable action);
@@ -85,17 +117,21 @@ public final class DisplayTextFocusPolicy {
 
     @NonNull private State state = State.CLOSED;
     private boolean enabled = true;
-    private int touchMode = TOUCH_MODE_TOUCHSCREEN;
     private boolean onPlace;
-    /** True while mouse mode's touchpad holds the keyboard frame; its taps are clicks. */
-    private boolean padUp;
     /** The name the pointer's cursor last reported, whether or not a finger was involved. */
     @NonNull private String cursorName = "";
     /** A name that arrived inside the open tap window, or null while none has. */
     @Nullable private String tappedCursorName;
     private boolean windowOpen;
+    /** A focus signal has reached the policy since it last became active: focus decides. */
+    private boolean focusHeard;
+    /** The last focus signal was a focus-in. Means nothing while {@link #focusHeard} is false. */
+    private boolean focusIn;
+    /** A focus-out is waiting out its grace before it hides the keyboard. */
+    private boolean hidePending;
 
     private final Runnable decide = this::decideOnTap;
+    private final Runnable hideAfterGrace = this::hideAfterGrace;
 
     public DisplayTextFocusPolicy(@NonNull Keyboard keyboard, @NonNull Scheduler scheduler,
                                   @Nullable Trace trace) {
@@ -113,7 +149,7 @@ public final class DisplayTextFocusPolicy {
 
     /** True while the signals mean anything at all. */
     public boolean isActive() {
-        return enabled && onPlace && (padUp || touchMode == TOUCH_MODE_TOUCHSCREEN);
+        return enabled && onPlace;
     }
 
     /** True while the wall rests on the Display place. */
@@ -126,6 +162,11 @@ public final class DisplayTextFocusPolicy {
         return windowOpen;
     }
 
+    /** True once a focus signal has been heard on this visit, so focus, not taps, decides. */
+    public boolean isFocusPresent() {
+        return focusHeard;
+    }
+
     // ---- The settings it reads ---------------------------------------------------------------
 
     /** The "Keyboard follows text fields" setting. */
@@ -133,29 +174,6 @@ public final class DisplayTextFocusPolicy {
         if (enabled == value) return;
         enabled = value;
         if (!isActive()) standDown("setting " + (value ? "on" : "off"));
-    }
-
-    /** The display's {@code touchMode}: only Touchscreen is read as taps on widgets. */
-    public void setTouchMode(int mode) {
-        if (touchMode == mode) return;
-        touchMode = mode;
-        if (!isActive()) standDown("touch mode " + mode);
-    }
-
-    /**
-     * Whether mouse mode's touchpad holds the keyboard frame. A tap on the pad is a click where
-     * the pointer stands, so it answers a cursor name exactly as a Touchscreen tap does — and
-     * the touch mode under it, whatever it is, decides nothing while the pad is there.
-     */
-    public void setPadUp(boolean value) {
-        if (padUp == value) return;
-        padUp = value;
-        if (!isActive()) standDown("the touchpad went down");
-    }
-
-    /** True while mouse mode's touchpad holds the keyboard frame. */
-    public boolean isPadUp() {
-        return padUp;
     }
 
     // ---- The wall ----------------------------------------------------------------------------
@@ -167,7 +185,7 @@ public final class DisplayTextFocusPolicy {
     public void onPlaceEntered(boolean keyboardRaisedOnEnter) {
         onPlace = true;
         cursorName = "";
-        closeWindow();
+        forgetTimersAndFocus();
         state = keyboardRaisedOnEnter ? State.PINNED : State.CLOSED;
         say("entered the place" + (keyboardRaisedOnEnter ? ", keyboard on enter" : ""));
     }
@@ -178,7 +196,7 @@ public final class DisplayTextFocusPolicy {
      */
     public void onPlaceLeft() {
         onPlace = false;
-        closeWindow();
+        forgetTimersAndFocus();
         state = State.CLOSED;
         say("left the place");
     }
@@ -188,10 +206,15 @@ public final class DisplayTextFocusPolicy {
     /**
      * A tap landed on the display itself: an {@code ACTION_UP} that never turned into a drag, and
      * never on the keyboard or on the launcher's own chrome. It opens the window the cursor name
-     * answers in.
+     * answers in. During the hide grace it opens none: focus is out, so only a focus-in can bring
+     * the keyboard back, and that needs no tap.
      */
     public void onDisplayTap() {
         if (!isActive()) return;
+        if (hidePending) {
+            say("tap during the hide grace -> focus decides");
+            return;
+        }
         tappedCursorName = null;
         windowOpen = true;
         scheduler.cancel();
@@ -204,7 +227,8 @@ public final class DisplayTextFocusPolicy {
      * raised the keyboard, so the keyboard goes down, the way a tap elsewhere puts it down —
      * unless the gesture began over text, which is selecting in the field, or the keyboard is the
      * user's own. A gesture never raises the keyboard: the pointer crosses too many widgets on
-     * the way for a name to mean anything.
+     * the way for a name to mean anything. While focus is present a gesture hides nothing either:
+     * the field still has focus until a focus-out says otherwise.
      */
     public void onDisplayDrag() {
         if (!isActive()) return;
@@ -212,6 +236,10 @@ public final class DisplayTextFocusPolicy {
         String seen = cursorName.isEmpty() ? "(no name)" : cursorName;
         if (state != State.AUTO_OPEN) {
             say("drag over " + seen + " -> nothing to do" + (state == State.PINNED ? ": pinned" : ""));
+            return;
+        }
+        if (focusHeard) {
+            say("drag over " + seen + " -> focus decides");
             return;
         }
         if (isTextCursor(cursorName)) {
@@ -232,35 +260,51 @@ public final class DisplayTextFocusPolicy {
     /**
      * Signal B: an input method on the Linux side says a text field took focus, or lost it. True
      * when the policy took the signal, false when it is inert and the caller should fall back to
-     * showing the keyboard itself.
+     * showing the keyboard itself. Heard while pinned it decides nothing, but it is remembered,
+     * so the taps after the pin know where focus is.
      */
     public boolean onTextFocusSignal(boolean focused) {
         if (!isActive()) return false;
         closeWindow();
+        focusHeard = true;
+        focusIn = focused;
         if (state == State.PINNED) {
             say("focus " + (focused ? "in" : "out") + " ignored: pinned");
             return true;
         }
         if (focused) {
+            boolean cancelled = hidePending;
+            if (cancelled) {
+                cancelHide();
+                say("hide cancelled: focus in");
+            }
             if (state == State.CLOSED || !keyboard.isKeyboardUp()) {
                 state = State.AUTO_OPEN;
                 say("focus in -> show");
                 keyboard.showKeyboardForTextFocus();
+            } else if (!cancelled) {
+                say("focus in -> already open");
             }
-        } else if (state == State.AUTO_OPEN) {
-            state = State.CLOSED;
-            say("focus out -> hide");
-            keyboard.hideKeyboardForTextFocus();
+        } else if (state != State.AUTO_OPEN) {
+            say("focus out -> nothing to do");
+        } else if (hidePending) {
+            say("focus out -> hide already pending");
+        } else {
+            hidePending = true;
+            scheduler.schedule(HIDE_GRACE_MS, hideAfterGrace);
+            say("focus out -> hide in " + HIDE_GRACE_MS + " ms");
         }
         return true;
     }
 
     /**
      * The user put the keyboard up or down themselves — the toggle key, the mouse key, the
-     * keyboard tools with a manual source. Up pins it; down hands it back to the policy.
+     * keyboard tools with a manual source. Up pins it; down hands it back to the policy. Either
+     * way a pending hide is dropped: up is theirs, and down is already down.
      */
     public void onUserKeyboardIntent(boolean shown) {
         closeWindow();
+        cancelHide();
         state = shown ? State.PINNED : State.CLOSED;
         say("user " + (shown ? "showed" : "hid") + " the keyboard -> " + state);
     }
@@ -283,6 +327,10 @@ public final class DisplayTextFocusPolicy {
             say("tap over " + seen + " ignored: pinned");
             return;
         }
+        if (focusHeard) {
+            decideTapByFocus(text, seen);
+            return;
+        }
         if (text) {
             if (state == State.CLOSED || !keyboard.isKeyboardUp()) {
                 state = State.AUTO_OPEN;
@@ -300,15 +348,57 @@ public final class DisplayTextFocusPolicy {
         }
     }
 
-    private void closeWindow() {
-        windowOpen = false;
-        tappedCursorName = null;
-        scheduler.cancel();
+    /**
+     * With focus present a tap only confirms: over text it shows the keyboard if a field has
+     * focus, and over anything else it leaves the keyboard to focus-out.
+     */
+    private void decideTapByFocus(boolean text, @NonNull String seen) {
+        if (!text) {
+            say("tap over " + seen + " -> focus decides");
+        } else if (!focusIn) {
+            say("tap over " + seen + " ignored: no focus");
+        } else if (state == State.CLOSED || !keyboard.isKeyboardUp()) {
+            state = State.AUTO_OPEN;
+            say("tap over " + seen + " -> show: focus in");
+            keyboard.showKeyboardForTextFocus();
+        } else {
+            say("tap over " + seen + " -> already open");
+        }
     }
 
-    /** Went inert: forget the pin and the window, and leave the keyboard exactly as it is. */
-    private void standDown(@NonNull String why) {
+    /** The grace ran out with no focus-in: the field really lost focus. */
+    private void hideAfterGrace() {
+        hidePending = false;
+        if (!isActive() || state != State.AUTO_OPEN) return;
+        state = State.CLOSED;
+        say("focus out -> hide");
+        keyboard.hideKeyboardForTextFocus();
+    }
+
+    /** Close the tap window, leaving a pending hide alone. */
+    private void closeWindow() {
+        if (windowOpen) scheduler.cancel();
+        windowOpen = false;
+        tappedCursorName = null;
+    }
+
+    /** Drop a pending hide, leaving the keyboard where it is. */
+    private void cancelHide() {
+        if (hidePending) scheduler.cancel();
+        hidePending = false;
+    }
+
+    /** Arriving, leaving, or going inert: no timer and no focus survive it. */
+    private void forgetTimersAndFocus() {
         closeWindow();
+        cancelHide();
+        focusHeard = false;
+        focusIn = false;
+    }
+
+    /** Went inert: forget the pin, the window and focus, and leave the keyboard exactly as it is. */
+    private void standDown(@NonNull String why) {
+        forgetTimersAndFocus();
         state = State.CLOSED;
         say("inert: " + why);
     }

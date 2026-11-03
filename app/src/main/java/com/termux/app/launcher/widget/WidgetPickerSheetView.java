@@ -210,6 +210,17 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     /** Kept for callers; the stock sheet's settle follows the system animation scale. */
     public void setReducedMotion(boolean value) { }
     public boolean isOpen() { return open; }
+
+    /**
+     * The band at the bottom the dock stands over: the sheet and its scrim end above it, as the
+     * widget grid does, so the dock never covers the last app group. The padding clips the sheet
+     * (clipToPadding) and the bottom-sheet behaviour measures its travel from what is left.
+     */
+    public void setDockReservePx(int px) {
+        int wanted = Math.max(0, px);
+        if (getPaddingBottom() == wanted) return;
+        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), wanted);
+    }
     @NonNull public WidgetPickerAdapter adapter() { return adapter; }
     @NonNull public RecyclerView list() { return list; }
     @NonNull public EditText searchField() { return search; }

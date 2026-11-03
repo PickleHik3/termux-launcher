@@ -3,14 +3,14 @@ package com.termux.app.x11;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * The command behind the Display page's "Install xkeyboard-config" button: the X keyboard data a
+ * The command behind the display window's "Install xkeyboard-config" button: the X keyboard data a
  * display cannot start without, installed in a terminal window the user watches.
  *
  * <p>Nothing here runs anything: an edition goes in, an argv comes out, and a test reads every
@@ -72,7 +72,7 @@ public final class KeyboardDataInstall {
      * when that edition has no such command (nix).
      */
     @Nullable
-    public static List<String> command(@NonNull TourEdition edition) {
+    public static List<String> command(@NonNull AppEdition edition) {
         String script = script(edition);
         return script == null ? null
             : Collections.unmodifiableList(Arrays.asList(SHELL, "-c", script));
@@ -80,7 +80,7 @@ public final class KeyboardDataInstall {
 
     /** The script {@link #command} hands to {@link #SHELL}, or null on nix. */
     @Nullable
-    static String script(@NonNull TourEdition edition) {
+    static String script(@NonNull AppEdition edition) {
         switch (edition) {
             case NIX: return null;
             case VAJ: return "{ " + aptInstall(false) + "; } || " + ON_FAILURE;

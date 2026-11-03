@@ -96,7 +96,8 @@ public final class LauncherCategoryPendingApps {
         Set<String> seen = new HashSet<>();
         List<LauncherAppEntry> pending = new ArrayList<>();
         for (LauncherAppEntry entry : catalogue) {
-            if (entry == null || X11Apps.isLinuxApp(entry.appRef)) continue;
+            if (entry == null || X11Apps.isLinuxApp(entry.appRef)
+                || com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) continue;
             if (!seen.add(entry.packageLower)) continue;
             if (placement.placedByUser(entry.packageLower)) continue;
             if (placedConfidently(placement.builtIn(entry))) continue;

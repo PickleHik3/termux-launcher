@@ -13,17 +13,16 @@ public final class BuiltinWidgetFactory {
                                                     @NonNull BuiltinWidgetServices services,
                                                     @NonNull BuiltinWidgetStyle style) {
         switch (kind) {
-            case CLOCK_ANALOG: return new AnalogClockWidgetView(context, services, style);
-            case CLOCK_DIGITAL: return new DigitalClockWidgetView(context, services, style);
-            case AGENDA: return new AgendaWidgetView(context, services, style);
+            case CLOCK: return new ClockWidgetView(context, services, style);
+            case GLANCE: return new GlanceWidgetView(context, services, style);
             case WEATHER: return new WeatherWidgetView(context, services, style);
-            case BATTERY: return new BatteryWidgetView(context, services, style);
-            case SYSTEM: return new SystemWidgetView(context, services, style);
+            case DEVICE: return new DeviceWidgetView(context, services, style);
             case MEDIA: return new MediaWidgetView(context, services, style);
             case NOTIFICATIONS: return new NotificationsWidgetView(context, services, style);
             case TASKS: return new TasksWidgetView(context, services, style);
             case NOTES: return new NotesWidgetView(context, services, style);
             case CALENDAR: return new CalendarWidgetView(context, services, style);
+            case TERMINAL: return new TerminalWidgetView(context, services, style);
             default: throw new IllegalArgumentException("unknown kind " + kind);
         }
     }

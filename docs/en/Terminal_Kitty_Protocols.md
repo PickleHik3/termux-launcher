@@ -135,7 +135,7 @@ When the cursor jumps, inside a pane or from one pane to another, a short animat
 it. Ordinary one-cell typing is not animated, and there is no trail while you are scrolled back.
 Over a text-sizing block the trail covers the whole enlarged cursor.
 
-Pick its look in **Settings → Terminal → Terminal display → Cursor trail**, or in **Appearance →
+Pick its look in **Settings → Terminal → Text & display → Cursor trail**, or in **Appearance →
 Look**: choose **Custom**, tap the terminal, then **Cursor trail**:
 
 - **Default**: kitty's own trail, a solid shape that shears toward the cursor and is gone once it
@@ -169,17 +169,14 @@ in `kitty.conf` picks a style and overrides the Settings choice; any other shade
 Motion blur, Railgun and Torpedo are this app's own takes on the kitty shaders they are named
 after; Pixie dust follows kitty's particles.
 
-## Terminal effect and edge colours
+## Terminal effect
 
-**Settings → Terminal → Terminal display → Terminal effect** gives the whole home screen a **CRT**,
+**Settings → Terminal → Text & display → Terminal effect** gives the whole home screen a **CRT**,
 **CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It is also on the
 terminal's **Custom** row in **Appearance → Look**, and needs Android 13 or newer. The effect
 covers every terminal pane and the status bar, dock, bars and keyboard around them, with the
 scanlines fixed to the screen. Only the panes curve like a tube; the bars stay flat so every key is
 where you touch it.
-
-**Extend edge colors** in the same section ("Match pane padding to nearby terminal colors."), on
-by default, fills a pane's padding with the terminal colours next to it.
 
 ## Kitty graphics Tier 2
 
@@ -275,7 +272,7 @@ the scrollback.
   number. Tapping the notification returns to the pane.
 - **OSC 9;4;state;pct** sets the progress ring on the window chip.
 - **OSC 52** writes the Android clipboard, and with `?` reads it. A write from a pane needs the
-  launcher on screen; a read also needs **Settings → Terminal → Clipboard → Let programs read the
+  launcher on screen; a read also needs **Settings → Terminal → Clipboard & compatibility → Let programs read the
   clipboard**.
 
 Each escape shares one implementation with `launcherctl`, for a process that has no terminal to
@@ -290,7 +287,7 @@ writes even while the launcher is off screen. See [LauncherCtl](LauncherCtl.md) 
 `kitten clipboard` works. The terminal implements kitty's
 [clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text and pictures, on the same
 Android clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and
-a read needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused
+a read needs it on screen and *Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard* on. A refused
 read is answered `status=EPERM`. `CSI ? 5522 $ p` answers `CSI ? 5522 ; 2 $ y` (supported, paste
 events off) or `; 1 $ y` (on), so a program can tell the protocol is there before it uses it.
 

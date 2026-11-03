@@ -127,12 +127,55 @@ public final class LauncherAppLauncher {
         return terminalAppRunner;
     }
 
+    /**
+     * Runs the launcher's own entries ({@link LauncherEntries}): Terminal and Display. Installed
+     * by the activity that owns the wall, with the same lifecycle rules as {@link #linuxAppRunner}.
+     */
+    public interface EntryRunner {
+        /** A tap: Terminal goes to the Workspace, Display opens the display window. */
+        boolean open(@NonNull String entryId);
+        /** The entry's long-press action: Terminal opens a new window. */
+        boolean openAlternate(@NonNull String entryId);
+        /** New float here: Terminal opens a Home float on the Home page in view. */
+        default boolean openHomeFloat(@NonNull String entryId) { return false; }
+    }
+
+    @Nullable private static volatile EntryRunner entryRunner;
+
+    public static void setEntryRunner(@NonNull EntryRunner runner) {
+        entryRunner = runner;
+    }
+
+    /** Take {@code runner} out, if it is still the one installed; another instance's stays. */
+    public static void clearEntryRunner(@NonNull EntryRunner runner) {
+        if (entryRunner == runner) entryRunner = null;
+    }
+
+    /** The long-press action of a launcher entry that has one (Terminal's New window). */
+    public static boolean launchEntryAlternate(@NonNull LauncherAppEntry entry) {
+        String id = LauncherEntries.idOf(entry.appRef);
+        EntryRunner runner = entryRunner;
+        return id != null && runner != null && runner.openAlternate(id);
+    }
+
+    /** The Terminal entry's New float here: a Home float on the Home page in view. */
+    public static boolean launchEntryHomeFloat(@NonNull LauncherAppEntry entry) {
+        String id = LauncherEntries.idOf(entry.appRef);
+        EntryRunner runner = entryRunner;
+        return id != null && runner != null && runner.openHomeFloat(id);
+    }
+
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {
         if (entry.appRef.packageName.startsWith("injected.test")) {
             return false;
         }
+        if (LauncherEntries.isEntry(entry.appRef)) {
+            EntryRunner runner = entryRunner;
+            String id = LauncherEntries.idOf(entry.appRef);
+            return runner != null && id != null && runner.open(id);
+        }
         if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
-            // Not an Android component: a Terminal=true entry (D5) gets a pane; every other Linux
+            // Not an Android component: a Terminal=true entry (D5) gets a window; every other Linux
             // app still goes to the display's runner, or nothing does.
             TerminalAppRunner terminal = terminalAppRunner;
             if (terminal != null && terminal.handles(entry)) {

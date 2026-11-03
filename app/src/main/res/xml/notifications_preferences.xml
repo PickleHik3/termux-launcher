@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_notifications_access_header">
-        <com.termux.app.fragments.settings.StatusActionPreference
-            app:key="app_launcher_notification_access"
-            app:icon="@drawable/ic_symbol_notifications"
-            app:title="@string/termux_app_launcher_notification_access_settings_title" />
-    </PreferenceCategory>
-
+    <!-- Notification access lives on General › Permissions & services only. -->
     <PreferenceCategory app:title="@string/settings_notifications_home_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"
             app:title="@string/settings_notification_dots_title"
             app:summary="@string/termux_app_launcher_notification_dots_summary"
             app:defaultValue="false" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="app_launcher_notification_badge_style"
+            app:title="@string/settings_notification_badge_style_title"
+            app:summary="@string/settings_notification_badge_style_summary"
+            app:defaultValue="dot"
+            app:entries="@array/notification_badge_style_entries"
+            app:entryValues="@array/notification_badge_style_values" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_notifications_pinned_header">

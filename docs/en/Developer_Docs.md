@@ -224,7 +224,7 @@ The files in `docs/en/examples/` are not bundled in the APK. `tlstore`'s catalog
 them (pinned to a tag in this repository); the app seeds the rest into place directly. Fish,
 zoxide, eza, and the showcase binaries (sigye, fastfetch, kitten) come from `tlstore install` — see
 `docs/en/Tlstore.md`. The Oh My Posh prompt theme and the Neovim colour scheme instead come from
-Settings › Look's template pack (`app/src/main/assets/theme-templates`), which renders and seeds
+the Appearance template pack (Tools that follow the terminal colours) (`app/src/main/assets/theme-templates`), which renders and seeds
 them directly.
 
 Files:
@@ -233,7 +233,7 @@ Files:
 - The shell environment is not scripted from this directory: `setup-launcher` (shipped in the nix base environment) installs the flake template and switches, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
 - `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
-Refresh installed files after an APK or docs update with `tlstore update`.
+Refresh installed files after an APK or docs update with `tlstore upgrade`.
 
 ## Shizuku and rish
 

@@ -23,6 +23,7 @@ import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.theme.TextScale;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
@@ -30,9 +31,47 @@ import com.termux.shared.termux.font.NerdFontSpans;
  * percentage or a temperature. Sized to sit on the same row as the window pills. Tapping it
  * is expected to open an anchored detail card; the widget itself is the anchor view.
  */
-public final class StatusBarWidgetView extends LinearLayout {
+public final class StatusBarWidgetView extends LinearLayout implements TextScale.Follower {
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
+
+    /** The CPU reading's glyph (nf-oct-cpu), wherever the launcher shows the reading. */
+    public static final String CPU_GLYPH = "\uf4bc";
+    /** The memory reading's glyph (nf-fa-memory). */
+    public static final String RAM_GLYPH = "\uefc5";
+
+    /** Dresses this widget as the CPU reading: its glyph and its tier, the primary role. */
+    public void dressAsCpu() {
+        setColorRole(ColorRole.PRIMARY);
+        setIconGlyph(CPU_GLYPH);
+    }
+
+    /** Dresses this widget as the memory reading: its glyph and its tier, the secondary role. */
+    public void dressAsRam() {
+        setColorRole(ColorRole.SECONDARY);
+        setIconGlyph(RAM_GLYPH);
+    }
+
+    /**
+     * The role colour a tier is written in, from {@code context}'s theme (the launcher's scheme
+     * chrome included): the seed every reading's measured ink is toned from.
+     */
+    @ColorInt
+    public static int seedFor(@NonNull Context context, @NonNull ColorRole role) {
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        switch (role) {
+            case SECONDARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorSecondary,
+                    ContextCompat.getColor(context, R.color.termux_secondary));
+            case TERTIARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorTertiary, primary);
+            default:
+                return primary;
+        }
+    }
 
     private final GaugeIcon mIcon;
     private final TextView mGlyph;
@@ -52,6 +91,8 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private Integer mLabelInk;
     @Nullable private Integer mIconInk;
     @Nullable private Integer mMutedInk;
+    /** The deck look's display colour while a terminal effect is on; null otherwise (wave 8). */
+    @Nullable private Integer mDeckDisplay;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
     /** The widget's own room at each end along a row, and what it keeps of it in a tight row. */
@@ -291,6 +332,21 @@ public final class StatusBarWidgetView extends LinearLayout {
         applyColors();
     }
 
+    /**
+     * The deck look (wave 8): the reading lit in the display window's colour with a soft glow
+     * while a terminal effect is on; {@code null} puts the chrome's ink back. Sizes unchanged.
+     */
+    public void setDeckLook(@Nullable com.termux.app.terminal.DeckLook deck) {
+        Integer display = deck == null ? null : deck.display;
+        if (java.util.Objects.equals(mDeckDisplay, display)) return;
+        mDeckDisplay = display;
+        float glow = display == null ? 0f : dp(4);
+        int glowColour = display == null ? 0 : ColorUtils.setAlphaComponent(display, 153);
+        mValue.setShadowLayer(glow, 0f, 0f, glowColour);
+        mGlyph.setShadowLayer(glow, 0f, 0f, glowColour);
+        applyColors();
+    }
+
     /** Accent styling used while the widget's detail card is open. */
     public void setAccent(boolean accent) {
         if (mAccent == accent) return;
@@ -328,6 +384,16 @@ public final class StatusBarWidgetView extends LinearLayout {
         // grouping, so individual pill backgrounds only add visual noise.
         setBackground(null);
 
+        // The deck's display window: every reading lit in the display colour, a muted one dimmed.
+        if (mDeckDisplay != null) {
+            int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
+            ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
+            mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
+            mGlyph.setTextColor(lit);
+            mValue.setTextColor(lit);
+            return;
+        }
+
         // Measured ink wins outright. It was resolved on what this band is really drawn over and
         // it carries whatever alpha that leaves room for, so laying the tier's old alpha over it
         // would spend exactly the contrast it was resolved to find.
@@ -351,13 +417,16 @@ public final class StatusBarWidgetView extends LinearLayout {
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 
+    @Override public void onTextScaleChanged() {
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
+    }
+
     /**
      * The tier's weight and size. Since 2026-09-17 all three tiers share the temperature's, so
      * this is one answer applied three times; the hierarchy is hue and order.
      */
     private void applyTier() {
-        mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP,
-            StatusBarInk.textSizeSpFor(mColorRole));
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
         int weight = StatusBarInk.weightFor(mColorRole);
         // The two-argument form so a heavy tier would be bold even where the platform has no bold
         // cut of the medium face: TextView then asks the paint for it rather than dropping it. At
