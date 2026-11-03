@@ -21,9 +21,7 @@ import com.termux.app.fragments.settings.SettingsLayoutUtils;
 
 /**
  * General: Use as and Start in (the Launcher group, which Use as Terminal only cannot take away
- * as it takes Home's section), the launcher-wide switches (vibration, Recents), the way to
- * Battery &amp; performance
- * ({@link PerformancePreferencesFragment}, which holds idle activity and the Low-memory preset), the
+ * as it takes Home's section), the launcher-wide switches (vibration, Recents), the
  * app's own pages (backup, permissions, diagnostics, about, help) and setting the launcher as the
  * home app. It grew out of App behavior and adds no preference of its own: every row writes the key
  * it always wrote, through the store that already owned it, so a value set here or on any older

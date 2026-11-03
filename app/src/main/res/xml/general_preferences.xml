@@ -72,16 +72,6 @@
             app:summary="@string/settings_behavior_keyboard_vibration_summary" />
     </PreferenceCategory>
 
-    <!-- Idle activity and the Low-memory preset live on Battery & performance. -->
-    <PreferenceCategory app:key="general_battery" app:title="@string/settings_behavior_battery_header">
-        <Preference
-            app:key="performance_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_performance"
-            app:summary="@string/settings_destination_performance_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:key="general_more" app:title="@string/settings_general_more_header">
         <Preference
             app:key="backup_restore"

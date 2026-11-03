@@ -46,6 +46,7 @@ public final class SettingsTree {
         KEYBOARD(R.string.settings_destination_keyboard_input, "keyboard_input"),
         NOTIFICATIONS(R.string.settings_destination_notifications, "notifications"),
         AI(R.string.settings_tai_service_title, "on_device_ai"),
+        PERFORMANCE(R.string.settings_destination_performance, "performance"),
         GENERAL(R.string.settings_section_general, "general");
 
         @StringRes public final int titleRes;
@@ -214,11 +215,10 @@ public final class SettingsTree {
         page(ai, PAGES + "TaiModelCentreFragment", R.string.tai_model_centre_title, 0);
 
         // System
+        section(Section.PERFORMANCE, PAGES + "PerformancePreferencesFragment",
+            R.string.settings_destination_performance, R.xml.performance_preferences);
         String general = PAGES + "GeneralPreferencesFragment";
         section(Section.GENERAL, general, R.string.settings_section_general, R.xml.general_preferences);
-        // The presets and the motion they trim: General's Battery row opens it.
-        page(general, PAGES + "PerformancePreferencesFragment", R.string.settings_destination_performance,
-            R.xml.performance_preferences);
         page(general, PAGES + "BackupRestorePreferencesFragment", R.string.settings_destination_backup_restore,
             R.xml.backup_restore_preferences);
         String permissions = PAGES + "ServicesPermissionsPreferencesFragment";

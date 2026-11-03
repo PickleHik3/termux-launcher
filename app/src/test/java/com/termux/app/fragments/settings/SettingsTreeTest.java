@@ -141,7 +141,7 @@ public class SettingsTreeTest {
         assertEquals(java.util.Arrays.asList(SettingsTree.Section.HOME, SettingsTree.Section.DOCK_DRAWER,
             SettingsTree.Section.TERMINAL, SettingsTree.Section.LINUX_APPS, SettingsTree.Section.APPEARANCE,
             SettingsTree.Section.KEYBOARD, SettingsTree.Section.NOTIFICATIONS, SettingsTree.Section.AI,
-            SettingsTree.Section.GENERAL), java.util.Arrays.asList(SettingsTree.Section.values()));
+            SettingsTree.Section.PERFORMANCE, SettingsTree.Section.GENERAL), java.util.Arrays.asList(SettingsTree.Section.values()));
         assertTrue(SettingsTree.sectionPage(SettingsTree.Section.APPEARANCE).door);
         assertEquals(PAGES + "X11DisplayPreferencesFragment",
             SettingsTree.sectionPage(SettingsTree.Section.LINUX_APPS).className);
