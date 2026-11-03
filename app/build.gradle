@@ -165,8 +165,6 @@ android {
                 // about fourteen. A fresh worker every 150 classes lets them go.
                 forkEvery = 150
                 maxHeapSize = "2g"
-                // TEMP(test-heap): dump the worker's heap on OOM for analysis; revert before merge.
-                jvmArgs "-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=${rootProject.projectDir}/build/heap"
             }
         }
     }
