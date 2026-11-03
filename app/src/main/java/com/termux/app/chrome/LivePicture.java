@@ -135,7 +135,7 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
-        float r = mRadiusPx / SCALE;
+        float r = renderEffectRadius(mRadiusPx) / SCALE;
         RenderEffect effect = r > 0f
             ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
         if (mFilter != null) {
@@ -146,6 +146,29 @@ public final class LivePicture implements GlassPicture {
     }
 
     /** Lets the next pre-draw re-record whatever it finds. */
+    /**
+     * The {@code RenderEffect} blur radius, at full scale, that blurs as much as the stored frame
+     * does at {@code storedRadiusPx}, so switching Live on keeps the glass's strength. The stored
+     * frame blurs with RenderScript's intrinsic (sigma = 0.4 r + 0.6 at its downsample factor f,
+     * {@code WallpaperBlurRenderer}), so 0.4 r + 0.6 f full-scale; Skia reads a RenderEffect radius
+     * as sigma = 0.57735 r + 0.5, here on a 1/{@link #SCALE} node, so 0.57735 R + 0.5 SCALE.
+     * Pure.
+     */
+    static float renderEffectRadius(float storedRadiusPx) {
+        if (storedRadiusPx <= 0f) return 0f;
+        float f = Math.max(1f, (float) Math.ceil(storedRadiusPx / STORED_SCRIPT_CAP_PX));
+        float sigma = STORED_SIGMA_SLOPE * storedRadiusPx + STORED_SIGMA_BASE * f;
+        return Math.max(0f, (sigma - SKIA_SIGMA_BASE * SCALE) / SKIA_SIGMA_SLOPE);
+    }
+
+    /** RenderScript's intrinsic blur: sigma = 0.4 r + 0.6, radius capped at 25 px. */
+    static final float STORED_SIGMA_SLOPE = 0.4f;
+    static final float STORED_SIGMA_BASE = 0.6f;
+    static final float STORED_SCRIPT_CAP_PX = 25f;
+    /** Skia's radius to sigma: 0.57735 r + 0.5. */
+    static final float SKIA_SIGMA_SLOPE = 0.57735f;
+    static final float SKIA_SIGMA_BASE = 0.5f;
+
     void forgetRecording() {
         mRecordedBeneath.clear();
         mRecordedWidth = -1;
