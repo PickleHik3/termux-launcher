@@ -167,6 +167,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return 0f;
         }
 
+        /**
+         * The drawer engages ({@code true}) or has closed ({@code false}). While engaged the plane
+         * covers the chrome, so the bands under it keep the even-out they stand on: the dim and
+         * the glass moving over them asked for a whole chrome apply on the open's frames (pong:
+         * three of 22-34 ms). Released after the closed frame, with one pass where it rests.
+         */
+        default void holdChromeForDrawer(boolean hold) {}
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
@@ -467,6 +475,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // than snapping to an end.
         mGrabProgress = mProgress.value;
         mCloseTimeAnim = false;
+        if (!mEngaged) mHost.holdChromeForDrawer(true);
         mEngaged = true;
         // With the embedded keyboard the IME can never be up here; with the system keyboard it
         // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
@@ -502,6 +511,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mDragging = false;
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
+        if (!mEngaged) mHost.holdChromeForDrawer(true);
         mEngaged = true;
         t = DrawerOpenTrace.start();
         mHost.hideSystemKeyboard();
@@ -624,6 +634,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // downward flick launch the spring away from the target it was just told to reach.
         float sign = mDirection == AppDrawerCommitPolicy.Direction.CLOSING ? -1f : 1f;
         mProgress.vel = mTravelPx > 0f ? (velocityPxPerSec / mTravelPx) * sign : 0f;
+        if (!mEngaged) mHost.holdChromeForDrawer(true);
         mEngaged = true;
         kick();
     }
@@ -2430,6 +2441,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mStatusInsetStripView = null;
         } finally {
             mEngaged = false;
+            mHost.holdChromeForDrawer(false);
             mHost.flushPendingAccessoryGeometry();
             mHost.restoreSystemKeyboard();
         }

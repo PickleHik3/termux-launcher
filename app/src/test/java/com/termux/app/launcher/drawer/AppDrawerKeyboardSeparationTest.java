@@ -363,6 +363,28 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(0, (int) ReflectionHelpers.getField(controller, "mKeyboardOnOpenFramesToWait"));
     }
 
+    /**
+     * The chrome's ink is held from the moment the drawer engages until it has closed, once each
+     * way: the even-out of the bands under the plane books no chrome commit during the motion
+     * (pong: three whole applies of 22-34 ms inside one open).
+     */
+    @Test public void theChromeInkIsHeldForTheWholeEngagementOnceEachWay() {
+        ReflectionHelpers.callInstanceMethod(controller, "settle",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(float.class, 0f));
+        // A second settle while engaged (a re-open mid-close) holds nothing more.
+        ReflectionHelpers.callInstanceMethod(controller, "settle",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(float.class, 0f));
+        assertEquals(java.util.Collections.singletonList(true), host.chromeHolds);
+
+        ReflectionHelpers.callInstanceMethod(controller, "onClosed",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true),
+            ReflectionHelpers.ClassParameter.from(boolean.class, false));
+
+        assertEquals(java.util.Arrays.asList(true, false), host.chromeHolds);
+    }
+
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
