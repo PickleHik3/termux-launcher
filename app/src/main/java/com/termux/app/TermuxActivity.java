@@ -26838,7 +26838,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (MotionLog.enabled) {
                             MotionLog.log("inner-step", "page=TERMINAL steps=" + steps + " fromPx=" + fromPx);
                         }
-                        stepWindowFromWall(steps, fromPx);
+                        Trace.beginSection("Term.stepWindow");
+                        try {
+                            stepWindowFromWall(steps, fromPx);
+                        } finally {
+                            Trace.endSection();
+                        }
                     } else {
                         dropTerminalDepartureSnapshot();
                     }
@@ -32801,8 +32806,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A live neighbour was already drawn where the drag left it: no first draw to wait for.
         boolean live = isLiveWindowStep(steps);
         mCurrentWSession.current = target;
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
-        rebuildDrawerSessions();
+        // The release frame does only what the next frame draws: the window in front, posed,
+        // focused, its bar. The drawer, the wall's row, the overview and the window beyond the
+        // arriving one wait for the settle to end (or run now when there is none to wait for).
+        mPaneController.showWindowAfterStep(mCurrentWSession.currentWindow(), steps);
+        Runnable afterStep = new Runnable() {
+            private boolean mRan;
+            @Override public void run() {
+                if (mRan) return;
+                mRan = true;
+                android.os.Trace.beginSection("Term.afterWindowStep");
+                try {
+                    if (mPaneController != null) mPaneController.releaseHeldNeighbour();
+                    rebuildDrawerSessions();
+                } finally {
+                    android.os.Trace.endSection();
+                }
+            }
+        };
         View host = findViewById(R.id.terminal_surface_host);
         int width = host == null ? 0 : host.getWidth();
         float remaining = Math.abs(fromPx);
@@ -32812,7 +32833,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The window just shown lays out and draws for the first time on the next frame, which
         // can take as long as the whole step (#173): the step waits for that draw to start.
         animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining,
-            com.termux.app.wall.WallParallax.ADJACENT, !live);
+            com.termux.app.wall.WallParallax.ADJACENT, !live, afterStep);
     }
 
     /**
@@ -33022,6 +33043,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
                                         float travelPx, int fromWindow,
                                         boolean afterArrivalDraws) {
+        animateTerminalArrival(direction, horizontal, durationMs, travelPx, fromWindow,
+            afterArrivalDraws, null);
+    }
+
+    /**
+     * @param afterEnd run once the sideways arrival has come to rest, however it ends, or at
+     *                 once when there is no sideways travel to wait for
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx, int fromWindow,
+                                        boolean afterArrivalDraws, @Nullable Runnable afterEnd) {
+        Trace.beginSection("Term.windowArrival");
+        try {
+            doAnimateTerminalArrival(direction, horizontal, durationMs, travelPx, fromWindow,
+                afterArrivalDraws, afterEnd);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doAnimateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                          float travelPx, int fromWindow,
+                                          boolean afterArrivalDraws, @Nullable Runnable afterEnd) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         // Behind the display window in front, a terminal window's arrival is not on screen: the
@@ -33029,12 +33073,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()
                 || isDisplayWindowInFront()) {
             dropTerminalDepartureSnapshot();
+            if (afterEnd != null) afterEnd.run();
             return;
         }
         float viewport = horizontal ? surfaceHost.getWidth() : surfaceHost.getHeight();
         float travel = travelPx > 0f ? Math.min(travelPx, viewport) : viewport;
         if (travel <= 0f) {
             dropTerminalDepartureSnapshot();
+            if (afterEnd != null) afterEnd.run();
             return;
         }
         // The switch is a wall pan, not a nudge: the outgoing card and the incoming surface each
@@ -33068,14 +33114,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (horizontal) {
             // The pane host is the wall's terminal page and the wall owns where its pages sit, so
             // a sideways arrival is drawn by the wall; nothing else writes that position.
+            // The wall runs the nudge's end however it ends (a drag cutting it short too).
+            Runnable landed = afterEnd == null ? unclip : () -> {
+                unclip.run();
+                afterEnd.run();
+            };
             if (mPaneWallController != null) {
                 mPaneWallController.nudgeTerminalPage(offset, fromWindow, durationMs, settle,
-                    unclip, clock);
+                    landed, clock);
             } else {
-                unclip.run();
+                landed.run();
             }
             return;
         }
+        // A vertical arrival's end action is skipped on a cancel: nothing waits for it.
+        if (afterEnd != null) afterEnd.run();
         paneHost.setTranslationY(offset);
         // Built when the gate opens, not before: a property animator starts itself on the next
         // frame once a property is set.
