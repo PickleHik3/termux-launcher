@@ -786,6 +786,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LIVE_BLUR}. The switch alone; whether it takes effect is the chrome's call. */
+    public boolean isLiveBlurEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LIVE_BLUR, TERMUX_APP.DEFAULT_VALUE_LIVE_BLUR);
+    }
+
+    public void setLiveBlurEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */
     public int getFancierGlassBendDp() {
         return lookGrid().value(LookGrid.Property.DEPTH, null, LookGrid.NO_PAGE);
