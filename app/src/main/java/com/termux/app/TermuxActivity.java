@@ -13089,12 +13089,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void runAccessoryGeometryPass(@NonNull GeometryScheduler.Reason reason) {
         // Named by its reason, so a trace counts the passes a transition cost and says why.
         Trace.beginSection("Accessory.geometry." + reason.name());
-        long tPass = com.termux.app.launcher.drawer.DrawerOpenTrace.start();
         try {
             doRunAccessoryGeometryPass();
         } finally {
-            com.termux.app.launcher.drawer.DrawerOpenTrace.end(
-                "activity.accessoryGeometryPass " + reason.name(), tPass);
             Trace.endSection();
         }
     }
@@ -21324,18 +21321,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             } else if (!wasUp) {
-                long tRaise = com.termux.app.launcher.drawer.DrawerOpenTrace.start();
                 raiseDisplayFrameKeyboard();
-                com.termux.app.launcher.drawer.DrawerOpenTrace.end("activity.raiseKeyboard", tRaise);
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             }
             // Raised after the pull, the keyboard was not among the bands the drawer measured;
             // it measures them again so the reveal can bring it up through the plane.
-            long tRaised = com.termux.app.launcher.drawer.DrawerOpenTrace.start();
             if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
-            com.termux.app.launcher.drawer.DrawerOpenTrace.end(
-                "activity.onBuiltInKeyboardRaised wasUp=" + wasUp, tRaised);
             return;
         }
         onSystemImeRequested();
@@ -26655,10 +26647,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
     private void openAppDrawerFromHome() {
         PlaceLayout.Edge edge = arrangement().appsEdge();
-        long tOpen = com.termux.app.launcher.drawer.DrawerOpenTrace.start();
         getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
             AppDrawerPullGeometry.seedFor(edge));
-        com.termux.app.launcher.drawer.DrawerOpenTrace.end("activity.openAppDrawerFromHome", tOpen);
     }
 
     /**
