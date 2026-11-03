@@ -8,7 +8,10 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.color.utilities.ColorUtils;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -85,6 +88,14 @@ public final class GlassBackdropCache {
          * moves.
          */
         KEYBOARD,
+        /**
+         * A Home widget's card, one rect per widget like {@link #TERMINAL_PANE}. Its inks are the
+         * card's own roles on the page's ink polarity, so the widget takes that polarity and
+         * answers with a veil of its card's colour; it casts no vote of its own, since the card's
+         * light or dark follows the polarity it would be voting on. Memoised per rect by
+         * {@code ChromeInk}.
+         */
+        WIDGET,
     }
 
     /** Reads the pixels behind a band. Implemented by the chrome renderer, faked in tests. */
@@ -111,6 +122,16 @@ public final class GlassBackdropCache {
         @ColorInt
         default int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
             return sampleWallpaper(screenRect);
+        }
+
+        /**
+         * The lightness statistics of the wallpaper under {@code screenRect} ({@link Lightness}),
+         * read before the frost filter, which is what the even-out stage maps; null when nothing
+         * can be read or the sampler keeps no statistics. Never throws.
+         */
+        @Nullable
+        default Lightness sampleLightness(@NonNull Rect screenRect) {
+            return null;
         }
     }
 
@@ -224,6 +245,13 @@ public final class GlassBackdropCache {
         if (mSampler == null || rect.isEmpty()) return UNREADABLE;
         int read = mSampler.sampleWallpaper(rect);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
+    }
+
+    /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
+    @Nullable
+    public Lightness sampleLightnessUncached(@NonNull Rect rect) {
+        if (mSampler == null || rect.isEmpty()) return null;
+        return mSampler.sampleLightness(rect);
     }
 
     /**
@@ -434,12 +462,71 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public static int sampleBitmapRegion(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        if (bitmap == null || bitmap.isRecycled()) return UNREADABLE;
+        int[] pixels = readGrid(bitmap, region);
+        if (pixels == null) return UNREADABLE;
+        return averageColor(pixels, 0, pixels.length);
+    }
+
+    /**
+     * The lightness of a band as the even-out stage needs it: the 2nd and 98th percentile and the
+     * mean of the pixels' HCT tone (CIE L*), and the mean colour. Read on the same grid, with the
+     * same clamping, as {@link #sampleBitmapRegion}; null where that gives {@link #UNREADABLE}.
+     */
+    @Nullable
+    public static Lightness sampleBitmapLightness(@Nullable Bitmap bitmap, @NonNull Rect region) {
+        int[] pixels = readGrid(bitmap, region);
+        if (pixels == null) return null;
+        int mean = averageColor(pixels, 0, pixels.length);
+        if (mean == UNREADABLE) return null;
+        double[] tones = new double[pixels.length];
+        int seen = 0;
+        double sum = 0d;
+        for (int pixel : pixels) {
+            if (Color.alpha(pixel) == 0) continue;
+            double tone = ColorUtils.lstarFromArgb(pixel);
+            tones[seen++] = tone;
+            sum += tone;
+        }
+        Arrays.sort(tones, 0, seen);
+        return new Lightness(percentile(tones, seen, 0.02d), sum / seen,
+            percentile(tones, seen, 0.98d), mean);
+    }
+
+    private static double percentile(@NonNull double[] sorted, int count, double fraction) {
+        double position = fraction * (count - 1);
+        int low = (int) Math.floor(position);
+        int high = Math.min(count - 1, low + 1);
+        return sorted[low] + (sorted[high] - sorted[low]) * (position - low);
+    }
+
+    /**
+     * A band's wallpaper lightness: the tail percentiles rather than the min and max, so one
+     * specular pixel does not set the range the even-out stage compresses.
+     */
+    public static final class Lightness {
+        public final double p2;
+        public final double mean;
+        public final double p98;
+        /** The mean colour, whose hue and chroma the even-out stage keeps. */
+        @ColorInt public final int meanColor;
+
+        public Lightness(double p2, double mean, double p98, @ColorInt int meanColor) {
+            this.p2 = p2;
+            this.mean = mean;
+            this.p98 = p98;
+            this.meanColor = meanColor;
+        }
+    }
+
+    /** The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region. */
+    @Nullable
+    private static int[] readGrid(@Nullable Bitmap bitmap, @NonNull Rect region) {
+        if (bitmap == null || bitmap.isRecycled()) return null;
         int left = Math.max(0, region.left);
         int top = Math.max(0, region.top);
         int right = Math.min(bitmap.getWidth(), region.right);
         int bottom = Math.min(bitmap.getHeight(), region.bottom);
-        if (right <= left || bottom <= top) return UNREADABLE;
+        if (right <= left || bottom <= top) return null;
         int columns = Math.min(SAMPLE_GRID, right - left);
         int rows = Math.min(SAMPLE_GRID, bottom - top);
         int[] pixels = new int[columns * rows];
@@ -453,6 +540,6 @@ public final class GlassBackdropCache {
                 pixels[index++] = bitmap.getPixel(x, y);
             }
         }
-        return averageColor(pixels, 0, pixels.length);
+        return pixels;
     }
 }

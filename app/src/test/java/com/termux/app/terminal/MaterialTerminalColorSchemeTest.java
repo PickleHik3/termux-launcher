@@ -9,6 +9,7 @@ import android.view.ContextThemeWrapper;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.google.android.material.color.utilities.Hct;
+import com.termux.app.chrome.ChromeInk;
 import com.termux.app.theme.LauncherThemeTokens;
 import com.termux.app.theme.templates.PaletteSet;
 import com.termux.app.theme.SchemeColors;
@@ -439,20 +440,24 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
-    /** Normal slots sit one tone band below bright, and both bands flip with the background. */
+    /**
+     * Normal slots sit one tone band below bright, and both bands flip with the background. The
+     * dark normal band is 55, not 80, and ANSI white 88, not 80: red and blue must read on white
+     * at 3:1 and on the dark background at the level's ratio, which leaves only that band.
+     */
     @Test
     public void toneBandsFollowTheBackgroundMode() {
         Properties dark = slots(220d, 40d, true);
         Properties light = slots(220d, 40d, false);
         for (int i = 1; i <= 6; i++) {
-            assertEquals("dark normal " + i, 80d, tone(dark, "color" + i), 1d);
+            assertEquals("dark normal " + i, 55d, tone(dark, "color" + i), 1d);
             assertEquals("dark bright " + i, 90d, tone(dark, "color" + (i + 8)), 1d);
             assertEquals("light normal " + i, 40d, tone(light, "color" + i), 1d);
             assertEquals("light bright " + i, 30d, tone(light, "color" + (i + 8)), 1d);
         }
         assertEquals(25d, tone(dark, "color0"), 1d);
         assertEquals(45d, tone(dark, "color8"), 1d);
-        assertEquals(80d, tone(dark, "color7"), 1d);
+        assertEquals(88d, tone(dark, "color7"), 1d);
         assertEquals(96d, tone(dark, "color15"), 1d);
         assertEquals(25d, tone(light, "color0"), 1d);
         assertEquals(50d, tone(light, "color8"), 1d);
@@ -524,7 +529,7 @@ public class MaterialTerminalColorSchemeTest {
             Properties palette = slots(220d, 40d, dark);
             assertEquals(25d, tone(palette, "color0"), 1d);
             assertEquals(dark ? 45d : 50d, tone(palette, "color8"), 1d);
-            assertEquals(dark ? 80d : 75d, tone(palette, "color7"), 1d);
+            assertEquals(dark ? 88d : 75d, tone(palette, "color7"), 1d);
             assertEquals(dark ? 96d : 92d, tone(palette, "color15"), 1d);
             for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
                 // Wide, deliberately: at neutral chroma the sRGB round trip moves a hue by a few
@@ -679,7 +684,8 @@ public class MaterialTerminalColorSchemeTest {
             // Bright white is a fill too: a text floor on it is what made it the darkest neutral.
             assertEquals("color15 at " + level.value, 0d,
                 MaterialTerminalColorScheme.ansiFloor(15, level), 0d);
-            assertEquals("color8 at " + level.value, 3.0d,
+            // Dim text takes the level's own ratio (TerminalContrastGreyTest holds the effect).
+            assertEquals("color8 at " + level.value, level.dimRatio,
                 MaterialTerminalColorScheme.ansiFloor(8, level), 0d);
             for (int slot : new int[] {1, 6, 9, 14}) {
                 assertEquals("color" + slot + " at " + level.value, level.ansiRatio,
@@ -847,6 +853,34 @@ public class MaterialTerminalColorSchemeTest {
             harder > 6.0d && harder < black);
     }
 
+    /**
+     * With the Debugging switch off the glass floors do not apply: a glass ground is held to
+     * today's floors (the only safe ones on an unbounded mean ground), and the palette differs
+     * from the one the switch-on build solves for the same ground.
+     */
+    @Test
+    public void withTheSwitchOffTheGlassFloorsDoNotApply() {
+        boolean changed = false;
+        try {
+            for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                MaterialTerminalColorScheme.setGlassFloors(true);
+                Properties on = MaterialTerminalColorScheme.build(PONG, level, DUSK, null);
+                MaterialTerminalColorScheme.setGlassFloors(false);
+                Properties off = MaterialTerminalColorScheme.build(PONG, level, DUSK, null);
+                for (int i = 0; i < 16; i++) {
+                    assertTrue("ANSI " + i + " at " + level.value + " off",
+                        ratio(color(off, "color" + i), DUSK) + .01
+                            >= LegibilityPairs.backgroundFloor(i, level, color(off, "color7"),
+                                DUSK));
+                }
+                changed |= !on.equals(off);
+            }
+        } finally {
+            MaterialTerminalColorScheme.setGlassFloors(true);
+        }
+        assertTrue("the switch changes the palette at some level", changed);
+    }
+
     /** (c) A dark wallpaper keeps the theme's pale ink, and every level still meets its target. */
     @Test
     public void aDarkGroundKeepsPaleInkAndMeetsTheLevel() {
@@ -860,9 +894,13 @@ public class MaterialTerminalColorSchemeTest {
             assertTrue(level.value + " is more legible than the level below", body > previous);
             previous = body;
             for (int i = 0; i < 16; i++) {
+                // Red and blue answer to the panel first (ADR 0014): on Harder over this ground
+                // their floor is what still leaves 3:1 on ANSI white.
                 assertTrue("ANSI " + i + " at " + level.value,
                     ratio(color(palette, "color" + i), DUSK) + .01
-                        >= MaterialTerminalColorScheme.ansiFloor(i, level));
+                        >= Math.min(LegibilityPairs.backgroundFloor(i, level, true),
+                            LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
+                                DUSK)));
             }
         }
     }
@@ -1101,5 +1139,54 @@ public class MaterialTerminalColorSchemeTest {
 
     private static int color(Properties properties, String key) {
         return Color.parseColor(properties.getProperty(key));
+    }
+    /**
+     * Harder on the wallpaper of the 2026-10-29 recording, where neither ink reads at 7:1: judged
+     * on the worst end for the ink it wears, the palette sends the ink to the other side on either
+     * end, and the band, re-measuring for the new ink, moves the worst end with it, so the two
+     * flipped each other on every pass. The pane band's verdict is now worn as decided: the palette
+     * keeps it on the end that argues against it, and only an undecided build still judges the
+     * ground.
+     */
+    @Test
+    public void aDecidedInkHoldsOnTheBandEndThatArguesAgainstIt() {
+        int brightEnd = 0xFF2D91FF;
+        int darkEnd = 0xFF0B3B8C;
+        double target = TerminalContrastLevel.HARDER.bodyTarget;
+        // The loop, as the judgement alone sees it: each end hands the ink to the other side.
+        assertSame(ChromeInk.Polarity.DARK_INK, MaterialTerminalColorScheme.inkPolarity(
+            brightEnd, target, ChromeInk.Polarity.PALE_INK));
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.inkPolarity(
+            darkEnd, target, ChromeInk.Polarity.DARK_INK));
+        // Decided by the band, the ink stays put on either end.
+        assertSame(ChromeInk.Polarity.DARK_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                ChromeInk.Polarity.DARK_INK, true)));
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, brightEnd,
+                ChromeInk.Polarity.PALE_INK, true)));
+        // Undecided, the ground still has the say.
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                ChromeInk.Polarity.DARK_INK, false)));
+        // A null ink is never "decided": the ground answers.
+        assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(
+            MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.HARDER, darkEnd,
+                null, true)));
+    }
+
+    /** The decided ink is part of the fingerprint, so a verdict that moves rebuilds the palette. */
+    @Test
+    public void theSignatureFollowsTheDecidedInk() {
+        Context context = ApplicationProvider.getApplicationContext();
+        int darkEnd = 0xFF0B3B8C;
+        int decidedDark = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.DARK_INK, true);
+        int decidedPale = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.PALE_INK, true);
+        int judged = MaterialTerminalColorScheme.signature(context,
+            TerminalContrastLevel.HARDER, darkEnd, ChromeInk.Polarity.DARK_INK, false);
+        assertNotEquals(decidedDark, decidedPale);
+        assertEquals("judged on the dark end, the ink is pale", decidedPale, judged);
     }
 }

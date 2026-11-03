@@ -252,4 +252,82 @@ public class AzTabPolicyTest {
         assertArrayEquals(new float[] {0f, 19.5f},
             AzTabPolicy.slideOffset(Edge.BOTTOM, 0.5f, travel), 1e-4f);
     }
+
+    /** The pane's text inside {@link #CANVAS}: 10dp in at each side, 12dp at the top and bottom. */
+    private static final AzTabPolicy.Box TEXT =
+        new AzTabPolicy.Box(18f * D, 72f * D, 382f * D, 628f * D);
+
+    @Test
+    public void theTabRestsInOnePlaceWhicheverWayTheCanvasReaches() {
+        // On the Workspace the canvas reaches 30dp up under the bar while the wall moves and comes
+        // back down at rest; the pane, and so its text, stays where it is either way.
+        AzTabPolicy.Box reaching = new AzTabPolicy.Box(CANVAS.left, CANVAS.top - 30f * D,
+            CANVAS.right, CANVAS.bottom);
+        for (Edge edge : Edge.values()) {
+            for (boolean rtl : new boolean[] {false, true}) {
+                AzTabPolicy.Placement atRest = AzTabPolicy.placeOnScreen(edge, rtl, CANVAS, TEXT,
+                    SCREEN_W, D);
+                AzTabPolicy.Placement afterReach = AzTabPolicy.placeOnScreen(edge, rtl, reaching,
+                    TEXT, SCREEN_W, D);
+                assertEquals(edge + " rtl=" + rtl, atRest.touch, afterReach.touch);
+                assertEquals(edge + " rtl=" + rtl, atRest.visual, afterReach.visual);
+            }
+        }
+        // Led from the canvas, as before, the two reaches rested the tab at two heights.
+        AzTabPolicy.Placement oldAtRest = AzTabPolicy.placeOnScreen(Edge.RIGHT, false, CANVAS,
+            SCREEN_W, D);
+        AzTabPolicy.Placement oldReaching = AzTabPolicy.placeOnScreen(Edge.RIGHT, false, reaching,
+            SCREEN_W, D);
+        assertEquals(30f * D, oldAtRest.touch.top - oldReaching.touch.top, 1e-3f);
+    }
+
+    @Test
+    public void theTabLeadsFromThePanesTextAtTheIndexsOwnEnd() {
+        AzTabPolicy.Placement right = AzTabPolicy.placeOnScreen(Edge.RIGHT, false, CANVAS, TEXT,
+            SCREEN_W, D);
+        assertEquals(TEXT.top + AzTabPolicy.leadInPx(D), right.touch.top, 0f);
+        AzTabPolicy.Placement bottom = AzTabPolicy.placeOnScreen(Edge.BOTTOM, false, CANVAS, TEXT,
+            SCREEN_W, D);
+        assertEquals(TEXT.bottom - AzTabPolicy.leadInPx(D), bottom.touch.bottom, 0f);
+    }
+
+    @Test
+    public void theTabStandsInThePanesMarginBesideEveryRow() {
+        // The emulator's Workspace (10-26): 2.625 density, the canvas 24px in from each side, the
+        // text 46px in. The 20dp half-pill reached 52.5px in and covered the prompt's "~".
+        float d = 2.625f;
+        float screenW = 1080f;
+        AzTabPolicy.Box canvas = new AzTabPolicy.Box(24f, 220f, screenW - 24f, 1440f);
+        AzTabPolicy.Box text = new AzTabPolicy.Box(46f, 250f, screenW - 46f, 1410f);
+        assertTrue("reproduction: the old tab reaches over the text",
+            AzTabPolicy.placeOnScreen(Edge.BOTTOM, false, canvas, screenW, d).visual.right
+                > text.left);
+        for (Edge edge : Edge.values()) {
+            for (boolean rtl : new boolean[] {false, true}) {
+                AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(edge, rtl, canvas, text,
+                    screenW, d);
+                String what = edge + " rtl=" + rtl;
+                if (tab.side == Edge.LEFT) {
+                    assertEquals(what, text.left - AzTabPolicy.TEXT_AIR_DP * d, tab.visual.right,
+                        1e-3f);
+                } else {
+                    assertEquals(what, text.right + AzTabPolicy.TEXT_AIR_DP * d, tab.visual.left,
+                        1e-3f);
+                }
+                assertEquals("the touch stays a full target", AzTabPolicy.TOUCH_THICKNESS_DP * d,
+                    tab.touch.width(), 1e-3f);
+            }
+        }
+    }
+
+    @Test
+    public void aMarginTabKeepsALegibleFloorAndNeverPassesTheFullTab() {
+        AzTabPolicy.Box tight = new AzTabPolicy.Box(4f * D, 72f * D, SCREEN_W - 4f * D, 628f * D);
+        assertEquals(AzTabPolicy.TOP_TAB_MIN_THICKNESS_DP * D,
+            AzTabPolicy.marginThicknessPx(Edge.LEFT, tight, SCREEN_W, D), 1e-3f);
+        AzTabPolicy.Box roomy = new AzTabPolicy.Box(40f * D, 72f * D, SCREEN_W - 40f * D,
+            628f * D);
+        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D,
+            AzTabPolicy.marginThicknessPx(Edge.RIGHT, roomy, SCREEN_W, D), 1e-3f);
+    }
 }

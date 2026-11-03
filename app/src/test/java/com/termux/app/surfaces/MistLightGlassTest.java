@@ -14,6 +14,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -38,6 +39,10 @@ import java.util.Map;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class MistLightGlassTest {
 
+    /** A Look names Base's opacity by its grid key (ADR 0017, W4b), not the preference key. */
+    private static final String OPACITY_KEY =
+        SurfacePresets.cellKey(null, SurfaceProperty.OPACITY);
+
     private TermuxAppSharedPreferences preferences;
 
     @Before
@@ -47,6 +52,7 @@ public class MistLightGlassTest {
             context.getSharedPreferences("mist-light-glass-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     @NonNull
@@ -70,20 +76,20 @@ public class MistLightGlassTest {
 
     @Test
     public void mistIs35OnLightGlassAnd60OnDarkAndNothingElseMoves() {
-        assertEquals(60, mist(false).values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
-        assertEquals(35, mist(true).values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(60, mist(false).values.get(OPACITY_KEY));
+        assertEquals(35, mist(true).values.get(OPACITY_KEY));
         assertEquals(35, SurfacePresets.MIST_LIGHT_OPACITY);
         Map<String, Object> dark = mist(false).values;
         Map<String, Object> light = mist(true).values;
         assertEquals("the same keys, in the same order",
             new java.util.ArrayList<>(dark.keySet()), new java.util.ArrayList<>(light.keySet()));
         for (Map.Entry<String, Object> entry : dark.entrySet()) {
-            if (TERMUX_APP.KEY_SURFACE_BASE_OPACITY.equals(entry.getKey())) continue;
+            if (OPACITY_KEY.equals(entry.getKey())) continue;
             assertEquals(entry.getKey(), entry.getValue(), light.get(entry.getKey()));
         }
-        assertEquals("Mist's Glass is 75 on either glass",
-            GlassControls.blurForGlass(GlassControls.MIST),
-            light.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals("Mist's Frost is the Mist stop on either glass",
+            FrostStops.nearestStopByBlur(GlassControls.blurForGlass(GlassControls.MIST)),
+            light.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, light.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         List<SurfacePresets.Preset> darkLooks = SurfacePresets.presets(false);
         List<SurfacePresets.Preset> lightLooks = SurfacePresets.presets(true);
@@ -164,7 +170,7 @@ public class MistLightGlassTest {
             preferences.getSurfaceCustomPreset());
         SurfacePresets.Preset saved = SurfacePresets.custom(preferences);
         assertNotNull(saved);
-        assertEquals(60, saved.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(60, saved.values.get(OPACITY_KEY));
     }
 
     /** The other Looks are the same on either glass, so a flip leaves them where they are. */
@@ -178,5 +184,11 @@ public class MistLightGlassTest {
             assertEquals(look.id, before, opacity());
             assertEquals(look.id, matchedId());
         }
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

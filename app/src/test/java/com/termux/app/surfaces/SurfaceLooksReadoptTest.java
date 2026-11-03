@@ -35,6 +35,7 @@ public class SurfaceLooksReadoptTest {
         store = context.getSharedPreferences("surface-looks-readopt-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -221,5 +222,11 @@ public class SurfaceLooksReadoptTest {
         SurfacePresets.readoptMovedLooks(preferences);
 
         assertEquals(before, looks());
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

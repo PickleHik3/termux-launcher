@@ -3,6 +3,9 @@ package com.termux.app.layouteditor;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.Dress;
+import com.termux.app.chrome.DressResolver;
+import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.place.Element;
@@ -15,7 +18,9 @@ import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One Layout editor session, as decisions rather than views: which orientation the layout canvas is
@@ -34,15 +39,19 @@ import java.util.List;
  * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
  * dirty check see every one of them.
  *
- * <p>The layout is every place's (ADR 0003), so there is no place to pick and every write lands
- * everywhere. The session still knows which place it was opened over, because that is what the
- * layout canvas draws — Home's grid, the terminal's text, the display's screen — and what decides
- * the handles worth offering: the grid's only on Home.
+ * <p>One layout dresses both halves (ADR 0009), so a write there lands on every window and on
+ * Home. Only while Home holds a Home layout does a Home page wear one of its own: the session
+ * edits the layout of the page it stands on, as its dress says, and the Home filter ({@link
+ * #showHome}) moves it between a Home page and its window, each layout's arrangement at entry
+ * kept for Undo. The session knows which place it is on, because that is what the layout
+ * canvas draws — Home's grid, the terminal's text, the display's screen — and what decides the
+ * handles worth offering: the grid's only on Home. Which elements the tray and a drop offer, and
+ * whether the dock's design is picked here, are the edited layout's page's {@link Dress}.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
- * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
- * The canvas stands in the editor's frame at its full size (spec §3.5), so there is no sheet or
- * layout canvas to size here any more.
+ * {@link LayoutEditorController} is the wiring under the Appearance editor's cards. The shrunken
+ * Layout mode that drew this on a canvas is retired (editor-redesign §1); the session now always
+ * shows the phone's orientation, and {@link #showOrientation} is left for the policy tests.
  */
 public final class LayoutEditorPlan {
 
@@ -56,72 +65,192 @@ public final class LayoutEditorPlan {
         LIVE
     }
 
-    /** The store pinned to the variant being edited, so nothing here can reach the other one. */
-    @NonNull private final PlaceLayoutStore mPlaces;
-    @NonNull private final LayoutVariant mVariant;
+    /** The store every variant is reached through. */
+    @NonNull private final PlaceLayoutStore mRoot;
+    /**
+     * The store pinned to the variant being edited, so nothing here can reach another one. The
+     * Home filter ({@link #showHome}) is the only thing that moves it.
+     */
+    @NonNull private PlaceLayoutStore mPlaces;
+    @NonNull private LayoutVariant mVariant;
+    /** What a page wears: the layout the session edits there, and the elements it offers. */
+    @NonNull private final DressResolver mDresses;
+    /**
+     * The page whose layout is being edited, so whose {@link Dress} says what is offered: the page
+     * the session opened on, until the Home filter moves it. A second door ({@link #showPlace})
+     * moves the picture and leaves it.
+     */
+    @NonNull private PaneWallPage mDressedPage;
     /** The place the layout canvas draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
-    /** The arrangement as the editor found it; what Discard and ↺ put back. */
-    @NonNull private final PlaceArrangeSnapshot mEntry;
-    @NonNull private final String mEntrySignature;
+    /**
+     * The window the Home filter hands back to when it is turned off: the window the editor was
+     * opened over, or the terminal when it was opened over Home.
+     */
+    @NonNull private PaneWallPage mWindowPlace;
+    /**
+     * The arrangement of every variant as the editor found it; what Discard and ↺ put back. All
+     * the session may touch are taken at open (never the Minimal layout from a normal-mode
+     * session, nor the normal one from a Minimal-mode session), the one the session opened on
+     * first: a card writes the layout
+     * the half on screen wears, and a write must never land on a layout the session has no entry
+     * for, or Discard would leave it behind. A carried session keeps the entries it brought; the
+     * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
+     * the other ({@link #enterVariant}).
+     */
+    @NonNull private final Map<LayoutVariant, PlaceArrangeSnapshot> mEntries =
+        new java.util.LinkedHashMap<>();
+    @NonNull private final Map<LayoutVariant, String> mEntrySignatures =
+        new java.util.LinkedHashMap<>();
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
+    /**
+     * Every page the session has dressed, by id, and whether it held a page layout when the
+     * session first reached it: the flags Discard puts back too (ADR 0015 §3).
+     */
 
-    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull LayoutVariant variant,
-                             @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation,
-                             @Nullable PlaceArrangeSnapshot carriedEntry) {
+    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+                             @NonNull PlaceOrientation deviceOrientation,
+                             @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
+        mRoot = places;
+        mDresses = DressResolver.of(places);
+        mDressedPage = place;
+        LayoutVariant variant = dress().layout();
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
+        mWindowPlace = place == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
         mShownOrientation = deviceOrientation;
-        // A session carried over an activity relaunch keeps the arrangement it opened on, as
-        // long as it was taken of the layout being edited now.
-        mEntry = carriedEntry != null && carriedEntry.variant() == variant ? carriedEntry
-            : PlaceArrangeSnapshot.capture(mPlaces, variant);
-        mEntrySignature = mEntry.signature();
+        // A session carried over an activity relaunch keeps the arrangements it opened on, every
+        // variant it had reached; the one being edited now is taken fresh if it had not.
+        if (carriedEntries != null) {
+            for (PlaceArrangeSnapshot entry : carriedEntries)
+                keepEntry(entry);
+        }
+        enterVariant(variant);
+        enterVariant(dockLayout());
+        // What the session may touch: the layout the page wears and the Workspace layout the
+        // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
+        // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
+        // remembered so Discard puts it back (ADR 0015 §3).
+        LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
+        enterVariant(workspace);
     }
 
     /**
-     * Opens a session over one place, showing the orientation the phone is in, on the layout the
-     * launcher is standing in: the minimal one while minimal mode is on.
+     * The view the dock's keys are read and written through: Home's on every Home page, whether it
+     * wears a page layout of its own or the shared one the Terminal shares (ADR 0018 section 4),
+     * else the edited layout's. Both sides read the dock through {@link DressResolver#dockLayoutOf}.
+     */
+    @NonNull
+    private PlaceLayoutStore dockPlaces() {
+        return mRoot.forVariant(dockLayout());
+    }
+
+    @NonNull
+    private LayoutVariant dockLayout() {
+        // A layout's dock is its own; Home pages wear Home's layout (ADR 0020 §1).
+        return mVariant;
+    }
+
+
+    // ------------------------------------------------------------------ the layout it edits
+
+    /**
+     * The layout this session edits, by the kind of page it was opened on (ADR 0020 §9):
+     * Terminal-minimal while minimal mode dresses a window.
+     */
+    @NonNull
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        return mVariant.layoutKind();
+    }
+
+    /** The editor's title: "Home layout", "Terminal layout", ... */
+    @NonNull
+    public String layoutTitle() {
+        return layoutKind().title;
+    }
+
+    /** The page being dressed, by id; -1 where the launcher has not named it. */
+    public int pageId() {
+        return mRoot.shownPageId(mDressedPage);
+    }
+
+    /** The kind of the page being dressed. */
+    @NonNull
+    public com.termux.app.wall.WallPages.PageKind pageKind() {
+        return DressResolver.kindOf(mDressedPage);
+    }
+
+
+
+
+
+    private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
+        mEntries.put(entry.variant(), entry);
+        mEntrySignatures.put(entry.variant(), entry.signature());
+    }
+
+    /**
+     * Takes the variant's arrangement as it stands, the first time the session reaches it. Its
+     * sizes may already have been edited through a layout it shares them with (the Home and
+     * normal layouts, {@link PlaceLayoutStore#sizesLinked}), so those come from that layout's
+     * entry: both entries then hold the sizes as the session found them.
+     */
+    private void enterVariant(@NonNull LayoutVariant variant) {
+        if (mEntries.containsKey(variant))
+            return;
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(mRoot, variant);
+        for (PlaceArrangeSnapshot kept : mEntries.values()) {
+            if (PlaceLayoutStore.sizesLinked(variant, kept.variant())) {
+                entry = entry.withSizesOf(kept);
+                break;
+            }
+        }
+        keepEntry(entry);
+    }
+
+    /**
+     * Opens a session over one page, showing the orientation the phone is in, on the layout that
+     * page is arranged by: the Home layout on a Home page, and on a window the Workspace layout
+     * the launcher is standing in, the minimal one while minimal mode is on.
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return enter(places, places.activeVariant(), place, deviceOrientation);
-    }
-
-    /** Opens a session over one variant of the layout. */
-    @NonNull
-    public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
-                                         @NonNull LayoutVariant variant,
-                                         @NonNull PaneWallPage place,
-                                         @NonNull PlaceOrientation deviceOrientation) {
-        return new LayoutEditorPlan(places, variant, place, deviceOrientation, null);
+        return new LayoutEditorPlan(places, place, deviceOrientation, null);
     }
 
     /**
      * {@link #enter(PlaceLayoutStore, PaneWallPage, PlaceOrientation)} continuing a session whose
-     * arrangement at open was {@code carriedEntry} (an activity relaunch), so its Undo and its
-     * unsaved state are the same; a snapshot of another layout variant is ignored.
+     * arrangements at open were {@code carriedEntries} (an activity relaunch), so its Undo and its
+     * unsaved state are the same, for every variant it had reached.
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation,
-                                         @Nullable PlaceArrangeSnapshot carriedEntry) {
-        return new LayoutEditorPlan(places, places.activeVariant(), place, deviceOrientation,
-            carriedEntry);
+                                         @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
+        return new LayoutEditorPlan(places, place, deviceOrientation, carriedEntries);
     }
 
-    /** The arrangement as the editor found it, to carry the session over a relaunch. */
+    /** What the page whose layout is being edited wears, as the store stands now. */
     @NonNull
-    public PlaceArrangeSnapshot entry() {
-        return mEntry;
+    private Dress dress() {
+        return mDresses.dressOf(mDressedPage);
+    }
+
+    /**
+     * The arrangements as the editor found them, every variant the session has reached, to carry
+     * the session over a relaunch.
+     */
+    @NonNull
+    public List<PlaceArrangeSnapshot> entries() {
+        return new ArrayList<>(mEntries.values());
     }
 
     /** Which layout the session is editing, which the card says so it is never a surprise. */
@@ -152,10 +281,14 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
-    /** The arrangement the layout canvas draws: the shown orientation's, resolved. */
+    /**
+     * The arrangement the layout canvas draws: the shown orientation's, resolved as the edited
+     * layout's page wears it, so a Home page on the shared layout is drawn without the extra keys
+     * and with its own keyboard element.
+     */
     @NonNull
     public PlaceLayout shownLayout() {
-        return mPlaces.resolve(mShownOrientation);
+        return mRoot.resolve(mShownOrientation, mVariant, mDressedPage);
     }
 
     // ------------------------------------------------------------------------ what a handle does
@@ -168,7 +301,7 @@ public final class LayoutEditorPlan {
 
     /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
     public float dockHeightScale() {
-        return mPlaces.dockHeightScale(mShownOrientation);
+        return dockPlaces().dockHeightScale(mShownOrientation);
     }
 
     /** The keyboard's height in the shown orientation, as a multiple of its unscaled height. */
@@ -189,7 +322,7 @@ public final class LayoutEditorPlan {
     /** The dock's handle dragged. */
     @NonNull
     public Drop setDockHeightScale(float scale) {
-        mPlaces.setDockHeightScale(mShownOrientation, scale);
+        dockPlaces().setDockHeightScale(mShownOrientation, scale);
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
@@ -205,6 +338,36 @@ public final class LayoutEditorPlan {
     public Drop setKeyboardChinDp(int dp) {
         mPlaces.setKeyboardChinDp(mShownOrientation, dp);
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /**
+     * Whether the edited layout's dock wears the Wall strip, so the canvas draws its first row and
+     * the dock's selection carries the row's own handle.
+     */
+    public boolean showsWallStrip() {
+        return dockStyle() == DockStyle.WALL_STRIP;
+    }
+
+    /** The Wall strip's first row in the shown orientation, in dp. */
+    public int wallStripHeightDp() {
+        return mPlaces.wallStripHeightDp(mShownOrientation);
+    }
+
+    /** The Strip row's handle dragged: its height, for the edited layout's shown orientation. */
+    @NonNull
+    public Drop setWallStripHeightDp(int dp) {
+        mPlaces.setWallStripHeightDp(mShownOrientation, dp);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** Home's widget grid in the shown orientation: its columns. */
+    public int widgetColumns() {
+        return mPlaces.widgetColumns(mShownOrientation);
+    }
+
+    /** Home's widget grid in the shown orientation: its rows. */
+    public int widgetRows() {
+        return mPlaces.widgetRows(mShownOrientation);
     }
 
     /** Home's corner handle dragged: the grid in whole cells. */
@@ -229,14 +392,127 @@ public final class LayoutEditorPlan {
 
     /**
      * The keyboard dropped in the tray, or brought back out of it. One switch for both
-     * orientations and every place — the palette's Keyboard on/off — so the live place follows it
-     * whichever orientation the toggle shows.
+     * orientations and every window — the palette's Keyboard on/off — so the live place follows it
+     * whichever orientation the toggle shows. On a Home page it is always on instead, Home's own
+     * whichever layout Home wears: whether the keyboard is up is each half's, not the layout's.
      */
     @NonNull
     public Drop setKeyboardShown(boolean shown) {
-        if (mPlaces.isKeyboardShown() == shown)
+        boolean home = mDressedPage == PaneWallPage.WIDGETS;
+        if ((home ? mRoot.isHomeKeyboardAlwaysOn() : mPlaces.isKeyboardShown()) == shown)
             return Drop.NONE;
-        mPlaces.setKeyboardShown(shown);
+        if (home)
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+        else
+            mPlaces.setKeyboardShown(shown);
+        return Drop.LIVE;
+    }
+
+    // ------------------------------------------------- Customization › Layout (overhaul §2)
+
+    /**
+     * Shows or puts away {@code element} on {@code variant}'s layout, in both orientations,
+     * whichever page the session is on: Customization's whole-app list. The variant is entered
+     * first, so Undo, Discard and the unsaved question cover it as they cover the edited one.
+     */
+    @NonNull
+    public Drop setShownOnLayout(@NonNull LayoutVariant variant, @NonNull Element element,
+                                 boolean shown) {
+        enterVariant(variant);
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        boolean wrote = false;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            Slot slot = layout.slot(orientation, element);
+            if (slot.hidden == !shown)
+                continue;
+            layout.setSlot(orientation, element, slot.withHidden(!shown));
+            wrote = true;
+        }
+        return wrote ? Drop.LIVE : Drop.NONE;
+    }
+
+    /**
+     * The keyboard element on {@code variant}'s layout: Home's always-on on the Home layout, the
+     * keyboard switch elsewhere ({@link #setKeyboardShown}), entered first as above.
+     */
+    @NonNull
+    public Drop setKeyboardShownOnLayout(@NonNull LayoutVariant variant, boolean shown) {
+        enterVariant(variant);
+        if (variant.isHomeKind()) {
+            if (mRoot.isHomeKeyboardAlwaysOn() == shown)
+                return Drop.NONE;
+            mRoot.setHomeKeyboardAlwaysOn(shown);
+            return Drop.LIVE;
+        }
+        PlaceLayoutStore layout = mRoot.forVariant(variant);
+        if (layout.isKeyboardShown() == shown)
+            return Drop.NONE;
+        layout.setKeyboardShown(shown);
+        return Drop.LIVE;
+    }
+
+    // ------------------------------------------------------------------------ the Dock design
+
+    /**
+     * The edited layout's Dock design as picked, whether or not it is drawn yet: what the picker
+     * marks. The shared layout's while Home wears it, the Home layout's while Home holds one.
+     */
+    @NonNull
+    public DockStyle dockStyle() {
+        return dockPlaces().dockStyle();
+    }
+
+    /**
+     * A Dock design picked, for the edited layout. One value for both orientations, so the live
+     * dock follows it whichever orientation the toggle shows. Every layout holds one, Home's and
+     * the windows' alike (#93).
+     */
+    @NonNull
+    public Drop setDockStyle(@NonNull DockStyle style) {
+        // Only what the picker offers: the Prompt line is the Search field now (#96), the Taskbar
+        // the Drawer tile (#97).
+        if (!DockStyle.CHOICES.contains(style) || style == dockStyle())
+            return Drop.NONE;
+        dockPlaces().setDockStyle(style);
+        return Drop.LIVE;
+    }
+
+    // ------------------------------------------------------------------- the Search field
+
+    /** Whether the edited layout turns the Search field on: what the toggle shows. */
+    public boolean searchField() {
+        return dockPlaces().searchField();
+    }
+
+    /**
+     * The Search field turned on or off for the edited layout, both orientations, its design
+     * left as it is; the live dock grows or loses the field under its apps row.
+     */
+    @NonNull
+    public Drop setSearchField(boolean on) {
+        if (on == searchField())
+            return Drop.NONE;
+        dockPlaces().setSearchField(on);
+        return Drop.LIVE;
+    }
+
+    // -------------------------------------------------------------------- the Drawer tile
+
+    /** Whether the edited layout turns the Drawer tile on: what the toggle shows. */
+    public boolean drawerTile() {
+        return dockPlaces().drawerTile();
+    }
+
+    /**
+     * The Drawer tile turned on or off for the edited layout, both orientations, its design and
+     * the tile's place in the row left as they are; the live dock's row takes or gives back the
+     * tile's slot.
+     */
+    @NonNull
+    public Drop setDrawerTile(boolean on) {
+        if (on == drawerTile())
+            return Drop.NONE;
+        dockPlaces().setDrawerTile(on);
         return Drop.LIVE;
     }
 
@@ -260,7 +536,9 @@ public final class LayoutEditorPlan {
 
     /**
      * What the tray holds for the shown orientation, in the order it lists them: the bars the
-     * arrangement puts away, then the keyboard while it is switched off.
+     * arrangement puts away, then the keyboard while it is switched off. Only what the page whose
+     * layout is being edited wears: Home's tray never holds the status bar or the extra keys,
+     * and its keyboard chip, brought back, turns always on on.
      */
     @NonNull
     public List<TrayItem> trayItems() {
@@ -269,7 +547,8 @@ public final class LayoutEditorPlan {
         for (TrayItem item : TrayItem.values()) {
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
-            } else if (layout.slot(item.element).hidden) {
+            } else if (DressResolver.wornOn(mVariant, item.element)
+                    && layout.slot(item.element).hidden) {
                 items.add(item);
             }
         }
@@ -285,6 +564,10 @@ public final class LayoutEditorPlan {
     public Drop restore(@NonNull TrayItem item) {
         if (item.element == null)
             return setKeyboardShown(true);
+        // What the kind can wear, not what it wears now: an element put away in both
+        // orientations is no longer in the dress, and must still come back.
+        if (!DressResolver.wornOn(mVariant, item.element))
+            return Drop.NONE;
         Slot slot = mPlaces.slot(mShownOrientation, item.element);
         if (!slot.hidden && !shownLayout().slot(item.element).hidden)
             return Drop.NONE;
@@ -300,6 +583,34 @@ public final class LayoutEditorPlan {
      */
     public void showPlace(@NonNull PaneWallPage place) {
         mPlace = place;
+        if (place != PaneWallPage.WIDGETS)
+            mWindowPlace = place;
+    }
+
+    /** Whether the Home filter is on: the canvas is drawing a Home page. */
+    public boolean showsHome() {
+        return mPlace == PaneWallPage.WIDGETS;
+    }
+
+    /**
+     * The Home filter, beside the Portrait / Landscape toggle: on, the canvas shows a Home page and
+     * every write lands on the Home layout; off, it shows the window the editor was opened over
+     * (the terminal when that was Home) and writes the Workspace's layout, the normal one or the
+     * minimal one as minimal mode says. The orientation stays as it was. Each layout's arrangement
+     * at entry is kept, so Undo and the unsaved question cover both.
+     *
+     * @return the place the canvas now shows, which the live wall is to stand on
+     */
+    @NonNull
+    public PaneWallPage showHome(boolean home) {
+        PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
+        mPlace = place;
+        mDressedPage = place;
+        mVariant = dress().layout();
+        mPlaces = mRoot.forVariant(mVariant);
+        enterVariant(mVariant);
+        enterVariant(dockLayout());
+        return place;
     }
 
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */
@@ -308,9 +619,8 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * The phone turned mid-session. The layout canvas goes with it: the editor is a picture of the
-     * place behind it, and leaving it on the orientation the user can no longer see would make the
-     * next drop land somewhere they are not looking.
+     * The phone turned mid-session: the session goes with it (rotate to edit, editor-redesign
+     * §1). The editor is the live place, so every write lands on the orientation on screen.
      */
     public void onDeviceOrientationChanged(@NonNull PlaceOrientation orientation) {
         mDeviceOrientation = orientation;
@@ -335,6 +645,9 @@ public final class LayoutEditorPlan {
     @NonNull
     public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
                      int index, boolean underKeyboard) {
+        // A bar the page does not wear stands nowhere on it: Home's status bar and extra keys.
+        if (!dress().wears(bar.element()))
+            return Drop.NONE;
         if (!LayoutChooserModel.applyDrop(mPlaces, mShownOrientation, bar, edge, index,
             underKeyboard))
             return Drop.NONE;
@@ -375,13 +688,70 @@ public final class LayoutEditorPlan {
         return !liveFollows();
     }
 
-    /** Whether anything has moved since the editor opened — the unsaved-changes question. */
+    /**
+     * Whether anything has moved since the editor opened, in any layout the session has reached
+     * — the unsaved-changes question.
+     */
     public boolean isDirty() {
-        return !mEntrySignature.equals(PlaceArrangeSnapshot.capture(mPlaces).signature());
+        for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
+            if (!entry.getValue().equals(
+                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
+                return true;
+        }
+        return false;
     }
 
-    /** Puts the arrangement back the way the editor found it. */
+    /**
+     * Puts every layout back the way the editor found it, and Home's own-layout switch; a layout
+     * nothing moved is left unwritten.
+     */
     public void revert() {
-        mEntry.restore(mPlaces);
+        for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
+            String atOpen = mEntrySignatures.get(entry.getKey());
+            if (atOpen == null || !atOpen.equals(
+                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
+                entry.getValue().restore(mRoot);
+        }
+    }
+
+    // ------------------------------------------------------------------------- Dock card
+
+    /**
+     * The shown orientation's arrangement as this layout stores it, before the page's dress: what
+     * a drop is written against ({@link LayoutChooserModel#applyDrop}).
+     */
+    @NonNull
+    public PlaceLayout arrangedLayout() {
+        return mPlaces.resolve(mShownOrientation);
+    }
+
+    /**
+     * Every slot of {@code next} that differs from {@link #arrangedLayout}, written for the shown
+     * orientation: the Dock card's Position rows and its restacking. The page's dress decides
+     * what it may write, as for a drop.
+     */
+    @NonNull
+    public Drop writeSlots(@NonNull PlaceLayout next) {
+        PlaceLayout now = arrangedLayout();
+        boolean wrote = false;
+        for (Element element : Element.values()) {
+            if (!dress().wears(element)) continue;
+            Slot slot = next.slot(element);
+            if (slot.equals(now.slot(element))) continue;
+            mPlaces.setSlot(mShownOrientation, element, slot);
+            wrote = true;
+        }
+        if (!wrote) return Drop.NONE;
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** The Dock card's Bars list for the shown orientation, or null where it never was stored. */
+    @Nullable
+    public String barOrder() {
+        return mPlaces.barOrder(mShownOrientation);
+    }
+
+    public void setBarOrder(@NonNull String order) {
+        mPlaces.setBarOrder(mShownOrientation, order);
     }
 }

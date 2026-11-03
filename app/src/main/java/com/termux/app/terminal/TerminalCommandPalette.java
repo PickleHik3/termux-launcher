@@ -88,7 +88,14 @@ public final class TerminalCommandPalette {
 
     /** Shows the palette. Must be called on the main thread. */
     public static void show(@NonNull TermuxActivity activity) {
-        activity.getCommandPaletteController().toggle();
+        // Opened on a Home page, the palette shows the Home set.
+        activity.getCommandPaletteController().toggle(activity.paletteContextHere());
+    }
+
+    /** Shows the palette with the row set for {@code where}. Must be called on the main thread. */
+    public static void show(@NonNull TermuxActivity activity,
+                            @NonNull CommandPaletteContext where) {
+        activity.getCommandPaletteController().toggle(where);
     }
 
     /**
@@ -96,9 +103,21 @@ public final class TerminalCommandPalette {
      * Visible for testing the inclusion rules without inflating a view.
      */
     @NonNull
-    static List<CommandPaletteFilter.Entry> buildEntries(@NonNull TermuxActivity activity) {
+    static List<CommandPaletteFilter.Entry> buildEntries(@NonNull Context activity) {
+        return buildEntries(activity, CommandPaletteContext.TERMINAL);
+    }
+
+    /**
+     * As above, for where the palette was summoned. On Home the terminal-only tools
+     * ({@link LauncherToolRegistry.ToolMetadata#terminalOnly}) are left out and the Home section
+     * leads ({@link CommandPaletteHomeSet#withHomeSection}).
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildEntries(@NonNull Context activity,
+                                                         @NonNull CommandPaletteContext where) {
         LauncherToolRegistry.ActionContext context =
             TerminalActionDispatcher.getInstance().actionContext();
+        boolean home = where == CommandPaletteContext.HOME;
 
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>();
         Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped =
@@ -106,6 +125,7 @@ public final class TerminalCommandPalette {
         for (Map.Entry<String, List<LauncherToolRegistry.ToolMetadata>> group : grouped.entrySet()) {
             for (LauncherToolRegistry.ToolMetadata tool : group.getValue()) {
                 if (tool.titleRes == 0) continue;          // not user-facing
+                if (home && tool.terminalOnly) continue;
                 String argumentName = promptableArgument(tool);
                 if (hasRequiredArguments(tool) && argumentName == null) continue;
 
@@ -129,7 +149,7 @@ public final class TerminalCommandPalette {
                     argumentChoices(tool, argumentName)));
             }
         }
-        return entries;
+        return home ? CommandPaletteHomeSet.withHomeSection(activity, entries) : entries;
     }
 
     /**
@@ -360,7 +380,29 @@ public final class TerminalCommandPalette {
         @Nullable Map<String, Drawable> iconsOut,
         @Nullable Map<String, Integer> scoresOut
     ) {
-        List<LauncherAppEntry> apps = provider.getAllApps();
+        return buildAppEntries(context, provider, usageStats, query, shortcuts, iconsOut,
+            scoresOut, AppSection.ALL);
+    }
+
+    /**
+     * Which apps an app section holds. The terminal palette keeps one Apps section with the Linux
+     * apps in it, as it always has; Home splits them into Apps and Linux apps.
+     */
+    enum AppSection { ALL, ANDROID, LINUX }
+
+    /** As above, for one {@link AppSection}; each section gets its own row limit. */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildAppEntries(
+        @NonNull Context context,
+        @NonNull LauncherAppDataProvider provider,
+        @NonNull LauncherUsageStatsStore usageStats,
+        @NonNull String query,
+        @NonNull Map<String, String> shortcuts,
+        @Nullable Map<String, Drawable> iconsOut,
+        @Nullable Map<String, Integer> scoresOut,
+        @NonNull AppSection section
+    ) {
+        List<LauncherAppEntry> apps = appsIn(provider.getAllApps(), section);
         if (apps.isEmpty()) return Collections.emptyList();
         String trimmed = query.trim();
         List<LauncherAppEntry> ranked = trimmed.isEmpty()
@@ -379,9 +421,51 @@ public final class TerminalCommandPalette {
             }
             if (scoresOut != null && !trimmed.isEmpty())
                 scoresOut.put(stableId, CommandPaletteAppMatch.score(app, trimmed));
-            entries.add(appEntry(context, app, shortcuts));
+            entries.add(section == AppSection.LINUX
+                ? linuxAppEntry(context, app, shortcuts) : appEntry(context, app, shortcuts));
         }
         return entries;
+    }
+
+    /**
+     * The apps of one section, in the provider's order. Linux apps holds what the drawer files
+     * under Linux Apps: the Linux apps and the launcher's own Terminal and Display entries.
+     */
+    @NonNull
+    static List<LauncherAppEntry> appsIn(@NonNull List<LauncherAppEntry> apps,
+                                         @NonNull AppSection section) {
+        if (section == AppSection.ALL || apps.isEmpty()) return apps;
+        boolean linux = section == AppSection.LINUX;
+        List<LauncherAppEntry> out = new ArrayList<>(apps.size());
+        for (LauncherAppEntry app : apps)
+            if (inLinuxSection(app) == linux) out.add(app);
+        return out;
+    }
+
+    private static boolean inLinuxSection(@NonNull LauncherAppEntry app) {
+        return com.termux.app.x11.X11Apps.isLinuxApp(app.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(app.appRef);
+    }
+
+    /**
+     * A Linux app's row on Home: the app row exactly — {@code app.launch} with its stable id, which
+     * goes the drawer's way through the launcher's runner (the display, or a terminal window for a
+     * {@code Terminal=true} app) — filed under Linux apps, and saying what it is rather than the
+     * catalogue's shared package.
+     */
+    @NonNull
+    static CommandPaletteFilter.Entry linuxAppEntry(@NonNull Context context,
+                                                    @NonNull LauncherAppEntry app,
+                                                    @NonNull Map<String, String> shortcuts) {
+        CommandPaletteFilter.Entry row = appEntry(context, app, shortcuts);
+        // The launcher's own entries are not Linux apps; they say only what a row can do.
+        boolean launcherEntry = com.termux.app.launcher.LauncherEntries.isEntry(app.appRef);
+        return new CommandPaletteFilter.Entry(row.toolName, row.title,
+            context.getString(launcherEntry ? R.string.palette_launcher_entry_row_subtitle
+                : R.string.palette_linux_app_row_subtitle),
+            CommandPaletteHomeSet.CATEGORY_LINUX_APPS, row.bindings, row.enabled,
+            row.disabledReason, row.requiresConfirmation, row.risk, row.arguments, null, null,
+            row.iconKey);
     }
 
     /**
@@ -523,7 +607,7 @@ public final class TerminalCommandPalette {
      * bound from here; the file still binds them.
      */
     static boolean isBindable(@NonNull CommandPaletteFilter.Entry entry) {
-        if (LauncherToolRegistry.CATEGORY_APPS.equals(entry.category))
+        if (entry.isAppRow())
             return entry.arguments != null && !entry.arguments.optString("query", "").isEmpty();
         if (CATEGORY_CONTACTS.equals(entry.category))
             return TOOL_CONTACT_OPEN.equals(entry.toolName)
@@ -609,6 +693,9 @@ public final class TerminalCommandPalette {
             case LauncherToolRegistry.CATEGORY_WALL: return context.getString(R.string.palette_category_wall);
             case CATEGORY_SESSIONS: return context.getString(R.string.palette_category_sessions);
             case CATEGORY_CONTACTS: return context.getString(R.string.palette_category_contacts);
+            case CommandPaletteHomeSet.CATEGORY_HOME: return context.getString(R.string.palette_category_home);
+            case CommandPaletteHomeSet.CATEGORY_LINUX_APPS: return context.getString(R.string.palette_category_linux_apps);
+            case CommandPaletteHomeSet.CATEGORY_WINDOWS: return context.getString(R.string.palette_category_windows);
             default: return category;
         }
     }

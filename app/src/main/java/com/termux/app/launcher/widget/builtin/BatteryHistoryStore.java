@@ -10,8 +10,8 @@ import java.util.Arrays;
 import java.util.TimeZone;
 
 /**
- * The battery level hour by hour over the last day, kept across restarts for the Battery widget's
- * 24-bar chart. One slot per local hour holds the latest level seen in it (0..100, or
+ * The battery level hour by hour over the last day, kept across restarts for the Device widget's
+ * 24 h chart and its drain rate. One slot per local hour holds the latest level seen in it (0..100, or
  * {@link #EMPTY} for an hour nothing was heard in); the ring slides as hours pass, so a slot
  * always means the same wall-clock hour. Writes happen only when a slot's value changes.
  */
@@ -98,6 +98,32 @@ public final class BatteryHistoryStore {
             }
         }
         return out;
+    }
+
+    /** How many of the newest hours the drain rate is read over, at most. */
+    static final int DRAIN_HOURS = 6;
+
+    /**
+     * How fast the battery has been going down, in whole percent an hour, from the newest run of
+     * heard hours in which the level only fell or held (oldest first, as {@link #levels} gives
+     * them), over at most {@link #DRAIN_HOURS}. -1 while that is unknown: the newest hour is
+     * empty, the run is under an hour long, or nothing was used; and -1 below half a percent an
+     * hour, which rounds to no whole percent, so the Device line says what it says without a rate
+     * rather than overstating a slow drain as 1%/h.
+     */
+    static int drainPerHour(@NonNull int[] levels) {
+        int last = levels.length - 1;
+        if (last < 1 || levels[last] < 0) return -1;
+        int first = last;
+        while (first > 0 && last - first < DRAIN_HOURS && levels[first - 1] >= 0
+            && levels[first - 1] >= levels[first]) {
+            first--;
+        }
+        int hours = last - first;
+        int drop = levels[first] - levels[last];
+        if (hours < 1 || drop <= 0) return -1;
+        int rate = Math.round(drop / (float) hours);
+        return rate < 1 ? -1 : rate;
     }
 
     @NonNull static String encode(@NonNull int[] levels) {

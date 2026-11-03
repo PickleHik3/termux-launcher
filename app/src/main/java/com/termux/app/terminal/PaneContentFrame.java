@@ -2,10 +2,13 @@ package com.termux.app.terminal;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
@@ -29,8 +32,9 @@ import com.termux.view.TerminalView;
  * arc, which is how a prompt that paints its own background to the very edge came out clipped.
  *
  * <p>So the shape and its clearance are set together, from one radius: the glass keeps filling the
- * whole slab and the terminal is laid out inside the arc's depth, the same distance off every
- * edge. The clearance is spent as the child's margin rather than as this frame's padding, because
+ * whole slab and the terminal is laid out clear of the arc: close to the rim at the top and
+ * bottom, where rows are scarce, and as far in at the sides as that leaves the corner cells
+ * inside the arc ({@link #onMeasure}). The clearance is spent as the child's margin rather than as this frame's padding, because
  * the frame's other child is the glass backdrop and it must still reach the corners the terminal
  * now stays out of.
  *
@@ -40,7 +44,8 @@ import com.termux.view.TerminalView;
  * outline showed through as a dark hairline outside the rim wherever the two edges' coverage
  * disagreed — and along a straight edge the stroke, not the arc, is what the text is held off.
  */
-public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener {
+public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener,
+        com.termux.app.chrome.LiveBackdrop.Container {
 
     /** How far off the rim's inner edge the text is kept along a straight edge. */
     private static final float EDGE_GAP_DP = 2f;
@@ -72,18 +77,50 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     /**
      * The retro look this card is drawn through, cut to the same card the outline draws — the
-     * travel's shortened bottom included — and bent like the tube it stands for. It re-reads all of
-     * that before each frame, so a divider drag, a re-dress or a wall page needs no call here.
+     * travel's shortened bottom included — and bent like the tube it stands for, on the screen
+     * inside the bezel ({@link PaneBezel}) only. It re-reads all of that before each frame, so a
+     * divider drag, a re-dress or a wall page needs no call here.
      */
-    private final RetroEffectBinder mRetroEffect = new RetroEffectBinder(this, (view, rect) -> {
-        int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
-        rect[0] = 0f;
-        rect[1] = 0f;
-        rect[2] = view.getWidth();
-        rect[3] = height;
-        return mClipToShape
-            ? PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height) : 0f;
-    }, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE);
+    private final RetroEffectBinder mRetroEffect = RetroEffectBinder.pane(this,
+        new RetroEffectBinder.ScreenShape() {
+            @Override
+            public float card(@NonNull View view, @NonNull float[] rect) {
+                int height = visibleHeight();
+                rect[0] = 0f;
+                rect[1] = 0f;
+                rect[2] = view.getWidth();
+                rect[3] = height;
+                return cardRadiusPx(height);
+            }
+
+            @Override
+            public float screen(@NonNull View view, @NonNull float[] rect) {
+                boolean worn = bezelWorn();
+                int height = visibleHeight();
+                float radius = PaneBezel.screen(worn, view.getWidth(), height, density(),
+                    cardRadiusPx(height), rect);
+                // The bend is worked out over the screen as laid out, so a travel cuts the
+                // picture off at the rising chrome instead of squeezing it.
+                rect[4] = view.getHeight() - PaneBezel.topBottomPx(worn, density());
+                return radius;
+            }
+        });
+
+    /**
+     * What the bezel's band is filled with under the terminal: the theme's panel colour, opaque,
+     * over whatever the pane's slab is ({@link #setBezelFill}); 0 until the first dress.
+     */
+    private int mBezelFill;
+    private final Paint mBezelFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The bezel's depth ({@link PaneBezel#SHADE_COLOURS}), rebuilt with {@link #mBezelPath}. */
+    private final Paint mBezelShadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The band between the pane's outline and the screen. */
+    private final Path mBezelPath = new Path();
+    private boolean mBezelPathDirty = true;
+    /** Scratch for the screen's rect, {@code left, top, right, bottom, bendBottom}. */
+    private final float[] mScreenScratch = new float[5];
+    /** Scratch for {@link PaneBezel#contentInsets}: {@code side, topBottom}. */
+    private final int[] mBezelInsets = new int[2];
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
@@ -115,6 +152,54 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      *  and anti-aliasing would blend a translucent hairline into exactly those shared edges. */
     private void initPaddingFillPaint() {
         mPaddingFillPaint.setAntiAlias(false);
+        mBezelFillPaint.setStyle(Paint.Style.FILL);
+        mBezelShadePaint.setStyle(Paint.Style.FILL);
+    }
+
+    private float density() {
+        return getResources().getDisplayMetrics().density;
+    }
+
+    /** The height the shape is drawn at: the laid-out height less the travel's inset. */
+    private int visibleHeight() {
+        return Math.max(0, getHeight() - mTravelBottomInsetPx);
+    }
+
+    /** The radius the card is drawn at, {@code height} tall; 0 while the frame clips to no shape. */
+    private float cardRadiusPx(int height) {
+        return mClipToShape ? PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), height) : 0f;
+    }
+
+    /** Whether the pane wears its bezel: while any terminal effect is drawn on it. */
+    public boolean bezelWorn() {
+        return PaneBezel.worn(mRetroEffect.style());
+    }
+
+    /** The bend the effect draws the screen with: the CRT's, none for a flat effect. */
+    private float bezelBend() {
+        return mRetroEffect.style().usesCrt() ? PaneRetroEffect.CRT_BEND : 0f;
+    }
+
+    /**
+     * The screen the effect is drawn on, in this frame's own px, as laid out (no travel):
+     * {@code left, top, right, bottom}; the whole frame while no bezel is worn. The bend is worked
+     * out over this rect, so it is also what the cursor trail inverts the bend over.
+     *
+     * @return its corner radius
+     */
+    public float retroScreen(@NonNull float[] out) {
+        return PaneBezel.screen(bezelWorn(), getWidth(), getHeight(), density(),
+            cardRadiusPx(getHeight()), out);
+    }
+
+    /**
+     * The bezel's fill under the terminal: an opaque colour (the theme's panel), so the bezel reads
+     * as a solid frame round the screen whatever the pane's glass is doing.
+     */
+    public void setBezelFill(int argb) {
+        if (mBezelFill == argb) return;
+        mBezelFill = argb;
+        if (bezelWorn()) invalidate();
     }
 
     @Override
@@ -122,6 +207,74 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         super.onFinishInflate();
         mContent = findViewById(R.id.terminal_view);
         wirePaddingFillListener();
+    }
+
+    /**
+     * Plays a screen event on this pane's CRT picture ({@link RetroEffectBinder#fire}): nothing
+     * unless the pane is drawn CRT and the Screen events switch is on.
+     */
+    public void screenEvent(@NonNull PaneScreenEvent.Kind kind) {
+        if (!mRetroEffect.style().usesCrt()) return;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
+    }
+
+    /**
+     * Re-reads the Idle animations switch and re-checks the ambient gate
+     * ({@link RetroEffectBinder#setAmbient}): run on attach, on every style, and whenever the
+     * pane's window, visibility or the screen changes. With the switch off it posts nothing.
+     */
+    public void refreshAmbient() {
+        // Null while the super constructor runs: FrameLayout may report visibility that early.
+        if (mRetroEffect == null) return;
+        boolean on = false;
+        if (mRetroEffect.style().usesCrt()) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                    .build(getContext(), false);
+            on = prefs != null && prefs.isIdleAnimationsEnabled();
+        }
+        mRetroEffect.setAmbient(on);
+    }
+
+    /**
+     * Draws the CRT picture dimmed (an unfocused pane of a window with more than one, spec
+     * decision 8): one uniform, snapped, no frames.
+     */
+    public void setDimmed(boolean dimmed) {
+        mRetroEffect.setDim(dimmed ? 1f : 0f);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        refreshAmbient();
+    }
+
+    @Override
+    public void onScreenStateChanged(int screenState) {
+        super.onScreenStateChanged(screenState);
+        refreshAmbient();
     }
 
     /**
@@ -169,6 +322,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         setClipToOutline(clipToShape);
         invalidateOutline();
         mBandClipPathDirty = true;
+        mBezelPathDirty = true;
         mRetroEffect.refresh();
         requestLayout();
     }
@@ -210,6 +364,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             setClipBounds(null);
         }
         fitForegroundToTravelInset();
+        mBezelPathDirty = true;
         mRetroEffect.refresh();
         invalidate();
     }
@@ -238,7 +393,18 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * child, not here.
      */
     public void setRetroStyle(@Nullable PaneRetroStyle style) {
+        boolean wornBefore = bezelWorn();
+        float bendBefore = bezelBend();
         mRetroEffect.setStyle(style);
+        refreshAmbient();
+        // The bezel comes and goes with the effect: the one relayout is the terminal taking its
+        // new margins, and only when the bezel or the bend it clears actually changed.
+        if (bezelWorn() != wornBefore || (wornBefore && bezelBend() != bendBefore)) {
+            mBandClipPathDirty = true;
+            mBezelPathDirty = true;
+            requestLayout();
+            invalidate();
+        }
     }
 
     /** The look the card is drawn through: NONE wherever no effect can be drawn at all. */
@@ -256,8 +422,18 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        android.os.Trace.beginSection("Pane.frame.sizeChanged");
+        try {
+            onSizeChangedImpl(w, h, oldw, oldh);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mBandClipPathDirty = true;
+        mBezelPathDirty = true;
         mRetroEffect.refresh();
         if (mTravelBottomInsetPx > 0 && !mClipToShape) {
             mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
@@ -274,6 +450,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * behind the terminal may poke past it.
      */
     private Path getBandClipPath() {
+        if (mBandClipPathDirty && bezelWorn()) {
+            // Inside the bezel the band stops at the screen: the bezel is the pane's frame, not
+            // the terminal's edge colour.
+            mBandClipPath.reset();
+            float radius = retroScreen(mScreenScratch);
+            mBandClipPath.addRoundRect(mScreenScratch[0], mScreenScratch[1], mScreenScratch[2],
+                mScreenScratch[3], radius, radius, Path.Direction.CW);
+            mBandClipPathDirty = false;
+        }
         if (mBandClipPathDirty) {
             mBandClipPath.reset();
             float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight());
@@ -401,6 +586,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      */
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child == mContent) drawBezel(canvas);
         if (child != mContent || !drawPaddingFillBand(canvas))
             return super.drawChild(canvas, child, drawingTime);
         int save = canvas.save();
@@ -410,6 +596,46 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         } finally {
             canvas.restoreToCount(save);
         }
+    }
+
+    /** The bezel's depth gradient as last built, null before the bezel was first drawn. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable
+    Shader bezelShade() {
+        return mBezelShadePaint.getShader();
+    }
+
+    /**
+     * The bezel, over the pane's glass and under the terminal: its opaque fill
+     * ({@link #setBezelFill}), lit at its top and shaded at its bottom
+     * ({@link PaneBezel#SHADE_COLOURS}). No line runs round the screen: the bezel is one solid
+     * frame, and the effect's recess is the screen's only edge. The effect leaves the band as
+     * it is ({@link RetroEffectBinder.ScreenShape}); the slab under it shows only until the first
+     * dress sets the fill.
+     */
+    private void drawBezel(@NonNull Canvas canvas) {
+        if (!bezelWorn() || getWidth() <= 0 || visibleHeight() <= 0) return;
+        if (mBezelPathDirty) {
+            int height = visibleHeight();
+            float outer = cardRadiusPx(height);
+            float radius = PaneBezel.screen(true, getWidth(), height, density(), outer,
+                mScreenScratch);
+            mBezelPath.reset();
+            mBezelPath.setFillType(Path.FillType.EVEN_ODD);
+            mBezelPath.addRoundRect(0f, 0f, getWidth(), height, outer, outer, Path.Direction.CW);
+            mBezelPath.addRoundRect(mScreenScratch[0], mScreenScratch[1], mScreenScratch[2],
+                mScreenScratch[3], radius, radius, Path.Direction.CW);
+            mBezelShadePaint.setShader(new LinearGradient(0f, 0f, 0f, height,
+                PaneBezel.SHADE_COLOURS, PaneBezel.SHADE_POSITIONS, Shader.TileMode.CLAMP));
+            mBezelPathDirty = false;
+        }
+        if (Color.alpha(mBezelFill) > 0) {
+            mBezelFillPaint.setColor(mBezelFill);
+            canvas.drawPath(mBezelPath, mBezelFillPaint);
+        }
+        // Lit at the top and shaded at the bottom, over the fill; the screen's own lip shadow is
+        // the effect's recess (PaneRetroEffect#RECESS_SHADE).
+        canvas.drawPath(mBezelPath, mBezelShadePaint);
     }
 
     /** Where the terminal child's first row of cells starts below its own top edge, if it is one. */
@@ -422,38 +648,56 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * measured against it — so the pane lays out once at its cleared size and the PTY is told one
      * size, not the flush one and then the inset one.
      *
-     * <p>Every edge gets the same clearance ({@link PaneShape#contentInsetPx}, the arc's), so the
-     * content sits the same distance off all four sides of the frame. The terminal centres its
-     * grid in its view ({@code TerminalView.getVerticalContentOffset()},
-     * {@code getHorizontalContentOffset()}), splitting the sub-cell leftover between opposite
-     * edges, so the grid's own gap from the frame is even too, to within half a cell. The top's
-     * margin is the only one that differs: the first row's cells start a fixed headroom below the
-     * view's top ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), so
-     * that much of the top's clearance is already paid and the margin only makes up the rest
-     * ({@link PaneShape#topInsetPx}) — the first cell then sits as far off the top as the last
-     * row's cells sit off the bottom.
+     * <p>The top and bottom are held only as far off the rim as the corner arc allows to be traded
+     * for side clearance ({@link PaneShape#verticalInsetPx}), and the sides take the clearance
+     * that keeps the corner cells inside the arc at that height ({@link PaneShape#sideInsetPx}):
+     * rows are what a terminal is short of, so the vertical gap is the one that gives. No glyph is
+     * ever cut by the arc. The terminal centres its grid in its view
+     * ({@code TerminalView.getVerticalContentOffset()}, {@code getHorizontalContentOffset()}),
+     * splitting the sub-cell leftover between opposite edges, so opposite gaps match to within half
+     * a cell. The top's margin differs from the bottom's only by the first row's headroom
+     * ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), which is
+     * clearance the top already has ({@link PaneShape#topInsetPx}) — the first cell then sits as
+     * far off the top as the last row's cells sit off the bottom.
      *
-     * <p>Along a straight edge none of this is what holds the text off the border — the rim's
-     * stroke is, plus a hair — so every margin is floored at that; the floor only ever bites at a
-     * radius too small for its own arc to clear the stroke.
+     * <p>Along a straight edge the rim's stroke, plus a hair, is what holds the text off the
+     * border, so every margin is floored at that; on a square pane the floor is all there is.
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        android.os.Trace.beginSection("Pane.frame.measure");
+        try {
+            onMeasureImpl(widthMeasureSpec, heightMeasureSpec);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onMeasureImpl(int widthMeasureSpec, int heightMeasureSpec) {
         if (mContent != null && mContent.getLayoutParams() instanceof MarginLayoutParams) {
             int width = MeasureSpec.getSize(widthMeasureSpec);
             int height = MeasureSpec.getSize(heightMeasureSpec);
             float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, width, height);
             float edgeFloor = mRimStrokePx > 0f
                 ? mRimStrokePx + EDGE_GAP_DP * getResources().getDisplayMetrics().density : 0f;
-            int side = Math.max(PaneShape.contentInsetPx(radius), (int) Math.ceil(edgeFloor));
-            int top = PaneShape.topInsetPx(side, contentHeadroomPx());
+            int floor = (int) Math.ceil(edgeFloor);
+            int bottom = PaneShape.verticalInsetPx(radius, floor);
+            int side = Math.max(PaneShape.sideInsetPx(radius, bottom), floor);
+            if (bezelWorn()) {
+                // Inside the bezel: past it and past the screen's arc. The bend is pinned at
+                // the edges' middles and pushes nothing off the screen.
+                PaneBezel.contentInsets(width, height, density(), mBezelInsets);
+                side = mBezelInsets[0];
+                bottom = mBezelInsets[1];
+            }
+            int top = PaneShape.topInsetPx(bottom, contentHeadroomPx());
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
             if (params.leftMargin != side || params.topMargin != top
-                || params.rightMargin != side || params.bottomMargin != side) {
+                || params.rightMargin != side || params.bottomMargin != bottom) {
                 params.leftMargin = side;
                 params.topMargin = top;
                 params.rightMargin = side;
-                params.bottomMargin = side;
+                params.bottomMargin = bottom;
             }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -506,5 +750,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             return false;
         return x < mContent.getLeft() || x >= mContent.getRight()
             || y < mContent.getTop() || y >= mContent.getBottom();
+    }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

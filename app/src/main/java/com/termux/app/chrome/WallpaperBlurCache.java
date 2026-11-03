@@ -160,10 +160,11 @@ public final class WallpaperBlurCache {
      * How many radii stay resident. A look uses one radius per surface — dock, status bar, pane
      * glass, the wall's own radius 0, and more when the keyboard and a palette are dressed apart —
      * and a rotation on Pong asked for six distinct radii in one frame while four fit, so the first
-     * two were evicted as the last two landed (2026-09-09). Six holds a full look; the byte budget
-     * below still bounds what a larger panel keeps.
+     * two were evicted as the last two landed (2026-09-09). Eight holds every Frost stop (ADR 0017
+     * §4), so no mix of per-element looks can evict a radius a visible surface still samples; the
+     * byte budget below still bounds what a larger panel keeps.
      */
-    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 6;
+    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 8;
     /**
      * How many bytes of pre-blurred frames stay resident, whatever the radius count. A count alone
      * let a QHD phone hold 55 MB of wallpaper nobody was looking at, so the budget bounds the bytes
@@ -446,6 +447,8 @@ public final class WallpaperBlurCache {
      */
     @Nullable
     public Bitmap obtain(int blurRadiusDp, @NonNull View wallpaperFrame) {
+        // The wallpaper scene's live frame is blurred at the radius glass is asking for.
+        com.termux.app.chrome.scene.LiveSceneFrame.noteBlurRadius(blurRadiusDp);
         Rect frameRect = mSource.wallpaperFrameRect();
         boolean managedSource = mSource.useManagedWallpaperSource();
         int systemWallpaperId = mSource.systemWallpaperId();

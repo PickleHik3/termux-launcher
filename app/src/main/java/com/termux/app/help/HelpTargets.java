@@ -201,7 +201,7 @@ public final class HelpTargets {
         add(s, "keyboard_grabber", out, 0);
     }
 
-    /** The top-left corner square of a page that is not the terminal: the Widgets or Display page. */
+    /** The top-left corner square of a page that is not the terminal: the Widgets or display window. */
     private Rect wallCorner(Rect wall) {
         float density = context.getResources().getDisplayMetrics().density;
         int size = Math.round(com.termux.app.chrome.CornerZones.clampSize(

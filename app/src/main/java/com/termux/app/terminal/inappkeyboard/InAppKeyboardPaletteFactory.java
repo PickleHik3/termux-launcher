@@ -191,13 +191,29 @@ public final class InAppKeyboardPaletteFactory {
     }
 
     /**
+     * The glass the keyboard's keys stand on under {@code look}: the dock's glass base, tinted by
+     * the Look's obsidian surface when it has one. {@link #createGlass} builds on it.
+     */
+    @ColorInt
+    public static int resolveGlassBase(@NonNull Context context, @NonNull GlassLook look) {
+        int glassBase = resolveDockGlassBaseColor(context);
+        return look.obsidianTint ? surfaceTinted(look, glassBase) : glassBase;
+    }
+
+    /**
      * Glass base color of the launcher dock — must stay in sync with
      * {@code TermuxActivity#resolveAccessoryGlassBaseColor()}.
      */
     @ColorInt
     public static int resolveDockGlassBaseColor(@NonNull Context context) {
         // Same scheme gate as TermuxActivity#resolveAccessoryGlassBaseColor(): the Material You
-        // neutral is only the right base while the chrome is on wallpaper colours.
+        // neutral is only the right base while the chrome is on wallpaper colours. Under an
+        // app-only picture the framework neutral is the phone's wallpaper's, so the theme's own
+        // surface stands in for it, as the activity's glass base reads it.
+        if (isNightMode(context) && com.termux.app.theme.AppOnlyWallpaperColors.isActive(context)) {
+            return MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorSurface, 0xFF1C1B1F);
+        }
         if (isNightMode(context)
                 && !com.termux.app.theme.LauncherSchemeTheme.isSchemeChromeActive(context)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -316,7 +332,7 @@ public final class InAppKeyboardPaletteFactory {
             ? "system" : variant;
         Theme.Palette base = create(context, normalizedVariant);
         boolean night = isNightMode(context);
-        int glassBase = resolveDockGlassBaseColor(context);
+        int glassBase = resolveGlassBase(context, look);
         int baseKey = base.keyBackground;
         int baseSpace = base.spaceBarBackground;
         int baseFunction = base.functionKeyBackground;
@@ -324,7 +340,6 @@ public final class InAppKeyboardPaletteFactory {
         int baseSubLabel = base.subLabelColor;
         int baseFunctionLabel = base.functionLabelColor;
         if (look.obsidianTint) {
-            glassBase = surfaceTinted(look, glassBase);
             night = ColorUtils.calculateLuminance(glassBase) < 0.5d;
             baseKey = chipOn(glassBase, KEY_LIFT);
             baseSpace = baseKey;

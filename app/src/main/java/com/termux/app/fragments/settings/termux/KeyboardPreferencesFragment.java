@@ -42,10 +42,9 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
- * feedback. The keyboard's look (theme, colors, typeface, bottom padding, and the "Customize
- * keyboard appearance" surface entry) moved to the Look page, since it is edited alongside the
- * launcher's other visual choices there.
+ * Keyboard: input method, layouts, size, typing, voice and the keyboard's look (its theme page and
+ * the Appearance editor's entry, moved here from Appearance so everything about the keyboard is in
+ * one place).
  */
 @Keep
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
@@ -120,6 +119,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
+
+        Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
+        if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_KEYBOARD);
+            return true;
+        });
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -289,6 +295,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             Preference row = findPreference(key);
             if (row != null) row.setEnabled(enabled);
         }
+        // The keyboard's look (moved here from Appearance) only matters for the built-in one.
+        Preference look = findPreference("keyboard_appearance");
+        if (look != null) look.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
         if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);

@@ -38,6 +38,22 @@
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardTypingPreferencesFragment" />
     </PreferenceCategory>
 
+    <!-- The keyboard's look, from Appearance: one place for everything about the keyboard. -->
+    <PreferenceCategory app:key="keyboard_appearance" app:title="@string/settings_keyboard_look_title">
+        <Preference
+            app:key="customize_keyboard_surface"
+            app:icon="@drawable/ic_symbol_keyboard"
+            app:persistent="false"
+            app:title="@string/settings_look_appearance_editor_title"
+            app:summary="@string/settings_appearance_door_summary" />
+        <Preference
+            app:key="in_app_keyboard_color_scheme_editor"
+            app:icon="@drawable/ic_ms_format_paint"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
+            app:summary="@string/keyboard_theme_summary"
+            app:title="@string/keyboard_theme_title" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:key="keyboard_terminal_hardware" app:title="@string/settings_terminal_key_row_header">
         <Preference
             app:key="edit_extra_keys_row"
@@ -50,18 +66,15 @@
             app:title="@string/settings_extra_keys_all_caps_title"
             app:summary="@string/settings_extra_keys_all_caps_summary"
             android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_hardware">
         <Preference
             app:key="keyboard_sub_hardware"
             app:persistent="false"
             app:title="@string/settings_keyboard_sub_hardware_title"
             app:summary="@string/settings_keyboard_sub_hardware_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardHardwarePreferencesFragment" />
-        <Preference
-            app:key="keyboard_vibration_link"
-            app:persistent="false"
-            app:title="@string/settings_keyboard_vibration_link_title"
-            app:summary="@string/settings_keyboard_vibration_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
     </PreferenceCategory>
 
 </PreferenceScreen>

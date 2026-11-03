@@ -27,6 +27,8 @@ public final class StatusBarEdgeGeometry {
     public static final float SLOT_DOCKED_DP = 65f;
     public static final float SLOT_CAPSULE_DP = 69f;
     public static final float STATUS_ROW_DP = 24f;
+    /** A folded capsule's status row, a little shorter than the open one. */
+    public static final float STATUS_ROW_COLLAPSED_CAPSULE_DP = 22f;
     public static final float ROW_FOOT_DOCKED_DP = 2f;
     public static final float ROW_FOOT_CAPSULE_DP = 3f;
 
@@ -83,6 +85,42 @@ public final class StatusBarEdgeGeometry {
         }
     }
 
+    /**
+     * What a bar's rows measure, in px: the bar's thickness, the status row's height, the foot
+     * below the row (0 when folded) and the widget slot above it. The rest pass and the fold pass
+     * both read it, so they cannot disagree.
+     */
+    public static final class RowGeometry {
+        public final int thickness;
+        public final int rowHeight;
+        public final int foot;
+        public final int slot;
+
+        public RowGeometry(int thickness, int rowHeight, int foot, int slot) {
+            this.thickness = thickness;
+            this.rowHeight = rowHeight;
+            this.foot = foot;
+            this.slot = slot;
+        }
+
+        @Override public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof RowGeometry)) return false;
+            RowGeometry that = (RowGeometry) other;
+            return thickness == that.thickness && rowHeight == that.rowHeight
+                && foot == that.foot && slot == that.slot;
+        }
+
+        @Override public int hashCode() {
+            return ((thickness * 31 + rowHeight) * 31 + foot) * 31 + slot;
+        }
+
+        @NonNull @Override public String toString() {
+            return "RowGeometry{thickness=" + thickness + ",rowHeight=" + rowHeight
+                + ",foot=" + foot + ",slot=" + slot + "}";
+        }
+    }
+
     private StatusBarEdgeGeometry() {}
 
     /** The bar stands in a column rather than a row. */
@@ -102,6 +140,24 @@ public final class StatusBarEdgeGeometry {
     public static int thicknessPx(@NonNull Edge edge, boolean capsule, boolean compact,
                                   float density) {
         return Math.round(thicknessDp(edge, capsule, compact) * density);
+    }
+
+    /**
+     * The bar's rows in px for one state. {@code compact} sizes the bar itself; {@code collapsed}
+     * is the folded row, which has no foot and, on a capsule, a shorter status row.
+     */
+    @NonNull
+    public static RowGeometry rowGeometry(@NonNull Edge edge, boolean capsule, boolean compact,
+                                          boolean collapsed, float density) {
+        return new RowGeometry(
+            thicknessPx(edge, capsule, compact, density),
+            px(collapsed && capsule ? STATUS_ROW_COLLAPSED_CAPSULE_DP : STATUS_ROW_DP, density),
+            px(collapsed ? 0f : capsule ? ROW_FOOT_CAPSULE_DP : ROW_FOOT_DOCKED_DP, density),
+            px(capsule ? SLOT_CAPSULE_DP : SLOT_DOCKED_DP, density));
+    }
+
+    private static int px(float dp, float density) {
+        return Math.round(dp * density);
     }
 
     /**

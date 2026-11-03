@@ -770,4 +770,112 @@ public class EdgeStackPolicyTest {
             default: throw new AssertionError("no row placement for " + slot);
         }
     }
+
+    // ------------------------------------------------------------------ the bar overlaying Home
+
+    @Test
+    public void anOverlayingBarOnTheTopHandsBackExactlyItsBand() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(STATUS_ROW_BAR, EdgeStackPolicy.topOverlapPx(layout, metrics(), true));
+        // The content's top, with the canvas reaching up by the overlap, is where it is with no bar.
+        int top = EdgeStackPolicy.contentInsets(layout, metrics()).top
+            - EdgeStackPolicy.topOverlapPx(layout, metrics(), true);
+        PlaceLayout noBar = layout.withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        assertEquals(EdgeStackPolicy.contentInsets(noBar, metrics()).top, top);
+    }
+
+    @Test
+    public void aBarThatDoesNotOverlayTakesItsBandAsAlways() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(layout, metrics(), false));
+    }
+
+    @Test
+    public void nothingOverlaysTheTopWhileTheBarStandsElsewhereOrIsHidden() {
+        PlaceLayout bottom = layout(Edge.BOTTOM, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(bottom, metrics(), true));
+        PlaceLayout hidden = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM).withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        assertEquals(0, EdgeStackPolicy.topOverlapPx(hidden, metrics(), true));
+    }
+
+    @Test
+    public void otherTopBandsKeepTheirRoomBesideAnOverlayingBar() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.TOP,
+            RowPlacement.BOTTOM);
+        assertEquals(STATUS_ROW_BAR + AZ_ROW_HEIGHT,
+            EdgeStackPolicy.stackThicknessPx(layout, Edge.TOP, metrics()));
+        assertEquals(STATUS_ROW_BAR, EdgeStackPolicy.topOverlapPx(layout, metrics(), true));
+    }
+
+    // ------------------------------------------------------------------ the dock overlaying Home
+
+    /**
+     * The Surface (2736x1824 landscape, 320 dpi) at b5b19ef99: the A-Z rail on the right, the dock
+     * rows (0,1623)-(2736,1748) with 12px under them, the canvas band down to 1760 under the dock,
+     * the side stack's frame inset 16. The rail ran to 1744 behind the dock; with the dock's reach
+     * taken off it ends at 1607, the frame's 16 above the dock's top, as on the Workspace.
+     */
+    @Test
+    public void aSideRailOnHomeEndsAboveTheDockByTheFrameGap() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.RIGHT,
+            RowPlacement.BOTTOM);
+        int dockTop = 1623, dockBottom = 1748, canvasBottom = 1760, frameInset = 16;
+        int reach = (dockBottom - dockTop) + (canvasBottom - dockBottom);
+        int inset = EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, true, reach);
+        assertEquals(137, inset);
+        int railBottom = canvasBottom - frameInset - inset;
+        assertEquals(1607, railBottom);
+        assertEquals(frameInset, dockTop - railBottom);
+    }
+
+    @Test
+    public void onlyASideThatHoldsSomethingAndOnlyWhileTheDockOverlays() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.RIGHT,
+            RowPlacement.BOTTOM);
+        // The Workspace: the dock takes its own row, so the canvas never reaches under it.
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, false, 137));
+        // The other side stands empty.
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.LEFT, true, 137));
+        // The top and bottom are not side stacks.
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.BOTTOM, true, 137));
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, true, -5));
+    }
+
+    /**
+     * A phone in portrait (1080x2400): the A-Z row lies under the dock, both sides are empty, and
+     * nothing changes however far the canvas reaches under the dock.
+     */
+    @Test
+    public void aPhoneInPortraitKeepsItsRowAndTheSidesHoldNothing() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.LEFT, true, 400));
+        assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, true, 400));
+    }
+
+    /**
+     * Moved from the Home chrome policy's test. Home wears no status bar of any kind
+     * (2026-10-19): its layout keeps the bar put away, so nothing stands on the top edge for it
+     * and the grid starts where the page's top does, below the system bar's inset alone. A bar
+     * there would overlay the page.
+     */
+    @Test
+    public void homeWearsNoStatusBarSoTheGridStartsAtThePagesTop() {
+        PlaceLayout home = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+            true, Edge.BOTTOM, RowPlacement.HIDDEN,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5)
+            .withSlot(Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(120, 200).apps(150, 90).az(40, 60).extraKeys(80, 100).build();
+        boolean overlays = true;
+        assertEquals(0, EdgeStackPolicy.contentInsets(home, metrics).top
+            - EdgeStackPolicy.topOverlapPx(home, metrics, overlays));
+        assertEquals(0, EdgeStackPolicy.stackThicknessPx(home, Edge.TOP, metrics));
+        assertEquals(0, EdgeStackPolicy.sideStackTopInsetPx(home, Edge.LEFT, metrics,
+            overlays));
+    }
 }

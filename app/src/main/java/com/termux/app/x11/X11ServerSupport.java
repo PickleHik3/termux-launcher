@@ -26,7 +26,10 @@ public final class X11ServerSupport {
         if (!com.termux.BuildConfig.X11_SERVER) return false;
         Boolean cached = sAvailable;
         if (cached != null) return cached;
-        boolean result = canLoad(context.getClassLoader());
+        ClassLoader loader = context.getClassLoader();
+        // Off Android's runtime (JVM unit tests) there is no dex loader to ask, and no ABI either:
+        // the build's flag answers there. On a phone the loader is always a dex loader.
+        boolean result = loader instanceof BaseDexClassLoader ? canLoad(loader) : true;
         sAvailable = result;
         return result;
     }

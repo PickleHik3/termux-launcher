@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +28,12 @@ public final class WidgetEditPolicy {
          * the candidate displaces nobody. A resize fills it in the same way a move does.
          */
         @NonNull public final Map<Integer, WidgetCellRect> displaced;
+        /**
+         * The widgets standing on the span the finger asked for, when that span was refused
+         * because they had nowhere to go: what edit mode shows as the reason the widget stopped
+         * short or went back. Empty whenever the finger got what it asked for.
+         */
+        @NonNull public final Set<Integer> refusedBy;
 
         Candidate(@NonNull WidgetCellRect rect, boolean valid) {
             this(rect, valid, Collections.emptyMap());
@@ -34,10 +41,18 @@ public final class WidgetEditPolicy {
 
         Candidate(@NonNull WidgetCellRect rect, boolean valid,
                   @NonNull Map<Integer, WidgetCellRect> displaced) {
+            this(rect, valid, displaced, Collections.emptySet());
+        }
+
+        Candidate(@NonNull WidgetCellRect rect, boolean valid,
+                  @NonNull Map<Integer, WidgetCellRect> displaced,
+                  @NonNull Set<Integer> refusedBy) {
             this.rect = rect;
             this.valid = valid;
             this.displaced = displaced.isEmpty()
                 ? Collections.emptyMap() : Collections.unmodifiableMap(displaced);
+            this.refusedBy = refusedBy.isEmpty()
+                ? Collections.emptySet() : Collections.unmodifiableSet(refusedBy);
         }
     }
 
@@ -48,7 +63,8 @@ public final class WidgetEditPolicy {
      * it is taken, the widgets sitting there are pushed into the nearest free holes on the same
      * page and reported in {@link Candidate#displaced}. When they cannot all be rehomed the
      * result falls back to the nearest collision-free position, and to the original span marked
-     * invalid when the page has no room at all, so the drag springs back.
+     * invalid when the page has no room at all, so the drag springs back. Either fallback names
+     * the widgets that would not move in {@link Candidate#refusedBy}.
      */
     @NonNull
     public static Candidate snapMove(@NonNull WidgetGridMetrics metrics,
@@ -84,7 +100,23 @@ public final class WidgetEditPolicy {
         if (nearest.equals(nearestFree)) return new Candidate(nearest, true);
         Map<Integer, WidgetCellRect> displaced = displace(metrics, records, appWidgetId, nearest);
         if (displaced != null) return new Candidate(nearest, true, displaced);
-        return nearestFree == null ? new Candidate(span, false) : new Candidate(nearestFree, true);
+        Set<Integer> refusedBy = standingOn(records, appWidgetId, nearest);
+        return nearestFree == null
+            ? new Candidate(span, false, Collections.emptyMap(), refusedBy)
+            : new Candidate(nearestFree, true, Collections.emptyMap(), refusedBy);
+    }
+
+    /** Every widget but the one being edited that covers part of {@code target}, in page order. */
+    @NonNull
+    private static Set<Integer> standingOn(List<LauncherWidgetRecord> records, int appWidgetId,
+                                           WidgetCellRect target) {
+        Set<Integer> ids = new LinkedHashSet<>();
+        for (LauncherWidgetRecord record : records) {
+            if (record.appWidgetId != appWidgetId && intersects(record.cell, target)) {
+                ids.add(record.appWidgetId);
+            }
+        }
+        return ids;
     }
 
     /**
@@ -169,7 +201,9 @@ public final class WidgetEditPolicy {
      * on a neighbour is still taken when that neighbour can be pushed into a free hole on the
      * same page, exactly as a move does, and the widgets that moved are reported in
      * {@link Candidate#displaced}. Candidates whose blockers have nowhere to go are passed over,
-     * so the scan carries on outward and the current rect is the floor.
+     * so the scan carries on outward and the current rect is the floor. When the finger sits
+     * nearer one of those passed-over spans than to the one taken, its blockers are named in
+     * {@link Candidate#refusedBy}.
      */
     @NonNull
     public static Candidate resize(@NonNull WidgetGridMetrics metrics,
@@ -179,6 +213,25 @@ public final class WidgetEditPolicy {
                                    int minColumnSpan, int minRowSpan) {
         return resize(metrics, records, appWidgetId, current, handle, desiredEdgePx,
             minColumnSpan, minRowSpan, 0, 0);
+    }
+
+    /**
+     * The smallest span a built-in resizes to: what the kind's own minimum span takes on this grid,
+     * measured in pixels like an app widget's minimum. A widget already below it keeps its size
+     * (the minimum never exceeds {@code currentColumns}×{@code currentRows}), so a placement from
+     * before the minimum existed is neither force-resized nor locked out of shrinking further.
+     */
+    @NonNull
+    public static WidgetGridMetrics.Span builtinMinimum(
+        @NonNull WidgetGridMetrics metrics,
+        @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetSpan kindMinimum,
+        float density, int currentColumns, int currentRows) {
+        WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
+            Math.round(kindMinimum.widthDp * density), Math.round(kindMinimum.heightDp * density));
+        int columns = minSpan.columns > 0 ? Math.min(minSpan.columns, currentColumns)
+            : currentColumns;
+        int rows = minSpan.rows > 0 ? Math.min(minSpan.rows, currentRows) : currentRows;
+        return new WidgetGridMetrics.Span(columns, rows, true);
     }
 
     /**
@@ -204,6 +257,10 @@ public final class WidgetEditPolicy {
         WidgetCellRect best = current;
         Map<Integer, WidgetCellRect> bestDisplaced = Collections.emptyMap();
         long bestDistance = edgeDistance(metrics.boundsFor(current), handle, desiredEdgePx);
+        // The passed-over span nearest the finger. Anything skipped uncosted is further away than
+        // what was held at the time, so it can never be nearer than the final answer.
+        WidgetCellRect refused = null;
+        long refusedDistance = Long.MAX_VALUE;
         BitSet others = WidgetGridPlacementPolicy.occupancy(grid, records, appWidgetId);
         // A snapshot that does not add up is nobody's to rearrange: the widget keeps its span.
         if (others == null) return new Candidate(current, true);
@@ -228,7 +285,13 @@ public final class WidgetEditPolicy {
                 displaced = Collections.emptyMap();
             } else {
                 displaced = displace(metrics, records, appWidgetId, candidate);
-                if (displaced == null) continue;
+                if (displaced == null) {
+                    if (distance < refusedDistance) {
+                        refusedDistance = distance;
+                        refused = candidate;
+                    }
+                    continue;
+                }
             }
             // A finger resting halfway between two cell edges is equally far from both; the one
             // that disturbs fewer neighbours is the better answer for that tie.
@@ -238,7 +301,11 @@ public final class WidgetEditPolicy {
                 bestDisplaced = displaced;
             }
         }
-        return new Candidate(best, true, bestDisplaced);
+        // A finger exactly halfway between the edge it holds and the one it cannot have asked for
+        // neither, so only a refusal strictly nearer than the answer is reported.
+        Set<Integer> refusedBy = refused != null && refusedDistance < bestDistance
+            ? standingOn(records, appWidgetId, refused) : Collections.emptySet();
+        return new Candidate(best, true, bestDisplaced, refusedBy);
     }
 
     private static WidgetCellRect withEdge(WidgetCellRect rect, Handle handle, int edge) {

@@ -5,11 +5,12 @@
 #
 # Staging (./gradlew :app:assembleStaging) is the release build's R8 shrinking,
 # still debuggable. BUILD_TYPE=debug installs the unshrunk debug APK instead.
-# BUILD_TYPE=release is what pong runs: release builds have no ABI splits and come out
+# Pong's development builds are staging (the default). BUILD_TYPE=release is for a drop
+# candidate on pong, a day before a pre-release cut: release builds have no ABI splits and come out
 # unsigned without the CI's TERMUX_RELEASE_* variables, so this takes the universal APK,
 # keeps only arm64-v8a's native libs, drops the bootstraps and signs it with the same test
-# key every build uses. It builds the release APK itself, versioned
-# <versionName>+dev.<sha> (".dirty" with uncommitted changes) so About tells it apart;
+# key every build uses. Staging and release are built here, versioned
+# <versionName>+dev.<sha> (".dirty" with uncommitted changes) so About tells them apart;
 # TERMUX_APP_VERSION_NAME overrides the version, NO_BUILD=1 installs the last build as is.
 #
 # Always installs with --no-incremental (an incremental install once left the launcher
@@ -20,15 +21,18 @@ DEVICE="${DEVICE:-127.0.0.1:5555}"
 BUILD_TYPE="${BUILD_TYPE:-staging}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ABI_SUFFIX=arm64-v8a; [ "$BUILD_TYPE" = release ] && ABI_SUFFIX=universal
-if [ "$BUILD_TYPE" = release ] && [ -z "${NO_BUILD:-}" ]; then
+# Staging and release are built here, versioned <versionName>+dev.<sha>, so About and
+# tlstore's min-launcher gate see the same string whichever tier is on the phone. Debug is
+# installed as last built.
+if [ "$BUILD_TYPE" != debug ] && [ -z "${NO_BUILD:-}" ]; then
   if [ -z "${TERMUX_APP_VERSION_NAME:-}" ]; then
     base="$(sed -n 's/^ *versionName "\(.*\)"/\1/p' "$REPO/app/build.gradle" | head -1)"
     sha="$(git -C "$REPO" rev-parse --short=9 HEAD)"
     [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || sha="$sha.dirty"
     export TERMUX_APP_VERSION_NAME="$base+dev.$sha"
   fi
-  echo "building release $TERMUX_APP_VERSION_NAME"
-  (cd "$REPO" && ./gradlew -q :app:assembleRelease)
+  echo "building $BUILD_TYPE $TERMUX_APP_VERSION_NAME"
+  (cd "$REPO" && ./gradlew -q ":app:assemble${BUILD_TYPE^}")
 fi
 APK="$REPO/app/build/outputs/apk/$BUILD_TYPE/termux-app_apt-android-7-${BUILD_TYPE}_${ABI_SUFFIX}.apk"
 [ -f "$APK" ] || { echo "no $APK; build it first (./gradlew :app:assemble${BUILD_TYPE^})" >&2; exit 1; }

@@ -50,6 +50,21 @@ public final class ChromeRenderer {
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /**
+         * The half of the wall whose look values the stack (the dock, its sheets and bands, the
+         * extra keys and the keyboard) wears now (ADR 0013): the half whose rows it stands.
+         */
+        @NonNull
+        default int stackLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
+        }
+
+        /** The half of the wall whose look values the status bar wears now (ADR 0013). */
+        @NonNull
+        default int statusLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
+        }
+
         /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */
         @Override
         default int glassVibrancyPercent() {
@@ -101,6 +116,26 @@ public final class ChromeRenderer {
          * Transparent when the slider is at 0. Read, never changed: the slider is the user's.
          */
         default int wallpaperDimColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
+        /**
+         * The ground under {@code screenRect}: the dim of the wall page (or pages, at a seam)
+         * the rect stands on, which on a Terminal page folds in the canvas tint when it is not
+         * glass. Home never carries the terminal's tint. Asked by the ink for a band, a widget or
+         * a pane instead of one wall-wide dim; the default is {@link #wallpaperDimColor()} for
+         * hosts that have no per-page ground.
+         */
+        default int groundUnder(@androidx.annotation.NonNull android.graphics.Rect screenRect) {
+            return wallpaperDimColor();
+        }
+
+        /**
+         * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
+         * to assume until a sample is read; transparent when the launcher shows its own picture
+         * or the system says nothing. Read, never changed.
+         */
+        default int wallpaperHintColor() {
             return android.graphics.Color.TRANSPARENT;
         }
 
@@ -385,6 +420,40 @@ public final class ChromeRenderer {
     }
 
     /**
+     * The chrome starts travelling across the seam: its bands keep the even-out they stand on
+     * ({@link ChromeInk#holdEvenOut}), so ground moving under them books no whole apply per frame.
+     */
+    public void holdEvenOut() {
+        mInk.holdEvenOut();
+    }
+
+    /**
+     * The travel is over and the landed frame is drawn: the even-out is let go, and if any band
+     * was held off ground it has since left, one pass measures it where it rests. Called after the
+     * landing frame, never in it, so the pass this books falls on a frame where nothing moves.
+     */
+    public void settleEvenOut() {
+        if (mInk.releaseEvenOut()) requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** Whether {@link #holdEvenOut} is in force and not yet settled. */
+    public boolean isEvenOutHeld() {
+        return mInk.isEvenOutHeld();
+    }
+
+    /** Set while {@link #commit} runs its apply. */
+    private boolean mCommitRunning;
+
+    /**
+     * Whether an apply asked for now is folded into the post-layout render pass instead of booking
+     * another commit: only from inside a commit, and only while the even-out is held for a
+     * crossing ({@link #holdEvenOut}), so nothing at rest changes.
+     */
+    boolean foldsIntoRenderPass() {
+        return mCommitRunning && mInk.isEvenOutHeld();
+    }
+
+    /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
      * drop the frames and leave the ink believing in a wallpaper that is no longer there.
@@ -514,7 +583,15 @@ public final class ChromeRenderer {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
         }
         if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
-            scheduleCommit();
+            if (foldsIntoRenderPass()) {
+                // Asked from inside the frame's own commit while the chrome travels across the
+                // seam (the ink measuring a band's new dress, mostly): the post-layout pass that
+                // follows applies the whole spec again anyway, so it is that pass, not a second
+                // whole apply before this frame's draw (24 ms of a drag frame on pong).
+                scopes |= SCOPE_ACCESSORY_RENDER;
+            } else {
+                scheduleCommit();
+            }
         }
         if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
             runTopPaneFrost();
@@ -709,9 +786,11 @@ public final class ChromeRenderer {
             return;
         }
         Trace.beginSection("Chrome.commit");
+        mCommitRunning = true;
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
         } finally {
+            mCommitRunning = false;
             Trace.endSection();
         }
     }

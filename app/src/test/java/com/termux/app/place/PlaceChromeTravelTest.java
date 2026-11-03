@@ -406,4 +406,93 @@ public class PlaceChromeTravelTest {
         assertEquals(chrome(0.3f), PlaceChromeTravel.progressToward(minimal, PaneWallPage.DISPLAY),
             EPSILON);
     }
+
+    /**
+     * Moved from the Home chrome policy's test. The dock rides the keyboard as a transform: the
+     * stack is laid out once with the keyboard in it, and while the keyboard is part way up the
+     * whole stack, dock included, is slid down by the share of the keyboard not yet revealed.
+     * Nothing is laid out per frame.
+     */
+    @Test
+    public void theDockRidesTheKeyboardsRevealAsATranslation() {
+        Rest down = new Rest(false, false, false);
+        Rest up = new Rest(true, false, false);
+        int keyboard = 600;
+        int dock = 128;
+        assertEquals(keyboard, PlaceChromeTravel.stackTranslationPx(
+            PlaceChromeTravel.rest(PaneWallPage.WIDGETS, down), keyboard, dock), 0f);
+        assertEquals(0f, PlaceChromeTravel.stackTranslationPx(
+            PlaceChromeTravel.rest(PaneWallPage.WIDGETS, up), keyboard, dock), 0f);
+    }
+
+    /** The window's status bar fades on the way to Home, and arrives with the window. */
+    @Test
+    public void theStatusBarFadesOutTowardHomeAndArrivesWithTheWindow() {
+        List<PaneWallPage> row = Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        PlaceChromeTravel.States states = page -> new Rest(false, false,
+            page != PaneWallPage.WIDGETS);
+        // Resting on the window, the wall half way back toward Home.
+        Frame halfway = PlaceChromeTravel.at(row, PaneWallPage.TERMINAL, 500f, 1000, states);
+        assertEquals(0.5f, halfway.statusReveal, 1e-4f);
+        assertEquals("the dock is on both halves", 1f, halfway.dockReveal, 0f);
+        Frame home = PlaceChromeTravel.at(row, PaneWallPage.WIDGETS, 0f, 1000, states);
+        assertEquals(0f, home.statusReveal, 0f);
+        Frame window = PlaceChromeTravel.at(row, PaneWallPage.TERMINAL, 0f, 1000, states);
+        assertEquals(1f, window.statusReveal, 0f);
+    }
+
+    /**
+     * Motion audit pair 5: the reveals a crossing draws are its places' rests at both ends, on
+     * every layout fixture's width: over the last {@link PlaceChromeTravel#LANDING} of the way
+     * the chrome already reads the arriving rest, the status bar's reveal included, so the settle
+     * finds nothing left to move.
+     */
+    @Test
+    public void aCrossingsRevealsLandOnTheRestOnEveryLayout() {
+        List<PaneWallPage> row = Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        PlaceChromeTravel.States states = page -> new Rest(page != PaneWallPage.WIDGETS, false,
+            page != PaneWallPage.WIDGETS);
+        for (LayoutFixtures.Fixture f : LayoutFixtures.ALL) {
+            int width = f.widthPx;
+            Rest window = states.restOf(PaneWallPage.TERMINAL);
+            Rest home = states.restOf(PaneWallPage.WIDGETS);
+            // Resting on Home, the wall all but landed on the window: the window's rest.
+            float landing = -width * (1f - PlaceChromeTravel.LANDING / 2f);
+            Frame there = PlaceChromeTravel.at(row, PaneWallPage.WIDGETS, landing, width, states);
+            assertEquals(f + " status", window.statusReveal(), there.statusReveal, 0f);
+            assertEquals(f + " dock", window.dockReveal(), there.dockReveal, 0f);
+            assertEquals(f + " keyboard", window.keyboardReveal(), there.keyboardReveal, 0f);
+            // And back: resting on the window, the wall all but landed on Home.
+            Frame back = PlaceChromeTravel.at(row, PaneWallPage.TERMINAL, -landing, width,
+                states, PaneWallPage.TERMINAL);
+            assertEquals(f + " status back", home.statusReveal(), back.statusReveal, 0f);
+            assertEquals(f + " keyboard back", home.keyboardReveal(), back.keyboardReveal, 0f);
+        }
+    }
+
+    /**
+     * Motion audit pair 8: the overlap a slide holds the content with
+     * ({@link PlaceChromeTravel#heldOverlapPx}) is the one Stack layout lays out under the hold,
+     * and it leaves the content exactly the room it was committed with, on every layout fixture:
+     * the Terminal committed with its keyboard down while the stack grows by the keyboard.
+     */
+    @Test
+    public void theHeldOverlapKeepsTheCommittedRoomOnEveryLayout() {
+        for (LayoutFixtures.Fixture f : LayoutFixtures.ALL) {
+            for (boolean dockFloating : new boolean[] {false, true}) {
+                String what = f + (dockFloating ? ", Floating" : ", Docked");
+                int held = f.settle(com.termux.app.wall.PageRef.TERMINAL, false, dockFloating)
+                    .contentReservationPx;
+                StackLayout.Input in = f.pass(com.termux.app.wall.PageRef.TERMINAL, true,
+                    dockFloating);
+                in.travelHoldsContent = true;
+                in.heldReservationPx = held;
+                StackLayout.Result r = StackLayout.layout(in,
+                    new com.termux.app.dock.DockGeometry());
+                assertEquals(what, PlaceChromeTravel.heldOverlapPx(r.stackHeightPx,
+                    r.bottomMarginPx, held), r.contentOverlapPx);
+                assertEquals(what, held, r.contentReservationPx);
+            }
+        }
+    }
 }

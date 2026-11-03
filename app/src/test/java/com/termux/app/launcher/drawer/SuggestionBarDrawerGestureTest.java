@@ -67,6 +67,8 @@ public class SuggestionBarDrawerGestureTest {
         // lives on a Configuration shared for the whole test.
         context.getResources().getConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
         row = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         child = new RecordingChild(context);
         row.addView(child, new ViewGroup.LayoutParams(ROW_WIDTH / 2, ROW_HEIGHT));
         row.measure(

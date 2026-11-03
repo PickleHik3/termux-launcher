@@ -11,13 +11,14 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The status bar's own page: the 12-hour choice, the CPU/memory/weather cards and the media row's
- * switch, with the place the weather follows when it should not follow the device. Pinned
- * notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
+ * switch, with the place the weather follows when it should not follow the device, and the gap
+ * the row leaves for the camera. Pinned notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
  * the last row here links to it.
  *
  * <p>Splits the status half out of the old combined Terminal &amp; status page; the terminal half
@@ -38,6 +39,26 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         bindWeatherPlace(findPreference("status_widget_weather_location"));
+        bindCutoutMode(findPreference("status_bar_cutout_mode"));
+    }
+
+    /** The cutout's two sliders are there only while the gap is the user's own. */
+    private void bindCutoutMode(@Nullable SegmentedPillPreference mode) {
+        if (mode == null) return;
+        applyCutoutSliders(mode.getValue());
+        mode.setOnPreferenceChangeListener((preference, newValue) -> {
+            // Fired before the new value is stored, so gate on the incoming one.
+            applyCutoutSliders(newValue == null ? null : newValue.toString());
+            return true;
+        });
+    }
+
+    private void applyCutoutSliders(@Nullable String mode) {
+        boolean custom = "custom".equals(mode);
+        Preference centre = findPreference("status_bar_cutout_center");
+        if (centre != null) centre.setVisible(custom);
+        Preference width = findPreference("status_bar_cutout_width");
+        if (width != null) width.setVisible(custom);
     }
 
     /**

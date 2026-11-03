@@ -1,0 +1,15 @@
+{
+  "wall_pages": "{\"home\":2,\"pages\":[{\"id\":2,\"kind\":\"HOME\"},{\"id\":1,\"kind\":\"TERMINAL\"}]}",
+  "prefs": {
+    "place.migrated": 14,
+    "place.home_layout": true,
+    "layout.portrait.apps_row": "bottom",
+    "layout.landscape.apps_row": "bottom",
+    "layout.portrait.az_row": true,
+    "layout.landscape.az_row": true,
+    "layout.home.portrait.apps_row": "hidden",
+    "layout.home.landscape.apps_row": "hidden",
+    "layout.home.portrait.az_row": false,
+    "layout.home.landscape.az_row": false
+  }
+}

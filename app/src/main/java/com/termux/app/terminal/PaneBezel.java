@@ -1,0 +1,117 @@
+package com.termux.app.terminal;
+
+import androidx.annotation.NonNull;
+
+/**
+ * The bezel a pane wears while a terminal effect is on: a solid band in the theme's panel colour
+ * round the "screen" the effect is drawn on, so the CRT's bend and the scanlines stop at a frame
+ * instead of running into the pane's edge, where the bend used to pull text past the slab. Solid
+ * rather than the pane's glass (wave 7): a monitor's frame is plastic, not a window on the
+ * wallpaper, and the picture reads deeper set into an opaque frame.
+ *
+ * <p>The bezel is {@link #SIDE_DP} at the sides and {@link #TOP_BOTTOM_DP} top and bottom; the
+ * screen inside it is rounded at {@link #SCREEN_RADIUS_DP} (capped like any pane,
+ * {@link PaneShape#radiusForBounds}). The effect is cut to the screen, and the terminal is laid
+ * out inside it: past the bezel, past the screen's own arc, and past what the bend pushes off the
+ * screen's edges, so no cell is lost to the bend either.
+ *
+ * <p>Pure arithmetic in px, so it is tested without a view.
+ */
+public final class PaneBezel {
+
+    private PaneBezel() {}
+
+    /** The bezel's width at the left and right. */
+    public static final float SIDE_DP = 8f;
+    /** The bezel's height at the top and bottom. */
+    public static final float TOP_BOTTOM_DP = 10f;
+    /** The radius the screen inside the bezel is rounded at. */
+    public static final float SCREEN_RADIUS_DP = 10f;
+
+    /**
+     * The bezel's depth, laid over its fill from the card's top to its bottom: the top edge lit
+     * (white at 8 %), clear at the middle, the bottom edge in shade (black at 18 %). Translucent
+     * over the slab, so it reads over glass and over the opaque surface colour alike. White and
+     * black each fade to their own clear colour, so the middle never greys.
+     */
+    public static final int[] SHADE_COLOURS = {0x14FFFFFF, 0x00FFFFFF, 0x00000000, 0x2E000000};
+    /** Where each of {@link #SHADE_COLOURS} stands, top 0 to bottom 1. */
+    public static final float[] SHADE_POSITIONS = {0f, 0.5f, 0.5f, 1f};
+
+    /** Whether a pane drawn through {@code style} wears the bezel: whenever any effect is on. */
+    public static boolean worn(@NonNull PaneRetroStyle style) {
+        return style != PaneRetroStyle.NONE;
+    }
+
+    /** The bezel's side width in px, 0 while it is not worn. */
+    public static int sidePx(boolean worn, float density) {
+        return worn ? Math.round(SIDE_DP * Math.max(0f, density)) : 0;
+    }
+
+    /** The bezel's top and bottom height in px, 0 while it is not worn. */
+    public static int topBottomPx(boolean worn, float density) {
+        return worn ? Math.round(TOP_BOTTOM_DP * Math.max(0f, density)) : 0;
+    }
+
+    /**
+     * The screen: the rect the effect is cut to inside a pane {@code width} by {@code height} px,
+     * the whole pane while no bezel is worn. Never inverted on a pane smaller than its bezel.
+     *
+     * @param out {@code left, top, right, bottom}
+     * @return the screen's corner radius; with no bezel, {@code paneRadiusPx} (the pane's own)
+     */
+    public static float screen(boolean worn, float width, float height, float density,
+                               float paneRadiusPx, @NonNull float[] out) {
+        float w = Math.max(0f, width);
+        float h = Math.max(0f, height);
+        if (!worn) {
+            out[0] = 0f;
+            out[1] = 0f;
+            out[2] = w;
+            out[3] = h;
+            return Math.max(0f, paneRadiusPx);
+        }
+        float side = Math.min(sidePx(true, density), w / 2f);
+        float topBottom = Math.min(topBottomPx(true, density), h / 2f);
+        out[0] = side;
+        out[1] = topBottom;
+        out[2] = w - side;
+        out[3] = h - topBottom;
+        return PaneShape.radiusForBounds(SCREEN_RADIUS_DP * Math.max(0f, density),
+            Math.round(out[2] - out[0]), Math.round(out[3] - out[1]));
+    }
+
+    /**
+     * The terminal's margins inside a pane {@code width} by {@code height} px while the bezel is
+     * worn: the bezel and the screen's arc clearance on each axis. The CRT's bend needs none: it
+     * is pinned at the middle of each edge ({@code c(1 + b|c|²)/(1 + b)} in
+     * {@link PaneRetroEffect#CRT_AGSL}), so the picture touches the screen there and pulls inward
+     * everywhere else; no cell leaves the screen. The top is before the terminal's own headroom
+     * ({@link PaneShape#topInsetPx} takes that off).
+     *
+     * @param out {@code side, topBottom}
+     */
+    public static void contentInsets(float width, float height, float density,
+                                     @NonNull int[] out) {
+        float w = Math.max(0f, width);
+        float h = Math.max(0f, height);
+        float side = Math.min(sidePx(true, density), w / 2f);
+        float topBottom = Math.min(topBottomPx(true, density), h / 2f);
+        float screenW = w - 2f * side;
+        float screenH = h - 2f * topBottom;
+        int arc = PaneShape.contentInsetPx(PaneShape.radiusForBounds(
+            SCREEN_RADIUS_DP * Math.max(0f, density), Math.round(screenW), Math.round(screenH)));
+        out[0] = Math.round(side) + arc;
+        out[1] = Math.round(topBottom) + arc;
+    }
+
+    /**
+     * What the bezel is filled with under the terminal: {@code panelColour} made opaque, whatever
+     * the pane's glass is doing. The theme's raised panel tone (the drawer's and popups', a step
+     * lighter than the surface in the dark theme) stands off the tube face inside the screen,
+     * which is near black, and off the pane's own surface colour behind it.
+     */
+    public static int fill(int panelColour) {
+        return panelColour | 0xFF000000;
+    }
+}

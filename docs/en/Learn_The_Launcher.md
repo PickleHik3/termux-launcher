@@ -36,8 +36,10 @@ edge or hidden; see [Layout and full screen](Layout_And_Full_Screen.md).
   terminal, the widgets or the display, and the space outside it). The edge lights as soon as you
   touch it, and the page follows your finger. A short drag goes back; a longer drag or a flick lands
   on the next place. On the left and right borders, hold until the page ticks and sinks under your
-  finger, then drag; holding works on the top and bottom too. A swipe that starts on the page
-  itself belongs to the page, so a scroll or selection never changes place by accident.
+  finger, then drag; holding works on the top and bottom too. A clear sideways swipe across a
+  terminal window's text changes place the same way. A scroll, a selection, or a program that uses
+  the mouse keeps its own drag, and **Settings → Home → Gestures → Swipe on the terminal
+  to switch windows** turns the text swipe off.
 - **Tap a place icon.** The other two places peek in from the edges of the status bar. Tap one to
   go there.
 - **Keyboard.** Swipe up from the bottom border to open the keyboard, and down to put it away. It
@@ -53,7 +55,7 @@ The corners are not the border. They hold the corner tab (below).
 Hold any corner of a page to show its tab:
 
 - **Terminal**: **Appearance**, minimal mode, automatic tiling, **Open settings** (cog) and **?**.
-- **Widgets**: **Edit widgets**, **Add page**, **Appearance**, minimal mode and **?**.
+- **Widgets**: **Edit widgets**, **Add page**, **Appearance** and **?**.
 - **Display**: turn the display on or off, minimal mode, settings, **Appearance** and **?**.
 - **A split pane**: **Close**, **Move** and **Maximise** instead.
 
@@ -70,7 +72,7 @@ Session
 ```
 
 - A **session** is the top-level group, shown by the number at the start of the status bar.
-- A **window** is a tab inside a session, shown as a pill beside the number.
+- A **window** is a tab inside a session, shown as a window chip beside the number.
 - A **pane** is one shell. A window can be split into several panes.
 - A **workspace** is a saved set of sessions, windows, panes and working directories.
 
@@ -113,31 +115,42 @@ None of these are needed for the launcher and terminal:
 
 ## The tour
 
-The tour plays once, over the real home screen, after first launch. Each step glows the control it
-wants you to try, and **Skip** is on every card. In order:
+The tour plays once, on the wall itself, when you tap **Take the tour** on the Welcome sheet. It
+starts on Home page 1. Each card glows the control it wants you to try and clears when you do the
+real gesture; **Skip** is on every card. Each lesson starts where it is taught: Home page 1, or
+your first window. If you wander to the other half mid-lesson, the card tells you the way back. Six
+lessons in three chapters:
 
-1. How you will use the launcher (the Launcher mode).
-2. Hold a corner, then tap **?**.
-3. Swipe sideways along the page's top or bottom border to the next place, then back.
-4. Swipe up and down on the bottom border for the keyboard.
-5. Swipe down and up on the top border for the status bar.
-6. Hold an empty spot in the apps row to pin apps.
-7. Swipe down on the apps row to open the app drawer (on a side rail, swipe right on a left rail
-   or left on a right rail).
-8. Swipe up on the space bar for the command palette.
-9. After an update only: an offer of the new extra-keys row.
-10. Use the launcher as your home screen.
-11. A closing card with tips, a **Copy** button for the `tlstore` commands it mentions, and
-    **Read the docs**.
+**Home**
 
-Replay it from **Settings → About & help → Replay tour**.
+1. Swipe left on an empty spot of Home: past your last Home page, your first window slides in.
+   Then swipe right along the window's bottom border (a border drag) to slide back to Home.
+2. Swipe down on the dock's apps row to open the app drawer (on a side rail, swipe right on a left
+   rail or left on a right rail).
+
+**The Workspace**
+
+3. Swipe down from the window's bottom border to put the keyboard away, then up to bring it back.
+4. Pull down from the window's top border to open the status bar, then swipe up to fold it.
+
+**Anywhere**
+
+5. Swipe up on an empty spot of Home for the command palette (on a window, it is in the corner
+   tab).
+6. Hold a corner of the window for its corner tab, then tap **?**.
+
+A closing card follows, with tips: hold an empty spot on Home and tap **Terminal** for a Home
+float, and **Layout** in the same menu arranges the dock. If the wall has no window beside Home,
+the first lesson is left out.
+
+Replay it from **Settings → General → About & help → Replay tour**.
 
 ## Get help
 
 Hold any corner for its tab, then tap **?** to see what the controls on that place do. **Help** is
-also in the command palette and in **Settings → Apps → Help**, and it opens for the place you are
+also in the command palette and in **Settings → General → About & help → Help**, and it opens for the place you are
 on. On the terminal it opens by topic, grouped from **Find your way** to **Something missing?**:
 pick what you are stuck on. **Try it** on a topic closes help and walks you through that action.
 
-These guides are also linked from **Settings → About & help → Documentation**. To report a bug,
+These guides are also linked from **Settings → General → About & help → Documentation**. To report a bug,
 use **Send feedback** there, and see [Troubleshooting](Launcher_Troubleshooting.md) first.

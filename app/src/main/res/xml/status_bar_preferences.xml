@@ -48,13 +48,30 @@
             app:dependency="status_widget_weather" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_status_more_header">
-        <Preference
-            app:key="status_bar_notifications_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_notifications"
-            app:summary="@string/settings_status_bar_notifications_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
+    <!-- Where the bar shares the camera's band, its row leaves a gap for the camera (#163).
+         Auto follows the phone's own cutout; Custom shows the two sliders. -->
+    <PreferenceCategory app:title="@string/settings_status_cutout_header">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="status_bar_cutout_mode"
+            app:title="@string/settings_status_cutout_title"
+            android:defaultValue="auto"
+            app:entries="@array/settings_status_cutout_entries"
+            app:entryValues="@array/settings_status_cutout_values" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_center"
+            app:title="@string/settings_status_cutout_center_title"
+            app:summary="@string/settings_status_cutout_center_summary"
+            android:defaultValue="0"
+            app:min="-200"
+            android:max="200"
+            app:showSeekBarValue="true" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_width"
+            app:title="@string/settings_status_cutout_width_title"
+            app:summary="@string/settings_status_cutout_width_summary"
+            android:defaultValue="32"
+            app:min="0"
+            android:max="160"
+            app:showSeekBarValue="true" />
     </PreferenceCategory>
-
 </PreferenceScreen>

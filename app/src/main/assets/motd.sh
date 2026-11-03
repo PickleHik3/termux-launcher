@@ -6,7 +6,7 @@
 rows='#Apps
 tlstore|browse and install terminal apps
 tlstore display|set up graphics for Linux apps
-tlstore update|keep your apps current'
+tlstore upgrade|keep your apps current'
 
 # The Nix edition has no pkg; its packages come from nix-on-droid.
 if command -v pkg >/dev/null 2>&1; then

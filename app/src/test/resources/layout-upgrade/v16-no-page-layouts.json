@@ -1,0 +1,17 @@
+{
+  "wall_pages": "{\"version\": 1, \"home\": 1, \"next\": 20, \"pages\": [{\"id\": 1, \"kind\": \"HOME\"}, {\"id\": 4, \"kind\": \"TERMINAL\"}], \"pending\": []}",
+  "prefs": {
+    "place.migrated": 16,
+    "layout.home.portrait.apps_row": "bottom",
+    "layout.portrait.apps_row": "hidden",
+    "layout.minimal.portrait.extra_keys": "hidden",
+    "layout.portrait.extra_keys": "bottom",
+    "layout.home.search_field": true,
+    "layout.search_field": false,
+    "place.dress.terminal.portrait.extra_keys": true,
+    "place.dress.display.portrait.extra_keys": false,
+    "place.terminal.keyboard_open": true,
+    "layout.home.keyboard_shown": true,
+    "layout.home.keyboard_rows": 2
+  }
+}

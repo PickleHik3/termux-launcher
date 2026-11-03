@@ -1,7 +1,6 @@
 package com.termux.app.help;
 
 import com.termux.R;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
@@ -60,8 +59,8 @@ public final class HelpTopics {
 
     /** Hold a corner, then tap ? — the lesson that teaches where help lives. */
     public static final String LESSON_FIND_HELP = "find_help";
-    /** Hold the page's border and drag sideways to the next place. */
-    public static final String LESSON_BORDER_DRAG = "border_drag";
+    /** Swipe across the seam into the Workspace, and border-drag back to Home. */
+    public static final String LESSON_PAGE_SWIPE = "page_swipe";
     /** Pull the apps row away from its edge to open the drawer. */
     public static final String LESSON_FIND_APPS = "find_apps";
     /** Put the keyboard away with a swipe off the bottom border, and bring it back. */
@@ -72,7 +71,7 @@ public final class HelpTopics {
     public static final String LESSON_FIND_ACTION = "find_action";
     /** The only lessons a topic may hand practice to: the run's own, under the run's ids. */
     public static final List<String> LESSON_IDS = Collections.unmodifiableList(Arrays.asList(
-        LESSON_FIND_HELP, LESSON_BORDER_DRAG, LESSON_KEYBOARD, LESSON_STATUS_SWIPE,
+        LESSON_FIND_HELP, LESSON_PAGE_SWIPE, LESSON_KEYBOARD, LESSON_STATUS_SWIPE,
         LESSON_FIND_APPS, LESSON_FIND_ACTION));
 
     /** One topic, and everything help knows to say about it. */
@@ -98,7 +97,7 @@ public final class HelpTopics {
         /** The places whose layout has that control; empty when the topic has no control. */
         public final List<PaneWallPage> places;
         /** The gesture a demonstration would trace, or null when none is implemented. */
-        public final TourGesture gesture;
+        public final HelpGesture gesture;
         /** A lesson from {@link #LESSON_IDS}, or null when there is nothing to practise. */
         public final String lessonId;
         /** Other topics worth reading next. */
@@ -209,8 +208,8 @@ public final class HelpTopics {
             .steps(R.string.help_topic_places_step1)
             .wayBack(R.string.help_topic_places_back)
             .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
-            .gesture(TourGesture.HOLD_DRAG)
-            .lesson(LESSON_BORDER_DRAG)
+            .gesture(HelpGesture.HOLD_DRAG)
+            .lesson(LESSON_PAGE_SWIPE)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
             .aliases(R.string.help_topic_places_aliases)
             .doc("Widgets.md"));
@@ -248,7 +247,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_status_back)
             .reveal(R.string.help_topic_status_reveal)
             .target("status", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
-            .gesture(TourGesture.DRAG_DOWN)
+            .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_STATUS_SWIPE)
             .related("places", "windows", "pinned_notifications")
             .terms("place", "window", "status_swipe")
@@ -280,7 +279,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_dock_back)
             .reveal(R.string.help_topic_dock_reveal)
             .target("dock", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.DRAG_DOWN)
+            .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_FIND_APPS)
             .related("az", "organize_apps", "fix_dock").terms("dock", "app_drawer")
             .aliases(R.string.help_topic_dock_aliases)
@@ -290,7 +289,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_az_step1)
             .reveal(R.string.help_topic_az_reveal)
             .target("az", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.SCRUB)
+            .gesture(HelpGesture.SCRUB)
             .related("dock", "organize_apps").terms("app_drawer")
             .aliases(R.string.help_topic_az_aliases)
             .doc("Home_Screen_And_Apps.md"));
@@ -368,7 +367,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_kswipe_back)
             .target("keyboard_grabber", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY,
                 PaneWallPage.WIDGETS)
-            .gesture(TourGesture.SWIPE_UP)
+            .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_KEYBOARD)
             .related("keyboard", "keyboard_layouts", "fix_keyboard")
             .terms("keyboard_swipe")
@@ -410,7 +409,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_space_step1, R.string.help_topic_space_step2)
             .reveal(R.string.help_topic_space_reveal)
             .target("space", PaneWallPage.TERMINAL)
-            .gesture(TourGesture.SWIPE_UP)
+            .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_FIND_ACTION)
             .related("palette", "windows", "hierarchy").terms("command_palette")
             .aliases(R.string.help_topic_space_aliases)
@@ -472,7 +471,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_workspace_step1, R.string.help_topic_workspace_step2)
             .related("windows", "panes").terms("workspace", "session")
             .aliases(R.string.help_topic_workspace_aliases)
-            .doc("Panes_Windows_And_Sessions.md#workspaces"));
+            .doc("Panes_Windows_And_Sessions.md#saved-sessions"));
 
         // 6. Make it yours.
         b.add(topic("appearance_editor", Group.YOURS, R.string.help_topic_appearance_title,
@@ -538,7 +537,7 @@ public final class HelpTopics {
                 R.string.help_topic_gui_apps_step3)
             .related("display_apps", "tlstore", "fix_display").terms("place")
             .aliases(R.string.help_topic_gui_apps_aliases)
-            .doc("X11_Display.md#turn-it-on"));
+            .doc("X11_Display.md#set-it-up"));
         b.add(topic("touchpad", Group.DISPLAY, R.string.help_pad_title,
                 R.string.help_topic_touchpad_purpose, R.string.help_topic_touchpad_action)
             .steps(R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three)
@@ -627,7 +626,7 @@ public final class HelpTopics {
         private int wayBackRes;
         private int revealRes;
         private String targetId;
-        private TourGesture gesture;
+        private HelpGesture gesture;
         private String lessonId;
         private int aliasesRes;
         private String docPath;
@@ -653,7 +652,7 @@ public final class HelpTopics {
             places.addAll(Arrays.asList(on));
             return this;
         }
-        Builder gesture(TourGesture value) { gesture = value; return this; }
+        Builder gesture(HelpGesture value) { gesture = value; return this; }
         Builder lesson(String id) { lessonId = id; return this; }
         Builder related(String... ids) { relatedIds.addAll(Arrays.asList(ids)); return this; }
         Builder terms(String... ids) { termIds.addAll(Arrays.asList(ids)); return this; }

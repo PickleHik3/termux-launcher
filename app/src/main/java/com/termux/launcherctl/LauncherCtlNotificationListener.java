@@ -329,6 +329,32 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return listenerConnected;
     }
 
+    /**
+     * The keys of the notifications in the shade that the system ranks below the default
+     * importance: the ones that arrive without a sound or a peek. Empty when the listener is not
+     * connected.
+     */
+    @NonNull
+    public static Set<String> activeSilentKeys() {
+        Set<String> keys = new HashSet<>();
+        LauncherCtlNotificationListener listener = activeInstance;
+        if (listener == null) return keys;
+        try {
+            RankingMap map = listener.getCurrentRanking();
+            if (map == null) return keys;
+            Ranking ranking = new Ranking();
+            for (String key : map.getOrderedKeys()) {
+                if (map.getRanking(key, ranking)
+                    && ranking.getImportance() < android.app.NotificationManager.IMPORTANCE_DEFAULT) {
+                    keys.add(key);
+                }
+            }
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "Could not read notification importance: " + e.getMessage());
+        }
+        return keys;
+    }
+
     public static boolean dismissNotification(String key) {
         LauncherCtlNotificationListener listener = activeInstance;
         if (listener == null || key == null || key.isEmpty()) return false;

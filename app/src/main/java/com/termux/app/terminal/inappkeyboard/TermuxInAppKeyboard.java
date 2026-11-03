@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.terminal.DeckLook;
 import com.termux.app.terminal.TerminalClipboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -264,6 +265,14 @@ public final class TermuxInAppKeyboard {
     /** Replaces how a connected hardware keyboard is detected; for tests. */
     void setHardwareKeyboardDetector(@NonNull BooleanSupplier detector) {
         mHardwareKeyboardConnected = Objects.requireNonNull(detector, "detector");
+    }
+
+    /**
+     * Whether this keyboard is standing aside for a physical one right now: the setting asks it to
+     * stay away while one is attached, and one is. A person asking for it still raises it.
+     */
+    public boolean yieldsToHardwareKeyboard() {
+        return mEnabled && shouldHideForHardwareKeyboard();
     }
 
     /** Whether the setting asks this keyboard to stay away while a hardware keyboard is attached. */
@@ -529,6 +538,7 @@ public final class TermuxInAppKeyboard {
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
                 applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
                 applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
+                applyTextScale();
                 // The gap slider is global and lands on the next resume, like the rows above.
                 if (mForm == PlaceLayout.KeyboardForm.SPLIT)
                     applyKeyboardForm();
@@ -855,6 +865,16 @@ public final class TermuxInAppKeyboard {
 
     private void applyKeyMarginScale(float keyMarginScale) {
         applyKeyMarginScale(keyMarginScale, false);
+    }
+
+    /**
+     * The key legends at the shared Text size. Only the legends move, never the keys, so this
+     * asks the keyboard for one measure and nothing of the geometry around it; the same size
+     * again asks for nothing.
+     */
+    public void applyTextScale() {
+        if (mKeyboardView != null)
+            mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
     }
 
     private void applyKeyMarginScale(float keyMarginScale, boolean livePreview) {
@@ -1483,6 +1503,7 @@ public final class TermuxInAppKeyboard {
             requireContainer().getContext());
         mKeyboardView.setHeightScale(effectiveHeightScale());
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
+        mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(tapLayoutKey(mSelectedLayoutId));
@@ -1593,7 +1614,8 @@ public final class TermuxInAppKeyboard {
             && a.lockedModifierColor == b.lockedModifierColor
             && a.borderColor == b.borderColor
             && a.keyGradientTopOverlay == b.keyGradientTopOverlay
-            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay;
+            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay
+            && a.deck == b.deck && a.deckKey == b.deckKey && a.deckLit == b.deckLit;
     }
 
     /** {@link #createPalette()} for the view, remembered as the one it draws. */
@@ -1612,7 +1634,47 @@ public final class TermuxInAppKeyboard {
                 mGlassTone);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
-        return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
+        if (scheme.shouldApplyImportedPalette(theme))
+            palette = scheme.applyToPalette(palette);
+        // After the scheme: while a terminal effect is on, the deck's colours win over its keys'.
+        DeckLook deck = mDeckLook;
+        return deck == null ? palette : palette.withDeck(deck.bed, deck.bedTop, deck.key,
+            deck.keyTop, deck.keyFoot, deck.lit, deck.litInk, deck.litFoot);
+    }
+
+    /**
+     * The glass the keyboard draws on, from the palette it builds ({@link #createPalette()}): the
+     * theme's glass under the Look, with the colour scheme's or the deck's bed over it. What a sheet
+     * over the keyboard takes for its own glass, so the two always match.
+     */
+    @androidx.annotation.ColorInt
+    public int glassBaseColor(@NonNull Context fallback) {
+        // Not laid into the window yet: the dock's glass, which the keyboard's starts from.
+        if (mHost.getKeyboardContainer() == null)
+            return InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(fallback);
+        Context context = requireContainer().getContext();
+        int base = InAppKeyboardPaletteFactory.resolveGlassBase(context,
+            com.termux.app.chrome.GlassLook.of(mPreferences));
+        int bed = createPalette().keyboardBackground;
+        return android.graphics.Color.alpha(bed) == 0 ? base
+            : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
+    }
+
+    /** The deck look the keyboard wears while a terminal effect is on; null for none. */
+    @Nullable private DeckLook mDeckLook;
+
+    /**
+     * Dresses the keyboard as the CRT's accessory (an opaque bed, push-button keys, lights in
+     * the effect's palette) while {@code look} is non-null; null restores the Look's palette.
+     */
+    public void setDeckLook(@Nullable DeckLook look) {
+        if (java.util.Objects.equals(look, mDeckLook))
+            return;
+        mDeckLook = look;
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        mKeyboardView.setPalette(recordedPalette());
+        if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */

@@ -235,6 +235,77 @@ public final class DockGlassRendering {
             Math.round(ba + (bb - ba) * t));
     }
 
+    // ------------------------------------------------------------ the shelf under a floating slab
+    //
+    // The Glass tray reads as a thick piece of glass resting just above the wallpaper, not a hard
+    // cut: under its lower edge the wallpaper wears a soft contact shadow, and inside that a faint
+    // glow, the light the slab gathered and lets out of its lower face. Both are drawn once by
+    // DockShelfView on the wallpaper below the slab, outside the glass, and never move at rest.
+
+    /** The contact shadow's darkness at its core, right under the slab's lower edge. */
+    public static final float SHELF_SHADOW_ALPHA = 0.22f;
+    /** How far below the slab's lower edge the shadow reaches, dp: its vertical radius. */
+    public static final float SHELF_SHADOW_DEPTH_DP = 7f;
+    /**
+     * How far above the lower edge the shadow's core sits, dp, hidden under the slab: the
+     * shadow is then darkest right at the contact line and fades from it, with no hard start.
+     */
+    public static final float SHELF_SHADOW_RISE_DP = 2f;
+    /** The light glow's strength at its core: faint, a hint of light through the glass. */
+    public static final float SHELF_GLOW_ALPHA = 0.10f;
+    /** How far below the slab's lower edge the glow reaches, dp. */
+    public static final float SHELF_GLOW_DEPTH_DP = 2.5f;
+    /** The glow's stops: its core, half of it at the middle of its reach, nothing at its rim. */
+    private static final float[] SHELF_FALLOFF_STOPS = {0f, 0.45f, 1f};
+    private static final float[] SHELF_FALLOFF_SHARES = {1f, 0.42f, 0f};
+
+    /**
+     * The contact shadow's half width across the slab: the slab's half width less half its
+     * corner radius, since the rounded corners stand off the wallpaper.
+     */
+    public static float shelfShadowHalfWidthPx(float slabWidthPx, float cornerRadiusPx) {
+        return Math.max(1f, slabWidthPx * 0.5f - Math.max(0f, cornerRadiusPx) * 0.5f);
+    }
+
+    /** The glow's half width: inside the shadow, clear of the corners' arcs. */
+    public static float shelfGlowHalfWidthPx(float slabWidthPx, float cornerRadiusPx) {
+        return Math.max(1f, slabWidthPx * 0.5f - Math.max(0f, cornerRadiusPx));
+    }
+
+    /** The radial falloff both share, as positions for a gradient. */
+    @NonNull
+    public static float[] shelfFalloffStops() {
+        return SHELF_FALLOFF_STOPS.clone();
+    }
+
+    /** The falloff's colours for a core of {@code color} at {@code alpha} (0..1). */
+    @NonNull
+    public static int[] shelfFalloffColors(@ColorInt int color, float alpha) {
+        int[] colors = new int[SHELF_FALLOFF_SHARES.length];
+        for (int i = 0; i < colors.length; i++) {
+            colors[i] = withAlpha(color, Math.round(255f * clamp01(alpha) * SHELF_FALLOFF_SHARES[i]));
+        }
+        return colors;
+    }
+
+    // The shelf in miniature under each Lens bead: the same contact shadow and glow, scaled to a
+    // bead, so each reads as a small lens resting just above the wallpaper.
+
+    /** A bead's contact shadow at its core: a little lighter than the tray's, as a bead is small. */
+    public static final float BEAD_SHADOW_ALPHA = 0.18f;
+    /** How far below a bead the shadow reaches, dp. */
+    public static final float BEAD_SHADOW_DEPTH_DP = 4.5f;
+    /** How far above the bead's lowest point the shadow's core sits, dp, hidden under the bead. */
+    public static final float BEAD_SHADOW_RISE_DP = 1.5f;
+    /** The shadow's half width as a share of the bead's radius: the part of a round bead that is low. */
+    public static final float BEAD_SHADOW_HALF_WIDTH_SHARE = 0.62f;
+    /** A bead's glow at its core. */
+    public static final float BEAD_GLOW_ALPHA = 0.08f;
+    /** How far below a bead the glow reaches, dp. */
+    public static final float BEAD_GLOW_DEPTH_DP = 1.6f;
+    /** The glow's half width as a share of the bead's radius. */
+    public static final float BEAD_GLOW_HALF_WIDTH_SHARE = 0.4f;
+
     /** Literal opacity endpoint: 100% is an opaque material and 0% is fully transparent. */
     private static final int BASE_MAX_ALPHA = 255;
 

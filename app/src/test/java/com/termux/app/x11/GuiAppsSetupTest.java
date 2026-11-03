@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup.Distro;
 import com.termux.app.x11.GuiAppsSetup.Route;
 import com.termux.app.x11.GuiAppsSetup.StarterApp;
@@ -25,6 +25,9 @@ import java.util.Set;
  * with the user watching, so both are checked here rather than on a phone.
  */
 public class GuiAppsSetupTest {
+
+    /** The done-marker step every Termux-route command now ends with. */
+    private static final String X11_MARKER = " && mkdir -p \"$PREFIX/var/lib/termux-launcher\" && printf '%s\\n' 'x11' > \"$PREFIX/var/lib/termux-launcher/gui-apps-setup\"";
 
     private static final Set<StarterApp> ALL = EnumSet.allOf(StarterApp.class);
     private static final Set<StarterApp> NONE = EnumSet.noneOf(StarterApp.class);
@@ -59,8 +62,60 @@ public class GuiAppsSetupTest {
         assertTrue(command(Route.X11_REPO, Distro.DEBIAN, NONE).contains(" dbus"));
     }
 
+    @Test public void termuxsX11RouteInstallsFcitx5ForTextFieldFocusAndVajsDoesNot() {
+        for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
+            String termux = command(Route.X11_REPO, Distro.DEBIAN, starters);
+            assertTrue(termux.contains(" fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio"));
+            assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
+                AppEdition.VAJ).contains("fcitx5"));
+            assertFalse(command(Route.DISTRO, Distro.DEBIAN, starters).contains("fcitx5"));
+        }
+    }
+
+    @Test public void termuxsX11RouteInstallsPulseaudioForSoundAndVajsDoesNot() {
+        for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
+            assertTrue(command(Route.X11_REPO, Distro.DEBIAN, starters).contains(" pulseaudio"));
+            assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
+                AppEdition.VAJ).contains("pulseaudio"));
+        }
+    }
+
+    @Test public void theDistroRouteAsksForTheSoundServerOnTheTermuxSideWithoutStoppingForIt() {
+        for (Distro distro : Distro.values()) {
+            String command = command(Route.DISTRO, distro, NONE);
+
+            assertTrue(distro.name(), command.contains(
+                "command -v pulseaudio >/dev/null 2>&1 || pkg install -y pulseaudio || true\n"));
+            assertTrue(command.indexOf("pkg install -y pulseaudio")
+                < command.indexOf("proot-distro login"));
+        }
+    }
+
+    @Test public void aDistroGetsAlsasPulseaudioPluginAndAnAsoundConfOnlyWhereNoneIsTheUsers() {
+        assertEquals("libasound2-plugins", Distro.DEBIAN.alsaPackages);
+        assertEquals("libasound2-plugins", Distro.UBUNTU.alsaPackages);
+        assertEquals("alsa-plugins libpulse", Distro.ARCH.alsaPackages);
+        for (Distro distro : Distro.values()) {
+            String inside = GuiAppsSetup.insideScript(distro, NONE);
+
+            for (String name : distro.alsaPackages.split(" ")) {
+                assertTrue(distro.name() + " " + name, inside.contains(" " + name));
+            }
+            assertTrue(inside.endsWith("if [ ! -e /etc/asound.conf ] || grep -q 'written by "
+                + "termux-launcher' /etc/asound.conf; then printf '%s' "
+                + GuiAppsSetup.singleQuote(GuiAppsSetup.ASOUND_CONF) + " > /etc/asound.conf; fi"));
+            assertTrue(inside.indexOf(distro.alsaPackages.split(" ")[0])
+                < inside.indexOf("/etc/asound.conf"));
+        }
+        assertTrue(GuiAppsSetup.ASOUND_CONF.startsWith("# written by termux-launcher"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\npcm.!default { type pulse }\n"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\nctl.!default { type pulse }\n"));
+        // It rides inside the single-quoted container script, so it must hold no quote itself.
+        assertFalse(GuiAppsSetup.ASOUND_CONF.contains("'"));
+    }
+
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio" + X11_MARKER,
             command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
@@ -68,7 +123,7 @@ public class GuiAppsSetupTest {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox mousepad",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio mousepad" + X11_MARKER,
             command);
     }
 
@@ -264,6 +319,20 @@ public class GuiAppsSetupTest {
         }
     }
 
+    @Test public void theCommandEndsByWritingTheDoneMarkerOnlyAfterEverythingSucceeded() {
+        String marker = "mkdir -p \"$PREFIX/var/lib/termux-launcher\" && printf '%s\\n' '";
+        String x11 = command(Route.X11_REPO, Distro.DEBIAN, ALL);
+        assertTrue(x11, x11.contains(" && " + marker));
+        assertTrue(x11, x11.endsWith("/gui-apps-setup\""));
+        for (Distro distro : Distro.values()) {
+            String command = command(Route.DISTRO, distro, ALL);
+            int at = command.indexOf(marker);
+            assertTrue(distro.name(), at > command.indexOf("proot-distro login"));
+            assertTrue(distro.name(), at < command.indexOf("Done."));
+            assertTrue(distro.name(), command.startsWith("( set -e\n"));
+        }
+    }
+
     // --- defaults and stored choices ----------------------------------------------------------
 
     @Test public void theDefaultTicksAreABrowserAFileManagerAndAnEditor() {
@@ -275,59 +344,59 @@ public class GuiAppsSetupTest {
 
     @Test public void termuxOffersBothRoutes() {
         assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
-            GuiAppsSetup.routesFor(TourEdition.TERMUX));
-        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.TERMUX));
+            GuiAppsSetup.routesFor(AppEdition.TERMUX));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(AppEdition.TERMUX));
     }
 
     @Test public void vajOffersBothRoutesLikeTermux() {
         // Reversed 2026-09-21: repo.pathayam.xyz now carries xkeyboard-config and the x11 apps,
         // so VAJ's X11 route works there too.
         assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
-            GuiAppsSetup.routesFor(TourEdition.VAJ));
-        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
+            GuiAppsSetup.routesFor(AppEdition.VAJ));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(AppEdition.VAJ));
     }
 
     @Test public void nixOffersNoRoute() {
         // Decision, 2026-09-20: graphical apps on nix come from nixpkgs and home.nix, a third
         // way this class builds no command for.
-        assertTrue(GuiAppsSetup.routesFor(TourEdition.NIX).isEmpty());
-        assertEquals(null, GuiAppsSetup.defaultRoute(TourEdition.NIX));
+        assertTrue(GuiAppsSetup.routesFor(AppEdition.NIX).isEmpty());
+        assertEquals(null, GuiAppsSetup.defaultRoute(AppEdition.NIX));
     }
 
     // --- VAJ's edition-aware X11 command --------------------------------------------------------
 
     @Test public void vajsX11CommandHasNoSeparateRepoStepAndDefaultsToPcmanfmAndMousepad() {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
-            GuiAppsSetup.defaultStarters(), TourEdition.VAJ);
+            GuiAppsSetup.defaultStarters(), AppEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }", command);
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }" + X11_MARKER, command);
     }
 
     @Test public void vajsX11CommandAddsTheTerminalWhenTicked() {
         Set<StarterApp> starters = EnumSet.copyOf(GuiAppsSetup.defaultStarters());
         starters.add(StarterApp.TERMINAL);
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
-            TourEdition.VAJ);
+            AppEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }",
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }" + X11_MARKER,
             command);
     }
 
     @Test public void vajsX11CommandDropsTheBrowserEvenWhenTicked() {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
-            EnumSet.of(StarterApp.BROWSER), TourEdition.VAJ);
+            EnumSet.of(StarterApp.BROWSER), AppEdition.VAJ);
 
         // VAJ ships no browser at all; ticking it adds nothing to the command.
-        assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }", command);
+        assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }" + X11_MARKER, command);
         assertFalse(command.contains("firefox"));
     }
 
     @Test public void termuxsX11CommandIsUnchangedByTheEditionAwareOverload() {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
-            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus openbox firefox pcmanfm mousepad xfce4-terminal",
-            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
+                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal" + X11_MARKER,
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {

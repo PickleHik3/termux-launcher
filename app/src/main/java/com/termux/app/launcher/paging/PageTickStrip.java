@@ -40,6 +40,15 @@ public final class PageTickStrip {
     }
 
     /**
+     * The air between the ticks and either edge of a band {@code bandPx} across: the strip draws
+     * its ticks on the band's middle line. For a strip standing just above a slab of glass (a dock
+     * whose dashes float over it) this is the gap between the dashes and the glass's top edge.
+     */
+    public static float edgeGapPx(int bandPx, float density) {
+        return Math.max(0f, (bandPx - THICKNESS_DP * Math.max(0f, density)) * 0.5f);
+    }
+
+    /**
      * Each tick's length along the strip, the one nearest {@code position} widened.
      *
      * @param position the fractional page position; clamped into {@code [0, pageCount - 1]}

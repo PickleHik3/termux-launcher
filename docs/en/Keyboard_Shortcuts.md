@@ -8,7 +8,7 @@ These are the launcher's default shortcuts. They work from a hardware keyboard, 
 
 - Latch **Ctrl** and **Alt** on the built-in keyboard and every key with a shortcut lights up,
   coloured by what it does, with a legend in the top-right corner. Press a lit key to run it.
-- **Settings → Terminal → Sessions and panes → Shortcut hints** ("Show pane shortcuts while holding
+- **Settings → Terminal → Windows & panes → Shortcut hints** ("Show pane shortcuts while holding
   Ctrl+Alt. Off lights the ? key instead.") turns that legend off.
 - The [command palette](Command_Palette_And_Actions.md) shows each action's shortcut beside it, and
   you can search by shortcut: typing `ctrl+alt+w` finds what it runs.
@@ -18,7 +18,7 @@ letter in a shortcut means Shift, so `Ctrl+Alt+R` is `Ctrl+Alt+Shift+R`.
 
 ## Which column applies
 
-**Settings → Terminal → Sessions and panes → Split-pane controls** is on by default. With it on,
+**Settings → Terminal → Windows & panes → Split-pane controls** is on by default. With it on,
 the terminal has windows and panes and the **Split panes on** column applies. Turning it off gives
 traditional single-pane Termux behaviour and the **Split panes off** column applies. "(to the shell)" means
 the keys go to the shell.
@@ -49,6 +49,8 @@ the keys go to the shell.
 | `Ctrl+Alt+[` / `Ctrl+Alt+]` | **Previous window** / **Next window** | (to the shell) |
 | `Ctrl+Alt+Left` / `Ctrl+Alt+Right` | **Previous window** / **Next window** | **Close sessions** / **Open sessions** (the sessions drawer) |
 | `Ctrl+Alt+1` … `Ctrl+Alt+9` | **Switch to window** 1 to 9 in this session | **Switch to session by number** 1 to 9 |
+| `Ctrl+Alt+,` | **Consume next window into this pane**: the window on the right joins this one as panes | (to the shell) |
+| `Ctrl+Alt+.` | **Expel pane to its own window**, right after this one | (to the shell) |
 
 On the Display place, next and previous window step through the apps open on the display.
 

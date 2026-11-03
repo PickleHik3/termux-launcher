@@ -124,6 +124,13 @@ public final class GlassLook {
         return mAmount;
     }
 
+    /** This look with the gradient rim, or the hairline; an element's own Rim cell (ADR 0017). */
+    @NonNull
+    public GlassLook withGradientRim(boolean gradient) {
+        if (gradient == gradientRim) return this;
+        return new GlassLook(obsidianTint, gradient, hue, accentResolved, mContainer, mAccent, mAmount);
+    }
+
     /** This look mixing in {@code hue}'s accent; its colours have to be resolved again. */
     @NonNull
     public GlassLook withHue(@NonNull Hue hue) {

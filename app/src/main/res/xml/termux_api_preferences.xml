@@ -1,8 +1,11 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Termux:API's log level lives on Diagnostics with the launcher's. The row is pointed there
+         in code (TermuxAPIPreferencesFragment), so search still lists it as this page's row. -->
     <Preference
-        app:title="@string/termux_debugging_preferences_title"
-        app:summary="@string/termux_debugging_preferences_summary"
-        app:fragment="com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment"/>
+        app:key="termux_api_logs"
+        app:persistent="false"
+        app:title="@string/settings_destination_advanced_diagnostics"
+        app:summary="@string/settings_termux_api_logs_summary"/>
 
 </PreferenceScreen>

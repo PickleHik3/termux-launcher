@@ -33,6 +33,18 @@ public class DeviceControlStringTest extends TerminalTestCase {
         enterString("B").assertLinesAre("AB ", "   ", "   ");
     }
 
+    public void testReportWhatXtermTerminfoLacks() {
+        // Programs that ask the terminal rather than terminfo (neovim's clipboard, colour and underline
+        // detection) take a "0+r" reply as "not supported", so the extras are answered here.
+        withTerminalSized(3, 3);
+        assertCapabilityResponse("Ms", "\033]52;%p1%s;%p2%s\007");
+        assertCapabilityResponse("RGB", "");
+        assertCapabilityResponse("Tc", "");
+        assertCapabilityResponse("Su", "");
+        assertCapabilityResponse("Smulx", "\033[4:%p1%dm");
+        assertCapabilityResponse("Setulc", "\033[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m");
+    }
+
     public void testReportKeys() {
         withTerminalSized(3, 3);
         assertCapabilityResponse("kB", "\033[Z");

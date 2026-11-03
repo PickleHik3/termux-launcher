@@ -24,16 +24,18 @@ public class ScreenBufferTest extends TerminalTestCase {
         assertEquals("XX\nXYY\n YY", screen.getTranscriptText());
     }
 
-    public void testBottomAnchoredExpansionAddsBlankRowsAboveCursor() {
+    /** With no transcript to pull down, an anchored growth adds its rows below, not above. */
+    public void testBottomAnchoredExpansionWithoutHistoryAddsBlankRowsBelow() {
         TerminalBuffer screen = new TerminalBuffer(5, 10, 3);
         screen.setChar(0, 0, 'a', TextStyle.NORMAL);
         screen.setChar(0, 2, 'p', TextStyle.NORMAL);
         int[] cursor = {0, 2};
 
-        screen.resize(5, 5, 10, cursor, TextStyle.NORMAL, false, true);
+        screen.resize(5, 5, 10, cursor, TextStyle.NORMAL, false);
 
-        assertEquals(4, cursor[1]);
-        assertEquals("\n\na\n\np", screen.getSelectedText(0, 0, 4, 4, false));
+        assertEquals(2, cursor[1]);
+        assertEquals("a\n\np", screen.getSelectedText(0, 0, 4, 2, false));
+        assertTrue(screen.getSelectedText(0, 3, 4, 4, false).trim().isEmpty());
     }
 
     public void testGetSelectedText() {

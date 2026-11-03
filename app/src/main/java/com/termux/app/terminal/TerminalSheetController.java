@@ -112,7 +112,7 @@ public final class TerminalSheetController
     }
 
     /** The plane's live blur, when the backdrop is not a wallpaper frost. */
-    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+    @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
 
     /**
      * The light a finger on a centred card's row casts into the plane's frost, built on the first
@@ -533,9 +533,9 @@ public final class TerminalSheetController
             placement.leading, scrim));
         mPlane.setVisibility(View.VISIBLE);
         applyBackdropMaterial();
-        // Live while the card arrives; animateIn rests it on one fresh capture once it has. The
-        // glass itself never moves, and a resize of it (the keyboard inset) recaptures on its own.
-        if (mLiveBlur != null) mLiveBlur.setUpdatesPaused(false);
+        // Frozen while the card arrives (a Snapshot taken as it opens); animateIn retakes it once the
+        // card has landed. The glass itself never moves.
+        if (mBackdrop != null) mBackdrop.setMoving(true);
         // Only a sheet with somewhere for typing to land is worth summoning a keyboard for; a
         // confirmation is all buttons and would just push the terminal around. A drawer is a list
         // first and a field only once a row asks to be renamed, so it summons the keys itself
@@ -615,6 +615,7 @@ public final class TerminalSheetController
     private void onEmptied() {
         mHost.setSheetInterceptorActive(false);
         if (mPlane != null) mPlane.setVisibility(View.INVISIBLE);
+        if (mBackdrop != null) mBackdrop.close();
         // The plane is shut: no light lingers on a frost about to be dropped.
         if (mTouchLight != null) mTouchLight.reset();
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
@@ -800,14 +801,16 @@ public final class TerminalSheetController
 
     /**
      * Picks the glass backdrop for this open: over the system wallpaper a pre-blurred wallpaper
-     * frost (the live blur cannot see through the window there and renders grey mud), otherwise the
-     * RealtimeBlurView blurring real window content.
+     * frost (a recording there holds no wallpaper and renders grey mud, and below Android 12 nothing
+     * can be recorded), otherwise the picture of what is drawn beneath the glass
+     * ({@link com.termux.app.chrome.PanelBackdrop}).
      */
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         View blur = mHost.findView(R.id.terminal_sheet_blur);
-        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
-            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
+        if (mBackdrop == null && blur instanceof ImageView) {
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+        }
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
             // is behind it — the transcript a search is searching — stays exactly as it was.
@@ -816,10 +819,20 @@ public final class TerminalSheetController
                 frost.setVisibility(View.GONE);
             }
             if (blur != null) blur.setVisibility(View.GONE);
+            if (mBackdrop != null) mBackdrop.close();
             return;
         }
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
-        if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
+        if (blur == null) return;
+        if (!frosted) blur.setVisibility(View.VISIBLE);
+        // A sheet stacked on a sheet keeps the picture the plane already has.
+        boolean pictured = !frosted && mBackdrop != null
+            && (mBackdrop.isOpen() || mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(blur.getContext(),
+                    com.termux.app.chrome.PanelBackdrop.PROMPT_BLUR_RADIUS_DP)));
+        if (!pictured) {
+            if (mBackdrop != null) mBackdrop.close();
+            blur.setVisibility(View.GONE);
+        }
     }
 
     /** True when nothing on the plane wants a backdrop; one card that does brings it back. */
@@ -1220,9 +1233,9 @@ public final class TerminalSheetController
             this::restLiveBlur);
     }
 
-    /** One more capture of what is behind the plane, then the blur rests on it. */
+    /** The card has landed: the picture of what is behind the plane is retaken once and rests. */
     private void restLiveBlur() {
-        if (mLiveBlur != null && !mStack.isEmpty()) mLiveBlur.refreshThenRest();
+        if (mBackdrop != null && !mStack.isEmpty()) mBackdrop.setMoving(false);
     }
 
     private void animateOut(@NonNull View card, boolean foot, boolean leading,

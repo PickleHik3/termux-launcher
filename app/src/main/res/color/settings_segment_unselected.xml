@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An unselected filled segment: lighter than the card it sits on (Highest is too close to it in
+     the light theme); color-night/ answers with the darker-than-card pair. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorSurfaceContainerLowest" />
+</selector>

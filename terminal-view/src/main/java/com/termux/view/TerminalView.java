@@ -11,6 +11,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
@@ -60,6 +61,7 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -83,6 +85,12 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+
+    /**
+     * The focus last reported to the emulator (DECSET 1004): this view's own focus and its window's
+     * together. Kept so a change in either reports once, and a session switch hands it over.
+     */
+    private boolean mReportedFocus;
 
     /**
      * Whether this pane's cursor trail listener is turned on: the preference and the device's
@@ -135,6 +143,27 @@ public final class TerminalView extends View {
     private boolean mTerminalSizeUpdatesPaused;
     private boolean mTerminalSizeUpdatePending;
     /**
+     * While a held resize is pending, the slack kept above the grid: the slack it had when the
+     * hold began, so the old grid stays anchored at the top of a pane that grows or shrinks under
+     * it (background below, cut at the bottom) instead of being re-centred each frame. -1 at rest,
+     * where the grid is centred in its view as usual (ADR 0019).
+     */
+    private int mHeldGridSlackPx = -1;
+    /**
+     * What the last draw reported to the cursor trail with: the held slack it drew with and the
+     * emulator's cursor-move stamp, so the next draw can tell a cursor the pane's geometry moved on
+     * screen from one the program moved ({@link #cursorTrailSnaps}).
+     */
+    private int mTrailHeldSlackPx = -1;
+    private long mTrailCursorStampMillis = Long.MIN_VALUE;
+    /**
+     * Pixels at the top of this view that the text keeps clear of while the view's own bounds (and
+     * the glass behind it) still reach there: the camera's band when Full screen lifts the pane to
+     * the screen's top edge (FullScreenCornerPolicy). The rows are counted in what is left below
+     * it and the grid is centred there; zero everywhere else, which is exactly the old layout.
+     */
+    private int mTextTopInsetPx;
+    /**
      * The pane wall's slide moves the keyboard over or off this view's bottom edge while the grid
      * keeps its rows until the settle (ADR 0003). From {@link #beginTravelDisplacement} to the
      * resize that ends it, the grid is drawn from where it stood when the travel began — the
@@ -160,6 +189,9 @@ public final class TerminalView extends View {
     private boolean mFrostOnTravelReflow;
     /** Whether this travel is frosted throughout ({@link #holdTravelFrost}), to thaw as it ends. */
     private boolean mTravelFrostHeld;
+    /** Frame-source counters for the idle audit. */
+    private static final com.termux.terminal.FrameProbe.Source TERMINAL_SCROLL = com.termux.terminal.FrameProbe.source("terminal.scroll");
+    private static final com.termux.terminal.FrameProbe.Source TERMINAL_REFLOWFROST = com.termux.terminal.FrameProbe.source("terminal.reflowFrost");
     /** The frost's change, while one runs (API 31+), and how deep it stands, 0 to 1. */
     @Nullable private ValueAnimator mReflowFrost;
     private float mReflowFrostLevel;
@@ -814,6 +846,28 @@ public final class TerminalView extends View {
         mEmulator = emulator;
     }
 
+    /** Focus as a program sees it: this view's own focus while its window has focus too. */
+    private void reportFocus() {
+        boolean focused = hasFocus() && hasWindowFocus();
+        if (focused == mReportedFocus)
+            return;
+        mReportedFocus = focused;
+        if (mEmulator != null)
+            mEmulator.onFocusChanged(focused);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction, Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        reportFocus();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        reportFocus();
+    }
+
     /**
      * Attach a {@link TerminalSession} to this view.
      *
@@ -824,6 +878,11 @@ public final class TerminalView extends View {
             return false;
         mTopRow = 0;
         updateKittyAnimationVisibility();
+        // The session going out of view loses the focus it was told it had; the new one is told
+        // once its emulator is here (updateSize → reportFocus).
+        if (mReportedFocus && mEmulator != null)
+            mEmulator.onFocusChanged(false);
+        mReportedFocus = false;
         mTermSession = session;
         mEmulator = null;
         updateKittyAnimationVisibility();
@@ -1217,6 +1276,8 @@ public final class TerminalView extends View {
                 replaced.mFontMetricsAdjustments, replaced.mBoxDrawingPolicy,
                 replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
@@ -1237,6 +1298,8 @@ public final class TerminalView extends View {
             r.mItalicTypeface, r.mBoldItalicTypeface, r.mSymbolMaps, r.mLigaturePolicy,
             r.mFontFeatures, r.mFontVariations, r.mFontMetricsAdjustments, r.mBoxDrawingPolicy,
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(null);
         updateSize();
     }
@@ -1254,6 +1317,38 @@ public final class TerminalView extends View {
         if (mUrlUnderlineColor == color) return;
         mUrlUnderlineColor = color;
         if (mRenderer != null) mRenderer.setUrlUnderlineColor(color);
+        invalidate();
+    }
+
+    private int mContrastBackdrop;
+
+    /**
+     * What this pane's text on the default background really stands on, opaque, or transparent
+     * for the palette's own background; see {@link TerminalRenderer#setContrastBackdrop}. Survives
+     * a renderer rebuild. Call it when the backdrop is measured anew, never per frame.
+     */
+    public void setContrastBackdrop(int color) {
+        if (mContrastBackdrop == color) return;
+        mContrastBackdrop = color;
+        if (mRenderer != null) mRenderer.setContrastBackdrop(color);
+        invalidate();
+    }
+
+    public int getContrastBackdrop() {
+        return mContrastBackdrop;
+    }
+
+    private double mContrastFloor = ContrastFloor.TEXT;
+
+    /**
+     * The contrast this pane's normal text is held to (faint text proportionally lower); see
+     * {@link TerminalRenderer#setContrastFloor}. Survives a renderer rebuild; set on change only.
+     */
+    public void setContrastFloor(double floor) {
+        final double text = floor > 0d ? floor : ContrastFloor.TEXT;
+        if (mContrastFloor == text) return;
+        mContrastFloor = text;
+        if (mRenderer != null) mRenderer.setContrastFloor(text);
         invalidate();
     }
 
@@ -1362,6 +1457,8 @@ public final class TerminalView extends View {
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
             boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(replaced);
         replaced.release();
         updateSize();
@@ -1564,6 +1661,20 @@ public final class TerminalView extends View {
         if (replaced == null
             || replaced.getFontLineSpacingAndAscent() != mRenderer.getFontLineSpacingAndAscent())
             requestLayout();
+    }
+
+    /**
+     * The cursor cell's centre in this view's own pixels, written to {@code out[0..1]}. False
+     * before an emulator and a renderer exist. Allocation-free; a reaction that starts at the cursor
+     * (the wallpaper scene's spark) reads it.
+     */
+    public boolean getCursorCenter(float[] out) {
+        if (mEmulator == null || mRenderer == null) return false;
+        int row = mEmulator.getCursorRow() - mTopRow;
+        out[0] = getHorizontalContentOffset() + (mEmulator.getCursorCol() + 0.5f) * mRenderer.mFontWidth;
+        out[1] = getVerticalContentOffset() - mScrollOffsetPixels + mRenderer.mFontLineSpacingAndAscent
+            + (row + 0.5f) * mRenderer.mFontLineSpacing;
+        return true;
     }
 
     private int getColumnForX(float x) {
@@ -1997,10 +2108,22 @@ public final class TerminalView extends View {
         return latched || (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
     }
 
+    /** When any terminal view last scrolled; see {@link #lastScrollUptimeMillis}. */
+    private static volatile long sLastScrollUptime = Long.MIN_VALUE / 4;
+
+    /**
+     * The uptime of the last scroll in any terminal view (a drag, a fling or a mouse wheel), so
+     * the app can hold its screen events while the user scrolls.
+     */
+    public static long lastScrollUptimeMillis() {
+        return sLastScrollUptime;
+    }
+
     /**
      * Perform a scroll, either from dragging the screen or by scrolling a mouse wheel.
      */
     void doScroll(MotionEvent event, int rowsDown) {
+        sLastScrollUptime = SystemClock.uptimeMillis();
         boolean up = rowsDown < 0;
         int amount = Math.abs(rowsDown);
         for (int i = 0; i < amount; i++) {
@@ -2208,6 +2331,7 @@ public final class TerminalView extends View {
             boolean more = mScroller.computeScrollOffset();
             setScrollPixelPosition(mScroller.getCurrY());
             if (more) {
+                TERMINAL_SCROLL.tick();
                 postOnAnimation(this);
                 return;
             }
@@ -2485,6 +2609,7 @@ public final class TerminalView extends View {
         if (action == MotionEvent.ACTION_CANCEL && !mSmoothFlingActive && !mSmoothSettleActive)
             retireScrollCache();
         if (action == MotionEvent.ACTION_DOWN) {
+            com.termux.terminal.TouchDownListener.fire();
             mTouchDownX = event.getX();
             mTouchDownY = event.getY();
             mScrollDelivery.reset();
@@ -3063,12 +3188,34 @@ public final class TerminalView extends View {
      */
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        retireScrollCache();
+        android.os.Trace.beginSection("Terminal.sizeChanged");
+        try {
+            onSizeChangedImpl(w, h, oldw, oldh);
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
         if (mTerminalSizeUpdatesPaused) {
+            // Held (ADR 0019): the grid is what it was, so its recording stays good and this
+            // redraw does not count as new content; the resize that ends the hold retires it.
+            holdGridAtTop(oldh);
             mTerminalSizeUpdatePending = true;
-            invalidate();
+            invalidateGeometryOnly();
         } else {
+            retireScrollCache();
             updateSize(false, "layout");
+        }
+    }
+
+    /** Redraw for a change of this view's frame alone; see {@link #invalidateScrollPosition}. */
+    private void invalidateGeometryOnly() {
+        mScrollPositionInvalidate = true;
+        try {
+            invalidate();
+        } finally {
+            mScrollPositionInvalidate = false;
         }
     }
 
@@ -3084,11 +3231,18 @@ public final class TerminalView extends View {
      *              the session is actually resized: {@code layout}, {@code attach}, {@code direct}
      *              (a caller's own re-measure), or the cause a paused span was resumed with
      */
-    private void updateSize(boolean keepCursorAtBottom, @NonNull String cause) {
+    private void updateSize(boolean allowZeroHeight, @NonNull String cause) {
         if (mTerminalSizeUpdatesPaused) {
+            holdGridAtTop(getHeight());
             mTerminalSizeUpdatePending = true;
-            invalidate();
+            invalidateGeometryOnly();
             return;
+        }
+        if (mHeldGridSlackPx >= 0) {
+            mHeldGridSlackPx = -1;
+            // The held grid's recording ends with the hold: never replayed across a real resize.
+            retireScrollCache();
+            invalidate();
         }
         // A travel ends on the resize it was drawn toward, whether or not the grid moves: a slide
         // that sprang back finds the grid already fitting and the displacement already zero.
@@ -3101,24 +3255,27 @@ public final class TerminalView extends View {
         // (e.g. a split pane made visible before setTextSize()). Nothing to size yet.
         // A settled host takeover may intentionally leave the pane at zero height. It still owes
         // the PTY its single final (minimum-row) size; ordinary pre-layout zeroes remain ignored.
-        if (viewWidth == 0 || (viewHeight == 0 && !keepCursorAtBottom)
+        if (viewWidth == 0 || (viewHeight == 0 && !allowZeroHeight)
             || mTermSession == null || mRenderer == null) {
             if (travelling) endTravelDisplacement(false);
             return;
         }
         // Set to 80 and 24 if you want to enable vttest.
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
-        int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
+        int newRows = rowsFor(viewHeight, mTextTopInsetPx, mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             reflowed = true;
-            logSessionResize(newColumns, newRows, keepCursorAtBottom, cause);
+            logSessionResize(newColumns, newRows, cause);
             android.os.Trace.beginSection("Terminal.updateSize");
             try {
                 mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
-                    mRenderer.getFontLineSpacing(), keepCursorAtBottom);
+                    mRenderer.getFontLineSpacing());
                 mEmulator = mTermSession.getEmulator();
                 updateKittyAnimationVisibility();
                 mClient.onEmulatorSet();
+                // A session that just came into a focused view is told so (DECSET 1004).
+                reportFocus();
                 // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
                 if (mTerminalCursorBlinkerRunnable != null)
                     mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
@@ -3144,14 +3301,40 @@ public final class TerminalView extends View {
     /** The cause a resume carries when a return hold covered the paused span it ends. */
     public static final String CAUSE_RETURN_HOLD = "return-hold";
 
-    private void logSessionResize(int newColumns, int newRows, boolean keepCursorAtBottom,
+    /**
+     * Where the motion log hears about resizes and reflow frosts: installed by the app, null in
+     * other hosts. Callers read {@link #sMotionLogEnabled} first, so a build with the log off
+     * builds no line.
+     */
+    public interface MotionSink {
+        void log(String event, String kv);
+    }
+
+    private static volatile MotionSink sMotionSink;
+    /** True while the motion log is on; the app keeps it in step with its switch. */
+    public static volatile boolean sMotionLogEnabled;
+
+    public static void setMotionSink(@Nullable MotionSink sink) {
+        sMotionSink = sink;
+    }
+
+    private static void motionLog(String event, String kv) {
+        MotionSink sink = sMotionSink;
+        if (sink != null) sink.log(event, kv);
+    }
+
+    private void logSessionResize(int newColumns, int newRows,
                                   @NonNull String cause) {
         // The session's emulator, not this view's: a freshly attached session already has a size.
         TerminalEmulator prior = mTermSession.getEmulator();
         String from = prior == null ? "none" : prior.mColumns + "x" + prior.mRows;
         android.util.Log.d(GEOMETRY_LOG_TAG, "resize " + from + " -> " + newColumns + "x" + newRows
-            + " keepBottom=" + keepCursorAtBottom + " cause=" + cause
+            + " cause=" + cause
             + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
+        if (sMotionLogEnabled) {
+            motionLog("pty-resize", "from=" + from + " to=" + newColumns + "x" + newRows
+                + " cause=" + cause + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
+        }
     }
 
     // ---- The place slide's travel (see mTravelActive) ------------------------------------------
@@ -3280,7 +3463,7 @@ public final class TerminalView extends View {
     float predictResizeDisplacementPx(int fromHeightPx, int toHeightPx) {
         if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
         int toRows = rowsForHeight(toHeightPx);
-        int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows, true);
+        int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows);
         return travelDisplacementPx(fromHeightPx, toHeightPx, mEmulator.mRows, toRows, rowShift,
             mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
     }
@@ -3288,7 +3471,7 @@ public final class TerminalView extends View {
     /** How many rows down the settle's resize to {@code toHeightPx} moves the rows on screen. */
     private int predictResizeRowShift(int toHeightPx) {
         if (!canPredictResize(mTravelAnchorHeightPx, toHeightPx)) return 0;
-        return mEmulator.predictRowsOnlyResizeShift(rowsForHeight(toHeightPx), true);
+        return mEmulator.predictRowsOnlyResizeShift(rowsForHeight(toHeightPx));
     }
 
     /** What the centring slack above the grid changes by across that resize. */
@@ -3368,6 +3551,7 @@ public final class TerminalView extends View {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private void frostReflow() {
+        if (sMotionLogEnabled) motionLog("reflow-frost-start", "radiusPx=" + reflowFrostRadiusPx());
         cancelReflowFrostAnimation();
         mReflowFrostLevel = 1f;
         applyReflowFrost(reflowFrostRadiusPx());
@@ -3392,6 +3576,7 @@ public final class TerminalView extends View {
         frost.setInterpolator(new DecelerateInterpolator());
         frost.addUpdateListener(animation -> {
             if (mReflowFrost != animation) return;
+            TERMINAL_REFLOWFROST.tick();
             mReflowFrostLevel = (float) animation.getAnimatedValue();
             applyReflowFrost(radius * mReflowFrostLevel);
         });
@@ -3449,17 +3634,17 @@ public final class TerminalView extends View {
         setTerminalSizeUpdatesPaused(paused, false);
     }
 
-    /** Resume a coalesced resize with optional bottom anchoring after the final layout pass. */
+    /** Resume a coalesced resize after the final layout pass; a settled takeover may size to zero height. */
     public void setTerminalSizeUpdatesPaused(boolean paused,
-                                             boolean keepCursorAtBottomOnResume) {
-        setTerminalSizeUpdatesPaused(paused, keepCursorAtBottomOnResume, "resume");
+                                             boolean allowZeroHeightOnResume) {
+        setTerminalSizeUpdatesPaused(paused, allowZeroHeightOnResume, "resume");
     }
 
     /**
      * As {@link #setTerminalSizeUpdatesPaused(boolean, boolean)}, naming what ended the pause for
      * the resize log line ({@link #CAUSE_RETURN_HOLD} when a return hold covered it).
      */
-    public void setTerminalSizeUpdatesPaused(boolean paused, boolean keepCursorAtBottomOnResume,
+    public void setTerminalSizeUpdatesPaused(boolean paused, boolean allowZeroHeightOnResume,
                                              @NonNull String resumeCause) {
         if (mTerminalSizeUpdatesPaused == paused) return;
         mTerminalSizeUpdatesPaused = paused;
@@ -3467,12 +3652,72 @@ public final class TerminalView extends View {
             mTerminalSizeUpdatePending = false;
             // Run after the final split layout pass so only the settled geometry reaches the PTY.
             new Handler(Looper.getMainLooper()).post(
-                () -> updateSize(keepCursorAtBottomOnResume, resumeCause));
+                () -> updateSize(allowZeroHeightOnResume, resumeCause));
         }
+    }
+
+    /**
+     * Keeps the text {@code px} below this view's top edge (see {@link #mTextTopInsetPx}): fewer
+     * rows, the grid centred in what is left, touches mapped through the same offset. A change
+     * resizes the session at once, or, while size updates are paused, with the pending resize the
+     * resume delivers, so a hold covering the move that asked for it lands both in one pass.
+     */
+    public void setTextTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mTextTopInsetPx) return;
+        mTextTopInsetPx = inset;
+        retireScrollCache();
+        updateSize(false, "text-inset");
+        invalidate();
+    }
+
+    /** The text's top inset now; see {@link #setTextTopInsetPx}. */
+    public int getTextTopInsetPx() {
+        return mTextTopInsetPx;
+    }
+
+    /**
+     * The rows a view {@code heightPx} tall holds below a text inset of {@code topInsetPx}: what
+     * the session is sized to. Never fewer than four.
+     */
+    static int rowsFor(int heightPx, int topInsetPx, int spacingAndAscentPx, int lineSpacingPx) {
+        int usable = heightPx - Math.max(0, topInsetPx);
+        return Math.max(4, (usable - spacingAndAscentPx) / lineSpacingPx);
+    }
+
+    /**
+     * How far down a grid of {@code contentPx} is drawn in a view {@code heightPx} tall with a text
+     * inset of {@code topInsetPx}: past the inset, then centred in what is left below it.
+     */
+    static int verticalContentOffsetPx(int heightPx, int topInsetPx, int contentPx) {
+        int inset = Math.max(0, topInsetPx);
+        return inset + centredSlackPx(heightPx - inset, contentPx);
+    }
+
+    /**
+     * The first time a pending resize is held, keeps the slack the grid had above it in a view
+     * {@code heightPx} tall, so the held grid stays where it was at the top from then on.
+     */
+    private void holdGridAtTop(int heightPx) {
+        if (mHeldGridSlackPx >= 0) return;
+        if (mEmulator == null || mRenderer == null || heightPx <= 0) {
+            mHeldGridSlackPx = 0;
+            return;
+        }
+        int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
+            + mRenderer.mFontLineSpacingAndAscent;
+        mHeldGridSlackPx = heldGridSlackPx(heightPx, mTextTopInsetPx, contentHeight);
+    }
+
+    /** The slack above a grid of {@code contentPx} in a view {@code heightPx} tall, below the inset. */
+    static int heldGridSlackPx(int heightPx, int topInsetPx, int contentPx) {
+        return verticalContentOffsetPx(heightPx, topInsetPx, contentPx) - Math.max(0, topInsetPx);
     }
 
     /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
     public void resumeTerminalSizeUpdatesDiscardingPending() {
+        if (mHeldGridSlackPx >= 0) retireScrollCache();
+        mHeldGridSlackPx = -1;
         mTerminalSizeUpdatePending = false;
         mTerminalSizeUpdatesPaused = false;
     }
@@ -3549,10 +3794,12 @@ public final class TerminalView extends View {
                 canvas.translate(0f, -fillRows * (float) mRenderer.mFontLineSpacing);
             }
             // Between row crossings a smooth scroll only moves the grid, so it is drawn from a
-            // recording made at zero translation; the translation above stays outside it.
+            // recording made at zero translation; the translation above stays outside it. A held
+            // resize (ADR 0019) only changes the frame around a grid that stays as it was, so a
+            // divider drag replays the same recording instead of rendering the text every move.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                 && ScrollRenderCache.applies(canvas.isHardwareAccelerated(), Build.VERSION.SDK_INT,
-                    isSmoothScrollMoving(), mTravelActive, fillRows,
+                    isSmoothScrollMoving() || mHeldGridSlackPx >= 0, mTravelActive, fillRows,
                     isSelectingText() || !selectorsAtRest(sel), mRowCacheBypassed)) {
                 drawGridThroughScrollCache(canvas, drawTopRow, sel, extraRows);
             } else {
@@ -3570,7 +3817,13 @@ public final class TerminalView extends View {
             // just this view); this pane only reports that its cursor may have moved, or — while
             // selecting text — that it should be hidden and not smeared into.
             if (mCursorTrailListener != null) {
-                if (isSelectingText())
+                final long cursorStamp = mEmulator.getCursorPositionChangedAtMillis();
+                final boolean programMoved = cursorStamp != mTrailCursorStampMillis;
+                final boolean slackChanged = mHeldGridSlackPx != mTrailHeldSlackPx;
+                mTrailCursorStampMillis = cursorStamp;
+                mTrailHeldSlackPx = mHeldGridSlackPx;
+                if (isSelectingText()
+                    || cursorTrailSnaps(mHeldGridSlackPx >= 0, slackChanged, programMoved))
                     mCursorTrailListener.onCursorTrailSnap(this);
                 else
                     mCursorTrailListener.onCursorMayHaveMoved(this);
@@ -3581,6 +3834,25 @@ public final class TerminalView extends View {
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
             mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
         }
+    }
+
+    /**
+     * Whether this draw's cursor position is a discontinuity the trail must snap across rather
+     * than animate. The pane's geometry can move the cursor on screen with no reflow behind it:
+     * while a resize is held (a divider drag, a corner drag, the keyboard) the old grid stays
+     * anchored at the top of a pane that moves and changes size under it, and when the hold ends
+     * the grid goes back to being centred. Those are the pane moving, not the cursor, so they
+     * snap (ADR 0019 follow-up; kitty skips the trail over a live resize the same way). A cursor
+     * the program moved still trails, even while held, unless the anchor itself jumped this draw.
+     *
+     * @param gridHeld            a held grid is drawn at its kept slack ({@code mHeldGridSlackPx >= 0})
+     * @param heldSlackChanged    the hold began, ended or re-anchored since the last draw
+     * @param cursorMovedByProgram the emulator's cursor-move stamp changed since the last draw
+     */
+    static boolean cursorTrailSnaps(boolean gridHeld, boolean heldSlackChanged,
+                                    boolean cursorMovedByProgram) {
+        if (heldSlackChanged) return true;
+        return gridHeld && !cursorMovedByProgram;
     }
 
     private static boolean selectorsAtRest(int[] sel) {
@@ -3599,10 +3871,21 @@ public final class TerminalView extends View {
         final int height = canvas.getHeight();
         final float horizontalOffset = getHorizontalContentOffset();
         final long generation = mContentGeneration;
+        final boolean held = mHeldGridSlackPx >= 0;
         if (mScrollGridNode == null) mScrollGridNode = new ScrollRenderCache.Node();
-        if (mScrollGridRenderer != mRenderer || !mScrollRenderCache.canReuse(drawTopRow,
-            extraRows, width, height, horizontalOffset, mUseTransparentFrameClear,
-            mTransparentFrameOverlayColor, generation)) {
+        if (held) {
+            // The recording's own ground stops at the height it was recorded at; a pane that grew
+            // under its held grid still gets the ground over the whole of itself, as the live
+            // render lays it over the whole clip. Laying it twice is the same pixels.
+            mRenderer.clearFrame(mEmulator, canvas, mUseTransparentFrameClear,
+                mTransparentFrameOverlayColor);
+        }
+        final boolean reusable = held
+            ? mScrollRenderCache.canReuseHeld(drawTopRow, extraRows, width, horizontalOffset,
+                mUseTransparentFrameClear, mTransparentFrameOverlayColor, generation)
+            : mScrollRenderCache.canReuse(drawTopRow, extraRows, width, height, horizontalOffset,
+                mUseTransparentFrameClear, mTransparentFrameOverlayColor, generation);
+        if (mScrollGridRenderer != mRenderer || !reusable) {
             android.os.Trace.beginSection("Terminal.scrollCache.record");
             try {
                 Canvas into = mScrollGridNode.beginRecording(width, height);
@@ -3870,6 +4153,8 @@ public final class TerminalView extends View {
             mEdgeTopColors[c] = edgeBackColor(screen, topExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
             mEdgeBottomColors[c] = edgeBackColor(screen, bottomExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
         }
+        keepOnlyWholeRow(mEdgeTopColors, columns);
+        keepOnlyWholeRow(mEdgeBottomColors, columns);
         for (int r = 0; r < rows; r++) {
             final int externalRow = mTopRow + r;
             mEdgeLeftColors[r] = edgeBackColor(screen, externalRow, 0, palette, boldWithBright, reverseVideo, defaultBack);
@@ -3896,6 +4181,23 @@ public final class TerminalView extends View {
             System.arraycopy(mEdgeLeftColors, 0, mPrevEdgeLeftColors, 0, rows);
             System.arraycopy(mEdgeRightColors, 0, mPrevEdgeRightColors, 0, rows);
             if (mPaddingFillListener != null) mPaddingFillListener.onPaddingFillColorsChanged();
+        }
+    }
+
+    /**
+     * Clear a top or bottom edge row unless every one of its cells has a background of its own.
+     * A row that is all colour — a status line, a title bar — reads as one band running on into
+     * the padding. A row that mixes coloured cells with default ones is drawn shapes, such as the
+     * pill tabs a TUI's dock draws with Powerline caps, and extending only its coloured cells puts
+     * a square block above each rounded pill. Ghostty's {@code window-padding-color = extend}
+     * makes the same call. The side bands keep their per-row colours.
+     */
+    static void keepOnlyWholeRow(int[] colors, int count) {
+        for (int i = 0; i < count; i++) {
+            if (colors[i] == 0) {
+                Arrays.fill(colors, 0, count, 0);
+                return;
+            }
         }
     }
 
@@ -4050,6 +4352,22 @@ public final class TerminalView extends View {
         return Math.round((cy - mTopRow) * mRenderer.mFontLineSpacing + getVerticalContentOffset());
     }
 
+    /**
+     * The columns this view's present size holds, whatever the session is sized to now: during a
+     * held resize, the columns the resize will give it. 0 before a font is set.
+     */
+    public int getColumnsForViewSize() {
+        if (mRenderer == null) return 0;
+        return Math.max(4, (int) (getWidth() / mRenderer.mFontWidth));
+    }
+
+    /** As {@link #getColumnsForViewSize}, for rows. */
+    public int getRowsForViewSize() {
+        if (mRenderer == null) return 0;
+        return rowsFor(getHeight(), mTextTopInsetPx, mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing);
+    }
+
     public float getHorizontalContentOffset() {
         if (mEmulator == null || mRenderer == null) {
             return 0f;
@@ -4102,6 +4420,10 @@ public final class TerminalView extends View {
      * the pane down to a whole number of rows ({@code TermuxActivity}'s flush padding) the
      * leftover is zero and nothing moves at all.
      *
+     * <p>A text top inset ({@link #setTextTopInsetPx}) is added first and the leftover is split in
+     * what is left below it, so the draw offset, {@link #getCursorY} and {@link #getPointY} all
+     * keep clear of it through this one number.
+     *
      * <p>The first row's cells start a further {@code mFontLineSpacingAndAscent} down from here
      * (the renderer's ascent allowance); the frame around this view counts that as clearance the
      * top edge already has.
@@ -4110,9 +4432,11 @@ public final class TerminalView extends View {
         if (mEmulator == null || mRenderer == null) {
             return 0f;
         }
+        // A held grid stays at the top of its pane while the pane changes size under it.
+        if (mHeldGridSlackPx >= 0) return Math.max(0, mTextTopInsetPx) + mHeldGridSlackPx;
         int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
             + mRenderer.mFontLineSpacingAndAscent;
-        return centredSlackPx(getHeight(), contentHeight);
+        return verticalContentOffsetPx(getHeight(), mTextTopInsetPx, contentHeight);
     }
 
     /**

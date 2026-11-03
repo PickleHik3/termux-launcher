@@ -16,6 +16,23 @@ package com.termux.terminal;
 public class DecSetTest extends TerminalTestCase {
 
     /**
+     * DECSET 1004: focus in and out are reported only to a program that asked.
+     */
+    public void testFocusEvents() {
+        withTerminalSized(3, 3);
+        mTerminal.onFocusChanged(true);
+        assertEquals("", mOutput.getOutputAndClear());
+        enterString("\033[?1004h");
+        mTerminal.onFocusChanged(true);
+        assertEquals("\033[I", mOutput.getOutputAndClear());
+        mTerminal.onFocusChanged(false);
+        assertEquals("\033[O", mOutput.getOutputAndClear());
+        enterString("\033[?1004l");
+        mTerminal.onFocusChanged(true);
+        assertEquals("", mOutput.getOutputAndClear());
+    }
+
+    /**
      * DECSET 25, DECTCEM, controls visibility of the cursor.
      */
     public void testEnableDisableCursor() {
