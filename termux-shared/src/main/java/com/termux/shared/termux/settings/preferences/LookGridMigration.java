@@ -128,7 +128,13 @@ public final class LookGridMigration {
      * @param pageIds every page id the wall has, so each page's own values are carried over
      */
     public static void run(@NonNull LookGrid.Store store, @NonNull Collection<Integer> pageIds) {
-        if (store.getBoolean(KEY_MIGRATED, false) || isFresh(store)) return;
+        run(store, pageIds, isFresh(store));
+    }
+
+    /** As above, with freshness decided by the caller before other migrations wrote their keys. */
+    public static void run(@NonNull LookGrid.Store store, @NonNull Collection<Integer> pageIds,
+                           boolean fresh) {
+        if (store.getBoolean(KEY_MIGRATED, false) || fresh) return;
         LookGrid grid = new LookGrid(store);
         if (grid.gridKeys().isEmpty()) fold(store, grid, pageIds);
         store.putBoolean(KEY_MIGRATED, true);

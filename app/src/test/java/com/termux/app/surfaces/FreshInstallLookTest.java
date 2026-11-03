@@ -44,7 +44,13 @@ public class FreshInstallLookTest {
     }
 
     private void launch() {
-        preferences.migrateLookGrid(java.util.Collections.emptyList());
+        // TermuxApplication.onCreate's order: freshness is decided before the migrations that
+        // write their own bookkeeping keys, which is what used to hide a first run.
+        
+        boolean fresh = preferences.isFreshInstall();
+        com.termux.app.WallReworkMigration.migrateIfNeeded(store);
+        store.edit().putInt(com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID, 0).apply();
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), fresh);
         SurfacePresets.readoptMovedLooks(preferences);
     }
 

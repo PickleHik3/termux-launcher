@@ -41,7 +41,12 @@ public final class LookGridKindMigration {
      * reads as fresh. Returns how many cells moved.
      */
     public static int run(@NonNull LookGrid.Store store) {
-        if (store.getBoolean(KEY_MIGRATED, false) || LookGridMigration.isFresh(store)) return 0;
+        return run(store, LookGridMigration.isFresh(store));
+    }
+
+    /** As above, with freshness decided by the caller before other migrations wrote their keys. */
+    public static int run(@NonNull LookGrid.Store store, boolean fresh) {
+        if (store.getBoolean(KEY_MIGRATED, false) || fresh) return 0;
         int moved = rehome(store, homeTwins(store.getString(TERMUX_APP.KEY_SURFACE_CUSTOM_PRESET, null)));
         store.putBoolean(KEY_MIGRATED, true);
         return moved;

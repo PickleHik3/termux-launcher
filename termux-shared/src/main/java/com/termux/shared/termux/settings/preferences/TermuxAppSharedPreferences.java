@@ -3049,9 +3049,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * inheritance, which is exactly what is not established yet.
      */
     public synchronized void migrateLookGrid(@NonNull java.util.Collection<Integer> pageIds) {
-        adoptShippedSurfaceDefaults();
+        migrateLookGrid(pageIds, isFreshInstall());
+    }
+
+    /**
+     * As {@link #migrateLookGrid(java.util.Collection)}, with freshness decided by the caller:
+     * start-up asks {@link #isFreshInstall()} once, before any migration writes a bookkeeping key
+     * that would make a first run look used.
+     */
+    public synchronized void migrateLookGrid(@NonNull java.util.Collection<Integer> pageIds,
+                                             boolean freshInstall) {
+        adoptShippedSurfaceDefaults(freshInstall);
         if (mSharedPreferences != null)
-            LookGridMigration.run(new LookGrid.PrefsStore(mSharedPreferences), pageIds);
+            LookGridMigration.run(new LookGrid.PrefsStore(mSharedPreferences), pageIds, freshInstall);
         migrateLayoutStyle();
     }
 
@@ -3118,12 +3128,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * <p>Runs before {@link #migrateSurfaceInheritance()}'s fold and carries its own marker, since
      * an install can have folded under an earlier build and still need this.
      */
-    private void adoptShippedSurfaceDefaults() {
+    private void adoptShippedSurfaceDefaults(boolean freshInstall) {
         if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
                 TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, false))
             return;
 
-        if (isFreshInstall()) {
+        if (freshInstall) {
             // A fresh install opens on the Clear look with an 8dp margin. Written here rather than
             // by moving the DEFAULT_* constants: an install that went through this branch under an
             // earlier build never stored these keys, and a changed constant would restyle it.
@@ -3186,7 +3196,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * already have; any other key means the app has been used and its look is the user's, not the
      * shipped one's.
      */
-    private boolean isFreshInstall() {
+    public boolean isFreshInstall() {
         for (String key : mSharedPreferences.getAll().keySet()) {
             if (!TERMUX_APP.KEY_LOG_LEVEL.equals(key))
                 return false;
