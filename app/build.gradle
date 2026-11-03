@@ -159,6 +159,10 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+            all {
+                // TEMP(test-heap): dump the worker's heap on OOM for analysis; revert before merge.
+                jvmArgs "-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=${rootProject.projectDir}/build/heap"
+            }
         }
     }
 
