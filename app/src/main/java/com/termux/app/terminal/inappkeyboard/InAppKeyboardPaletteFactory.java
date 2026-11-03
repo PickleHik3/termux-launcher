@@ -191,6 +191,16 @@ public final class InAppKeyboardPaletteFactory {
     }
 
     /**
+     * The glass the keyboard's keys stand on under {@code look}: the dock's glass base, tinted by
+     * the Look's obsidian surface when it has one. {@link #createGlass} builds on it.
+     */
+    @ColorInt
+    public static int resolveGlassBase(@NonNull Context context, @NonNull GlassLook look) {
+        int glassBase = resolveDockGlassBaseColor(context);
+        return look.obsidianTint ? surfaceTinted(look, glassBase) : glassBase;
+    }
+
+    /**
      * Glass base color of the launcher dock — must stay in sync with
      * {@code TermuxActivity#resolveAccessoryGlassBaseColor()}.
      */
@@ -322,7 +332,7 @@ public final class InAppKeyboardPaletteFactory {
             ? "system" : variant;
         Theme.Palette base = create(context, normalizedVariant);
         boolean night = isNightMode(context);
-        int glassBase = resolveDockGlassBaseColor(context);
+        int glassBase = resolveGlassBase(context, look);
         int baseKey = base.keyBackground;
         int baseSpace = base.spaceBarBackground;
         int baseFunction = base.functionKeyBackground;
@@ -330,7 +340,6 @@ public final class InAppKeyboardPaletteFactory {
         int baseSubLabel = base.subLabelColor;
         int baseFunctionLabel = base.functionLabelColor;
         if (look.obsidianTint) {
-            glassBase = surfaceTinted(look, glassBase);
             night = ColorUtils.calculateLuminance(glassBase) < 0.5d;
             baseKey = chipOn(glassBase, KEY_LIFT);
             baseSpace = baseKey;

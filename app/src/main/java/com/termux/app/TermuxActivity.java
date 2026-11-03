@@ -953,6 +953,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+
+    /** The in-app keyboard, once built; the command palette's sheet takes its glass from it. */
+    @Nullable
+    public TermuxInAppKeyboard getInAppKeyboard() {
+        return mInAppKeyboard;
+    }
     /** True while the travel pre-rolls the keyboard, which opens below the screen. */
     private boolean mKeyboardOpensBelowScreen;
 

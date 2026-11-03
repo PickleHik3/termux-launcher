@@ -597,6 +597,14 @@ public final class TerminalCommandPaletteController
         });
         mView = new CommandPaletteView(mActivity);
         mView.setCallbacks(this);
+        // The sheet wears the keyboard's glass: the same theme, Look, scheme and deck look.
+        mView.setGlassBaseSource(() -> {
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard keyboard =
+                mActivity.getInAppKeyboard();
+            return keyboard != null ? keyboard.glassBaseColor(mActivity)
+                : com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+                    .resolveDockGlassBaseColor(mActivity);
+        });
         mView.setPassThroughSource(this::passThroughRects);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));

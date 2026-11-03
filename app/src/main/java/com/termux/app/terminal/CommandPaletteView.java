@@ -500,6 +500,18 @@ public final class CommandPaletteView extends View {
         return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
+    /** Where the sheet's glass comes from: the in-app keyboard's palette, so the two match. */
+    public interface GlassBaseSource {
+        @ColorInt int glassBaseColor();
+    }
+
+    @Nullable private GlassBaseSource mGlassBaseSource;
+
+    /** The sheet's glass from {@code source} on the next {@link #refreshPalette()}; null for the dock's. */
+    public void setGlassBaseSource(@Nullable GlassBaseSource source) {
+        mGlassBaseSource = source;
+    }
+
     public void setCallbacks(@Nullable Callbacks callbacks) {
         mCallbacks = callbacks;
     }
@@ -507,7 +519,9 @@ public final class CommandPaletteView extends View {
     /** Re-resolves every role. Called on theme, wallpaper-color and configuration changes. */
     public void refreshPalette() {
         Context context = getContext();
-        mGlassBase = InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
+        GlassBaseSource source = mGlassBaseSource;
+        mGlassBase = source != null ? source.glassBaseColor()
+            : InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
         mPrimary = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int onSurface = MaterialColors.getColor(context,
