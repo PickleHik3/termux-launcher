@@ -8016,6 +8016,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyDecorNavBarSurfaceState(@NonNull ChromeSpec state) {
         boolean visible = shouldShowDecorNavBarSurface(state);
+        if (mNavFadeActive && !mCrossing.crossing()) endNavStripFade();
+        if (mNavFadeActive && applyDecorNavBarSurfaceFade(state, visible)) return;
         if (!visible) {
             hideDecorNavBarSurfaceOverlay(true);
             return;
@@ -8047,6 +8049,232 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         overlay.setVisibility(View.VISIBLE);
         // The Peek glass reflection runs on down the card's foot.
         syncPeekReflection();
+    }
+
+    // ---- The under-pill strip across the seam ----------------------------------------------
+    //
+    // The strip stands still at the screen's foot while the wall crosses between Home and the
+    // Workspace, and the stack's dress, which it continues, changes halves on the crossing's first
+    // frame. So it does not change with it there: it keeps the dress it began in (or none, where
+    // the committed half has no strip) beside the other half's, built once, and the two cross by
+    // alpha with the finger (SeamFade), so either end of the way shows exactly that end's strip.
+
+    /** Whether the strip is crossing between the halves' dresses. */
+    private boolean mNavFadeActive;
+    /** The crossing's committed end, the way's share is read from. */
+    @Nullable private com.termux.app.wall.PageRef mNavFadeHerePage;
+    /** Whether the strip showed as the crossing began, and the tint it wore then. */
+    private boolean mNavFadeHereShown;
+    @Nullable private Drawable mNavFadeHereTint;
+    /** Whether the other half's dress has been read yet (the stack wore it on a pass). */
+    private boolean mNavFadeThereKnown;
+    private boolean mNavFadeThereShown;
+    /** How much of the other half's strip shows, 0 to 1 (SeamFade#share). */
+    private float mNavFadeShare;
+
+    /** A crossing between Home and the Workspace begins: the strip keeps what it wears. */
+    private void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here,
+                                   @NonNull com.termux.app.wall.PageRef there) {
+        endNavStripFade();
+        if (here.isHome() == there.isHome()) return;
+        mNavFadeActive = true;
+        mNavFadeHerePage = here;
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        mNavFadeHereShown = overlay != null && overlay.getVisibility() == View.VISIBLE;
+        mNavFadeHereTint = mNavFadeHereShown && mDecorNavBarTintOverlay != null
+            ? mDecorNavBarTintOverlay.getBackground() : null;
+    }
+
+    /** The strip's crossing is over; the pass that follows dresses it plainly. */
+    // ---- The band behind the system bar and the bar across the seam ---------------------------
+    //
+    // On pong (TopBandDiag) the strip's glass behind the system status bar was re-dressed into the
+    // Workspace's look in place, full width, on a crossing's second frame, while the bar's own
+    // glass under it kept Home's until the landing: a dark band, then the bar a moment later. Now
+    // the first re-dress of either mid-crossing builds both in the arriving dress, once, beside
+    // the dresses they wore, and both cross by the one share of the way (SeamFade). Later
+    // re-dresses in the crossing change nothing; the landing leaves each on the dress it reached.
+
+    private boolean mTopFadeActive;
+    @Nullable private com.termux.app.wall.PageRef mTopFadeHerePage;
+    @Nullable private Drawable mTopFadeStripHere;
+    @Nullable private Drawable mTopFadeBarHere;
+    private boolean mTopFadeBuilt;
+    private float mTopFadeShare;
+
+    /** A crossing between Home and the Workspace begins: the band and the bar keep their glass. */
+    private void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here,
+                                  @NonNull com.termux.app.wall.PageRef there) {
+        endTopBandFade();
+        if (here.isHome() == there.isHome()) return;
+        mTopFadeActive = true;
+        mTopFadeHerePage = here;
+        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+        mTopFadeStripHere = strip != null && strip.isShown() ? strip.getBackground() : null;
+        View bar = findViewById(R.id.terminal_window_bar_background);
+        mTopFadeBarHere = bar != null ? bar.getBackground() : null;
+    }
+
+    /**
+     * Whether a re-dress of the band or the bar is the fade's to answer: mid-crossing it is. The
+     * first one builds both in the dress worn now beside the ones they began with; every later one
+     * changes nothing.
+     */
+    private boolean topFadeTakesRedress() {
+        if (!mTopFadeActive) return false;
+        if (!mCrossing.crossing()) {
+            endTopBandFade();
+            return false;
+        }
+        if (mTopFadeBuilt) return true;
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null || mChrome == null) return false;
+        mTopFadeBuilt = true;
+        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+        if (strip != null) {
+            strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
+                buildStatusInsetStripSurface(host), mTopFadeShare));
+        }
+        View bar = findViewById(R.id.terminal_window_bar_background);
+        if (bar != null) {
+            bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
+                buildTerminalWindowBarBackground(host), mTopFadeShare));
+        }
+        applyTopBandFadeShare();
+        return true;
+    }
+
+    /** One frame of the crossing: the band and the bar at the wall's share of the way. */
+    private void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) {
+        if (!mTopFadeActive || mTopFadeHerePage == null) return;
+        float share = com.termux.app.place.SeamFade.share(
+            com.termux.app.place.SeamTravel.otherEndProgress(wallFrame, mTopFadeHerePage));
+        if (share == mTopFadeShare) return;
+        mTopFadeShare = share;
+        if (mTopFadeBuilt) applyTopBandFadeShare();
+    }
+
+    private void applyTopBandFadeShare() {
+        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+        setCrossfadeShare(strip, mTopFadeShare);
+        // A band the leaving half did not show comes in by its alpha with the share, and goes
+        // the same way on a cancel; one it showed stays whole while its glass crosses.
+        if (strip != null) {
+            float alpha = com.termux.app.place.SeamFade.presence(mTopFadeStripHere != null, true,
+                mTopFadeShare);
+            if (strip.getAlpha() != alpha) strip.setAlpha(alpha);
+        }
+        setCrossfadeShare(findViewById(R.id.terminal_window_bar_background), mTopFadeShare);
+    }
+
+    private static void setCrossfadeShare(@Nullable View view, float share) {
+        Drawable background = view == null ? null : view.getBackground();
+        if (background instanceof com.termux.app.chrome.CrossfadeDrawable)
+            ((com.termux.app.chrome.CrossfadeDrawable) background).setShare(share);
+    }
+
+    /** The crossing is over: each blend gives way to the dress it reached, nothing rebuilt. */
+    private void endTopBandFade() {
+        if (mTopFadeBuilt) {
+            View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+            settleCrossfade(strip);
+            if (strip != null && strip.getAlpha() != 1f) {
+                // Faded out on a cancel toward a half that shows no band: it goes as it was; the
+                // landing's pass hides it, as that half wears it.
+                if (strip.getAlpha() == 0f && mTopFadeStripHere == null)
+                    strip.setVisibility(View.GONE);
+                strip.setAlpha(1f);
+            }
+            settleCrossfade(findViewById(R.id.terminal_window_bar_background));
+        }
+        mTopFadeActive = false;
+        mTopFadeHerePage = null;
+        mTopFadeStripHere = null;
+        mTopFadeBarHere = null;
+        mTopFadeBuilt = false;
+        mTopFadeShare = 0f;
+    }
+
+    private static void settleCrossfade(@Nullable View view) {
+        Drawable background = view == null ? null : view.getBackground();
+        if (background instanceof com.termux.app.chrome.CrossfadeDrawable)
+            view.setBackground(((com.termux.app.chrome.CrossfadeDrawable) background).endpoint());
+    }
+
+    private void endNavStripFade() {
+        mNavFadeActive = false;
+        mNavFadeHerePage = null;
+        mNavFadeHereShown = false;
+        mNavFadeHereTint = null;
+        mNavFadeThereKnown = false;
+        mNavFadeThereShown = false;
+        mNavFadeShare = 0f;
+    }
+
+    /**
+     * The strip on a pass mid-crossing. While the stack still wears the committed half's dress
+     * the plain pass dresses it (false). The first pass in the other half's dress builds that
+     * half's strip once beside the one the crossing began with; every later pass changes nothing.
+     * Whether it handled the strip.
+     */
+    private boolean applyDecorNavBarSurfaceFade(@NonNull ChromeSpec state, boolean visible) {
+        if (mCrossing.seam().stackDressPage() == null) {
+            // Back in the committed half's dress (a dip drawn back before its swap): the plain
+            // pass dresses the strip, and the next swap builds the other half's again.
+            mNavFadeThereKnown = false;
+            return false;
+        }
+        if (!mNavFadeThereKnown) {
+            if (!mNavFadeHereShown && !visible) return false;
+            mNavFadeThereKnown = true;
+            mNavFadeThereShown = visible;
+            ensureDecorNavBarSurfaceOverlay();
+            FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+            if (overlay == null) return true;
+            Drawable thereTint = null;
+            if (visible) {
+                applyDecorNavBarSurfaceBounds(overlay, true);
+                thereTint = buildDecorNavBarTint(state);
+                if (navStripBlurEnabled(state)) updateDecorNavBarBackdrop(state);
+            }
+            if (mDecorNavBarTintOverlay != null) {
+                mDecorNavBarTintOverlay.setBackground(new com.termux.app.chrome.CrossfadeDrawable(
+                    mNavFadeHereTint, thereTint, mNavFadeShare));
+                mDecorNavBarTintOverlay.setAlpha(1f);
+                mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
+            }
+            overlay.setVisibility(View.VISIBLE);
+            syncPeekReflection();
+        }
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        if (overlay != null) overlay.setAlpha(navStripFadeAlpha());
+        return true;
+    }
+
+    /** The strip's opacity mid-crossing: the drawer's and sheet's, by how much of it stands. */
+    private float navStripFadeAlpha() {
+        return decorNavStripAlpha() * com.termux.app.place.SeamFade.presence(mNavFadeHereShown,
+            mNavFadeThereShown, mNavFadeShare);
+    }
+
+    /**
+     * One frame of the crossing: the strip's two dresses at the wall's share of the way. A
+     * redraw of the strip, nothing built.
+     */
+    private void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) {
+        if (!mNavFadeActive || mNavFadeHerePage == null) return;
+        float share = com.termux.app.place.SeamFade.share(
+            com.termux.app.place.SeamTravel.otherEndProgress(wallFrame, mNavFadeHerePage));
+        if (share == mNavFadeShare) return;
+        mNavFadeShare = share;
+        if (!mNavFadeThereKnown) return;
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        if (overlay == null) return;
+        Drawable tint = mDecorNavBarTintOverlay == null ? null
+            : mDecorNavBarTintOverlay.getBackground();
+        if (tint instanceof com.termux.app.chrome.CrossfadeDrawable)
+            ((com.termux.app.chrome.CrossfadeDrawable) tint).setShare(share);
+        overlay.setAlpha(navStripFadeAlpha());
     }
 
     /**
@@ -10471,13 +10699,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             restLiveBlurAfterLayout(statusBlur);
         }
         if (statusSurface != null) {
-            statusSurface.setBackground(mChrome.glass().statusBarExtensionSurface(opacity, 0f,
-                terminalWindowGlassStatusFraction(host),
-                STATUS_INSET_STRIP_CONTINUES_PANE_VEIL
-                    ? com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR
-                    : null));
+            // Mid-crossing the fade holds the strip's glass (and the bar's): both are built once
+            // in the arriving half's dress and cross with the finger (TopBandFade).
+            if (!topFadeTakesRedress()) statusSurface.setBackground(buildStatusInsetStripSurface(host));
             statusSurface.setVisibility(View.VISIBLE);
         }
+        // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
+        // pass, not at its rest until the bar's next move.
+        syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -10520,6 +10749,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.glass().statusTintStrength()));
             statusSurface.setVisibility(View.VISIBLE);
         }
+        // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
+        // pass, not at its rest until the bar's next move.
+        syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -24181,6 +24413,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
             mPreferences != null && mChrome != null, mPromptFieldEase != null,
             mPromptFieldUnderPalette);
+        // The strip under the pill crosses from the one dress to the other with the finger.
+        syncNavStripFade(wallFrame);
+        // And the band behind the system bar with the bar's glass, by the same share.
+        syncTopBandFade(wallFrame);
         // A band only one half's dock carries follows its page across the seam.
         syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
@@ -24576,6 +24812,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 isSplitPanesEnabled()),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        // The strip under the pill stands still through the crossing and crosses dresses by alpha.
+        beginNavStripFade(herePage, therePage);
+        beginTopBandFade(herePage, therePage);
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
         // frame. The landing lets it go after its own frame (runLandingSettle).
@@ -24740,6 +24979,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (seam.barRedressed()) syncPlaceBar();
+        // The strip behind the system bar stands with the bar on every riding frame, whatever
+        // pass of this frame dressed or showed it.
+        if (rides) syncStatusStripTravel();
         return rides;
     }
 
@@ -24749,16 +24991,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
      */
     private void applyStatusTravelX(float x) {
-        if (x == mStatusTravelXPx) return;
+        boolean moved = x != mStatusTravelXPx;
         mStatusTravelXPx = x;
-        View host = hotView(R.id.terminal_window_bar_host);
-        if (host != null) host.setTranslationX(x);
-        View strip = hotView(R.id.terminal_status_bar_background);
-        if (strip != null) {
-            float stripX = x != 0f && continuesIntoStatusInsetStrip(host) ? x : 0f;
-            if (strip.getTranslationX() != stripX) strip.setTranslationX(stripX);
+        if (moved) {
+            View host = hotView(R.id.terminal_window_bar_host);
+            if (host != null) host.setTranslationX(x);
         }
+        // The strip follows on every call, moved or not: one shown since the last move (dressed
+        // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
+        syncStatusStripTravel();
+        if (!moved) return;
         View backdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop);
+        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+    }
+
+    /**
+     * The strip behind the system bar where the bar stands now: with it while the strip is the
+     * bar's own glass running up under the system bar (the lead it was last dressed for, not one
+     * read live mid-crossing, which can still answer for the half the bar left), at rest
+     * otherwise (StatusStripRide). Its backdrop samples where it is drawn, so it is re-aimed.
+     */
+    private void syncStatusStripTravel() {
+        View strip = hotView(R.id.terminal_status_bar_background);
+        if (strip == null) return;
+        float stripX = com.termux.app.place.StatusStripRide.stripX(mStatusTravelXPx,
+            strip.getVisibility() == View.VISIBLE,
+            mStatusStripLead == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
+        if (strip.getTranslationX() == stripX) return;
+        strip.setTranslationX(stripX);
+        View backdrop = hotView(R.id.terminal_status_bar_wallpaper_backdrop);
         if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
@@ -25540,6 +25801,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // settle-time show the pre-roll stood in for would have told it.
                 mX11Display.onUserKeyboardIntent(true);
             }
+            // The strip's crossing has landed on one end's dress: the commit below dresses it
+            // plainly, as that end wears it.
+            endNavStripFade();
+            endTopBandFade();
             mLandingStackDressed = seamLanding.stackDressedFor(page);
             try {
                 syncPlaceState(page, leavingKeyboardUp);
@@ -31128,9 +31393,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first. The bar keeps a sheet only as the band touching the canvas, where the dock's
         // glass is inset below it (dockGlassTopInsetPx) — which is where it has always stood.
         boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
-        float opacity = mPreferences == null ? 1f
-            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookPage()) : mPreferences.getStatusBarOpacity(statusLookPage()))
-                / 100f;
         int blurRadiusDp = joinsDock
             ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
         boolean windowBarBlurEnabled = !onPlank && ChromePolicy.dockBlurEnabled(blurRadiusDp);
@@ -31144,34 +31406,57 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (blur != null) blur.setVisibility(windowBarBlurEnabled ? View.VISIBLE : View.GONE);
         // Nothing moves behind the bar at rest, so its blur rests too instead of repainting.
         restLiveBlur(blur, true);
-        boolean capsuleStatusBar = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         View background = findViewById(R.id.terminal_window_bar_background);
-        if (background != null) {
-            // The capsule floats below the status bar as its own slab, so its glass spans the full
-            // pane height. The default pane merges with the behind-status glass, so it renders only
-            // the lower slice and the extension draws the rest.
-            // The edge rule is the model's: Docked, only the edge facing the opening keeps the
-            // line; the bar's screen edges and joins take none, and the strip behind the system
-            // status bar continues it where it leads. The capsule keeps it all round.
-            boolean stripContinues = statusInsetStripLead()
-                == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
-            int barStroke = capsuleStatusBar ? com.termux.app.chrome.ChromeEdgeRule.ALL
-                : chromeRimEdges(com.termux.app.place.ChromeShape.PieceId.STATUS);
-            background.setBackground(onPlank ? null
-                : joinsDock
-                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false,
-                        mChrome.glass().statusTintStrength())
-                    : mChrome.glass().statusBarSurface(opacity,
-                        capsuleStatusBar || isStatusBarVertical() || !stripContinues
-                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
-                        com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
-                        // While the bar's frost draws the gathered light along the same outline,
-                        // as the last frost pass found it, the bar lays no stroke beside it.
-                        mWindowBarFrostDrawsEdge));
+        if (background != null && !topFadeTakesRedress()) {
+            background.setBackground(buildTerminalWindowBarBackground(host));
         }
         applyWindowBarDeckSlab();
         applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
+    }
+
+    /** The strip's glass behind the system bar, continuing the bar's, in the dress worn now. */
+    @NonNull
+    private Drawable buildStatusInsetStripSurface(@NonNull View host) {
+        float opacity = mPreferences != null
+            ? mPreferences.getStatusBarOpacity(statusLookPage()) / 100f : 1f;
+        return mChrome.glass().statusBarExtensionSurface(opacity, 0f,
+            terminalWindowGlassStatusFraction(host),
+            STATUS_INSET_STRIP_CONTINUES_PANE_VEIL
+                ? com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR
+                : null);
+    }
+
+    /** The bar's own glass in the dress worn now; null where it wears none (on the plank). */
+    @Nullable
+    private Drawable buildTerminalWindowBarBackground(@NonNull View host) {
+        boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
+        boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
+        float opacity = mPreferences == null ? 1f
+            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookPage()) : mPreferences.getStatusBarOpacity(statusLookPage()))
+                / 100f;
+        boolean capsuleStatusBar = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
+        // The capsule floats below the status bar as its own slab, so its glass spans the full
+        // pane height. The default pane merges with the behind-status glass, so it renders only
+        // the lower slice and the extension draws the rest.
+        // The edge rule is the model's: Docked, only the edge facing the opening keeps the
+        // line; the bar's screen edges and joins take none, and the strip behind the system
+        // status bar continues it where it leads. The capsule keeps it all round.
+        boolean stripContinues = statusInsetStripLead()
+            == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
+        int barStroke = capsuleStatusBar ? com.termux.app.chrome.ChromeEdgeRule.ALL
+            : chromeRimEdges(com.termux.app.place.ChromeShape.PieceId.STATUS);
+        return onPlank ? null
+            : joinsDock
+                ? mChrome.glass().dockSurface(opacity, 0f, 1f, false,
+                    mChrome.glass().statusTintStrength())
+                : mChrome.glass().statusBarSurface(opacity,
+                    capsuleStatusBar || isStatusBarVertical() || !stripContinues
+                        ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
+                    com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+                    // While the bar's frost draws the gathered light along the same outline,
+                    // as the last frost pass found it, the bar lays no stroke beside it.
+                    mWindowBarFrostDrawsEdge);
     }
 
     /**
