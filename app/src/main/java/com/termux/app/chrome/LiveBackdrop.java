@@ -33,6 +33,12 @@ import java.util.ArrayList;
  * containers on a live surface's path implement {@link Container}; an ancestor that does not
  * contributes nothing beneath.</p>
  *
+ * <p><b>Ground.</b> Under the root's children every recording first draws the window's ground: the
+ * backgrounds of the root and of every view above it up to the decor, whose background is the
+ * window background (the opaque mode's surface base; transparent in wallpaper mode, where the
+ * ground is the wallpaper and ground strip views inside the root). Without it a recording is only
+ * as opaque as the views in it, and the live screen shows through the glass.</p>
+ *
  * <p><b>When.</b> Surfaces are re-recorded in a pre-draw of a frame that is already being drawn,
  * and only when what is beneath them moved: the views drawn beneath (a sibling shown, hidden or
  * raised) or where the surface stands among them. Anything that merely redraws beneath (a page
@@ -247,34 +253,106 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      */
     @RequiresApi(Build.VERSION_CODES.Q)
     public boolean recordWindowBeneath(@NonNull View surface, @NonNull RenderNode out, int marginPx) {
-        if (!(mRoot instanceof Container) || !mRoot.isAttachedToWindow()
-            || !surface.isAttachedToWindow()) return false;
+        if (!canDrawWindowBeneath(surface)) return false;
+        int width = Math.max(1, surface.getWidth() + 2 * marginPx);
+        int height = Math.max(1, surface.getHeight() + 2 * marginPx);
+        out.setPosition(0, 0, width, height);
+        RecordingCanvas canvas = out.beginRecording(width, height);
+        try {
+            drawWindow(surface, canvas, marginPx, true);
+        } finally {
+            out.endRecording();
+        }
+        return true;
+    }
+
+    /**
+     * {@link #recordBelow} drawn now into a software {@code canvas} (a software Snapshot, below
+     * Android 12): every view beneath is really redrawn ({@code View.draw}), never the surface or
+     * anything above it. False, with nothing drawn, as {@link #recordBelow}. The canvas is
+     * restored however the draw ends.
+     */
+    public boolean drawBelow(@NonNull View surface, @NonNull Canvas canvas, int marginPx) {
+        if (!collect(surface) || !mMatrix.invert(mInverse)) return false;
+        int save = canvas.save();
+        try {
+            drawPath(canvas, marginPx, false);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+        return true;
+    }
+
+    /** {@link #recordWindowBeneath} drawn now into a software {@code canvas}, as {@link #drawBelow}. */
+    public boolean drawWindowBeneath(@NonNull View surface, @NonNull Canvas canvas, int marginPx) {
+        if (!canDrawWindowBeneath(surface)) return false;
+        int save = canvas.save();
+        try {
+            drawWindow(surface, canvas, marginPx, false);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+        return true;
+    }
+
+    private boolean canDrawWindowBeneath(@NonNull View surface) {
+        return mRoot instanceof Container && mRoot.isAttachedToWindow() && surface.isAttachedToWindow();
+    }
+
+    /** The whole root into {@code canvas}, placed by the two views' screen positions. */
+    private void drawWindow(@NonNull View surface, @NonNull Canvas canvas, int marginPx, boolean z) {
         mRoot.getLocationOnScreen(mLocation);
         int rootX = mLocation[0];
         int rootY = mLocation[1];
         surface.getLocationOnScreen(mLocation);
         mBeneath.clear();
         collectLevel(mRoot, null, mBeneath);
-        int width = Math.max(1, surface.getWidth() + 2 * marginPx);
-        int height = Math.max(1, surface.getHeight() + 2 * marginPx);
-        out.setPosition(0, 0, width, height);
-        RecordingCanvas canvas = out.beginRecording(width, height);
         try {
-            canvas.translate(marginPx + rootX - mLocation[0] - mRoot.getScrollX(),
-                marginPx + rootY - mLocation[1] - mRoot.getScrollY());
-            canvas.enableZ();
+            canvas.translate(marginPx + rootX - mLocation[0], marginPx + rootY - mLocation[1]);
+            drawGround(canvas);
+            canvas.translate(-mRoot.getScrollX(), -mRoot.getScrollY());
+            if (z) enableZ(canvas);
             for (int i = 0; i < mBeneath.size(); i++) {
                 ((Container) mRoot).drawChildForBackdrop(canvas, mBeneath.get(i));
             }
-            canvas.disableZ();
+            if (z) disableZ(canvas);
         } finally {
-            out.endRecording();
+            mBeneath.clear();
         }
-        mBeneath.clear();
-        return true;
+    }
+
+    /**
+     * The ground under the root's children, bottom first: the background of each view from the
+     * decor down to the root, at its place. {@code canvas} is in the root's own coordinates.
+     */
+    private void drawGround(@NonNull Canvas canvas) {
+        mRoot.getLocationInWindow(mRootLocation);
+        drawGroundOf(canvas, mRoot);
+    }
+
+    private void drawGroundOf(@NonNull Canvas canvas, @NonNull View view) {
+        ViewParent parent = view.getParent();
+        if (parent instanceof View) drawGroundOf(canvas, (View) parent);
+        Drawable background = view.getBackground();
+        if (background == null || view.getVisibility() != View.VISIBLE) return;
+        view.getLocationInWindow(mLocation);
+        int save = canvas.save();
+        canvas.translate(mLocation[0] - mRootLocation[0], mLocation[1] - mRootLocation[1]);
+        background.draw(canvas);
+        canvas.restoreToCount(save);
+    }
+
+    /** Shadows and Z order among the views drawn, as a parent's own hardware draw has them. */
+    private static void enableZ(@NonNull Canvas canvas) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) canvas.enableZ();
+    }
+
+    private static void disableZ(@NonNull Canvas canvas) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) canvas.disableZ();
     }
 
     @NonNull private final int[] mLocation = new int[2];
+    @NonNull private final int[] mRootLocation = new int[2];
 
     /**
      * Fills {@link #mPath} (surface first, root last), {@link #mBeneath} (per level from the root
@@ -375,29 +453,38 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (!mMatrix.invert(mInverse)) return false;
         RecordingCanvas canvas = out.beginRecording(width, height);
         try {
-            canvas.translate(marginPx, marginPx);
-            canvas.concat(mInverse);
-            int next = 0;
-            for (int i = mPath.size() - 1; i >= 1; i--) {
-                ViewGroup parent = (ViewGroup) mPath.get(i);
-                View child = mPath.get(i - 1);
-                int save = canvas.save();
-                canvas.translate(-parent.getScrollX(), -parent.getScrollY());
-                // Shadows and Z order among the views drawn here, as the parent's own draw has.
-                canvas.enableZ();
-                for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
-                    ((Container) parent).drawChildForBackdrop(canvas, below);
-                }
-                canvas.disableZ();
-                canvas.restoreToCount(save);
-                canvas.translate(child.getLeft() - parent.getScrollX(),
-                    child.getTop() - parent.getScrollY());
-                Matrix own = child.getMatrix();
-                if (!own.isIdentity()) canvas.concat(own);
-            }
+            drawPath(canvas, marginPx, true);
         } finally {
             out.endRecording();
         }
         return true;
+    }
+
+    /**
+     * Draws {@link #mBeneath} along {@link #mPath} into {@code canvas}, with {@link #mInverse}
+     * already set. {@code z} for a recording canvas, where the parent's own draw orders by Z with
+     * shadows; a software canvas has neither, and {@link #collectLevel} has ordered by Z already.
+     */
+    private void drawPath(@NonNull Canvas canvas, int marginPx, boolean z) {
+        canvas.translate(marginPx, marginPx);
+        canvas.concat(mInverse);
+        drawGround(canvas);
+        int next = 0;
+        for (int i = mPath.size() - 1; i >= 1; i--) {
+            ViewGroup parent = (ViewGroup) mPath.get(i);
+            View child = mPath.get(i - 1);
+            int save = canvas.save();
+            canvas.translate(-parent.getScrollX(), -parent.getScrollY());
+            if (z) enableZ(canvas);
+            for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
+                ((Container) parent).drawChildForBackdrop(canvas, below);
+            }
+            if (z) disableZ(canvas);
+            canvas.restoreToCount(save);
+            canvas.translate(child.getLeft() - parent.getScrollX(),
+                child.getTop() - parent.getScrollY());
+            Matrix own = child.getMatrix();
+            if (!own.isIdentity()) canvas.concat(own);
+        }
     }
 }

@@ -10,24 +10,42 @@ import android.os.Build;
  * <ul>
  *   <li><b>Live</b>: Live blur is on and the panel is in the launcher's own window: the recorded
  *   picture refreshes on frames where something beneath it changed.</li>
- *   <li><b>Snapshot</b>: the same recording, blurred once into a GPU bitmap when the panel opens and
- *   again when it settles, and frozen while it moves.</li>
- *   <li><b>Stored</b>: below Android 12 (no {@code RenderEffect}) or with no recorder: the panel
- *   shows the stored pre-blurred wallpaper frame instead.</li>
+ *   <li><b>Snapshot</b>: the same recording, blurred once when the panel opens and again when it
+ *   settles, and frozen while it moves: on the GPU from Android 12, and below it (no
+ *   {@code RenderEffect}, so no Live either) drawn in software and blurred by RenderScript.</li>
+ *   <li><b>Stored</b>: with no recorder, or below Android 12 once the software blur has failed: the
+ *   panel shows the stored pre-blurred wallpaper frame instead.</li>
  * </ul>
  */
 public final class PanelBackdropPolicy {
 
     public enum Kind { LIVE, SNAPSHOT, STORED }
 
-    /** The first Android that can record and blur what is beneath a panel. */
-    public static final int MIN_SDK = Build.VERSION_CODES.S;
+    /** The first Android that can picture what is beneath a panel: a software Snapshot. */
+    public static final int MIN_SDK = Build.VERSION_CODES.O;
+
+    /** The first Android that records and blurs on the GPU ({@code RenderEffect}): Live, and GPU Snapshots. */
+    public static final int MIN_GPU_SDK = Build.VERSION_CODES.S;
 
     private PanelBackdropPolicy() {}
 
     /** Whether a panel can show a recorded picture at all here. */
     public static boolean canRecord(int sdkInt) {
         return sdkInt >= MIN_SDK;
+    }
+
+    /** Whether the picture is recorded and blurred on the GPU; below this a Snapshot is drawn in software. */
+    public static boolean onGpu(int sdkInt) {
+        return sdkInt >= MIN_GPU_SDK;
+    }
+
+    /**
+     * Whether a panel shows a recorded picture now: it can record here, and, where that is the
+     * software Snapshot, the software blur has not failed in this process ({@code softwareFailed}).
+     * When false the panel shows the stored wallpaper frame ({@code WallpaperFrostPainter}).
+     */
+    public static boolean pictured(int sdkInt, boolean softwareFailed) {
+        return canRecord(sdkInt) && (onGpu(sdkInt) || !softwareFailed);
     }
 
     /**
@@ -40,6 +58,7 @@ public final class PanelBackdropPolicy {
     public static Kind kind(int sdkInt, boolean recorderAvailable, boolean liveBlur,
                             boolean sameWindow, boolean liveSlotFree) {
         if (!canRecord(sdkInt) || !recorderAvailable) return Kind.STORED;
+        if (!onGpu(sdkInt)) return Kind.SNAPSHOT;
         return liveBlur && sameWindow && liveSlotFree ? Kind.LIVE : Kind.SNAPSHOT;
     }
 

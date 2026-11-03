@@ -49,9 +49,9 @@ import java.util.List;
  * and layout pass per frame, and the clipped, bottom-anchored viewport with its focus wash and
  * bottom fade has no natural widget anyway.
  *
- * <p>The backdrop blur is not drawn here. The host stacks a {@code RealtimeBlurView} clipped to
- * this rectangle's outline underneath, exactly as the dock does; this view draws the tint,
- * gradient, specular, rim and content over it.
+ * <p>The backdrop blur is not drawn here. The host stacks the panel's backdrop
+ * ({@code chrome.PanelBackdrop}) clipped to this rectangle's outline underneath; this view draws
+ * the tint, gradient, specular, rim and content over it.
  *
  * <p>Colors resolve through Material roles and every label is contrast-checked against the
  * composited glass with {@link InAppKeyboardPaletteFactory#ensureContrast}, because the live

@@ -12,15 +12,14 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 
 /**
- * Wallpaper frost: the shared pre-blurred wallpaper frame shown wherever a
- * {@code RealtimeBlurView} is blind.
+ * Wallpaper frost: the shared pre-blurred wallpaper frame, the Wallpaper backdrop kind.
  *
- * <p>In wallpaper passthrough mode a live-blur view can only sample the window's own (transparent)
- * content, so the top pane, the command palette, the app drawer plane and the sheets bars lie on
- * off the dock all read as flat tint — or grey mud over the window dim — while the dock shows
- * frosted wallpaper. Each of those surfaces
- * instead draws the same frame the dock samples, through a {@link SharedFrameDrawable} aimed at
- * the surface's own screen position on every draw, and its useless live-blur view rests.</p>
+ * <p>In wallpaper passthrough mode the window's own content is transparent, so nothing drawn in
+ * it can see the wallpaper. The status strip, the window bar and the sheets bars lie on off the
+ * dock wear this kind alone; the app drawer, the command palette and the terminal sheet wear it
+ * where they cannot record what is beneath them ({@link PanelBackdrop}). Each draws the same
+ * frame the dock samples, through a {@link SharedFrameDrawable} aimed at the surface's own screen
+ * position on every draw.</p>
  *
  * <p>Nothing is cut: a slide, a resize or the parallax only moves where the drawable samples, so
  * the passes below allocate no bitmap. The rect bookkeeping that is left says when a surface has
@@ -51,8 +50,7 @@ public final class WallpaperFrostPainter {
 
     /**
      * Gives the status inset band and the window-bar pane the same shared pre-blurred wallpaper
-     * frame the dock uses, and rests the useless live-blur views. Runs after the blur views' own
-     * visibility passes so its GONE wins while frost is active.
+     * frame the dock uses: their Wallpaper backdrop kind, and the only blur they wear.
      */
     public void updateTopPane() {
         // Ride the same triggers: every state change that can move or restyle the top-pane frost
@@ -69,8 +67,7 @@ public final class WallpaperFrostPainter {
         int blurRadiusDp = mSurfaces.effectiveStatusBarBlurRadiusDp();
         // Rounded style: the pane is a floating capsule already clipped to its outline, so it takes
         // frost like any surface; the inset band above it shows raw wallpaper by design. This used
-        // to bail out for the whole style, which left the capsule with no blur at all — its live
-        // blur view is as blind to the wallpaper as every other RealtimeBlurView here.
+        // to bail out for the whole style, which left the capsule with no blur at all.
         boolean capsule = mSurfaces.roundedDockStyle();
         ChromeEdgeRule.TopLead lead = capsule ? ChromeEdgeRule.TopLead.NONE : mSurfaces.topStackLead();
         // The strip continues whatever leads the top edge: the window bar's own glass, or the
@@ -108,12 +105,6 @@ public final class WallpaperFrostPainter {
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
             paneSeams, statusCover(), status());
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
-        View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
-        View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
-        if (statusApplied && statusBlur != null) statusBlur.setVisibility(View.GONE);
-        if (paneApplied && paneBlur != null) {
-            paneBlur.setVisibility(View.GONE);
-        }
         if (statusApplied || paneApplied) {
             mLedger.clearFrostDirty();
             mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, blurRadiusDp);
@@ -137,11 +128,9 @@ public final class WallpaperFrostPainter {
     }
 
     /**
-     * Wallpaper frost for the command palette glass. The palette's RealtimeBlurView has the same
-     * blind spot as the top pane's: over the home wallpaper it can only blur the window's dim
-     * scrim, which renders the glass as grey mud. Returns true when a frost was installed and the
-     * live blur should rest; the frost spans the full glass pane and the pane's animated outline
-     * clips it.
+     * Wallpaper frost for the command palette glass, where its recorded backdrop cannot see the
+     * wallpaper ({@link PanelBackdrop}). Returns true when a frost was installed; the frost spans
+     * the full glass pane and the pane's animated outline clips it.
      */
     public boolean applyCommandPalette(@NonNull ImageView frost) {
         return applyFrost(frost, glassOf(frost, null), topGlassFrostRadiusDp(),
@@ -166,14 +155,11 @@ public final class WallpaperFrostPainter {
     }
 
     /**
-     * Wallpaper frost for the app drawer plane's glass, the same blind-spot fix the palette needs:
-     * over the home wallpaper the plane's RealtimeBlurView can only blur the window's own dim
-     * scrim. Unlike the palette this follows the dock's effective blur radius directly rather than
+     * Wallpaper frost for the app drawer plane's glass, as the palette's. Unlike the palette this follows the dock's effective blur radius directly rather than
      * {@link #topGlassFrostRadiusDp()} — the plane grows out of the dock, so it has to show the
      * dock's radius or the two would read as different materials mid-handoff (and a fourth radius
      * would evict the dock's own entry from the pre-blur LRU). Returns true when a frost was
-     * installed and the live blur should rest; the frost spans the full glass pane and the plane's
-     * animated outline clips it.
+     * installed; the frost spans the full glass pane and the plane's animated outline clips it.
      */
     public boolean applyAppDrawer(@NonNull ImageView frost) {
         return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
@@ -191,8 +177,7 @@ public final class WallpaperFrostPainter {
      * outline clips it; the rim follows that outline's radius on all four sides, since a sheet
      * off the dock stands clear of every edge and meets no other glass.
      *
-     * <p>Returns true when the frost was installed and the sheet's live blur should rest; false
-     * leaves the caller its live blur, which is what these sheets always wore.</p>
+     * <p>Returns true when the frost was installed; false leaves the sheet its wash alone.</p>
      */
     public boolean applyOffDockSheet(@NonNull ImageView frost,
                                      @NonNull SurfaceDirtyLedger.FrostRect rectKey,
@@ -283,8 +268,9 @@ public final class WallpaperFrostPainter {
     }
 
     /**
-     * @param panel a panel's glass ({@link PanelBackdrop}): where it cannot record what is beneath
-     *     it (below Android 12) the frost is its picture over the launcher's own wallpaper too
+     * @param panel a panel's glass ({@link PanelBackdrop}): where it cannot picture what is beneath
+     *     it (below Android 12, once the software blur has failed) the frost is its picture over the
+     *     launcher's own wallpaper too
      */
     private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
@@ -293,7 +279,7 @@ public final class WallpaperFrostPainter {
                                @NonNull ElementOn glass, boolean panel) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         boolean wanted = mSurfaces.wallpaperPassthroughEnabled()
-            || (panel && !PanelBackdropPolicy.canRecord(android.os.Build.VERSION.SDK_INT));
+            || (panel && !PanelBackdrop.pictured());
         if (!wanted || blurRadiusDp <= 0 || wallpaperFrame == null
             || boundsView == null || boundsView.getVisibility() != View.VISIBLE
             || boundsView.getWidth() <= 0 || boundsView.getHeight() <= 0) {

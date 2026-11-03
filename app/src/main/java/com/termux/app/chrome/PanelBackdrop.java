@@ -4,6 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.content.Context;
 import android.graphics.ColorSpace;
 import android.graphics.HardwareRenderer;
 import android.graphics.Paint;
@@ -28,7 +29,9 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.annotation.VisibleForTesting;
 
+import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.termux.R;
 
 /**
@@ -43,9 +46,12 @@ import com.termux.R;
  *   own {@link HardwareRenderer} when the panel opens and when it comes to rest. While it moves
  *   nothing is recorded or rendered: the bitmap stands. The UI thread only records (it reuses the
  *   views' display lists) and hands the frame over; the blur runs on the render thread and the
- *   bitmap arrives on a later frame.</li>
+ *   bitmap arrives on a later frame. Below Android 12 (no {@code RenderEffect}, so no Live) the
+ *   Snapshot is drawn in software instead, at the same moments: the views beneath are redrawn into
+ *   one downsampled bitmap and RenderScript blurs it, all on the UI thread, so it lands at once.</li>
  *   <li><b>Stored</b>: {@link #open} answers false and the controller shows the stored
- *   pre-blurred wallpaper frame ({@link WallpaperFrostPainter}) instead.</li>
+ *   pre-blurred wallpaper frame ({@link WallpaperFrostPainter}) instead; also below Android 12
+ *   for the rest of the process once a software Snapshot has failed ({@link #pictured}).</li>
  * </ul>
  *
  * <p>A controller calls {@link #open} on each open, {@link #setMoving} as its motion starts and
@@ -88,6 +94,41 @@ public final class PanelBackdrop {
 
     @Nullable private static Handler sMainHandler;
 
+    /** A software Snapshot failed in this process: below Android 12 panels show the stored frame. */
+    private static boolean sSoftwareFailed;
+
+    /** Makes the blur a software Snapshot uses; tests put in one that needs no RenderScript. */
+    @VisibleForTesting
+    interface SoftwareBlurFactory {
+        @NonNull SoftwareBlur make();
+    }
+
+    /** Blurs a software Snapshot's bitmap in place. */
+    @VisibleForTesting
+    interface SoftwareBlur {
+        /** False when it cannot; it may also throw. */
+        boolean blur(@NonNull Context context, @NonNull Bitmap bitmap, float radius);
+
+        void release();
+    }
+
+    @NonNull private static SoftwareBlurFactory sSoftwareBlurFactory = ScriptBlur::new;
+
+    /** Puts in {@code factory} (null for RenderScript) and forgets any failure. */
+    @VisibleForTesting
+    static void setSoftwareBlurFactoryForTest(@Nullable SoftwareBlurFactory factory) {
+        sSoftwareBlurFactory = factory != null ? factory : ScriptBlur::new;
+        sSoftwareFailed = false;
+    }
+
+    /**
+     * Whether panels picture what is beneath them here and now; false when they show the stored
+     * wallpaper frame instead ({@link WallpaperFrostPainter}).
+     */
+    public static boolean pictured() {
+        return PanelBackdropPolicy.pictured(Build.VERSION.SDK_INT, sSoftwareFailed);
+    }
+
     @NonNull private final ImageView mSurface;
     @NonNull private final View mAnchor;
     @Nullable private Scene mScene;
@@ -100,6 +141,8 @@ public final class PanelBackdrop {
     private boolean mMoving;
     @Nullable private LiveBackdrop mRecorder;
     @Nullable private Object mSnapshot;
+    @Nullable private SoftwareSnapshot mSoftware;
+    private int mSnapshotsTaken;
     private boolean mWaitingForLayout;
     @NonNull private final View.OnLayoutChangeListener mLayoutWait =
         (v, l, t, r, b, ol, ot, or, ob) -> {
@@ -158,7 +201,7 @@ public final class PanelBackdrop {
         boolean sameWindow = recorder != null
             && mSurface.getRootView() == recorder.root().getRootView();
         PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.kind(Build.VERSION.SDK_INT,
-            recorder != null, source != null && source.liveBlur(), sameWindow,
+            recorder != null && pictured(), source != null && source.liveBlur(), sameWindow,
             recorder != null && recorder.size() < LiveBackdrop.MAX_LIVE_SURFACES);
         if (kind != mKind || recorder != mRecorder) drop();
         mRecorder = recorder;
@@ -173,13 +216,18 @@ public final class PanelBackdrop {
             kind = PanelBackdropPolicy.Kind.SNAPSHOT;
         }
         mKind = kind;
-        if (kind == PanelBackdropPolicy.Kind.STORED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            mKind = PanelBackdropPolicy.Kind.STORED;
+        if (kind == PanelBackdropPolicy.Kind.STORED) {
             mSurface.setImageDrawable(null);
             return false;
         }
-        show(snapshot().mDrawable);
-        if (PanelBackdropPolicy.snapshotOnOpen(kind)) takeSnapshot();
+        show(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? snapshot().mDrawable : software().mDrawable);
+        if (PanelBackdropPolicy.snapshotOnOpen(kind) && !takeSnapshot()) {
+            // The software Snapshot failed: the panel shows what it did before it, the glass's
+            // tint now, and the stored frame from the next open.
+            drop();
+            mKind = PanelBackdropPolicy.Kind.STORED;
+            return false;
+        }
         return true;
     }
 
@@ -188,8 +236,15 @@ public final class PanelBackdrop {
         boolean was = mMoving;
         mMoving = moving;
         if (mKind != null && PanelBackdropPolicy.snapshotOnMotion(mKind, true, was, moving)) {
+            // A failed software retake leaves no picture (the glass's tint), never a half-drawn one.
             takeSnapshot();
         }
+    }
+
+    /** Software Snapshots taken since this backdrop was made. */
+    @VisibleForTesting
+    int snapshotsTaken() {
+        return mSnapshotsTaken;
     }
 
     /** Shut: the picture, its layer and its buffers go. */
@@ -214,24 +269,29 @@ public final class PanelBackdrop {
     private void drop() {
         stopWaitingForLayout();
         if (mKind == PanelBackdropPolicy.Kind.LIVE && mRecorder != null) mRecorder.detach(mSurface);
+        if (mSoftware != null) mSoftware.release();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && mSnapshot != null) {
             ((Snapshot) mSnapshot).release();
         }
         if (mSurface.getDrawable() != null) mSurface.setImageDrawable(null);
     }
 
-    private void takeSnapshot() {
-        if (mKind != PanelBackdropPolicy.Kind.SNAPSHOT || mRecorder == null
-            || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+    /** False only when a software Snapshot failed; a GPU one, or one waiting for layout, is true. */
+    private boolean takeSnapshot() {
+        if (mKind != PanelBackdropPolicy.Kind.SNAPSHOT || mRecorder == null) return true;
         if (!mSurface.isAttachedToWindow() || mSurface.getWidth() <= 0 || mSurface.getHeight() <= 0) {
             // A popup not laid out yet: the snapshot waits for its first layout.
             if (!mWaitingForLayout) {
                 mWaitingForLayout = true;
                 mSurface.addOnLayoutChangeListener(mLayoutWait);
             }
-            return;
+            return true;
         }
-        snapshot().request();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            snapshot().request();
+            return true;
+        }
+        return software().take();
     }
 
     private void stopWaitingForLayout() {
@@ -245,6 +305,12 @@ public final class PanelBackdrop {
     private Snapshot snapshot() {
         if (mSnapshot == null) mSnapshot = new Snapshot();
         return (Snapshot) mSnapshot;
+    }
+
+    @NonNull
+    private SoftwareSnapshot software() {
+        if (mSoftware == null) mSoftware = new SoftwareSnapshot();
+        return mSoftware;
     }
 
     @NonNull
@@ -368,7 +434,7 @@ public final class PanelBackdrop {
                 } else {
                     Image old = mHeld;
                     mHeld = image;
-                    mDrawable.show(bitmap, mMarginInFlight);
+                    mDrawable.show(bitmap, mMarginInFlight, LivePicture.SCALE);
                     // One frame, for the new picture; the surface draws nothing else.
                     mSurface.invalidate();
                     if (old != null) old.close();
@@ -381,7 +447,7 @@ public final class PanelBackdrop {
         }
 
         private void releaseTarget() {
-            mDrawable.show(null, 0);
+            mDrawable.show(null, 0, LivePicture.SCALE);
             if (mHeld != null) {
                 mHeld.close();
                 mHeld = null;
@@ -408,26 +474,161 @@ public final class PanelBackdrop {
         }
     }
 
-    /** Draws the quarter-scale snapshot back at four times, its margin outside the surface. */
+    /**
+     * One panel's Snapshot below Android 12: what {@link LiveBackdrop#drawBelow} draws beneath the
+     * panel (or {@link LiveBackdrop#drawWindowBeneath}, for a popup in a window of its own), drawn
+     * now through a software canvas into one downsampled ARGB bitmap and blurred in place by
+     * RenderScript. The bitmap and the blur's buffers are kept while the panel is open (a retake
+     * at the same size reuses them) and given back on close; at most
+     * {@link LivePicture#SOFTWARE_SNAPSHOT_BUDGET_BYTES}. A failure shows no picture, and except
+     * for a short heap makes {@link #pictured} false for the rest of the process.
+     */
+    private final class SoftwareSnapshot {
+        @NonNull final SnapshotDrawable mDrawable = new SnapshotDrawable();
+        @Nullable private Bitmap mBitmap;
+        @Nullable private Canvas mCanvas;
+        @Nullable private SoftwareBlur mBlur;
+
+        boolean take() {
+            LiveBackdrop recorder = mRecorder;
+            if (recorder == null) return false;
+            int margin = Math.max(1, (int) Math.ceil(mRadiusPx));
+            int width = mSurface.getWidth() + 2 * margin;
+            int height = mSurface.getHeight() + 2 * margin;
+            int scale = LivePicture.softwareScale(mRadiusPx, width, height);
+            int w = Math.max(1, (width + scale - 1) / scale);
+            int h = Math.max(1, (height + scale - 1) / scale);
+            float radius = LivePicture.softwareScriptRadius(mRadiusPx, scale);
+            boolean sameWindow = mSurface.getRootView() == recorder.root().getRootView();
+            // The bitmap is drawn in place: nothing shows it until it is whole again.
+            mDrawable.show(null, 0, scale);
+            try {
+                if (mBitmap == null || mBitmap.getWidth() != w || mBitmap.getHeight() != h) {
+                    releaseBitmap();
+                    mBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                    mCanvas = new Canvas(mBitmap);
+                }
+                mBitmap.eraseColor(Color.TRANSPARENT);
+                Canvas canvas = mCanvas;
+                int save = canvas.save();
+                Scene scene = mScene;
+                boolean drawn;
+                try {
+                    canvas.scale(1f / scale, 1f / scale);
+                    if (scene != null) scene.beforeSnapshot();
+                    drawn = sameWindow ? recorder.drawBelow(mSurface, canvas, margin)
+                        : recorder.drawWindowBeneath(mSurface, canvas, margin);
+                } finally {
+                    if (scene != null) scene.afterSnapshot();
+                    canvas.restoreToCount(save);
+                }
+                // Not inside the recorder's root: no picture, as the GPU Snapshot.
+                if (!drawn) return false;
+                if (radius > 0f) {
+                    if (mBlur == null) mBlur = sSoftwareBlurFactory.make();
+                    if (!mBlur.blur(mSurface.getContext(), mBitmap, radius)) {
+                        fail();
+                        return false;
+                    }
+                }
+            } catch (OutOfMemoryError e) {
+                // Short of memory now, not broken: the next open tries again.
+                release();
+                return false;
+            } catch (RuntimeException e) {
+                // RenderScript missing or broken, or a view that cannot draw in software (a
+                // hardware bitmap): the stored frame from here on.
+                fail();
+                return false;
+            }
+            mSnapshotsTaken++;
+            mDrawable.show(mBitmap, margin, scale);
+            // One frame, for the new picture; the surface draws nothing else.
+            mSurface.invalidate();
+            return true;
+        }
+
+        private void fail() {
+            sSoftwareFailed = true;
+            release();
+        }
+
+        private void releaseBitmap() {
+            mDrawable.show(null, 0, LivePicture.SCALE);
+            mCanvas = null;
+            // Not recycled: a display list recorded before this may still draw it this frame. From
+            // API 26 its pixels sit on the native heap and go with the last reference.
+            mBitmap = null;
+        }
+
+        void release() {
+            releaseBitmap();
+            if (mBlur != null) {
+                try {
+                    mBlur.release();
+                } catch (RuntimeException ignored) {
+                    // Gone already with a broken RenderScript.
+                }
+                mBlur = null;
+            }
+        }
+    }
+
+    /**
+     * RenderScript's intrinsic blur over a software Snapshot's bitmap, in place. Its buffers are
+     * made again only when the bitmap's size or the radius changes.
+     */
+    private static final class ScriptBlur implements SoftwareBlur {
+        @NonNull private final AndroidStockBlurImpl mImpl = new AndroidStockBlurImpl();
+        private int mWidth = -1;
+        private int mHeight = -1;
+        private float mRadius = -1f;
+
+        @Override
+        public boolean blur(@NonNull Context context, @NonNull Bitmap bitmap, float radius) {
+            if (bitmap.getWidth() != mWidth || bitmap.getHeight() != mHeight || radius != mRadius) {
+                mWidth = -1;
+                if (!mImpl.prepare(context, bitmap, radius)) return false;
+                mWidth = bitmap.getWidth();
+                mHeight = bitmap.getHeight();
+                mRadius = radius;
+            }
+            // The input is copied in before the output is copied out, so one bitmap is both.
+            mImpl.blur(bitmap, bitmap);
+            return true;
+        }
+
+        @Override
+        public void release() {
+            mWidth = -1;
+            mImpl.release();
+        }
+    }
+
+    /** Draws the downsampled snapshot back at its scale, its margin outside the surface. */
     private final class SnapshotDrawable extends Drawable {
         @NonNull private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
         @Nullable private Bitmap mBitmap;
         private int mMargin;
+        private int mScale = LivePicture.SCALE;
 
-        void show(@Nullable Bitmap bitmap, int marginPx) {
+        void show(@Nullable Bitmap bitmap, int marginPx, int scale) {
             mBitmap = bitmap;
             mMargin = marginPx;
+            mScale = scale;
         }
 
         @Override
         public void draw(@NonNull Canvas canvas) {
             Bitmap bitmap = mBitmap;
-            // A hardware bitmap cannot be drawn by a software canvas (a screenshot of the view).
-            if (bitmap == null || !canvas.isHardwareAccelerated()) return;
+            if (bitmap == null) return;
+            // A hardware bitmap cannot be drawn by a software canvas (a screenshot of the view, or
+            // another panel's software Snapshot).
+            if (!canvas.isHardwareAccelerated() && bitmap.getConfig() == Bitmap.Config.HARDWARE) return;
             int save = canvas.save();
             // The holder (an ImageView) has already moved the canvas to its content box.
             canvas.translate(-mMargin - mSurface.getPaddingLeft(), -mMargin - mSurface.getPaddingTop());
-            canvas.scale(LivePicture.SCALE, LivePicture.SCALE);
+            canvas.scale(mScale, mScale);
             canvas.drawBitmap(bitmap, 0f, 0f, mPaint);
             canvas.restoreToCount(save);
         }
