@@ -4293,13 +4293,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
                                                                 int blurRadiusDp) {
+        return attachLivePicture(surface, blurRadiusDp,
+            com.termux.app.chrome.LiveBackdrop.RANK_CHROME);
+    }
+
+    /** {@link #attachLivePicture(View, int)} at {@code rank} in the budget's order. */
+    @Nullable
+    private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
+                                                                int blurRadiusDp, int rank) {
         if (!mLiveBlur) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
             return null;
         }
         com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
         return recorder == null ? null : recorder.attach(surface,
-            blurRadiusDp * getResources().getDisplayMetrics().density);
+            blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
 
     /** The window's recorder, made on first use; null before the content root exists. */
@@ -27585,6 +27593,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == null) return;
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
+            // Widgets take what the dock and the floats leave of Live blur's budget.
+            @Override public boolean liveBlur() { return mLiveBlur; }
+            @Nullable @Override
+            public com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
+                                                                           int blurDp) {
+                return attachLivePicture(slab, blurDp,
+                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET);
+            }
+            @Override public void detachWidgetLiveGlass(@NonNull View slab) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+            }
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
@@ -34370,7 +34389,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable @Override
         public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
             return attachLivePicture(slab,
-                mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
+                mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0,
+                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT);
         }
 
         @Override public void detachLiveGlass(@NonNull View slab) {
