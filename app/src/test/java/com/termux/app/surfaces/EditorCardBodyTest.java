@@ -71,6 +71,25 @@ public class EditorCardBodyTest {
     }
 
     @Test
+    public void linksIsAnAlwaysOpenInsetAndTheOtherSectionsCollapse() {
+        for (EditorCard card : CARDS) {
+            Fixture f = new Fixture(card, 1f);
+            for (EditorCardSheet.Section section : f.sheet.sections()) {
+                boolean links = section.key.equals(Row.SECTION_LINKS.name());
+                assertEquals(card + " " + section.key, links, section.inset);
+                assertEquals(card + " " + section.key + " clickable", !links,
+                    section.titleRow.hasOnClickListeners());
+                assertEquals(card + " " + section.key + " arrow", !links,
+                    section.arrow.getVisibility() == View.VISIBLE);
+                if (links) {
+                    assertTrue(card + " links open", section.open);
+                    assertEquals(View.VISIBLE, section.body.getVisibility());
+                }
+            }
+        }
+    }
+
+    @Test
     public void everyRowOfTheCardIsThere() {
         for (EditorCard card : CARDS) {
             Fixture f = new Fixture(card, 1f);

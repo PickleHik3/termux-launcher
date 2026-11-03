@@ -1475,13 +1475,14 @@ final class EditorCardSheet {
         Strip strip = null;
         for (EditorRows.Spec spec : specs) {
             if (isSectionHeading(spec.row)) {
-                section = newSection(spec.row.name(), mContext.getString(spec.row.labelRes));
+                section = newSection(spec.row.name(), mContext.getString(spec.row.labelRes),
+                    isInsetSection(spec.row));
                 tier = 0;
                 strip = null;
                 continue;
             }
             if (section == null)
-                section = newSection(EditorSectionStore.FIRST, cardTitle);
+                section = newSection(EditorSectionStore.FIRST, cardTitle, false);
             LinearLayout body = section.body;
             RowViews own = ownRow(spec.row);
             if (own == null && spec.row.kind == Kind.SLIDER) {
@@ -1511,8 +1512,10 @@ final class EditorCardSheet {
         }
         for (int i = 0; i < mSectionList.size(); i++) {
             Section built = mSectionList.get(i);
-            built.open = mSections.isOpen(mSectionCard, built.key, i);
-            mSections.setOpen(mSectionCard, built.key, built.open);
+            // The Links inset never collapses: no stored state is read or written for it.
+            built.open = built.inset || mSections.isOpen(mSectionCard, built.key, i);
+            if (!built.inset)
+                mSections.setOpen(mSectionCard, built.key, built.open);
             applySection(built, false);
         }
         mSections.markVisited(mSectionCard);
@@ -1522,6 +1525,11 @@ final class EditorCardSheet {
     /** Whether {@code row} heads a collapsible section (a tier-level SECTION_* row). */
     static boolean isSectionHeading(@NonNull Row row) {
         return row.name().startsWith("SECTION_");
+    }
+
+    /** Whether {@code row} heads the always-open Links inset instead of a collapsible section. */
+    static boolean isInsetSection(@NonNull Row row) {
+        return row == Row.SECTION_LINKS;
     }
 
     /** One collapsible section: its container, title row, arrow and body. */
@@ -1534,6 +1542,8 @@ final class EditorCardSheet {
         @NonNull final LinearLayout body;
         @NonNull final List<Row> rows = new ArrayList<>();
         boolean open;
+        /** The Links inset: always open, no arrow, no toggle. */
+        boolean inset;
         @Nullable android.animation.ValueAnimator motion;
 
         Section(@NonNull String key, @NonNull String title, @NonNull LinearLayout root,
@@ -1549,21 +1559,23 @@ final class EditorCardSheet {
     }
 
     static final int SECTION_CORNER_DP = 20;
+    static final int INSET_CORNER_DP = 16;
     static final int SECTION_GAP_DP = 2;
     static final int SECTION_SIDE_DP = 8;
     static final int SECTION_TITLE_DP = 48;
     static final long SECTION_MOTION_MS = 300;
 
     @NonNull
-    private Section newSection(@NonNull String key, @NonNull String title) {
+    private Section newSection(@NonNull String key, @NonNull String title, boolean inset) {
         LinearLayout root = new LinearLayout(mContext);
         root.setOrientation(LinearLayout.VERTICAL);
         com.google.android.material.shape.MaterialShapeDrawable shape =
             new com.google.android.material.shape.MaterialShapeDrawable(
                 com.google.android.material.shape.ShapeAppearanceModel.builder()
-                    .setAllCornerSizes(dp(SECTION_CORNER_DP)).build());
-        shape.setFillColor(ColorStateList.valueOf(EditorViews.color(mContext,
-            com.google.android.material.R.attr.colorSurfaceContainerLowest)));
+                    .setAllCornerSizes(dp(inset ? INSET_CORNER_DP : SECTION_CORNER_DP)).build());
+        shape.setFillColor(ColorStateList.valueOf(EditorViews.color(mContext, inset
+            ? com.google.android.material.R.attr.colorSurfaceContainer
+            : com.google.android.material.R.attr.colorSurfaceContainerLowest)));
         root.setBackground(shape);
         root.setClipToOutline(true);
 
@@ -1575,10 +1587,15 @@ final class EditorCardSheet {
         android.util.TypedValue ripple = new android.util.TypedValue();
         mContext.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple,
             true);
-        titleRow.setBackgroundResource(ripple.resourceId);
+        if (!inset)
+            titleRow.setBackgroundResource(ripple.resourceId);
         TextView name = new TextView(mContext);
-        EditorViews.textAppearance(name, com.google.android.material.R.attr.textAppearanceTitleSmall);
-        name.setTextColor(EditorViews.color(mContext, androidx.appcompat.R.attr.colorPrimary));
+        EditorViews.textAppearance(name, inset
+            ? com.google.android.material.R.attr.textAppearanceLabelLarge
+            : com.google.android.material.R.attr.textAppearanceTitleSmall);
+        name.setTextColor(EditorViews.color(mContext, inset
+            ? com.google.android.material.R.attr.colorOnSurfaceVariant
+            : androidx.appcompat.R.attr.colorPrimary));
         name.setText(title);
         name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         titleRow.addView(name, new LinearLayout.LayoutParams(0,
@@ -1588,6 +1605,8 @@ final class EditorCardSheet {
         arrow.setImageTintList(ColorStateList.valueOf(EditorViews.color(mContext,
             com.google.android.material.R.attr.colorOnSurfaceVariant)));
         arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        if (inset)
+            arrow.setVisibility(View.GONE);
         titleRow.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(24)));
         androidx.core.view.ViewCompat.setAccessibilityHeading(titleRow, true);
         root.addView(titleRow, new LinearLayout.LayoutParams(
@@ -1605,14 +1624,16 @@ final class EditorCardSheet {
         params.topMargin = mSectionList.isEmpty() ? 0 : dp(SECTION_GAP_DP);
         mRows.addView(root, params);
         Section section = new Section(key, title, root, titleRow, arrow, body);
-        titleRow.setOnClickListener(v -> setSectionOpen(section, !section.open, true));
+        section.inset = inset;
+        if (!inset)
+            titleRow.setOnClickListener(v -> setSectionOpen(section, !section.open, true));
         mSectionList.add(section);
         return section;
     }
 
     /** Opens or closes {@code section}, remembering it for the card. */
     private void setSectionOpen(@NonNull Section section, boolean open, boolean animate) {
-        if (section.open == open)
+        if (section.inset || section.open == open)
             return;
         section.open = open;
         mSections.setOpen(mSectionCard, section.key, open);
@@ -1625,6 +1646,10 @@ final class EditorCardSheet {
      * the section's own height changes, so the sections above it stay where they stand.
      */
     private void applySection(@NonNull Section section, boolean animate) {
+        if (section.inset) {
+            section.body.setVisibility(View.VISIBLE);
+            return;
+        }
         section.titleRow.setContentDescription(mContext.getString(section.open
             ? R.string.appearance_section_expanded : R.string.appearance_section_collapsed,
             section.title));
