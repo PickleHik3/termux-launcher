@@ -1,6 +1,7 @@
 # Live blur: blur what is really behind the glass (2026-11-03)
 
-Status: approved for waves 0–4 (2026-11-03). No code yet.
+Status: waves 0–4 delivered except 3b (2026-11-03); decision record is
+[ADR 0021](../../docs/adr/0021-glass-records-what-is-beneath-it.md).
 
 ## Problem
 
@@ -18,7 +19,7 @@ second part is its own spec; this one only builds the live backdrop and the seam
 
 1. Scope of the first build: built-in widgets on Home pages and every built dock style.
 2. An opt-in switch, off by default. The stored frame stays the default and the fallback.
-3. Live blur first, the glass shape after it.
+3. Live blur first, the glass shape after it (the shape is **parked**, developer, 2026-11-03).
 4. No per-style copy of the live path: if the dock styles need one each, fix the architecture first.
 5. Glass on glass: floating terminal windows (now possible on Home) see through to what is behind
    them, widgets and their glass included. One switch covers the dock, widgets and floats; a float
@@ -319,7 +320,7 @@ A miss is reported red with the numbers; the next step is the developer's call.
 ## Not in this spec
 
 - The thick-glass shape: height-profile bevel, spectral dispersion, Fresnel edge reflection,
-  wallpaper-derived key light. Next spec, built on `GlassBackdrop`.
+  wallpaper-derived key light. **Parked** (developer, 2026-11-03).
 - Live for bars, sheets, keyboard and terminal pane slabs.
 - Glass seen through glass.
 
@@ -347,3 +348,7 @@ see-through. Drawer: the open's Snapshot is taken in the settled scene (no frost
 and a slow close brings the dock and the search keyboard down with the plane
 (`AppDrawerKeyboardLowering`; pong frames). Guard scenarios: `scripts/perf-scenarios/gfxbench*.`
 Owed: the bars at a cold start before the stored frame lands.
+
+**Wave 4 delivered (2026-11-03):** [ADR 0021](../../docs/adr/0021-glass-records-what-is-beneath-it.md),
+`performance.md` rule 3 and baselines, the `docs/en/` line, and the owed checks in
+`device-checks.md`. Wave 3b (widgets) lands alongside.
