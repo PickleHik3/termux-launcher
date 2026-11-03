@@ -6741,6 +6741,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void runLandingSettle() {
         if (isDestroyed()) return;
+        seamDiagNote("landingSettle halfRestyle=" + mHalfRestyleFrom + "->" + mHalfRestyleTo);
         flushLandingRestyle();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
     }
@@ -9821,6 +9822,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
+        boolean diag = seamDiagActive();
+        long diagStart = diag ? SystemClock.uptimeMillis() : 0L;
+        Object[] diagBefore = diag ? seamDiagDress() : null;
         try {
             followLooksGlassTheme();
             syncFancierGlassLook();
@@ -9832,7 +9836,134 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncStatusBarInk();
         } finally {
             Trace.endSection();
+            if (diag) seamDiagApply(diagStart, diagBefore);
         }
+    }
+
+    // ---- TEMPORARY diagnostic (SeamDressDiag): which on-screen surfaces change dress, and when,
+    // across a Home <-> Workspace crossing. Never merged; reverted once read on pong.
+
+    private static final String SEAM_DIAG_TAG = "SeamDressDiag";
+    /** Logs keep running this long past a landing, for the deferred re-dress and the settle. */
+    private static final long SEAM_DIAG_TAIL_MS = 700L;
+    private long mSeamDiagUntil;
+    /** applyInAppKeyboardSurfaceState's and applyDecorNavBarSurfaceState's last cost, ms. */
+    private long mSeamDiagKeyboardMs = -1L;
+    private long mSeamDiagNavMs = -1L;
+    /** The looks the last logged apply dressed in, so a log line says when one changed. */
+    private int mSeamDiagStackLook = Integer.MIN_VALUE;
+    private int mSeamDiagStatusLook = Integer.MIN_VALUE;
+
+    private boolean seamDiagActive() {
+        return mCrossing.crossing() || SystemClock.uptimeMillis() < mSeamDiagUntil;
+    }
+
+    /** The views a crossing may leave on screen, by name, in the order seamDiagDress reads. */
+    private static final int[] SEAM_DIAG_IDS = {
+        R.id.accessory_stack_container, R.id.extrakeys_background, R.id.accessory_blur_backdrop,
+        R.id.inapp_keyboard_view_host, R.id.terminal_window_bar_host, R.id.place_apps_bar_host,
+        R.id.place_extra_keys_host, R.id.place_az_bar_host, R.id.place_off_dock_plank_host,
+    };
+    private static final String[] SEAM_DIAG_NAMES = {
+        "stack", "extraKeysBg", "accBackdrop", "kbHost", "barHost", "appsHost", "extraHost",
+        "azHost", "plankHost", "navStrip", "navTint", "picture",
+    };
+
+    @NonNull
+    private View[] seamDiagViews() {
+        View[] views = new View[SEAM_DIAG_NAMES.length];
+        for (int i = 0; i < SEAM_DIAG_IDS.length; i++) views[i] = findViewById(SEAM_DIAG_IDS[i]);
+        views[SEAM_DIAG_IDS.length] = mDecorNavBarSurfaceOverlay;
+        views[SEAM_DIAG_IDS.length + 1] = mDecorNavBarTintOverlay;
+        views[SEAM_DIAG_IDS.length + 2] = mStackPicture;
+        return views;
+    }
+
+    /** Each view's dress as identities: its background, and an ImageView's drawable. */
+    @NonNull
+    private Object[] seamDiagDress() {
+        View[] views = seamDiagViews();
+        Object[] dress = new Object[views.length * 2];
+        for (int i = 0; i < views.length; i++) {
+            View v = views[i];
+            if (v == null) continue;
+            dress[2 * i] = v.getBackground();
+            dress[2 * i + 1] = v instanceof ImageView ? ((ImageView) v).getDrawable() : null;
+        }
+        return dress;
+    }
+
+    /** One view as it stands: shown, alpha, where on screen, its translation. */
+    @NonNull
+    private String seamDiagPlace(@Nullable View v) {
+        if (v == null) return "none";
+        int[] at = new int[2];
+        v.getLocationOnScreen(at);
+        return (v.isShown() ? "shown" : "hidden") + " a=" + v.getAlpha() + " x=" + at[0]
+            + " y=" + at[1] + " w=" + v.getWidth() + " h=" + v.getHeight()
+            + " tx=" + v.getTranslationX() + " ty=" + v.getTranslationY();
+    }
+
+    @NonNull
+    private static String seamDiagFrames() {
+        StackTraceElement[] trace = new Throwable().getStackTrace();
+        StringBuilder out = new StringBuilder();
+        // 0 is this method, 1 its caller in this diagnostic: the six after that.
+        for (int i = 2, n = 0; i < trace.length && n < 6; i++, n++) {
+            if (n > 0) out.append(" < ");
+            out.append(trace[i].getMethodName()).append(':').append(trace[i].getLineNumber());
+        }
+        return out.toString();
+    }
+
+    /** The dress halves in force for the chrome now. */
+    @NonNull
+    private String seamDiagHalves() {
+        com.termux.app.wall.PaneWallPage dressPage = mCrossing.seam().stackDressPage();
+        return "committed=" + mLastWallPage + " stackDressPage=" + dressPage
+            + " stackLook=" + stackLookPage() + " statusLook=" + statusLookPage()
+            + " crossing=" + mCrossing.crossing() + " pictured=" + mCrossing.seam().pictured()
+            + " designApart=" + mCrossing.seam().stackDesignApart()
+            + " evenOutHeld=" + (mChrome != null && mChrome.isEvenOutHeld());
+    }
+
+    private void seamDiagApply(long start, @Nullable Object[] before) {
+        long now = SystemClock.uptimeMillis();
+        Object[] after = seamDiagDress();
+        View[] views = seamDiagViews();
+        StringBuilder changed = new StringBuilder();
+        for (int i = 0; i < views.length; i++) {
+            boolean bg = before != null && before[2 * i] != after[2 * i];
+            boolean img = before != null && before[2 * i + 1] != after[2 * i + 1];
+            if (!bg && !img) continue;
+            changed.append("\n    ").append(SEAM_DIAG_NAMES[i]).append(bg ? " bg" : "")
+                .append(img ? " img" : "").append(": ").append(seamDiagPlace(views[i]));
+        }
+        int stackLook = stackLookPage();
+        int statusLook = statusLookPage();
+        boolean lookChanged = stackLook != mSeamDiagStackLook || statusLook != mSeamDiagStatusLook;
+        mSeamDiagStackLook = stackLook;
+        mSeamDiagStatusLook = statusLook;
+        android.util.Log.i(SEAM_DIAG_TAG, "apply t=" + now + " ms=" + (now - start)
+            + " lookChanged=" + lookChanged
+            + " kbMs=" + mSeamDiagKeyboardMs + " navMs=" + mSeamDiagNavMs + " "
+            + seamDiagHalves() + " frames=" + seamDiagFrames()
+            + (changed.length() == 0 ? " changed=none" : " changed:" + changed));
+        mSeamDiagKeyboardMs = -1L;
+        mSeamDiagNavMs = -1L;
+    }
+
+    /** A dress write outside the apply ({@code what}), with where every candidate stands. */
+    private void seamDiagNote(@NonNull String what) {
+        if (!seamDiagActive()) return;
+        StringBuilder places = new StringBuilder();
+        View[] views = seamDiagViews();
+        for (int i = 0; i < views.length; i++) {
+            places.append("\n    ").append(SEAM_DIAG_NAMES[i]).append(": ")
+                .append(seamDiagPlace(views[i]));
+        }
+        android.util.Log.i(SEAM_DIAG_TAG, what + " t=" + SystemClock.uptimeMillis() + " "
+            + seamDiagHalves() + " frames=" + seamDiagFrames() + places);
     }
 
     private void doApplyChromeSpec(@NonNull ChromeSpec state) {
@@ -9908,8 +10039,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDockGlassInks(state.barAlpha);
 
         configureAccessoryTopEdgeFx(true, state.barAlpha);
+        long diagNav = SystemClock.uptimeMillis();
         applyDecorNavBarSurfaceState(state);
+        long diagKb = SystemClock.uptimeMillis();
+        mSeamDiagNavMs = diagKb - diagNav;
         applyInAppKeyboardSurfaceState(state);
+        mSeamDiagKeyboardMs = SystemClock.uptimeMillis() - diagKb;
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
         // the live blur views have nothing left to contribute — and each one that keeps capturing
         // redraws the whole window, terminal text included, on the UI thread.
@@ -18064,6 +18199,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDressedSearchField = committedSearchField();
         }
         if (mPreferences == null || mChrome == null) return;
+        seamDiagNote("restyleDockSurface travelledTo=" + mDockDesignTravelledTo);
         syncDockBeadsListeners();
         // The Drawer tile comes and goes with the page's toggle.
         syncDrawerTile();
@@ -24489,6 +24625,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 isSplitPanesEnabled()),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        if (seamDiagActive()) {
+            com.termux.app.place.SeamDress.StackDress diagHere =
+                stackDressOf(committedDress, herePage, orientation);
+            com.termux.app.place.SeamDress.StackDress diagThere =
+                stackDressOf(otherDress, therePage, orientation);
+            seamDiagNote("begin " + herePage + "->" + therePage + " stackDressDiffers="
+                + !diagHere.equals(diagThere) + " shapeDiffers="
+                + !diagHere.shape.equals(diagThere.shape) + " here={" + diagHere + "} there={"
+                + diagThere + "} progress="
+                + com.termux.app.place.SeamTravel.otherEndProgress(frame, herePage));
+        }
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
         // frame. The landing lets it go after its own frame (runLandingSettle).
@@ -24559,6 +24706,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void restyleStackForDress(boolean shapeDiffers) {
         if (mPreferences == null || mChrome == null) return;
+        seamDiagNote("restyleStackForDress shapeDiffers=" + shapeDiffers);
         Trace.beginSection("Wall.seamDress");
         try {
             updateAppLauncherBarHeight();
@@ -25464,6 +25612,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             mCrossing.end();
+            mSeamDiagUntil = SystemClock.uptimeMillis() + SEAM_DIAG_TAIL_MS;
+            seamDiagNote("landed page=" + page + " left=" + left);
             // What waits for the landed frame (the half's re-dress, the even-out's settle) runs
             // just after it.
             postLandingSettle();
