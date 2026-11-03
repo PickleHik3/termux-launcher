@@ -6,6 +6,6 @@
     android:viewportWidth="960"
     android:viewportHeight="960">
     <group android:translateX="0" android:translateY="960">
-        <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M320 -700 H720 Q840 -700 840 -580 V-380 Q840 -260 720 -260 H320 Q200 -260 200 -380 V-580 Q200 -700 320 -700 Z M320 -620 Q280 -620 280 -580 V-380 Q280 -340 320 -340 H720 Q760 -340 760 -380 V-580 Q760 -620 720 -620 Z M152 -592 H280 L653.52 -421.13 A32 32 0 0 1 626.48 -363.13 L272.91 -528 H152 A32 32 0 0 1 152 -592 Z" />
+        <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M260 -840 H700 Q820 -840 820 -720 V-240 Q820 -120 700 -120 H260 Q140 -120 140 -240 V-720 Q140 -840 260 -840 Z M260 -760 Q220 -760 220 -720 V-240 Q220 -200 260 -200 H700 Q740 -200 740 -240 V-720 Q740 -760 700 -760 Z M120 -580 H400 Q413 -580 424 -572 L573 -460 H840 A40 40 0 0 1 840 -380 H560 Q547 -380 536 -388 L387 -500 H120 A40 40 0 0 1 120 -580 Z" />
     </group>
 </vector>

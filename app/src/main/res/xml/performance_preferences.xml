@@ -61,7 +61,7 @@
             android:defaultValue="true" />
         <ListPreference
             app:key="terminal_retro_effect"
-            app:icon="@drawable/ic_ms_tv"
+            app:icon="@drawable/ic_ms_tv_gen"
             app:title="@string/settings_terminal_retro_effect_title"
             app:summary="@string/settings_performance_terminal_effect_summary"
             app:entries="@array/settings_terminal_retro_effect_entries"
