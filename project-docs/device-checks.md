@@ -18,10 +18,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
-- **Battery & performance at the root (11-03, a38b183c3).** Settings root shows Battery &
-  performance in System above General; it opens the page in one-pane and two-pane (landscape)
-  Settings; General no longer lists it; search for "Glass refraction" lands on the page. Every
-  row wears its glyph, legible at 1.3× font in light and dark (pong or emulator).
+- **Battery & performance at the root (11-03, a38b183c3).** Pong 11-03: root row in System
+  above General, page opens, glyphs read at 1.0× in dark. Still owed: two-pane (landscape)
+  Settings, search for "Glass refraction" lands on the page, glyphs at 1.3× font and in light.
 - **Dock glass after the GlassEffects move (11-03, 5559211a5).** Emulator was pixel-identical for
   the four dock types, Docked; still owed: Floating style for the four types, and a held extra
   key's lens on the dock still magnifies and fades (pong).

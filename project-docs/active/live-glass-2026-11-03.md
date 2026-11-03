@@ -175,6 +175,19 @@ mode 120 Hz.
 was on Home. Each later wave re-measures this build back to back with its own, since the baseline
 build is a pong merge, not the wave's base commit.
 
+## Wave 1 on pong (2026-11-03 ~09:48Z)
+
+Staging `2.0.0-pre.1+dev.a38b183c3` (wave 1 + the settings move), same Home, 47% battery.
+
+| What | Wave 0 | Wave 1 |
+|---|---|---|
+| Idle PSS mean | 205.1 MB | 203.8 MB |
+| At rest, 30 s | 34 frames | 32 frames |
+| Home swipe ×5, janky | 3.8% / 3.2% | 3.3% / 3.1% |
+| Home swipe, p50 / p90 / p99 | 19–17 / 25 / 57–44 ms | 18 / 25 / 57–53 ms |
+
+Within noise on every row: wave 1 passes its gate.
+
 ## Gates on pong (90 Hz, 11.1 ms budget)
 
 Live **off** must equal wave 0 within noise on every row. Live **on**, against wave 0:
