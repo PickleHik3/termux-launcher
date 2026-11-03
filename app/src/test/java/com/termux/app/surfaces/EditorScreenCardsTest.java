@@ -32,7 +32,7 @@ public class EditorScreenCardsTest {
         // Overhaul §2: Appearance (open first) closing on Minimal layout, then Layout.
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
             Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
-            Row.MINIMAL), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
+            Row.CONTRAST, Row.MINIMAL), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS),
             EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
     }
