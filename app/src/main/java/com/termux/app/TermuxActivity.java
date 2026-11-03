@@ -5394,16 +5394,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildBackdropGlassEffectForLens();
         DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
         if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        if (wereBeads != (mDockBeads != null) && mChrome != null) {
-            // Under the engaged drawer the dock is covered: the whole apply waits for it to go
-            // (releaseChromeAfterDrawer) instead of landing on an open's frame.
-            if (isAppDrawerEngaged()) {
-                mDockBeadsSyncOwedToDrawer = true;
-                return;
-            }
+        if (wereBeads != (mDockBeads != null) && mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        }
     }
 
     /**
@@ -6922,9 +6915,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void runLandingSettle() {
         if (isDestroyed()) return;
         flushLandingRestyle();
-        // An engaged drawer keeps the hold too; its close settles it (releaseChromeAfterDrawer).
-        if (mChrome != null && !mCrossing.crossing() && !isAppDrawerEngaged())
-            mChrome.settleEvenOut();
+        if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
     }
 
     /**
@@ -20198,10 +20189,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 getResources().getDisplayMetrics().density);
         }
 
-        @Override public void holdChromeForDrawer(boolean hold) {
-            TermuxActivity.this.holdChromeForDrawer(hold);
-        }
-
         @Override public float inAppKeyboardCardRadiusPx() {
             // The radius the keyboard surface is clipped to (applyInAppKeyboardSurface).
             if (!isInAppKeyboardCapsule()) return 0f;
@@ -20353,41 +20340,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>{@code AppDrawerController} reaches it from the {@code finally} of its own teardown: the
      * flush must run even if restoring the plane's transforms throws.
      */
-    /** A beads commit the engaged drawer deferred; booked when it lets the chrome go. */
-    private boolean mDockBeadsSyncOwedToDrawer;
-
-    /**
-     * The drawer holds the chrome's ink for as long as it is engaged (the seam crossing's hold, see
-     * beginPlaceCrossing): the bands are under the plane, and the ground moving under them must not
-     * book a whole apply per frame. Let go after the closed frame is drawn, never in it, so the one
-     * pass that settles a band held off its ground — and a beads change the drawer deferred —
-     * falls on a frame where nothing moves. A crossing under way keeps the hold; its landing
-     * settles it.
-     */
-    private void holdChromeForDrawer(boolean hold) {
-        if (mChrome == null) return;
-        if (hold) {
-            mChrome.holdEvenOut();
-            return;
-        }
-        View root = getWindow() == null ? null : getWindow().getDecorView();
-        if (root == null) {
-            releaseChromeAfterDrawer();
-            return;
-        }
-        root.postOnAnimation(() -> root.post(this::releaseChromeAfterDrawer));
-    }
-
-    private void releaseChromeAfterDrawer() {
-        if (isDestroyed() || mChrome == null || isAppDrawerEngaged()) return;
-        if (!mCrossing.crossing()) mChrome.settleEvenOut();
-        if (mDockBeadsSyncOwedToDrawer) {
-            mDockBeadsSyncOwedToDrawer = false;
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        }
-    }
-
     private void flushPendingAccessoryGeometry() {
         if (!mAppDrawerGeometryFreezePending || isAppDrawerEngaged()) {
             return;

@@ -71,13 +71,6 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         decorNavStripAlpha = alpha;
     }
 
-    /** Every holdChromeForDrawer call, in order. */
-    final java.util.List<Boolean> chromeHolds = new java.util.ArrayList<>();
-
-    @Override public void holdChromeForDrawer(boolean hold) {
-        chromeHolds.add(hold);
-    }
-
     /** The terminal pane's gap and corner radius; negative means the host gives none. */
     float paneGapPx = -1f;
     float paneCornerRadiusPx = -1f;

@@ -1,6 +1,7 @@
 package com.termux.app.launcher.drawer;
 
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -25,21 +26,33 @@ import androidx.annotation.Nullable;
  */
 final class AppDrawerScrimDrawable extends Drawable {
 
-    private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path mPath = new Path();
+    /**
+     * Drawn as four plain rects around the hole and four small corner wedges, never as one
+     * full-screen path with a hole in it: the hole moves with the keyboard on every frame of the
+     * open, and a full-screen anti-aliased even-odd path re-rasterised each frame cost the
+     * RenderThread 5-14 ms of issue time per frame on pong. The rects are exact (no AA, so no
+     * seams where they meet); only the wedges, one cached quarter shape drawn four times under a
+     * translate/mirror, are anti-aliased.
+     */
+    private final Paint mPaint = new Paint();
+    private final Paint mWedgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The top-left corner's wedge at the origin: the r x r square less its quarter circle. */
+    private final Path mWedge = new Path();
+    private float mWedgeRadiusPx = -1f;
+    private final RectF mArcScratch = new RectF();
     private final RectF mHole = new RectF();
     private float mHoleRadiusPx;
     private boolean mHasHole;
-    private boolean mPathDirty = true;
 
     AppDrawerScrimDrawable() {
         mPaint.setStyle(Paint.Style.FILL);
-        mPath.setFillType(Path.FillType.EVEN_ODD);
+        mWedgePaint.setStyle(Paint.Style.FILL);
     }
 
     void setColor(int color) {
         if (mPaint.getColor() == color) return;
         mPaint.setColor(color);
+        mWedgePaint.setColor(color);
         invalidateSelf();
     }
 
@@ -58,7 +71,6 @@ final class AppDrawerScrimDrawable extends Drawable {
             mHole.set(hole);
             mHoleRadiusPx = Math.max(0f, radiusPx);
         }
-        mPathDirty = true;
         invalidateSelf();
     }
 
@@ -68,26 +80,50 @@ final class AppDrawerScrimDrawable extends Drawable {
         return mHasHole ? new RectF(mHole) : null;
     }
 
-    @Override
-    protected void onBoundsChange(@NonNull android.graphics.Rect bounds) {
-        mPathDirty = true;
+    /** Visible for tests: the corner radius the wedges are drawn at, clamped to the hole. */
+    float effectiveRadiusPx() {
+        return Math.max(0f, Math.min(mHoleRadiusPx,
+            Math.min(mHole.width(), mHole.height()) / 2f));
     }
 
     @Override
     public void draw(@NonNull Canvas canvas) {
-        if (mPaint.getAlpha() == 0) return;
+        if (Color.alpha(mPaint.getColor()) == 0) return;
+        android.graphics.Rect b = getBounds();
         if (!mHasHole) {
-            canvas.drawRect(getBounds(), mPaint);
+            canvas.drawRect(b, mPaint);
             return;
         }
-        if (mPathDirty) {
-            mPath.reset();
-            mPath.addRect(getBounds().left, getBounds().top, getBounds().right,
-                getBounds().bottom, Path.Direction.CW);
-            mPath.addRoundRect(mHole, mHoleRadiusPx, mHoleRadiusPx, Path.Direction.CW);
-            mPathDirty = false;
+        RectF h = mHole;
+        // Around the hole: above, below, then the two sides between them.
+        if (h.top > b.top) canvas.drawRect(b.left, b.top, b.right, h.top, mPaint);
+        if (h.bottom < b.bottom) canvas.drawRect(b.left, h.bottom, b.right, b.bottom, mPaint);
+        if (h.left > b.left) canvas.drawRect(b.left, h.top, h.left, h.bottom, mPaint);
+        if (h.right < b.right) canvas.drawRect(h.right, h.top, b.right, h.bottom, mPaint);
+        float r = effectiveRadiusPx();
+        if (r <= 0f) return;
+        if (mWedgeRadiusPx != r) {
+            mWedgeRadiusPx = r;
+            mWedge.reset();
+            mWedge.moveTo(0f, 0f);
+            mWedge.lineTo(r, 0f);
+            mArcScratch.set(0f, 0f, 2f * r, 2f * r);
+            // From the top of the quarter circle round to its left end, then back to the corner.
+            mWedge.arcTo(mArcScratch, 270f, -90f, false);
+            mWedge.close();
         }
-        canvas.drawPath(mPath, mPaint);
+        drawWedge(canvas, h.left, h.top, 1f, 1f);
+        drawWedge(canvas, h.right, h.top, -1f, 1f);
+        drawWedge(canvas, h.left, h.bottom, 1f, -1f);
+        drawWedge(canvas, h.right, h.bottom, -1f, -1f);
+    }
+
+    private void drawWedge(@NonNull Canvas canvas, float x, float y, float sx, float sy) {
+        int save = canvas.save();
+        canvas.translate(x, y);
+        canvas.scale(sx, sy);
+        canvas.drawPath(mWedge, mWedgePaint);
+        canvas.restoreToCount(save);
     }
 
     @Override public void setAlpha(int alpha) {
@@ -96,6 +132,7 @@ final class AppDrawerScrimDrawable extends Drawable {
 
     @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
         mPaint.setColorFilter(colorFilter);
+        mWedgePaint.setColorFilter(colorFilter);
         invalidateSelf();
     }
 
