@@ -314,3 +314,16 @@ A miss is reported red with the numbers; the next step is the developer's call.
   wallpaper-derived key light. Next spec, built on `GlassBackdrop`.
 - Live for bars, sheets, keyboard and terminal pane slabs.
 - Glass seen through glass.
+
+## Queued after 2b part 1: the command palette's shape and theme (developer, 2026-11-03)
+
+1. Corners follow the **Menus and dialogs** card's Corner radius (the SHEETS surface; Base until
+   detached), open and closed, Docked and Floating — today the open radius copies the dock capsule
+   (`TerminalCommandPaletteController` ~750, `resolveDockCapsuleCornerRadiusPx`), and the closed
+   filter row (`CommandPaletteView.FILTER_ROW_H`) is short enough that any radius past half its
+   height reads as the same pill.
+2. The filter row a little taller, so the radius reads; height chosen from pong shots.
+3. Material 3 pass: colour roles through the launcher scheme (`LauncherSchemeTheme`), not system
+   attrs read directly (`CommandPaletteView.refreshPalette` ~508); surface-container tones and the
+   M3 type scale for rows and chips; selected row and chips on secondary-container pairs. Checked
+   in light, dark, black and Material You. Before/after shots to the developer before merge.
