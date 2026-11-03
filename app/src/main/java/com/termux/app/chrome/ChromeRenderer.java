@@ -441,6 +441,18 @@ public final class ChromeRenderer {
         return mInk.isEvenOutHeld();
     }
 
+    /** Set while {@link #commit} runs its apply. */
+    private boolean mCommitRunning;
+
+    /**
+     * Whether an apply asked for now is folded into the post-layout render pass instead of booking
+     * another commit: only from inside a commit, and only while the even-out is held for a
+     * crossing ({@link #holdEvenOut}), so nothing at rest changes.
+     */
+    boolean foldsIntoRenderPass() {
+        return mCommitRunning && mInk.isEvenOutHeld();
+    }
+
     /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
@@ -571,7 +583,15 @@ public final class ChromeRenderer {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
         }
         if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
-            scheduleCommit();
+            if (foldsIntoRenderPass()) {
+                // Asked from inside the frame's own commit while the chrome travels across the
+                // seam (the ink measuring a band's new dress, mostly): the post-layout pass that
+                // follows applies the whole spec again anyway, so it is that pass, not a second
+                // whole apply before this frame's draw (24 ms of a drag frame on pong).
+                scopes |= SCOPE_ACCESSORY_RENDER;
+            } else {
+                scheduleCommit();
+            }
         }
         if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
             runTopPaneFrost();
@@ -766,9 +786,11 @@ public final class ChromeRenderer {
             return;
         }
         Trace.beginSection("Chrome.commit");
+        mCommitRunning = true;
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
         } finally {
+            mCommitRunning = false;
             Trace.endSection();
         }
     }
