@@ -83,7 +83,8 @@ public class SelectionRingShapeTest {
         assertTrue(SelectionRingShape.wearsHalo(EditorCard.WORKSPACE));
         assertFalse(SelectionRingShape.wearsHalo(EditorCard.STATUS));
         assertFalse(SelectionRingShape.wearsHalo(EditorCard.KEYBOARD));
-        assertFalse(SelectionRingShape.wearsHalo(EditorCard.APPEARANCE));
+        assertTrue("Customization wears the page's halo too",
+            SelectionRingShape.wearsHalo(EditorCard.APPEARANCE));
         assertFalse(SelectionRingShape.wearsHalo(null));
     }
 

@@ -621,9 +621,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final int FRAME_GAP_DP = EditorFramePose.GAP_DP;
     /** The selected surface's ring and every surface's quiet outline, on screen. */
     private static final int RING_DP = 2;
-    /** The Appearance card's ring around the whole frame: outset and radius (SPEC 1). */
-    private static final int FRAME_RING_OUTSET_DP = 4;
-    private static final int FRAME_RING_RADIUS_DP = 28;
     private static final int QUIET_DP = 1;
     /** The quiet outline's share of colorOutline. */
     private static final float QUIET_ALPHA = 0.4f;
@@ -1132,6 +1129,38 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
     }
 
+    /**
+     * The pill chose {@code card}. A page card of the other screen first slides the live wall to
+     * its page inside the mini UI ({@link #showPage}, as a swipe would: Home's place brings back
+     * the Home page the wall last stood on), then its card goes up.
+     */
+    private void openMainCard(@NonNull EditorCard card) {
+        PaneWallPage place = pillPlace(card, mScreen);
+        if (place != null) {
+            showPage(place, true);
+            if (mCard == card)
+                return;
+        }
+        openCard(card, true);
+        // A card that could not go up (no Home under Terminal only): the pill shows the card up.
+        if (mSheet != null && mCard != null && mCard != card)
+            mSheet.restate();
+    }
+
+    /**
+     * The page the wall slides to when the pill chooses {@code card} over {@code screen}: Home
+     * from the Workspace, the Workspace from Home; null where the card stands on the screen shown
+     * (Customization stands on both).
+     */
+    @Nullable
+    static PaneWallPage pillPlace(@NonNull EditorCard card, @NonNull PaneWallPage screen) {
+        if (card == EditorCard.HOME && screen != PaneWallPage.WIDGETS)
+            return PaneWallPage.WIDGETS;
+        if (card == EditorCard.WORKSPACE && screen == PaneWallPage.WIDGETS)
+            return PaneWallPage.TERMINAL;
+        return null;
+    }
+
     /** Why {@code card} cannot go up now, or null when it can. */
     @Nullable
     private String cardRefusal(@NonNull EditorCard card) {
@@ -1531,7 +1560,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private final class SheetListener implements EditorCardSheet.Listener {
         @Override public void onOpenCard(@NonNull EditorCard card) {
-            openCard(card, true);
+            openMainCard(card);
         }
 
         @Override public void onBack() {
@@ -5018,20 +5047,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float fromHeight = outline.getHeight() * outline.getScaleY();
         EditorCard card = mOpen ? mCard : null;
         float scale = mTargetScale > 0f ? mTargetScale : 1f;
-        // The Appearance card rings the whole frame, its outline standing 4dp out (SPEC 1).
-        int frameOut = Math.round(dp(FRAME_RING_OUTSET_DP) / scale);
+        // The page cards and Customization glow round the whole mini UI (the halo).
         boolean halo = SelectionRingShape.wearsHalo(card);
-        int[] rect = card == null ? null : card == EditorCard.APPEARANCE
-            ? new int[] {-frameOut, -frameOut, overlay.getWidth() + frameOut,
-                overlay.getHeight() + frameOut}
-            : halo ? miniUiRect(overlay) : targetRect(card, overlay);
+        int[] rect = card == null ? null : halo ? miniUiRect(overlay) : targetRect(card, overlay);
         if (rect == null) {
             EditorViews.setVisible(outline, false);
             hideHalo();
             return;
         }
         int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
-        int grow = card == EditorCard.APPEARANCE || halo ? 0 : stroke;
+        int grow = halo ? 0 : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
         int primary = mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
@@ -5050,9 +5075,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             GradientDrawable ring = new GradientDrawable();
             ring.setColor(0);
             ring.setStroke(stroke, primary);
-            if (card == EditorCard.APPEARANCE) {
-                ring.setCornerRadius(dp(FRAME_RING_RADIUS_DP) / scale);
-            } else {
+            {
                 boolean docked = layoutDocked();
                 int[] clip = miniUiRect(overlay);
                 // Docked bars reach the screen's edge: the ring stands just inside it there,
