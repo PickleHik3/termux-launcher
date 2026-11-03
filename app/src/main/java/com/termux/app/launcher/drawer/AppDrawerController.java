@@ -159,6 +159,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return -1f;
         }
 
+        /**
+         * The built-in keyboard card's corner radius, in px, for the hole the Floating scrim cuts
+         * around it; 0 for a square card.
+         */
+        default float inAppKeyboardCardRadiusPx() {
+            return 0f;
+        }
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
@@ -1462,6 +1470,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? (resting ? restingFrameOf(mExtraKeysView) : frameOf(mExtraKeysView)) : null;
         Frame keyboard = isBandVisible(mKeyboardView)
             ? (resting ? restingFrameOf(mKeyboardView) : frameOf(mKeyboardView)) : null;
+        // The card inside the keyboard band, at the band's resting place: the Floating scrim's hole
+        // adds the band's live translation to it each frame.
+        mKeyboardCardView = mHost.findView(R.id.inapp_keyboard_view_host);
+        Frame card = keyboard != null && isBandVisible(mKeyboardCardView)
+            ? frameOf(mKeyboardCardView) : null;
+        if (card != null && mKeyboardView != null) {
+            float dy = mKeyboardView.getTranslationY();
+            card = new Frame(card.left, card.top - dy, card.right, card.bottom - dy);
+        }
+        mKeyboardCardFrame = card;
         mHasBands = extraKeys != null || keyboard != null;
         if (!mHasBands) {
             mExtraKeysBand = null;
@@ -1923,6 +1941,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         float k = revealFraction();
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             mOpenRadiusPx, p);
+        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(mRoundedStyle, k,
+            mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx();
             // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
@@ -1939,11 +1959,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     revealGapPx(), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
-            // its own brightness rather than under the drawer's shade.
-            mHostClipScratch.set(0, 0, mHostLayout.getWidth(), Math.round(
-                AppDrawerTransitionGeometry.resolveRevealClipBottom(mHostLayout.getHeight(), pinTop, k)));
-            mHostLayout.setClipBounds(mHostClipScratch);
-            mHostClipped = true;
+            // its own brightness rather than under the drawer's shade. Under Floating the dim runs
+            // on below and around the keyboard card instead, with the card cut out of it (the
+            // scrim's hole, below): the plane never reaches below this clip, so the clip only ever
+            // decided the dim's extent.
+            if (scrimAroundKeyboard) {
+                if (mHostClipped) {
+                    mHostLayout.setClipBounds(null);
+                    mHostClipped = false;
+                }
+            } else {
+                mHostClipScratch.set(0, 0, mHostLayout.getWidth(), Math.round(
+                    AppDrawerTransitionGeometry.resolveRevealClipBottom(mHostLayout.getHeight(),
+                        pinTop, k)));
+                mHostLayout.setClipBounds(mHostClipScratch);
+                mHostClipped = true;
+            }
         } else if (mHostClipped) {
             mHostLayout.setClipBounds(null);
             mHostClipped = false;
@@ -1955,8 +1986,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
         // the drawer's own spring while the glass keeps its opacity. setBackgroundColor reuses
-        // the host's ColorDrawable after the first frame, so this stays allocation-free.
-        mHostLayout.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        // the host's ColorDrawable after the first frame, so this stays allocation-free. Around a
+        // Floating keyboard card the same colour is painted by the scrim with the card cut out.
+        // Never through a null background: a background arriving on a view that had none requests
+        // a layout, and the swap between the two drawables (same zero minimum size, no padding)
+        // does not.
+        if (!scrimAroundKeyboard) {
+            mHostLayout.setBackgroundColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        }
 
         // Glass handoff: the host carries the fade so the frost/blur pane and the painted slab
         // cross over as one surface.
@@ -1977,6 +2014,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
         applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k);
+        // After the bands: the hole follows the keyboard card where this frame has put it.
+        if (scrimAroundKeyboard) applyKeyboardScrim(p);
         applyStatusBand(p);
         // The under-pill strip lives on the decor, above every pixel of this, so it is the one
         // surface that has to be faded rather than covered. Linear in p, which is what the plane's
@@ -2119,6 +2158,38 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float capturedPinTopPx() {
         AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
         return keyboard == null ? 0f : keyboard.topPx;
+    }
+
+    /** The Floating scrim, made on first use. */
+    @Nullable private AppDrawerScrimDrawable mScrim;
+    /** The keyboard card's resting rect in host coordinates; null when no keyboard was measured. */
+    @Nullable private Frame mKeyboardCardFrame;
+    @Nullable private View mKeyboardCardView;
+    private final android.graphics.RectF mScrimHoleScratch = new android.graphics.RectF();
+
+    /**
+     * Whether the scene dim runs below and around the keyboard rather than stopping at its top:
+     * under Floating (the keyboard is a card of its own), while the built-in keyboard is being
+     * revealed, once its card has been measured. Docked keeps the clip at the keyboard's top.
+     */
+    @VisibleForTesting
+    static boolean scrimRunsAroundKeyboard(boolean rounded, float reveal, boolean systemIme,
+                                           boolean cardMeasured) {
+        return rounded && reveal > 0f && !systemIme && cardMeasured;
+    }
+
+    /** The dim over the whole host, the keyboard card cut out where this frame has put it. */
+    @VisibleForTesting
+    void applyKeyboardScrim(float p) {
+        FrameLayout host = mHostLayout;
+        Frame card = mKeyboardCardFrame;
+        if (host == null || card == null) return;
+        if (mScrim == null) mScrim = new AppDrawerScrimDrawable();
+        if (host.getBackground() != mScrim) host.setBackground(mScrim);
+        mScrim.setColor(com.termux.app.GlassBackdropTint.colorFor(p));
+        float dy = mKeyboardView == null ? 0f : mKeyboardView.getTranslationY();
+        mScrimHoleScratch.set(card.left, card.top + dy, card.right, card.bottom + dy);
+        mScrim.setHole(mScrimHoleScratch, mHost.inAppKeyboardCardRadiusPx());
     }
 
     private void applyAccessoryBands(float p, float planeBottomPx, float reveal) {

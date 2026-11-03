@@ -20204,6 +20204,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 getResources().getDisplayMetrics().density);
         }
 
+        @Override public float inAppKeyboardCardRadiusPx() {
+            // The radius the keyboard surface is clipped to (applyInAppKeyboardSurface).
+            if (!isInAppKeyboardCapsule()) return 0f;
+            com.termux.app.chrome.LiveChromeShape.Clip clip = chromeClipOf(KEYBOARD_PIECES);
+            return clip != null ? clip.radius : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
+        }
+
         @Override public float searchKeyboardCornerRadiusPx() {
             // The corners the terminal pane wears under both Styles (paneCornerRadiusDp).
             return layoutCornersPx(com.termux.app.place.SeamDress.Surface.FRAME);

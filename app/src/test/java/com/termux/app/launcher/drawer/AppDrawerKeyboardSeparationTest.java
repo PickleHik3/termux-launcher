@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -139,6 +140,9 @@ public class AppDrawerKeyboardSeparationTest {
     @Test public void midAnimationFramesRequestNoLayout() {
         FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
         root.addView(plane, new FrameLayout.LayoutParams(WIDTH, HEIGHT));
+        // Floating with a measured card runs the scrim: its swaps must not request a layout either.
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(24f, KEYBOARD_TOP + 8f, WIDTH - 24f, KEYBOARD_TOP + 640f));
         for (boolean rounded : new boolean[] {false, true}) {
             if (rounded) floating(); else docked();
             reveal(0f);
@@ -189,6 +193,62 @@ public class AppDrawerKeyboardSeparationTest {
             controller.applyLiveBlurRest();
             assertTrue("close p=" + p, blur.isUpdatesPaused());
         }
+    }
+
+    @Test public void floatingScrimRunsAroundTheKeyboardCard() {
+        floating();
+        host.paneGapPx = 11f;
+        Frame card = new Frame(24f, KEYBOARD_TOP + 8f, WIDTH - 24f, KEYBOARD_TOP + 640f);
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame", card);
+        reveal(1f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        // No clip at the keyboard's top: the dim covers the whole host ...
+        assertNull(root.getClipBounds());
+        assertTrue(root.getBackground() instanceof AppDrawerScrimDrawable);
+        AppDrawerScrimDrawable scrim = (AppDrawerScrimDrawable) root.getBackground();
+        assertEquals(com.termux.app.GlassBackdropTint.colorFor(1f), scrim.getColor());
+        // ... but for the keyboard card, cut out where it stands.
+        assertEquals(new android.graphics.RectF(card.left, card.top, card.right, card.bottom),
+            scrim.getHole());
+        // The card itself still ends above the keyboard.
+        assertEquals(KEYBOARD_TOP - 11f, plane.getFrame().bottom, 1e-3f);
+    }
+
+    @Test public void dockedDimStillStopsAtTheKeyboardTop() {
+        docked();
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(0f, KEYBOARD_TOP, WIDTH, HEIGHT));
+        reveal(1f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        assertEquals(new android.graphics.Rect(0, 0, WIDTH, Math.round(KEYBOARD_TOP)),
+            root.getClipBounds());
+        assertFalse(root.getBackground() instanceof AppDrawerScrimDrawable);
+    }
+
+    @Test public void keyboardDownFloatingDimIsThePlainColour() {
+        floating();
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(24f, KEYBOARD_TOP, WIDTH - 24f, HEIGHT - 80f));
+        reveal(1f);
+        applyFrame(1f);
+        reveal(0f);
+
+        applyFrame(1f);
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        assertNull(root.getClipBounds());
+        assertTrue(root.getBackground() instanceof android.graphics.drawable.ColorDrawable);
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 0f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(false, 1f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, true, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, false, false));
+        assertTrue(AppDrawerController.scrimRunsAroundKeyboard(true, 0.2f, false, true));
     }
 
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
