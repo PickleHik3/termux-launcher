@@ -18,6 +18,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live blur on the dock (11-03, wave 2).** Live blur on, Floating dock, terminal text or a page
+  sliding under the dock: the dock shows it blurred and following; Live off shows wallpaper only;
+  blur strength the same either way (emulator or pong).
 - **Battery & performance at the root (11-03, a38b183c3).** Pong 11-03: root row in System
   above General, page opens, glyphs read at 1.0× in dark. Still owed: two-pane (landscape)
   Settings, search for "Glass refraction" lands on the page, glyphs at 1.3× font and in light.
