@@ -188,6 +188,54 @@ public final class LivePicture implements GlassPicture {
         return Math.max(0f, (sigma / SCALE - SKIA_SIGMA_BASE) / SKIA_SIGMA_SLOPE);
     }
 
+    /**
+     * The RenderScript radius that blurs a software Snapshot (below Android 12) as much as the GPU
+     * Snapshot blurs a panel at {@code panelRadiusPx}, on a bitmap at 1/{@code scale}. The GPU path
+     * comes to sigma = 0.57735 R + 0.5 at full scale ({@link #panelQuarterRadius}), so sigma /
+     * {@code scale} on the bitmap; RenderScript's intrinsic reads a radius as sigma = 0.4 r + 0.6,
+     * as {@link #renderEffectRadius} calibrates against the stored frame. 0 for no blur. Pure.
+     */
+    static float softwareScriptRadius(float panelRadiusPx, int scale) {
+        if (panelRadiusPx <= 0f) return 0f;
+        float sigma = (SKIA_SIGMA_SLOPE * panelRadiusPx + SKIA_SIGMA_BASE) / Math.max(1, scale);
+        return Math.max(0f, (sigma - STORED_SIGMA_BASE) / STORED_SIGMA_SLOPE);
+    }
+
+    /**
+     * A software Snapshot's downsample for a {@code width} x {@code height} recording: a quarter,
+     * as the GPU Snapshot, or coarser when RenderScript's {@link #STORED_SCRIPT_CAP_PX} cannot
+     * reach the radius there, or the bitmap would pass {@link #SOFTWARE_SNAPSHOT_MAX_BITMAP_BYTES}.
+     * Pure.
+     */
+    static int softwareScale(float panelRadiusPx, int width, int height) {
+        int scale = SCALE;
+        while (scale < MAX_SOFTWARE_SCALE
+            && (softwareScriptRadius(panelRadiusPx, scale) > STORED_SCRIPT_CAP_PX
+                || softwareBitmapBytes(width, height, scale) > SOFTWARE_SNAPSHOT_MAX_BITMAP_BYTES)) {
+            scale++;
+        }
+        return scale;
+    }
+
+    /** Bytes of a software Snapshot's ARGB bitmap over a {@code width} x {@code height} recording at 1/{@code scale}. */
+    static long softwareBitmapBytes(int width, int height, int scale) {
+        long w = Math.max(1, (width + scale - 1) / scale);
+        long h = Math.max(1, (height + scale - 1) / scale);
+        return w * h * 4L;
+    }
+
+    /** One software Snapshot's bitmap at most: a budget screen at a quarter, as one live layer. */
+    static final long SOFTWARE_SNAPSHOT_MAX_BITMAP_BYTES = LiveBackdrop.MAX_LAYER_BYTES;
+
+    /**
+     * One open panel's software Snapshot at most: its bitmap, and RenderScript's input and output
+     * allocations of the same size, all three held while the panel is open and given back on close.
+     */
+    public static final long SOFTWARE_SNAPSHOT_BUDGET_BYTES = 3 * SOFTWARE_SNAPSHOT_MAX_BITMAP_BYTES;
+
+    /** A bound on {@link #softwareScale}'s search; nothing real comes near it. */
+    static final int MAX_SOFTWARE_SCALE = 64;
+
     /** RenderScript's intrinsic blur: sigma = 0.4 r + 0.6, radius capped at 25 px. */
     static final float STORED_SIGMA_SLOPE = 0.4f;
     static final float STORED_SIGMA_BASE = 0.6f;

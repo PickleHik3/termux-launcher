@@ -268,8 +268,9 @@ public final class WallpaperFrostPainter {
     }
 
     /**
-     * @param panel a panel's glass ({@link PanelBackdrop}): where it cannot record what is beneath
-     *     it (below Android 12) the frost is its picture over the launcher's own wallpaper too
+     * @param panel a panel's glass ({@link PanelBackdrop}): where it cannot picture what is beneath
+     *     it (below Android 12, once the software blur has failed) the frost is its picture over the
+     *     launcher's own wallpaper too
      */
     private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
@@ -278,7 +279,7 @@ public final class WallpaperFrostPainter {
                                @NonNull ElementOn glass, boolean panel) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         boolean wanted = mSurfaces.wallpaperPassthroughEnabled()
-            || (panel && !PanelBackdropPolicy.canRecord(android.os.Build.VERSION.SDK_INT));
+            || (panel && !PanelBackdrop.pictured());
         if (!wanted || blurRadiusDp <= 0 || wallpaperFrame == null
             || boundsView == null || boundsView.getVisibility() != View.VISIBLE
             || boundsView.getWidth() <= 0 || boundsView.getHeight() <= 0) {
