@@ -25,8 +25,6 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   them and release on close (API 30 emulator only so far). (4) Contrast on custom schemes on pong
   changes the terminal live. (5) The Wallpaper entries on pong: each opens the picker, and the
   Workspace's More sheet has one.
-- **Fresh install opens on Clear (11-03).** Uninstall, install the build, open it: the Look is Clear
-  (Appearance shows Clear selected, 8dp margin); an install over pre.2 keeps its look (emulator).
 - **Live blur floats (11-03, wave 3).** Live blur on: a Workspace float over a terminal printing
   (`yes`) shows the text scrolling blurred behind it; two overlapping Home floats, the upper shows
   the lower's glass and text, raising swaps them; minimise, restore, close, dock back leave no stale
