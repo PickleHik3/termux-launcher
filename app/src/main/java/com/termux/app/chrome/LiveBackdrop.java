@@ -100,10 +100,20 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      */
     @Nullable
     public LivePicture attach(@NonNull View surface, float blurRadiusPx) {
+        return attach(surface, blurRadiusPx, false);
+    }
+
+    /**
+     * {@link #attach(View, float)} for a panel ({@link PanelBackdrop}): {@code blurRadiusPx} is the
+     * panel's {@code RealtimeBlurView} radius when {@code panelRadius}, calibrated by
+     * {@link LivePicture#panelQuarterRadius}, so the panel keeps the strength it had.
+     */
+    @Nullable
+    public LivePicture attach(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
         LivePicture picture = find(surface);
         if (picture == null) {
             if (mPictures.size() >= MAX_LIVE_SURFACES) return null;
-            picture = new LivePicture(surface, blurRadiusPx);
+            picture = new LivePicture(surface, blurRadiusPx, panelRadius);
             mPictures.add(picture);
             listen(true);
         } else {
@@ -222,6 +232,50 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         return record(out, width, height, marginPx);
     }
 
+    /** The root this recorder records within. */
+    @NonNull
+    public ViewGroup root() {
+        return mRoot;
+    }
+
+    /**
+     * Records the whole root, as the window draws it, beneath {@code surface} in another window
+     * (a popup menu): everything in the root is beneath a window above it. In {@code surface}'s
+     * coordinates offset by {@code marginPx}, placed by the two views' screen positions. False,
+     * with {@code out} untouched, when the root cannot draw its children ({@link Container}) or
+     * either view is not on screen.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    public boolean recordWindowBeneath(@NonNull View surface, @NonNull RenderNode out, int marginPx) {
+        if (!(mRoot instanceof Container) || !mRoot.isAttachedToWindow()
+            || !surface.isAttachedToWindow()) return false;
+        mRoot.getLocationOnScreen(mLocation);
+        int rootX = mLocation[0];
+        int rootY = mLocation[1];
+        surface.getLocationOnScreen(mLocation);
+        mBeneath.clear();
+        collectLevel(mRoot, null, mBeneath);
+        int width = Math.max(1, surface.getWidth() + 2 * marginPx);
+        int height = Math.max(1, surface.getHeight() + 2 * marginPx);
+        out.setPosition(0, 0, width, height);
+        RecordingCanvas canvas = out.beginRecording(width, height);
+        try {
+            canvas.translate(marginPx + rootX - mLocation[0] - mRoot.getScrollX(),
+                marginPx + rootY - mLocation[1] - mRoot.getScrollY());
+            canvas.enableZ();
+            for (int i = 0; i < mBeneath.size(); i++) {
+                ((Container) mRoot).drawChildForBackdrop(canvas, mBeneath.get(i));
+            }
+            canvas.disableZ();
+        } finally {
+            out.endRecording();
+        }
+        mBeneath.clear();
+        return true;
+    }
+
+    @NonNull private final int[] mLocation = new int[2];
+
     /**
      * Fills {@link #mPath} (surface first, root last), {@link #mBeneath} (per level from the root
      * down, each level's views bottom first, then a null) and {@link #mMatrix} (surface to root).
@@ -251,9 +305,12 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         return true;
     }
 
-    /** {@code parent}'s children drawn before {@code pathChild}, bottom first, into {@code out}. */
+    /**
+     * {@code parent}'s children drawn before {@code pathChild}, bottom first, into {@code out}; every
+     * child it draws when {@code pathChild} is null.
+     */
     @VisibleForTesting
-    void collectLevel(@NonNull ViewGroup parent, @NonNull View pathChild, @NonNull ArrayList<View> out) {
+    void collectLevel(@NonNull ViewGroup parent, @Nullable View pathChild, @NonNull ArrayList<View> out) {
         int count = parent.getChildCount();
         if (mPreorder.length < count) {
             mPreorder = new int[count];
@@ -270,8 +327,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // ViewGroup.dispatchDraw's own test: shown, or animating out.
             mDrawn[i] = child.getVisibility() == View.VISIBLE || child.getAnimation() != null;
         }
-        int n = beneath(count, mPreorder, mZ, mDrawn, parent.indexOfChild(pathChild),
-            mOrder, mOut);
+        int n = beneath(count, mPreorder, mZ, mDrawn,
+            pathChild == null ? EVERY_CHILD : parent.indexOfChild(pathChild), mOrder, mOut);
         for (int i = 0; i < n; i++) out.add(parent.getChildAt(mOut[i]));
     }
 
@@ -280,7 +337,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * {@code ViewGroup}'s draw orders them: the drawing order ({@code preorder}, container indices
      * by drawing position), then a stable sort by Z, so a child raised by elevation draws after
      * every lower one whatever its place. Only children that draw at all ({@code drawn}) are
-     * written; the path child and everything after it never are. Pure.
+     * written; the path child and everything after it never are. With {@link #EVERY_CHILD} for
+     * {@code pathIndex}, every child that draws is written. Pure.
      *
      * @param order scratch of at least {@code count}, for the sorted drawing order
      * @return how many container indices were written to {@code out}; 0 when the path child is
@@ -305,8 +363,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             if (index == pathIndex) return written;
             if (drawn[index]) out[written++] = index;
         }
-        return 0;
+        return pathIndex == EVERY_CHILD ? written : 0;
     }
+
+    /** {@link #beneath}'s path index for "no path child": every child that draws. */
+    static final int EVERY_CHILD = Integer.MIN_VALUE;
 
     /** Draws {@link #mBeneath} into {@code out} along {@link #mPath}, as {@link #collect} found them. */
     @RequiresApi(Build.VERSION_CODES.Q)
