@@ -11,6 +11,7 @@
         app:title="@string/settings_performance_presets_header">
         <SwitchPreferenceCompat
             app:key="lazy_mode"
+            app:icon="@drawable/ic_ms_bedtime"
             app:title="@string/settings_behavior_idle_title"
             app:summary="@string/settings_behavior_idle_summary"
             app:defaultValue="false">
@@ -19,6 +20,7 @@
         </SwitchPreferenceCompat>
         <SwitchPreferenceCompat
             app:key="low_memory_preset"
+            app:icon="@drawable/ic_ms_memory"
             app:title="@string/settings_behavior_low_memory_title"
             app:summary="@string/settings_behavior_low_memory_summary"
             app:defaultValue="false" />
@@ -29,31 +31,37 @@
         app:title="@string/settings_performance_motion_header">
         <SwitchPreferenceCompat
             app:key="fancier_glass"
+            app:icon="@drawable/ic_ms_glass_refraction"
             app:title="@string/settings_performance_glass_refraction_title"
             app:summary="@string/settings_performance_glass_refraction_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="live_windows_while_swiping"
+            app:icon="@drawable/ic_ms_desktop_windows"
             app:title="@string/settings_performance_live_windows_title"
             app:summary="@string/settings_performance_live_windows_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="fancier_glass_motion_light"
+            app:icon="@drawable/ic_ms_living_glass"
             app:title="@string/settings_motion_light_title"
             app:summary="@string/settings_performance_living_glass_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="wallpaper_parallax"
+            app:icon="@drawable/ic_ms_swipe"
             app:title="@string/settings_wallpaper_parallax_title"
             app:summary="@string/settings_performance_parallax_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="terminal_cursor_trail"
+            app:icon="@drawable/ic_ms_cursor_trail"
             app:title="@string/settings_performance_cursor_trail_title"
             app:summary="@string/settings_performance_cursor_trail_summary"
             android:defaultValue="true" />
         <ListPreference
             app:key="terminal_retro_effect"
+            app:icon="@drawable/ic_ms_tv"
             app:title="@string/settings_terminal_retro_effect_title"
             app:summary="@string/settings_performance_terminal_effect_summary"
             app:entries="@array/settings_terminal_retro_effect_entries"
@@ -61,11 +69,13 @@
             app:defaultValue="none" />
         <SwitchPreferenceCompat
             app:key="terminal_screen_events"
+            app:icon="@drawable/ic_ms_screen_events"
             app:title="@string/settings_terminal_screen_events_title"
             app:summary="@string/settings_terminal_screen_events_summary"
             app:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="idle_animations"
+            app:icon="@drawable/ic_ms_animation"
             app:title="@string/settings_idle_animations_title"
             app:summary="@string/settings_idle_animations_summary"
             app:defaultValue="false" />
