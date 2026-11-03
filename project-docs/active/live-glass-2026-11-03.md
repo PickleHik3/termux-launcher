@@ -193,6 +193,12 @@ and no layout: RealtimeBlurView's capture on every frame while it is open. **Ter
 (long-press, More…, Back): 374 frames, 8.3% janky, p50 11 / p90 20 / p99 69 ms. **App drawer** (the
 drawer session, `+dev.1ea98b0d9`): 12.4% janky, p50 12 ms, one 36 ms settle capture.
 
+**After 2b part 1 on pong** (`+dev.3b931802d`, Live blur off, same steps): **palette** 239 frames,
+**5.9% janky** (10.3), p50 13 / p90 16 / p99 32 ms (23 / 31 / 46), 7 slow-UI (18); one cycle 5 of 78
+frames over 20 ms (40 of 72), `trav` ~1.6 ms (~10). **Sheet** 5.4% janky (8.3), p50 10 / p90 16 /
+p99 73 ms (11 / 20 / 69). Both look the same as before (glass strength and tint). Drawer not
+measured: pong dropped off adb mid-run.
+
 **Measurement guard.** `scripts/perf-frametime.sh` scenarios for the drawer, palette, sheet and the
 Home ↔ Workspace swipe (plus `gfxbench.sh`'s phase split, which shows a capture as `trav` time with
 no layout), each with a frame budget, run before and after each move.
