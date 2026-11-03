@@ -131,17 +131,18 @@ public final class LensBeadGeometry {
     /**
      * {@link #rowWearsBeads} for Lens beads themselves, which may cut the joined Docked frame
      * (2026-11-03): where the dock's sheet stands down on the frame ({@code sheetStandsDownOnFrame})
-     * the frame leaves the apps row's band out of its glass and the row wears its own beads
-     * there, as it does under Floating, while every other band keeps the frame's glass. Under the
-     * frame the row may share the plank with the A–Z row standing under it (nearer the screen's
-     * edge), whose glass is the frame's; any other band, or the A–Z row over the icons, keeps the
-     * slab. Without the frame this is {@link #rowWearsBeads}, unchanged. The Peek card keeps
-     * asking {@link #rowWearsBeads}: it never cuts the frame.
+     * the frame leaves the beaded bands out of its glass and the row wears its own beads there, as
+     * it does under Floating. Under Floating and under the frame alike the row may share the
+     * plank with the A–Z row standing under it (nearer the screen's edge), each of whose letters
+     * then wears a small bead of its own ({@link #azRowWearsBeads}, {@link AzBeadRow}); any other
+     * band, the A–Z row over the icons, or the keyboard sharing the glass keeps the slab. The
+     * Peek card keeps asking {@link #rowWearsBeads}: it never cuts the frame and takes no letters.
      */
     public static boolean rowWearsBeadsCuttingFrame(
             @NonNull com.termux.app.place.PlaceLayout layout, boolean sheetStandsDownOnFrame,
             boolean keyboardSharesGlass) {
-        if (!sheetStandsDownOnFrame) return rowWearsBeads(layout, false, keyboardSharesGlass);
+        if (!sheetStandsDownOnFrame && rowWearsBeads(layout, false, keyboardSharesGlass))
+            return true;
         if (keyboardSharesGlass
             || !com.termux.app.place.PlaceChromePolicy.appsShown(layout)
             || com.termux.app.place.PlaceChromePolicy.appsRailShown(layout)
@@ -161,6 +162,22 @@ public final class LensBeadGeometry {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Whether the A–Z row stands on the dock's plank under the apps row (nearer the screen's
+     * edge), where it wears letter beads ({@link AzBeadRow}) whenever the apps row wears Lens
+     * beads ({@link #rowWearsBeadsCuttingFrame}). Hidden, on another edge or over the icons it
+     * has no beads.
+     */
+    public static boolean azRowWearsBeads(@NonNull com.termux.app.place.PlaceLayout layout) {
+        java.util.List<com.termux.app.place.Element> bands =
+            com.termux.app.terminal.AccessoryStackLayoutPolicy.plankBands(
+                com.termux.app.place.EdgeStackPolicy.stack(layout,
+                    com.termux.app.place.PlaceLayout.Edge.BOTTOM));
+        int az = bands.indexOf(com.termux.app.place.Element.AZ);
+        int apps = bands.indexOf(com.termux.app.place.Element.APPS);
+        return az >= 0 && apps >= 0 && az < apps;
     }
 
     /**

@@ -55,15 +55,30 @@ public class LensBeadDockedFrameTest {
         PlaceLayout appsAlone = home(false, PlaceLayout.Edge.BOTTOM);
         PlaceLayout withAz = home(true, PlaceLayout.Edge.BOTTOM);
         PlaceLayout azTop = home(true, PlaceLayout.Edge.TOP);
-        for (PlaceLayout layout : Arrays.asList(appsAlone, withAz, azTop)) {
+        for (PlaceLayout layout : Arrays.asList(appsAlone, azTop)) {
             for (boolean keyboard : new boolean[] {false, true}) {
                 assertEquals(LensBeadGeometry.rowWearsBeads(layout, false, keyboard),
                     LensBeadGeometry.rowWearsBeadsCuttingFrame(layout, false, keyboard));
             }
         }
-        // Floating with the A–Z row on the dock keeps the slab (its own task follows).
-        assertFalse(LensBeadGeometry.rowWearsBeadsCuttingFrame(withAz, false, false));
+        // Floating with the A–Z row on the dock under the icons: beads, a bead under each
+        // letter too (2026-11-03); the keyboard on the glass still keeps the slab.
+        assertTrue(LensBeadGeometry.rowWearsBeadsCuttingFrame(withAz, false, false));
+        assertFalse(LensBeadGeometry.rowWearsBeadsCuttingFrame(withAz, false, true));
         assertTrue(LensBeadGeometry.rowWearsBeadsCuttingFrame(appsAlone, false, false));
+    }
+
+    @Test
+    public void anotherBandOnThePlankKeepsTheSlab() {
+        // The extra keys on the dock's plank too: the slab, Floating or Docked.
+        PlaceLayout withKeys = new PlaceLayout(PlaceLayout.Edge.TOP,
+            PlaceLayout.RowPlacement.BOTTOM, true, PlaceLayout.Edge.BOTTOM,
+            PlaceLayout.RowPlacement.BOTTOM, PlaceLayout.KeyboardMode.RESIZE,
+            PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+        assertEquals(3, AccessoryStackLayoutPolicy.plankBands(
+            EdgeStackPolicy.stack(withKeys, PlaceLayout.Edge.BOTTOM)).size());
+        assertFalse(LensBeadGeometry.rowWearsBeadsCuttingFrame(withKeys, false, false));
+        assertFalse(LensBeadGeometry.rowWearsBeadsCuttingFrame(withKeys, true, false));
     }
 
     @Test
