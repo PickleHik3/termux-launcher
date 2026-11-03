@@ -10591,6 +10591,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : null));
             statusSurface.setVisibility(View.VISIBLE);
         }
+        // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
+        // pass, not at its rest until the bar's next move.
+        syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -10633,6 +10636,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.glass().statusTintStrength()));
             statusSurface.setVisibility(View.VISIBLE);
         }
+        // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
+        // pass, not at its rest until the bar's next move.
+        syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -24770,6 +24776,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (seam.barRedressed()) syncPlaceBar();
+        // The strip behind the system bar stands with the bar on every riding frame, whatever
+        // pass of this frame dressed or showed it.
+        if (rides) syncStatusStripTravel();
         return rides;
     }
 
@@ -24779,16 +24788,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
      */
     private void applyStatusTravelX(float x) {
-        if (x == mStatusTravelXPx) return;
+        boolean moved = x != mStatusTravelXPx;
         mStatusTravelXPx = x;
-        View host = hotView(R.id.terminal_window_bar_host);
-        if (host != null) host.setTranslationX(x);
-        View strip = hotView(R.id.terminal_status_bar_background);
-        if (strip != null) {
-            float stripX = x != 0f && continuesIntoStatusInsetStrip(host) ? x : 0f;
-            if (strip.getTranslationX() != stripX) strip.setTranslationX(stripX);
+        if (moved) {
+            View host = hotView(R.id.terminal_window_bar_host);
+            if (host != null) host.setTranslationX(x);
         }
+        // The strip follows on every call, moved or not: one shown since the last move (dressed
+        // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
+        syncStatusStripTravel();
+        if (!moved) return;
         View backdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop);
+        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+    }
+
+    /**
+     * The strip behind the system bar where the bar stands now: with it while the strip is the
+     * bar's own glass running up under the system bar (the lead it was last dressed for, not one
+     * read live mid-crossing, which can still answer for the half the bar left), at rest
+     * otherwise (StatusStripRide). Its backdrop samples where it is drawn, so it is re-aimed.
+     */
+    private void syncStatusStripTravel() {
+        View strip = hotView(R.id.terminal_status_bar_background);
+        if (strip == null) return;
+        float stripX = com.termux.app.place.StatusStripRide.stripX(mStatusTravelXPx,
+            strip.getVisibility() == View.VISIBLE,
+            mStatusStripLead == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
+        if (strip.getTranslationX() == stripX) return;
+        strip.setTranslationX(stripX);
+        View backdrop = hotView(R.id.terminal_status_bar_wallpaper_backdrop);
         if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
