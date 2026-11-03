@@ -8086,113 +8086,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The strip's crossing is over; the pass that follows dresses it plainly. */
-    // ---- TEMPORARY diagnostic (TopBandDiag): what draws behind the system status bar as a
-    // Home <-> Workspace crossing begins. Never merged; reverted once read on pong.
-
-    private static final String TOP_BAND_DIAG_TAG = "TopBandDiag";
-    /** How far down a view must reach to be logged: the band behind the system bar. */
-    private static final int TOP_BAND_DIAG_Y_PX = 140;
-    /** Frames of the crossing still to log after its begin; -1 while none. */
-    private int mTopBandDiagFrames = -1;
-    /** Each logged view's background and foreground as last logged, to say when one changed. */
-    private final java.util.IdentityHashMap<View, Drawable[]> mTopBandDiagSeen =
-        new java.util.IdentityHashMap<>();
-
-    private void topBandDiagBegin() {
-        mTopBandDiagFrames = 6;
-        mTopBandDiagSeen.clear();
-        topBandDiagLog("begin", true);
-    }
-
-    private void topBandDiagFrame() {
-        if (mTopBandDiagFrames <= 0) return;
-        int frame = 7 - mTopBandDiagFrames;
-        mTopBandDiagFrames--;
-        topBandDiagLog("frame" + frame, false);
-    }
-
-    private void topBandDiagLog(@NonNull String what, boolean frames) {
-        StringBuilder out = new StringBuilder();
-        out.append(what).append(" t=").append(SystemClock.uptimeMillis())
-            .append(" committed=").append(mLastWallPage)
-            .append(" crossing=").append(mCrossing.crossing())
-            .append(" statusTravelX=").append(mStatusTravelXPx)
-            .append(" stripLead=").append(mStatusStripLead);
-        if (frames) {
-            StackTraceElement[] trace = new Throwable().getStackTrace();
-            out.append(" frames=");
-            for (int i = 2, n = 0; i < trace.length && n < 3; i++, n++) {
-                if (n > 0) out.append(" < ");
-                out.append(trace[i].getMethodName()).append(':').append(trace[i].getLineNumber());
-            }
-        }
-        View content = findViewById(android.R.id.content);
-        View decor = getWindow().getDecorView();
-        int[] at = new int[2];
-        if (content != null) topBandDiagWalk(content, out, at);
-        if (decor instanceof ViewGroup) {
-            ViewGroup root = (ViewGroup) decor;
-            for (int i = 0; i < root.getChildCount(); i++) {
-                View child = root.getChildAt(i);
-                if (child == content) continue;
-                out.append("\n  [decor child ").append(i).append(']');
-                topBandDiagView(child, out, at, true);
-            }
-        }
-        // Logcat cuts a line near 4 KB: the record goes in numbered pieces split at view lines.
-        String all = out.toString();
-        int piece = 0;
-        int start = 0;
-        while (start < all.length()) {
-            int end = Math.min(all.length(), start + 3500);
-            if (end < all.length()) {
-                int cut = all.lastIndexOf('\n', end);
-                if (cut > start) end = cut;
-            }
-            android.util.Log.i(TOP_BAND_DIAG_TAG, what + " #" + piece++ + " "
-                + all.substring(start, end));
-            start = end;
-        }
-    }
-
-    private void topBandDiagWalk(@NonNull View view, @NonNull StringBuilder out, int[] at) {
-        if (view.getVisibility() != View.VISIBLE) return;
-        topBandDiagView(view, out, at, false);
-        if (!(view instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) topBandDiagWalk(group.getChildAt(i), out, at);
-    }
-
-    private void topBandDiagView(@NonNull View v, @NonNull StringBuilder out, int[] at,
-                                 boolean always) {
-        Drawable bg = v.getBackground();
-        Drawable fg = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? v.getForeground() : null;
-        Drawable img = v instanceof ImageView ? ((ImageView) v).getDrawable() : null;
-        v.getLocationOnScreen(at);
-        boolean inBand = at[1] < TOP_BAND_DIAG_Y_PX && v.getHeight() > 0 && v.getWidth() > 0;
-        if (!always && (!inBand || (bg == null && fg == null && img == null))) return;
-        Drawable[] last = mTopBandDiagSeen.get(v);
-        boolean changed = last != null && (last[0] != bg || last[1] != fg || last[2] != img);
-        mTopBandDiagSeen.put(v, new Drawable[] {bg, fg, img});
-        String id;
-        try {
-            id = v.getId() == View.NO_ID ? "no-id" : getResources().getResourceEntryName(v.getId());
-        } catch (Exception e) {
-            id = "#" + Integer.toHexString(v.getId());
-        }
-        out.append("\n  ").append(id).append(' ').append(v.getClass().getSimpleName())
-            .append(v.isShown() ? " shown" : " notShown")
-            .append(" vis=").append(v.getVisibility())
-            .append(" a=").append(v.getAlpha())
-            .append(" rect=").append(at[0]).append(',').append(at[1]).append(' ')
-            .append(v.getWidth()).append('x').append(v.getHeight())
-            .append(" tx=").append(v.getTranslationX())
-            .append(" bg=").append(bg == null ? "null" : bg.getClass().getSimpleName())
-            .append(" fg=").append(fg == null ? "null" : fg.getClass().getSimpleName())
-            .append(" img=").append(img == null ? "null" : img.getClass().getSimpleName())
-            .append(last == null ? " new" : changed ? " CHANGED" : " same");
-    }
-
     private void endNavStripFade() {
         mNavFadeActive = false;
         mNavFadeHerePage = null;
@@ -24322,7 +24215,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPromptFieldUnderPalette);
         // The strip under the pill crosses from the one dress to the other with the finger.
         syncNavStripFade(wallFrame);
-        topBandDiagFrame();
         // A band only one half's dock carries follows its page across the seam.
         syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
@@ -24720,7 +24612,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!begins) return;
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.
         beginNavStripFade(herePage, therePage);
-        topBandDiagBegin();
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
         // frame. The landing lets it go after its own frame (runLandingSettle).
@@ -25709,7 +25600,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The strip's crossing has landed on one end's dress: the commit below dresses it
             // plainly, as that end wears it.
             endNavStripFade();
-            topBandDiagLog("landed", false);
             mLandingStackDressed = seamLanding.stackDressedFor(page);
             try {
                 syncPlaceState(page, leavingKeyboardUp);
