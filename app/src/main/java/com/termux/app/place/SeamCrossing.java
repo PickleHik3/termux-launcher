@@ -525,7 +525,7 @@ public final class SeamCrossing {
         // Workspace's extra keys, or a keyboard in the stack, keep the slab there). The Search
         // field keeps the beads, in a capsule of its own under them (#84).
         boolean otherBeads = mRun.otherDesign == DockStyle.LENS_BEADS
-            && LensBeadGeometry.rowWearsBeads(there,
+            && LensBeadGeometry.rowWearsBeadsCuttingFrame(there,
                 !stackDressedApart(committed.page.kind) && stage.frameGlass.standsDown(),
                 mRun.otherKeyboard);
         mRun.beadMelt = stage.beadsDrawn != otherBeads;
