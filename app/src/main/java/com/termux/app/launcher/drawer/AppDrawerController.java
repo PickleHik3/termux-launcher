@@ -195,6 +195,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default void dismissSearchSystemKeyboard() {}
 
         /**
+         * Whether the close will put the built-in keyboard down: the search raised it, the user
+         * has not claimed it since, and it is still up. See {@link AppDrawerKeyboardLowering}.
+         */
+        default boolean drawerCloseLowersKeyboard() { return false; }
+
+        /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
          * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
          * moving — the plane covers it and the accessory stack must not relayout under an open plane.
@@ -257,7 +263,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private static final float DOCK_LIFT_DP = 8f;
 
     /** Glass handoff: two identical rectangles swapping over the first tenth of the transition. */
-    private static final float GLASS_FADE_END = 0.10f;
+    static final float GLASS_FADE_END = 0.10f;
     /**
      * The dock's rows leave early — they are the dock's, not the drawer's. One window for all of
      * them, ending where the pinned icons' own staggered wave ends, so no row on the glass is gone
@@ -335,6 +341,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * read the dock at all, so taking it on never moves the plane.
      */
     @Nullable private Frame mRaisedKeyboardDockRect;
+    /** The dock's rect at the pull: where it rests again once a keyboard the search raised is down. */
+    @Nullable private Frame mPullDockRect;
+    /**
+     * This close puts down the keyboard the search raised ({@link AppDrawerKeyboardLowering}).
+     * Set when a close starts; cleared at rest, open or closed.
+     */
+    private boolean mLowering;
     @Nullable private Frame mOpenRect;
     @Nullable private AppDrawerAccessoryChoreography.Band mExtraKeysBand;
     @Nullable private AppDrawerAccessoryChoreography.Band mKeyboardBand;
@@ -468,6 +481,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = mProgress.value;
         mCloseTimeAnim = false;
         mEngaged = true;
+        if (!closing) applyBackdropMaterial();
+        else beginLoweringIfKeyboardGoes();
         // With the embedded keyboard the IME can never be up here; with the system keyboard it
         // stayed open across the drawer, covering the grid until dismissed by hand. A keyboard the
         // drawer's own text field put up is the search's, and is put away with the search instead.
@@ -496,6 +511,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mGrabProgress = 0f;
         mCloseTimeAnim = false;
         mEngaged = true;
+        applyBackdropMaterial();
         mHost.hideSystemKeyboard();
         applyFrame(0f);
         settle(true, 0f);
@@ -593,6 +609,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             requestSearchKeyboardOnOpenIfEnabled();
             nudgeCategorizationIfPending();
         } else {
+            beginLoweringIfKeyboardGoes();
             endTextFieldSearchIfBegun();
         }
         retargetReveal();
@@ -1312,7 +1329,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame dockRect = frameOf(dock);
         if (dockRect == null) return false;
         mDockRect = dockRect;
+        mPullDockRect = dockRect;
         mRaisedKeyboardDockRect = null;
+        mLowering = false;
 
         // One dock-geometry snapshot for the whole capture: style, seed radius and (via
         // resolveOpenRect) the outer inset all come off the same value.
@@ -1706,6 +1725,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mRaisedKeyboardDockRect = null;
     }
 
+    /**
+     * A close is starting: if it will put down a keyboard the search raised, the dock and the
+     * keyboard go to their keyboard-down places with it rather than when it has finished.
+     */
+    private void beginLoweringIfKeyboardGoes() {
+        if (mLowering || mPullDockRect == null || mTextFieldSearch || mImePinTopPx > 0f) return;
+        mLowering = mHost.drawerCloseLowersKeyboard();
+    }
+
     /** {@code -1} on the preference means "follow the rounded-surface token", as the dock's does. */
     private float resolveOpenRadiusPx() {
         TermuxAppSharedPreferences preferences = mHost.preferences();
@@ -1755,7 +1783,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
         applyDrawerSettings();
-        applyBackdropMaterial();
+        // The plane's picture is opened by the caller once the drawer is engaged: the open's
+        // Snapshot poses the settled scene (mSettledScene), which only an engaged drawer can pose.
+        // Opened here, the first Snapshot recorded Home as it stood (the dock showing, no dim) and
+        // the settled one replaced it, so the frost changed mid-open.
         prepareContent(plane);
         addHostLayoutListener();
     }
@@ -1973,19 +2004,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             dockRect = mDockRect;
         }
 
+        // A close that has come back to rest open is no longer putting the keyboard down.
+        if (mLowering && p >= 1f && mOpen && !mDragging && !mCapturingSettledScene)
+            mLowering = false;
+        Frame pullDock = mPullDockRect;
+        boolean lowering = mLowering && pullDock != null;
+        // Where the dock is laid out now: above the raised keyboard once the stack was laid out
+        // for it, whether or not the plane's seed has taken that rect on yet.
+        Frame laidOutDock = mRaisedKeyboardDockRect != null ? mRaisedKeyboardDockRect : dockRect;
+        float stackOffset = lowering
+            ? AppDrawerKeyboardLowering.offsetPx(laidOutDock.top, pullDock.top, p) : 0f;
+        float seedOffset = lowering
+            ? AppDrawerKeyboardLowering.offsetPx(dockRect.top, pullDock.top, p) : 0f;
+        float keyboardExit = lowering && mKeyboardBand != null
+            ? AppDrawerKeyboardLowering.keyboardExitPx(mKeyboardBand.topPx,
+                mHostLayout.getHeight(), p) : 0f;
+
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
-        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p, lift);
+        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p,
+            lift + seedOffset);
         // The search keyboard's reveal only ever shortens the plane from the bottom. At k = 0 this
         // is skipped entirely, so an open drawer with nothing typed into it draws the same rectangle
         // it drew in B-1 — down to the allocation, which is why the branch is on k and not on
         // whether a keyboard exists.
         float k = revealFraction();
+        if (lowering) k = AppDrawerKeyboardLowering.reveal(k, p);
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             mOpenRadiusPx, p);
         boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(mRoundedStyle, k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
-            float pinTop = pinTopPx();
+            float pinTop = pinTopPx() + keyboardExit;
             // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
             // the top stays pushed past the bezel by whichever radius is larger.
             if (mImePinTopPx <= 0f) {
@@ -2045,14 +2094,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // row standing on the glass rises with it instead of off it. Never
         // accessory_stack_container: applyDockImeOffset owns that view's translationY, and writing
         // it here makes the dock jump by the IME lift.
-        applyGroupTranslationY(mDockLiftGroup, lift);
+        applyGroupTranslationY(mDockLiftGroup, lift + stackOffset);
 
         applyGroupAlpha(mDockRowFadeGroup,
             1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END));
 
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
-        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k);
+        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k, stackOffset,
+            keyboardExit, lowering);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
         applyStatusBand(p);
@@ -2150,16 +2200,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mScrim.setHole(mScrimHoleScratch, mHost.inAppKeyboardCardRadiusPx());
     }
 
-    private void applyAccessoryBands(float p, float planeBottomPx, float reveal) {
+    /**
+     * @param stackOffsetPx   the extra keys' way to their keyboard-down place, as the dock's
+     * @param keyboardExitPx  the keyboard's way out under a close that puts it down
+     */
+    private void applyAccessoryBands(float p, float planeBottomPx, float reveal,
+                                     float stackOffsetPx, float keyboardExitPx, boolean lowering) {
         if (!mHasBands || mExtraKeysBand == null || mKeyboardBand == null) return;
         AppDrawerAccessoryChoreography.Result result = AppDrawerAccessoryChoreography.resolve(
             mRoundedStyle, p, mExtraKeysBand, mKeyboardBand, mCapturedGapPx, planeBottomPx);
         // Byte-identical to `result` at reveal 0, so this is unconditional rather than branched.
         result = AppDrawerAccessoryChoreography.blendTowardIdentity(result, reveal);
-        applyBand(mExtraKeysView, result.extraKeysTranslationY, result.extraKeysClipTopPx,
-            result.extraKeysAlpha);
-        applyBand(mKeyboardView, result.keyboardTranslationY, result.keyboardClipTopPx,
-            result.keyboardAlpha);
+        applyBand(mExtraKeysView, result.extraKeysTranslationY + stackOffsetPx,
+            result.extraKeysClipTopPx, result.extraKeysAlpha);
+        applyBand(mKeyboardView, result.keyboardTranslationY + keyboardExitPx,
+            result.keyboardClipTopPx, lowering
+                ? AppDrawerKeyboardLowering.keyboardAlpha(result.keyboardAlpha, p)
+                : result.keyboardAlpha);
     }
 
     /**
@@ -2271,6 +2328,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             removeHostLayoutListener();
             stopAwaitingRaisedKeyboard();
             mRaisedKeyboardDockRect = null;
+            mLowering = false;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);

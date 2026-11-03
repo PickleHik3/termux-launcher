@@ -71,6 +71,13 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         decorNavStripAlpha = alpha;
     }
 
+    /** Whether the close puts down a keyboard the drawer's search raised. */
+    boolean closeLowersKeyboard;
+
+    @Override public boolean drawerCloseLowersKeyboard() {
+        return closeLowersKeyboard;
+    }
+
     /** The terminal pane's gap and corner radius; negative means the host gives none. */
     float paneGapPx = -1f;
     float paneCornerRadiusPx = -1f;

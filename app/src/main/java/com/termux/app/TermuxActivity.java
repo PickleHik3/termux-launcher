@@ -20173,6 +20173,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestAppDrawerSearchKeyboard();
         }
 
+        @Override public boolean drawerCloseLowersKeyboard() {
+            // The same question lowerDrawerSearchKeyboard asks once the close has finished.
+            return com.termux.app.x11.DisplayKeyboardRoute.drawerCloseLowers(mDrawerRaisedKeyboard,
+                mDrawerRaisedKeyboardClaimed, mInAppKeyboard != null && mInAppKeyboard.isVisible());
+        }
+
         @Override public void dismissSearchSystemKeyboard() {
             // Scrolled away, as launchers do: the field keeps its focus and its query, so a tap on
             // the search brings the keyboard straight back.
