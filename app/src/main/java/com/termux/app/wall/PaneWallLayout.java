@@ -69,7 +69,8 @@ import java.util.WeakHashMap;
  * {@link MarginLayoutParams} and applies them to all of its pages; margins on the other pages are
  * ignored.
  */
-public final class PaneWallLayout extends ViewGroup {
+public final class PaneWallLayout extends ViewGroup
+        implements com.termux.app.chrome.LiveBackdrop.Container {
 
     // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
     // starts where the finger let go and at the finger's own speed, so the release has no seam,
@@ -3776,5 +3777,12 @@ public final class PaneWallLayout extends ViewGroup {
         mStatusGrabber.reset();
         mGlow.reset();
         mGlowPage = null;
+    }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

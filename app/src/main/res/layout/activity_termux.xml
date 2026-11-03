@@ -109,7 +109,7 @@
             android:clipToPadding="false"
             android:orientation="vertical">
 
-        <LinearLayout
+        <com.termux.app.chrome.LiveBackdropLinearLayout
             android:id="@+id/terminal_content_column"
             android:layout_alignParentTop="true"
             android:layout_above="@+id/accessory_stack_container"
@@ -545,7 +545,7 @@
                  answers for the sides is structure rather than padding anyone applies. It clips:
                  a rail holds more icons than the screen is tall and scrolls them, and an unclipped
                  band let the scrolled ones out past the canvas to sit beside the dock. -->
-            <LinearLayout
+            <com.termux.app.chrome.LiveBackdropLinearLayout
                 android:id="@+id/terminal_canvas_band"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -609,7 +609,7 @@
 
             </com.termux.app.place.EdgeStackView>
 
-            <FrameLayout
+            <com.termux.app.chrome.LiveBackdropFrameLayout
                 android:id="@+id/terminal_surface_host"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -638,7 +638,7 @@
                     <!-- Split-pane host: TerminalPaneController inflates the recursive pane
                          tree (view_terminal_pane.xml per leaf) into this frame. A single
                          unsplit shell is just one pane filling the host. -->
-                    <FrameLayout
+                    <com.termux.app.chrome.LiveBackdropFrameLayout
                         android:id="@+id/terminal_pane_host"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
@@ -654,7 +654,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
-            </FrameLayout>
+            </com.termux.app.chrome.LiveBackdropFrameLayout>
 
             <com.termux.app.place.EdgeStackView
                 android:id="@+id/place_edge_stack_right"
@@ -663,14 +663,14 @@
                 app:edgeStackEdge="right"
                 android:clipChildren="false"
                 android:clipToPadding="false" />
-            </LinearLayout>
+            </com.termux.app.chrome.LiveBackdropLinearLayout>
 
             <!-- The content column ends at the canvas band. The whole bottom edge — the status
                  bar included — stands in accessory_row_stack below, because that is the one
                  container that keeps its bands above the in-app keyboard and on the dock's glass.
                  There used to be a second bottom stack here holding only the status bar, which is
                  what pinned it above the dock whatever order the user gave it. -->
-        </LinearLayout>
+        </com.termux.app.chrome.LiveBackdropLinearLayout>
 
         <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
              accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's

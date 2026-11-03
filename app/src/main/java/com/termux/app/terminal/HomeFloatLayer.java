@@ -19,7 +19,8 @@ import com.termux.app.launcher.widget.WidgetPaneView;
  * <p>The layer itself takes no touch: a press that lands on no float goes on to the grid, and the
  * layer reports it first, since a tap on Home beside the floats gives focus back to Home.
  */
-public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.PagePinnedLayer {
+public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.PagePinnedLayer,
+        com.termux.app.chrome.LiveBackdrop.Container {
 
     /** What the layer reports to the controller that fills it. */
     public interface Listener {
@@ -113,5 +114,12 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
             mListener.onPressBesideFloats(event.getRawX(), event.getRawY());
         }
         return super.dispatchTouchEvent(event);
+    }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }

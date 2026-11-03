@@ -44,7 +44,8 @@ import com.termux.view.TerminalView;
  * outline showed through as a dark hairline outside the rim wherever the two edges' coverage
  * disagreed — and along a straight edge the stroke, not the arc, is what the text is held off.
  */
-public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener {
+public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener,
+        com.termux.app.chrome.LiveBackdrop.Container {
 
     /** How far off the rim's inner edge the text is kept along a straight edge. */
     private static final float EDGE_GAP_DP = 2f;
@@ -749,5 +750,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             return false;
         return x < mContent.getLeft() || x >= mContent.getRight()
             || y < mContent.getTop() || y >= mContent.getBottom();
+    }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 }
