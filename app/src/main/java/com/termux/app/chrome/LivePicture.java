@@ -46,6 +46,8 @@ public final class LivePicture implements GlassPicture {
     @NonNull private final LiveDrawable mDrawable = new LiveDrawable();
     private float mRadiusPx;
     private int mMarginPx;
+    /** The radius is a panel's {@code RealtimeBlurView} radius, not the stored frame's. */
+    private boolean mPanelRadius;
     @Nullable private ColorFilter mFilter;
 
     @Nullable private RenderNode mRecord;
@@ -62,8 +64,9 @@ public final class LivePicture implements GlassPicture {
     /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
     private boolean mReleased;
 
-    LivePicture(@NonNull View surface, float blurRadiusPx) {
+    LivePicture(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
         mSurface = surface;
+        mPanelRadius = panelRadius;
         setBlurRadiusPx(blurRadiusPx);
     }
 
@@ -146,7 +149,7 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
-        float r = renderEffectRadius(mRadiusPx) / SCALE;
+        float r = mPanelRadius ? panelQuarterRadius(mRadiusPx) : renderEffectRadius(mRadiusPx) / SCALE;
         RenderEffect effect = r > 0f
             ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
         if (mFilter != null) {
@@ -156,7 +159,6 @@ public final class LivePicture implements GlassPicture {
         mBlur.setRenderEffect(effect);
     }
 
-    /** Lets the next pre-draw re-record whatever it finds. */
     /**
      * The {@code RenderEffect} blur radius, at full scale, that blurs as much as the stored frame
      * does at {@code storedRadiusPx}, so switching Live on keeps the glass's strength. The stored
@@ -172,6 +174,20 @@ public final class LivePicture implements GlassPicture {
         return Math.max(0f, (sigma - SKIA_SIGMA_BASE * SCALE) / SKIA_SIGMA_SLOPE);
     }
 
+    /**
+     * The blur radius on the quarter-scale node that blurs as much as a panel's old
+     * {@code RealtimeBlurView} at {@code panelRadiusPx}, so a panel keeps its strength. On Android
+     * 12+ that view drew the window at a quarter scale, scaled it back up and ran a full-scale
+     * {@link RenderEffect} at the radius itself (sigma = 0.57735 R + 0.5); here the effect runs on a
+     * 1/{@link #SCALE} node, where sigma counts {@link #SCALE} times: 0.57735 r + 0.5 = sigma /
+     * SCALE. Both sides downsample and upscale the same way, so only the blur is matched. Pure.
+     */
+    static float panelQuarterRadius(float panelRadiusPx) {
+        if (panelRadiusPx <= 0f) return 0f;
+        float sigma = SKIA_SIGMA_SLOPE * panelRadiusPx + SKIA_SIGMA_BASE;
+        return Math.max(0f, (sigma / SCALE - SKIA_SIGMA_BASE) / SKIA_SIGMA_SLOPE);
+    }
+
     /** RenderScript's intrinsic blur: sigma = 0.4 r + 0.6, radius capped at 25 px. */
     static final float STORED_SIGMA_SLOPE = 0.4f;
     static final float STORED_SIGMA_BASE = 0.6f;
@@ -180,6 +196,7 @@ public final class LivePicture implements GlassPicture {
     static final float SKIA_SIGMA_SLOPE = 0.57735f;
     static final float SKIA_SIGMA_BASE = 0.5f;
 
+    /** Lets the next pre-draw re-record whatever it finds. */
     void forgetRecording() {
         mRecordedBeneath.clear();
         mRecordedWidth = -1;

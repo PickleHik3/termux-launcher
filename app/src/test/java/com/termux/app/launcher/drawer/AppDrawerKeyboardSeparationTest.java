@@ -158,44 +158,34 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     /**
-     * The live blur's capture is a software draw of the decor in its pre-draw hook; on pong it
-     * cost ~13 ms of every open and close frame. It must never be woken while the plane moves.
+     * The old live blur's capture cost ~13 ms of every open and close frame on pong. The plane's
+     * picture is told it moves on every frame that is not settled open, so a Snapshot is never
+     * retaken mid-motion, and that it rests exactly when the plane settles open.
      */
-    @Test public void liveBlurNeverCapturesWhileThePlaneMoves() {
-        com.github.mmin18.widget.RealtimeBlurView blur =
-            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
-        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
+    @Test public void thePictureIsFrozenWhileThePlaneMoves() {
+        com.termux.app.chrome.PanelBackdrop backdrop = new com.termux.app.chrome.PanelBackdrop(
+            new android.widget.ImageView(plane.getContext()), plane);
+        ReflectionHelpers.setField(controller, "mBackdrop", backdrop);
         Object progress = ReflectionHelpers.getField(controller, "mProgress");
         ReflectionHelpers.setField(controller, "mOpen", true);
         ReflectionHelpers.setField(progress, "target", 1f);
-        // The open's one capture has been taken and the view rested itself.
-        blur.setUpdatesPaused(true);
 
         for (float p : new float[] {0.03f, 0.26f, 0.5f, 0.9f, 0.998f}) {
             ReflectionHelpers.setField(progress, "value", p);
-            controller.applyLiveBlurRest();
-            assertTrue("open p=" + p, blur.isUpdatesPaused());
+            controller.applyBackdropRest();
+            assertTrue("open p=" + p, (boolean) ReflectionHelpers.getField(backdrop, "mMoving"));
         }
 
-        // Settled open: exactly one fresh capture, then rest — not on the settle frame itself but
-        // a moment later, from the posted refresh.
-        ReflectionHelpers.setField(controller, "mEngaged", true);
         ReflectionHelpers.setField(progress, "value", 1f);
-        controller.applyLiveBlurRest();
-        assertTrue(blur.isUpdatesPaused());
-        controller.refreshSettledBackdrop();
-        assertFalse(blur.isUpdatesPaused());
-        blur.setUpdatesPaused(true);
-        controller.applyLiveBlurRest();
-        assertTrue(blur.isUpdatesPaused());
+        controller.applyBackdropRest();
+        assertFalse((boolean) ReflectionHelpers.getField(backdrop, "mMoving"));
 
-        // Close: rests on the settled capture all the way down.
         ReflectionHelpers.setField(controller, "mOpen", false);
         ReflectionHelpers.setField(progress, "target", 0f);
         for (float p : new float[] {0.9f, 0.5f, 0.1f}) {
             ReflectionHelpers.setField(progress, "value", p);
-            controller.applyLiveBlurRest();
-            assertTrue("close p=" + p, blur.isUpdatesPaused());
+            controller.applyBackdropRest();
+            assertTrue("close p=" + p, (boolean) ReflectionHelpers.getField(backdrop, "mMoving"));
         }
     }
 
@@ -272,14 +262,14 @@ public class AppDrawerKeyboardSeparationTest {
         Frame shown = plane.getFrame();
         float shownAlpha = root.getAlpha();
 
-        com.github.mmin18.widget.RealtimeBlurView.CaptureScene scene =
+        com.termux.app.chrome.PanelBackdrop.Scene scene =
             ReflectionHelpers.getField(controller, "mSettledScene");
-        scene.beforeCapture();
+        scene.beforeSnapshot();
         // What the capture sees: the full dim, the host at full opacity, the plane fully open.
         assertEquals(com.termux.app.GlassBackdropTint.colorFor(1f),
             ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
         assertEquals(1f, root.getAlpha(), 0f);
-        scene.afterCapture();
+        scene.afterSnapshot();
 
         assertEquals(shown, plane.getFrame());
         assertEquals(shownAlpha, root.getAlpha(), 0f);
@@ -322,27 +312,6 @@ public class AppDrawerKeyboardSeparationTest {
         ReflectionHelpers.setField(controller, "mOpen", false);
         controller.onListDragHidesKeyboard();
         assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
-    }
-
-    @Test public void aFreshFirstFrameCaptureIsNotTakenAgainAtSettle() {
-        com.github.mmin18.widget.RealtimeBlurView blur =
-            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
-        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
-        Object progress = ReflectionHelpers.getField(controller, "mProgress");
-        ReflectionHelpers.setField(controller, "mOpen", true);
-        ReflectionHelpers.setField(controller, "mEngaged", true);
-        ReflectionHelpers.setField(progress, "target", 1f);
-        ReflectionHelpers.setField(progress, "value", 1f);
-        ReflectionHelpers.setField(controller, "mFreshCaptureThisOpen", true);
-        blur.setUpdatesPaused(true);
-
-        controller.applyLiveBlurRest();
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(1,
-            java.util.concurrent.TimeUnit.SECONDS);
-
-        assertTrue(blur.isUpdatesPaused());
-        assertFalse(AppDrawerController.settledRefreshNeeded(true));
-        assertTrue(AppDrawerController.settledRefreshNeeded(false));
     }
 
     /**

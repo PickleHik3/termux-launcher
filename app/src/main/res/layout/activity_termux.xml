@@ -1213,12 +1213,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/app_drawer_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1252,12 +1255,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/command_palette_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1300,12 +1306,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/terminal_sheet_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
 
             <!-- Cards, oldest first: a sheet opened from a sheet (the workspace picker's confirm)

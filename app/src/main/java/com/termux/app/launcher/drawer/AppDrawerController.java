@@ -43,7 +43,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * <p>Deliberately shaped like {@code TerminalCommandPaletteController} — one {@link Spring}
  * channel ticked on a {@link Choreographer} callback, one {@code applyFrame} that is the single
  * writer of every animated property, views bound lazily on first use and left {@code INVISIBLE}
- * rather than {@code GONE} so the host stays measured and {@code RealtimeBlurView} can gate its own
+ * rather than {@code GONE} so the host stays measured and the glass picture can gate its own
  * work on {@code isShown()}.
  *
  * <p><b>The transition is one number.</b> {@code p ∈ [0,1]}, 0 = dock, 1 = full drawer. Under a
@@ -371,8 +371,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mEngaged;
     private boolean mOpen;
     private boolean mDragging;
-    /** The plane's live backdrop blur, held so the settle logic can rest and wake it per frame. */
-    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+    /** The plane's picture of what is beneath it; the settle logic freezes and retakes it. */
+    @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
     @NonNull private AppDrawerCommitPolicy.Direction mDirection =
         AppDrawerCommitPolicy.Direction.OPENING;
     private float mDownRawY;
@@ -821,88 +821,39 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return;
         }
         if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
-        // The live blur ghosts the terminal through the glass at the price of a full software
-        // re-draw of the decor hierarchy on every frame the window produces — including every
-        // frame of a grid scroll. Once the plane has settled fully open, what it blurs is static
-        // to the eye, so the blur rests on its last captured frame; any motion of the plane
-        // itself (a close, a drag, a re-open) drops the progress out of the settled band and the
-        // next frame here wakes it. Scrub and rope frames deliberately do not wake it — they move
-        // content above the glass, never what is behind it.
-        applyLiveBlurRest();
+        // The plane's picture stands still while the plane moves (a Snapshot is taken on the open
+        // and once more when the plane comes to rest open; Live refreshes only when what is beneath
+        // it changes). Scrub and rope frames deliberately do not move it: they move content above
+        // the glass, never what is behind it.
+        applyBackdropRest();
     }
-
-    /** True once the blur has taken its one capture of the settled-open scene. */
-    private boolean mLiveBlurRefreshedAtRest;
 
     /**
-     * The live blur's capture is a software draw of the whole decor in its pre-draw hook — about
-     * 13 ms a frame on a 120 Hz phone, which is what every open and close frame spent between the
-     * traversal's start and its draw. It no longer runs while the plane moves: the capture taken on
-     * the first frame of the open (the host turning visible clears the old one) stands under the
-     * frost for the whole motion, the settled-open scene is captured once, and a close or a drag
-     * rests on that.
+     * Tells the plane's picture whether the plane is moving: a Snapshot is frozen for the whole
+     * motion and retaken once, when the plane comes to rest open; a close or a drag rests on that.
      */
     @VisibleForTesting
-    void applyLiveBlurRest() {
-        com.github.mmin18.widget.RealtimeBlurView blur = mLiveBlur;
-        if (blur == null) return;
-        if (!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value)) {
-            // Nothing to pause: every capture asked for here is refreshThenRest, which rests the
-            // view itself after its one capture. Pausing here would cancel the open's first one.
-            mLiveBlurRefreshedAtRest = false;
-        } else if (!mLiveBlurRefreshedAtRest) {
-            mLiveBlurRefreshedAtRest = true;
-            // A capture this open took on its first frame is already of the settled scene (the
-            // CaptureScene hook), moments old: taking it again would cost a ~36 ms frame for the
-            // same picture. Only a capture held over from an earlier open is refreshed.
-            if (!settledRefreshNeeded(mFreshCaptureThisOpen)) return;
-            // Off the settle frame: the capture costs ~30 ms, and on a frame where nothing moves
-            // any more it is a frame nobody sees late.
-            FrameLayout host = mHostLayout;
-            if (host != null) {
-                host.removeCallbacks(mSettledRefresh);
-                host.postDelayed(mSettledRefresh, SETTLED_REFRESH_DELAY_MS);
-            } else {
-                refreshSettledBackdrop();
-            }
-        }
+    void applyBackdropRest() {
+        com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
+        if (backdrop == null) return;
+        backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
     }
 
-    /** True when this open's frost was captured on its own first frame rather than held over. */
-    private boolean mFreshCaptureThisOpen;
-
-    @VisibleForTesting
-    static boolean settledRefreshNeeded(boolean freshCaptureThisOpen) {
-        return !freshCaptureThisOpen;
-    }
-
-    private static final long SETTLED_REFRESH_DELAY_MS = 160L;
-    private final Runnable mSettledRefresh = this::refreshSettledBackdrop;
-
-    /** The settled-open scene's one capture, if the plane is still resting open. */
-    @VisibleForTesting
-    void refreshSettledBackdrop() {
-        com.github.mmin18.widget.RealtimeBlurView blur = mLiveBlur;
-        if (blur == null || !mEngaged || !isSettledOpen(mOpen, mDragging, mProgress.target,
-                mProgress.value)) return;
-        blur.refreshThenRest();
-    }
-
-    /** True for the length of one capture's software draw; see {@link #mSettledScene}. */
+    /** True for the length of one Snapshot's recording; see {@link #mSettledScene}. */
     private boolean mCapturingSettledScene;
 
     /**
-     * Every capture shows the settled-open scene, whichever frame it is taken on: the dim at p = 1,
+     * Every Snapshot shows the settled-open scene, whichever frame it is taken on: the dim at p = 1,
      * the dock faded out, the keyboard where the reveal is going. The first capture of an open
      * used to be taken at p ~ 0.03 — almost no dim, the dock still showing — and the settled one at
      * p = 1, so the frost jumped from bright to dim just before the plane came to rest. The real
      * frame is put back straight after; nothing of the swap reaches the screen.
      */
-    private final com.github.mmin18.widget.RealtimeBlurView.CaptureScene mSettledScene =
-        new com.github.mmin18.widget.RealtimeBlurView.CaptureScene() {
+    private final com.termux.app.chrome.PanelBackdrop.Scene mSettledScene =
+        new com.termux.app.chrome.PanelBackdrop.Scene() {
             private float mHeldReveal;
 
-            @Override public void beforeCapture() {
+            @Override public void beforeSnapshot() {
                 if (!mEngaged || mCapturingSettledScene) return;
                 mCapturingSettledScene = true;
                 mHeldReveal = mReveal.value;
@@ -910,7 +861,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 applyFrame(1f);
             }
 
-            @Override public void afterCapture() {
+            @Override public void afterSnapshot() {
                 if (!mCapturingSettledScene) return;
                 mReveal.value = mHeldReveal;
                 applyFrame(mProgress.value);
@@ -1970,43 +1921,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
-     * Over the system wallpaper the plane's {@code RealtimeBlurView} can only blur the window's own
-     * (mostly transparent) content and renders grey mud, so a crop of the shared pre-blurred
-     * wallpaper frame stands in. When that crop cannot be cut — the user turned dock blur off, or a
-     * live wallpaper makes the pre-blur impossible — the live blur is <em>not</em> a fallback in
-     * wallpaper mode: the plane is simply tinted glass over whatever is behind it.
+     * The plane's glass shows what is drawn beneath it ({@link com.termux.app.chrome.PanelBackdrop}):
+     * a Snapshot taken on this open's first frame, of the settled-open scene ({@link #mSettledScene}),
+     * frozen while the plane moves and retaken once it rests; Live while Live blur is on. Over the
+     * system wallpaper the recording holds no wallpaper, so a crop of the shared pre-blurred
+     * wallpaper frame stands beneath it, and the picture ghosts the terminal through the glass over
+     * that; without the crop (dock blur off, a live wallpaper) the picture is not a fallback there
+     * and the plane is simply tinted glass. Where nothing can be recorded (below Android 12) the
+     * crop stands alone.
      */
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
         View blur = mHost.findView(R.id.app_drawer_blur);
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
-        if (blur == null) return;
-        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
-            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
-        // A fresh open takes one capture on its first frame and rests on it for the whole motion;
-        // applyLiveBlurRest takes one more once the plane settles. Never live while it moves.
-        if (mLiveBlur != null) {
-            mLiveBlurRefreshedAtRest = false;
-            mLiveBlur.setCaptureScene(mSettledScene);
-            // The last open's settled capture is the scene this open settles into, give or take
-            // what the terminal printed since: it is kept across the close and reused, and the
-            // settle refreshes it. Only an open with nothing held pays a capture on its first frame.
-            mLiveBlur.setKeepCaptureWhileHidden(true);
-            if (mLiveBlur.hasCapture()) {
-                mFreshCaptureThisOpen = false;
-                mLiveBlur.setUpdatesPaused(true);
-            } else {
-                mFreshCaptureThisOpen = true;
-                mLiveBlur.refreshThenRest();
-            }
+        if (!(blur instanceof ImageView)) return;
+        if (mBackdrop == null) {
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+            mBackdrop.setScene(mSettledScene);
+            // The scene dim is the host's background: beneath the glass on screen, but a recording
+            // holds only the views beneath, so the picture wears the settled dim itself.
+            mBackdrop.setVeil(com.termux.app.GlassBackdropTint.colorFor(1f));
         }
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        // Frosted wallpaper mode keeps the live blur ON TOP of the frost: the blur can see the
-        // window's own content (the running terminal), so it ghosts through the glass while the
-        // frost keeps covering the wallpaper the blur cannot see. Only the unfrosted live
-        // wallpaper case still drops the blur (grey mud).
-        blur.setVisibility(frosted || !wallpaperMode ? View.VISIBLE : View.GONE);
+        boolean wanted = frosted || !wallpaperMode;
+        if (wanted) blur.setVisibility(View.VISIBLE);
+        boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
+            mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
+        if (!pictured) {
+            mBackdrop.close();
+            blur.setVisibility(View.GONE);
+        }
     }
 
     // ------------------------------------------------------------------ per-frame
@@ -2343,6 +2288,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);
             }
+            if (mBackdrop != null) mBackdrop.close();
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
             ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
             if (frost != null) {

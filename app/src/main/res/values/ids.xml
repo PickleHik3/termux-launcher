@@ -1,5 +1,7 @@
 <resources>
     <item name="help_split_divider" type="id" />
+    <!-- The decor view's tag holding the panels' backdrop source (PanelBackdrop.install). -->
+    <item name="panel_backdrop_source" type="id" />
     <!-- The Appearance editor header ⋮ menu's Reset item. -->
     <item name="editor_header_reset" type="id" />
 

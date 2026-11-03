@@ -167,8 +167,8 @@ public final class TerminalCommandPaletteController
     private FrameLayout mHost;
     private FrameLayout mGlass;
     private CommandPaletteView mView;
-    /** The glass's live blur, when the backdrop is not a wallpaper frost. */
-    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
+    /** The glass's picture of what is beneath it, when the backdrop is not a wallpaper frost. */
+    @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
 
     private boolean mOpen;
     private boolean mFrameScheduled;
@@ -577,8 +577,8 @@ public final class TerminalCommandPaletteController
         mGlass = mActivity.findViewById(R.id.command_palette_glass);
         View blur = mActivity.findViewById(R.id.command_palette_blur);
         if (mHost == null || mGlass == null || blur == null) return false;
-        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
-            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
+        mBackdrop = blur instanceof ImageView
+            ? new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur) : null;
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -597,6 +597,14 @@ public final class TerminalCommandPaletteController
         });
         mView = new CommandPaletteView(mActivity);
         mView.setCallbacks(this);
+        // The sheet wears the keyboard's glass: the same theme, Look, scheme and deck look.
+        mView.setGlassBaseSource(() -> {
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard keyboard =
+                mActivity.getInAppKeyboard();
+            return keyboard != null ? keyboard.glassBaseColor(mActivity)
+                : com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+                    .resolveDockGlassBaseColor(mActivity);
+        });
         mView.setPassThroughSource(this::passThroughRects);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -654,14 +662,11 @@ public final class TerminalCommandPaletteController
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);
         applyFrame();
-        // The live blur re-rasterises the decor on every frame the window draws — every frame of
-        // a list fling above it included. While the glass moves it has to; once the palette has
-        // settled it rests on one fresh capture, like the drawer does. What is behind it is the
-        // terminal, so a settled palette shows the terminal as it was when it settled.
-        if (mLiveBlur != null) {
-            if (moving) mLiveBlur.setUpdatesPaused(false);
-            else if (mOpen) mLiveBlur.refreshThenRest();
-        }
+        // The picture stands still while the glass moves (a Snapshot taken on the open) and is
+        // retaken once when the palette settles open, like the drawer's. What is behind it is the
+        // terminal, so a settled palette shows the terminal as it was when it settled. A close
+        // never retakes it.
+        if (mBackdrop != null) mBackdrop.setMoving(moving || !mOpen);
         // Faded out is enough to tear down — deliberately not "and both channels have settled".
         // The height channel tracks a result count that can keep nudging it, and anything that
         // leaves it in motion would otherwise pin the blur pane open over the space bar, since
@@ -678,11 +683,11 @@ public final class TerminalCommandPaletteController
 
     /**
      * Settled shut. The host stays INVISIBLE rather than GONE so it keeps being measured — the
-     * next sprout needs its width immediately — while {@code RealtimeBlurView} does no work,
-     * since it gates its own blur pass on {@code isShown()}.
+     * next sprout needs its width immediately — and the picture behind the glass is let go.
      */
     private void onCollapsed() {
         mGlass.setVisibility(View.INVISIBLE);
+        if (mBackdrop != null) mBackdrop.close();
         // Drop the full-screen frost bitmap while shut; the next show() rebuilds it.
         ImageView frost = mActivity.findViewById(R.id.command_palette_wallpaper_backdrop);
         if (frost != null) {
@@ -693,15 +698,23 @@ public final class TerminalCommandPaletteController
     }
 
     /**
-     * Picks the glass backdrop for this open: over the system wallpaper a pre-blurred wallpaper
-     * frost (the live blur cannot see through the window there and renders grey mud), otherwise
-     * the RealtimeBlurView blurring real window content.
+     * Picks the glass backdrop for this open: over the system wallpaper (or where nothing can be
+     * recorded) a pre-blurred wallpaper frost, since a recording there holds no wallpaper and
+     * renders grey mud; otherwise the picture of what is drawn beneath the glass
+     * ({@link com.termux.app.chrome.PanelBackdrop}).
      */
     private void applyBackdropMaterial() {
         ImageView frost = mActivity.findViewById(R.id.command_palette_wallpaper_backdrop);
         View blur = mActivity.findViewById(R.id.command_palette_blur);
         boolean frosted = frost != null && mActivity.applyCommandPaletteWallpaperFrost(frost);
-        if (blur != null) blur.setVisibility(frosted ? View.GONE : View.VISIBLE);
+        if (blur == null) return;
+        if (!frosted) blur.setVisibility(View.VISIBLE);
+        boolean pictured = !frosted && mBackdrop != null
+            && mBackdrop.open(dp(com.termux.app.chrome.PanelBackdrop.PROMPT_BLUR_RADIUS_DP));
+        if (!pictured) {
+            if (mBackdrop != null) mBackdrop.close();
+            blur.setVisibility(View.GONE);
+        }
     }
 
     private void applyFrame() {

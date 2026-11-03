@@ -1642,6 +1642,24 @@ public final class TermuxInAppKeyboard {
             deck.keyTop, deck.keyFoot, deck.lit, deck.litInk, deck.litFoot);
     }
 
+    /**
+     * The glass the keyboard draws on, from the palette it builds ({@link #createPalette()}): the
+     * theme's glass under the Look, with the colour scheme's or the deck's bed over it. What a sheet
+     * over the keyboard takes for its own glass, so the two always match.
+     */
+    @androidx.annotation.ColorInt
+    public int glassBaseColor(@NonNull Context fallback) {
+        // Not laid into the window yet: the dock's glass, which the keyboard's starts from.
+        if (mHost.getKeyboardContainer() == null)
+            return InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(fallback);
+        Context context = requireContainer().getContext();
+        int base = InAppKeyboardPaletteFactory.resolveGlassBase(context,
+            com.termux.app.chrome.GlassLook.of(mPreferences));
+        int bed = createPalette().keyboardBackground;
+        return android.graphics.Color.alpha(bed) == 0 ? base
+            : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
+    }
+
     /** The deck look the keyboard wears while a terminal effect is on; null for none. */
     @Nullable private DeckLook mDeckLook;
 

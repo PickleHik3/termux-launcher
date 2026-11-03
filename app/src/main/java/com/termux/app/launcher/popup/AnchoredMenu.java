@@ -25,7 +25,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
-import com.github.mmin18.widget.RealtimeBlurView;
 import com.termux.R;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.termux.app.chrome.ChromeShade;
@@ -462,10 +461,31 @@ public final class AnchoredMenu {
                     M3.STATE_DRAGGED))));
             popupRoot.setBackground(plate);
             popupRoot.setClipToOutline(true);
-            RealtimeBlurView blurView = new RealtimeBlurView(host.getContext());
-            blurView.setBlurRadius(Math.max(0f, (float) dp(theme.blurRadiusDp())));
-            blurView.setOverlayColor(overlayColor);
+            // What the launcher's window draws beneath the menu, blurred once it is laid out
+            // (a Snapshot: the menu is a window of its own, which Live does not refresh). Where
+            // nothing can be recorded the plate's tint stands alone.
+            android.widget.ImageView blurView = new android.widget.ImageView(host.getContext());
+            blurView.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+            blurView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             popupRoot.addView(blurView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
+            com.termux.app.chrome.PanelBackdrop backdrop =
+                new com.termux.app.chrome.PanelBackdrop(blurView, host);
+            float blurRadiusPx = Math.max(0f, (float) dp(theme.blurRadiusDp()));
+            // Taken each time the menu's window shows, and gone with it however it is dismissed,
+            // its buffers with it.
+            blurView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(@NonNull View v) {
+                    if (!backdrop.open(blurRadiusPx)) backdrop.close();
+                }
+
+                @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                    backdrop.close();
+                }
+            });
+            // The tint over the blur, as the old blur view laid it.
+            View overlay = new View(host.getContext());
+            overlay.setBackground(new android.graphics.drawable.ColorDrawable(overlayColor));
+            popupRoot.addView(overlay, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
             // The dock's grain over the blur and under the rows, the same static tile every glass
             // surface lays (the plate's outline clips it).
             int grain = theme.grainPercent();
