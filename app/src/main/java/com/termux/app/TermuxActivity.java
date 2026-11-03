@@ -10130,6 +10130,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 statusBarSurface.setLayoutParams(layoutParams);
             }
         }
+        applyDeckBands();
 
         // Keep content out of the camera hole now that the window draws under the cutout. Only the
         // horizontal insets reach the content root: the top cutout is already covered by the
@@ -10334,6 +10335,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.ChromeEdgeRule.TopLead lead = statusInsetStripLead();
         com.termux.app.chrome.ChromeEdgeRule.TopLead previous = mStatusStripLead;
         mStatusStripLead = lead;
+        // The deck's band over the strip follows the lead this pass lays.
+        applyDeckBands();
         if (previous != lead) {
             // The surface the strip used to continue, or now continues, renders a different slice
             // and takes a different top seam: re-glaze it, after this pass rather than inside it.
@@ -10396,6 +10399,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // that layout has landed.
             restLiveBlur(statusBlur, true);
             restLiveBlurAfterLayout(statusBlur);
+            // Under the deck's opaque band the live blur would draw unseen: it rests hidden, and
+            // the next pass off the deck shows it again.
+            if (mDeckLook != null && statusBlur.getVisibility() == View.VISIBLE)
+                statusBlur.setVisibility(View.INVISIBLE);
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().statusBarExtensionSurface(opacity, 0f,
@@ -17471,6 +17478,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyDockFootLayout(@NonNull View container,
                                      @NonNull com.termux.app.place.BottomInsets insets) {
+        applyDeckBands();
         View column = container.findViewById(R.id.accessory_keyboard_column);
         if (column != null && column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) column.getLayoutParams();
@@ -23619,6 +23627,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.statusbar.DeckDisplayWindow.apply(
             findViewById(R.id.terminal_status_stats_cluster), deck);
+        // The bands behind the system bars wear the slab with the bar and the keyboard.
+        applyDeckBands();
         if (!changed)
             return;
         // The extra keys row, every page of it (a page made later is dressed as it is set).
@@ -23665,6 +23675,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View blur = findViewById(R.id.terminal_window_bar_blur);
         if (blur != null && blur.getVisibility() == View.VISIBLE)
             blur.setVisibility(View.INVISIBLE);
+    }
+
+    /**
+     * Under the deck look the bands behind the system status bar and the system navigation bar are
+     * the same opaque slab as the window bar and the keyboard, laid over whatever glass is there
+     * (the status strip's, the joined Docked frame's, the stack's gap above the gesture strip). The
+     * status band wherever a strip or the frame reaches under the status bar; the navigation band
+     * under a dock standing on the bottom edge. Off the deck both are gone and the glass under them
+     * shows as it always did. Their own views, which nothing else writes.
+     */
+    private void applyDeckBands() {
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        View status = findViewById(R.id.deck_status_band);
+        if (status != null) {
+            View root = findViewById(R.id.activity_termux_root_view);
+            int top = Math.max(mLastStatusBarInsetTop, root == null ? 0 : root.getPaddingTop());
+            boolean show = deck != null && top > 0 && (frameStandsDown()
+                || statusInsetStripLead() == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
+            if (show) {
+                ViewGroup.LayoutParams params = status.getLayoutParams();
+                if (params != null && params.height != top) {
+                    params.height = top;
+                    status.setLayoutParams(params);
+                }
+                status.setTranslationY(-top);
+                setDeckSlab(status, deck);
+            }
+            setDeckBandShown(status, show);
+        }
+        View nav = findViewById(R.id.deck_nav_band);
+        if (nav != null) {
+            View stack = findViewById(R.id.accessory_stack_container);
+            // The band hangs below the stack, so it is laid only while the stack is.
+            boolean show = deck != null && stack != null && stack.getVisibility() == View.VISIBLE
+                && !dockFloats();
+            if (show) setDeckSlab(nav, deck);
+            setDeckBandShown(nav, show);
+        }
+    }
+
+    /** {@code view}'s background as the deck's slab, rebuilt only when the deck moved. */
+    private static void setDeckSlab(@NonNull View view,
+                                    @NonNull com.termux.app.terminal.DeckLook deck) {
+        android.graphics.drawable.Drawable current = view.getBackground();
+        if (!(current instanceof com.termux.app.terminal.DeckSlabDrawable)
+                || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
+            view.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
+    }
+
+    private static void setDeckBandShown(@NonNull View band, boolean shown) {
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (band.getVisibility() != visibility) band.setVisibility(visibility);
+        if (!shown && band.getBackground() != null) band.setBackground(null);
     }
 
     /**
