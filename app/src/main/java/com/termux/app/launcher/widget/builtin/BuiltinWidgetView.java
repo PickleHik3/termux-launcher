@@ -176,6 +176,18 @@ public abstract class BuiltinWidgetView extends FrameLayout
         /** {@code widget} is live on this page, or its switch flipped; idempotent. */
         void addGlassWidget(@NonNull BuiltinWidgetView widget);
         void removeGlassWidget(@NonNull BuiltinWidgetView widget);
+        /** Whether Live blur is in effect now; asked as the page moves, so a field read. */
+        default boolean liveBlur() { return false; }
+        /**
+         * {@code slab}'s live picture of what is drawn beneath it, at the Look's blur; null while
+         * Live blur is off or the budget has no room for a widget, and the stored frame stands.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+            return null;
+        }
+        /** {@code slab} shows its stored frame again: its picture and layer can go. */
+        default void detachLiveGlass(@NonNull View slab) {}
     }
 
     @NonNull protected final BuiltinWidgetKind kind;
@@ -193,6 +205,10 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The alpha of the Look's tint the slab wears; what the card's ground is, see-through. */
     private int wornTintAlpha;
     @Nullable private GlassSource glassSource;
+    /** What {@link WidgetLiveGlass#wants} last answered; the page's moves act only on a change. */
+    private boolean liveAsked;
+    /** Scratch for {@link WidgetLiveGlass#onScreen}. */
+    private final android.graphics.Rect liveRect = new android.graphics.Rect();
     /** Whether the page's ink is the pale one, so the card is the dark one ({@link #resolveStyle}). */
     private boolean inkPale;
     /** Whether the widget wears the Look's glass now: its switch on and no solid fallback. */
@@ -671,6 +687,41 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
     public final void onGlassMoved() {
         if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
+        // Per frame of a slide: only a page sliding on or off screen changes the answer.
+        if (slab != null && wantsLiveGlass() != liveAsked) syncLiveGlass();
+    }
+
+    /** {@link WidgetLiveGlass#wants} for this widget as it stands now. */
+    private boolean wantsLiveGlass() {
+        GlassSource source = glassSource;
+        return source != null && slab != null && WidgetLiveGlass.wants(source.liveBlur(),
+            android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE,
+            isShown(), WidgetLiveGlass.onScreen(this, liveRect));
+    }
+
+    /**
+     * Hands the slab Live blur's picture while {@link WidgetLiveGlass#wants} it, or gives the
+     * picture back and lets the slab draw the stored frame. With Live blur off a slab that never
+     * had a picture is not touched, so it draws exactly as it did.
+     */
+    private void syncLiveGlass() {
+        com.termux.app.terminal.PaneGlassBackdropView glass = slab;
+        if (glass == null) return;
+        GlassSource source = glassSource;
+        boolean want = wantsLiveGlass();
+        liveAsked = want;
+        if (want) {
+            glass.setLivePicture(source.attachLiveGlass(glass));
+        } else if (glass.livePicture() != null) {
+            glass.setLivePicture(null);
+            if (source != null) source.detachLiveGlass(glass);
+        }
+    }
+
+    /** The widget, its page or Home itself shown or hidden: a hidden page gives its pictures back. */
+    @Override public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        syncLiveGlass();
     }
 
     /** @return whether the style moved; see {@link #dressSlab(com.termux.app.terminal.PaneSurfaceStyle)} */
@@ -754,6 +805,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         boolean styleMoved = style != before;
         if (!shown) {
             if (slab != null && slab.getVisibility() != GONE) slab.setVisibility(GONE);
+            syncLiveGlass();
             boolean chromeMoved = wornLook != null || bareMoved;
             wornLook = null;
             // A Bare widget's inks are measured here, so its style may move again.
@@ -777,6 +829,8 @@ public abstract class BuiltinWidgetView extends FrameLayout
         com.termux.app.terminal.PaneGlass.apply(source, this, slab, corner.radiusPx());
         slab.setRim(cardRadiusPx(), source);
         slab.invalidateOutline();
+        // The dress pass is where Live blur going on or off reaches the widgets.
+        syncLiveGlass();
         int tintAlpha = android.graphics.Color.alpha(source.paneGlassTintColor());
         boolean chromeMoved = wornLook == null || tintAlpha != wornTintAlpha;
         wornLook = source;
@@ -1049,6 +1103,12 @@ public abstract class BuiltinWidgetView extends FrameLayout
 
     @Override @CallSuper protected void onDetachedFromWindow() {
         stopInternal();
+        if (slab != null && slab.livePicture() != null) {
+            com.termux.app.terminal.PaneGlassBackdropView glass = slab;
+            glass.setLivePicture(null);
+            if (glassSource != null) glassSource.detachLiveGlass(glass);
+        }
+        liveAsked = false;
         if (glassSource != null) {
             glassSource.removeGlassWidget(this);
             glassSource = null;

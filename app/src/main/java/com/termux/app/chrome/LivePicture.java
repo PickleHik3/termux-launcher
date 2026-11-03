@@ -61,6 +61,8 @@ public final class LivePicture implements GlassPicture {
     int mRecordedWidth = -1;
     int mRecordedHeight = -1;
     int mRecordedMargin = -1;
+    /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
+    int mRank = LiveBackdrop.RANK_CHROME;
     /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
     private boolean mReleased;
 

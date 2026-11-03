@@ -134,8 +134,8 @@ to `StoredBackdrop` at once, the same draw.
 
 ### Memory budget
 
-Rule 2: the live layers are pixels. `LiveBackdrop` holds at most `MAX_LIVE_SURFACES` (the dock plus
-the widgets on the visible page; proposed 8) GPU layers at ¼ scale, and the recorded node. Budget
+Rule 2: the live layers are pixels. `LiveBackdrop` holds at most `MAX_LIVE_SURFACES` (8: the dock and
+panels, then floats, then the widgets on the visible page, in that order of claim) GPU layers at ¼ scale, and the recorded node. Budget
 constant beside the code, asserted by `LiveBackdropBudgetTest`. Layers are released when a page
 leaves the screen, on `onTrimMemory` at the levels `ChromePolicy` drops the stored frame's extra
 radii, and when the switch goes off.
@@ -290,6 +290,36 @@ only. Glass on glass works.
 Inside the gates (janky +0.3 to +1.0 point, memory within noise), but the cost is visible: with a
 float over moving content every such frame re-blurs the float, about +3–5 ms at p50/p90 on a swipe
 and about +9 ms on each seconds-hand frame at rest. Opt-in, and only while a float is on screen.
+
+## Wave 3b: widgets (code, 2026-11-03; pong owed)
+
+**Policy** (`launcher/widget/builtin/WidgetLiveGlass.wants`, pure): a built-in widget's slab asks for
+the live picture only while Live blur is in effect, the phone is Android 12 or later, the widget
+wears its slab (glass on, not solid or Bare), the widget and every view above it are shown (its
+Home page is the one in front, or the page beside it while the pager slides; Home is on the wall's
+screen) and some of it is inside the window (`getGlobalVisibleRect`). Asked on the dress pass
+(where Live going on or off arrives), on `onVisibilityAggregated` (the wall sets an off-screen
+place INVISIBLE, the pager hides its neighbour GONE), on detach, and on `onGlassMoved`, where it
+acts only when the answer changes. Otherwise the slab gives its picture back and draws the stored
+frame; with Live off a slab that never held a picture is not touched. Route: `GlassSource` →
+`WidgetPaneFrame` → `WidgetPaneFrame.Host` (the activity's `attachLivePicture`), at the Look's
+blur (`LookGlassSpec.blurDp`).
+
+**Budget order** (`LiveBackdrop.RANK_*`): chrome (dock, nav strip, panels) first, then floats, then
+widgets. With all `MAX_LIVE_SURFACES` taken, a surface of a better rank takes the place of the
+newest picture of the worst rank below it; that picture is released and its view invalidated, so
+it draws the stored frame next. A displaced widget asks again on its next dress pass, page change
+or slide, not the moment a place frees.
+
+**Seconds hand.** A widget's slab is its own child 0, under its content, and `WidgetGridView` is not
+a `LiveBackdrop.Container`, so no widget's recording holds any widget (its own or a neighbour's):
+widgets in the grid never overlap, and a neighbour's clock in the recording would only add damage.
+A tick re-records the clock face's display list alone: the recorder's pre-draw finds the same views
+beneath and the same matrix and does not re-record, and no widget picture references the face, so
+no widget re-blurs on a tick. What does re-blur on a tick is any surface over the page (a float, the
+dock, an open panel), as wave 3 measured (+9 ms a seconds-hand frame with a float). Still per tick:
+the pre-draw's walk for each live picture (path, levels, list compare). Read from the code, not
+measured.
 
 ## Gates on pong (90 Hz, 11.1 ms budget)
 
