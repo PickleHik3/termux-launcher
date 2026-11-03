@@ -322,8 +322,7 @@ final class EditorCardSheet {
         GradientDrawable surface = new GradientDrawable();
         float corner = dp(CORNER_DP);
         surface.setCornerRadii(new float[] {corner, corner, corner, corner, 0, 0, 0, 0});
-        surface.setColor(EditorViews.color(context,
-            com.google.android.material.R.attr.colorSurfaceContainerLow));
+        surface.setColor(EditorViews.color(context, sheetFill(darkSurface(context))));
         mSheet.setBackground(surface);
         mSheet.setVisibility(View.GONE);
 
@@ -1558,6 +1557,37 @@ final class EditorCardSheet {
         }
     }
 
+    /**
+     * Whether the theme is dark. There the light pair (sheet on Surface container low, sections
+     * on lowest) is only a few tones apart, near black on near black, and the sections did not
+     * read as cards; the dark pair steps the sections up from a darker sheet instead.
+     */
+    static boolean darkSurface(@NonNull Context context) {
+        return !com.google.android.material.color.MaterialColors.isColorLight(
+            EditorViews.color(context, com.google.android.material.R.attr.colorSurface));
+    }
+
+    /** The sheet's fill: low in light themes, lowest in dark ones. */
+    @androidx.annotation.AttrRes
+    static int sheetFill(boolean dark) {
+        return dark ? com.google.android.material.R.attr.colorSurfaceContainerLowest
+            : com.google.android.material.R.attr.colorSurfaceContainerLow;
+    }
+
+    /**
+     * A section's fill, and the inset Links box's: in light themes lowest (white) on the sheet
+     * and the box one step darker; in dark themes container on the darker sheet and the box a
+     * step lighter, so every step goes the same way as the light theme's contrast.
+     */
+    @androidx.annotation.AttrRes
+    static int sectionFill(boolean dark, boolean inset) {
+        if (dark)
+            return inset ? com.google.android.material.R.attr.colorSurfaceContainerHigh
+                : com.google.android.material.R.attr.colorSurfaceContainer;
+        return inset ? com.google.android.material.R.attr.colorSurfaceContainer
+            : com.google.android.material.R.attr.colorSurfaceContainerLowest;
+    }
+
     static final int SECTION_CORNER_DP = 20;
     static final int INSET_CORNER_DP = 16;
     static final int SECTION_GAP_DP = 2;
@@ -1573,9 +1603,13 @@ final class EditorCardSheet {
             new com.google.android.material.shape.MaterialShapeDrawable(
                 com.google.android.material.shape.ShapeAppearanceModel.builder()
                     .setAllCornerSizes(dp(inset ? INSET_CORNER_DP : SECTION_CORNER_DP)).build());
-        shape.setFillColor(ColorStateList.valueOf(EditorViews.color(mContext, inset
-            ? com.google.android.material.R.attr.colorSurfaceContainer
-            : com.google.android.material.R.attr.colorSurfaceContainerLowest)));
+        boolean dark = darkSurface(mContext);
+        shape.setFillColor(ColorStateList.valueOf(EditorViews.color(mContext,
+            sectionFill(dark, inset))));
+        // Dark tones sit close together: an outline marks each section's edge as well.
+        if (dark && !inset)
+            shape.setStroke(dp(1), EditorViews.color(mContext,
+                com.google.android.material.R.attr.colorOutlineVariant));
         root.setBackground(shape);
         root.setClipToOutline(true);
 

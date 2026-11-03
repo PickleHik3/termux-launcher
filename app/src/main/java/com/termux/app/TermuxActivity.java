@@ -14925,6 +14925,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentFancierGlassLook() != null;
         }
 
+        @Override @NonNull
+        public com.termux.app.chrome.FancierGlassPolicy.Off glassRefractionOff() {
+            if (currentFancierGlassLook() != null)
+                return com.termux.app.chrome.FancierGlassPolicy.Off.NONE;
+            com.termux.app.chrome.FancierGlassPolicy.Off off =
+                com.termux.app.chrome.FancierGlassPolicy.off(Build.VERSION.SDK_INT,
+                    mPreferences != null && mPreferences.isFancierGlassEnabled(),
+                    shouldUseManagedWallpaperBlurSource(), isLazyModeEnabled());
+            // Off for none of the reasons a setting answers: say the phone.
+            return off == com.termux.app.chrome.FancierGlassPolicy.Off.NONE
+                ? com.termux.app.chrome.FancierGlassPolicy.Off.PHONE : off;
+        }
+
         @Override @Nullable public int[] cardWidgetAt(float rawX, float rawY) {
             View root = findViewById(R.id.terminal_root_container);
             if (mWidgetPaneController == null || !(root instanceof ViewGroup))

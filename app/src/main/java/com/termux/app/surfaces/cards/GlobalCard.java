@@ -23,9 +23,12 @@ public final class GlobalCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
+        EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH)
+                Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH);
+        // Out for a setting the user can change: the way to it stands under them.
+        if (offers.refractionLink) rows.tier(1, Row.LINK_GLASS_REFRACTION);
+        return rows
             .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)

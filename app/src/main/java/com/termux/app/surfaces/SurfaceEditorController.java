@@ -185,6 +185,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         default void retainGlassCapture(boolean retain) {}
         /** Whether the glass edge is drawn now: Depth and the glass edge are offered only then. */
         boolean isGlassRefractionActive();
+        /** Why the glass edge is not drawn now; a host that cannot tell answers from the above. */
+        @NonNull default com.termux.app.chrome.FancierGlassPolicy.Off glassRefractionOff() {
+            return isGlassRefractionActive() ? com.termux.app.chrome.FancierGlassPolicy.Off.NONE
+                : com.termux.app.chrome.FancierGlassPolicy.Off.PHONE;
+        }
         /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
         /**
@@ -462,6 +467,66 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean chipsPlain(@Nullable EditorCard card) {
         return card != null && card.slot != null && !mChips.onKind();
+    }
+
+    /**
+     * After a glass row's write, lets it be seen where a cell below it in the read order would
+     * otherwise hide it. An element card set to Global means everywhere: the element's own
+     * Home, Terminal and Display values of the property go. Customization, Home and the
+     * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
+     * Mist on Home) on the kinds they write; a value the user set on an element card stays.
+     */
+    private void releaseShadowingCells(@NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (mCard == null || prefs == null) return;
+        com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties;
+        if (row == Row.LOOK) {
+            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {
+                com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST,
+                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+                com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
+        } else {
+            com.termux.shared.termux.settings.preferences.LookGrid.Property one =
+                GlassRows.gridProperty(row);
+            if (one == null) return;
+            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {one};
+        }
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        EditorChips chips = mChips;
+        for (com.termux.shared.termux.settings.preferences.LookGrid.Property property : properties) {
+            if (!property.perElement) continue;
+            if (chips.element != null) {
+                if (chips.onKind()) continue;
+                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind
+                        : com.termux.shared.termux.settings.preferences.LookGrid.Kind.values())
+                    if (grid.has(property, chips.element, kind))
+                        grid.clear(property, chips.element, kind);
+            } else {
+                java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Kind> kinds =
+                    chips.onKind() ? chips.appliesTo.kinds : java.util.Arrays.asList(
+                        com.termux.shared.termux.settings.preferences.LookGrid.Kind.values());
+                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind : kinds)
+                    grid.clearSeeded(property, kind);
+            }
+        }
+    }
+
+    /** Why Depth and Edge are out, if they are. */
+    @NonNull
+    private com.termux.app.chrome.FancierGlassPolicy.Off refractionOff() {
+        com.termux.app.chrome.FancierGlassPolicy.Off off = mHost.glassRefractionOff();
+        return off != null ? off : com.termux.app.chrome.FancierGlassPolicy.Off.PHONE;
+    }
+
+    /** What Depth and Edge read while they are out, by why. */
+    @StringRes
+    static int refractionOffText(@NonNull com.termux.app.chrome.FancierGlassPolicy.Off off) {
+        switch (off) {
+            case LAZY: return R.string.editor_row_refraction_off_lazy;
+            case SWITCH: return R.string.editor_row_refraction_off_switch;
+            case WALLPAPER: return R.string.editor_row_refraction_off_wallpaper;
+            default: return R.string.editor_row_not_on_this_phone;
+        }
     }
 
     /** {@code card}'s cells this visit: its fixed place, else its Applies to choice. */
@@ -1264,7 +1329,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull
     private EditorRows.Offers offers() {
         return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
-            useAs().showsHomePage(), mHost.isPageOverviewOpen());
+            useAs().showsHomePage(), mHost.isPageOverviewOpen(), refractionOff().userCanChange());
     }
 
     /**
@@ -3095,7 +3160,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
             if (GlassRows.needsGlassEdge(row) && !enabled(row))
-                return getString(R.string.editor_row_not_on_this_phone);
+                return getString(refractionOffText(refractionOff()));
             switch (row) {
                 case FROST:
                 case OPACITY:
@@ -3369,6 +3434,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onValue(@NonNull Row row, int value, boolean dragging) {
             beginDrag(dragging);
             writeRow(row, value, dragging);
+            releaseShadowingCells(row);
         }
 
         @Override public void onReleased(@NonNull Row row) {
@@ -3553,6 +3619,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 external = false; summary = R.string.editor_link_icon_pack_summary; break;
             case LINK_GESTURES:
                 external = true; summary = R.string.editor_link_gestures_summary; break;
+            case LINK_GLASS_REFRACTION:
+                external = true; summary = R.string.editor_link_glass_refraction_summary; break;
             case LINK_LAYOUTS: external = true; summary = R.string.editor_link_layouts_summary; break;
             case KEYBOARD_THEME:
                 external = true; summary = R.string.editor_link_keyboard_theme_summary; break;
@@ -3882,6 +3950,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 openSettingsFromEditor(HomePreferencesFragment.class,
                     R.string.settings_section_home, HOME_GESTURES_SECTION, null);
                 break;
+            case LINK_GLASS_REFRACTION:
+                // Lazy mode and the switch both live on Performance; land on the one to change.
+                openSettingsFromEditor(com.termux.app.fragments.settings.termux
+                        .PerformancePreferencesFragment.class,
+                    R.string.settings_destination_performance, null,
+                    refractionOff() == com.termux.app.chrome.FancierGlassPolicy.Off.LAZY
+                        ? "lazy_mode" : "fancier_glass");
+                break;
             case LINK_PAGES:
                 mHost.openPageOverview();
                 break;
@@ -3952,8 +4028,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (!writeOnPage(card, card.slot, property, written))
             prefs.detachSurfaceValue(card.slot, property, SurfacePresets.pageOf(writeScreen(row)), written);
-        if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY)
-            prefs.setTerminalBackgroundOpacity(written);
+        // The system-wallpaper opacity the chrome restores from rides along. Not
+        // setTerminalBackgroundOpacity: with no terminal cell of its own everywhere, it writes
+        // Base, and the Terminal card's Opacity moved every surface on every page.
+        if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY
+                && prefs.isUseSystemWallpaperEnabled())
+            prefs.setWallpaperEnabledTerminalBackgroundOpacity(written);
         requestPreview(scopes);
         EditorCardSheet sheet = mSheet;
         if (sheet != null && !mSliderDragActive) {
@@ -6738,6 +6818,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
             case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
             case LINK_GESTURES: return R.drawable.ic_ms_swipe;
+            case LINK_GLASS_REFRACTION: return R.drawable.ic_ms_blur_on;
             case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
             case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
             case TINT_HUE: return R.drawable.ic_ms_format_color_fill;

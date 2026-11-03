@@ -23,12 +23,15 @@ public final class KeyboardCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         // The opacity link stands between the two opacities it moves together.
-        return new EditorRows.CardRows()
+        EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN, Row.KEY_CORNERS,
                 Row.BOTTOM_PADDING)
             .tier(3, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
                 Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
-                Row.RIM, Row.GLASS_EDGE, Row.DEPTH)
+                Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
+        // Out for a setting the user can change: the way to it stands under them.
+        if (offers.refractionLink) rows.tier(3, Row.LINK_GLASS_REFRACTION);
+        return rows
             .tier(3, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
             .build();
     }
