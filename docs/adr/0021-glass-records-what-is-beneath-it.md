@@ -52,7 +52,7 @@ dock style or per surface; a dock style changes only `DockSurfaceSpec` numbers.
 
 One **Live blur** row in Battery & performance, off by default, covers the dock, floats and
 widgets. `LiveBlurPolicy` also requires Android 13 or later, Glass refraction, an in-app wallpaper
-and no battery saver; when any term fails the surface draws the stored frame at once.
+no battery saver, no low-memory preset and not lazy; when any term fails the surface draws the stored frame at once.
 
 The recorder holds at most 8 live surfaces, about 8.8 MiB, asserted by `LiveBackdropBudgetTest`.
 When more want a slot the priority is dock, then floats, then widgets. Layers are released when a

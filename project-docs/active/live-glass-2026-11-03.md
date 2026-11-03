@@ -179,8 +179,7 @@ the page's keyboard look, deck look) instead of `resolveDockGlassBaseColor`
 Snapshot uses the recorder, not `PixelCopy`: the recording only ever holds what is beneath the
 panel (PixelCopy reads the composited screen and must run before the panel appears or it copies
 itself), reuses cached display lists, and blurs on the GPU. When no surface uses
-`RealtimeBlurView` any more it is deleted, with its RenderScript path (Android 8–12 fall back to the
-Wallpaper kind).
+`RealtimeBlurView` any more it is deleted, with its RenderScript path (Android 8–11 panels take a software Snapshot instead; see "2b delivered" below).
 
 Checked and dropped from the drawer session's list: `PaneGlassBackdropView` builds its
 `BitmapShader` only when its frame changes (`setGlass` ~273), Peek's reflection gradient is built
