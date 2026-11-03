@@ -875,6 +875,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mLiveBlurRefreshedAtRest = false;
         } else if (!mLiveBlurRefreshedAtRest) {
             mLiveBlurRefreshedAtRest = true;
+            // A capture this open took on its first frame is already of the settled scene (the
+            // CaptureScene hook), moments old: taking it again would cost a ~36 ms frame for the
+            // same picture. Only a capture held over from an earlier open is refreshed.
+            if (!settledRefreshNeeded(mFreshCaptureThisOpen)) return;
             // Off the settle frame: the capture costs ~30 ms, and on a frame where nothing moves
             // any more it is a frame nobody sees late.
             FrameLayout host = mHostLayout;
@@ -885,6 +889,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 refreshSettledBackdrop();
             }
         }
+    }
+
+    /** True when this open's frost was captured on its own first frame rather than held over. */
+    private boolean mFreshCaptureThisOpen;
+
+    @VisibleForTesting
+    static boolean settledRefreshNeeded(boolean freshCaptureThisOpen) {
+        return !freshCaptureThisOpen;
     }
 
     private static final long SETTLED_REFRESH_DELAY_MS = 160L;
@@ -2032,8 +2044,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             // settle refreshes it. Only an open with nothing held pays a capture on its first frame.
             mLiveBlur.setKeepCaptureWhileHidden(true);
             if (mLiveBlur.hasCapture()) {
+                mFreshCaptureThisOpen = false;
                 mLiveBlur.setUpdatesPaused(true);
             } else {
+                mFreshCaptureThisOpen = true;
                 mLiveBlur.refreshThenRest();
             }
         }

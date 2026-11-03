@@ -324,6 +324,27 @@ public class AppDrawerKeyboardSeparationTest {
         assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
     }
 
+    @Test public void aFreshFirstFrameCaptureIsNotTakenAgainAtSettle() {
+        com.github.mmin18.widget.RealtimeBlurView blur =
+            new com.github.mmin18.widget.RealtimeBlurView(plane.getContext(), null);
+        ReflectionHelpers.setField(controller, "mLiveBlur", blur);
+        Object progress = ReflectionHelpers.getField(controller, "mProgress");
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(progress, "target", 1f);
+        ReflectionHelpers.setField(progress, "value", 1f);
+        ReflectionHelpers.setField(controller, "mFreshCaptureThisOpen", true);
+        blur.setUpdatesPaused(true);
+
+        controller.applyLiveBlurRest();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1,
+            java.util.concurrent.TimeUnit.SECONDS);
+
+        assertTrue(blur.isUpdatesPaused());
+        assertFalse(AppDrawerController.settledRefreshNeeded(true));
+        assertTrue(AppDrawerController.settledRefreshNeeded(false));
+    }
+
     @Test public void settledOpenIsOnlyAFullyOpenUndraggedPlane() {
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 1f));
         assertTrue(AppDrawerController.isSettledOpen(true, false, 1f, 0.9995f));
