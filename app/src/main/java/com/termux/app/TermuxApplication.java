@@ -100,6 +100,9 @@ public class TermuxApplication extends Application {
         // Read before the wall migration stores its version: an earlier build ran it already.
         boolean wallMigrationStoredBefore = false;
         if (surfacePreferences != null) {
+            // Decided once, before any migration below writes a bookkeeping key: a first run holds
+            // only the log level, and every later check would otherwise see it as an upgrade.
+            final boolean freshInstall = surfacePreferences.isFreshInstall();
             // An install from before the wall rework takes Start in from its usage mode, once.
             android.content.SharedPreferences nudgeStore = surfacePreferences.getSharedPreferences();
             wallMigrationStoredBefore = nudgeStore != null && nudgeStore.contains(
@@ -140,7 +143,7 @@ public class TermuxApplication extends Application {
             java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
             for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
                 lookPageIds.add(page.id);
-            surfacePreferences.migrateLookGrid(lookPageIds);
+            surfacePreferences.migrateLookGrid(lookPageIds, freshInstall);
             // Every grid reads a page's kind from the wall and a kind's shipped look from the
             // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
             com.termux.shared.termux.settings.preferences.LookGrid.install(
@@ -148,7 +151,7 @@ public class TermuxApplication extends Application {
                 com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
             com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()));
+                    surfacePreferences.getSharedPreferences()), freshInstall);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
