@@ -82,4 +82,19 @@ public final class DeckLook {
     private static int opaque(@ColorInt int colour) {
         return colour | 0xFF000000;
     }
+
+    /** By colours, so a surface re-dressed with the same deck can skip its repaint. */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof DeckLook)) return false;
+        DeckLook that = (DeckLook) o;
+        return bed == that.bed && display == that.display && lit == that.lit
+            && litInk == that.litInk;
+    }
+
+    @Override
+    public int hashCode() {
+        return ((bed * 31 + display) * 31 + lit) * 31 + litInk;
+    }
 }

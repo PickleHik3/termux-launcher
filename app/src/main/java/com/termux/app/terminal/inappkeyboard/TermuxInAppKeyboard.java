@@ -1650,7 +1650,7 @@ public final class TermuxInAppKeyboard {
      * the effect's palette) while {@code look} is non-null; null restores the Look's palette.
      */
     public void setDeckLook(@Nullable DeckLook look) {
-        if (look == mDeckLook)
+        if (java.util.Objects.equals(look, mDeckLook))
             return;
         mDeckLook = look;
         if (mDestroyed || mKeyboardView == null)
