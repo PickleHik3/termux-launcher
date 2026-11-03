@@ -4274,8 +4274,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.drawable.Drawable liveDockPicture(@NonNull ImageView backdrop,
                                                                int blurRadiusDp) {
+        com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp);
+        return picture == null ? null : picture.drawable();
+    }
+
+    /**
+     * {@code surface}'s live picture at {@code blurRadiusDp}, the recorder made on first use; null,
+     * and any picture it had dropped, while Live is off, or when the recorder is full.
+     */
+    @Nullable
+    private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
+                                                                int blurRadiusDp) {
         if (!mLiveBlur) {
-            if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+            if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
             return null;
         }
         if (mLiveBackdrop == null) {
@@ -4283,9 +4294,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!(root instanceof ViewGroup)) return null;
             mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
         }
-        com.termux.app.chrome.LivePicture picture = mLiveBackdrop.attach(backdrop,
+        return mLiveBackdrop.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density);
-        return picture == null ? null : picture.drawable();
     }
 
     /** Whether the dock's backdrop shows a picture now, stored or live. */
@@ -34385,6 +34395,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
+        // A float's glass blurs what is beneath it at the terminal glass's own radius.
+        @Nullable @Override
+        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+            return attachLivePicture(slab,
+                mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
+        }
+
+        @Override public void detachLiveGlass(@NonNull View slab) {
+            if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+        }
+
         // Live windows while swiping: the row's windows beside the one in front. None under
         // reduced motion, where the wall never shows them, or with the display in front.
         @Nullable @Override

@@ -34,7 +34,8 @@ import com.termux.app.wall.SettleSpring;
 import java.util.List;
 
 /** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
-public final class WidgetPaneView extends FrameLayout {
+public final class WidgetPaneView extends FrameLayout
+        implements com.termux.app.chrome.LiveBackdrop.Container {
     /** The page dots' band under the grid: their height, their air to the pane's edge, and to the grid. */
     private static final int DOTS_HEIGHT_DP = 14;
     private static final int DOTS_BOTTOM_MARGIN_DP = 4;
@@ -1493,4 +1494,11 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    /** Live blur records what draws beneath a float's glass through this container. */
+    @Override
+    public void drawChildForBackdrop(@androidx.annotation.NonNull android.graphics.Canvas canvas,
+                                     @androidx.annotation.NonNull android.view.View child) {
+        drawChild(canvas, child, getDrawingTime());
+    }
 }

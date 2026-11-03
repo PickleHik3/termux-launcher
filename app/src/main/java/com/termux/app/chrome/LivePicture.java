@@ -59,6 +59,8 @@ public final class LivePicture implements GlassPicture {
     int mRecordedWidth = -1;
     int mRecordedHeight = -1;
     int mRecordedMargin = -1;
+    /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
+    private boolean mReleased;
 
     LivePicture(@NonNull View surface, float blurRadiusPx) {
         mSurface = surface;
@@ -83,6 +85,15 @@ public final class LivePicture implements GlassPicture {
         mMarginPx = Math.max(1, (int) Math.ceil(radius));
         forgetRecording();
         if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
+    }
+
+    /**
+     * Whether the recorder has let this picture go (Live off, the surface detached, memory short):
+     * it draws nothing any more, and its holder goes back to the stored frame until it is handed a
+     * new one.
+     */
+    public boolean released() {
+        return mReleased;
     }
 
     /** The surface this picture shows what is beneath. */
@@ -194,6 +205,7 @@ public final class LivePicture implements GlassPicture {
 
     /** {@link #trim} and the nodes too: the picture is done with (Live off, memory short). */
     void release() {
+        mReleased = true;
         trim();
         mBlur = null;
         mRecord = null;
