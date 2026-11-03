@@ -8016,6 +8016,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyDecorNavBarSurfaceState(@NonNull ChromeSpec state) {
         boolean visible = shouldShowDecorNavBarSurface(state);
+        if (mNavFadeActive && !mCrossing.crossing()) endNavStripFade();
+        if (mNavFadeActive && applyDecorNavBarSurfaceFade(state, visible)) return;
         if (!visible) {
             hideDecorNavBarSurfaceOverlay(true);
             return;
@@ -8047,6 +8049,117 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         overlay.setVisibility(View.VISIBLE);
         // The Peek glass reflection runs on down the card's foot.
         syncPeekReflection();
+    }
+
+    // ---- The under-pill strip across the seam ----------------------------------------------
+    //
+    // The strip stands still at the screen's foot while the wall crosses between Home and the
+    // Workspace, and the stack's dress, which it continues, changes halves on the crossing's first
+    // frame. So it does not change with it there: it keeps the dress it began in (or none, where
+    // the committed half has no strip) beside the other half's, built once, and the two cross by
+    // alpha with the finger (SeamFade), so either end of the way shows exactly that end's strip.
+
+    /** Whether the strip is crossing between the halves' dresses. */
+    private boolean mNavFadeActive;
+    /** The crossing's committed end, the way's share is read from. */
+    @Nullable private com.termux.app.wall.PageRef mNavFadeHerePage;
+    /** Whether the strip showed as the crossing began, and the tint it wore then. */
+    private boolean mNavFadeHereShown;
+    @Nullable private Drawable mNavFadeHereTint;
+    /** Whether the other half's dress has been read yet (the stack wore it on a pass). */
+    private boolean mNavFadeThereKnown;
+    private boolean mNavFadeThereShown;
+    /** How much of the other half's strip shows, 0 to 1 (SeamFade#share). */
+    private float mNavFadeShare;
+
+    /** A crossing between Home and the Workspace begins: the strip keeps what it wears. */
+    private void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here,
+                                   @NonNull com.termux.app.wall.PageRef there) {
+        endNavStripFade();
+        if (here.isHome() == there.isHome()) return;
+        mNavFadeActive = true;
+        mNavFadeHerePage = here;
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        mNavFadeHereShown = overlay != null && overlay.getVisibility() == View.VISIBLE;
+        mNavFadeHereTint = mNavFadeHereShown && mDecorNavBarTintOverlay != null
+            ? mDecorNavBarTintOverlay.getBackground() : null;
+    }
+
+    /** The strip's crossing is over; the pass that follows dresses it plainly. */
+    private void endNavStripFade() {
+        mNavFadeActive = false;
+        mNavFadeHerePage = null;
+        mNavFadeHereShown = false;
+        mNavFadeHereTint = null;
+        mNavFadeThereKnown = false;
+        mNavFadeThereShown = false;
+        mNavFadeShare = 0f;
+    }
+
+    /**
+     * The strip on a pass mid-crossing. While the stack still wears the committed half's dress
+     * the plain pass dresses it (false). The first pass in the other half's dress builds that
+     * half's strip once beside the one the crossing began with; every later pass changes nothing.
+     * Whether it handled the strip.
+     */
+    private boolean applyDecorNavBarSurfaceFade(@NonNull ChromeSpec state, boolean visible) {
+        if (mCrossing.seam().stackDressPage() == null) {
+            // Back in the committed half's dress (a dip drawn back before its swap): the plain
+            // pass dresses the strip, and the next swap builds the other half's again.
+            mNavFadeThereKnown = false;
+            return false;
+        }
+        if (!mNavFadeThereKnown) {
+            if (!mNavFadeHereShown && !visible) return false;
+            mNavFadeThereKnown = true;
+            mNavFadeThereShown = visible;
+            ensureDecorNavBarSurfaceOverlay();
+            FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+            if (overlay == null) return true;
+            Drawable thereTint = null;
+            if (visible) {
+                applyDecorNavBarSurfaceBounds(overlay, true);
+                thereTint = buildDecorNavBarTint(state);
+                if (navStripBlurEnabled(state)) updateDecorNavBarBackdrop(state);
+            }
+            if (mDecorNavBarTintOverlay != null) {
+                mDecorNavBarTintOverlay.setBackground(new com.termux.app.chrome.CrossfadeDrawable(
+                    mNavFadeHereTint, thereTint, mNavFadeShare));
+                mDecorNavBarTintOverlay.setAlpha(1f);
+                mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
+            }
+            overlay.setVisibility(View.VISIBLE);
+            syncPeekReflection();
+        }
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        if (overlay != null) overlay.setAlpha(navStripFadeAlpha());
+        return true;
+    }
+
+    /** The strip's opacity mid-crossing: the drawer's and sheet's, by how much of it stands. */
+    private float navStripFadeAlpha() {
+        return decorNavStripAlpha() * com.termux.app.place.SeamFade.presence(mNavFadeHereShown,
+            mNavFadeThereShown, mNavFadeShare);
+    }
+
+    /**
+     * One frame of the crossing: the strip's two dresses at the wall's share of the way. A
+     * redraw of the strip, nothing built.
+     */
+    private void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) {
+        if (!mNavFadeActive || mNavFadeHerePage == null) return;
+        float share = com.termux.app.place.SeamFade.share(
+            com.termux.app.place.SeamTravel.otherEndProgress(wallFrame, mNavFadeHerePage));
+        if (share == mNavFadeShare) return;
+        mNavFadeShare = share;
+        if (!mNavFadeThereKnown) return;
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        if (overlay == null) return;
+        Drawable tint = mDecorNavBarTintOverlay == null ? null
+            : mDecorNavBarTintOverlay.getBackground();
+        if (tint instanceof com.termux.app.chrome.CrossfadeDrawable)
+            ((com.termux.app.chrome.CrossfadeDrawable) tint).setShare(share);
+        overlay.setAlpha(navStripFadeAlpha());
     }
 
     /**
@@ -24094,6 +24207,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
             mPreferences != null && mChrome != null, mPromptFieldEase != null,
             mPromptFieldUnderPalette);
+        // The strip under the pill crosses from the one dress to the other with the finger.
+        syncNavStripFade(wallFrame);
         // A band only one half's dock carries follows its page across the seam.
         syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
@@ -24489,6 +24604,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 isSplitPanesEnabled()),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        // The strip under the pill stands still through the crossing and crosses dresses by alpha.
+        beginNavStripFade(herePage, therePage);
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
         // frame. The landing lets it go after its own frame (runLandingSettle).
@@ -25452,6 +25569,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // settle-time show the pre-roll stood in for would have told it.
                 mX11Display.onUserKeyboardIntent(true);
             }
+            // The strip's crossing has landed on one end's dress: the commit below dresses it
+            // plainly, as that end wears it.
+            endNavStripFade();
             mLandingStackDressed = seamLanding.stackDressedFor(page);
             try {
                 syncPlaceState(page, leavingKeyboardUp);
