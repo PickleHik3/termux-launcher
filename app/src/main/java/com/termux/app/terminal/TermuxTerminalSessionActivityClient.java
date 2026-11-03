@@ -94,8 +94,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     private static final long GROUND_SETTLE_MS = 150L;
     private final Runnable mGroundSettledRunnable = this::onTerminalTextGroundSettled;
-    /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
-    private long mLastColorsFileStamp = Long.MIN_VALUE;
+    /**
+     * {@link #schemeSignature} at the last non-dynamic apply: the contrast level, the
+     * colors.properties stamp and the ground. {@code Long.MIN_VALUE} while the wallpaper palette
+     * is on, so turning it off always reloads the scheme.
+     */
+    private long mLastSchemeSignature = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
     /** The resolved faces, so a new pane does not re-read and re-scan the font config. */
     private final TerminalFontMemo mFontMemo = new TerminalFontMemo();
@@ -1079,7 +1083,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
                     mContext, level, ground, leaning, band != null);
-                mLastColorsFileStamp = Long.MIN_VALUE;
+                mLastSchemeSignature = Long.MIN_VALUE;
                 // The active roles are built here, on the main thread, from the activity's theme, so
                 // the files describe the same palette the terminal just took. The dark and light
                 // halves, which only the files and templates use, are derived on the writer thread
@@ -1088,20 +1092,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
                     MaterialTerminalColorScheme.paletteSetSource(mContext, level, props));
             } else {
-                props = new Properties();
+                Properties loaded = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
                 File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
-                mLastColorsFileStamp = colorsFileStamp();
                 if (colorsFile.isFile()) {
                     try (InputStream in = new FileInputStream(colorsFile)) {
-                        props.load(in);
+                        loaded.load(in);
                     }
-                    exportSchemeColorFiles(props);
-                } else {
-                    // No custom theme: rewrite the material-colors files from the scheme so shells
-                    // do not keep the old wallpaper palette.
-                    exportSchemeColorFiles(props);
                 }
+                // The Contrast row moves a fixed scheme too: its foreground and ANSI colours, on
+                // the same ground the wallpaper palette is measured against. Default is the scheme
+                // as loaded.
+                TerminalContrastLevel level =
+                    com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences());
+                int ground = mHost.terminalTextGround();
+                props = SchemeContrast.apply(loaded, ground, level);
+                mLastSchemeSignature = schemeSignature(level, ground);
+                // With or without a custom theme: rewrite the material-colors files from the scheme
+                // so shells do not keep the old wallpaper palette.
+                exportSchemeColorFiles(props);
             }
             TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
@@ -1272,6 +1281,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
+     * What a fixed scheme's palette depends on: the colors.properties stamp, the contrast level
+     * and, away from Default, the ground's tone bucket (the same buckets the wallpaper palette's
+     * signature uses), so a ground that merely wobbles does not rebuild it.
+     */
+    @VisibleForTesting
+    static long schemeSignature(@NonNull TerminalContrastLevel level, int ground) {
+        long groundKey = level == TerminalContrastLevel.DEFAULT ? 0L
+            : android.graphics.Color.alpha(ground) == 0 ? -1L
+            : 1L + MaterialTerminalColorScheme.groundToneBucket(ground);
+        return ((colorsFileStamp() * 31L) + level.ordinal()) * 31L + groundKey;
+    }
+
+    /**
      * Rebuild the palette only if the Material roles, the contrast level or the ground the text
      * stands on actually moved. This is the path for resume, configuration changes, wallpaper-colour
      * callbacks and the pane band's measured ground settling: they fire whether or not
@@ -1284,8 +1306,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // follows the measured backdrop whether or not the palette is rebuilt.
         applyTextBackdropToPanes();
         if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
-            // A custom colors.properties is followed: re-read it only when it changed.
-            if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
+            // A fixed scheme is re-read and re-contrasted only when the file, the level or (away
+            // from Default) the ground moved.
+            long signature = schemeSignature(
+                com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
+                mHost.terminalTextGround());
+            if (signature != mLastSchemeSignature) applyTerminalColors();
             return;
         }
         int ground = mHost.terminalTextGround();
@@ -1343,13 +1369,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     /**
      * The contrast the user's Terminal contrast level asks normal text to hold: Softer 3:1,
-     * Default 4.5:1, Harder 7:1. The level is only offered with wallpaper colours on, so without
-     * them the default holds.
+     * Default 4.5:1, Harder 7:1, with wallpaper colours or a fixed scheme alike
+     * ({@link SchemeContrast} moves a fixed scheme to the same targets).
      */
     public static double terminalContrastFloor(
             @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences) {
-        if (preferences == null || !preferences.isTerminalDynamicColorsEnabled())
-            return com.termux.view.ContrastFloor.TEXT;
+        if (preferences == null) return com.termux.view.ContrastFloor.TEXT;
         return preferences.getTerminalContrastLevel().bodyTarget;
     }
 

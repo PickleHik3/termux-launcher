@@ -105,7 +105,7 @@ public class EditorCardSectionsTest {
     @Test
     public void workspace() {
         check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", block(Row.MINIMAL),
+            "SECTION_APPEARANCE", block(Row.CONTRAST, Row.MINIMAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
     }
 

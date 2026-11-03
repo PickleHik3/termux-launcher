@@ -4736,6 +4736,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         prefs.setTerminalContrastLevel(level);
         mHost.refreshTerminalPalette();
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+        syncDirty();
     }
 
     /** The cursor trail: Off or a style, the same preferences Settings writes. */
