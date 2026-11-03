@@ -30,6 +30,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   through 90/270/0). Owed on pong with real widgets: rotate both ways and back, widget store
   revision unchanged, every widget keeps its cell, no widget zooms. Pong's landscape keeps its own
   dock setting (hidden there, developer 11-02), so no side bar on pong is expected.
+- **Glass controls reach + dark sections (11-03, 509b634db).** On pong, dark theme: the editor's
+  sections stand apart from the sheet (lighter fill, thin outline) and, with Appearance open, the
+  unselected Look tiles (Mist, Tint, Solid, Custom) still read as tiles on the lighter section.
+  Keyboard card › Applies to Global › Opacity and Blur move the keyboard on Home and on a Display
+  page as well as the Terminal; Customization Opacity moves the Home keyboard while no Keyboard ›
+  Home value was set. Turn Glass refraction off in Battery & performance: Depth and Edge read
+  "Glass refraction is off." and the card shows a Glass refraction link that lands on the switch;
+  with Reduce idle activity on they read "Off while Reduce idle activity is on." · pong, go-ahead.
+
 - **Removing a Display card (11-02, #193).** Edit pages › Display card × with Firefox on it: after
   the Undo window a stop question (an app is open); Confirm: `wall_pages.xml` has no page 9 and no
   `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
