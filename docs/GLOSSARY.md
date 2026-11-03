@@ -1003,7 +1003,8 @@ The privileged lane: it runs allowlisted tlstore tools as the shell uid (2000) t
 `PrivilegedLaneService` runs as shell, `PrivilegedLaneServer` listens on an abstract socket and
 accepts only the app's own uid, and the client is `tl-priv` in the tlstore repository. The wire
 protocol between them is `tlpriv1` (`LaneRequest`), a contract changed on both sides in step. The
-allowlist guards against accidents, not against code already running as that uid. See AGENTS.md.
+allowlist guards against accidents, not against code already running as that uid. See
+`docs/agents/privileged-lane.md`.
 _Avoid_: root mode, shell mode
 
 **Nightly**:

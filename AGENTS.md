@@ -1,446 +1,193 @@
 # Termux Launcher
 
-Termux Launcher is a fork of Termux that is also an Android **home launcher**. The terminal is the
-home screen: app drawer, dock, widgets, status chrome and an embedded keyboard are drawn around a
-live terminal session, and the whole thing is themable down to per-surface blur, opacity, grain,
-corner radius and edge gap.
+A fork of Termux that is also an Android **home launcher**: the terminal is the home screen, with
+the app drawer, dock, widgets, status chrome and an embedded keyboard drawn around a live session,
+all themable per surface (blur, opacity, grain, corner radius, edge gap).
 
-The rest of this document exists so you can change it without breaking the parts people already
-rely on. Treat it as good defaults, not scripture — the developer's stated preference overrides
-anything here, and if a rule fights the task in front of you, say so out loud rather than quietly
-working around it.
+These are defaults, not scripture. The developer's stated preference overrides them; if a rule
+fights the task, say so rather than working around it quietly.
 
-## What we can never compromise on
+## What we never compromise on
 
-### 1. It is the home screen
+**It is the home screen.** Android returns to it whenever anything closes, it holds the user's
+shell sessions, and a crash is the home screen falling over mid-touch.
+- `am force-stop` is not a clean restart: the system relaunches the launcher at once and it reads
+  shared preferences on the way up. Edit prefs (`run-as` + `sed`) before the force-stop.
+- Null-tolerance at input boundaries is a feature, not clutter.
+- Never gate window drawing without a fail-safe (the keyboard reveal gate has three: frame count,
+  160 ms backstop, null gate view). A gate that can hang leaves a black home screen.
 
-This is not an app the user can quit. It is the process Android returns to when anything else
-closes, it holds their shell sessions, and it is the first thing they see all day. That has hard
-consequences you will meet repeatedly:
+**Memory discipline.** A process that never dies pays for every retained byte forever; a live
+terminal idles at about 185–200 MB PSS on pong, and that ground is not given back. Anything holding
+pixels (kitty frames, app icons, wallpaper blurs) sits behind a bounded store with an explicit
+budget (`KittyImageStore.FrameBudget`, `LauncherIconStore`). Decide cost from the pixels a
+drawable actually holds, never its declared size: `AdaptiveIconDrawable` reports 72dp while its
+layers hold 108dp.
 
-- **`am force-stop` is not a clean restart.** The system immediately relaunches the launcher, and
-  the fresh process reads shared preferences on the way up. Edit prefs (via `run-as` + `sed`)
-  **before** the force-stop, never after — otherwise the restart overwrites your edit.
-- A crash is not a crash of "an app", it is the home screen falling over mid-touch. Null-tolerance
-  at input boundaries is a feature, not defensive clutter.
-- **Never gate window drawing without a fail-safe.** The keyboard reveal gate ships three (frame
-  count, 160 ms backstop, null-gate-view). A gate that can hang leaves a black home screen.
+**It has to feel right.** No continuously repainting animations, no layout work per frame; prefer
+structural fixes (derive the position, own the outline) over tuning durations. Before a change
+that keeps pixels or memory, runs per frame or at rest, or sits on start-up or the page-change
+path, read [`docs/agents/performance.md`](docs/agents/performance.md). When the developer says
+"janky" they mean it looks bad, not that it dropped frames: read UI complaints as aesthetic first.
 
-### 2. Memory discipline
-
-An app that never dies pays for every byte it retains forever. The 2026-08 RAM work bounded
-growth: memory now comes back on `clear`, on pane close and under pressure, and a live terminal
-idles at about 185–200 MB PSS on pong. That ground is not to be given back. Anything that holds
-pixels — kitty graphics frames, app icons, wallpaper blurs — belongs behind a bounded store with an
-explicit budget:
-
-- Kitty frames are charged against a process-wide `KittyImageStore.FrameBudget` sized from
-  `/proc/meminfo`, settled at commit rather than accept, and folded rather than refused when full.
-- App icon artwork lives in the budgeted `LauncherIconStore`, not on `LauncherAppEntry`.
-- **Decide cost from the pixels a drawable actually holds, never the size it declares.**
-  `AdaptiveIconDrawable.getIntrinsicWidth()` reports the nominal 72dp while its layers hold the
-  108dp rasterisation; walk containers all the way down, and treat "no intrinsic size" as
-  *measure it*, not zero.
-
-### 3. It has to feel right
-
-Users drive this thing with their thumbs all day and notice a dropped frame, a mispositioned chip
-and a stale label. No continuously repainting animations. No layout work per frame. Prefer
-structural fixes (derive the position, own the outline) over tuning durations.
-
-**Performance has numbers.** Before a change that keeps pixels or memory, runs per frame or at
-rest, sits on the start-up or page-change path, or loads a model, read
-[`docs/agents/performance.md`](docs/agents/performance.md): the budgets, the pong baselines, how to
-measure them, and what your report must show.
-
-**When the developer calls something "janky", they mean it looks bad — not that it dropped
-frames.** Read UI complaints as aesthetic first and ask before optimising a frame budget nobody
-complained about.
-
-### 4. Three editions, fed only by merging
-
-Content reaches the three release branches (`main`, `nix-edition`, `io-vaj-package`) only by
-merging `dev`. A release branch carries nothing but its identity: applicationId,
-`TERMUX_PACKAGE_NAME` (in `app/build.gradle` and `TermuxConstants`), `versionName`, manifest
-placeholders, ABI/split rules, bootstrap handling, CI matrix. New work starts on `pre`, and fixes
-for the current stable start on `dev`; see "Branches and releases".
-
-Every edition has its own package and so its own prefix, `/data/data/<pkg>/files/usr`. Name the
-package through `context.getPackageName()` or `TermuxConstants`; a literal `com.termux` in code is
-correct on one edition and a bug on the other two.
+**Three editions, fed only by merging.** Content reaches `main`, `nix-edition` and
+`io-vaj-package` only by merging `dev`; a release branch carries only its identity
+(applicationId, `TERMUX_PACKAGE_NAME`, `versionName`, manifest placeholders, ABI rules, bootstrap
+handling, CI matrix). Each edition has its own package and prefix, so name the package through
+`context.getPackageName()` or `TermuxConstants`, never a literal `com.termux`.
 
 ## Words
 
-**You** are the agent reading this. **The developer** is the maintainer you are talking to, who
-uses the launcher as their daily driver. **Pong** is their phone and the device of record. For every
-other name (a place, a surface, a gesture, an edition), look it up in
-[`docs/GLOSSARY.md`](docs/GLOSSARY.md) before you name it in code, a commit, a string or a report.
+The developer is the maintainer, who uses the launcher daily. **Pong** is their phone and the
+device of record. Every other name (a place, surface, gesture, edition) is in
+[`docs/GLOSSARY.md`](docs/GLOSSARY.md); look it up before naming it in code, a commit or a string.
 
 ## The five ways to hurt yourself
 
-1. **`gh` talks to the wrong repo.** This checkout has an `upstream` remote pointing at
-   `termux/termux-app`, and `gh` resolves to it by default. **Pass `--repo PickleHik3/termux-launcher`
-   to every single `gh` command.** A release created on upstream is not a mistake you can quietly
-   undo.
-2. **The developer is editing this tree while you work in it.** Builds have failed mid-save on
-   their in-flight edits. A compile error in a file you did not touch is probably theirs — retry
-   the build, do not "fix" their half-typed code, and do not revert it.
-3. **Committing bootstrap zips.** `*.zip` is gitignored for a reason. No APK of any edition or build
-   type carries a bootstrap: the app downloads and checksum-verifies it on first run, so any APK can
-   install fresh, and a fresh install needs the network. One zip got committed once
-   and cost a force-push and a history rewrite.
-4. **Touching a real phone without being asked.** The device of record is someone's daily
-   driver, often reached over the network (`adb connect <device-ip>:5555`); how to reach it is
-   configured on the host, not in the repo. Pass `-s <serial>` to every adb command: bare `adb`
-   goes to whichever device is attached, and that is often the phone. Ask before installing, force-stopping, or injecting input. A stray
-   `adb input tap` once landed on the editor's edge-drag pill and silently zeroed the developer's
-   side gap on every surface.
-5. **Merging `dev` into an edition branch.** A dev merge once clobbered the VAJ identity in
-   `app/build.gradle` (the v0.2.31 hotfix): applicationId, manifest placeholders and ABI rules are
-   the only thing an edition branch owns, and a merge that takes `dev`'s side of that file silently
-   ships the wrong app. Expect conflicts in `app/build.gradle` and `app/src/main/res/values/strings.xml`
-   on every cut, and in `.github/workflows/debug_build.yml` whenever `dev` touched its push
-   trigger (each edition names its own branch there); resolve identity, `versionName` and the
-   trigger to the edition's side. Diff `app/build.gradle`
-   against the previous edition tag before tagging; the workflow's manifest guard is the backstop,
-   not the check.
+1. **`gh` talks to the wrong repo.** The `upstream` remote is `termux/termux-app` and `gh` resolves
+   to it. Pass `--repo PickleHik3/termux-launcher` to every `gh` command.
+2. **The developer edits this tree while you work.** A compile error in a file you did not touch
+   is probably theirs: retry the build; do not fix or revert their half-typed code.
+3. **Committing bootstrap zips.** `*.zip` is gitignored for a reason; no APK carries a bootstrap
+   (the app downloads and verifies it on first run). One committed zip cost a history rewrite.
+4. **Touching a real phone without being asked.** Ask before installing, force-stopping or
+   injecting input on pong, and pass `-s <serial>` to every adb command (bare `adb` often reaches
+   the phone). A stray tap once zeroed the developer's side gap on every surface.
+5. **Merging `dev` into an edition branch** carelessly. Expect conflicts in `app/build.gradle`,
+   `app/src/main/res/values/strings.xml` and `.github/workflows/debug_build.yml`; resolve identity,
+   `versionName` and the push trigger to the edition's side, and diff `app/build.gradle` against
+   the previous edition tag before tagging.
 
 ## Hit every surface
 
-The most common defect in this repo is a change that works on the path you tested and is missing
-everywhere else. Before calling a change done, walk this list and say which entries applied:
+The most common defect here is a change that works on the path you tested and nowhere else.
+Before calling a change done, say which of these applied:
 
-- **Dock styles.** Docked and Floating resolve geometry differently and *should* — Docked is square
-  at rest so every dp of radius is new encroachment; Floating is already a 26dp card, so only radius
-  beyond that encroaches. Do not "unify" them into one formula.
+- **Dock styles.** Docked and Floating resolve geometry differently on purpose (Docked is square at
+  rest; Floating is already a 26dp card). Do not unify them into one formula.
 - **Keyboard up and down.** The in-app keyboard changes terminal bounds, dock lift, flush-dock
-  absorption, and which surface the decor nav strip should mirror. Check both.
-- **One pane and many.** Split panes change what "the terminal" means; small panes clamp their own
-  radius (`PaneShape.radiusForBounds`).
-- **Inherited and detached.** Every surface property can be following Base or overridden. A control
-  that only works in one state is half-built. Setters write *through* the link deliberately, so
-  Settings sliders and wallpaper mode do not silently detach surfaces.
-- **Reverse states.** If you added a way in, add the way out and the way to see it. A one-way door
-  is a bug.
-- **Themes and scheme.** Light, dark, black, the Material You scheme, and the launcher's own scheme
-  chrome (`LauncherSchemeTheme.isSchemeChromeActive()`) — chrome colours that read system palette
-  resources directly have bypassed the scheme before.
-- **Density and font scale.** Overlap reports from other phones are usually *text*, not geometry:
-  fixed-height rows plus a 1.3× font scale is what clips. Single-line + ellipsize labels, and give
-  toggle segments `minWidth=0` and autosize.
-- **Editions.** Anything touching applicationId, bootstrap, manifest or signing needs a decision per
-  edition, even if the decision is "no change".
-- **The system IME.** Any code path that shows the system keyboard **must** call
-  `TermuxActivity.onSystemImeRequested()` first, or its insets are ignored by the
-  `mAcceptSystemImeInsets` gate.
+  absorption and which surface the nav strip mirrors.
+- **One pane and many.** Small panes clamp their own radius (`PaneShape.radiusForBounds`).
+- **Inherited and detached.** Every surface property can follow Base or override it; setters
+  write through the link on purpose.
+- **Reverse states.** A way in needs a way out and a way to see it.
+- **Themes and scheme.** Light, dark, black, Material You, and the launcher's scheme chrome
+  (`LauncherSchemeTheme.isSchemeChromeActive()`); chrome that reads system palette resources
+  directly bypasses the scheme.
+- **Density and font scale.** Overlap reports are usually text: single-line + ellipsize labels,
+  `minWidth=0` and autosize on toggle segments.
+- **Editions.** Anything touching applicationId, bootstrap, manifest or signing needs a decision
+  per edition.
+- **The system IME.** Every path that shows it calls `TermuxActivity.onSystemImeRequested()`
+  first, or the `mAcceptSystemImeInsets` gate drops its insets.
 
 ## Where code lives
 
-- `app/` — the launcher. Java only, under `com.termux`.
-  - `app/` — `TermuxActivity` (the shell everything hangs off), `SuggestionBarView`, service,
-    installer, dock/glass rendering views.
-  - `app/terminal/` — terminal hosting, clients, panes, find/copy modes, `inappkeyboard/`.
-  - `app/surfaces/` — the Appearance editor, inheritance row table, presets, materials, outlines.
-  - `app/layouteditor/` — the layout session under the editor's cards (`LayoutEditorController`,
-    policy in `LayoutEditorPlan`): Undo, the dirty state and every Position and size write.
-  - `app/launcher/` — app catalogue, icons, paging, popups, A–Z scrub, notifications.
-  - `app/chrome/`, `app/dock/`, `app/statusbar/`, `app/notice/`, `app/theme/`, `app/settings/`,
-    `app/tour/` — the named chrome subsystems.
-  - `ai/`, `launcherctl/`, `privileged/`, `filepicker/` — the non-terminal side features.
-- `terminal-emulator/` — escape-sequence parsing, buffers, kitty graphics, sixel. Upstream-shaped.
-- `terminal-view/` — the `TerminalView` widget and input handling.
-- `termux-shared/` — shared constants, settings, `TermuxAppSharedPreferences` (which is also where
-  the surface inheritance resolver lives, so every existing getter returns resolved values).
-- `termux-am-library/`, `inapp-keyboard/` — vendored: the am library, and a trimmed snapshot of
-  Unexpected-Keyboard kept in package `juloo.keyboard2` for upstream diffability. **Local deviations
-  from upstream go in `inapp-keyboard/UPSTREAM.md`, always.**
-- `docs/` — user guides (`docs/en/`), ADRs (`docs/adr/`), agent docs (`docs/agents/`) and the
-  glossary (`docs/GLOSSARY.md`). `project-docs/` — developer specs: `active/` (work in flight),
-  `reference/` (research, comparisons, delivered records), `verification/` (runnable probes),
-  `backlog.md`, and the release notes; `project-docs/README.md` is the index. `ci/`, `fastlane/`,
-  `art/` — packaging, build support and store metadata.
-- Never commit generated `build/` or `.gradle/` content.
+- `app/` (Java, `com.termux`): `app/` holds `TermuxActivity` and the dock and glass views;
+  `app/terminal/` panes, find/copy, `inappkeyboard/`; `app/surfaces/` the Appearance editor;
+  `app/layouteditor/` the layout session (`LayoutEditorController`, `LayoutEditorPlan`);
+  `app/launcher/` catalogue, icons, paging, A–Z; `app/chrome|dock|statusbar|notice|theme|settings|tour/`;
+  `ai/`, `launcherctl/`, `privileged/` ([lane rules](docs/agents/privileged-lane.md)), `filepicker/`.
+- `terminal-emulator/` (upstream-shaped), `terminal-view/`, `termux-shared/` (constants,
+  `TermuxAppSharedPreferences`, which also resolves surface inheritance).
+- Vendored: `termux-am-library/`, `inapp-keyboard/` (Unexpected-Keyboard, package
+  `juloo.keyboard2`; every local deviation goes in `inapp-keyboard/UPSTREAM.md`).
+- `docs/` user guides, ADRs, agent docs and glossary; `project-docs/` developer specs
+  (`active/`, `reference/`, `verification/`, `backlog.md`; index in `project-docs/README.md`).
+- Agent docs, read when the task needs them: [building and installing](docs/agents/building.md),
+  [testing and device checks](docs/agents/testing.md), [releasing](docs/agents/releasing.md),
+  [performance](docs/agents/performance.md), [device map](docs/agents/device-map.md),
+  [tlstore](docs/agents/tlstore.md), [issue tracker](docs/agents/issue-tracker.md).
 
-## The privileged lane
+## Building and verifying
 
-`app/src/main/java/com/termux/privileged/lane/` lets a terminal program run as the shell uid (2000).
-`PrivilegedLaneService` is a Shizuku UserService running as shell; `PrivilegedLaneServer` listens
-on the abstract socket `@<packageName>.priv` and accepts only the app's own uid; the client is
-`tl-priv` in the tlstore repo (PickleHik3/tlstore, `recipes/cross/tl-priv/tl-priv.c`).
-
-- **The wire protocol `tlpriv1` (`LaneRequest`) is a contract with `tl-priv`.** Change both sides in
-  step, or neither.
-- `LaneAllowlist` runs only catalog `binary` rows marked `priv=shizuku` whose sha256 matches the
-  active tlstore catalog. It guards against accidents, not against code already running as this
-  uid; do not describe it as a security boundary.
-- Binaries are staged under `/data/local/tmp/tl`. The service runs with umask 0, so every directory
-  there must be chmodded 0700 explicitly (`PrivilegedLaneService`), or the tree is world-writable.
-- `LocalSocket` re-attaches queued fds to every later write. After handing over the pty master,
-  call `setFileDescriptorsForSend(null)`, or the next write fails with EBADF and the client hangs.
-- `getFilesDir()` answers `/data/user/0/<pkg>/files` while Termux paths say `/data/data/<pkg>/files`.
-  They are one directory, not a symlink, so canonical paths never agree: compare by inode.
-- The window chip shows `tl-priv run <path>` as the tool's name
-  (`WindowForegroundResolver.unwrapLane`); a new way of launching through the lane needs it too.
-
-## Build and run
-
-Run from the repository root with the checked-in wrapper. Builds need an Android SDK and a JDK
-compatible with AGP 8.13.2; the code targets Java 11.
-
-- `./gradlew :app:assembleStaging` — what goes on a phone and into nightlies: the release build's
-  R8 shrinking and keep rules, but debuggable (`run-as` works) and signed with the published test
-  key. Debug builds skip R8, so a hole in the keep rules only ever shows up in a shrunk build;
-  1.0.0 shipped one.
-- `./gradlew assembleDebug` / `:app:assembleDebug` — unshrunk debug APKs, for fast local iteration.
-- `./gradlew testDebugUnitTest` — JVM unit tests across modules, matching CI.
-- `./gradlew :app:connectedDebugAndroidTest` — instrumentation on a connected emulator or device.
-- `./gradlew lintDebug` — Android lint.
-- `./gradlew :app:verifyReleaseHardening` — release build safety settings.
-- `scripts/dev-install.sh` — installs the arm64 staging APK, fresh or as an upgrade. Target the
-  device with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug APK instead.
-- **Installing on pong** (only when the developer asks), in three tiers:
-  1. *Development* runs a **staging** build, `DEVICE=<pong> scripts/dev-install.sh` (the default),
-     named `<versionName>+dev.<sha>` so tlstore's `min-launcher` gating sees the same version
-     string a release dev build shows. `run-as` works and stack traces are readable.
-     A **diagnostic** build (staging plus a branch's temporary logging commits, never merged) may
-     stay on pong between waves: a merged fix does not need a clean build put over it. A clean
-     build replaces it only when a release or pre-release is cut, or when the developer asks.
-  2. A *drop candidate* gets a **release** build of the candidate commit,
-     `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh`, for a day of real use before a
-     pre-release cut. It builds one versioned `<versionName>+dev.<sha>` from HEAD. Do not
-     `adb install` the release APK by hand: a local release build has no ABI splits (one ~100 MB
-     universal APK with every ABI's native libraries) and is **unsigned** unless the CI's
-     `TERMUX_RELEASE_*` variables are set, which fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`.
-  3. A *shipped* build is the **CI artifact from the GitHub release**, installed through
-     Obtainium, never a local build: only that exercises the real signing key, the ABI splits
-     and the bootstrap download on the phone.
-
-  The script keeps only arm64-v8a, signs with the test key every build shares, installs with
-  `--no-incremental` and checks the launcher came back up. Why staging is enough for
-  development: it differs from release only in `debuggable` and the signing key (the sixteen
-  branches on `BuildConfig.DEBUG` / the debuggable flag are the only behaviour a release build
-  adds), and the user bugs that never showed on pong came from fresh installs, upgrades across
-  migrations, other densities and font scales and other editions, which a release build on one
-  long-lived phone cannot show either. Those are checked on the emulator per drop
-  (`docs/agents/releasing.md`).
-- `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging
-  build.
-
-**When the machine is busy, let CI build.** A push to `dev` runs "Build nightly"
-(`.github/workflows/debug_build.yml`: `testDebugUnitTest`, then `assembleStaging`). Read it with
-`gh run list --repo PickleHik3/termux-launcher --branch dev` and
-`gh run view <id> --repo PickleHik3/termux-launcher --log-failed`.
-
-## Verifying
-
-Smallest proof that the change works, then stop. Run the tests you touched; run the module suite
-before you hand work over. CI owns the rest.
-
-- **Reproduce before you fix.** A bug fix starts from the failing state reproduced in your tree:
-  a failing test, a measured value, a log line, a screenshot. No reproduction, no fix; report what
-  you tried instead. A fix on a plausible cause ships a regression test for the wrong cause
-  (2026-10-26: one ink bug was "fixed" four times before a reproduction showed a missing
-  permission).
-
-- **Unit tests.** JUnit 4, Robolectric where Android behaviour is needed, AndroidX Test for
-  instrumentation. Tests sit beside their module in `src/test/java` / `src/androidTest/java`,
-  mirror the production package, and end in `Test`. Bug fixes ship with a focused regression test.
-- **Baselines, not counts.** The full suite is green (thousands of tests) and the historical
-  ~50-failure environmental baseline no longer reproduces. If failures appear, **compare failing
-  test *name lists* against a clean worktree**, never counts.
-  `TerminalIOPreferencesDataStoreLazyModeTest` is a known order-dependent flake (static singleton
-  in `TerminalIOPreferencesFragment`) — it passes alone.
-- **The developer's phone is the truth for layout and motion; the emulator is for throwaway
-  shots.** Width, font scale, wallpaper and permissions differ on the phone, and the emulator
-  cannot judge motion. When the developer has allowed the phone for a named piece of work, a build
-  goes on it after the skeleton and after each wave, not at the end (2026-10-26: six waves were
-  emulator-checked before the first phone build; the phone showed clipped tiles and wrong ink the
-  emulator never did). The emulator stays the platform for screenshots and drivable checks when
-  the phone is not offered. If your host has an emulator skill or driver, use it rather than
-  re-deriving the setup; drive the app through Mobilerun Portal where the host provides it. The
-  non-negotiables: an AVD such as
-  `tl16`, `-gpu angle_indirect` (the default swiftshader segfaults on this app's blur), stop the
-  Gradle daemon first on a small host, install the **x86_64** split, and always pass
-  `-s emulator-5554` — if qemu dies, adb silently falls back to the phone.
-- **Batched functional checks run through the `device-checker` agent** where the host has one:
-  it gets the user-facing summary and the `device-checks.md` items, never the diff, and reports
-  pass or fail with crops. **Visual work is seen by whoever read the diff:** the session that
-  merges opens the before/after shots itself and says so in the merge; a checker's "passed" is a
-  claim, not a check. Take the device's lease for the whole session, and batch pong items into one
-  ask.
-  This launcher becomes the emulator's home screen when installed: set the stock launcher back
-  as home before you hand the emulator over. Swap checks (stable → drop → stable) still need
-  release builds of both, which install over each other because every build shares one signing key.
-- **Tear the test setup down when you are done.** The emulator holds this host's RAM and GPU for
-  as long as it runs. When the testing is finished, force-stop the app, release the lease (which
-  stops an emulator it started), and stop any background monitor or logcat loop you left behind.
-- **What the emulator cannot tell you.** Jank: `gfxinfo` on ANGLE/lavapipe reports everything as
-  100% janky — judge motion on a real phone. Dialogs: a UI-bounds dump does not see dialog windows, so
-  screenshot and tap fresh coordinates. Simulate other phones with `wm size` / `wm density` /
-  `font_scale`, and **force-stop the app after a density or font change** or the layout keeps the
-  old dp scale.
-- **Be honest about the boundary.** Say which items you verified, on what, and which are reasoned
-  from the code and still owe a device check. "Device-verified" means you saw it. Whatever still
-  owes one lands in the same commit: an item an agent can drive over adb goes on
-  `project-docs/device-checks.md`; one that needs the developer's hand (feel, frame timing, a
-  thumb mid-gesture, a lock screen, taste, a container they install, Perfetto) goes on
-  `project-docs/developer-checks.md`. Either is deleted once seen.
-- Do not verify with browsers or computer use unless the developer asks.
-- Compile-check any API claim before you rely on it. `UserHandle.getIdentifier` looks public and is
-  `@SystemApi`; a worker asserted otherwise and was wrong.
-
-## User-facing text
-
-Settings entries, dialogs, hints, notices — every string a user can see is product copy, not an
-engineering note. Write it the way a polished 2026 app would: a short title and one sentence that
-says what the user gets. No implementation mechanism, no window-manager or protocol names, no HTTP
-codes, no keybind lore, and never a recap of the design discussion that produced the feature.
-"Arrange panes automatically as you open and move them", not "tiles like Hyprland: each new pane
-halves the focused one along its longer side". If a string seems to need a paragraph, the setting
-is doing too much. The deeper detail belongs in `docs/en/`, where curious users are already sent —
-and in the commit body, where the next agent will look.
+- Fast loop: `./gradlew :app:assembleDebug`; on a phone: `:app:assembleStaging` (it runs R8 like
+  release); tests: `./gradlew testDebugUnitTest`. Details and pong's install tiers are in
+  [building.md](docs/agents/building.md).
+- Prove the change with the smallest check that shows it works, then stop: the tests you touched,
+  then the module suite before handing work over. CI owns the rest.
+- If the cause of a bug is plain from the code, fix it. If not, or one fix has already missed,
+  reproduce the failing state first (a failing test, a log line, a measured value). Fixes ship
+  with a focused regression test.
+- Pong is the truth for layout and motion; the emulator is for throwaway shots.
+- Say what you verified and on what; anything owed goes on `project-docs/device-checks.md` or
+  `developer-checks.md` in the same commit ([testing.md](docs/agents/testing.md)).
+- Compile-check an API claim before relying on it (`UserHandle.getIdentifier` looks public and is
+  `@SystemApi`).
 
 ## Coding style
 
-Follow `.editorconfig`: UTF-8, LF, final newline, four spaces (two for YAML). Standard Java
-conventions — `UpperCamelCase` types, `lowerCamelCase` members, `UPPER_SNAKE_CASE` constants,
-lowercase packages under `com.termux`, `lower_snake_case` Android resource names. There is no
-repository-wide formatter: match the surrounding code.
+Follow `.editorconfig` (UTF-8, LF, four spaces, two for YAML) and the surrounding code.
 
 - **Extend the seams, not `TermuxActivity`.** New activity-facing behaviour goes through a Host
   interface or a deep module (`TerminalHost`, `ChromeRenderer`, `DockLayoutPolicy`,
-  `SurfaceEditorController.Host`, …), not a new public method on the activity. That interface
-  accreted 326 public methods once; the extraction is what stopped it.
-- Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorPillMetrics`,
-  `AzScrubGesture`, `PaneShape`), with the view layer dumb enough to just apply the answer.
-- **One owner per two-phase number.** A number that one phase predicts, pre-rolls or pre-sizes
-  and a later phase settles (the terminal's room under the keyboard, the keyboard's reveal, the
-  dock's lift, a still's size) comes from one pure policy that both phases read, and the two
-  phases share a parity test. Two formulas for one number agree on the layout you tested and
-  diverge on the next phone: the 2026-10-30 landing stutter was a pre-size 96 px short of the
-  settle, masked by the reflow frost. `project-docs/active/motion-invariants-2026-10-30.md`.
-- Comments describe how a thing is used and move when the code moves. Do not annotate every line.
-- Inferred types over ceremony. Do not preserve complexity because it already exists, and do not
-  add machinery because it looks architecturally impressive.
-- No magic padding, no negative margins, no per-size special cases where a measured rule will do.
-  A number that appears twice is a constant that appears once, next to the code it governs.
+  `SurfaceEditorController.Host`).
+- Keep geometry and policy pure and tested (`DockLayoutPolicy`, `PaneShape`, `AzScrubGesture`);
+  views just apply the answer.
+- **One owner per two-phase number.** A number one phase predicts and a later phase settles
+  (keyboard reveal, dock lift, terminal room) comes from one pure policy both read, with a parity
+  test. See `project-docs/active/motion-invariants-2026-10-30.md`.
+- No magic padding, no negative margins, no per-size special cases. A number that appears twice
+  is a constant that appears once.
 - A layout never requests another layout from inside measure, layout or draw: compare before
   setting text, visibility, minimum sizes or layout params.
-- Robolectric layout tests use `@GraphicsMode(GraphicsMode.Mode.NATIVE)` so text has real
-  metrics; a layout assertion in legacy mode proves nothing.
+- Comments say how a thing is used. Don't keep complexity because it exists, or add machinery
+  because it looks impressive.
 
-## Things already decided — do not re-litigate
+## User-facing text
 
-These were settled deliberately. Raise them if you think they are wrong; do not silently undo them.
+Every string a user sees is product copy: a short title and one sentence saying what the user
+gets. No mechanism, protocol names, error codes or design history. "Arrange panes automatically
+as you open and move them", not "tiles like Hyprland". Deeper detail goes in `docs/en/`.
 
-- **Negative / concave corner radius was proposed and fully dropped.** Do not reintroduce it.
-- **The Sessions sidebar is legacy.** It loses its purpose with split tabs and its edge-swipe
-  fights the keyboard's. No Sessions tab in the editor, no dot tab badges.
-- **The Appearance editor commits only on Done.** Its card sheet is always present at one of
-  three detents, peek (handle plus header), half or full; there is no ✕. A drag or a tap on the
-  header moves between detents, touching a surface or a chip swaps the card at the current detent,
-  and the page swipe swaps Home ⇄ Workspace cards. Back above peek collapses to peek; at peek it
-  routes through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken
-  on entry. The sheet and the editor bar carry elevation, so anything raised over the editor in
-  the same parent (the wallpaper picker) takes a Z above them; `bringToFront` alone draws under.
-- **A stored `-1` corner radius is the "follow the style" sentinel**, resolved in one place
-  (`resolveAutoCornerRadiusDp`). Never set `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
-  `DEFAULT_STATUS_BAR_CORNER_RADIUS` to a real number — the shipped default rides on
-  `DEFAULT_SURFACE_BASE_CORNER_RADIUS` instead.
-- **Shipped defaults are pinned for existing installs.** `adoptShippedSurfaceDefaults()` treats a
-  store holding nothing but `log_level` as a fresh install; anything else gets the pre-shipped
-  values pinned into keys it never set, *before* the inheritance fold.
-- **The Appearance editor collapses the status pane on entry.** A status-pane control therefore cannot
-  rely on the live pane — it must draw its own preview in its row.
-- **`SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout.** A preference with
-  its own layout must be added to the exemption list or it renders as a plain row.
-- **The pane's inner padding favours rows (2026-10-31).** The top and bottom gaps are trimmed
-  from the corner arc's even clearance toward the rim's floor (stroke plus 2dp) for as long as
-  each pixel costs the sides no more than one (`PaneShape.verticalInsetPx`); the sides take what
-  keeps the corner cells inside the arc at that height (`PaneShape.sideInsetPx`). No glyph is ever
-  cut by the arc, and a square pane holds only the floor. The grid is still centred in its view
-  on both axes (`getHorizontalContentOffset`, `getVerticalContentOffset`), so opposite gaps match;
-  the `mFontLineSpacingAndAscent` top offset is the renderer's and the pane frame counts it as
-  clearance the top already has. Change the rule in `PaneShape`, with its tests, not per view.
-- **`targetSdkVersion` stays 28, on every edition and every companion app.** Android only leaves
-  the `untrusted_app_25`/`untrusted_app_27` SELinux domains allowed to execute files under an app's
-  own data directory; from sdk 29 the app lands in `untrusted_app` and the kernel denies
-  `execute_no_trans` on everything in `$PREFIX`. The domain is computed from the **highest**
-  target sdk in the whole `sharedUserId` group and is remembered until every member is uninstalled
-  — so a single companion app (`…api`, `…styling`, any plugin) built against a newer sdk bricks
-  the launcher it ships beside, and a plain reinstall does not undo it. `TermuxInstaller` detects
-  the restricted domain and names the offending packages; it does not work around it.
-- **No exec fallback via the system linker.** Running an unexecutable binary through
-  `/apex/com.android.runtime/bin/linker64` was tried (8ea87965) and removed: it turns a clean
-  "cannot exec my own files" into an opaque exit 126 deep in the bootstrap second stage, it cannot
-  work for `#!` scripts at all, and the prefix was deleted before anyone could read the evidence.
-  Exec failures must surface where they happen.
+## Things already decided
 
-## Branches and releases
+Raise these if you think they are wrong; do not silently undo them.
 
-Pick the route before you branch. Content only ever moves `pre` → `dev` → the release branches:
+- No negative or concave corner radius.
+- The Sessions sidebar is legacy: no Sessions tab in the editor, no dot tab badges.
+- The Appearance editor commits only on Done. Its card sheet is always present at peek, half or
+  full (no ✕); Back above peek collapses to peek, at peek it goes through the unsaved-changes
+  dialog; dirtiness compares against the entry snapshot. Views raised over the editor need a Z
+  above the sheet's elevation; `bringToFront` alone draws under.
+- The editor collapses the status pane on entry, so a status-pane control draws its own preview.
+- A stored `-1` corner radius means "follow the style", resolved only in
+  `resolveAutoCornerRadiusDp`. Never give `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
+  `DEFAULT_STATUS_BAR_CORNER_RADIUS` a real number.
+- Shipped defaults are pinned for existing installs (`adoptShippedSurfaceDefaults()`; a store
+  holding only `log_level` is a fresh install).
+- `SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout; a preference with
+  its own layout goes on the exemption list.
+- Pane inner padding favours rows; change the rule only in `PaneShape` (`verticalInsetPx`,
+  `sideInsetPx`) with its tests.
+- `targetSdkVersion` stays 28 on every edition and every companion app: from sdk 29 the
+  `sharedUserId` group lands in `untrusted_app` and the kernel denies exec in `$PREFIX`, and one
+  newer companion bricks the launcher until every member is uninstalled.
+- No exec fallback through the system linker (tried in 8ea87965, removed): exec failures surface
+  where they happen.
+
+## Branches, commits and PRs
 
 | The work | Branch from and merge into | Reaches users as |
 |---|---|---|
-| A feature, or any change in behaviour | `pre` | the next pre-release drop; then the next stable, once `pre` is promoted into `dev` |
-| A fix for something the current stable has | `dev` | the next patch release (`dev` merged into each release branch); the next drop merges it into `pre` |
-| A fix for something only the channel has | `pre` | the next drop |
+| A feature, or any change in behaviour | `v2-redesign` | the next pre-release drop (cut by merging `v2-redesign` into `pre`), then the next stable |
+| A fix for something the current stable has | `dev` | the next patch release |
+| A fix for something only the channel has | `v2-redesign` | the next drop |
 
-Releasing has its own document, [`docs/agents/releasing.md`](docs/agents/releasing.md). Read it
-before you cut a release or a pre-release drop, write release notes (a change merged into `pre`
-adds its line to `project-docs/prerelease-notes.md`), read a version string from a bug report, or
-touch an edition branch or a companion app.
+The main checkout sits on `v2-redesign` and is shared with the developer and other sessions:
+branch work happens in a worktree. The local `pre` is the developer's testing branch; never
+merge into it, push it or reset it.
 
-## Commits, PRs and work artifacts
+- Read [releasing.md](docs/agents/releasing.md) before cutting a release or drop, writing release
+  notes, reading a version string from a bug report, or touching an edition branch.
+- Conventional-commit subjects, plain and imperative, one concern per commit:
+  `fix(statusbar): move Floating's bottom row inward as its corner radius grows`.
+- Never open a PR or cut a release unless the developer asks. A PR body states the problem, the
+  fix, what you ran, and any native-library, signing, bootstrap or compatibility impact.
+- Durable plans and decisions go in `project-docs/active/`, then `project-docs/reference/` once
+  delivered. Agent scratch stays out of the tree; the merged commit is the record.
+- Never commit `build/` or `.gradle/` content.
 
-- Conventional-commit subjects, plain language, imperative, scoped where it helps:
-  `fix(statusbar): move Floating's bottom row inward as its corner radius grows`. One concern per
-  commit. If the subject wants an "also", split it.
-- **Never open a PR or cut a release unless the developer explicitly asks.**
-- A PR body explains the problem in a sentence or two, then the fix. List what you ran and what you
-  tested it on. Link the issue. UI changes need before/after images; motion needs a short video.
-  Call out native-library, signing, bootstrap or compatibility impact explicitly.
-- **Durable** plans, designs and decisions go in `project-docs/active/` while the work is open and
-  `project-docs/reference/` once it is delivered, so the next agent finds current facts. **Ephemeral** agent scratch — working notes, todo checklists,
-  research dumps — stays out of the worktree. `work-logs/` runtime logs and `.lavish/` review
-  documents are gitignored on purpose.
-- The merged commit is the implementation record. Do not leave a second checklist behind in the
-  repo after the work lands.
-
-## Agent skills
-
-### Issue tracker
-
-GitHub Issues on `PickleHik3/termux-launcher`; every `gh` call passes `-R`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five default labels, unchanged. See `docs/agents/triage-labels.md`.
-
-### tlstore
-
-The store's own sources (its CLI, `tlstore-ui`, the catalog and its build pipeline) live in
-[PickleHik3/tlstore](https://github.com/PickleHik3/tlstore), not here — send catalog and store-code
-changes there; see that repo's `docs/maintainer/catalog.md` and `AGENTS.md`.
-
-This launcher only pins the release it ships: `app/tlstore.lock` names a tlstore release tag and
-the sha256 of each `dist/` file, and Gradle's `fetchTlstore` task downloads them into the APK's
-assets, verifying every hash. Bump the lock with the block tlstore's `scripts/release.sh` prints
-after cutting a release there, and bump it whole: the engine and `tlstore-ui` are a pair and must
-come from the same release.
-
-On a new APK, `TlstoreInstaller` writes the bundled engine and `tlstore-ui`, but never over a
-tlstore the user has self-updated to something newer (it compares `TLSTORE_VERSION`) — it keeps
-that pair. Testing a bundled tlstore on a device that has self-updated therefore shows the newer one.
-
-A store item that needs a launcher feature gates on `min-launcher=X.Y.Z` in the tlstore catalog,
-naming the **release** the feature first ships in (btop needs the lane, which first ships after
-v0.2.39). The engine compares it with the running app's `versionName`, so a `dev` build reports
-`dev`'s stale version and can hide an item the next release will show. To build against a local tlstore checkout instead of a published
-release — while developing tlstore itself — pass `-Ptlstore.local=<dir>` (or set `TLSTORE_LOCAL`)
-pointing at that checkout's `dist/` folder; this skips the lock check entirely and prints a warning.
-
-### Domain docs
-
-Single-context: `docs/GLOSSARY.md` (`CONTEXT.md` at the repo root points to it) and `docs/adr/`.
-See `docs/agents/domain.md`.
+Issues: GitHub on `PickleHik3/termux-launcher` ([issue-tracker.md](docs/agents/issue-tracker.md),
+[triage-labels.md](docs/agents/triage-labels.md)). Domain terms and ADRs:
+[domain.md](docs/agents/domain.md).

@@ -106,10 +106,10 @@ goes away until they do.
 
 Work reaches the channel only after all of these:
 
-1. **Used on pong** for a day in normal use, with no crash or freeze: as a staging build while
-   it is developed, then as a release build of the candidate commit
-   (`BUILD_TYPE=release scripts/dev-install.sh`) before the cut. The release build is the drop
-   candidate's check, and the only place pong runs one.
+1. **Used on pong** in normal use, with no crash or freeze, as a staging or diagnostic build.
+   Just before the cut, a release build of the candidate commit
+   (`BUILD_TYPE=release scripts/dev-install.sh`) goes on as the final check; it is the only time
+   pong runs one.
 2. **Suite green** on the branch with `pre` merged in.
 3. **Within budget**: frame-path work holds the pong baselines in
    [`performance.md`](performance.md); an on-device AI load is admitted at its intended context

@@ -12,7 +12,7 @@ Three rules keep this directory from rotting:
   implementation record. What survives is *reasoning* git log cannot carry: research, comparisons,
   measurements and the delivered records below. Old specs are in git history.
 - **A document that contradicts AGENTS.md is worse than no document.** Build commands live in
-  AGENTS.md, and the branch model and release process in `docs/agents/releasing.md`; nothing here
+  `docs/agents/building.md`, and the branch model and release process in `docs/agents/releasing.md`; nothing here
   restates them.
 - **Move a document when its state changes**: `active/` while the work is open, `reference/` when it
   is delivered or is research that will not change.
