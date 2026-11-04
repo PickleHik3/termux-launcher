@@ -124,6 +124,11 @@ public final class WallpaperBackdropView extends View {
      * dresses the glass, so the opacity sliders would otherwise show a pass late on the backdrop
      * while the root's background under it had already moved.
      */
+    /** The dim drawn over the frame now; a live recording of this view carries it. */
+    public int dimColor() {
+        return getVisibility() == VISIBLE && mFrame != null ? mDimColor : android.graphics.Color.TRANSPARENT;
+    }
+
     public void setDimColor(int dimColor) {
         if (mDimColor == dimColor) return;
         mDimColor = dimColor;

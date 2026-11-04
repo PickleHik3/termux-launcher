@@ -151,6 +151,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 evicted.mSurface.invalidate();
             }
             picture = new LivePicture(surface, blurRadiusPx, panelRadius);
+            picture.setStoredParity(recordedDim(surface), mBakeVibrancy, mBakeFrameTint);
             mPictures.add(picture);
             listen(true);
         } else {
@@ -158,6 +159,44 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         }
         picture.mRank = rank;
         return picture;
+    }
+
+    /** The Vibrancy and frame tint the stored frames are baked at ({@link #setStoredBake}). */
+    private int mBakeVibrancy = 100;
+    private int mBakeFrameTint = GlassFrameTint.NONE;
+
+    /**
+     * The Vibrancy and frame tint the stored frames are baked at now
+     * ({@code WallpaperBlurCache}), which every picture but a panel's then takes after its blur,
+     * so the glass looks the same on either route ({@link LiveStoredParity}).
+     */
+    public void setStoredBake(int vibrancyPercent, int frameTint) {
+        if (vibrancyPercent == mBakeVibrancy && frameTint == mBakeFrameTint) return;
+        mBakeVibrancy = vibrancyPercent;
+        mBakeFrameTint = frameTint;
+        for (int i = 0; i < mPictures.size(); i++) {
+            LivePicture picture = mPictures.get(i);
+            picture.setStoredParity(recordedDim(picture.mSurface), vibrancyPercent, frameTint);
+        }
+    }
+
+    /**
+     * The wall's dim a recording beneath {@code surface} carries: the launcher-drawn wallpaper's
+     * ({@link WallpaperBackdropView}), when it is among the views drawn beneath. Transparent when
+     * it is not. Collects {@code surface}'s beneath to find it.
+     */
+    private int recordedDim(@NonNull View surface) {
+        if (!collect(surface)) return 0;
+        return dimBeneath();
+    }
+
+    /** {@link #recordedDim} over the views {@link #collect} just found. Allocates nothing. */
+    private int dimBeneath() {
+        for (int i = 0; i < mBeneath.size(); i++) {
+            View below = mBeneath.get(i);
+            if (below instanceof WallpaperBackdropView) return ((WallpaperBackdropView) below).dimColor();
+        }
+        return 0;
     }
 
     /**
@@ -259,6 +298,9 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 continue;
             }
             if (!collect(surface)) continue;
+            // The dim the recording carries is taken back out after the blur; a dim moved is a
+            // new effect on the same recording, never a re-record.
+            picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
             if (picture.mRecordedWidth == surface.getWidth()
                 && picture.mRecordedHeight == surface.getHeight()
