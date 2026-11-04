@@ -72,6 +72,43 @@ public final class X11ServerProcesses {
     }
 
     /**
+     * Which server of {@code packageName} is running, as {@code <pid>:<start time>}, or null when
+     * none is. The start time (from {@code /proc/<pid>/stat}) keeps a reused pid from passing for
+     * the server before it, so the answer names one server start and no other. Used to start the
+     * display's Start with choice once per server ({@link DisplayStartWith}). File work: call off
+     * the main thread.
+     */
+    @Nullable
+    public static String runningServerIdentity(@NonNull String packageName) {
+        File[] entries = new File("/proc").listFiles();
+        if (entries == null) return null;
+        int self = android.os.Process.myPid();
+        for (File entry : entries) {
+            int pid = pidOf(entry.getName());
+            if (pid <= 0 || pid == self) continue;
+            if (!isServer(readCmdline(new File(entry, "cmdline")), packageName)) continue;
+            String startTime = startTimeOf(readCmdline(new File(entry, "stat")));
+            return pid + ":" + (startTime == null ? "" : startTime);
+        }
+        return null;
+    }
+
+    /**
+     * The start time, field 22, of a {@code /proc/<pid>/stat} line, or null when it cannot be read.
+     * Fields are counted after the command name's closing parenthesis, which may itself hold
+     * spaces. Pure.
+     */
+    @Nullable
+    static String startTimeOf(@Nullable String stat) {
+        if (stat == null) return null;
+        int close = stat.lastIndexOf(')');
+        if (close < 0) return null;
+        String[] fields = stat.substring(close + 1).trim().split("\\s+");
+        // Field 3 (the state) is the first after the name, so field 22 is index 19.
+        return fields.length > 19 ? fields[19] : null;
+    }
+
+    /**
      * Ask every display server of {@code packageName} to stop (SIGTERM, what {@code pkill} sends).
      * File work: call off the main thread. Answers how many were signalled.
      */

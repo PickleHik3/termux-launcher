@@ -23,6 +23,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Full screen under the camera cut-out and a busy shell (prompt on the last row), raise and lower
   the in-app keyboard, Docked and Floating dock: the rows slide straight to where they rest, with
   no step at the end of the slide · pong.
+- **Display Start with (11-04, #166).** Debian with `xfce4 dbus-x11` installed, Settings › Linux
+  apps › Start with lists "Debian desktop (XFCE)" (a distro without XFCE is not listed) and set to
+  it: opening the display (Display page Start, a drawer Linux app, `termux-x11 :0` from a shell)
+  shows XFCE; leaving and reopening the Display page, or closing its window while the server
+  runs and opening it again, does not start a second session (`ps` inside Debian shows one
+  `xfce4-session`).
+  Start with = A command… `xterm`: an xterm opens with the display; a command `false` shows "The
+  display's start command did not run." once, with no retry. The tap that starts the display on
+  a drawer desktop (XFCE from the drawer) does not start a second one · emulator.
 
 - **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
   start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
