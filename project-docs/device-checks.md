@@ -227,8 +227,11 @@ device. Owed:
 - 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.
 
 **New float terminal tile on the dock (2026-11-04, #197 narrow).** Not yet seen on a device; the
-tile is off by default and has no switch in the editor yet (pref `dock_float_terminal_button`). Owed:
-- 2026-11-04 · With the pref on: the apps row gains one last column holding the tile; a tap opens a
+tile is off by default; the switch is New float terminal in the Dock card's Options and the
+Elements list (pref `dock_float_terminal_button`). Owed:
+- 2026-11-04 · The switch appears in both places, flips the tile live, is undone by Discard and
+  cleared by the Dock card's Reset · pong.
+- 2026-11-04 · With the switch on: the apps row gains one last column holding the tile; a tap opens a
   floating terminal on Home as the Terminal entry's New float here does; Docked and Floating dock
   styles, keyboard up and down, one pane and many · pong.
 - 2026-11-04 · Both the Command palette tile and the Float tile on: palette then Float, each one

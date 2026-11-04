@@ -75,6 +75,8 @@ public final class DockCard {
         DRAWER_ICON(R.drawable.ic_symbol_apps, R.string.editor_dock_option_drawer_icon, 0),
         COMMAND_PALETTE(R.drawable.ic_symbol_terminal, R.string.editor_dock_option_command_palette,
             0),
+        FLOAT_TERMINAL(R.drawable.ic_status_bar_add_window,
+            R.string.editor_dock_option_float_terminal, 0),
         NOTIFICATION_DOTS(R.drawable.ic_ms_circle_notifications,
             R.string.editor_dock_option_notification_dots, 0),
         QUICK_REPLY(R.drawable.ic_ms_swipe_up_alt, R.string.editor_dock_option_quick_reply,
@@ -97,7 +99,7 @@ public final class DockCard {
      * row of its own ({@link Row#DOCK_MONOCHROME}).
      */
     public static final List<Option> SHOW_HIDE = java.util.Collections.unmodifiableList(
-        Arrays.asList(Option.COMMAND_PALETTE, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
+        Arrays.asList(Option.COMMAND_PALETTE, Option.FLOAT_TERMINAL, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
             Option.QUICK_REPLY, Option.SEARCH_FIELD));
 
     /** What the card reads and writes. */
