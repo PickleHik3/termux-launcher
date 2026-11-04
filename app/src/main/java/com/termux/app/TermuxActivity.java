@@ -29279,11 +29279,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void openPageOverview(boolean fromSettings) {
         if (mWidgetPaneController == null || mPaneWallController == null) return;
         if (mPageOverview != null) return;
-        // Edit pages is Home's: Terminal only has no Home pages to edit.
-        if (!useAs().showsHomePage()) {
-            Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG, useAs().doorLine("edit-pages"));
-            return;
-        }
+        // Under Terminal only Edit pages opens too: it shows no Home card, and offers the
+        // set-aside Home pages back.
         if (mWidgetPaneController.refusedWhileLocked(
                 com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
         View root = findViewById(R.id.activity_termux_root_view);
@@ -29371,6 +29368,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
+                }
+                @Override public boolean homePagesShown() {
+                    return useAs().showsHomePage();
+                }
+                @Override public int detachedHomePages() {
+                    int n = 0;
+                    for (com.termux.app.wall.WallPages.Page page : wallPages().detached()) {
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
+                    }
+                    return n;
+                }
+                @Override public void bringBackHomePages() {
+                    // The setting's own path: the preference, then the pages brought back.
+                    com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
+                        com.termux.app.wall.UseAs.HOME);
                 }
                 // A card's menu and the Display picker (ADR 0015 section 2): names and bindings
                 // are the wall's pages', by id.

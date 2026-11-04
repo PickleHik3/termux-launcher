@@ -126,6 +126,14 @@ public final class PageOverviewView extends FrameLayout {
         /** Display page {@code id} leaves the wall ({@link WallPages#remove}). */
         default void removeDisplayPage(int id) { }
 
+        // Use as Terminal only: the Home pages are set aside, and Edit pages offers them back.
+        /** Whether the wall shows Home pages; false under Use as Terminal only. */
+        default boolean homePagesShown() { return true; }
+        /** How many Home pages are set aside while the wall shows none. */
+        default int detachedHomePages() { return 0; }
+        /** Use as goes back to Home screen, which brings the set-aside Home pages back. */
+        default void bringBackHomePages() { }
+
         // A card's long-press menu and the Display picker (ADR 0015 section 2).
         /** The name Home page {@code page} was given in Edit pages; null for its default. */
         @Nullable default String homePageName(int page) { return null; }
@@ -418,6 +426,7 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final TextView addPage;
     @NonNull private final TextView addTerminal;
     @NonNull private final TextView addDisplay;
+    @NonNull private final TextView bringBack;
     @NonNull private final Touch accessibility;
 
     public PageOverviewView(@NonNull Context context, @NonNull Host host) {
@@ -463,6 +472,9 @@ public final class PageOverviewView extends FrameLayout {
             R.drawable.ic_symbol_terminal, v -> onAddWindow(false));
         addDisplay = pill(context, R.string.page_overview_add_display,
             R.drawable.ic_symbol_desktop_windows, v -> showDisplayPicker(null));
+        bringBack = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_home,
+            v -> onBringBack());
+        pills.addView(bringBack);
         pills.addView(addPage);
         pills.addView(addTerminal);
         pills.addView(addDisplay);
@@ -618,7 +630,8 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Reads the pages and the row from the host again, the held removal's card left out. */
     private void reload() {
-        int pages = Math.max(1, host.pageCount());
+        // Under Terminal only the wall shows no Home page: the strip has no Home card.
+        int pages = host.homePagesShown() ? Math.max(1, host.pageCount()) : 0;
         while (homeKeys.size() < pages) homeKeys.add(new Object());
         while (homeKeys.size() > pages) homeKeys.remove(homeKeys.size() - 1);
         Map<Object, Float> places = new java.util.HashMap<>();
@@ -754,6 +767,15 @@ public final class PageOverviewView extends FrameLayout {
     }
 
     private void updatePills() {
+        boolean homes = host.homePagesShown();
+        addPage.setVisibility(PageOverviewAddPolicy.showsAddPage(homes) ? VISIBLE : GONE);
+        int back = PageOverviewAddPolicy.bringBackCount(homes, host.detachedHomePages());
+        bringBack.setVisibility(back > 0 ? VISIBLE : GONE);
+        if (back > 0) {
+            CharSequence text = getResources().getQuantityString(
+                R.plurals.page_overview_bring_back_homes, back, back);
+            if (!text.toString().contentEquals(bringBack.getText())) bringBack.setText(text);
+        }
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
         boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
@@ -791,6 +813,16 @@ public final class PageOverviewView extends FrameLayout {
             scrollTo(index, this::onSettled);
         }
         invalidate();
+    }
+
+    /** "Bring back N Home pages": Use as goes back to Home screen, and the strip reads again. */
+    private void onBringBack() {
+        if (!isOpen() || host.homePagesShown()) return;
+        commitPending();
+        mutate(host::bringBackHomePages);
+        reload();
+        invalidate();
+        onSettled();
     }
 
     private void onAddWindow(boolean display) {

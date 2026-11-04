@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Edit pages under Terminal only (11-04, #203).** Set Use as to Terminal only. (1) Appearance
+  editor › Terminal card › Links shows Pages; it opens Edit pages with no Home card and no Add
+  page pill, and a "Bring back N Home pages" pill (N = the pages set aside). (2) Tap it: the Home
+  cards come back in their order with their icons and widgets, the pill goes, Add page returns,
+  and Settings › Use as reads Home screen. (3) Back out: Home pages are on the wall again.
+  Emulator or pong.
 - **Edit pages card menu and Display picker (11-04, #201, #200).** (1) Long-press a Home card
   and let go: a menu with Set as home, Rename, Remove opens at the finger; long-press and move
   on: the menu goes and the card drags as before. (2) Rename a Home page and a Display page: the
