@@ -278,4 +278,57 @@ public class DeviceLayoutPlanTest {
         assertFalse(typical(true).signature().equals(other.signature()));
         assertNull(empty().cpuLabel);
     }
+
+    @NonNull private static Part part(@NonNull WidgetLayoutPlan plan, @NonNull String id) {
+        for (Part part : plan.parts) if (part.id.equals(id)) return part;
+        throw new AssertionError("no " + id + " in " + plan.parts);
+    }
+
+    /** Above the bars: from the loose gap under the line under the level; below: to the inset. */
+    @NonNull private static float[] spareAroundBars(@NonNull WidgetLayoutPlan plan) {
+        float room = part(plan, "detail").box.bottom() + WidgetTokens.GAP_LOOSE_DP;
+        float above = part(plan, "storage.label").box.top - room;
+        float below = plan.inset.bottom() - part(plan, "temp.bar").box.bottom();
+        return new float[] {above, below};
+    }
+
+    @Test public void theTallSpansCentreTheirBarsUnderTheLine() {
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {BuiltinWidgetSpan.TWO_BY_TWO,
+                BuiltinWidgetSpan.FOUR_BY_TWO}) {
+            for (float scale : new float[] {1f, 1.6f}) {
+                WidgetLayoutPlan plan = plan(span, span.widthDp, span.heightDp * scale, 1f,
+                    typical(true));
+                float[] spare = spareAroundBars(plan);
+                String what = span + " x" + scale;
+                assertTrue(what + ": at least the loose gap under the line", spare[0] >= -0.01f);
+                assertEquals(what + ": as much room above the bars as below", spare[0], spare[1],
+                    0.01f);
+            }
+        }
+        // The tall card has room to spare, and it is shared, not all above the bars.
+        BuiltinWidgetSpan tall = BuiltinWidgetSpan.FOUR_BY_TWO;
+        float[] spare = spareAroundBars(plan(tall, tall.widthDp, tall.heightDp * 1.6f, 1f,
+            typical(true)));
+        assertTrue("spare room above " + spare[0], spare[0] > 1f);
+    }
+
+    @Test public void theFourByOnesBarsKeepTheirPlaces() {
+        BuiltinWidgetSpan span = BuiltinWidgetSpan.FOUR_BY_ONE;
+        WidgetLayoutPlan plan = plan(span, span.widthDp, span.heightDp, 1f, typical(true));
+        assertBox(part(plan, "storage.glyph").box, 182.2f, 17.6f, 24.4f, 24.4f);
+        assertBox(part(plan, "storage.label").box, 214.6f, 17.6f, 50.4f, 14.4f);
+        assertBox(part(plan, "storage.bar").box, 214.6f, 36.0f, 149.4f, 6.0f);
+        assertBox(part(plan, "ram.glyph").box, 182.2f, 50.0f, 24.4f, 24.4f);
+        assertBox(part(plan, "ram.value").box, 293.4f, 50.0f, 70.6f, 14.4f);
+        assertBox(part(plan, "ram.bar").box, 214.6f, 68.4f, 149.4f, 6.0f);
+    }
+
+    private static void assertBox(@NonNull WidgetLayoutPlan.Box box, float left, float top,
+                                  float width, float height) {
+        String what = box.toString();
+        assertEquals(what, left, box.left, 0.05f);
+        assertEquals(what, top, box.top, 0.05f);
+        assertEquals(what, width, box.width, 0.05f);
+        assertEquals(what, height, box.height, 0.05f);
+    }
 }
