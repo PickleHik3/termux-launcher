@@ -24,11 +24,11 @@ import com.termux.app.chrome.WidgetInkSource;
  * <p>Sampled where the text is laid out, as the widgets are; a wall slide or a wallpaper pan is
  * not a new place (the widgets' rule: {@link GlassAnchor#layoutOriginOnScreen}).</p>
  */
-final class HomeLabelInk {
+public final class HomeLabelInk {
 
     /** The dark ink a label takes on a light wallpaper; its partner is white, as Home always drew. */
-    static final int DARK_INK = 0xFF1F1F1F;
-    static final int PALE_INK = Color.WHITE;
+    public static final int DARK_INK = 0xFF1F1F1F;
+    public static final int PALE_INK = Color.WHITE;
 
     private final Rect rect = new Rect();
     private final int[] location = new int[2];

@@ -16,6 +16,12 @@ import com.termux.R;
 public final class AppDrawerPageIndicatorView extends View {
 
     private static final float DOT_RADIUS_DP = 3f;
+
+    /** The view's own height: exactly the dots, so the drawer decides the air around them. */
+    static int dotsHeightPx(float density) {
+        return Math.round(2f * DOT_RADIUS_DP * density);
+    }
+
     private static final float DOT_GAP_DP = 8f;
     private static final float MIN_RADIUS_PX = 1f;
 

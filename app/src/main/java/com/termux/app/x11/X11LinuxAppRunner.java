@@ -331,6 +331,7 @@ public final class X11LinuxAppRunner {
         }
         if (pending == null) {
             manageBareDisplay();
+            startWithOnce(false);
             return;
         }
         LinuxAppCatalog.LinuxApp app = pending;
@@ -339,6 +340,80 @@ public final class X11LinuxAppRunner {
         // The display is up because this runner just asked for it: the manager it starts may not
         // be there yet, and a desktop must wait for it rather than race it.
         launch(app, true);
+        startWithOnce(app.session);
+    }
+
+    /**
+     * The server last handled by {@link #startWithOnce}, for when the marker file cannot be read
+     * back. Main thread and the worker, so volatile.
+     */
+    @Nullable private volatile String startWithServer;
+
+    /**
+     * #166: the display's Start with choice, run once per server start whatever brought the
+     * display up ({@link DisplayStartWith}). The choice, the server and the marker are all file
+     * work, so they are read on the worker; the launch goes through the same paths a drawer tap
+     * takes. {@code desktopArriving}: the tap that started the display was itself a desktop.
+     */
+    private void startWithOnce(boolean desktopArriving) {
+        boolean desktopOnDisplay = desktopArriving || runningSession != null || takeOver != null;
+        EXECUTOR.execute(() -> {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+            if (preferences == null) return;
+            DisplayStartWith.Choice choice = DisplayStartWith.parse(preferences.getX11StartWith(),
+                preferences.getX11StartWithCommand());
+            if (choice.kind == DisplayStartWith.Kind.NOTHING) return;
+            String server = X11ServerProcesses.runningServerIdentity(context.getPackageName());
+            String marked = DisplayStartWith.readMarker();
+            if (marked == null) marked = startWithServer;
+            DisplayStartWith.Decision decision =
+                DisplayStartWith.decide(choice, server, marked, desktopOnDisplay);
+            if (decision.mark && server != null) {
+                startWithServer = server;
+                DisplayStartWith.writeMarker(server);
+            }
+            if (decision.action == DisplayStartWith.Action.START_DESKTOP) {
+                ProotDistro.Container container =
+                    ProotDistro.byName(ProotDistro.installed(), choice.distro);
+                if (container == null || !DisplayStartWith.hasXfce(container)) {
+                    String label = DisplayStartWith.distroLabel(choice.distro);
+                    handler.post(() -> notice(context.getString(
+                        com.termux.R.string.termux_x11_start_with_desktop_missing, label)));
+                    return;
+                }
+                LinuxAppCatalog.LinuxApp desktop = DisplayStartWith.desktopApp(container);
+                handler.post(() -> {
+                    // A drawer tap may have put a desktop on the display in the meantime.
+                    if (runningSession != null || takeOver != null) return;
+                    Logger.logInfo(LOG_TAG, "Starting " + desktop.id + " with the display");
+                    launch(desktop, true);
+                });
+            } else if (decision.action == DisplayStartWith.Action.START_COMMAND) {
+                LinuxAppCatalog.LinuxApp command = DisplayStartWith.commandApp(choice.command);
+                GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(), false);
+                String script = gpuServerBlock(gpu.server)
+                    + script(command, X11DisplayHostController.displayName(), gpu.env);
+                handler.post(() -> runStartCommand(script));
+            }
+        });
+    }
+
+    /**
+     * Runs the Start with command once. A command that fails within {@link #QUICK_FAIL_MS} is
+     * reported; nothing is retried, since the user's command is not D7's Electron crash.
+     */
+    private void runStartCommand(@NonNull String script) {
+        com.termux.app.sound.LauncherSound.get(context).onNeed();
+        long started = android.os.SystemClock.elapsedRealtime();
+        Logger.logInfo(LOG_TAG, "Running the display's start command");
+        boolean ran = runScript(script, exitCode -> {
+            Logger.logInfo(LOG_TAG, "The display's start command exited with " + exitCode);
+            boolean quick = android.os.SystemClock.elapsedRealtime() - started < QUICK_FAIL_MS;
+            if (exitCode != 0 && quick) {
+                notice(context.getString(com.termux.R.string.termux_x11_start_with_failed));
+            }
+        });
+        if (!ran) notice(context.getString(com.termux.R.string.termux_x11_start_with_failed));
     }
 
     /**

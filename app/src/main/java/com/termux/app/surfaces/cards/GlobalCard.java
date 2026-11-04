@@ -25,7 +25,8 @@ public final class GlobalCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH);
+                Row.TINT, Row.CORNERS, Row.MARGIN, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE,
+                Row.DEPTH);
         // Out for a setting the user can change: the way to it stands under them.
         if (offers.refractionLink) rows.tier(1, Row.LINK_GLASS_REFRACTION);
         return rows

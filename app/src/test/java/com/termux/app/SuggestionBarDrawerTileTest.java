@@ -60,8 +60,9 @@ public class SuggestionBarDrawerTileTest {
     private final SuggestionBarView.DrawerTileListener listener =
         new SuggestionBarView.DrawerTileListener() {
             @Override public void onDrawerTileTapped() { taps++; }
-            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn) {
-                moves.add(new int[] {drawerColumn, paletteColumn});
+            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn,
+                                                    int floatColumn) {
+                moves.add(new int[] {drawerColumn, paletteColumn, floatColumn});
             }
         };
 
@@ -233,7 +234,7 @@ public class SuggestionBarDrawerTileTest {
         assertTrue("not dropped yet", moves.isEmpty());
         drag(tile, 2f * step, true);
         assertEquals(1, moves.size());
-        assertArrayEquals(new int[] {2, -1}, moves.get(0));
+        assertArrayEquals(new int[] {2, -1, -1}, moves.get(0));
     }
 
     /** A drop on the other tile's column swaps the two; a drop where it stood moves nothing. */
@@ -244,13 +245,76 @@ public class SuggestionBarDrawerTileTest {
         float step = bar.getWidth() / 7f;
         drag(drawerTile(), 6f * step, true);
         assertArrayEquals("the drawer to the last, the palette to the first",
-            new int[] {6, 0}, moves.get(0));
+            new int[] {6, 0, -1}, moves.get(0));
 
         drag(paletteTile(), -6f * step, true);
-        assertArrayEquals("the palette onto the drawer", new int[] {6, 0}, moves.get(1));
+        assertArrayEquals("the palette onto the drawer", new int[] {6, 0, -1},
+            moves.get(1));
 
         drag(drawerTile(), 0.2f * step, true);
         assertEquals("back on its own column: no move", 2, moves.size());
+    }
+
+    /**
+     * The New float terminal tile is a third still tile: it stands in the row's last column
+     * beside the palette tile until dragged, and a drop on another tile's column swaps the two.
+     */
+    @Test public void theFloatTileStandsLastAndSwapsOnADrop() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
+        bar.setPaletteTile(true, () -> { });
+        bar.setFloatTile(true, () -> { });
+        idle();
+        assertNotNull(floatTile());
+        assertEquals(6, (int) ReflectionHelpers.getField(bar, "floatTileColumn"));
+        assertEquals(5, (int) ReflectionHelpers.getField(bar, "paletteTileColumn"));
+        assertEquals(0, (int) ReflectionHelpers.getField(bar, "drawerTileColumn"));
+        float step = bar.getWidth() / 7f;
+        drag(floatTile(), -6f * step, true);
+        assertArrayEquals("float onto the drawer's column: they swap", new int[] {6, 5, 0},
+            moves.get(0));
+    }
+
+    /** A stored Float column stands where it was dragged, around the others. */
+    @Test public void aStoredFloatColumnStands() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
+        bar.setFloatTile(true, 3, () -> { });
+        idle();
+        assertEquals(3, (int) ReflectionHelpers.getField(bar, "floatTileColumn"));
+        assertEquals(0, (int) ReflectionHelpers.getField(bar, "drawerTileColumn"));
+        float step = bar.getWidth() / 7f;
+        int[] row = new int[2];
+        bar.getLocationOnScreen(row);
+        assertEquals(row[0] + step * 3.5f, centreX(floatTile()), 2f);
+    }
+
+    /**
+     * A hold that stays still on a tile lifts it, each of the three, in the row's real parent
+     * (the row alone sees no other long-press; the dock's popup is {@code SurfaceLongPress}'s,
+     * which leaves a tile that keeps its own long-press alone: asserted below).
+     */
+    @Test public void aStillHoldPicksEachTileUp() {
+        bar.setDrawerTile(DrawerTilePolicy.Position.START, listener);
+        bar.setPaletteTile(true, () -> { });
+        bar.setFloatTile(true, () -> { });
+        idle();
+        for (View tile : new View[] {drawerTile(), paletteTile(), floatTile()}) {
+            int[] at = new int[2];
+            tile.getLocationOnScreen(at);
+            float x = at[0] + tile.getWidth() / 2f;
+            float y = at[1] + tile.getHeight() / 2f;
+            long t = android.os.SystemClock.uptimeMillis();
+            ((View) bar.getParent()).dispatchTouchEvent(android.view.MotionEvent.obtain(t, t,
+                android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(
+                android.view.ViewConfiguration.getLongPressTimeout() + 50L));
+            assertTrue("the dock popup leaves it alone: " + tile.getContentDescription(),
+                com.termux.app.surfaces.SurfaceLongPress.ownsLongPress(tile));
+            assertTrue("picked up: " + tile.getContentDescription(),
+                (boolean) ReflectionHelpers.getField(bar, "drawerTileDragging"));
+            ((View) bar.getParent()).dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 700,
+                android.view.MotionEvent.ACTION_UP, x, y, 0));
+            idle();
+        }
     }
 
     /** Long-presses {@code tile}, carries it {@code dx} along the row, and lets go if {@code up}. */
@@ -306,6 +370,10 @@ public class SuggestionBarDrawerTileTest {
 
     private View paletteTile() {
         return findNamed(bar, activity.getString(R.string.dock_command_palette_tile));
+    }
+
+    private View floatTile() {
+        return findNamed(bar, activity.getString(R.string.dock_float_terminal_tile));
     }
 
     private View drawerTile() {

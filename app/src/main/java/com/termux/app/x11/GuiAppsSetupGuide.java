@@ -119,6 +119,7 @@ public final class GuiAppsSetupGuide {
             offered.add(GuiAppsSetup.StarterApp.BROWSER);
         }
         offered.add(GuiAppsSetup.StarterApp.FILE_MANAGER);
+        if (route == GuiAppsSetup.Route.DISTRO) offered.add(GuiAppsSetup.StarterApp.DESKTOP);
         return offered;
     }
 
@@ -156,7 +157,9 @@ public final class GuiAppsSetupGuide {
         GuiAppsSetup.Distro distro = GuiAppsSetup.Distro.of(prefs.getString(KEY_DISTRO, null));
         Set<GuiAppsSetup.StarterApp> starters = EnumSet.noneOf(GuiAppsSetup.StarterApp.class);
         for (GuiAppsSetup.StarterApp app : startersOffered(edition, route)) {
-            if (prefs.getBoolean(KEY_STARTER_PREFIX + app.key, true)) starters.add(app);
+            // The desktop is a big download: off until the user ticks it.
+            boolean fallback = app != GuiAppsSetup.StarterApp.DESKTOP;
+            if (prefs.getBoolean(KEY_STARTER_PREFIX + app.key, fallback)) starters.add(app);
         }
         return new Choices(route, distro, starters);
     }
@@ -164,9 +167,32 @@ public final class GuiAppsSetupGuide {
     /** The command for what is picked, or null when the edition builds none (nix). */
     @Nullable
     public static String command(@NonNull SharedPreferences prefs, @NonNull AppEdition edition) {
+        return command(prefs, edition, Collections.<GuiAppsSetup.Distro>emptySet());
+    }
+
+    /** As above; a picked distro that is in {@code installed} gets no install step. */
+    @Nullable
+    public static String command(@NonNull SharedPreferences prefs, @NonNull AppEdition edition,
+                                 @NonNull Set<GuiAppsSetup.Distro> installed) {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return null;
         Choices choices = read(prefs, edition);
-        return GuiAppsSetup.command(choices.route, choices.distro, choices.starters, edition);
+        return GuiAppsSetup.command(choices.route, choices.distro, choices.starters, edition,
+            null, null, installed.contains(choices.distro));
+    }
+
+    /**
+     * The distros with a container under {@code containersDir} (proot-distro's own meaning of
+     * installed: its {@code rootfs} directory exists). Reads the disk; call off the main thread.
+     */
+    @NonNull
+    public static Set<GuiAppsSetup.Distro> installedDistros(@NonNull java.io.File containersDir) {
+        Set<GuiAppsSetup.Distro> found = EnumSet.noneOf(GuiAppsSetup.Distro.class);
+        for (ProotDistro.Container container : ProotDistro.containers(containersDir)) {
+            for (GuiAppsSetup.Distro distro : GuiAppsSetup.Distro.values()) {
+                if (distro.alias.equals(container.name)) found.add(distro);
+            }
+        }
+        return found;
     }
 
     /** The name of the source or Linux the picks add up to. */

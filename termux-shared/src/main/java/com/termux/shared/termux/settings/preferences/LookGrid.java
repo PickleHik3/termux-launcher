@@ -26,8 +26,9 @@ import java.util.Set;
  * element everywhere, all glass on that kind, Base, then the value shipped for that kind (an
  * element beats a page). A page reads its kind's cells: the page row is retired (ADR 0020 §2)
  * and its keys are no longer read. A key present at a cell is that cell's value; an absent key
- * follows; Reset deletes the key. Vibrancy and Margin have only the all-glass column
- * and no kind row. A key names a page or a kind, never both. Clamps live here, once.</p>
+ * follows; Reset deletes the key. Vibrancy and Margin have only the all-glass column; Margin has
+ * the kind row (2026-11-04: Home and the Workspace hold their own), Vibrancy none. A key names a
+ * page or a kind, never both. Clamps live here, once.</p>
  *
  * <p>The kind of a page comes from {@link PageKinds} and a kind's shipped value from
  * {@link ShippedLooks}, both supplied at construction; {@link #install} sets the ones every grid
@@ -85,9 +86,10 @@ public final class LookGrid {
         RIM("rim", RIM_OFF, RIM_GRADIENT, RIM_HAIRLINE, true),
         VIBRANCY("vibrancy", TermuxPreferenceConstants.TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY, false),
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY, false, false),
+        /** All glass only, but each kind of page may hold its own (Home's, the Workspace's). */
         MARGIN("margin", 0, TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, false);
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, false, true);
 
         public final String key;
         public final int min;
@@ -95,13 +97,20 @@ public final class LookGrid {
         public final int shipped;
         /** False for the Where-level properties, which have no element column. */
         public final boolean perElement;
+        /** Whether a kind of page may hold its own value: every property but Vibrancy. */
+        public final boolean perKind;
 
         Property(String key, int min, int max, int shipped, boolean perElement) {
+            this(key, min, max, shipped, perElement, perElement);
+        }
+
+        Property(String key, int min, int max, int shipped, boolean perElement, boolean perKind) {
             this.key = key;
             this.min = min;
             this.max = max;
             this.shipped = shipped;
             this.perElement = perElement;
+            this.perKind = perKind;
         }
 
         public int clamp(int value) {
@@ -398,7 +407,7 @@ public final class LookGrid {
     @NonNull
     public static String key(@NonNull Property property, @Nullable Element element,
                              @Nullable Kind kind) {
-        if (kind != null && !property.perElement)
+        if (kind != null && !property.perKind)
             throw new IllegalArgumentException(property.key + " has no kind row");
         String plain = key(property, element, NO_PAGE);
         return kind == null ? plain : plain + PAGE_SEPARATOR + KIND_PREFIX + kind.key;
@@ -438,7 +447,7 @@ public final class LookGrid {
         }
         Property property = Property.forKey(rest);
         if (property == null || (element != null && !property.perElement)) return null;
-        if (kind != null) return property.perElement ? new Key(property, element, kind) : null;
+        if (kind != null) return property.perKind ? new Key(property, element, kind) : null;
         return new Key(property, element, page);
     }
 
@@ -470,10 +479,10 @@ public final class LookGrid {
     @NonNull
     private Resolved resolveAt(@NonNull Property property, @Nullable Element element, int page,
                                @Nullable Kind kind) {
-        if (!property.perElement) {
+        if (!property.perElement)
             element = null;
+        if (!property.perKind)
             kind = null;
-        }
         // The page tier is retired (ADR 0020 §2): a page reads its kind's cells, where its
         // values are written and where step 17 folded the Start-in page's.
         if (element != null && kind != null) {
@@ -523,12 +532,12 @@ public final class LookGrid {
 
     /**
      * The cell a page's value lives in (ADR 0020 §2: no look is kept per page): the page's kind's
-     * cell; Base for a property with no kind row (Vibrancy, Margin) or a page of no known kind.
+     * cell; Base for a property with no kind row (Vibrancy) or a page of no known kind.
      */
     @NonNull
     public String cellKey(@NonNull Property property, @Nullable Element element, int page) {
         if (page < 0) return key(property, element, NO_PAGE);
-        Kind kind = property.perElement ? kindOf(page) : null;
+        Kind kind = property.perKind ? kindOf(page) : null;
         return kind != null ? key(property, element, kind) : key(property, element, NO_PAGE);
     }
 
@@ -680,7 +689,8 @@ public final class LookGrid {
      * {@code look.…@<page>} of the Start-in Home page {@code homePageId} into {@code @kind:home},
      * of the Terminal page {@code terminalPageId} into {@code @kind:terminal} and
      * {@code @kind:display}, each only where {@code all} holds no value for the kind's cell.
-     * Other pages' cells, and Vibrancy's and Margin's (no kind row), are left and no longer read.
+     * Other pages' cells, and Vibrancy's and Margin's (Margin's kind row is newer than the
+     * page row: a page Margin was never read, so it does not become one), are left and no longer read.
      */
     @NonNull
     public static java.util.Map<String, Object> foldedPageCells(

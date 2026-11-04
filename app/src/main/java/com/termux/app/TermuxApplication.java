@@ -34,6 +34,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
+import com.termux.launcherctl.LauncherCtlStartPolicy;
 import com.termux.privileged.lane.PrivilegedLaneServer;
 
 import java.util.Properties;
@@ -192,6 +193,13 @@ public class TermuxApplication extends Application {
         // The privileged lane's socket (@<package>.priv): catalog tools that run as shell through
         // Shizuku. It starts whether or not Shizuku is there, so a client always gets an answer.
         PrivilegedLaneServer.getInstance().start(context);
+        // Any revival of the main process (a package update brings it back as a service or
+        // notification-listener host) binds the API; the activity's own call stays as a no-op
+        // repeat. The start runs on the server's executor, not here.
+        if (LauncherCtlStartPolicy.startsAtApplicationStart(currentProcessName(context),
+            context.getPackageName())) {
+            LauncherCtlApiServer.getInstance().ensureStartedAsync(context);
+        }
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {
@@ -313,12 +321,17 @@ public class TermuxApplication extends Application {
     }
 
     private boolean isTaiRuntimeProcess(Context context) {
+        String processName = currentProcessName(context);
+        return processName != null && processName.endsWith(":tai_runtime");
+    }
+
+    private String currentProcessName(Context context) {
         // Application.getProcessName() answers locally; the running-processes query is a binder
         // call into the system server, kept only for the releases without it.
         String processName = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
             ? Application.getProcessName() : null;
         if (processName == null)
             processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
-        return processName != null && processName.endsWith(":tai_runtime");
+        return processName;
     }
 }

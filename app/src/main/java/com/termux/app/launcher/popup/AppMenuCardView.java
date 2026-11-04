@@ -84,6 +84,16 @@ public final class AppMenuCardView extends FrameLayout {
         invalidate();
     }
 
+    /** Lays the card out as a side menu: shadow room all round, no arrow. */
+    public void applySide(int shadowRoom, boolean scrolls) {
+        scroller.setPadding(shadowRoom, shadowRoom, shadowRoom, shadowRoom);
+        scroller.setClipToPadding(scrolls);
+        scroller.setVerticalFadingEdgeEnabled(scrolls);
+        scroller.setFadingEdgeLength(scrolls ? shadowRoom * 4 : 0);
+        arrow.reset();
+        invalidate();
+    }
+
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         super.dispatchDraw(canvas);

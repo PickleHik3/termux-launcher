@@ -54,7 +54,8 @@ final class EditorSettingsSnapshot {
         HomeSettings.KEY_LABEL_SHADOW,
         AppearanceSettingsStore.KEY_FULLSCREEN,
         DockCard.KEY_AZ_GLASS_BACKGROUND,
-        DockCard.KEY_COMMAND_PALETTE_BUTTON);
+        DockCard.KEY_COMMAND_PALETTE_BUTTON,
+        DockCard.KEY_FLOAT_TERMINAL_BUTTON);
 
     /**
      * The Dock card's own switches, which Settings has no row for: kept in the app's preference
@@ -64,7 +65,8 @@ final class EditorSettingsSnapshot {
     static final List<String> APP_STORE_KEYS = Arrays.asList(
         DockCard.KEY_AZ_SHOW,
         DockCard.KEY_AZ_GLASS_BACKGROUND,
-        DockCard.KEY_COMMAND_PALETTE_BUTTON);
+        DockCard.KEY_COMMAND_PALETTE_BUTTON,
+        DockCard.KEY_FLOAT_TERMINAL_BUTTON);
 
     /** Where the values are read and written; Settings' own store in the app, a map in a test. */
     interface Store {
@@ -128,6 +130,8 @@ final class EditorSettingsSnapshot {
                 return true;
             case DockCard.KEY_COMMAND_PALETTE_BUTTON:
                 return DockCard.DEFAULT_COMMAND_PALETTE_BUTTON;
+            case DockCard.KEY_FLOAT_TERMINAL_BUTTON:
+                return DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON;
             case DockCard.KEY_AZ_GLASS_BACKGROUND:
                 return DockCard.DEFAULT_AZ_GLASS_BACKGROUND;
             default:

@@ -116,4 +116,49 @@ public class KeyboardMaterialPolicyTest {
         assertTrue(KeyboardMaterialPolicy.solidFillIsRounded(KeyboardForm.SPLIT, true, false, true));
         assertFalse(KeyboardMaterialPolicy.solidFillIsRounded(KeyboardForm.SPLIT, true, false, false));
     }
+
+    @Test
+    public void onADisplayPageTheDockedKeyboardIsGlassWithItsOpacityInEitherMode() {
+        for (KeyboardForm form : new KeyboardForm[] {KeyboardForm.DOCKED, KeyboardForm.SPLIT}) {
+            for (boolean overlays : new boolean[] {true, false}) {
+                assertEquals(Material.GLASS,
+                    KeyboardMaterialPolicy.hostMaterial(form, overlays, false, true));
+                assertTrue(KeyboardMaterialPolicy.opacityApplies(form, overlays, false, true));
+            }
+        }
+    }
+
+    @Test
+    public void onlyTheOverlayKeyboardSeesThroughToTheDisplay() {
+        for (KeyboardForm form : new KeyboardForm[] {KeyboardForm.DOCKED, KeyboardForm.SPLIT}) {
+            assertTrue(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, true));
+            // Resize mode: the bed lies beside the display, over the wallpaper, in its glass.
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, true));
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, false));
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, false));
+        }
+    }
+
+    @Test
+    public void theFloatingCardStaysThePanelOverADisplayPage() {
+        assertEquals(Material.NONE,
+            KeyboardMaterialPolicy.hostMaterial(KeyboardForm.FLOATING, true, false, true));
+        assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(KeyboardForm.FLOATING, true, true));
+    }
+
+    @Test
+    public void terminalPagesKeepTheThreeArgumentTable() {
+        for (boolean overlays : new boolean[] {true, false})
+            for (boolean home : new boolean[] {true, false})
+                assertEquals(KeyboardMaterialPolicy.hostMaterial(KeyboardForm.DOCKED, overlays, home),
+                    KeyboardMaterialPolicy.hostMaterial(KeyboardForm.DOCKED, overlays, home, false));
+    }
+
+    @Test
+    public void crossingFromTheTerminalToADisplayPageBlendsPanelToGlass() {
+        Material terminal = KeyboardMaterialPolicy.hostMaterial(KeyboardForm.DOCKED, true, false, false);
+        Material display = KeyboardMaterialPolicy.hostMaterial(KeyboardForm.DOCKED, true, false, true);
+        assertEquals(0.5f,
+            KeyboardMaterialPolicy.travelSolidness(terminal, display, true, true, 0.5f), 0f);
+    }
 }

@@ -131,6 +131,13 @@ public class SeamCrossingTest {
             // Linked: the preferences answer the Workspace's on either half.
             return SHAPE;
         }
+        /** Home's own Margin, held per kind; null: the Workspace's. */
+        @androidx.annotation.Nullable WallShape homeShape;
+        @NonNull @Override public WallShape shape(
+                @NonNull com.termux.app.wall.WallPages.PageKind kind) {
+            return kind == com.termux.app.wall.WallPages.PageKind.HOME && homeShape != null
+                ? homeShape : SHAPE;
+        }
     }
 
     /** Each layout's sizes as a test sets them: the minimal layout's dock is shorter. */
@@ -153,6 +160,7 @@ public class SeamCrossingTest {
         float beadShare;
         float stripShare, fieldShare;
         float pictureReveal, pictureSlide, stackSlide;
+        float barMarginShare, barMarginDp, lookShare;
         DockStyle stackDesign;
         boolean active, folds, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
@@ -217,6 +225,9 @@ public class SeamCrossingTest {
             step.pictureReveal = answers.pictureReveal();
             step.pictureSlide = answers.pictureSlide();
             step.stackSlide = answers.stackSlide();
+            step.barMarginShare = answers.barMarginShare();
+            step.barMarginDp = crossing.barMarginDp(answers.barMarginShare());
+            step.lookShare = answers.lookShare();
             step.stackDesign = crossing.stackDesign();
             step.folds = answers.folds();
             step.rowsSink = answers.rowsSink(100);
@@ -1141,6 +1152,216 @@ public class SeamCrossingTest {
         assertEquals(1f, drive.last().keyboardReveal, EPSILON);
         assertEquals(1f, drive.last().dockReveal, EPSILON);
         assertNull(drive.last().stackDressPage);
+    }
+
+    /**
+     * Home and the Workspace hold different Margins (Margin is per kind) and stand the bar alike:
+     * the bar stays on screen through the crossing, either way, rather than riding off with the
+     * Workspace's page and leaving Home without one until the landing. The landing's half re-dress
+     * insets it for the half it lands on.
+     */
+    @Test
+    public void aBarBothHalvesStandAlikeStaysOnScreenWhenOnlyTheirMarginsDiffer() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+            Drive drive = from == PaneWallPage.WIDGETS
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    window(), false, false)
+                : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                    home(), false, false);
+            drive.slow(0f, 1f);
+            assertFalse("from " + from + ": no dress of Home's to take off a bar on screen",
+                drive.barFirst);
+            for (Step step : drive.steps) {
+                assertFalse("from " + from + ": the bar stands at " + step.fraction, step.rides);
+                if (step.layout != null) {
+                    assertFalse(step.layout.slot(Element.STATUS).hidden);
+                }
+            }
+            // The stack is still dressed for the arriving half's Margin where none of it shows.
+            assertTrue(drive.count(s -> s.restyle && s.restyleShape) > 0);
+        }
+    }
+
+    /**
+     * A still bar between two Margins eases from the committed page's to the arriving page's with
+     * the wall (amendment 2026-11-04): the frame the wall lands on draws it at the arriving
+     * Margin, so the landing's re-dress has nothing to show.
+     */
+    @Test
+    public void aStillBarEasesItsMarginWithTheWall() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+            Drive drive = from == PaneWallPage.WIDGETS
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    window(), false, false)
+                : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                    home(), false, false);
+            drive.slow(0f, 1f);
+            int here = from == PaneWallPage.WIDGETS ? SHAPE.marginDp + 8 : SHAPE.marginDp;
+            int there = from == PaneWallPage.WIDGETS ? SHAPE.marginDp : SHAPE.marginDp + 8;
+            float last = -1f;
+            for (Step step : drive.steps) {
+                if (!step.active) continue;
+                assertFalse("from " + from + ": eases at " + step.fraction,
+                    Float.isNaN(step.barMarginShare));
+                assertTrue("from " + from + ": never goes back", step.barMarginShare >= last);
+                assertEquals(here + (there - here) * step.barMarginShare, step.barMarginDp,
+                    EPSILON);
+                last = step.barMarginShare;
+            }
+            assertEquals("from " + from + ": lands at the arriving Margin", 1f,
+                drive.last().barMarginShare, EPSILON);
+            assertEquals(there, drive.last().barMarginDp, EPSILON);
+            // And back the other way, the committed page's Margin again.
+            drive.slow(1f, 0f);
+            assertEquals(here, drive.last().barMarginDp, EPSILON);
+        }
+    }
+
+    /**
+     * The landing changes nothing the last moving frame drew (amendment 2026-11-04): driven to
+     * that frame between halves with Margins apart, the bar was drawn at the landed page's Margin,
+     * which the landing's re-dress lays it out at; the bar never rode, so nothing puts it back;
+     * and the same holds for a slide that came back, at the committed page's Margin.
+     */
+    @Test
+    public void theLandingChangesNothingTheLastFrameDrew() {
+        for (PaneWallPage from : BOTH) {
+            for (boolean comesBack : new boolean[] {false, true}) {
+                Stored stored = new Stored();
+                stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+                boolean fromHome = from == PaneWallPage.WIDGETS;
+                Drive drive = fromHome
+                    ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                        window(), false, false)
+                    : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                        home(), false, false);
+                drive.slow(0f, 1f);
+                if (comesBack) drive.slow(1f, 0f);
+                Step last = drive.last();
+                PaneWallPage landed = comesBack ? from : drive.there.page.kind;
+                int landedMargin = (landed == drive.here.page.kind ? drive.here : drive.there)
+                    .stack.shape.marginDp;
+                String why = "from " + from + (comesBack ? ", back" : "");
+                assertFalse(why + ": the re-dress moves nothing",
+                    SeamCrossing.landingMovesBar(last.barMarginDp, landedMargin));
+                SeamCrossing.Landing landing = drive.crossing.land();
+                assertFalse(why + ": the bar never rode", landing.barTravelled());
+                assertFalse(why + ": nothing to dress back", landing.redressesBack(landed));
+            }
+        }
+    }
+
+    /** One end of a crossing whose stack wears the dock at {@code dockOpacity}, nothing else apart. */
+    private static SeamCrossing.Endpoint lookEnd(@NonNull DressResolver dresses,
+                                                 @NonNull PaneWallPage page, int dockOpacity) {
+        Dress dress = dresses.dressOf(page);
+        PlaceLayout layout = page == PaneWallPage.WIDGETS ? home() : window();
+        return SeamCrossing.Endpoint.of(PageRef.of(page), dress, layout,
+            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0, HalfLook.ofDockOpacity(dockOpacity)),
+            false);
+    }
+
+    /**
+     * Halves apart only in look (amendment 2026-11-04): the stack moves exactly as between halves
+     * dressed alike (no dip, no re-dress mid-slide), its look blends with the wall in steps to the
+     * landed end, and the landing's re-dress is one the landed frame has nothing to show from, so
+     * it follows that frame instead of holding it (58-88 ms on pong). A slide that came back has
+     * blended back and commits nothing.
+     */
+    @Test
+    public void aLookApartAloneBlendsAndItsLandingFollowsTheFrame() {
+        for (PaneWallPage from : BOTH) {
+            for (boolean comesBack : new boolean[] {false, true}) {
+                PaneWallPage to = from == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
+                    : PaneWallPage.WIDGETS;
+                DressResolver dresses = new DressResolver(new Stored());
+                Drive drive = new Drive(lookEnd(dresses, from, 20), lookEnd(dresses, to, 90),
+                    SeamCrossing.Stage.of(false, () -> false, true));
+                Drive alike = oneLayout(from);
+                drive.slow(0f, 1f);
+                alike.slow(0f, 1f);
+                if (comesBack) {
+                    drive.slow(1f, 0f);
+                    alike.slow(1f, 0f);
+                }
+                String why = "from " + from + (comesBack ? ", back" : "");
+                float last = Float.NaN;
+                for (int i = 0; i < drive.steps.size(); i++) {
+                    Step step = drive.steps.get(i), plain = alike.steps.get(i);
+                    assertEquals(why + ": no dip", plain.dockReveal, step.dockReveal, EPSILON);
+                    assertEquals(why, plain.keyboardReveal, step.keyboardReveal, EPSILON);
+                    assertFalse(why + ": nothing dressed again mid-slide", step.restyle);
+                    if (!step.active) continue;
+                    assertFalse(why + ": blends", Float.isNaN(step.lookShare));
+                    assertEquals(why + ": in steps", 0f,
+                        step.lookShare * SeamCrossing.LOOK_STEPS
+                            - Math.round(step.lookShare * SeamCrossing.LOOK_STEPS), EPSILON);
+                    last = step.lookShare;
+                }
+                assertEquals(why + ": the last frame shows the landed look", comesBack ? 0f : 1f,
+                    last, EPSILON);
+                // The glass the last moving frame drew is the landed end's, which the landing's
+                // re-dress builds: the dock's opacity (20 here, 90 there) and, read the same
+                // way, its tint strength (the sheet's crossfade stands wholly on that end).
+                assertEquals(why + ": opacity", comesBack ? 20 : 90,
+                    SeamCrossing.lookBlendValue(20, 90, last));
+                assertEquals(why + ": tint", comesBack ? 35 : 70,
+                    SeamCrossing.lookBlendValue(35, 70, last));
+                PaneWallPage landed = comesBack ? from : to;
+                SeamCrossing.Landing landing = drive.crossing.land();
+                assertFalse(why, landing.stackDressedFor(landed));
+                assertFalse(why, landing.redressesBack(landed));
+                assertEquals(why + ": the re-dress follows the landed frame", !comesBack,
+                    landing.lookBlendedOnto(landed));
+            }
+        }
+    }
+
+    /** One Margin on both ends: nothing eases. */
+    @Test
+    public void oneMarginEasesNothing() {
+        Drive drive = oneLayout(PaneWallPage.WIDGETS).slow(0f, 1f);
+        for (Step step : drive.steps) assertTrue(Float.isNaN(step.barMarginShare));
+    }
+
+    /**
+     * Under a page transition that turns the pages, the Workspace's bar of another Style fades in
+     * place by the way toward the Workspace's page instead of riding a turned page (amendment
+     * 2026-11-04).
+     */
+    @Test
+    public void aBarApartFadesInPlaceWhileThePagesTurn() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(LayoutStyle.FLOATING, SHAPE.cornersDp, SHAPE.marginDp);
+            DressResolver dresses = new DressResolver(stored);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = new Drive(
+                half(dresses, from, fromHome ? home() : window(), false),
+                half(dresses, fromHome ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS,
+                    fromHome ? window() : home(), false),
+                SeamCrossing.Stage.of(false, () -> false, true, false));
+            drive.slow(0f, 1f);
+            SeamCrossing.Answers answers = drive.crossing.frame(drive.frameAt(1f), true, false,
+                false);
+            assertEquals("from " + from + ": the Workspace's bar shows there", fromHome ? 1f : 0f,
+                answers.statusFade(), EPSILON);
+            assertEquals("from " + from + ": never rides", 0, drive.count(st -> st.rides));
+        }
+    }
+
+    /** A Style apart still reshapes the bar: it rides with the Workspace's page. */
+    @Test
+    public void aBarOfAnotherStyleStillRidesWithTheWorkspace() {
+        Stored stored = new Stored();
+        stored.homeShape = WallShape.of(LayoutStyle.FLOATING, SHAPE.cornersDp, SHAPE.marginDp);
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+            home(), false, false).slow(0f, 0.6f);
+        assertTrue(drive.count(s -> s.rides) > 0);
     }
 
     // ---- Rest ----

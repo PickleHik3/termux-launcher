@@ -61,7 +61,7 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
             Row.DOCK_MONOCHROME,
             Row.SECTION_LAYOUT, Row.DOCK_BARS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION,
+            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION, Row.RIM, Row.TINT_HUE,
             Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL),
             EditorRows.tier(EditorCard.DOCK, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.DOCK, ALL);
@@ -75,7 +75,7 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
             Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
+            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
             Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
             EditorRows.tier(EditorCard.STATUS, ALL, 3));
     }
@@ -85,8 +85,8 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN,
             Row.KEY_CORNERS, Row.BOTTOM_PADDING), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
-            Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM,
-            Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
+            Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
+            Row.DEPTH, Row.RIM, Row.TINT_HUE, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
     }
 
@@ -102,11 +102,11 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalCardHasNoPlaceOfItsOwn() {
-        assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL,
-            Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
-            Row.FOCUS_GROWS), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
+        assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.MARGIN, Row.CONTRAST,
+            Row.CURSOR_TRAIL, Row.EFFECT, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.PANE_BORDERS), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
+            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
             Row.SECTION_LINKS, Row.LINK_FONT), EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
@@ -135,14 +135,14 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
-        assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.ICON_PACK,
-            Row.HOME_ICON_SIZE, Row.LABEL_SIZE, Row.PAGE_TRANSITION),
+        assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.HOME_ICON_SIZE,
+            Row.LABEL_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
             EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS,
             Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS,
-            Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
+            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.MARGIN, Row.RIM, Row.TINT_HUE,
+            Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PaneWallPage frame : PaneWallPage.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
@@ -155,12 +155,13 @@ public class EditorRowsTest {
     @Test
     public void theGlobalCardOpensOnTheWallpaperThenTheColourAndKeepsTheGlassMaterial() {
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH),
+            Row.GRAIN, Row.TINT, Row.CORNERS, Row.MARGIN, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH,
+            Row.RIM),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
-            Row.WALLPAPER_COLOURS, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
+        assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
+            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
             Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
             Row.TOOL_COLOURS),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));

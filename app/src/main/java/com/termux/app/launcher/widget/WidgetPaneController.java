@@ -59,6 +59,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** The page on screen was drawn again: its number or its widgets may have changed. */
         default void onWidgetPageRendered() { }
         /**
+         * The user's own swipe turned Home to another page: told before that page is drawn, so
+         * the wall stands on its cell by the time anything reads it. The only turn the pane makes
+         * on its own; every other page change comes from the wall.
+         */
+        default void onHomePageTurnedByUser() { }
+        /**
          * The widget edit chrome came up or went away. The page's own border tab follows it: a
          * render that drops the chrome ends the session as surely as Back does, so this is told
          * from one place rather than from each way in and out.
@@ -245,7 +251,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
         });
         pane.setListener(new WidgetPaneView.Listener() {
-            @Override public void onPageChangeRequested(int page) { setCurrentPage(page); }
+            @Override public void onPageChangeRequested(int page) { turnByUser(page); }
             @Override public void onWidgetEditCommit() { commitEditSession(); }
             @Override public void onWidgetEditDiscard() { discardEditSession(); }
             @Override public void onWidgetAddPage() { menuAddPage(); }
@@ -503,14 +509,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void onWallPageShown(boolean shown) {
-        // Sizes reach the providers only while the wall rests here; see WidgetGridView.
+        // Sizes reach the providers only while the wall rests here; see WidgetGridView. Home keeps
+        // the page the wall bound it to while the wall is elsewhere: the wall turns it, a border
+        // drag back off the first window included (PaneWallController.onWallDragBegin).
         pane.grid().setPageAtRest(shown);
-        if (shown) return;
-        // Home waits on its last page while the wall is elsewhere: that is the page next to the
-        // seam, the one a border drag back off the first window arrives on (ADR 0008). The home
-        // press turns it to page 1 itself (showHomePage).
-        int last = Math.max(0, widgets.repository().pageCount() - 1);
-        if (currentPage != last) { currentPage = last; render(); }
     }
 
     /** How many Home pages there are. */
@@ -645,6 +647,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int clamped = Math.max(0, Math.min(widgets.repository().pageCount() - 1, page));
         if (clamped == currentPage) return;
         currentPage = clamped;
+        render();
+    }
+
+    /** The user's swipe committed a turn to {@code page}: the host hears it before the render. */
+    private void turnByUser(int page) {
+        int clamped = Math.max(0, Math.min(widgets.repository().pageCount() - 1, page));
+        if (clamped == currentPage) return;
+        currentPage = clamped;
+        host.onHomePageTurnedByUser();
         render();
     }
 

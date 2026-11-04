@@ -63,6 +63,22 @@ public class KeyboardOverlayPolicyTest {
             RowPlacement.BOTTOM, mode, form, 4, 5);
     }
 
+    @Test
+    public void onlyADisplayPageInOverlayModeReachesUnderTheWholeStack() {
+        for (KeyboardForm form : KeyboardForm.values()) {
+            assertTrue(KeyboardOverlayPolicy.contentUnderStack(PaneWallPage.DISPLAY,
+                layout(KeyboardMode.OVERLAY, form)));
+            assertFalse("resize mode keeps the display above the keyboard",
+                KeyboardOverlayPolicy.contentUnderStack(PaneWallPage.DISPLAY,
+                    layout(KeyboardMode.RESIZE, form)));
+            for (PaneWallPage place : PaneWallPage.values()) {
+                if (place == PaneWallPage.DISPLAY) continue;
+                assertFalse(KeyboardOverlayPolicy.contentUnderStack(place,
+                    layout(KeyboardMode.OVERLAY, form)));
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ when it applies
 
     @Test

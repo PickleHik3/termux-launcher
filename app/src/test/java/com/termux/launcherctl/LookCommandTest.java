@@ -145,7 +145,7 @@ public class LookCommandTest {
             .getInt("_statusCode"));
         assertEquals(400, run("{\"op\":\"get\",\"property\":\"opacity\",\"kind\":\"sofa\"}")
             .getInt("_statusCode"));
-        assertEquals(400, run("{\"op\":\"set\",\"property\":\"margin\",\"value\":\"4\",\"kind\":\"home\"}")
+        assertEquals(400, run("{\"op\":\"set\",\"property\":\"vibrancy\",\"value\":\"4\",\"kind\":\"home\"}")
             .getInt("_statusCode"));
         assertEquals("all glass on Display pages",
             LookCommand.describeCell(null, LookGrid.Kind.DISPLAY));

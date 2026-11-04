@@ -10,7 +10,8 @@ import java.util.List;
  * Which rows the App menu shows, and in which groups, as a pure answer.
  *
  * <p>The card is the same on the dock, on Home and in the drawer; only the inputs differ. Groups run
- * top to bottom: the notifications row (only while the app is badged), the app's shortcuts, then the
+ * top to bottom: the notifications row (only while the app is badged), the app's shortcuts, Move to category
+ * (alone, where the drawer can sort the app), then the
  * actions in Launcher3's order — Widgets, App info, Add to home, Pin or Unpin, Change icon (with
  * Reset icon beside it once a custom icon is set), Uninstall. An app in a dock folder trades Pin for
  * Move to dock and Remove from folder, the two things only a folder member can do. An icon on Home
@@ -27,6 +28,7 @@ public final class AppMenuPlan {
         NOTIFICATIONS,
         SHORTCUT,
         MORE_SHORTCUTS,
+        MOVE_TO_CATEGORY,
         WIDGETS,
         APP_INFO,
         ADD_TO_HOME,
@@ -68,6 +70,8 @@ public final class AppMenuPlan {
         public boolean pinnedToDock;
         /** The icon was pressed on the dock itself (not the drawer, Home or a folder's popup). */
         public boolean onDock;
+        /** The drawer can reassign categories (the host has its picker); see {@link #movesToCategory}. */
+        public boolean canMoveToCategory;
     }
 
     private AppMenuPlan() {
@@ -78,6 +82,16 @@ public final class AppMenuPlan {
         if (count <= MAX_SHORTCUT_ROWS) return Math.max(0, count);
         // Past the cap the card shows the cap and then the More row.
         return MAX_SHORTCUT_ROWS;
+    }
+
+    /**
+     * Whether Move to category shows: the drawer can take the answer, and the app is an Android
+     * app in the drawer or on Home (a dock icon's menu is the dock's, and a dock folder's member
+     * is not sorted by category).
+     */
+    public static boolean movesToCategory(@NonNull Inputs in) {
+        return in.canMoveToCategory && in.androidPackage && !in.onDock
+            && in.source != Source.FOLDER_MEMBER;
     }
 
     /** The groups, top to bottom; never an empty group. */
@@ -93,6 +107,8 @@ public final class AppMenuPlan {
             if (visible < in.shortcutCount) shortcuts.add(Row.MORE_SHORTCUTS);
             groups.add(shortcuts);
         }
+
+        if (movesToCategory(in)) groups.add(Collections.singletonList(Row.MOVE_TO_CATEGORY));
 
         List<Row> actions = new ArrayList<>(8);
         if (in.androidPackage && in.hasWidgets) actions.add(Row.WIDGETS);

@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -28,7 +29,8 @@ import com.termux.app.launcher.model.LauncherAppEntry;
  * never renders on the main thread, so a cold scroll costs a tile per cell, not three bitmaps and
  * a blur.</p>
  */
-public class AppDrawerAppCellView extends LinearLayout {
+public class AppDrawerAppCellView extends LinearLayout
+    implements com.termux.app.launcher.animation.LaunchIconSource {
 
     /** Stream-level guard used because a nested close deliberately does not cancel its child. */
     public interface ClickGate {
@@ -47,6 +49,15 @@ public class AppDrawerAppCellView extends LinearLayout {
     @NonNull public final ImageView icon;
     @NonNull public final TextView label;
     private boolean mKeyboardHighlighted;
+
+    /** The package this cell shows, for the home handoff; null while unbound. */
+    @Nullable private String launchPackage;
+
+    @Override public boolean launchesPackage(@NonNull String packageName) {
+        return packageName.equals(launchPackage);
+    }
+    @Override public boolean isDrawerCell() { return true; }
+    @Override @Nullable public View launchIconView() { return icon; }
 
     public AppDrawerAppCellView(@NonNull Context context) {
         super(context);
@@ -136,6 +147,7 @@ public class AppDrawerAppCellView extends LinearLayout {
                               float iconSize, float rowHeight, @NonNull ClickGate clickGate,
                               @Nullable AppDrawerPickupDelegate pickupDelegate,
                               @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        launchPackage = entry.appRef.packageName;
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
         if (dock != null && iconPx > 0) {
@@ -231,6 +243,7 @@ public class AppDrawerAppCellView extends LinearLayout {
 
     /** Releases rendered artwork, app-specific listeners and transient scrub state. */
     public void unbind() {
+        launchPackage = null;
         if (mKeyboardHighlighted) setKeyboardHighlight(false);
         cancelLongPress();
         setOnClickListener(null);

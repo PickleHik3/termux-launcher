@@ -86,15 +86,19 @@ public class EditorChipsTest {
     }
 
     @Test
-    public void vibrancyAndMarginStayBaseWhateverTheCard() {
-        for (EditorCard card : EditorCard.values())
-            for (Property property : new Property[] {Property.VIBRANCY, Property.MARGIN}) {
-                List<LookGrid.Key> cells = EditorChips.openFor(card, AppliesTo.WORKSPACE)
-                    .cells(property);
-                assertEquals(1, cells.size());
-                assertNull(cells.get(0).element);
-                assertNull(cells.get(0).kind);
+    public void vibrancyStaysBaseAndMarginTakesTheKindWhateverTheCard() {
+        for (EditorCard card : EditorCard.values()) {
+            EditorChips chips = EditorChips.openFor(card, AppliesTo.WORKSPACE);
+            List<LookGrid.Key> vibrancy = chips.cells(Property.VIBRANCY);
+            assertEquals(1, vibrancy.size());
+            assertNull(vibrancy.get(0).element);
+            assertNull(vibrancy.get(0).kind);
+            // Margin has no element column but a kind row (2026-11-04): all glass at the level.
+            for (LookGrid.Key cell : chips.cells(Property.MARGIN)) {
+                assertNull(card + ": no element column", cell.element);
+                assertEquals(card + ": at the card's level", chips.onKind(), cell.kind != null);
             }
+        }
     }
 
     @Test
@@ -123,7 +127,11 @@ public class EditorChipsTest {
     public void elementIgnoredGreysTheBaseOnlyRowsAwayFromCustomization() {
         assertFalse(EditorChips.openFor(EditorCard.APPEARANCE, null)
             .elementIgnored(Property.VIBRANCY));
-        assertTrue(EditorChips.openFor(EditorCard.HOME, null).elementIgnored(Property.MARGIN));
+        assertTrue(EditorChips.openFor(EditorCard.HOME, null).elementIgnored(Property.VIBRANCY));
+        assertFalse("Home holds its own Margin",
+            EditorChips.openFor(EditorCard.HOME, null).elementIgnored(Property.MARGIN));
+        assertTrue("the Dock's Margin is not its own",
+            EditorChips.openFor(EditorCard.DOCK, null).elementIgnored(Property.MARGIN));
         assertTrue(EditorChips.openFor(EditorCard.DOCK, null).elementIgnored(Property.VIBRANCY));
         assertFalse(EditorChips.openFor(EditorCard.DOCK, null).elementIgnored(Property.OPACITY));
     }

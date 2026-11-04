@@ -67,6 +67,7 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openSettings() { log.add("settings"); }
+        @Override public void showMoreSheet() { log.add("more"); }
         @Override public void onAutoTilingChanged(boolean enabled) {
             log.add(enabled ? "tiling on" : "tiling off");
         }
@@ -93,7 +94,7 @@ public class TerminalPaneCornerTabTapTest {
     public void aLonePanesTabOffersWallpaperAndStyleAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
+        assertEquals("six buttons on a lone pane", 6, fixture.slots().length);
 
         fixture.tapSlot(0);
         assertEquals(Arrays.asList("appearance"), fixture.host.log);
@@ -122,6 +123,11 @@ public class TerminalPaneCornerTabTapTest {
         fixture.showTab();
         fixture.tapSlot(4);
         assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
+
+        fixture.host.log.clear();
+        fixture.showTab();
+        fixture.tapSlot(5);
+        assertEquals(Arrays.asList("more"), fixture.host.log);
     }
 
     /**
@@ -135,17 +141,17 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("three buttons in a split", 3, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+        assertEquals("four buttons in a split", 4, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 0, 1, 10), fixture.actionsAtEverySlot());
     }
 
     /** The three buttons, and what each is called, as the policy asks for them. */
     @Test
     public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
         // Tiled: all three, close first.
-        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false)));
+        assertEquals(Arrays.asList(2, 0, 1, 10), ids(TerminalPaneController.splitTabActions(false)));
         // Maximised: no neighbour to move onto.
-        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true)));
+        assertEquals(Arrays.asList(2, 1, 10), ids(TerminalPaneController.splitTabActions(true)));
         for (boolean maximised : new boolean[] {false, true}) {
             for (int id : TerminalPaneController.splitTabActions(maximised)) {
                 assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
@@ -176,7 +182,7 @@ public class TerminalPaneCornerTabTapTest {
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(2, fixture.controller.tiledPaneCount());
         fixture.showTab();
-        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+        assertEquals(Arrays.asList(2, 0, 1, 10), fixture.actionsAtEverySlot());
     }
 
     /**
@@ -249,8 +255,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("two buttons maximized", 2, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 1), fixture.actionsAtEverySlot());
+        assertEquals("three buttons maximized", 3, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 1, 10), fixture.actionsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button

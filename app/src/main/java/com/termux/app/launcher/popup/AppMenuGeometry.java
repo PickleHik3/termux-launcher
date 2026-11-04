@@ -147,4 +147,16 @@ public final class AppMenuGeometry {
     public static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
+
+    /**
+     * A side menu's window height: its rows and the shadow room, kept inside the frame less the
+     * edge margin on both sides; {@code true} in {@code scrolls[0]} when the rows had to be cut.
+     */
+    public static int sideWindowHeight(int contentHeight, int frameHeight, int shadowRoom,
+                                       int edgeMargin, boolean[] scrolls) {
+        int wanted = contentHeight + 2 * shadowRoom;
+        int room = Math.max(0, frameHeight - 2 * edgeMargin);
+        scrolls[0] = wanted > room;
+        return Math.min(wanted, room);
+    }
 }
