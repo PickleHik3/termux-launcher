@@ -2261,7 +2261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLastLaunchWasLauncherEntry = true;
         }
         if (mLauncherTransitionController != null) {
-            mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
+            mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView,
+                getWindow().getDecorView(), isAppDrawerOpen());
         }
         if (isLauncherHomeIntent(intent)) {
             // HOME means the home screen, not the home screen with something still up. HOME while
@@ -11756,7 +11757,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
         final Intent intent = getIntent();
         if (mLauncherTransitionController != null) {
-            mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView);
+            mLauncherTransitionController.maybeHandleGestureContract(intent, mSuggestionBarView,
+                getWindow().getDecorView(), isAppDrawerOpen());
         }
         setIntent(null);
         // Live shells were recreated or adopted above; an empty service is decided here: the

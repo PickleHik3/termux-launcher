@@ -308,3 +308,12 @@ Elements list (pref `dock_float_terminal_button`). Owed:
   swipe holds all still tiles, Lens beads keep a bead under each · pong.
 - 2026-11-04 · Light and dark, scheme chrome, glyph ink on a pale wallpaper (glyph is the status
   bar's add-window drawable, the closest existing) · pong.
+
+**Swipe-up handoff from other apps (2026-11-04).** Not yet seen on a device. The latched pref
+`app_launcher_animation_safe_mode` clears on the next cold start; an app with no icon here is no
+longer counted as an error. Owed:
+- 2026-11-04 · Swipe home from an app pinned on the dock, from one on a Home page, and from one
+  opened from the drawer: the first two shrink into their icon, the third plays the plain
+  fallback, and `app_launcher_animation_safe_mode` stays false. `adb logcat -s
+  LauncherTransitionController` shows one "Gesture handoff" line each (source dock, home, none) ·
+  pong.
