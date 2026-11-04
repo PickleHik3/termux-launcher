@@ -9155,9 +9155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Battery saver, or the blur setting, turned over while the keyboard is up: the next
             // pass decides again.
             mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
-                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME),
-                // The editor's preview is scaled; the bed is see-through there.
-                mSurfaceEditor::isActive);
+                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         }
         mKeyboardFrost.want();
         android.os.PowerManager power = getSystemService(android.os.PowerManager.class);

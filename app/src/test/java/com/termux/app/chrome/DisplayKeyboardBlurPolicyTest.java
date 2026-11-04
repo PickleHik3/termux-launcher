@@ -55,4 +55,24 @@ public class DisplayKeyboardBlurPolicyTest {
         assertEquals(540, out[0]);
         assertEquals(900, out[1]);
     }
+
+    @Test
+    public void underTheEditorsScaledPreviewTheFrostKeepsItsFullSizePlace() {
+        // Full size: display at (0, 96), bed at (0, 1400).
+        int[] full = new int[2];
+        DisplayKeyboardBlurPolicy.toSurfaceSpace(new int[] {0, 1400}, new int[] {0, 96}, 1f, 1f,
+            full);
+        // The preview at 0.5, its origin at (270, 180): both views move and shrink alike.
+        int[] scaled = new int[2];
+        DisplayKeyboardBlurPolicy.toSurfaceSpace(new int[] {270, 180 + 700},
+            new int[] {270, 180 + 48}, 0.5f, 0.5f, scaled);
+        assertEquals(full[0], scaled[0]);
+        assertEquals(full[1], scaled[1]);
+        assertEquals(1304, scaled[1]);
+        // A scale of 0 counts as none rather than dividing by it.
+        DisplayKeyboardBlurPolicy.toSurfaceSpace(new int[] {10, 20}, new int[] {0, 0}, 0f, -1f,
+            scaled);
+        assertEquals(10, scaled[0]);
+        assertEquals(20, scaled[1]);
+    }
 }

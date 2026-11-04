@@ -56,8 +56,22 @@ public final class DisplayKeyboardBlurPolicy {
      * so the per-frame follower allocates nothing.
      */
     public static void toSurfaceSpace(int[] bedInWindow, int[] displayInWindow, int[] out) {
-        out[0] = bedInWindow[0] - displayInWindow[0];
-        out[1] = bedInWindow[1] - displayInWindow[1];
+        toSurfaceSpace(bedInWindow, displayInWindow, 1f, 1f, out);
+    }
+
+    /**
+     * The same under a scale both views share, the Appearance editor's preview: the on-screen
+     * offset divided by it. The display's surface carries that scale already and the frost is
+     * its child, so the frost is placed where the bed stands relative to the display at full
+     * size, and the surface's own transform carries it under the scaled keyboard. A scale of 0 or
+     * less counts as 1.
+     */
+    public static void toSurfaceSpace(int[] bedInWindow, int[] displayInWindow, float scaleX,
+                                      float scaleY, int[] out) {
+        float sx = scaleX > 0f ? scaleX : 1f;
+        float sy = scaleY > 0f ? scaleY : 1f;
+        out[0] = Math.round((bedInWindow[0] - displayInWindow[0]) / sx);
+        out[1] = Math.round((bedInWindow[1] - displayInWindow[1]) / sy);
     }
 
     /** Whether the bed frosts the display behind it, or is plain see-through. */

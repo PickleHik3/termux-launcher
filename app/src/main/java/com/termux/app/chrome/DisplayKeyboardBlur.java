@@ -113,18 +113,9 @@ public final class DisplayKeyboardBlur {
         }
     };
 
-    /**
-     * True while the frost must not show though the bed is up: the Appearance editor's scaled
-     * preview, where the bed's rect on screen is not the one the layer is placed at. The bed is
-     * see-through there; the layer stays made and shows again on the first frame after.
-     */
-    @NonNull private final java.util.function.BooleanSupplier mHeld;
-
-    public DisplayKeyboardBlur(@NonNull Activity activity, @NonNull Runnable onAvailabilityChanged,
-                               @NonNull java.util.function.BooleanSupplier held) {
+    public DisplayKeyboardBlur(@NonNull Activity activity, @NonNull Runnable onAvailabilityChanged) {
         mActivity = activity;
         mOnAvailabilityChanged = onAvailabilityChanged;
-        mHeld = held;
     }
 
     /**
@@ -278,12 +269,22 @@ public final class DisplayKeyboardBlur {
                 if (mWanted && parent != null) mOnAvailabilityChanged.run();
                 return;
             }
-            boolean visible = !mHeld.getAsBoolean()
-                && host.isAttachedToWindow() && host.isShown() && display.isShown()
+            boolean visible = host.isAttachedToWindow() && host.isShown() && display.isShown()
                 && host.getWidth() > 0 && host.getHeight() > 0;
             host.getLocationInWindow(mLocation);
             display.getLocationInWindow(mDisplayLocation);
-            DisplayKeyboardBlurPolicy.toSurfaceSpace(mLocation, mDisplayLocation, mPosition);
+            // The on-screen offset carries any scale over both views (the Appearance editor's
+            // preview); the display's surface carries it too, so the frost, its child, is placed
+            // at the unscaled offset and its size, corner and blur stay in surface units.
+            float scaleX = 1f;
+            float scaleY = 1f;
+            for (android.view.ViewParent p = display.getParent(); p instanceof View;
+                 p = p.getParent()) {
+                scaleX *= ((View) p).getScaleX();
+                scaleY *= ((View) p).getScaleY();
+            }
+            DisplayKeyboardBlurPolicy.toSurfaceSpace(mLocation, mDisplayLocation, scaleX, scaleY,
+                mPosition);
             int x = mPosition[0];
             int y = mPosition[1];
             int w = host.getWidth();

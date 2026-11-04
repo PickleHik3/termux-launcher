@@ -35,8 +35,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   (`xdpyinfo | grep dimensions` in X) is the same with the keyboard up and down; the extra keys
   lie over its foot with the keyboard down. Resize mode: the display still ends above the
   keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
-  Appearance editor open over a Display page the bed is see-through, no frost patch anywhere in
-  the preview; the frost is back on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
+  Appearance editor open over a Display page the frost sits exactly under the scaled keyboard in
+  the preview (no patch elsewhere), follows it through peek/half/full, and stays right on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
   pong (API 34+, blur supported), plus an API 30 emulator for the see-through fallback.
 - **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
   Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
