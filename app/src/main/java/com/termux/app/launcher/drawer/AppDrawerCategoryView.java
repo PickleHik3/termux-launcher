@@ -92,6 +92,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     @NonNull private Part streamPart = Part.OUTSIDE;
     private boolean streamFinalized;
     private float downRawY;
+    /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
+    private int bottomInset;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -307,14 +309,41 @@ public final class AppDrawerCategoryView extends ViewGroup
         // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
         // the plane rather than as a list that scrolls. One row gap of overscroll says the
         // difference, and the tiles still paint into it while dragging.
-        int bottom = Math.max(0, Math.round(metrics.itemGapPx + metrics.itemBottomGapPx));
-        overview.setPadding(horizontal, 0, horizontal, bottom);
+        overview.setPadding(horizontal, 0, horizontal, overviewBottomPaddingPx());
         overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
         tileAdapter.setMetrics(metrics);
         detailAdapter.setMetrics(metrics);
         requestLayout();
+    }
+
+    /**
+     * Ends the last overview card and the opened category's last row {@code bottomInsetPx} above
+     * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
+     * padding gives back. Not per frame.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == bottomInset) return;
+        bottomInset = inset;
+        int detail = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset,
+            AppDrawerGridMetrics.ROW_BOTTOM_DP * getResources().getDisplayMetrics().density);
+        if (detailList.getPaddingBottom() != detail) {
+            detailList.setPadding(0, 0, 0, detail);
+            detailList.setClipToPadding(false);
+        }
+        int overviewBottom = overviewBottomPaddingPx();
+        if (overview.getPaddingBottom() != overviewBottom) {
+            overview.setPadding(overview.getPaddingLeft(), 0, overview.getPaddingRight(),
+                overviewBottom);
+        }
+    }
+
+    private int overviewBottomPaddingPx() {
+        AppDrawerCategoryGridMetrics current = metrics;
+        return AppDrawerContentInsetPolicy.listBottomPaddingPx(bottomInset,
+            current == null ? 0f : current.itemBottomGapPx);
     }
 
     public void submitBuckets(@NonNull List<AppDrawerCategoryBucket> newBuckets) {
