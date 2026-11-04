@@ -20,7 +20,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 - **Keyboard frosts the display (11-04).** A Display page with an X app that moves, keyboard
   up, in overlay and in resize mode, Docked and Floating Style, Docked with the frame joined:
-  the bed shows the live display (or wallpaper in resize) frosted behind it at the Keyboard
+  the bed shows the live display frosted behind it, keys sharp (resize: see-through, no frost
+  beside the display), at the Keyboard
   card's Display-pages Opacity and Tint; no wallpaper picture in the bed, no frost outside its
   rounded outline, and the strip under the pill matches the bed. Frost 0 is see-through, Frost
   high is clearly frosted. Battery saver on (and Settings › Accessibility window blur off):

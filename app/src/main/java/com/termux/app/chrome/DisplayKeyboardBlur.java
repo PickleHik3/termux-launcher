@@ -6,6 +6,8 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.view.AttachedSurfaceControl;
 import android.view.SurfaceControl;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -24,11 +26,17 @@ import java.util.function.Consumer;
  * The frost under the keyboard's bed on a Display page: one blur layer the compositor fills with
  * what lies behind the bed, the live display included, at full rate.
  *
- * <p>The layer is a child of this window's own surface, at {@link #LAYER_Z}: above the display's
- * {@code SurfaceView} (which sits at -2 under the window) and below the window's content, where
- * the keyboard draws its see-through bed and its keys. It holds no buffer and no input, so the
+ * <p>The layer is a child of the display's own {@code SurfaceView} surface, at {@link #LAYER_Z}
+ * over the display's buffer. The {@code SurfaceView} is placed relative to the window at -2,
+ * under the window's buffer, so the frost composites over the display and under the keyboard's
+ * see-through bed and its keys. (A child of the window's surface lands in its Bounds layer,
+ * above the window's buffer, and frosts the keys too: seen on pong.) Position and crop are in
+ * the {@code SurfaceView}'s space ({@link DisplayKeyboardBlurPolicy#toSurfaceSpace}), and the
+ * {@code SurfaceView}'s crop clips the frost to the display: where the bed lies beside the
+ * display (resize mode) it is not frosted. The layer holds no buffer and no input, so the
  * keyboard's touches, its reveal, the insets and the display's own input are untouched; it only
- * follows the host's rect, synced to the frame the host draws in.
+ * follows the two rects, synced to the frame the window draws in, and is rebuilt when the
+ * display's surface is.
  *
  * <p>Android has no public call that blurs a child layer's background, so the layer is made and
  * dressed through the framework's own hidden calls (an effect layer, its blur radius and corner).
@@ -42,8 +50,8 @@ public final class DisplayKeyboardBlur {
 
     private static final String LOG_TAG = "DisplayKeyboardBlur";
 
-    /** Between the display's {@code SurfaceView} (-2 relative to the window) and the window's content. */
-    static final int LAYER_Z = -1;
+    /** Over the display's buffer (z 0), inside the {@code SurfaceView}'s slot under the window. */
+    static final int LAYER_Z = 1;
 
     /** Set once a hidden call fails: no more layers this process, the bed stays see-through. */
     private static boolean sUnavailable;
@@ -60,12 +68,18 @@ public final class DisplayKeyboardBlur {
 
     @Nullable private SurfaceControl mLayer;
     @Nullable private AttachedSurfaceControl mRoot;
+    /** The display's surface the layer is a child of; a new one means a new layer. */
+    @Nullable private SurfaceControl mParent;
     @Nullable private View mHost;
+    /** The display whose surface callbacks are followed while the keyboard is over it. */
+    @Nullable private SurfaceView mDisplay;
     @Nullable private ViewTreeObserver mObserved;
     /** Reused for every geometry change from API 33, where a merge empties it on the UI thread. */
     @Nullable private SurfaceControl.Transaction mTransaction;
 
     private final int[] mLocation = new int[2];
+    private final int[] mDisplayLocation = new int[2];
+    private final int[] mPosition = new int[2];
     private final Rect mCrop = new Rect();
     private int mX = Integer.MIN_VALUE;
     private int mY = Integer.MIN_VALUE;
@@ -83,6 +97,20 @@ public final class DisplayKeyboardBlur {
     private final ViewTreeObserver.OnPreDrawListener mFollower = () -> {
         follow();
         return true;
+    };
+
+    /** The display's surface going takes the frost with it; a new one asks for a pass. */
+    private final SurfaceHolder.Callback mSurfaceFollower = new SurfaceHolder.Callback() {
+        @Override public void surfaceCreated(@NonNull SurfaceHolder holder) {
+            if (mWanted) mOnAvailabilityChanged.run();
+        }
+
+        @Override public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width,
+                                             int height) {}
+
+        @Override public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+            dropLayer();
+        }
     };
 
     public DisplayKeyboardBlur(@NonNull Activity activity, @NonNull Runnable onAvailabilityChanged) {
@@ -110,19 +138,21 @@ public final class DisplayKeyboardBlur {
     }
 
     /**
-     * Frosts the rect of {@code host} at {@code radiusPx}, rounded to {@code cornerPx}. A radius
-     * of 0, or a layer that cannot be made, takes the layer away and leaves the bed see-through.
-     * Returns whether the layer is up.
+     * Frosts the rect of {@code host} over {@code display} at {@code radiusPx}, rounded to
+     * {@code cornerPx}. A radius of 0, no display, or a layer that cannot be made takes the layer
+     * away and leaves the bed see-through. Returns whether the layer is up.
      */
-    public boolean show(@NonNull View host, int radiusPx, float cornerPx) {
+    public boolean show(@NonNull View host, @Nullable SurfaceView display, int radiusPx,
+                        float cornerPx) {
         want();
-        if (radiusPx <= 0 || sUnavailable
+        followSurfaceOf(display);
+        if (display == null || radiusPx <= 0 || sUnavailable
             || Build.VERSION.SDK_INT < DisplayKeyboardBlurPolicy.MIN_SDK) {
             dropLayer();
             return false;
         }
         try {
-            return showLayer(host, radiusPx, cornerPx);
+            return showLayer(host, display, radiusPx, cornerPx);
         } catch (Throwable t) {
             giveUp("Could not blur under the keyboard", t);
             return false;
@@ -132,6 +162,7 @@ public final class DisplayKeyboardBlur {
     /** Takes the layer away and stops listening: the keyboard hid, the page changed, or a pause. */
     public void release() {
         dropLayer();
+        followSurfaceOf(null);
         if (!mWanted) return;
         mWanted = false;
         if (mBlurListener != null && Build.VERSION.SDK_INT >= DisplayKeyboardBlurPolicy.MIN_SDK) {
@@ -164,30 +195,36 @@ public final class DisplayKeyboardBlur {
         }
     }
 
+    /** Follows {@code display}'s surface callbacks, and only its; null stops following. */
+    private void followSurfaceOf(@Nullable SurfaceView display) {
+        if (mDisplay == display) return;
+        if (mDisplay != null) mDisplay.getHolder().removeCallback(mSurfaceFollower);
+        mDisplay = display;
+        if (display != null) display.getHolder().addCallback(mSurfaceFollower);
+    }
+
     @RequiresApi(31)
-    private boolean showLayer(@NonNull View host, int radiusPx, float cornerPx) throws Exception {
+    private boolean showLayer(@NonNull View host, @NonNull SurfaceView display, int radiusPx,
+                              float cornerPx) throws Exception {
         AttachedSurfaceControl root = host.getRootSurfaceControl();
-        if (root == null || !host.isAttachedToWindow()) {
+        SurfaceControl parent = display.getSurfaceControl();
+        if (root == null || !host.isAttachedToWindow() || parent == null || !parent.isValid()) {
             dropLayer();
             return false;
         }
-        if (mLayer == null || mRoot != root) {
+        if (mLayer == null || mRoot != root || mParent != parent) {
             dropLayer();
             if (!resolveHiddenCalls()) return false;
             SurfaceControl.Builder builder = new SurfaceControl.Builder()
                 .setName("Keyboard frost")
+                .setParent(parent)
                 .setHidden(true);
             sSetEffectLayer.invoke(builder);
             SurfaceControl layer = builder.build();
-            SurfaceControl.Transaction t = root.buildReparentTransaction(layer);
-            if (t == null) {
-                layer.release();
-                return false;
-            }
-            t.setLayer(layer, LAYER_Z);
-            t.apply();
+            new SurfaceControl.Transaction().setLayer(layer, LAYER_Z).apply();
             mLayer = layer;
             mRoot = root;
+            mParent = parent;
             mRadiusPx = 0;
             mCornerPx = -1f;
             resetGeometry();
@@ -214,21 +251,31 @@ public final class DisplayKeyboardBlur {
     }
 
     /**
-     * Moves the layer to the host's rect, and hides it while the host is not on screen, in the
-     * frame the host draws in. Runs before every frame the window draws while the layer is up;
-     * at rest it costs one location read and a few compares, and nothing is sent.
+     * Moves the layer to the host's rect in the display's space, and hides it while either is not
+     * on screen, in the frame the window draws in. Runs before every frame the window draws while
+     * the layer is up; at rest it costs two location reads and a few compares, and nothing is
+     * sent. A display whose surface was replaced under it drops the layer and asks for a pass.
      */
     private void follow() {
         SurfaceControl layer = mLayer;
         View host = mHost;
+        SurfaceView display = mDisplay;
         if (layer == null || host == null || Build.VERSION.SDK_INT < DisplayKeyboardBlurPolicy.MIN_SDK)
             return;
         try {
-            boolean visible = host.isAttachedToWindow() && host.isShown()
+            SurfaceControl parent = display == null ? null : display.getSurfaceControl();
+            if (parent != mParent || parent == null || !parent.isValid()) {
+                dropLayer();
+                if (mWanted && parent != null) mOnAvailabilityChanged.run();
+                return;
+            }
+            boolean visible = host.isAttachedToWindow() && host.isShown() && display.isShown()
                 && host.getWidth() > 0 && host.getHeight() > 0;
             host.getLocationInWindow(mLocation);
-            int x = mLocation[0];
-            int y = mLocation[1];
+            display.getLocationInWindow(mDisplayLocation);
+            DisplayKeyboardBlurPolicy.toSurfaceSpace(mLocation, mDisplayLocation, mPosition);
+            int x = mPosition[0];
+            int y = mPosition[1];
             int w = host.getWidth();
             int h = host.getHeight();
             if (visible == mVisible && x == mX && y == mY && w == mWidth && h == mHeight) return;
@@ -290,6 +337,7 @@ public final class DisplayKeyboardBlur {
         SurfaceControl layer = mLayer;
         mLayer = null;
         mRoot = null;
+        mParent = null;
         mRadiusPx = 0;
         mCornerPx = -1f;
         resetGeometry();

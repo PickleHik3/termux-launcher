@@ -50,6 +50,16 @@ public final class DisplayKeyboardBlurPolicy {
         return max > 0f ? max : 0f;
     }
 
+    /**
+     * The bed's top-left in the display surface's space, where the frost layer is placed: its
+     * location in the window less the display's. Both are {@code {x, y}}; written to {@code out}
+     * so the per-frame follower allocates nothing.
+     */
+    public static void toSurfaceSpace(int[] bedInWindow, int[] displayInWindow, int[] out) {
+        out[0] = bedInWindow[0] - displayInWindow[0];
+        out[1] = bedInWindow[1] - displayInWindow[1];
+    }
+
     /** Whether the bed frosts the display behind it, or is plain see-through. */
     public static boolean frosts(int sdk, boolean crossWindowBlurEnabled, boolean powerSave,
                                  int frostDp, float density) {

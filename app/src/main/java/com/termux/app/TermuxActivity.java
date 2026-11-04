@@ -9164,7 +9164,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             power != null && power.isPowerSaveMode(),
             mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
             getResources().getDisplayMetrics().density);
-        mKeyboardFrost.show(surfaceHost, radiusPx, cornerPx);
+        mKeyboardFrost.show(surfaceHost, displayView(), radiusPx, cornerPx);
     }
 
     /** Takes the frost under the keyboard away and frees it; safe when there is none. */

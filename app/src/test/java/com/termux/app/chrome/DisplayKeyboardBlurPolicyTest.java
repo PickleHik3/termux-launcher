@@ -43,4 +43,16 @@ public class DisplayKeyboardBlurPolicyTest {
         assertEquals(0f, DisplayKeyboardBlurPolicy.cornerPx(0f, 0f, 0f, 0f), 0f);
         assertEquals(0f, DisplayKeyboardBlurPolicy.cornerPx(-1f, -2f, -3f, -4f), 0f);
     }
+
+    @Test
+    public void theBedIsPlacedInTheDisplaySurfacesSpace() {
+        int[] out = new int[2];
+        DisplayKeyboardBlurPolicy.toSurfaceSpace(new int[] {12, 1400}, new int[] {12, 96}, out);
+        assertEquals(0, out[0]);
+        assertEquals(1304, out[1]);
+        // A display slid half off the left edge mid-crossing: the bed sits right of its origin.
+        DisplayKeyboardBlurPolicy.toSurfaceSpace(new int[] {0, 900}, new int[] {-540, 0}, out);
+        assertEquals(540, out[0]);
+        assertEquals(900, out[1]);
+    }
 }
