@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
+  start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
+  diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`
+  (sha256 89f7ec81…; v2-redesign 74fcf5a98 plus the `DevWidgetDiag` log commit on the local branch
+  `diag/devwidget-pong`, worktree `../tl-diag-pong`; the branch is never merged or pushed). Install it on pong with the
+  developer's go-ahead (staging, test key: updates over the pre release). Then the developer leaves the
+  phone asleep for an hour or more and wakes it. Read `adb logcat -s DevWidgetDiag`. Done when the
+  wake's lines name the cause: `readNow` with `sticky=true` and a level, then `bindLive label=<level>`,
+  means the fix holds. `label=–` means the system gave no reading. Report which, then delete the
+  branch, the worktree and the APK · pong.
 - **Temporary Display page (11-04).** With no Display page on the wall: (1) tap a Linux app in
   the drawer: a Display page appears and the app runs on it; Edit pages lists no Display card and
   Add display is enabled. (2) Close the app: about 2 s later the page goes, the wall lands on its
