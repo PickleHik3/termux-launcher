@@ -181,7 +181,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_bedtime, "lazy_mode");
         key(R.drawable.ic_ms_memory, "low_memory_preset", "status_widget_ram", "tai_memory_limits");
         key(R.drawable.ic_ms_blur_on, "fancier_glass");
-        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light", "tai_models_card");
+        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light");
         key(R.drawable.ic_ms_tv, "terminal_retro_effect");
 
         // Voice output and speech models
