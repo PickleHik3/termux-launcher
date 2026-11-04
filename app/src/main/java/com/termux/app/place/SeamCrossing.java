@@ -374,6 +374,9 @@ public final class SeamCrossing {
         @Nullable PaneWallPage dressedFor;
         boolean dressDiffered;
         boolean shapeDiffered;
+        /** Whether the halves were apart only in look, which the crossing blended with the wall. */
+        boolean lookBlended;
+        @Nullable PaneWallPage committedKind;
         /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
         public boolean bandsMoved() {
             return bandsMoved;
@@ -406,6 +409,17 @@ public final class SeamCrossing {
          */
         public boolean stackDressedFor(@NonNull PaneWallPage landed) {
             return dressDiffered && dressedFor != null && !SeamTravel.crosses(dressedFor, landed);
+        }
+
+        /**
+         * Whether the crossing blended the stack's look onto {@code landed}: the halves were
+         * apart only in look ({@link Answers#lookShare}) and the wall landed on the other half,
+         * so the frame it lands on already shows the arriving look. Like
+         * {@link #stackDressedFor}, the landing's re-dress has nothing to show that frame and
+         * follows it instead of holding it. A slide that came back commits nothing.
+         */
+        public boolean lookBlendedOnto(@NonNull PaneWallPage landed) {
+            return lookBlended && committedKind != null && SeamTravel.crosses(committedKind, landed);
         }
 
         /** Whether that dress back changes the shape too. */
@@ -941,6 +955,8 @@ public final class SeamCrossing {
         landing.dressedFor = mRun.stackDressPage;
         landing.dressDiffered = mRun.dressDiffers;
         landing.shapeDiffered = mRun.shapeDiffers;
+        landing.lookBlended = mRun.lookBlends;
+        landing.committedKind = mRun.committed;
         mRun = mRun.landed();
         return landing;
     }

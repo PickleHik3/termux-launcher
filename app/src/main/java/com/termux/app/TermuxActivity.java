@@ -6949,14 +6949,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         if (dressOf(from).shape().equals(dressOf(to).shape()) && !looksDifferAcross(from, to))
             return;
-        redressChromeFromState(false);
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        refreshTerminalWindowBar();
-        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        applySuggestionBarSurfaceStyling();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // Traced: 58-88 ms on pong, so it must never run inside a landing's frame.
+        Trace.beginSection("Wall.halfRedress");
+        try {
+            redressChromeFromState(false);
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            refreshTerminalWindowBar();
+            if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+            applySuggestionBarSurfaceStyling();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Set through a landing's commit while the stack already wears the half it landed on. */
@@ -26248,7 +26254,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // plainly, as that end wears it.
             endNavStripFade();
             endTopBandFade();
-            mLandingStackDressed = seamLanding.stackDressedFor(page);
+            // A stack dressed for the landed half on the way, or a look the crossing blended onto
+            // it: the landed frame already shows what the half's re-dress would, which follows it.
+            mLandingStackDressed = seamLanding.stackDressedFor(page)
+                || seamLanding.lookBlendedOnto(page);
             try {
                 syncPlaceState(page, leavingKeyboardUp);
             } finally {

@@ -18,6 +18,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
+  a perfetto trace. The landing frame holds no `Wall.halfRedress` section (it runs in the frame
+  after, as a shape-apart landing's does) and draws under 16 ms; nothing visible hitches as the
+  wall lands. Docked and Floating, keyboard up and down · pong.
 - **Dock opacity blends across a crossing (11-04).** Terminal page's Dock Opacity detached to 20,
   Home's at 90, same Style, Corners and Margin: swipe Home 2 to the Workspace and back, slow and
   reversed. The dock stays on screen (no dip) and its opacity eases with the finger; the landing
