@@ -297,7 +297,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean lostWindow = mHadWindow && !hasWindow;
         mHadWindow = hasWindow;
         if (hasWindow) mLandingShellStarted = false;
-        syncHomeCell();
         int before = mWall.currentPageId();
         mWall.setCells(cells(hasWindow));
         // The empty Terminal page shows its card, not a blank view, until a window arrives.
@@ -418,7 +417,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** The id of the page the wall is on; -1 while the wall's pages are not known. */
     public int currentPageId() {
-        syncHomeCell();
         int id = mWall.currentPageId();
         return id < 0 ? -1 : id;
     }
@@ -430,7 +428,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @Nullable
     public PaneWallPage kindAt(int steps) {
-        syncHomeCell();
         int id = steps == 0 ? mWall.currentPageId() : mWall.neighbourId(steps);
         return id == PaneWallLayout.NO_PAGE ? null : mWall.kindOf(id);
     }
@@ -459,7 +456,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** The index of the current page's cell in {@link #cellKinds}. */
     public int currentCellIndex() {
-        syncHomeCell();
         return Math.max(0, mWall.indexOfCell(mWall.currentPageId()));
     }
 
@@ -473,7 +469,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         PaneWallPage kind = mWall.kindOf(pageId);
         if (kind == null) return false;
         mWorkspacePending = false;
-        syncHomeCell();
         if (kind == PaneWallPage.WIDGETS && mWall.currentPage() == PaneWallPage.WIDGETS
             && !mWall.isMoving() && sameRun(mWall.currentPageId(), pageId)) {
             bindHome(pageId);
@@ -575,14 +570,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The Home frame pages inside its run by its own swipe: the wall stands on the cell of the
-     * Home page it shows. Asked before anything reads the current page. Only while the frame is
-     * bound to the cell the wall is on: a wall carried to another Home cell (a home press, a far
-     * jump under way) has not bound the frame yet, and the frame's old page must not pull the
-     * wall back to it.
+     * The Home frame paged inside its run by the user's own swipe, the one change of Home page
+     * the wall does not make itself: the wall stands on the cell of the Home page the frame now
+     * shows. Told by the host as the swipe commits, before the turned page is drawn. Everywhere
+     * else the wall's page id is the owner and the frame is turned to it ({@link #bindHome});
+     * a read of the current page never moves the wall. Only while the frame is bound to the cell
+     * the wall rests on: a wall carried to another Home cell (a home press, a far jump under
+     * way) has not bound the frame yet, and the frame's old page must not pull the wall back.
      */
-    private void syncHomeCell() {
+    public void onHomePageTurned() {
         if (mKnownPages == null || mWall.currentPage() != PaneWallPage.WIDGETS) return;
+        if (mWall.isMoving()) return;
         if (mWall.boundPageId(PaneWallPage.WIDGETS) != mWall.currentPageId()) return;
         int id = homeIdAt(mHost.innerIndex(PaneWallPage.WIDGETS));
         if (id != PaneWallLayout.NO_PAGE && sameRun(mWall.currentPageId(), id)) mWall.follow(id);
@@ -611,15 +609,33 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean goToHomePage(int index, boolean animate, boolean bindFirst) {
         int id = homeIdAt(index);
         if (id != PaneWallLayout.NO_PAGE) {
-            if (bindFirst && mWall.currentPageId() != id) {
-                mWorkspacePending = false;
-                syncHomeCell();
-                bindHome(id);
-            }
-            return goToPage(id, animate);
+            return bindFirst ? goToHomeBound(id, animate) : goToPage(id, animate);
         }
         mHost.showInnerPage(PaneWallPage.WIDGETS, index);
         return goTo(PaneWallPage.WIDGETS, animate);
+    }
+
+    /**
+     * Go to global Home page {@code index} (clamped to the pages there are), the frame bound to
+     * it before any slide: how the activity shows a Home page of its choosing (a float's page,
+     * a position at once), so the wall, not the frame, decides which Home page shows.
+     */
+    public boolean goToHomePageAt(int index, boolean animate) {
+        int count = Math.max(1, mHost.innerCount(PaneWallPage.WIDGETS));
+        return goToHomePage(Math.max(0, Math.min(count - 1, index)), animate, true);
+    }
+
+    /**
+     * Go to Home page {@code id} with the Home frame bound to it before the slide, so it slides
+     * in live rather than as its still: the home press's and the Home key's arrival. The page
+     * the frame leaves keeps its picture ({@link #bindHome} takes it).
+     */
+    private boolean goToHomeBound(int id, boolean animate) {
+        if (mWall.currentPageId() != id) {
+            mWorkspacePending = false;
+            bindHome(id);
+        }
+        return goToPage(id, animate);
     }
 
     /**
@@ -631,14 +647,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public com.termux.app.launcher.widget.WidgetPaneView.Seam homeSeam() {
         return new com.termux.app.launcher.widget.WidgetPaneView.Seam() {
             @Override public boolean canLeaveForward() {
-                syncHomeCell();
                 return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
                     && mWall.neighbourId(1) != PaneWallLayout.NO_PAGE;
             }
             // A Home run after the Terminal page leaves backward from its first page.
             @Override public boolean canLeaveBackward() {
-                syncHomeCell();
                 return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
                     && mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE;
@@ -937,7 +951,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             case "home":
             case "widgets": {
                 int id = homeKeyPage(pages, current);
-                return id != PaneWallLayout.NO_PAGE && goToPage(id, true);
+                return id != PaneWallLayout.NO_PAGE && goToHomeBound(id, true);
             }
             case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
@@ -1194,14 +1208,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * A drag is taking the wall from the current cell: the Home cell follows the Home page the
-     * frame shows, and the views that can arrive beside the seam are put on the page they will
-     * show while still off screen (the window next to Home, a kind-only Home cell's last page).
+     * A drag is taking the wall from the current cell: the views that can arrive beside the seam
+     * are put on the page they will show while still off screen (the window next to Home, a
+     * kind-only Home cell's last page).
      */
     @Override
     public void onWallDragBegin(@NonNull PaneWallPage page) {
         mWorkspacePending = false;
-        syncHomeCell();
         // Off the first window a kind-only Home cell, which holds every Home page, comes in on
         // its last page, the one beside the seam.
         int left = mWall.neighbourId(-1);

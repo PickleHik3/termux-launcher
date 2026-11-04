@@ -25,6 +25,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 - **AI runtimes updated (11-04).** A LiteRT-LM chat model loads and answers on GPU and on CPU
   (and the Benchmark route still returns numbers); voice typing's speech detection still starts
   and stops on speech · pong.
+- **Home page arrives live (11-04).** Home 1 (home), Home 2, Terminal: on Home 1 swipe to Home 2,
+  go to the Workspace, keyboard up, then the extra keys' Home key, and again with the phone's
+  home press: Home 1 slides in with its widgets and status bar from the first frame, never the
+  "Home 1" card. On Home 1 at rest, wait 10 s, then swipe right toward the Workspace: the wall
+  leaves from Home 1, not Home 2. A float chip for a float on Home 2 lands on Home 2 · pong.
+- **Bar across a Margin apart (11-04).** Home Margin 16, Workspace Margin 4, both with the bar on
+  top: swipe Workspace -> Home 2 and Home 2 -> Workspace, slow and flung. The bar stays on screen
+  the whole way (the window chips pan out, Home's content pans in) and settles to the arriving
+  page's Margin at the landing; no bare handle at the top mid-swipe. Same Margins: as before · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
   dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.

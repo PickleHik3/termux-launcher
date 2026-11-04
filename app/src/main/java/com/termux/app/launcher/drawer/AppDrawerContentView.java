@@ -113,14 +113,15 @@ public final class AppDrawerContentView extends FrameLayout
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
     public static final float OVERPULL_MAX_DP = 96f;
 
-    private static final float PILL_MARGIN_H_DP = 16f;
+    /** The drawer's side padding, and the content inset every view type ends above the card's bottom. */
+    static final float PILL_MARGIN_H_DP = 16f;
     private static final float PILL_MARGIN_TOP_DP = 12f;
     private static final float PILL_TO_GRID_DP = 10f;
-    /** Bottom strip occupied by horizontal paging dots. */
-    private static final float PAGE_INDICATOR_BAND_DP = 64f;
     /** Band the categories search reserves above its rows for the "N RESULTS" label. */
     private static final float RESULTS_LABEL_BAND_DP = 24f;
 
+    /** Distance from the content's bottom edge to its last element; see {@link #setBottomInsetPx}. */
+    private int mBottomInsetPx;
     private final AppDrawerSearchPillView mPill;
     private final AppDrawerSearchInputView mInput;
     private final TextView mResultsLabel;
@@ -348,7 +349,9 @@ public final class AppDrawerContentView extends FrameLayout
         // clipChildren=false for the rope lean and the full-plane drag overlay, so the recycler has
         // to establish its own hard draw boundary. With clipToPadding=false a partially visible
         // leading row can paint above this view during a fling and into the pill rectangle.
-        mGrid.setClipToPadding(true);
+        // Bottom padding (the card's content inset) is the one thing it lets rows paint into, and the
+        // outline below still holds the hard boundary at the top.
+        mGrid.setClipToPadding(false);
         mGrid.setOutlineProvider(ViewOutlineProvider.BOUNDS);
         mGrid.setClipToOutline(true);
         mGrid.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -418,7 +421,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         pagerParams.topMargin = gridParams.topMargin;
-        pagerParams.bottomMargin = dp(PAGE_INDICATOR_BAND_DP);
+        pagerParams.bottomMargin = Math.round(pagerBottomBandPx());
         mHorizontalPager.setVisibility(GONE);
         addView(mHorizontalPager, pagerParams);
 
@@ -470,7 +473,8 @@ public final class AppDrawerContentView extends FrameLayout
         addView(mNoResults, noResultsParams);
 
         LayoutParams indicatorParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            dp(PAGE_INDICATOR_BAND_DP), Gravity.BOTTOM);
+            AppDrawerPageIndicatorView.dotsHeightPx(mDensity), Gravity.BOTTOM);
+        indicatorParams.bottomMargin = mBottomInsetPx;
         addView(mPageIndicator, indicatorParams);
 
         mColumn = new AppDrawerRopeColumnView(context);
@@ -840,7 +844,46 @@ public final class AppDrawerContentView extends FrameLayout
     /** Vertical space already reserved by the pill/top gap and the existing bottom band. */
     public float horizontalPagerUsableHeight(float contentHeightPx) {
         LayoutParams params = (LayoutParams) mHorizontalPager.getLayoutParams();
-        return Math.max(0f, contentHeightPx - params.topMargin - params.bottomMargin);
+        return AppDrawerContentInsetPolicy.pagerUsableHeightPx(contentHeightPx, params.topMargin,
+            params.bottomMargin);
+    }
+
+    /** The drawer's side padding in pixels: the one inset every view type keeps above the card. */
+    public int contentInsetPx() {
+        return dp(PILL_MARGIN_H_DP);
+    }
+
+    /**
+     * Ends every view type's content {@code bottomInsetPx} above the card's usable bottom (see
+     * {@link AppDrawerContentInsetPolicy}). Set once per keyboard decision or open, never per
+     * frame; each write compares first so an unchanged inset requests no layout.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == mBottomInsetPx) return;
+        mBottomInsetPx = inset;
+        float rowTrailing = AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity;
+        int listPadding = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
+        if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
+        LayoutParams pager = (LayoutParams) mHorizontalPager.getLayoutParams();
+        int band = Math.round(pagerBottomBandPx());
+        if (pager.bottomMargin != band) {
+            pager.bottomMargin = band;
+            mHorizontalPager.setLayoutParams(pager);
+        }
+        LayoutParams indicator = (LayoutParams) mPageIndicator.getLayoutParams();
+        if (indicator.bottomMargin != inset) {
+            indicator.bottomMargin = inset;
+            mPageIndicator.setLayoutParams(indicator);
+        }
+        mCategoryView.setBottomInsetPx(inset);
+    }
+
+    /** Dots, the row gap above them and the inset below: what the pager gives up at the bottom. */
+    private float pagerBottomBandPx() {
+        return AppDrawerContentInsetPolicy.pagerBottomBandPx(mBottomInsetPx,
+            AppDrawerPageIndicatorView.dotsHeightPx(mDensity),
+            AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity);
     }
 
     public void setViewType(@NonNull AppDrawerViewType viewType) {

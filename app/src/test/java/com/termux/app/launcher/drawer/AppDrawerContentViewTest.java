@@ -298,14 +298,16 @@ public class AppDrawerContentViewTest {
 
     @Test
     public void everyPillViewTypeClipsItsProductionContentSurface() {
-        assertTrue(grid.getClipToPadding());
+        // Not clipped to padding: the bottom padding is the content inset rows scroll under; the
+        // outline below is the hard boundary.
+        assertFalse(grid.getClipToPadding());
         assertTrue(grid.getClipToOutline());
         assertTrue(content.getHorizontalPager().getClipToPadding());
         assertTrue(content.getHorizontalPager().getClipToOutline());
         assertTrue(content.getCategoryView().getClipChildren());
         assertTrue(content.getCategoryView().getClipToOutline());
         assertTrue(content.getCategoryView().getOverview().getClipToPadding());
-        assertTrue(content.getCategoryView().getDetailList().getClipToPadding());
+        assertTrue(content.getCategoryView().getDetailList().getClipToOutline());
     }
 
     @Test

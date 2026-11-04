@@ -29736,8 +29736,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController == null) return;
         setOverviewPreviewing(!landing);
         if (position.kind == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
-            if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(position.index);
+            mPaneWallController.goToHomePageAt(position.index, false);
             return;
         }
         int row = position.index;
@@ -31164,6 +31163,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Between two Home pages that dress the chrome apart, it morphs with the
                     // slide (#173 slice E).
                     syncHomePagesTravel();
+                }
+                // The user's swipe inside the Home run: the wall steps onto that page's cell.
+                @Override public void onHomePageTurnedByUser() {
+                    if (mPaneWallController != null) mPaneWallController.onHomePageTurned();
                 }
                 @Override public void onWidgetPageRendered() {
                     // A Terminal widget gone from Home takes its shell with it, however it went.
@@ -34372,17 +34375,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     void showHomeFloat(@NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
         if (mPaneController == null || !window.isHomeFloat()) return;
-        if (mWidgetPaneController != null
-            && mWidgetPaneController.homePageIndex() != window.homePage()) {
-            mWidgetPaneController.showHomePage(window.homePage());
-        }
-        if (mPaneWallController != null
-            && mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS) {
+        if (mPaneWallController != null) {
             // Home comes back with its keyboard down, so the slide's landing put away the one this
             // asks for and the float grew back to its own shape, taller than it was minimised.
             // This landing keeps it: the slide carries it to Home, and the float meets it there.
-            mKeyboardForRestoredFloat = true;
-            mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+            if (mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS)
+                mKeyboardForRestoredFloat = true;
+            // The wall owns which Home page shows: it goes to the float's page, frame and all.
+            mPaneWallController.goToHomePageAt(window.homePage(), isVisible());
         }
         mPaneController.restoreHomeFloat(window);
         if (mPaneController.focusedHomeFloat() == window && mInAppKeyboard != null
@@ -34534,9 +34534,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (ws == mCurrentWSession) {
             mPaneController.showWindow(ws.currentWindow());
         }
-        if (mWidgetPaneController != null && mWidgetPaneController.homePageIndex() != page)
-            mWidgetPaneController.showHomePage(page);
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+        mPaneWallController.goToHomePageAt(page, isVisible());
         rebuildDrawerSessions();
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard

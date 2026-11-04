@@ -669,7 +669,9 @@ public class PaneWallControllerTest {
     @Test public void aSwipeFromHomeOntoTheEmptyTerminalPageStartsItsFirstShellOnLanding() {
         emptyTerminalBetweenHomeAndDisplay(true);
         controller.goHome(false);
+        // The user's swipe turns Home to its last page.
         host.homePage = 1;
+        controller.onHomePageTurned();
         assertTrue(controller.homeSeam().canLeaveForward());
         controller.homeSeam().begin();
         controller.homeSeam().drag(-900f);
@@ -864,6 +866,93 @@ public class PaneWallControllerTest {
         assertEquals(1, controller.currentPageId());
         assertEquals(0, host.homePage);
         assertEquals(0f, wall.offsetPx(), 0f);
+    }
+
+    @Test public void theHomePressSlidesTheLiveFrameInNotTheHomePagesCard() {
+        // [Home1][Home8][T4]; the frame paged from Home 1 to Home 8 by its own swipe (no picture
+        // of Home 1 kept), then the wall went to the Workspace.
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(8, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        controller.refreshPages();
+        host.homePress = 0;
+        controller.goHome(false);
+        host.homePage = 1;
+        controller.onHomePageTurned();
+        assertEquals(8, controller.currentPageId());
+        controller.returnToTerminal(false);
+        assertEquals(4, controller.currentPageId());
+        host.reduced = false;
+        controller.refreshPages();
+        controller.goHome(true);
+        assertTrue(wall.isMoving());
+        for (int frame = 0; frame < 40 && wall.isMoving(); frame++) {
+            assertTrue("Home 1 is live at frame " + frame, wall.isLive(1));
+            PageCardView card = wall.cardOf(1);
+            assertTrue("no card over Home 1 at frame " + frame,
+                card == null || card.getVisibility() != View.VISIBLE);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(16,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** [Home1][Home8][T4], Home 1 the home page. */
+    private void twoHomePagesAndTheTerminal() {
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(8, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        host.homePress = 0;
+        controller.refreshPages();
+    }
+
+    @Test public void aHomePageTurnTheWallDidNotAskForNeverCarriesTheWallOffIt() {
+        // Resting on Home 1, the frame's page index moves to Home 8 behind the wall's back (a
+        // render, a restored index), and the ground strip reads the current cell (TLHomeCard,
+        // 11-04: groundStop <- onWidgetPageRendered).
+        twoHomePagesAndTheTerminal();
+        controller.goHome(false);
+        assertEquals(1, controller.currentPageId());
+        host.homePage = 1;
+        assertEquals(0, controller.currentCellIndex());
+        assertEquals(1, controller.currentPageId());
+        assertEquals(PaneWallPage.WIDGETS, controller.kindAt(0));
+        assertEquals(1, wall.boundPageId(PaneWallPage.WIDGETS));
+        // Only the user's own swipe moves the wall with the frame.
+        controller.onHomePageTurned();
+        assertEquals(8, controller.currentPageId());
+        assertEquals(1, controller.currentCellIndex());
+    }
+
+    @Test public void theHomeKeyFromTheWorkspaceBindsTheFrameToTheHomePageBeforeTheSlide() {
+        // The user swiped Home 1 -> Home 8, then went to the Workspace: the frame stays on Home 8.
+        twoHomePagesAndTheTerminal();
+        controller.goHome(false);
+        host.homePage = 1;
+        controller.onHomePageTurned();
+        assertEquals(8, controller.currentPageId());
+        controller.returnToTerminal(false);
+        assertEquals(4, controller.currentPageId());
+        assertEquals(8, wall.boundPageId(PaneWallPage.WIDGETS));
+        host.reduced = false;
+        controller.refreshPages();
+        // The extra keys' Home key: wall.go home.
+        assertTrue(controller.goTo("home"));
+        assertTrue("the far key slides", wall.isMoving());
+        assertEquals("the frame is bound to Home 1 before the slide", 1,
+            wall.boundPageId(PaneWallPage.WIDGETS));
+        assertEquals("and turned to its page", 0, host.homePage);
+        assertTrue(wall.isLive(1));
+        PageCardView card = wall.cardOf(1);
+        assertTrue("no card over Home 1", card == null || card.getVisibility() != View.VISIBLE);
+        idle();
+        assertEquals(1, controller.currentPageId());
+        assertEquals(0, host.homePage);
     }
 
     @Test public void theHomePressOnTheHomePageDoesNotMove() {

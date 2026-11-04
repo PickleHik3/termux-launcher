@@ -131,6 +131,13 @@ public class SeamCrossingTest {
             // Linked: the preferences answer the Workspace's on either half.
             return SHAPE;
         }
+        /** Home's own Margin, held per kind; null: the Workspace's. */
+        @androidx.annotation.Nullable WallShape homeShape;
+        @NonNull @Override public WallShape shape(
+                @NonNull com.termux.app.wall.WallPages.PageKind kind) {
+            return kind == com.termux.app.wall.WallPages.PageKind.HOME && homeShape != null
+                ? homeShape : SHAPE;
+        }
     }
 
     /** Each layout's sizes as a test sets them: the minimal layout's dock is shorter. */
@@ -1141,6 +1148,46 @@ public class SeamCrossingTest {
         assertEquals(1f, drive.last().keyboardReveal, EPSILON);
         assertEquals(1f, drive.last().dockReveal, EPSILON);
         assertNull(drive.last().stackDressPage);
+    }
+
+    /**
+     * Home and the Workspace hold different Margins (Margin is per kind) and stand the bar alike:
+     * the bar stays on screen through the crossing, either way, rather than riding off with the
+     * Workspace's page and leaving Home without one until the landing. The landing's half re-dress
+     * insets it for the half it lands on.
+     */
+    @Test
+    public void aBarBothHalvesStandAlikeStaysOnScreenWhenOnlyTheirMarginsDiffer() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+            Drive drive = from == PaneWallPage.WIDGETS
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    window(), false, false)
+                : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                    home(), false, false);
+            drive.slow(0f, 1f);
+            assertFalse("from " + from + ": no dress of Home's to take off a bar on screen",
+                drive.barFirst);
+            for (Step step : drive.steps) {
+                assertFalse("from " + from + ": the bar stands at " + step.fraction, step.rides);
+                if (step.layout != null) {
+                    assertFalse(step.layout.slot(Element.STATUS).hidden);
+                }
+            }
+            // The stack is still dressed for the arriving half's Margin where none of it shows.
+            assertTrue(drive.count(s -> s.restyle && s.restyleShape) > 0);
+        }
+    }
+
+    /** A Style apart still reshapes the bar: it rides with the Workspace's page. */
+    @Test
+    public void aBarOfAnotherStyleStillRidesWithTheWorkspace() {
+        Stored stored = new Stored();
+        stored.homeShape = WallShape.of(LayoutStyle.FLOATING, SHAPE.cornersDp, SHAPE.marginDp);
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+            home(), false, false).slow(0f, 0.6f);
+        assertTrue(drive.count(s -> s.rides) > 0);
     }
 
     // ---- Rest ----
