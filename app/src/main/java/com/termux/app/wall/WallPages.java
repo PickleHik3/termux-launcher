@@ -439,8 +439,26 @@ public final class WallPages {
     }
 
     /**
-     * Makes a temporary page permanent where it stands ("Add display" while one is up): it stays
-     * on the wall and in Edit pages after its display stops. NONE when it is already permanent.
+     * Edit pages' "Add display": a lasting unbound Display page. A temporary one is made lasting
+     * where it stands (its app stays on it); else a lasting unbound one already on the wall is
+     * the answer (NONE); else a new one goes after {@code afterId} (the end when that page is
+     * not on the wall).
+     */
+    @NonNull
+    public Result addDisplayPage(int afterId) {
+        Page temporary = temporaryDisplay();
+        if (temporary != null) return makePermanent(temporary.id);
+        for (Page p : pages()) {
+            if (p.kind == PageKind.DISPLAY && p.binding == null) {
+                return new Result(this, ChangeType.NONE, p, null, -1, visibleIndex(p.id));
+            }
+        }
+        return add(PageKind.DISPLAY, page(afterId) != null ? afterId : END, null);
+    }
+
+    /**
+     * Makes a temporary page permanent where it stands: it stays on the wall and in Edit pages
+     * after its display stops. NONE when it is already permanent.
      */
     @NonNull
     public Result makePermanent(int id) {
