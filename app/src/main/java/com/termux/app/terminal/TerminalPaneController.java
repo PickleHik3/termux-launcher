@@ -229,6 +229,8 @@ public class TerminalPaneController {
         default void openSurfaceEditor() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
+        /** The pane corner's "More": the sheet a long press on the Workspace opens, for the active pane. */
+        default void showMoreSheet() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
         /**
@@ -6341,12 +6343,13 @@ public class TerminalPaneController {
      */
     @NonNull
     static int[] splitTabActions(boolean maximised) {
-        int count = 1 + (maximised ? 0 : 1) + 1;
+        int count = 1 + (maximised ? 0 : 1) + 1 + 1;
         int[] ids = new int[count];
         int at = 0;
         ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
         if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
         ids[at++] = PaneInteractionOverlay.ACTION_MAXIMIZE;
+        ids[at++] = PaneInteractionOverlay.ACTION_MORE;
         return ids;
     }
 
@@ -6459,6 +6462,8 @@ public class TerminalPaneController {
         private static final int ACTION_APPEARANCE = 8;
         /** Minimal mode on or off for the terminal place; the glyph shows which. */
         private static final int ACTION_MINIMAL = 9;
+        /** The terminal's More sheet, for this pane; always the last button. */
+        private static final int ACTION_MORE = 10;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -6587,6 +6592,7 @@ public class TerminalPaneController {
                 actions.add(PaneControlsView.Action.label(ACTION_HELP,
                     CornerTabGlyphs.help(getContext()),
                     context.getString(R.string.pane_controls_help)));
+                actions.add(moreAction(context));
             } else {
                 for (int id : splitTabActions(mMaximizedLeaf != null)) {
                     if (id == ACTION_CLOSE) {
@@ -6603,11 +6609,35 @@ public class TerminalPaneController {
                             () -> context.getString(mMaximizedLeaf != null
                                 ? R.string.pane_controls_restore_pane
                                 : R.string.pane_corner_tab_maximise_description)));
+                    } else if (id == ACTION_MORE) {
+                        actions.add(moreAction(context));
                     }
                 }
             }
             mControls.setActions(actions);
         }
+
+        private PaneControlsView.Action moreAction(@NonNull android.content.Context context) {
+            return PaneControlsView.Action.drawn(ACTION_MORE, this::drawMoreMark,
+                PaneControlsView.TINT_PRIMARY, context.getString(R.string.pane_controls_more));
+        }
+
+        /** Three dots, in the tab's tint. */
+        private void drawMoreMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                  @NonNull Paint paint, float density) {
+            if (mMoreIcon == null) {
+                Drawable icon = ContextCompat.getDrawable(getContext(), R.drawable.ic_pane_more);
+                if (icon == null) return;
+                mMoreIcon = icon.mutate();
+            }
+            int half = Math.round(dp(8));
+            int cx = Math.round(button.centerX());
+            int cy = Math.round(button.centerY());
+            mMoreIcon.setBounds(cx - half, cy - half, cx + half, cy + half);
+            mMoreIcon.setTint(paint.getColor());
+            mMoreIcon.draw(canvas);
+        }
+        @Nullable private Drawable mMoreIcon;
 
         /** The minimal-mode glyph: out to minimal, or back in once the place is minimal. */
         private final PaneControlsView.Mark mMinimalMark =
@@ -6939,6 +6969,11 @@ public class TerminalPaneController {
             } else if (action == ACTION_APPEARANCE) {
                 dismissControls();
                 mHost.openSurfaceEditor();
+            } else if (action == ACTION_MORE) {
+                // The sheet acts on the active pane's session, so make it the corner's pane first.
+                focusLeaf(leaf);
+                dismissControls();
+                mHost.showMoreSheet();
             }
         }
 

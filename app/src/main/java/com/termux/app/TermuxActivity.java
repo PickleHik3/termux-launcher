@@ -34749,6 +34749,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
         }
 
+        @Override public void showMoreSheet() {
+            TermuxActivity.this.showTerminalActionSheet();
+        }
+
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();
