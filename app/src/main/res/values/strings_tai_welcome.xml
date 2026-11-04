@@ -31,6 +31,4 @@
     <string name="tai_welcome_reason_nothing">Tick something to download it.</string>
     <string name="tai_welcome_reason_storage">Not enough free storage for this selection.</string>
 
-    <string name="tai_models_card_title">Models for this phone</string>
-    <string name="tai_models_card_summary">Pick the models this phone can run and download them.</string>
 </resources>

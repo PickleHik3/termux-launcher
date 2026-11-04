@@ -119,9 +119,9 @@ final class LookCommand {
                     + " grain, rim, vibrancy, margin");
             if (element != null && !property.perElement)
                 return error(propertyName + " is set for all glass, not for one element");
-            if (kind != null && !property.perElement)
+            if (kind != null && !property.perKind)
                 return error(propertyName + " is set everywhere, not for one kind of page");
-            if (page >= 0 && !property.perElement)
+            if (page >= 0 && !property.perKind)
                 return error(propertyName + " is set everywhere, not for one page");
         }
         // A page names its kind's cell (ADR 0020 §2): pages have no cells of their own.
@@ -190,7 +190,8 @@ final class LookCommand {
         int cleared = 0;
         for (LookGrid.Property each : LookGrid.Property.values()) {
             if (property != null && each != property) continue;
-            if ((element != null || kind != null) && !each.perElement) continue;
+            if ((element != null && !each.perElement) || (kind != null && !each.perKind))
+                continue;
             LookGrid.Key cell = cell(each, element, page, kind);
             if (grid.has(cell)) {
                 grid.clear(cell);

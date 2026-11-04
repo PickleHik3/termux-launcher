@@ -42,13 +42,28 @@ public final class WallShape {
      */
     @NonNull
     public static WallShape read(@Nullable TermuxAppSharedPreferences prefs) {
+        return read(prefs, false);
+    }
+
+    /** {@link #read} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    @NonNull
+    public static WallShape read(@Nullable TermuxAppSharedPreferences prefs, boolean home) {
         if (prefs == null) return DEFAULT;
         return new WallShape(prefs.getLayoutStyle(), prefs.getLayoutCornersDp(false),
-            prefs.getLayoutMarginDp(false));
+            prefs.getLayoutMarginDp(home));
     }
 
     public boolean isFloating() {
         return style == LayoutStyle.FLOATING;
+    }
+
+    /**
+     * Whether {@code other} outlines a surface as this does, its Style and Corners, whatever its
+     * Margin: Margin only insets a surface from the edge, so a bar both halves stand alike keeps
+     * its outline across the seam when only their Margins differ (Margin is per kind).
+     */
+    public boolean sameOutline(@NonNull WallShape other) {
+        return style == other.style && cornersDp == other.cornersDp;
     }
 
     @Override

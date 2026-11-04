@@ -9,7 +9,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
-    litertLmVersion = "0.18.0"
+    litertLmVersion = "0.19.0"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -52,7 +52,7 @@ android {
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
         // One plain X.Y.Z for every edition; nightlies get +dev.<sha> from CI (see docs/agents/releasing.md). Keep the line bare: CI greps it.
-        versionName "2.0.0-pre.3"
+        versionName "2.0.0-pre.4"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)

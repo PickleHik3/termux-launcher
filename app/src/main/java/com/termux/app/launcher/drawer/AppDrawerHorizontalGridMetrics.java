@@ -67,9 +67,10 @@ public final class AppDrawerHorizontalGridMetrics {
             int explicit = Math.max(MIN_ROWS, Math.min(MAX_ROWS, requestedRows));
             rows = Math.max(1, Math.min(explicit, physicallyFit));
         }
-        // Fill the usable height only when it is taller than the cells need. A short height keeps
-        // the natural row finite and relies on clipping rather than producing a zero-sized cell.
-        float rowHeight = height > 0f ? Math.min(naturalRowHeight, height / rows) : naturalRowHeight;
+        // The rows share the page's height: the leftover under a whole row spreads between them
+        // instead of collecting under the last one. A height shorter than one row gives that row
+        // the height there is and relies on clipping; no height keeps the natural row.
+        float rowHeight = height > 0f ? height / rows : naturalRowHeight;
         return new AppDrawerHorizontalGridMetrics(cells.columns, rows, width, height,
             cells.cellWidthPx, Math.min(cells.iconPx,
                 Math.max(0f, rowHeight - Math.max(0f, labelHeightPx)

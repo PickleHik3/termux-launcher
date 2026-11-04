@@ -60,11 +60,16 @@ public final class DockCard {
     /** The palette button on the dock. Stored now, drawn in wave 6. */
     public static final String KEY_COMMAND_PALETTE_BUTTON = "dock_command_palette_button";
     public static final boolean DEFAULT_COMMAND_PALETTE_BUTTON = true;
+    /** The dock's New float terminal tile (the apps row's last column); off until switched on. */
+    public static final String KEY_FLOAT_TERMINAL_BUTTON = "dock_float_terminal_button";
+    public static final boolean DEFAULT_FLOAT_TERMINAL_BUTTON = false;
     /**
      * The palette tile's column in the dock row, an int, one for every layout (the Drawer tile's
      * is per layout). Absent is the row's last ({@code PaletteTilePolicy.DEFAULT_COLUMN}).
      */
     public static final String KEY_COMMAND_PALETTE_COLUMN = "dock_command_palette_column";
+    /** The New float terminal tile's column, kept the way the palette tile's is. */
+    public static final String KEY_FLOAT_TERMINAL_COLUMN = "dock_float_terminal_column";
 
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
@@ -72,6 +77,8 @@ public final class DockCard {
         DRAWER_ICON(R.drawable.ic_symbol_apps, R.string.editor_dock_option_drawer_icon, 0),
         COMMAND_PALETTE(R.drawable.ic_symbol_terminal, R.string.editor_dock_option_command_palette,
             0),
+        FLOAT_TERMINAL(R.drawable.ic_status_bar_add_window,
+            R.string.editor_dock_option_float_terminal, 0),
         NOTIFICATION_DOTS(R.drawable.ic_ms_circle_notifications,
             R.string.editor_dock_option_notification_dots, 0),
         QUICK_REPLY(R.drawable.ic_ms_swipe_up_alt, R.string.editor_dock_option_quick_reply,
@@ -94,7 +101,7 @@ public final class DockCard {
      * row of its own ({@link Row#DOCK_MONOCHROME}).
      */
     public static final List<Option> SHOW_HIDE = java.util.Collections.unmodifiableList(
-        Arrays.asList(Option.COMMAND_PALETTE, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
+        Arrays.asList(Option.COMMAND_PALETTE, Option.FLOAT_TERMINAL, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
             Option.QUICK_REPLY, Option.SEARCH_FIELD));
 
     /** What the card reads and writes. */

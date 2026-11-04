@@ -80,4 +80,97 @@ public final class PaletteTilePolicy {
         if (palette < 0) return new int[] {drawer};
         return new int[] {Math.min(drawer, palette), Math.max(drawer, palette)};
     }
+
+    // ---- The New float terminal tile: a third still tile, in a column of its own (the row's last
+    // until it is dragged, like the palette tile's), swapping with whichever tile it is dropped on.
+
+    /** {@link #appSlots(int, boolean, boolean)} with the Float tile's column taken too. */
+    public static int appSlots(int slots, boolean drawerTile, boolean paletteTile,
+                               boolean floatTile) {
+        int tiles = (drawerTile ? 1 : 0) + (paletteTile ? 1 : 0) + (floatTile ? 1 : 0);
+        return Math.max(tiles > 0 ? 1 : 0, Math.max(1, slots) - tiles);
+    }
+
+    /** {@link #columnCount(int, boolean, boolean)} with the Float tile's column. */
+    public static int columnCount(int appSlots, boolean drawerTile, boolean paletteTile,
+                                  boolean floatTile) {
+        return columnCount(appSlots, drawerTile, paletteTile) + (floatTile ? 1 : 0);
+    }
+
+    /**
+     * The three tiles' columns, {@code {drawer, palette, float}}, in a row of {@code columns}
+     * columns, each -1 for a tile the row does not hold. {@code drawer} is the Drawer tile's
+     * wanted column; {@code palette} and {@code floatTile} are the stored ones ({@link
+     * #DEFAULT_COLUMN} the row's last, a column kept from a wider row the last). Where wants meet
+     * on one column the Float tile keeps it, then the palette tile, then the Drawer tile, and the
+     * one that gives way takes the nearest free column toward the start, else toward the end: so
+     * both tiles on their defaults stand palette, Float at the row's end, and no two ever share
+     * a column.
+     */
+    @NonNull
+    public static int[] tileColumns(int drawer, boolean paletteOn, int palette,
+                                    boolean floatOn, int floatTile, int columns) {
+        int n = Math.max(1, columns);
+        boolean[] taken = new boolean[n];
+        int f = floatOn ? claim(column(floatTile, n), taken) : -1;
+        int p = paletteOn ? claim(column(palette, n), taken) : -1;
+        int d = drawer >= 0 ? claim(Math.min(drawer, n - 1), taken) : -1;
+        return new int[] {d, p, f};
+    }
+
+    private static int claim(int wanted, @NonNull boolean[] taken) {
+        if (!taken[wanted]) {
+            taken[wanted] = true;
+            return wanted;
+        }
+        for (int c = wanted - 1; c >= 0; c--) {
+            if (!taken[c]) { taken[c] = true; return c; }
+        }
+        for (int c = wanted + 1; c < taken.length; c++) {
+            if (!taken[c]) { taken[c] = true; return c; }
+        }
+        return -1;
+    }
+
+    /**
+     * The three tiles' columns, {@code {moved, other1, other2}}, once the tile at {@code from} is
+     * dropped on {@code to}: on another tile's column the two swap, so they never share one; a
+     * tile at -1 (none) stays none.
+     */
+    @NonNull
+    public static int[] dropped(int to, int from, int other1, int other2) {
+        if (other1 >= 0 && to == other1) return new int[] {to, from, other2};
+        if (other2 >= 0 && to == other2) return new int[] {to, other1, from};
+        return new int[] {to, other1, other2};
+    }
+
+    /** The column app {@code app} of {@code apps} takes around the three tiles (-1 for none). */
+    public static int slotOf(int app, int tileA, int tileB, int tileC, int apps) {
+        if (app < 0 || app >= Math.max(0, apps)) return -1;
+        int low = Math.min(tileA, Math.min(tileB, tileC));
+        int high = Math.max(tileA, Math.max(tileB, tileC));
+        int mid = tileA + tileB + tileC - low - high;
+        int column = app;
+        if (low >= 0 && column >= low) column++;
+        if (mid >= 0 && column >= mid) column++;
+        if (high >= 0 && column >= high) column++;
+        return column;
+    }
+
+    /**
+     * The app at {@code column} of a row of {@code apps} apps around the three tiles (-1 for a
+     * tile the row does not hold), as its index among the apps, or -1 for a tile's column and a
+     * column outside the row.
+     */
+    public static int appAt(int column, int tileA, int tileB, int tileC, int apps) {
+        int columns = Math.max(0, apps) + (tileA >= 0 ? 1 : 0) + (tileB >= 0 ? 1 : 0)
+            + (tileC >= 0 ? 1 : 0);
+        if (column < 0 || column >= columns || column == tileA || column == tileB
+            || column == tileC) return -1;
+        int app = column;
+        if (tileA >= 0 && tileA < column) app--;
+        if (tileB >= 0 && tileB < column) app--;
+        if (tileC >= 0 && tileC < column) app--;
+        return app;
+    }
 }

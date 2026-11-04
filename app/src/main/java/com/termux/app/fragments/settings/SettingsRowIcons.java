@@ -117,6 +117,8 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_install_desktop, "x11_gui_apps_setup");
         key(R.drawable.ic_ms_visibility_off, "x11_hidden_apps");
         key(R.drawable.ic_ms_desktop_windows, "x11_window_manager");
+        key(R.drawable.ic_ms_play_circle, "x11_start_with");
+        key(R.drawable.ic_ms_terminal, "x11_start_with_command");
         key(R.drawable.ic_ms_mouse, "x11_sub_input");
         key(R.drawable.ic_ms_fit_screen, "x11_sub_resolution");
         key(R.drawable.ic_ms_power_settings_new, "x11_sub_startup", "x11_display_autostart");
@@ -179,7 +181,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_bedtime, "lazy_mode");
         key(R.drawable.ic_ms_memory, "low_memory_preset", "status_widget_ram", "tai_memory_limits");
         key(R.drawable.ic_ms_blur_on, "fancier_glass");
-        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light", "tai_models_card");
+        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light");
         key(R.drawable.ic_ms_tv, "terminal_retro_effect");
 
         // Voice output and speech models

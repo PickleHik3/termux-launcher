@@ -99,7 +99,7 @@ public class AppearanceControlsReachTest {
     // ------------------------------------------------------------------- what stays the user's
 
     @Test
-    public void customizationKeepsAKeyboardHomeValueTheUserSet() {
+    public void customizationResetsAKeyboardHomeValueTheUserSet() {
         TermuxAppSharedPreferences prefs = fresh();
         EditorCardSheet.Model keyboard = open(prefs, EditorCard.KEYBOARD, EditorChips.AppliesTo.HOME);
         keyboard.onValue(Row.OPACITY, 23, false);
@@ -110,7 +110,11 @@ public class AppearanceControlsReachTest {
         customization.onValue(Row.OPACITY, 71, false);
         customization.onReleased(Row.OPACITY);
 
-        assertEquals("the user's Home value stands", home,
+        // Last change wins (developer, 2026-11-04): the Global move resets the keyboard's own.
+        assertEquals("the user's Home value gave way to Global",
+            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, TERMINAL_PAGE),
+            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, HOME_PAGE));
+        org.junit.Assert.assertNotEquals("it was the user's own before", home,
             read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, HOME_PAGE));
         assertEquals("the seeded Display value gave way",
             read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, TERMINAL_PAGE),

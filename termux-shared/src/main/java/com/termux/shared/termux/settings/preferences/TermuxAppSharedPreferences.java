@@ -310,12 +310,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, dp);
     }
 
-    /** Margin for a half, in dp as stored: Base's side gap on either half. */
+    /**
+     * The Margin the surfaces of Home pages ({@code home}) or of the Workspace's pages wear, in dp
+     * as stored: that kind's own once the Home or Workspace card set it, else Base's.
+     */
     public int getLayoutMarginDp(boolean home) {
+        return fromGrid(SurfaceProperty.SIDE_GAP, lookGrid().value(LookGrid.Property.MARGIN, null,
+            home ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL));
+    }
+
+    /** Base's Margin, in dp as stored: what every kind of page wears until it holds its own. */
+    public int getBaseMarginDp() {
         return getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
     }
 
-    /** Sets the Margin both halves wear, from either half. */
+    /** Sets Base's Margin, which every kind of page without its own follows. */
     public void setLayoutMarginDp(boolean home, int dp) {
         setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, dp);
     }
@@ -1494,6 +1503,32 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setX11WindowManager(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_X11_WINDOW_MANAGER, value == null ? "" : value.trim(), false);
+    }
+
+    /** What the display starts with; see {@code TERMUX_APP.KEY_X11_START_WITH}. Trimmed. */
+    @NonNull
+    public String getX11StartWith() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH, TERMUX_APP.DEFAULT_X11_START_WITH, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11StartWith(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH, value == null ? "" : value.trim(), false);
+    }
+
+    /** The command the display starts with when the choice is {@code command}. Trimmed. */
+    @NonNull
+    public String getX11StartWithCommand() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH_COMMAND, TERMUX_APP.DEFAULT_X11_START_WITH_COMMAND, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11StartWithCommand(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH_COMMAND, value == null ? "" : value.trim(), false);
     }
 
     /**

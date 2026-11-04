@@ -18,6 +18,161 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Dock tiles lift on a held press (11-04).** On the Tray and Strip dock designs, with the
+  Drawer, Command palette and New float terminal tiles all on: a finger held still on each
+  tile for about half a second lifts it (haptic tick, the tile grows) with no Edit/Hide card
+  opening, and dragging along the row and letting go drops it on the nearest column, swapping
+  with a tile it lands on; the order survives a restart and the Dock card's Reset puts the
+  palette and float tiles back last. A hold on the dock's empty frame still opens the card, and
+  a quick sideways swipe starting on a tile still pages the row · pong or emulator.
+- **MNN 3.6.2 runtime (11-04, #211).** On pong: the MNN chat models already installed load and
+  answer (CPU and OpenCL), an embedding model and a diffusion model still run, and
+  `taobao-mnn/MobileMoE-S-SFT-MNN` (716 MB, uses IndexedLinear) imports, loads and answers.
+  Optional: `LFM2.5-8B-A1B-MNN` (4.8 GB) · pong.
+- **AI runtimes updated (11-04).** A LiteRT-LM chat model loads and answers on GPU and on CPU
+  (and the Benchmark route still returns numbers); voice typing's speech detection still starts
+  and stops on speech · pong.
+- **Keyboard frosts the display (11-04).** A Display page with an X app that moves, keyboard
+  up, in overlay and in resize mode, Docked and Floating Style, Docked with the frame joined:
+  in overlay mode the bed shows the live display frosted behind it, keys sharp, at the Keyboard
+  card's Display-pages Opacity and Tint; no wallpaper picture in the bed, no frost outside its
+  rounded outline, and the strip under the pill matches the bed. In resize mode the bed wears
+  the ordinary wallpaper glass with the Display-pages look values, no frost layer
+  (`dumpsys SurfaceFlinger --list` shows no 'Keyboard frost'). Frost 0 is see-through, Frost
+  high is clearly frosted. Battery saver on (and Settings › Accessibility window blur off):
+  see-through, same Opacity and Tint, and the frost returns when it goes off with the keyboard
+  still up. Rotate with it up. Open and close the keyboard twenty times, leave the page and come
+  back, HOME and back: no stuck blur band with the keyboard down, `dumpsys SurfaceFlinger
+  --list | grep -c 'Keyboard frost'` at most 1. Typing lands in X; display taps above the
+  keyboard still reach X. In overlay mode the display runs to the screen's bottom (or the
+  Floating card's bottom inset) under the keyboard and the strip under the pill, and its size
+  (`xdpyinfo | grep dimensions` in X) is the same with the keyboard up and down; the extra keys
+  lie over its foot with the keyboard down. Resize mode: the display still ends above the
+  keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
+  Appearance editor open over a Display page the frost sits exactly under the scaled keyboard in
+  the preview (no patch elsewhere), follows it through peek/half/full, and stays right on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
+  pong (API 34+, blur supported), plus an API 30 emulator for the see-through fallback.
+- **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
+  a perfetto trace. The landing frame holds no `Wall.halfRedress` section (it runs in the frame
+  after, as a shape-apart landing's does) and draws under 16 ms; nothing visible hitches as the
+  wall lands. Docked and Floating, keyboard up and down · pong.
+- **Dock opacity blends across a crossing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, same Style, Corners and Margin: swipe Home 2 to the Workspace and back, slow and
+  reversed. The dock stays on screen (no dip) and its opacity eases with the finger; the landing
+  frame changes nothing in the dock. Again with the dock's Tint and Grain apart: both ease too.
+  Known gaps, still changing at the landing: the dock's Blur radius, the keyboard bed's own
+  look, the under-pill strip and the status bar's look. Docked (also on a joined frame, where
+  the dock's sheet stands down and nothing blends) and Floating, keyboard up and down, Live blur
+  on and off · pong.
+- **Terminal pane stays sharp after a crossing (11-04).** Home Margin 16, Workspace Margin 4,
+  and the dock's opacity apart on Home: swipe Home 2 to the Workspace with a session showing
+  text. Record the screen: no frame after the landing shows the pane's text blurred (it was ~4
+  frames). Live blur on and off, Docked and Floating, keyboard up and down · pong.
+- **Crossings turn by the Page transition (11-04).** Page transition Carousel, then Depth, Fade,
+  Stack and Slide: swipe Home 2 to the Workspace and back, slow, flung and reversed mid-way. The
+  two pages move as Home 1 and Home 2 do under the same setting (Slide: flat); the status bar,
+  dock and keyboard stay flat on screen and ease with the finger; a bar only one end wears fades
+  in place under the turning ones; the terminal pane's glass and Live blur (on and off) turn
+  with their page; a Display page in front still slides. Docked and Floating dock, keyboard up
+  and down · pong.
+- **Home page arrives live (11-04).** Home 1 (home), Home 2, Terminal: on Home 1 swipe to Home 2,
+  go to the Workspace, keyboard up, then the extra keys' Home key, and again with the phone's
+  home press: Home 1 slides in with its widgets and status bar from the first frame, never the
+  "Home 1" card. On Home 1 at rest, wait 10 s, then swipe right toward the Workspace: the wall
+  leaves from Home 1, not Home 2. A float chip for a float on Home 2 lands on Home 2 · pong.
+- **Bar across a Margin apart (11-04).** Home Margin 16, Workspace Margin 4, both with the bar on
+  top: swipe Workspace -> Home 2 and Home 2 -> Workspace, slow and flung. The bar stays on screen
+  the whole way (the window chips pan out, Home's content pans in), its width easing to the
+  arriving page's Margin with the finger, and nothing about it changes on the landing frame; a
+  reversal mid-way eases back; no bare handle at the top mid-swipe. Docked and Floating, keyboard
+  up and down, Live blur on and off (the bar's glass stays sharp at its edges while it eases).
+  Only the glass stretches: the clock, chips and readings keep their size mid-swipe (no wide or
+  narrow text), the start ones moving with the left edge and the end ones with the right; on a
+  Floating card the rounded corners follow the eased width both ways (wider and narrower).
+  Same Margins: as before · pong.
+- **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
+  from the search field to the page dots, with no dock-high empty band under the last row; the
+  dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
+- **Pane corner panel: More (11-04).** Hold a pane corner on a lone pane and on a split pane:
+  More is the last button in both (lone: Appearance, Minimal, Auto-tiling, Settings, Help, More;
+  split: Close, Move, Maximise, More). Tapping it opens the same sheet a long press on the
+  Workspace opens, and Share, Reset and Kill act on that pane's session (try it from the
+  non-focused pane of a split). The three-dot glyph sits like its neighbours, light and dark
+  theme · pong.
+- **Home press lands on the page set as home (11-04).** Wall Home 1 (set as home), Home 2,
+  Terminal: press Android Home from the Terminal page, from Home 2 and from Home 1. Each ends on
+  Home 1 (pressing on Home 1 doesn't move). Then swipe Home 1 → Home 2 → Home 1 inside Home:
+  the dots and the status bar follow each page, and Home 1 slides in drawn, never an empty page
+  for a frame · pong.
+- **Full screen pane under the camera: keyboard up/down slide lands without a jump (11-04).**
+  Fix #190 (the slide's row prediction now reads the text top inset the resize uses). With a pane
+  Full screen under the camera cut-out and a busy shell (prompt on the last row), raise and lower
+  the in-app keyboard, Docked and Floating dock: the rows slide straight to where they rest, with
+  no step at the end of the slide · pong.
+- **Display Start with (11-04, #166).** Debian with `xfce4 dbus-x11` installed, Settings › Linux
+  apps › Start with lists "Debian desktop (XFCE)" (a distro without XFCE is not listed) and set to
+  it: opening the display (Display page Start, a drawer Linux app, `termux-x11 :0` from a shell)
+  shows XFCE; leaving and reopening the Display page, or closing its window while the server
+  runs and opening it again, does not start a second session (`ps` inside Debian shows one
+  `xfce4-session`).
+  Start with = A command… `xterm`: an xterm opens with the display; a command `false` shows "The
+  display's start command did not run." once, with no retry. The tap that starts the display on
+  a drawer desktop (XFCE from the drawer) does not start a second one · emulator.
+
+- **Drawer pages swipe closes the keyboard (11-04).** Drawer view = pages, "Open keyboard
+  automatically" on: open the drawer (keyboard rises), swipe sideways to the next page: the keyboard
+  goes as the swipe starts, the query stays. Dragging an app to the page edge (which turns the page)
+  does not close it. In-app and system keyboard · pong.
+- **Edit pages: a Home page vanished once (emu2, 11-04)** after Bring back → force-stop → Add
+  page → Rename → night toggle; not reproduced. When re-running that sequence, capture
+  `wall_pages.xml` (with `next`) and the widget repository's stored page ids before and after
+  the night toggle · emulator or pong.
+- **Edit pages fixes (11-04, after the emu2 check).** (1) Use as Terminal only set from
+  Settings › Use as (not the welcome sheet): Edit pages shows "Bring back N Home pages" with N
+  the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
+  and Display card carries its name over its top left ("Page 2", "Display", the app's name); a
+  renamed card shows its new name at once; a long name ends in "…" short of the red button.
+  The captions and the "Terminal ⋮⋮" grip take dark ink on a light (cream) wallpaper and white
+  on a dark one, in light and dark theme, Material You on and off.
+  (3) Rename: the keyboard is up as the dialog opens, the field focused. Emulator or pong.
+- **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
+  windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
+  Terminal?"; Cancel keeps everything; Close stops the shells, the Terminal cards go, no undo
+  snackbar, the wall lands on a neighbour, Add terminal appears. (2) Force-stop and relaunch:
+  still no Terminal page, and no shell started (the empty-workspace autosave). (3) Each of
+  Ctrl+Alt+C, the drawer's New terminal, a Terminal=true Linux app and `launcherctl` pane open
+  brings the Terminal page back after the last Home page, lands on it and opens the window
+  there. (4) Edit pages › Add terminal adds an empty Terminal page after the focused card;
+  landing on it starts a shell. (5) The Terminal page's own look (a detached canvas tint) after
+  it comes back. Emulator or pong.
+- **Edit pages under Terminal only (11-04, #203).** Set Use as to Terminal only. (1) Appearance
+  editor › Terminal card › Links shows Pages; it opens Edit pages with no Home card and no Add
+  page pill, and a "Bring back N Home pages" pill (N = the pages set aside). (2) Tap it: the Home
+  cards come back in their order with their icons and widgets, the pill goes, Add page returns,
+  and Settings › Use as reads Home screen. (3) Back out: Home pages are on the wall again.
+  Emulator or pong.
+- **Edit pages card menu and Display picker (11-04, #201, #200).** (1) Long-press a Home card
+  and let go: a menu with Set as home, Rename, Remove opens at the finger; long-press and move
+  on: the menu goes and the card drags as before. (2) Rename a Home page and a Display page: the
+  dialog's keyboard comes up, the card shows the new name; an empty name goes back to "Page n" /
+  "Display". (3) Remove from the menu: the same undo snackbar as the red button. (4) The first
+  Terminal card offers Set as home and Remove, later ones Remove only. (5) With a Linux app
+  installed, Add display opens a list, Whole display first then apps; an app adds a Display card
+  after the focused card named after it; Bind app on a Display card swaps its app (Whole display
+  unbinds); an app already bound to a page is not listed. (6) With no Linux apps, Add display
+  adds the whole display at once, as before. Light and dark theme, editor open and closed.
+  Emulator or pong.
+- **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
+  start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
+  diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`
+  (sha256 89f7ec81…; v2-redesign 74fcf5a98 plus the `DevWidgetDiag` log commit on the local branch
+  `diag/devwidget-pong`, worktree `../tl-diag-pong`; the branch is never merged or pushed). Install it on pong with the
+  developer's go-ahead (staging, test key: updates over the pre release). Then the developer leaves the
+  phone asleep for an hour or more and wakes it. Read `adb logcat -s DevWidgetDiag`. Done when the
+  wake's lines name the cause: `readNow` with `sticky=true` and a level, then `bindLive label=<level>`,
+  means the fix holds. `label=–` means the system gave no reading. Report which, then delete the
+  branch, the worktree and the APK · pong.
 - **Temporary Display page (11-04).** With no Display page on the wall: (1) tap a Linux app in
   the drawer: a Display page appears and the app runs on it; Edit pages lists no Display card and
   Add display is enabled. (2) Close the app: about 2 s later the page goes, the wall lands on its
@@ -195,3 +350,86 @@ nothing clipped. Still owed:
   theme outline, Primary and no glow · pong, go-ahead.
 - 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
   drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
+- 2026-11-04 · #205 · After `pm install -r` over a running build, with the launcher not opened, `curl $(cat ~/.launcherctl/endpoint)/v1/ai/status` answers (the API binds when the main process is revived as a service host) · pong or emulator.
+**Linux apps guide marks an installed distro (2026-11-04, #176).**
+- 2026-11-04 · feat/176-installed-distro · emulator: install Debian by hand with
+  `proot-distro install debian`, then open Settings › Linux apps › Set up Linux apps and go to the
+  Linux step: Debian shows "Installed" (in place of "Recommended"), the others do not, and the
+  copied command on the last step has no `proot-distro install` line. With nothing installed the
+  picker and command are as before · emulator, no pong needed.
+- 2026-11-04 · feat/176-installed-distro · emulator, #177: pick a full Linux, tick Desktop on
+  the Apps step (off by default, not offered on the Termux route); the Command step shows the
+  Start with note and the command installs xfce4. Run it, then `dbus-launch startxfce4` with
+  DISPLAY set draws XFCE. Debian, Ubuntu and Arch (Arch is untested: pacman group xfce4) · emulator.
+
+**App menu shortcut icons and the More shortcuts card (2026-11-04, #198).** Not yet seen on a
+device. Owed:
+- 2026-11-04 · App menu on a Home icon, a drawer icon and a dock icon of an app that publishes
+  shortcuts (Chrome, Messages): each shortcut row shows that shortcut's own icon, untinted; an
+  app whose shortcuts have none keeps the bolt glyph · pong.
+- 2026-11-04 · More shortcuts on an app with more than four shortcuts: the side menu is the App
+  menu's card (same rows, shades, type, no arrow), beside the card and centred on the More row,
+  on the left when the right has no room, scrolling when taller than the screen; a tap launches
+  and closes both; the main card's drag highlight still follows the finger onto it · pong.
+- 2026-11-04 · The same in light and dark theme, with the launcher's scheme chrome on and off,
+  and with an icon pack pinned (shortcut icons are the app's own, not the pack's) · pong.
+- 2026-11-04 · Font scale 1.3: long shortcut labels ellipsize on one line · pong or emulator.
+
+**Move to category in the App menu (2026-11-04, #199).** Not yet seen on a device. Owed:
+- 2026-11-04 · Long-press an app in the drawer (every view type) and a Home icon of a drawer app:
+  the card shows Move to category alone below the shortcuts; it opens the categories picker, a
+  pick (or Automatic) moves the app and the Categories view regrouping follows · pong.
+- 2026-11-04 · The row is absent on a dock icon, a dock folder member and a Linux app entry · pong.
+- 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.
+
+**New float terminal tile on the dock (2026-11-04, #197 narrow).** Not yet seen on a device; the
+tile is off by default; the switch is New float terminal in the Dock card's Options and the
+Elements list (pref `dock_float_terminal_button`). Owed:
+- 2026-11-04 · The switch appears in both places, flips the tile live, is undone by Discard and
+  cleared by the Dock card's Reset · pong.
+- 2026-11-04 · With the switch on: the apps row gains one last column holding the tile; a tap opens a
+  floating terminal on Home as the Terminal entry's New float here does; Docked and Floating dock
+  styles, keyboard up and down, one pane and many · pong.
+- 2026-11-04 · Both the Command palette tile and the Float tile on: palette then Float, each one
+  column; dragging the palette tile or the Drawer tile never lands on the Float column; a page
+  swipe holds all still tiles, Lens beads keep a bead under each · pong.
+- 2026-11-04 · Light and dark, scheme chrome, glyph ink on a pale wallpaper (glyph is the status
+  bar's add-window drawable, the closest existing) · pong.
+
+**Swipe-up handoff from other apps (2026-11-04).** Not yet seen on a device. The latched pref
+`app_launcher_animation_safe_mode` clears on the next cold start; an app with no icon here is no
+longer counted as an error. Owed:
+- 2026-11-04 · Swipe home from an app pinned on the dock, from one on a Home page, and from one
+  opened from the drawer: the first two shrink into their icon, the third plays the plain
+  fallback, and `app_launcher_animation_safe_mode` stays false. `adb logcat -s
+  LauncherTransitionController` shows one "Gesture handoff" line each (source dock, home, none) ·
+  pong.
+
+- **Last change wins on the Global and Workspace sliders (11-04).** Dock card (Applies to
+  Global) Opacity to 20, Keyboard card (Applies to Home) Corners to 30. Global card: move Opacity;
+  the dock now wears Global's opacity on Home and Terminal pages, the keyboard keeps its 30 dp
+  corners. Move Global Corners; the keyboard's corners follow. Dock Opacity to 20 again: only the
+  dock changes. Workspace card Opacity: Terminal and Display pages follow, the dock on Home stays
+  at 20. Discard after any of these puts every value back. Global Margin moves the air on every
+  surface · pong.
+- **One-line slider rows (11-04).** Global, Dock, Terminal and Keyboard cards at font 1.0 and
+  1.3, light, dark and the launcher's scheme chrome: each slider is one line (glyph, name, a thick
+  track) with its value inside the track's end, white-on-fill where the fill reaches it and grey
+  over the empty track, never cut; a long name at 1.3 falls back to name and value over a
+  full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
+  its menu; TalkBack reads the value · pong.
+- **Rows in group order (11-04).** Global, Workspace, Dock, Terminal and Keyboard cards: inside
+  each section the Look and the structural choices come first (Dock Type, Status bar Position,
+  Keyboard Form, Style), then the sliders, then switches and small choices (Rim, Contrast), then
+  colours (Tint colour), then links (Pane borders, Refraction), with a small gap
+  between groups and no new headings; the Keyboard's Linked toggle still stands between its two
+  opacities; sections and their open or closed state are as before · pong.
+- **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)
+  Opacity to 20; Home card Opacity: the dock on Home pages follows Home, on the Terminal page it
+  stays at 20 · pong.
+- **Margin per page kind (11-04).** Before anything: Home and Terminal pages look as they did
+  after the update. Workspace card Margin to 20: Terminal and Display pages' dock, status bar and
+  pane air move, Home pages do not; Home card Margin to 4: Home alone moves; swipe Home ↔
+  Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
+  (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
+  pong.

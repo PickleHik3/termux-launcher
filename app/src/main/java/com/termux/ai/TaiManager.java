@@ -1598,8 +1598,9 @@ public final class TaiManager {
             TaiLoadMeter sampler = TaiLoadMeter.start(appContext);
             BenchmarkInfo info;
             try {
-                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, params.prefillTokens,
-                    params.decodeTokens, cacheDir.getAbsolutePath(), BENCHMARK_PROMPT);
+                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, null, null,
+                    params.prefillTokens, params.decodeTokens, cacheDir.getAbsolutePath(),
+                    Contents.Companion.of(BENCHMARK_PROMPT), null, null, null);
             } catch (Throwable t) {
                 sampler.stop();
                 String message = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();

@@ -268,6 +268,19 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_WINDOW_MANAGER = "openbox";
 
+        /**
+         * What the display starts with when it comes up: empty for nothing, {@code desktop:<distro>}
+         * for that distro's XFCE desktop, or {@code command} for {@link #KEY_X11_START_WITH_COMMAND}.
+         */
+        public static final String KEY_X11_START_WITH = "x11_start_with";
+
+        public static final String DEFAULT_X11_START_WITH = "";
+
+        /** The shell command the display starts with when {@link #KEY_X11_START_WITH} is {@code command}. */
+        public static final String KEY_X11_START_WITH_COMMAND = "x11_start_with_command";
+
+        public static final String DEFAULT_X11_START_WITH_COMMAND = "";
+
         /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
         public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
 

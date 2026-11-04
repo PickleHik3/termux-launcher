@@ -99,6 +99,8 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         thread.setDaemon(true);
         return thread;
     });
+    /** Distros already installed, read off the main thread; empty until the read lands. */
+    private java.util.Set<GuiAppsSetup.Distro> mInstalled = java.util.Collections.emptySet();
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final OnBackPressedCallback mBackCallback = new OnBackPressedCallback(false) {
         @Override public void handleOnBackPressed() { back(); }
@@ -189,6 +191,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         if (activity != null) activity.setTitle(R.string.settings_gui_apps_title);
         // Every return, so a pick made on the Graphics acceleration page shows at once.
         if (mStep == Step.GRAPHICS) probeGpu();
+        loadInstalled();
     }
 
     @Override
@@ -407,7 +410,9 @@ public class GuiAppsSetupGuideFragment extends Fragment {
                 : R.string.settings_gui_apps_distro_debian_summary;
             mBody.addView(optionCard(context, GuiAppsSetupGuide.distroName(context, distro),
                 context.getString(summary),
-                distro == GuiAppsSetup.Distro.DEBIAN
+                mInstalled.contains(distro)
+                    ? context.getString(R.string.settings_gui_apps_installed)
+                    : distro == GuiAppsSetup.Distro.DEBIAN
                     ? context.getString(R.string.settings_gui_apps_recommended) : null,
                 distro == picked, false, v -> {
                     mPrefs.edit().putString(GuiAppsSetupGuide.KEY_DISTRO, distro.key).apply();
@@ -425,6 +430,8 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             boolean ticked = choices.starters.contains(app);
             String title = context.getString(app == GuiAppsSetup.StarterApp.BROWSER
                 ? R.string.settings_gui_apps_starter_browser
+                : app == GuiAppsSetup.StarterApp.DESKTOP
+                ? R.string.settings_gui_apps_starter_desktop
                 : R.string.settings_gui_apps_starter_files);
             // The app the command would actually fetch: Firefox ESR on Debian, Falkon on Ubuntu.
             String summary = GuiAppsSetup.starterAppName(choices.route, choices.distro, app);
@@ -450,7 +457,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         });
         mBody.addView(copy, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        String command = GuiAppsSetupGuide.command(mPrefs, mEdition);
+        String command = GuiAppsSetupGuide.command(mPrefs, mEdition, mInstalled);
         TextView code = new TextView(context);
         code.setText(command == null ? "" : command);
         code.setTypeface(Typeface.MONOSPACE);
@@ -467,6 +474,18 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(context, 16);
         mBody.addView(code, lp);
+        if (GuiAppsSetupGuide.read(mPrefs, mEdition).starters
+            .contains(GuiAppsSetup.StarterApp.DESKTOP)) {
+            TextView note = new TextView(context);
+            note.setText(R.string.settings_gui_apps_desktop_note);
+            note.setTextAppearance(
+                com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+            note.setTextColor(M3.onSurface(context));
+            LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            noteLp.topMargin = dp(context, 12);
+            mBody.addView(note, noteLp);
+        }
     }
 
     private void renderGraphics(@NonNull Context context) {
@@ -624,7 +643,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
     // ---- actions -----------------------------------------------------------------------------
 
     private void copyCommand(@NonNull Context context) {
-        String command = GuiAppsSetupGuide.command(mPrefs, mEdition);
+        String command = GuiAppsSetupGuide.command(mPrefs, mEdition, mInstalled);
         if (command == null) return;
         Context appContext = context.getApplicationContext();
         ShareUtils.copyTextToClipboard(appContext,
@@ -637,6 +656,24 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         } catch (RuntimeException e) {
             // Nothing the user asked for depends on this; the command is already on the clipboard.
         }
+    }
+
+    /** Reads which distros are installed off the main thread; draws again if the answer changed. */
+    private void loadInstalled() {
+        if (mProbeExecutor.isShutdown()) return;
+        mProbeExecutor.execute(() -> {
+            java.util.Set<GuiAppsSetup.Distro> found =
+                GuiAppsSetupGuide.installedDistros(com.termux.app.x11.ProotDistro.containersDir());
+            mHandler.post(() -> {
+                if (!isAdded() || found.equals(mInstalled)) return;
+                mInstalled = found;
+                // Only the two steps that show it, and where the user was scrolled to.
+                if (mStep != Step.DISTRO && mStep != Step.COMMAND) return;
+                int scrollY = mScroll == null ? 0 : mScroll.getScrollY();
+                render();
+                if (mScroll != null) mScroll.post(() -> mScroll.scrollTo(0, scrollY));
+            });
+        });
     }
 
     /** The Graphics step's text: the pick and its last result, read off the main thread. */

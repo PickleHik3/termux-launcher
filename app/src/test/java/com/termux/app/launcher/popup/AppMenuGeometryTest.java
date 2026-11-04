@@ -232,4 +232,13 @@ public class AppMenuGeometryTest {
         @Override public boolean blurEnabled() { return false; }
         @Override public int blurRadiusDp() { return 0; }
     }
+
+    @Test
+    public void sideMenuKeepsItsRowsWhenTheyFitAndScrollsWhenTheyDoNot() {
+        boolean[] scrolls = new boolean[1];
+        assertEquals(300 + 8, AppMenuGeometry.sideWindowHeight(300, 800, 4, 8, scrolls));
+        assertFalse(scrolls[0]);
+        assertEquals(800 - 16, AppMenuGeometry.sideWindowHeight(900, 800, 4, 8, scrolls));
+        assertTrue(scrolls[0]);
+    }
 }

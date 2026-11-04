@@ -68,7 +68,9 @@ One slide of the wall between Home and the Workspace, from the first frame the w
 frame it lands. During a crossing the dock morphs from the leaving half's **Dress** to the arriving
 one in step with the wall's offset (icon size, row width, bands, Search field and Drawer tile), so
 nothing changes at the landing. The keyboard travels with the half that has it open, and a reversal
-or a chip tapped mid-slide retargets from where the wall is. A crossing is over only when the wall
+or a chip tapped mid-slide retargets from where the wall is. The pages move by the **Page
+transition**; the status bar, window bar, dock and keyboard stay flat and ease every difference
+between the two dresses (Margin, glass) with the offset. A crossing is over only when the wall
 lands.
 _Avoid_: travel (the code's older word for the same motion), transition, page swipe
 _ADR 0015 (proposed): any slide between two neighbouring pages, not only between the halves._
@@ -490,13 +492,18 @@ A look value one page holds instead of the wall's: a **Cell** in the page's row 
 that cell deletes it (ADR 0017).
 _Avoid_: half value, per-page setting
 
+**Page transition**:
+How pages move past each other on the wall: Slide, Depth, Fade, Carousel or Stack, one setting for
+every page move (Home ⇄ Home, a **Crossing**, window ⇄ window). A live Display page always slides.
+_Avoid_: page effect, swipe animation
+
 **Cell**:
 One slot of the look grid (ADR 0017, ADR 0018 §3): a property at one *Where* (everywhere, a kind
 of page, or a page) and one *What* (all glass or one element), keyed
 `look.<property>[.<element>][@<page>|@kind:<home|terminal|display>]`. A present key is the cell's
 value; an absent key follows. Read order: the element on this page, all glass on this page, the
 element on the page's kind, all glass on that kind, the element everywhere, **Base**, the Look
-shipped for that kind. Vibrancy and Margin have no element column and no kind row.
+shipped for that kind. Vibrancy and Margin have no element column; Vibrancy has no kind row either.
 _Avoid_: layer, level, override slot
 
 **Scope chip**:

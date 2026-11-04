@@ -45,6 +45,9 @@ final class EditorCardReset {
                 remove(prefs, DockCard.KEY_AZ_GLASS_BACKGROUND);
                 remove(prefs, DockCard.KEY_AZ_SHOW);
                 remove(prefs, DockCard.KEY_COMMAND_PALETTE_BUTTON);
+                remove(prefs, DockCard.KEY_FLOAT_TERMINAL_BUTTON);
+                remove(prefs, DockCard.KEY_COMMAND_PALETTE_COLUMN);
+                remove(prefs, DockCard.KEY_FLOAT_TERMINAL_COLUMN);
                 break;
             case STATUS:
                 prefs.setTopPaneClockStyle(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE);
