@@ -53,9 +53,11 @@ public final class TerminalCard {
         rows.tier(1, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
-        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT)
-            .build();
+        com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT);
+        // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
+        if (!offers.homeShown && !offers.overviewUp) rows.tier(3, Row.LINK_PAGES);
+        return rows.build();
     }
 
     // ------------------------------------------------------------------------------ policy

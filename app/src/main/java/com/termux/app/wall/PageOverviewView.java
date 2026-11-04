@@ -126,6 +126,51 @@ public final class PageOverviewView extends FrameLayout {
         /** Display page {@code id} leaves the wall ({@link WallPages#remove}). */
         default void removeDisplayPage(int id) { }
 
+        // Use as Terminal only: the Home pages are set aside, and Edit pages offers them back.
+        /** Whether the wall shows Home pages; false under Use as Terminal only. */
+        default boolean homePagesShown() { return true; }
+        /** How many Home pages are set aside (detached) while the wall shows none. */
+        default int detachedHomePages() { return 0; }
+        /** How many Home pages stay in the page list while the wall hides them. */
+        default int hiddenHomePages() { return 0; }
+        /** Use as goes back to Home screen, which brings the set-aside Home pages back. */
+        default void bringBackHomePages() { }
+
+        // The Terminal page as a whole (ADR 0015 section 1): removed, and added back.
+        /** Whether the wall has the Terminal page. */
+        default boolean hasTerminalPage() { return true; }
+        /** Whether the Terminal page can leave: another page stays on the wall. */
+        default boolean terminalPageRemovable() { return false; }
+        /** Every terminal window open on the Terminal page, across its sessions. */
+        default int terminalWindowCount() { return 0; }
+        /** Every terminal window closes and the Terminal page leaves the wall, with no undo. */
+        default void removeTerminalPage() { }
+        /** The Terminal page goes back on the wall, empty, after the page the wall stands on. */
+        default void addTerminalPage() { }
+
+        // A card's long-press menu and the Display picker (ADR 0015 section 2).
+        /** The name Home page {@code page} was given in Edit pages; null for its default. */
+        @Nullable default String homePageName(int page) { return null; }
+        /**
+         * Asks for a new name for the card of {@code kind} at {@code index} (a Home page's
+         * index, or a Display page's id); {@code renamed} runs once it is written.
+         */
+        default void promptRename(@NonNull PageOverviewPolicy.Kind kind, int index,
+                                  @NonNull Runnable renamed) { }
+        /** The Linux apps a Display page can be bound to, as the catalog last read them. */
+        @NonNull default java.util.List<DisplayApp> displayApps() {
+            return java.util.Collections.emptyList();
+        }
+        /** The app Display page {@code id} is bound to; null for the whole display. */
+        @Nullable default String displayBinding(int id) { return null; }
+        /** Display page {@code id} shows {@code app} from now on; null for the whole display. */
+        default void bindDisplayPage(int id, @Nullable String app) { }
+        /**
+         * A Display page bound to {@code app} after the page the wall stands on
+         * ({@link WallPages#add}); its id, or -1 when none was added.
+         */
+        default int addBoundDisplay(@NonNull String app) { return -1; }
+
         // The current session's row of terminal windows (ADR 0015: no display window in it).
         int rowCount();
         /** Something that stays the same for the window at row place {@code row} while it lives. */
@@ -170,6 +215,13 @@ public final class PageOverviewView extends FrameLayout {
         default boolean editorOpen() { return false; }
         /** The height of the editor's folded sheet along the bottom, which the chips stand above. */
         default int coveredBottom() { return 0; }
+        /**
+         * The wallpaper under {@code screen} (screen pixels), under the launcher's dim, opaque;
+         * transparent while nothing can be read. The captions' ink follows it.
+         */
+        default int wallpaperUnder(@NonNull Rect screen) { return 0; }
+        /** Moves whenever the wallpaper, dim or mode changes: the captions read it again. */
+        default int wallpaperGeneration() { return 0; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -177,6 +229,17 @@ public final class PageOverviewView extends FrameLayout {
         boolean reducedMotion();
         /** The overview is gone; {@code byBack} when Back closed it. */
         void onClosed(boolean byBack);
+    }
+
+    /** A Linux app the Display picker lists: the catalog id it binds by, and its name. */
+    public static final class DisplayApp {
+        @NonNull public final String id;
+        @NonNull public final String name;
+
+        public DisplayApp(@NonNull String id, @NonNull String name) {
+            this.id = id;
+            this.name = name;
+        }
     }
 
     /** One Display page of the wall: where it stands, and what its card is called. */
@@ -221,7 +284,7 @@ public final class PageOverviewView extends FrameLayout {
         final int number;
         /** Where it is drawn, in strip places; eases toward its place while a drag makes room. */
         float place;
-        /** A Display page's name; null for the others. */
+        /** The card's name: a Display page's, or a Home page's own; null for the default. */
         @Nullable String label;
 
         Card(@NonNull PageOverviewPolicy.Kind kind, @NonNull Object key, int index, int number) {
@@ -317,6 +380,15 @@ public final class PageOverviewView extends FrameLayout {
     /** How deep the overview is inside a change of its own, which it reads back itself. */
     private int mutating;
     @Nullable private Snackbar snackbar;
+    /** Each caption's last wallpaper read: {cellX, cellY, generation, wallpaper}, by card key. */
+    @NonNull private final Map<Object, int[]> captionWallpaper = new java.util.HashMap<>();
+    @NonNull private final Rect captionScreen = new Rect();
+    @NonNull private final int[] captionOrigin = new int[2];
+    /** The long-press menu of a card, or the Display picker; one at a time. */
+    @Nullable private com.termux.app.launcher.popup.AnchoredMenu menu;
+    /** Where the finger stood when a card's menu opened: moving on from there drags instead. */
+    private float menuDownX;
+    private float menuDownY;
 
     @Nullable private ValueAnimator zoomAnimator;
     @Nullable private ValueAnimator scrollAnimator;
@@ -379,6 +451,7 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final TextView addPage;
     @NonNull private final TextView addTerminal;
     @NonNull private final TextView addDisplay;
+    @NonNull private final TextView bringBack;
     @NonNull private final Touch accessibility;
 
     public PageOverviewView(@NonNull Context context, @NonNull Host host) {
@@ -421,9 +494,12 @@ public final class PageOverviewView extends FrameLayout {
         addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_add,
             v -> onAddPage());
         addTerminal = pill(context, R.string.page_overview_add_terminal,
-            R.drawable.ic_symbol_terminal, v -> onAddWindow(false));
+            R.drawable.ic_symbol_terminal, v -> onAddTerminalPage());
         addDisplay = pill(context, R.string.page_overview_add_display,
-            R.drawable.ic_symbol_desktop_windows, v -> onAddWindow(true));
+            R.drawable.ic_symbol_desktop_windows, v -> showDisplayPicker(null));
+        bringBack = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_home,
+            v -> onBringBack());
+        pills.addView(bringBack);
         pills.addView(addPage);
         pills.addView(addTerminal);
         pills.addView(addDisplay);
@@ -520,6 +596,7 @@ public final class PageOverviewView extends FrameLayout {
         handler.removeCallbacksAndMessages(null);
         removeCallbacks(longPress);
         removeCallbacks(edgeScroller);
+        dismissMenu();
         if (zoomAnimator != null) zoomAnimator.cancel();
         if (scrollAnimator != null) scrollAnimator.cancel();
         if (snackbar != null) {
@@ -578,7 +655,8 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Reads the pages and the row from the host again, the held removal's card left out. */
     private void reload() {
-        int pages = Math.max(1, host.pageCount());
+        // Under Terminal only the wall shows no Home page: the strip has no Home card.
+        int pages = host.homePagesShown() ? Math.max(1, host.pageCount()) : 0;
         while (homeKeys.size() < pages) homeKeys.add(new Object());
         while (homeKeys.size() > pages) homeKeys.remove(homeKeys.size() - 1);
         Map<Object, Float> places = new java.util.HashMap<>();
@@ -595,7 +673,8 @@ public final class PageOverviewView extends FrameLayout {
             homesBefore[j] = Math.max(0, Math.min(pages, displays.get(j).homesBefore));
             after[j] = displays.get(j).afterTerminal;
         }
-        List<Integer> order = PageOverviewPolicy.wallOrder(pages, true, before, homesBefore, after);
+        List<Integer> order = PageOverviewPolicy.wallOrder(pages, host.hasTerminalPage(), before,
+            homesBefore, after);
         if (displayGoing && !host.displayOpen()) displayGoing = false;
         displayCount = 0;
         blockStart = 0;
@@ -643,7 +722,9 @@ public final class PageOverviewView extends FrameLayout {
     private void addHomeCard(int page) {
         Object key = homeKeys.get(page);
         if (isPending(key)) return;
-        cards.add(new Card(PageOverviewPolicy.Kind.HOME_PAGE, key, page, page + 1));
+        Card card = new Card(PageOverviewPolicy.Kind.HOME_PAGE, key, page, page + 1);
+        card.label = host.homePageName(page);
+        cards.add(card);
     }
 
     /** The strip's kinds, in order, for the order-agnostic policy. */
@@ -712,10 +793,22 @@ public final class PageOverviewView extends FrameLayout {
     }
 
     private void updatePills() {
+        boolean homes = host.homePagesShown();
+        addPage.setVisibility(PageOverviewAddPolicy.showsAddPage(homes) ? VISIBLE : GONE);
+        int back = PageOverviewAddPolicy.bringBackCount(homes, host.detachedHomePages(),
+            host.hiddenHomePages());
+        bringBack.setVisibility(back > 0 ? VISIBLE : GONE);
+        if (back > 0) {
+            CharSequence text = getResources().getQuantityString(
+                R.plurals.page_overview_bring_back_homes, back, back);
+            if (!text.toString().contentEquals(bringBack.getText())) bringBack.setText(text);
+        }
+        addTerminal.setVisibility(PageOverviewAddPolicy.showsAddTerminal(host.hasTerminalPage())
+            ? VISIBLE : GONE);
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
         boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
-            host.displayTemporary());
+            host.displayTemporary()) || (supported && !pickableApps(-1).isEmpty());
         addDisplay.setEnabled(canAdd);
         addDisplay.setAlpha(canAdd ? 1f : 0.38f);
     }
@@ -749,6 +842,16 @@ public final class PageOverviewView extends FrameLayout {
             scrollTo(index, this::onSettled);
         }
         invalidate();
+    }
+
+    /** "Bring back N Home pages": Use as goes back to Home screen, and the strip reads again. */
+    private void onBringBack() {
+        if (!isOpen() || host.homePagesShown()) return;
+        commitPending();
+        mutate(host::bringBackHomePages);
+        reload();
+        invalidate();
+        onSettled();
     }
 
     private void onAddWindow(boolean display) {
@@ -978,6 +1081,256 @@ public final class PageOverviewView extends FrameLayout {
         }
         invalidate();
         onSettled();
+    }
+
+    // ---- A card's menu and the Display picker (ADR 0015 section 2) -------------------------
+
+    /**
+     * The long press on the card at {@code index}: its menu opens at the finger while the card
+     * is held, so letting go leaves the menu up and moving on drags the card instead.
+     */
+    private void showCardMenu(@NonNull Card card, int index) {
+        Context context = getContext();
+        List<PageCardMenuPolicy.Action> actions = PageCardMenuPolicy.actions(card.kind,
+            isDefault(card), isFirstTerminal(card), homePageCards(),
+            host.terminalPageRemovable());
+        if (actions.isEmpty()) return;
+        List<com.termux.app.launcher.popup.AppMenuCard.Item> items = new ArrayList<>(5);
+        items.add(com.termux.app.launcher.popup.AppMenuCard.Item.header(labelOf(card)));
+        final Object key = card.key;
+        for (PageCardMenuPolicy.Action action : actions) {
+            switch (action) {
+                case SET_HOME:
+                    items.add(menuItem(R.string.page_overview_menu_set_home,
+                        R.drawable.ic_symbol_home, key, this::onMakeHome));
+                    break;
+                case RENAME:
+                    items.add(menuItem(R.string.page_overview_menu_rename, R.drawable.ic_ms_edit,
+                        key, this::onRename));
+                    break;
+                case BIND_APP:
+                    items.add(menuItem(R.string.page_overview_menu_bind_app, R.drawable.ic_ms_link,
+                        key, c -> showDisplayPicker(c)));
+                    break;
+                case REMOVE_TERMINAL:
+                    items.add(menuItem(R.string.page_overview_menu_remove_terminal,
+                        R.drawable.ic_ms_delete_sweep, key, c -> onRemoveTerminalPage()));
+                    break;
+                case REMOVE:
+                default:
+                    items.add(menuItem(R.string.page_overview_menu_remove, R.drawable.ic_ms_delete,
+                        key, this::onDelete));
+                    break;
+            }
+        }
+        dismissMenu();
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme(context);
+        com.termux.app.launcher.popup.AnchoredMenu shown =
+            new com.termux.app.launcher.popup.AnchoredMenu(this, theme);
+        com.termux.app.launcher.popup.AppMenuCard built =
+            com.termux.app.launcher.popup.AppMenuCard.build(context,
+                new com.termux.app.launcher.popup.MenuRowFactory(context, theme),
+                java.util.Collections.singletonList(items));
+        int[] at = new int[2];
+        getLocationOnScreen(at);
+        menuDownX = downX;
+        menuDownY = downY;
+        int half = dp(24);
+        Rect press = new Rect(at[0] + Math.round(downX) - half, at[1] + Math.round(downY) - half,
+            at[0] + Math.round(downX) + half, at[1] + Math.round(downY) + half);
+        menu = shown;
+        shown.showAppMenu(built, press, () -> {
+            if (menu == shown) menu = null;
+        }, labelOf(card));
+    }
+
+    /** A menu row that acts on the card {@code key} names, if it is still in the strip. */
+    @NonNull
+    private com.termux.app.launcher.popup.AppMenuCard.Item menuItem(int label, int glyph,
+            @NonNull Object key, @NonNull java.util.function.Consumer<Card> act) {
+        return new com.termux.app.launcher.popup.AppMenuCard.Item(getContext().getString(label),
+            glyph, () -> {
+                dismissMenu();
+                if (!isOpen()) return;
+                int now = indexOfKey(key);
+                if (now >= 0) act.accept(cards.get(now));
+            });
+    }
+
+    private void dismissMenu() {
+        com.termux.app.launcher.popup.AnchoredMenu shown = menu;
+        menu = null;
+        if (shown != null) shown.dismiss();
+    }
+
+    /**
+     * Remove Terminal: with windows open it asks first ("Close N windows and remove
+     * Terminal?"), Close or Cancel; closed shells cannot come back, so no undo follows.
+     */
+    private void onRemoveTerminalPage() {
+        if (!isOpen() || !host.terminalPageRemovable()) return;
+        commitPending();
+        int open = host.terminalWindowCount();
+        if (open <= 0) {
+            removeTerminalPageNow();
+            return;
+        }
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(getContext())
+            .setTitle(getResources().getQuantityString(
+                R.plurals.page_overview_remove_terminal_question, open, open))
+            .setMessage(R.string.page_overview_remove_terminal_message)
+            .setPositiveButton(R.string.page_overview_remove_terminal_close,
+                (dialog, which) -> removeTerminalPageNow())
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void removeTerminalPageNow() {
+        if (!isOpen()) return;
+        liveKey = null;
+        mutate(host::removeTerminalPage);
+        reload();
+        focus = clampFocus(focus);
+        invalidate();
+        onSettled();
+    }
+
+    /** Add terminal, offered only while there is no Terminal page: it comes back empty. */
+    private void onAddTerminalPage() {
+        if (!isOpen() || host.hasTerminalPage()) return;
+        commitPending();
+        mutate(host::addTerminalPage);
+        reload();
+        invalidate();
+    }
+
+    private void onRename(@NonNull Card card) {
+        if (card.kind == PageOverviewPolicy.Kind.TERMINAL) return;
+        commitPending();
+        host.promptRename(card.kind, card.index, () -> {
+            if (!isOpen()) return;
+            reload();
+            accessibility.invalidateRoot();
+            invalidate();
+        });
+    }
+
+    /** The Linux apps the picker lists for {@code bindingOf} (a Display page's id, or -1 to add). */
+    @NonNull
+    private List<DisplayApp> pickableApps(int bindingOf) {
+        List<DisplayApp> catalog = host.displayApps();
+        List<String> ids = new ArrayList<>(catalog.size());
+        for (DisplayApp app : catalog) ids.add(app.id);
+        java.util.Set<String> bound = new java.util.HashSet<>();
+        for (DisplayPage page : host.displayPages()) {
+            String binding = host.displayBinding(page.id);
+            if (binding != null) bound.add(binding);
+        }
+        List<String> keep = PageCardMenuPolicy.pickableApps(ids, bound,
+            bindingOf < 0 ? null : host.displayBinding(bindingOf));
+        List<DisplayApp> out = new ArrayList<>(keep.size());
+        for (String id : keep) {
+            for (DisplayApp app : catalog) {
+                if (app.id.equals(id)) { out.add(app); break; }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Add › Display ({@code target} null), or a Display card's Bind app: "Whole display" first,
+     * then the Linux apps no other page is bound to. Adding with no app to offer goes straight
+     * to the whole display.
+     */
+    private void showDisplayPicker(@Nullable Card target) {
+        if (!isOpen()) return;
+        final int id = target == null ? -1 : target.index;
+        boolean wholeOffered = target != null || PageOverviewPolicy.canAddDisplay(
+            host.displayOpen(), host.displayTemporary());
+        List<DisplayApp> apps = pickableApps(id);
+        if (target == null && apps.isEmpty()) {
+            if (wholeOffered) onAddWindow(true);
+            return;
+        }
+        Context context = getContext();
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme(context);
+        com.termux.app.launcher.popup.MenuRowFactory factory =
+            new com.termux.app.launcher.popup.MenuRowFactory(context, theme);
+        LinearLayout shell = factory.newShell();
+        int tint = surfaceColor & 0x00FFFFFF;
+        List<com.termux.app.launcher.popup.MenuRow> rows = new ArrayList<>();
+        String current = id < 0 ? null : host.displayBinding(id);
+        if (wholeOffered) {
+            Runnable whole = () -> {
+                dismissMenu();
+                if (id < 0) onAddWindow(true);
+                else bindDisplay(id, null);
+            };
+            rows.add(new com.termux.app.launcher.popup.MenuRow(factory.addActionRow(shell,
+                context.getString(R.string.page_overview_whole_display),
+                R.drawable.ic_symbol_desktop_windows, false, tint, whole), whole));
+        }
+        for (DisplayApp app : apps) {
+            if (app.id.equals(current)) continue;
+            Runnable pick = () -> {
+                dismissMenu();
+                if (id < 0) addBoundDisplay(app.id);
+                else bindDisplay(id, app.id);
+            };
+            rows.add(new com.termux.app.launcher.popup.MenuRow(factory.addActionRow(shell,
+                app.name, R.drawable.ic_ms_apps, false, tint, pick), pick));
+        }
+        if (rows.isEmpty()) return;
+        dismissMenu();
+        com.termux.app.launcher.popup.AnchoredMenu shown =
+            new com.termux.app.launcher.popup.AnchoredMenu(this, theme);
+        menu = shown;
+        shown.show(com.termux.app.launcher.popup.MenuSpec.of(shell, tint)
+            .minimumOpacityPercent(100)
+            .rows(rows)
+            .onDismiss(() -> {
+                if (menu == shown) menu = null;
+            })
+            .build(), addDisplay);
+    }
+
+    private void bindDisplay(int id, @Nullable String app) {
+        if (!isOpen()) return;
+        commitPending();
+        mutate(() -> host.bindDisplayPage(id, app));
+        reload();
+        invalidate();
+    }
+
+    /** A Display page bound to {@code app} lands after the focused card, and the strip goes to it. */
+    private void addBoundDisplay(@NonNull String app) {
+        if (!isOpen()) return;
+        commitPending();
+        int[] added = {-1};
+        mutate(() -> added[0] = host.addBoundDisplay(app));
+        reload();
+        Object key = added[0] < 0 ? null : displayKeys.get(added[0]);
+        int index = key == null ? -1 : indexOfKey(key);
+        if (index >= 0) {
+            for (int i = index + 1; i < cards.size(); i++) cards.get(i).place = i - 1;
+            cards.get(index).place = index;
+            scrollTo(index, this::onSettled);
+        }
+        invalidate();
+    }
+
+    /** The menus' ink: the launcher's App menu look, on its own opaque shades. */
+    @NonNull
+    private static com.termux.app.launcher.popup.AnchoredMenuTheme menuTheme(
+            @NonNull Context context) {
+        int ink = com.termux.app.material.M3.onSurface(context);
+        return new com.termux.app.launcher.popup.AnchoredMenuTheme() {
+            @Override public int textColor() { return ink; }
+            @Override public int selectedTextColor() { return ink; }
+            @Override public int opacityPercent() { return 100; }
+            @Override public boolean blurEnabled() { return false; }
+            @Override public int blurRadiusDp() { return 0; }
+        };
     }
 
     // ---- Settling, the live card and pictures -----------------------------------------------
@@ -1344,14 +1697,70 @@ public final class PageOverviewView extends FrameLayout {
         labelPaint.setTextSize(dp(13));
         labelPaint.setTextAlign(Paint.Align.LEFT);
         int alpha = labelPaint.getAlpha();
-        labelPaint.setAlpha(Math.round(alpha * zoom));
         float baseline = scratch.top - dp(10);
+        inkCaption(gripText, scratch.left, baseline, labelPaint.measureText(text));
+        labelPaint.setAlpha(Math.round(alpha * zoom));
         canvas.drawText(text, scratch.left, baseline, labelPaint);
         gripRect.set(scratch.left - dp(8), baseline - dp(26),
             scratch.left + labelPaint.measureText(text) + dp(8), baseline + dp(8));
         labelPaint.setAlpha(alpha);
         labelPaint.setTextAlign(Paint.Align.CENTER);
         labelPaint.setTextSize(size);
+        plainCaptionInk();
+    }
+
+    /**
+     * Sets the label paint's ink and shadow for a caption at ({@code x}, {@code baseline}),
+     * {@code width} wide, from the wallpaper under it ({@link OverviewCaptionInk}). Read again
+     * only when the caption moves to another cell or the wallpaper changes.
+     */
+    private void inkCaption(@NonNull Object key, float x, float baseline, float width) {
+        float cellPx = dp(48);
+        int cx = OverviewCaptionInk.cell(x, cellPx);
+        int cy = OverviewCaptionInk.cell(baseline, cellPx);
+        int generation = host.wallpaperGeneration();
+        int[] held = captionWallpaper.get(key);
+        if (held == null || held[0] != cx || held[1] != cy || held[2] != generation) {
+            getLocationOnScreen(captionOrigin);
+            captionScreen.set(captionOrigin[0] + Math.round(x),
+                captionOrigin[1] + Math.round(baseline - dp(14)),
+                captionOrigin[0] + Math.round(x + Math.max(dp(8), width)),
+                captionOrigin[1] + Math.round(baseline + dp(4)));
+            held = new int[] {cx, cy, generation, host.wallpaperUnder(captionScreen)};
+            captionWallpaper.put(key, held);
+        }
+        labelPaint.setColor(OverviewCaptionInk.ink(held[3]));
+        labelPaint.setShadowLayer(dp(3), 0f, dp(1), OverviewCaptionInk.shadow(held[3]));
+    }
+
+    /** Back to the label paint's own white on its dark shadow, for the in-card labels. */
+    private void plainCaptionInk() {
+        labelPaint.setColor(Color.WHITE);
+        labelPaint.setShadowLayer(dp(3), 0f, dp(1), OverviewCaptionInk.UNKNOWN_SHADOW);
+    }
+
+    /**
+     * A Home or Display card's name over its top left edge, as the Terminal block's grip stands
+     * over its first card: the page's own name once it has one. Kept clear of the remove button.
+     */
+    private void drawCaption(@NonNull Canvas canvas, @NonNull Card card, @NonNull RectF at) {
+        if (zoom <= 0f) return;
+        float size = labelPaint.getTextSize();
+        int alpha = labelPaint.getAlpha();
+        labelPaint.setTextSize(dp(13));
+        labelPaint.setTextAlign(Paint.Align.LEFT);
+        labelPaint.setAlpha(Math.round(alpha * zoom));
+        float room = Math.max(0f, at.width() / 2f - buttonRadius - dp(8));
+        CharSequence text = android.text.TextUtils.ellipsize(labelOf(card),
+            new android.text.TextPaint(labelPaint), room, android.text.TextUtils.TruncateAt.END);
+        float baseline = at.top - dp(10);
+        inkCaption(card.key, at.left, baseline, labelPaint.measureText(text, 0, text.length()));
+        labelPaint.setAlpha(Math.round(alpha * zoom));
+        canvas.drawText(text, 0, text.length(), at.left, baseline, labelPaint);
+        labelPaint.setAlpha(alpha);
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+        labelPaint.setTextSize(size);
+        plainCaptionInk();
     }
 
     /** The launcher's own wallpaper, full-screen behind the cards, while it is showing one. */
@@ -1387,6 +1796,7 @@ public final class PageOverviewView extends FrameLayout {
         canvas.clipPath(clip);
         drawContent(canvas, card, at);
         canvas.restoreToCount(clipped);
+        if (card.kind != PageOverviewPolicy.Kind.TERMINAL) drawCaption(canvas, card, at);
         outlinePaint.setAlpha(Math.round(0x80 * zoom));
         canvas.drawRoundRect(at, radius, radius, outlinePaint);
         if (zoom > 0f) drawButtons(canvas, card, at);
@@ -1570,7 +1980,8 @@ public final class PageOverviewView extends FrameLayout {
     private String labelOf(@NonNull Card card) {
         switch (card.kind) {
             case HOME_PAGE:
-                return getContext().getString(R.string.home_pages_editor_page, card.number);
+                return PageCardMenuPolicy.cardName(card.label,
+                    getContext().getString(R.string.home_pages_editor_page, card.number));
             case TERMINAL:
                 return getContext().getString(R.string.page_overview_terminal, card.number);
             default:
@@ -1641,6 +2052,11 @@ public final class PageOverviewView extends FrameLayout {
                 if (velocity != null) velocity.addMovement(event);
                 lastX = x;
                 if (dragCard != null) {
+                    // The card's menu opened with the long press; moving on is a drag instead.
+                    if (menu != null && (Math.abs(x - menuDownX) > touchSlop
+                            || Math.abs(y - menuDownY) > touchSlop)) {
+                        dismissMenu();
+                    }
                     dragX = x;
                     updateDragTarget();
                     edgeScroll = x < dp(48) ? -1 : x > getWidth() - dp(48) ? 1 : 0;
@@ -1783,6 +2199,7 @@ public final class PageOverviewView extends FrameLayout {
         dragX = lastX;
         handler.removeCallbacks(capture);
         com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
+        if (!grip) showCardMenu(dragCard, index);
         invalidate();
     }
 

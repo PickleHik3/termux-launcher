@@ -37,6 +37,45 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   automatically" on: open the drawer (keyboard rises), swipe sideways to the next page: the keyboard
   goes as the swipe starts, the query stays. Dragging an app to the page edge (which turns the page)
   does not close it. In-app and system keyboard · pong.
+- **Edit pages: a Home page vanished once (emu2, 11-04)** after Bring back → force-stop → Add
+  page → Rename → night toggle; not reproduced. When re-running that sequence, capture
+  `wall_pages.xml` (with `next`) and the widget repository's stored page ids before and after
+  the night toggle · emulator or pong.
+- **Edit pages fixes (11-04, after the emu2 check).** (1) Use as Terminal only set from
+  Settings › Use as (not the welcome sheet): Edit pages shows "Bring back N Home pages" with N
+  the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
+  and Display card carries its name over its top left ("Page 2", "Display", the app's name); a
+  renamed card shows its new name at once; a long name ends in "…" short of the red button.
+  The captions and the "Terminal ⋮⋮" grip take dark ink on a light (cream) wallpaper and white
+  on a dark one, in light and dark theme, Material You on and off.
+  (3) Rename: the keyboard is up as the dialog opens, the field focused. Emulator or pong.
+- **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
+  windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
+  Terminal?"; Cancel keeps everything; Close stops the shells, the Terminal cards go, no undo
+  snackbar, the wall lands on a neighbour, Add terminal appears. (2) Force-stop and relaunch:
+  still no Terminal page, and no shell started (the empty-workspace autosave). (3) Each of
+  Ctrl+Alt+C, the drawer's New terminal, a Terminal=true Linux app and `launcherctl` pane open
+  brings the Terminal page back after the last Home page, lands on it and opens the window
+  there. (4) Edit pages › Add terminal adds an empty Terminal page after the focused card;
+  landing on it starts a shell. (5) The Terminal page's own look (a detached canvas tint) after
+  it comes back. Emulator or pong.
+- **Edit pages under Terminal only (11-04, #203).** Set Use as to Terminal only. (1) Appearance
+  editor › Terminal card › Links shows Pages; it opens Edit pages with no Home card and no Add
+  page pill, and a "Bring back N Home pages" pill (N = the pages set aside). (2) Tap it: the Home
+  cards come back in their order with their icons and widgets, the pill goes, Add page returns,
+  and Settings › Use as reads Home screen. (3) Back out: Home pages are on the wall again.
+  Emulator or pong.
+- **Edit pages card menu and Display picker (11-04, #201, #200).** (1) Long-press a Home card
+  and let go: a menu with Set as home, Rename, Remove opens at the finger; long-press and move
+  on: the menu goes and the card drags as before. (2) Rename a Home page and a Display page: the
+  dialog's keyboard comes up, the card shows the new name; an empty name goes back to "Page n" /
+  "Display". (3) Remove from the menu: the same undo snackbar as the red button. (4) The first
+  Terminal card offers Set as home and Remove, later ones Remove only. (5) With a Linux app
+  installed, Add display opens a list, Whole display first then apps; an app adds a Display card
+  after the focused card named after it; Bind app on a Display card swaps its app (Whole display
+  unbinds); an app already bound to a page is not listed. (6) With no Linux apps, Add display
+  adds the whole display at once, as before. Light and dark theme, editor open and closed.
+  Emulator or pong.
 - **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
   start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
   diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`

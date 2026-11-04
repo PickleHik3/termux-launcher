@@ -26818,6 +26818,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
                 // Home is always on the row; the Workspace while there is a window to show.
                 @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @Override public boolean terminalWindowOpen() {
+                    return mTermuxService != null && terminalWindowTotal() > 0;
+                }
+                @Override public boolean restoreTerminalPage() {
+                    com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
+                        com.termux.app.wall.TerminalPageReturn::restore);
+                    if (!back.ok() || back.page == null) return false;
+                    noteTerminalPageId(back.page.id);
+                    return true;
+                }
                 @NonNull @Override public com.termux.app.wall.UseAs useAs() {
                     return TermuxActivity.this.useAs();
                 }
@@ -29263,6 +29273,102 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGroundLook = null;
     }
 
+    /**
+     * Edit pages' Rename: a name field with the keyboard up and the field focused, the system
+     * IME announced first so its insets are taken.
+     */
+    private void promptPageRename(@Nullable String current,
+                                  @NonNull java.util.function.Consumer<String> done) {
+        float density = getResources().getDisplayMetrics().density;
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine();
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        if (current != null) {
+            input.setText(current);
+            input.setSelection(current.length());
+        }
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        int side = Math.round(24 * density);
+        box.setPadding(side, Math.round(8 * density), side, Math.round(16 * density));
+        box.addView(input);
+        androidx.appcompat.app.AlertDialog dialog =
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.page_overview_rename_title)
+                .setView(box)
+                .setPositiveButton(R.string.page_overview_rename_confirm,
+                    (d, which) -> done.accept(input.getText().toString()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        input.setOnEditorActionListener((v, action, event) -> {
+            done.accept(input.getText().toString());
+            dialog.dismiss();
+            return true;
+        });
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        }
+        onSystemImeRequested();
+        dialog.show();
+        input.requestFocus();
+    }
+
+    /** Every terminal window open, across sessions: what removing the Terminal page closes. */
+    private int terminalWindowTotal() {
+        int n = 0;
+        for (WSession ws : mWSessions) n += ws.windows.size();
+        return n;
+    }
+
+    /** The Terminal page's id as the look's per-page values know it (set at start, and here). */
+    private void noteTerminalPageId(int id) {
+        if (mPreferences != null) {
+            mPreferences.getSharedPreferences().edit().putInt(
+                com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
+                id).apply();
+        }
+        TermuxAppSharedPreferences.setTerminalPageId(id);
+    }
+
+    /**
+     * Removing the Terminal page (Edit pages, after its question): every window of every session
+     * closes, its shells killed, then the page leaves the wall for good. Closed shells cannot come
+     * back, so there is no undo.
+     */
+    private void removeTerminalPage() {
+        com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+        if (terminal == null) return;
+        int open = terminalWindowTotal();
+        if (mPaneController != null) {
+            for (WSession ws : new java.util.ArrayList<>(mWSessions)) {
+                for (com.termux.app.terminal.TerminalPaneController.Window w
+                        : new java.util.ArrayList<>(ws.windows)) {
+                    for (TerminalSession s : mPaneController.removeWindow(w))
+                        if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+                }
+            }
+        }
+        mWSessions.clear();
+        mCurrentWSession = null;
+        final int id = terminal.id;
+        com.termux.app.wall.WallPages.Result removed =
+            wallPagesStore().edit(pages -> pages.remove(id, open, true));
+        if (removed.ok()) wallPagesStore().edit(pages -> pages.commitRemoval(id));
+        refreshTerminalWindowBar();
+        rebuildDrawerSessions();
+    }
+
+    /** The wall page behind an Edit pages card: a Home page by index, a Display page by id. */
+    @Nullable
+    private com.termux.app.wall.WallPages.Page overviewPage(
+            @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
+        com.termux.app.wall.WallPages pages = wallPages();
+        if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY) return pages.page(index);
+        if (kind != com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) return null;
+        java.util.List<com.termux.app.wall.WallPages.Page> homes = pages.homePages();
+        return index >= 0 && index < homes.size() ? homes.get(index) : null;
+    }
+
     /** The display window's card key in the page overview: there is only ever one display. */
     private static final Object PAGE_OVERVIEW_DISPLAY_KEY = new Object();
 
@@ -29274,11 +29380,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void openPageOverview(boolean fromSettings) {
         if (mWidgetPaneController == null || mPaneWallController == null) return;
         if (mPageOverview != null) return;
-        // Edit pages is Home's: Terminal only has no Home pages to edit.
-        if (!useAs().showsHomePage()) {
-            Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG, useAs().doorLine("edit-pages"));
-            return;
-        }
+        // Under Terminal only Edit pages opens too: it shows no Home card, and offers the
+        // set-aside Home pages back.
         if (mWidgetPaneController.refusedWhileLocked(
                 com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
         View root = findViewById(R.id.activity_termux_root_view);
@@ -29355,8 +29458,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
                             ? null : displayCards().find(page.binding);
                         out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
-                            com.termux.app.wall.DisplayPagePolicy.cardName(page,
-                                app == null ? null : app.name), homes, afterTerminal));
+                            com.termux.app.wall.PageCardMenuPolicy.cardName(page.name,
+                                com.termux.app.wall.DisplayPagePolicy.cardName(page,
+                                    app == null ? null : app.name)), homes, afterTerminal));
                     }
                     return out;
                 }
@@ -29365,6 +29469,99 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
+                }
+                @Override public boolean hasTerminalPage() {
+                    return wallPages().terminal() != null;
+                }
+                @Override public boolean terminalPageRemovable() {
+                    return wallPages().terminal() != null && wallPages().listedPages().size() > 1;
+                }
+                @Override public int terminalWindowCount() {
+                    return terminalWindowTotal();
+                }
+                @Override public void removeTerminalPage() {
+                    TermuxActivity.this.removeTerminalPage();
+                }
+                @Override public void addTerminalPage() {
+                    // Empty, as a removed one leaves it: landing on it starts the first shell.
+                    final int after = linuxRouteFromPageId();
+                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+                        pages.add(com.termux.app.wall.WallPages.PageKind.TERMINAL,
+                            pages.page(after) != null ? after
+                                : com.termux.app.wall.WallPages.END, null));
+                    if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                }
+                @Override public boolean homePagesShown() {
+                    return useAs().showsHomePage();
+                }
+                @Override public int detachedHomePages() {
+                    int n = 0;
+                    for (com.termux.app.wall.WallPages.Page page : wallPages().detached()) {
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
+                    }
+                    return n;
+                }
+                @Override public int hiddenHomePages() {
+                    // Settings' Use as leaves the Home pages in the list, hidden by the wall.
+                    return useAs().showsHomePage() ? 0 : wallPages().homePages().size();
+                }
+                @Override public void bringBackHomePages() {
+                    // The setting's own path: the preference, then the pages brought back.
+                    com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
+                        com.termux.app.wall.UseAs.HOME);
+                }
+                // A card's menu and the Display picker (ADR 0015 section 2): names and bindings
+                // are the wall's pages', by id.
+                @Override @Nullable public String homePageName(int page) {
+                    java.util.List<com.termux.app.wall.WallPages.Page> homes =
+                        wallPages().homePages();
+                    return page >= 0 && page < homes.size() ? homes.get(page).name : null;
+                }
+                @Override public void promptRename(
+                        @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index,
+                        @NonNull Runnable renamed) {
+                    com.termux.app.wall.WallPages.Page page = overviewPage(kind, index);
+                    if (page == null) return;
+                    final int id = page.id;
+                    promptPageRename(page.name, text -> {
+                        editWallPages(pages -> pages.rename(id, text));
+                        renamed.run();
+                    });
+                }
+                @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp>
+                        displayApps() {
+                    java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
+                        displayCards().apps();
+                    // Not read yet: read it now, for the next time the picker opens.
+                    if (apps.isEmpty()) refreshDisplayCards();
+                    java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp> out =
+                        new java.util.ArrayList<>(apps.size());
+                    for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app : apps) {
+                        out.add(new com.termux.app.wall.PageOverviewView.DisplayApp(app.id,
+                            app.name));
+                    }
+                    return out;
+                }
+                @Override @Nullable public String displayBinding(int id) {
+                    com.termux.app.wall.WallPages.Page page = wallPages().page(id);
+                    return page == null ? null : page.binding;
+                }
+                @Override public void bindDisplayPage(int id, @Nullable String app) {
+                    editWallPages(pages -> pages.bind(id, app));
+                    refreshDisplayCards();
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                }
+                @Override public int addBoundDisplay(@NonNull String app) {
+                    final int after = linuxRouteFromPageId();
+                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+                        pages.add(com.termux.app.wall.WallPages.PageKind.DISPLAY,
+                            pages.page(after) != null ? after
+                                : com.termux.app.wall.WallPages.END, app));
+                    if (!added.ok() || added.page == null) return -1;
+                    refreshDisplayCards();
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    return added.page.id;
                 }
                 @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
                     java.util.List<com.termux.app.wall.WallPages.Page> homes =
@@ -29484,6 +29681,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override @Nullable public View backdrop() {
                     return findViewById(R.id.wallpaper_backdrop);
+                }
+                // The captions' ink follows the wallpaper as Home's labels do: one sampler.
+                @Override public int wallpaperUnder(@NonNull android.graphics.Rect screen) {
+                    int[] origin = new int[2];
+                    root.getLocationOnScreen(origin);
+                    android.graphics.Rect rootRect = new android.graphics.Rect(screen);
+                    rootRect.offset(-origin[0], -origin[1]);
+                    com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+                    int read = ink.wallpaperSample(rootRect);
+                    return android.graphics.Color.alpha(read) != 0 ? read : ink.wallpaperFallback();
+                }
+                @Override public int wallpaperGeneration() {
+                    return mChrome.ink().wallpaperGeneration();
                 }
                 @Override @Nullable public android.view.SurfaceView displaySurface() {
                     if (mPaneWallController == null || !isDisplayUp()) return null;
