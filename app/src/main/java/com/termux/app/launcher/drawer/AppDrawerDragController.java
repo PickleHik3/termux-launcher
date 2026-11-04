@@ -271,14 +271,17 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
 
     @Nullable
     static PickupArtwork pickupArtwork(@NonNull View source) {
-        if (!(source instanceof AppDrawerAppCellView)) return null;
-        AppDrawerAppCellView cell = (AppDrawerAppCellView) source;
-        Drawable drawable = cell.icon.getDrawable();
+        // A category tile's launch icons are bare ImageViews, so the icon is the source itself.
+        android.widget.ImageView iconView = source instanceof AppDrawerAppCellView
+            ? ((AppDrawerAppCellView) source).icon
+            : source instanceof android.widget.ImageView ? (android.widget.ImageView) source : null;
+        if (iconView == null) return null;
+        Drawable drawable = iconView.getDrawable();
         if (drawable == null) return null;
-        int width = cell.icon.getWidth();
-        int height = cell.icon.getHeight();
+        int width = iconView.getWidth();
+        int height = iconView.getHeight();
         if (width <= 0 || height <= 0) {
-            ViewGroup.LayoutParams params = cell.icon.getLayoutParams();
+            ViewGroup.LayoutParams params = iconView.getLayoutParams();
             width = params == null ? 0 : params.width;
             height = params == null ? 0 : params.height;
         }

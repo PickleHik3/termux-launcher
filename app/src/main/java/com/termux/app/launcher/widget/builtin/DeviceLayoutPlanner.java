@@ -258,7 +258,11 @@ final class DeviceLayoutPlanner {
             right = Math.max(right, x + w);
         }
         if (keep > 0) {
-            rows.place(keep, box.left, box.bottom() - rows.height(keep), box.right(), parts);
+            // Centred in the room under the level's block, past its loose gap: spare height
+            // goes above and below the bars alike rather than all above them.
+            float room = box.top + blockH + (blockH > 0f ? GAP_L : 0f);
+            float rowsTop = Math.max(room, room + (box.bottom() - room - rows.height(keep)) / 2f);
+            rows.place(keep, box.left, rowsTop, box.right(), parts);
             right = box.right();
         }
         return right - box.left;

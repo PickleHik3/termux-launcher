@@ -110,8 +110,44 @@ public class WallPagesStoreTest {
         WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
         storage.write("{not json");
         assertFalse(new WallPagesStore(storage).wasSeeded());
-        storage.write("{\"version\":2,\"pages\":[],\"home\":0,\"next\":1}");
+        storage.write("{\"version\":3,\"pages\":[],\"home\":0,\"next\":1}");
         assertFalse(new WallPagesStore(storage).wasSeeded());
+    }
+
+    @Test
+    public void aTemporaryPageRoundTripsAndVersionOnePagesReadAsLasting() {
+        WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+        WallPages seeded = WallPagesMigration.seed("home", 0, "home", 2);
+        WallPages launched = seeded.routeLinuxApp("firefox", 2).addTo(seeded).pages;
+        new WallPagesStore(storage).replace(launched);
+        WallPages again = new WallPagesStore(storage).current();
+        assertEquals(launched, again);
+        assertTrue(again.temporaryDisplay() != null);
+        assertTrue(storage.read().contains("\"version\":2"));
+
+        // A version-1 value (written before temporary pages) reads with every page lasting, even
+        // one carrying a stray marker.
+        storage.write("{\"version\":1,\"home\":1,\"next\":3,\"pages\":["
+            + "{\"id\":1,\"kind\":\"HOME\"},{\"id\":2,\"kind\":\"DISPLAY\",\"temporary\":true}]}");
+        WallPagesStore old = new WallPagesStore(storage);
+        assertTrue(old.wasSeeded());
+        assertEquals(2, old.current().pages().size());
+        assertFalse(old.current().page(2).temporary);
+        assertEquals(null, old.current().temporaryDisplay());
+    }
+
+    @Test
+    public void theStartUpSweepRemovesTheTemporaryPageForGood() {
+        WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+        WallPagesStore store = new WallPagesStore(storage);
+        WallPages seeded = WallPagesMigration.seed("home", 0, "home", 2);
+        store.replace(seeded.routeLinuxApp("firefox", 2).addTo(seeded).pages);
+        Recorder rec = new Recorder();
+        store.addListener(rec);
+        store.transform(WallPages::withoutTemporaryPages);
+        assertEquals(1, rec.removed.size());
+        assertTrue(rec.removed.get(0).temporary);
+        assertEquals(null, new WallPagesStore(storage).current().temporaryDisplay());
     }
 
     @Test

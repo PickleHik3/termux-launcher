@@ -662,6 +662,8 @@ public final class AppDrawerContentView extends FrameLayout
         if (dock != null && mDragController == null) {
             mDragController = new AppDrawerDragController(dock, mDragOverlay, this);
             mAdapter.setDragController(mDragController, this::suppressCellClick);
+            mCategoryView.getDetailAdapter().setPickupDelegate(mDragController);
+            mCategoryView.getTileAdapter().setPickupDelegate(mDragController);
             mHorizontalAdapter.setClickGate(this::suppressCellClick);
             mHorizontalAdapter.setDragController(mDragController);
         }
@@ -1865,9 +1867,7 @@ public final class AppDrawerContentView extends FrameLayout
             mGestureDragStableId = downItem == null ? null : downItem.stableId;
             // Folders join apps here: a folder tile is picked up the same way, it just travels to a
             // free position instead of merging into what it lands on.
-            mGestureDragEligible = mInteractive && !hasQuery()
-                && mViewType != AppDrawerViewType.CATEGORIES
-                && downItem != null;
+            mGestureDragEligible = mInteractive && !hasQuery() && downItem != null;
             mDragPolicy = new AppDrawerDragPolicy(new AppDrawerDragPolicy.FrozenDown(
                 mGestureViewType, mInteractive, !hasQuery(), mGestureDragEligible,
                 mGestureDragStableId));
@@ -1925,6 +1925,11 @@ public final class AppDrawerContentView extends FrameLayout
             View child = mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
             if (child == null) return null;
             return mAdapter.itemAt(mGrid.getChildAdapterPosition(child));
+        }
+        if (mViewType == AppDrawerViewType.CATEGORIES) {
+            LauncherAppEntry entry = mCategoryView.appEntryAt(x - mCategoryView.getLeft(),
+                y - mCategoryView.getTop());
+            return entry == null ? null : AppDrawerItem.app(entry);
         }
         if (mViewType != AppDrawerViewType.HORIZONTAL) return null;
         View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),

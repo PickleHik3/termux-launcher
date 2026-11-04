@@ -10,7 +10,7 @@ public class AppDrawerFourWayGestureArbiterTest {
                 type, true, true, true, "id");
             AppDrawerDragPolicy policy = new AppDrawerDragPolicy(down);
             boolean drag = policy.claim(AppDrawerDragPolicy.Claim.DRAG);
-            assertEquals(type != AppDrawerViewType.CATEGORIES, drag);
+            assertTrue(drag);
             if (drag) {
                 assertFalse(policy.claim(AppDrawerDragPolicy.Claim.CLOSE));
                 assertFalse(policy.claim(AppDrawerDragPolicy.Claim.PAGE_OR_TILE));

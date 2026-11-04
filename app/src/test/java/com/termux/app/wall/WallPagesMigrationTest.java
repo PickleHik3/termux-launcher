@@ -270,8 +270,8 @@ public class WallPagesMigrationTest {
 
     @Test
     public void unreadableStoredPagesAreKeptAndNotSeededOver() {
-        // A newer build's value (version 2) and a broken one (W7): neither is "no pages".
-        String[] raws = {"{\"version\":2,\"pages\":[],\"home\":1,\"next\":2}", "{not json"};
+        // A newer build's value (version 3) and a broken one (W7): neither is "no pages".
+        String[] raws = {"{\"version\":3,\"pages\":[],\"home\":1,\"next\":2}", "{not json"};
         for (String raw : raws) {
             prefs.edit().clear().commit();
             WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();

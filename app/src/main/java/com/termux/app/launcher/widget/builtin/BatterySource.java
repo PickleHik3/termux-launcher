@@ -73,7 +73,15 @@ public final class BatterySource {
     @Nullable private State latest;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context context, Intent intent) { accept(intent); }
+        @Override public void onReceive(Context context, Intent intent) {
+            String action = intent == null ? null : intent.getAction();
+            // Out of deep sleep the last broadcast may be hours old, or never have come: read now.
+            if (Intent.ACTION_SCREEN_ON.equals(action) || Intent.ACTION_USER_PRESENT.equals(action)) {
+                readNow();
+            } else {
+                accept(intent);
+            }
+        }
     };
 
     private BatterySource(@NonNull Context context) {
@@ -84,14 +92,21 @@ public final class BatterySource {
                 @Override public boolean open() {
                     Intent sticky;
                     try {
-                        sticky = context.registerReceiver(receiver,
-                            new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                        filter.addAction(Intent.ACTION_SCREEN_ON);
+                        filter.addAction(Intent.ACTION_USER_PRESENT);
+                        // The one receiver also hears the screen come on: no second registration.
+                        sticky = context.registerReceiver(receiver, filter);
                     } catch (RuntimeException ignored) {
                         // Without the broadcast the widgets keep their unknown state.
                         return false;
                     }
                     // Registered from here on, whatever the first reading does: the close pairs it.
-                    if (sticky != null) accept(sticky);
+                    if (sticky != null && Intent.ACTION_BATTERY_CHANGED.equals(sticky.getAction())) {
+                        accept(sticky);
+                    } else {
+                        readNow();
+                    }
                     return true;
                 }
 
@@ -118,9 +133,61 @@ public final class BatterySource {
 
     @NonNull public BatteryHistoryStore history() { return history; }
 
+    /**
+     * Reads the battery at once rather than waiting for a broadcast: the sticky intent, asked for
+     * without registering, else the level alone from {@link BatteryManager}. Every listener hears
+     * the reading; nothing changes when neither gives one.
+     */
+    @MainThread public void readNow() {
+        Intent sticky = null;
+        try {
+            sticky = context.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        } catch (RuntimeException ignored) {
+            // No sticky reading on this build: the capacity below stands in.
+        }
+        State fromIntent = sticky == null ? null : read(sticky);
+        int capacity = fromIntent != null && fromIntent.known() ? -1 : capacity();
+        State next = settle(fromIntent, capacity, latest);
+        if (next != null) publish(next);
+    }
+
+    /** The level as {@link BatteryManager#BATTERY_PROPERTY_CAPACITY} gives it, or -1. */
+    private int capacity() {
+        try {
+            BatteryManager manager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
+            return manager == null ? -1
+                : manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        } catch (RuntimeException ignored) {
+            return -1;
+        }
+    }
+
+    /**
+     * The reading to show: the sticky intent's when it has a level; else the capacity, keeping
+     * what the intent or the last reading said besides the level; else the intent's or the last
+     * reading as they are. Null only when there is nothing at all.
+     */
+    @Nullable static State settle(@Nullable State fromIntent, int capacity,
+                                  @Nullable State previous) {
+        if (fromIntent != null && fromIntent.known()) return fromIntent;
+        if (capacity >= 0 && capacity <= 100) {
+            State base = fromIntent != null ? fromIntent : previous;
+            if (base == null) {
+                return new State(capacity, false, false, false, Integer.MIN_VALUE, -1, Double.NaN, -1);
+            }
+            return new State(capacity, base.charging, base.full, base.plugged,
+                base.temperatureTenths, base.voltageMv, base.powerWatts, base.chargeTimeMs);
+        }
+        if (previous != null && previous.known()) return null;
+        return fromIntent;
+    }
+
     private void accept(@Nullable Intent intent) {
         if (intent == null) return;
-        State state = read(intent);
+        publish(read(intent));
+    }
+
+    private void publish(@NonNull State state) {
         latest = state;
         if (state.known()) history.record(state.level, System.currentTimeMillis());
         for (Listener listener : new ArrayList<>(listeners)) listener.onBatteryChanged(state);

@@ -167,8 +167,15 @@ public final class AppDrawerHorizontalPageAdapter
             rootParams.height = pageHeight;
             holder.page.setLayoutParams(rootParams);
         }
-        holder.page.setColumnCount(columns);
-        holder.page.setRowCount(rows);
+        // A recycled page may hold cells placed for a larger grid. GridLayout checks every
+        // child's spec against a new count, so a shrink throws until the cells are re-placed:
+        // drop the counts, re-place the cells below, then set the new counts.
+        boolean regrid = holder.page.getColumnCount() != columns
+            || holder.page.getRowCount() != rows;
+        if (regrid) {
+            holder.page.setColumnCount(GridLayout.UNDEFINED);
+            holder.page.setRowCount(GridLayout.UNDEFINED);
+        }
         holder.ensureCapacity(capacity);
 
         int start = AppDrawerPageModel.startForPage(pagePosition, mItems.size(), capacity);
@@ -222,6 +229,10 @@ public final class AppDrawerHorizontalPageAdapter
                 cell.setClickable(false);
                 cell.setVisibility(View.INVISIBLE);
             }
+        }
+        if (regrid) {
+            holder.page.setColumnCount(columns);
+            holder.page.setRowCount(rows);
         }
         prefetchPage(pagePosition + 1, capacity, metrics);
     }

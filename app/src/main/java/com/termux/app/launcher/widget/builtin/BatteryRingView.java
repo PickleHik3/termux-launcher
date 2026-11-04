@@ -30,6 +30,8 @@ public final class BatteryRingView extends View {
     private static final float GAP_SHARE = 1f / 17f;
     /** The widest reading the number is fitted to. */
     private static final String WIDEST = "100";
+    /** What the ring says with no reading at all: never an empty disc. */
+    static final String PLACEHOLDER = "\u2013";
     /** The text size the ink is measured at; the fit scales from it. */
     private static final float PROBE_PX = 100f;
 
@@ -42,7 +44,7 @@ public final class BatteryRingView extends View {
     private final Rect markInk = new Rect();
     private float fraction;
     @ColorInt private int fill;
-    @NonNull private String label = "";
+    @NonNull private String label = PLACEHOLDER;
     private boolean bolt;
     /** The size the number was last fitted for, or -1 when it must be fitted again. */
     private float fittedSide = -1f;
@@ -61,10 +63,16 @@ public final class BatteryRingView extends View {
     public void set(float fraction, @ColorInt int fill, @NonNull String label, boolean bolt) {
         this.fraction = Math.max(0f, Math.min(1f, fraction));
         this.fill = fill;
+        label = shown(label);
         if (!label.equals(this.label)) fittedSide = -1f;
         this.label = label;
         this.bolt = bolt;
         invalidate();
+    }
+
+    /** {@code label}, or {@link #PLACEHOLDER} where it is empty. */
+    @NonNull static String shown(@NonNull String label) {
+        return label.isEmpty() ? PLACEHOLDER : label;
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -94,7 +102,6 @@ public final class BatteryRingView extends View {
     }
 
     private void drawStack(@NonNull Canvas canvas, float cx, float cy, float size) {
-        if (label.isEmpty()) return;
         fit(size);
         number.getTextBounds(label, 0, label.length(), ink);
         float height = ink.height();

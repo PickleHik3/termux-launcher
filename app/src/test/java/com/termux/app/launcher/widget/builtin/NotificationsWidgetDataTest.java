@@ -109,4 +109,17 @@ public class NotificationsWidgetDataTest {
         // The items keep one entry per notification.
         assertEquals(4, snapshot.count());
     }
+
+    @Test public void replyKeysMarkTheItemsThatTakeAReply() {
+        List<LauncherCtlNotificationEvent> rows = Arrays.asList(
+            row("chat", "p.a", "A", "Mum", "Mum", "hi", NOW - MINUTE, 0),
+            row("mail", "p.b", "B", null, "Bill", "due", NOW - 2 * MINUTE, 0));
+        NotificationsWidgetData.Snapshot snapshot = NotificationsWidgetData.select(rows, NOW, 50,
+            java.util.Collections.<String>emptySet(), java.util.Collections.singleton("chat"));
+        assertTrue(snapshot.items.get(0).canReply);
+        assertFalse(snapshot.items.get(1).canReply);
+        assertFalse("a reply appearing is a change",
+            snapshot.sameAs(NotificationsWidgetData.select(rows, NOW, 50)));
+        assertFalse(NotificationsWidgetData.select(rows, NOW, 50).items.get(0).canReply);
+    }
 }
