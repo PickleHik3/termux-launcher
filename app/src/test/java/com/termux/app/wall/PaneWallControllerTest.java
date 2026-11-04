@@ -854,6 +854,9 @@ public class PaneWallControllerTest {
         host.homePage = 1;
         controller.goHome(true);
         assertTrue("the far press slides", wall.isMoving());
+        assertEquals("the frame is bound to the target before the slide runs", 1,
+            wall.boundPageId(PaneWallPage.WIDGETS));
+        assertEquals("and turned to its page", 0, host.homePage);
         // Anything the chrome asks during the slide must not move the wall off its target.
         assertEquals(1, controller.currentPageId());
         assertEquals(PaneWallPage.WIDGETS, controller.kindAt(0));

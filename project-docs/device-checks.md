@@ -21,7 +21,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 - **Home press lands on the page set as home (11-04).** Wall Home 1 (set as home), Home 2,
   Terminal: press Android Home from the Terminal page, from Home 2 and from Home 1. Each ends on
   Home 1 (pressing on Home 1 doesn't move). Then swipe Home 1 → Home 2 → Home 1 inside Home:
-  the dots and the status bar follow each page · pong.
+  the dots and the status bar follow each page, and Home 1 slides in drawn, never an empty page
+  for a frame · pong.
 - **Full screen pane under the camera: keyboard up/down slide lands without a jump (11-04).**
   Fix #190 (the slide's row prediction now reads the text top inset the resize uses). With a pane
   Full screen under the camera cut-out and a busy shell (prompt on the last row), raise and lower

@@ -600,8 +600,24 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * pages are not known, the Home page turned to it.
      */
     private boolean goToHomePage(int index, boolean animate) {
+        return goToHomePage(index, animate, false);
+    }
+
+    /**
+     * @param bindFirst bind the Home frame to the page before the slide, so it slides in live
+     *                  rather than as a still or an empty frame: the home press's own arrival.
+     *                  The pages the frame leaves keep their picture (bindHome takes it).
+     */
+    private boolean goToHomePage(int index, boolean animate, boolean bindFirst) {
         int id = homeIdAt(index);
-        if (id != PaneWallLayout.NO_PAGE) return goToPage(id, animate);
+        if (id != PaneWallLayout.NO_PAGE) {
+            if (bindFirst && mWall.currentPageId() != id) {
+                mWorkspacePending = false;
+                syncHomeCell();
+                bindHome(id);
+            }
+            return goToPage(id, animate);
+        }
         mHost.showInnerPage(PaneWallPage.WIDGETS, index);
         return goTo(PaneWallPage.WIDGETS, animate);
     }
@@ -1016,7 +1032,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         // The home press's page, wherever the wall is: a far one slides one width from a
         // stand-off, the pages between never shown (W3, W9).
-        goToHomePage(Math.max(0, mHost.homePressPage()), animate);
+        goToHomePage(Math.max(0, mHost.homePressPage()), animate, true);
     }
 
     private boolean homeIsTerminalPage() {
