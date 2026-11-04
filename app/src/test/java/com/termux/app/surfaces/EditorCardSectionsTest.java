@@ -37,6 +37,13 @@ public class EditorCardSectionsTest {
         return out;
     }
 
+    /** {@link #block} with the page card's own Margin among the sliders, after Depth. */
+    private static List<Row> blockWithMargin(Row... toggles) {
+        List<Row> out = block(toggles);
+        out.add(out.indexOf(Row.DEPTH) + 1, Row.MARGIN);
+        return out;
+    }
+
     /** The card's sections in order, each with its rows. */
     private static Map<String, List<Row>> sections(EditorCard card, Offers offers) {
         Map<String, List<Row>> out = new LinkedHashMap<>();
@@ -95,7 +102,7 @@ public class EditorCardSectionsTest {
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
                 Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            "SECTION_APPEARANCE", block(),
+            "SECTION_APPEARANCE", blockWithMargin(),
             "SECTION_LINKS", Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES,
                 Row.LINK_SHEETS)));
     }
@@ -110,7 +117,7 @@ public class EditorCardSectionsTest {
     @Test
     public void workspace() {
         check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", block(Row.CONTRAST, Row.MINIMAL),
+            "SECTION_APPEARANCE", blockWithMargin(Row.CONTRAST, Row.MINIMAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
     }
 

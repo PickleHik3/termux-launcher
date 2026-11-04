@@ -25,7 +25,7 @@ public final class WorkspaceCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         // Contrast and Minimal layout join the Appearance section, with no heading of their own.
         return com.termux.app.surfaces.GlassRows.appearance(new EditorRows.CardRows(), offers, 1)
-            .tier(1, Row.CONTRAST, Row.MINIMAL)
+            .tier(1, Row.MARGIN, Row.CONTRAST, Row.MINIMAL)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
             .build();
     }

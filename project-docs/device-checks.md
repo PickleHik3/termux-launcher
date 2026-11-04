@@ -344,3 +344,9 @@ longer counted as an error. Owed:
 - **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)
   Opacity to 20; Home card Opacity: the dock on Home pages follows Home, on the Terminal page it
   stays at 20 · pong.
+- **Margin per page kind (11-04).** Before anything: Home and Terminal pages look as they did
+  after the update. Workspace card Margin to 20: Terminal and Display pages' dock, status bar and
+  pane air move, Home pages do not; Home card Margin to 4: Home alone moves; swipe Home ↔
+  Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
+  (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
+  pong.

@@ -266,6 +266,78 @@ public class PresetApplyTest {
     }
 
     @Test
+    public void marginsLastChangeWinsAcrossGlobalWorkspaceAndAnElement() {
+        TermuxAppSharedPreferences prefs = install();
+        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 10);
+        assertMargins(prefs, 10, 10, "Global");
+
+        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+            Row.MARGIN, 20);
+        assertMargins(prefs, 10, 20, "then Workspace");
+
+        // The Terminal card stands on the Workspace: its Margin edits that level.
+        slide(open(prefs, EditorCard.TERMINAL, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+            Row.MARGIN, 30);
+        assertMargins(prefs, 10, 30, "then the Terminal card");
+
+        slide(open(prefs, EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 14);
+        assertMargins(prefs, 14, 30, "then Home");
+
+        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 6);
+        assertMargins(prefs, 6, 6, "Global again resets both kinds");
+    }
+
+    @Test
+    public void aDocksMarginEditsTheLevelItAppliesTo() {
+        TermuxAppSharedPreferences prefs = install();
+        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+            Row.MARGIN, 20);
+        SurfaceEditorController dock = open(prefs, EditorCard.DOCK, PaneWallPage.WIDGETS,
+            HOME_PAGE);
+        EditorCardSheet.Model model = ReflectionHelpers.getField(dock, "mModel");
+        ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
+            ReflectionHelpers.ClassParameter.from(int.class,
+                EditorChips.appliesToOptions(EditorCard.DOCK).indexOf(
+                    EditorChips.AppliesTo.HOME)));
+        slide(dock, Row.MARGIN, 16);
+        assertMargins(prefs, 16, 20, "Dock on Home");
+        ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
+            ReflectionHelpers.ClassParameter.from(int.class,
+                EditorChips.appliesToOptions(EditorCard.DOCK).indexOf(
+                    EditorChips.AppliesTo.GLOBAL)));
+        slide(dock, Row.MARGIN, 9);
+        assertMargins(prefs, 9, 9, "Dock on Global is Base, and resets the kinds");
+    }
+
+    @Test
+    public void discardPutsAKindsMarginBack() {
+        TermuxAppSharedPreferences prefs = install();
+        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+            Row.MARGIN, 20);
+        SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
+            HOME_PAGE);
+        int base = prefs.getBaseMarginDp();
+        slide(global, Row.MARGIN, 6);
+        assertMargins(prefs, 6, 6, "Global");
+        ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertMargins(prefs, base, 20, "after Discard");
+    }
+
+    private static void assertMargins(TermuxAppSharedPreferences prefs, int home, int workspace,
+                                      String what) {
+        assertEquals(what + ": Home pages", home, prefs.getLayoutMarginDp(true));
+        assertEquals(what + ": Workspace pages", workspace, prefs.getLayoutMarginDp(false));
+        assertEquals(what + ": a Display page", workspace,
+            prefs.lookGrid().value(LookGrid.Property.MARGIN, null, DISPLAY_PAGE));
+        // What the dress shapes each kind's pages by.
+        assertEquals(what + ": Home's shape", home,
+            com.termux.app.place.WallShape.read(prefs, true).marginDp);
+        assertEquals(what + ": the Workspace's shape", workspace,
+            com.termux.app.place.WallShape.read(prefs, false).marginDp);
+    }
+
+    @Test
     public void discardPutsTheResetValuesBack() {
         TermuxAppSharedPreferences prefs = install();
         dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);

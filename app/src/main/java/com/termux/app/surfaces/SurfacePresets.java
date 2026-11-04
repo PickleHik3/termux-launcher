@@ -1359,13 +1359,14 @@ public final class SurfacePresets {
     /**
      * Before a Global value of {@code property} (a Look's number, or a slider on the Global card):
      * the Home and Workspace values (all glass on each kind) and every element's own value,
-     * everywhere and on each kind, go, so every surface follows Base again. Nothing for a
-     * property with no element column (Margin, Vibrancy): Base is its one cell.
+     * everywhere and on each kind, go, so every surface follows Base again. Margin has only the
+     * kind values; Vibrancy nothing beneath Base.
      */
     static void clearBeneathGlobal(@NonNull LookGrid grid, @NonNull LookGrid.Property property) {
+        if (property.perKind)
+            for (LookGrid.Kind kind : KINDS)
+                clearIfHeld(grid, property, null, kind);
         if (!property.perElement) return;
-        for (LookGrid.Kind kind : KINDS)
-            clearIfHeld(grid, property, null, kind);
         for (LookGrid.Element element : ELEMENTS) {
             clearIfHeld(grid, property, element, null);
             for (LookGrid.Kind kind : KINDS)
@@ -1408,18 +1409,24 @@ public final class SurfacePresets {
      * Last change wins (developer, 2026-11-04): a slider on the Global card or a page card (Home,
      * Workspace) resets the values set beneath it for its one property, at the levels it covers,
      * so they follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element
-     * card's slider resets nothing: it holds its own value.
+     * card's slider resets nothing: it holds its own value. For a property with no element column
+     * (Margin) an element card edits all glass at its level, so it resets as that level's card.
      */
     static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
                                    @NonNull LookGrid.Property property) {
-        if (!slidersResetBeneath(chips)) return;
+        if (!slidersResetBeneath(chips, property)) return;
         if (chips.onKind()) clearBeneathKind(grid, chips.appliesTo.kinds, property);
         else clearBeneathGlobal(grid, property);
     }
 
-    /** Whether a slider moved at {@code chips} resets what is beneath it ({@link #clearBeneathSlider}). */
-    static boolean slidersResetBeneath(@NonNull EditorChips chips) {
-        return chips.element == null;
+    /**
+     * Whether a slider of {@code property} moved at {@code chips} resets what is beneath it
+     * ({@link #clearBeneathSlider}): all glass at the chips' level, which an element card edits
+     * for a property with no element column.
+     */
+    static boolean slidersResetBeneath(@NonNull EditorChips chips,
+                                       @NonNull LookGrid.Property property) {
+        return chips.element == null || !property.perElement;
     }
 
     /** Clears a cell the grid holds; an absent cell is left alone (no write, no seed bookkeeping). */

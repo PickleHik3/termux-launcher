@@ -133,8 +133,10 @@ public class GlassRowsTest {
         EditorChips dockOnHome = new EditorChips(EditorChips.AppliesTo.HOME, LookGrid.Element.DOCK);
         LookGrid.Key margin = dockOnHome.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
-        assertNull("no kind row", margin.kind);
-        assertEquals(LookGrid.NO_PAGE, margin.page);
+        assertEquals("Home's kind row", LookGrid.Kind.HOME, margin.kind);
+        LookGrid.Key vibrancy = dockOnHome.cell(GlassRows.cellProperty(Row.VIBRANCY));
+        assertNull("no kind row", vibrancy.kind);
+        assertEquals(LookGrid.NO_PAGE, vibrancy.page);
     }
 
     @Test

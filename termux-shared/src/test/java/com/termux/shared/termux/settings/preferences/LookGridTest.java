@@ -309,19 +309,58 @@ public class LookGridTest {
         assertNull(LookGrid.parse("look.opacity@kind:"));
         assertNull(LookGrid.parse("look.vibrancy@kind:home"));
         assertNull(LookGrid.parse("look.opacity@kind:home@4"));
+        // Margin has a kind row since 2026-11-04 (Home's and the Workspace's); Vibrancy none.
+        assertEquals("look.margin@kind:home", LookGrid.key(Property.MARGIN, null, LookGrid.Kind.HOME));
+        assertEquals(LookGrid.Kind.HOME, LookGrid.parse("look.margin@kind:home").kind);
         try {
-            LookGrid.key(Property.MARGIN, null, LookGrid.Kind.HOME);
-            fail("margin has no kind row");
+            LookGrid.key(Property.VIBRANCY, null, LookGrid.Kind.HOME);
+            fail("vibrancy has no kind row");
         } catch (IllegalArgumentException expected) {
         }
     }
 
     @Test
-    public void vibrancyAndMarginIgnoreTheKind() {
+    public void vibrancyIgnoresTheKind() {
         LookGrid.MemoryStore store = new LookGrid.MemoryStore();
         store.putInt("look.vibrancy@kind:home", 5);
         LookGrid grid = kindGrid(store);
         assertEquals(Cell.SHIPPED, grid.resolve(Property.VIBRANCY, null, HOME_PAGE).cell);
+    }
+
+    @Test
+    public void marginIsReadPerKindThenBase() {
+        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
+        LookGrid grid = kindGrid(store);
+        grid.write(Property.MARGIN, null, LookGrid.NO_PAGE, 8);
+        for (int page : new int[] {HOME_PAGE, TERMINAL_PAGE, DISPLAY_PAGE})
+            assertEquals("Base on page " + page, 8, grid.value(Property.MARGIN, null, page));
+        grid.write(Property.MARGIN, null, LookGrid.Kind.TERMINAL, 20);
+        grid.write(Property.MARGIN, null, LookGrid.Kind.DISPLAY, 20);
+        assertEquals(Cell.KIND, grid.resolve(Property.MARGIN, null, TERMINAL_PAGE).cell);
+        assertEquals(20, grid.value(Property.MARGIN, null, TERMINAL_PAGE));
+        assertEquals(20, grid.value(Property.MARGIN, Element.DOCK, DISPLAY_PAGE));
+        assertEquals("Home still follows Base", 8, grid.value(Property.MARGIN, null, HOME_PAGE));
+        assertEquals("everywhere reads Base", 8,
+            grid.value(Property.MARGIN, null, LookGrid.NO_PAGE));
+        // A page's write lands on its kind's row.
+        grid.write(Property.MARGIN, null, HOME_PAGE, 4);
+        assertTrue(store.contains("look.margin@kind:home"));
+        assertEquals(4, grid.value(Property.MARGIN, null, HOME_PAGE));
+    }
+
+    @Test
+    public void anExistingSingleMarginLooksTheSameOnEveryKind() {
+        // An install from before the kind row holds only Base (and maybe an old page key, which
+        // is not read and not folded): every kind resolves to Base, as before.
+        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
+        store.putInt("look.margin", 12);
+        store.putInt("look.margin@" + HOME_PAGE, 30);
+        LookGrid grid = kindGrid(store);
+        for (int page : new int[] {HOME_PAGE, TERMINAL_PAGE, DISPLAY_PAGE, LookGrid.NO_PAGE})
+            assertEquals("page " + page, 12, grid.value(Property.MARGIN, null, page));
+        assertTrue("no kind row is made",
+            LookGrid.foldedPageCells(java.util.Collections.singletonMap("look.margin@" + HOME_PAGE,
+                (Object) 30), HOME_PAGE, TERMINAL_PAGE).isEmpty());
     }
 
     @Test

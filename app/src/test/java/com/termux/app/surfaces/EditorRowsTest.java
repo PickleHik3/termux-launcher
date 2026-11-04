@@ -141,8 +141,8 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS,
             Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE, Row.SECTION_LINKS,
-            Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
+            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.MARGIN, Row.RIM, Row.TINT_HUE,
+            Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PaneWallPage frame : PaneWallPage.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})

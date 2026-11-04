@@ -310,12 +310,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, dp);
     }
 
-    /** Margin for a half, in dp as stored: Base's side gap on either half. */
+    /**
+     * The Margin the surfaces of Home pages ({@code home}) or of the Workspace's pages wear, in dp
+     * as stored: that kind's own once the Home or Workspace card set it, else Base's.
+     */
     public int getLayoutMarginDp(boolean home) {
+        return fromGrid(SurfaceProperty.SIDE_GAP, lookGrid().value(LookGrid.Property.MARGIN, null,
+            home ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL));
+    }
+
+    /** Base's Margin, in dp as stored: what every kind of page wears until it holds its own. */
+    public int getBaseMarginDp() {
         return getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
     }
 
-    /** Sets the Margin both halves wear, from either half. */
+    /** Sets Base's Margin, which every kind of page without its own follows. */
     public void setLayoutMarginDp(boolean home, int dp) {
         setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, dp);
     }
