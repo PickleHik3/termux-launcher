@@ -18,6 +18,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **AI runtimes updated (11-04).** A LiteRT-LM chat model loads and answers on GPU and on CPU
+  (and the Benchmark route still returns numbers); voice typing's speech detection still starts
+  and stops on speech · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
   dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
