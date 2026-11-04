@@ -18670,7 +18670,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mPaletteTileKnob = (preferences, key) -> {
             if ((com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
-                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON.equals(key))
+                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN.equals(key))
                 && mSuggestionBarView != null) {
                 // The row takes or gives back the slot, and the dock is dressed again (beads).
                 restyleDockSurface();
@@ -18700,7 +18702,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean floatOn = store != null && store.getBoolean(
             com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
             com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
-        bar.setFloatTile(floatOn, floatOn ? this::openHomeFloatHere : null);
+        int floatColumn = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
+            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
+                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
+        bar.setFloatTile(floatOn, floatColumn, floatOn ? this::openHomeFloatHere : null);
     }
 
     /**
@@ -18730,16 +18735,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 openAppDrawerFromHome();
             }
 
-            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn) {
-                // The Drawer tile's column is the layout's own; the palette tile's is global.
+            @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn,
+                                                     int floatColumn) {
+                // The Drawer tile's column is the layout's own; the palette and Float tiles' are
+                // global.
                 PlaceLayoutStore store = committedDockStore();
                 if (store != null && drawerColumn >= 0) store.setDrawerTileColumn(drawerColumn);
                 android.content.SharedPreferences prefs =
                     mPreferences == null ? null : mPreferences.getSharedPreferences();
-                if (prefs != null && paletteColumn >= 0) {
-                    prefs.edit().putInt(
+                if (prefs != null && (paletteColumn >= 0 || floatColumn >= 0)) {
+                    android.content.SharedPreferences.Editor edit = prefs.edit();
+                    if (paletteColumn >= 0) edit.putInt(
                         com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
-                        paletteColumn).apply();
+                        paletteColumn);
+                    if (floatColumn >= 0) edit.putInt(
+                        com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
+                        floatColumn);
+                    edit.apply();
                 }
                 syncDrawerTile();
             }

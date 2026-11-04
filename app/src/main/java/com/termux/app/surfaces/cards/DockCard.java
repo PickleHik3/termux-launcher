@@ -68,6 +68,8 @@ public final class DockCard {
      * is per layout). Absent is the row's last ({@code PaletteTilePolicy.DEFAULT_COLUMN}).
      */
     public static final String KEY_COMMAND_PALETTE_COLUMN = "dock_command_palette_column";
+    /** The New float terminal tile's column, kept the way the palette tile's is. */
+    public static final String KEY_FLOAT_TERMINAL_COLUMN = "dock_float_terminal_column";
 
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
