@@ -94,7 +94,6 @@ public class PaletteTilePolicyTest {
         assertEquals(4, PaletteTilePolicy.appSlots(6, false, true, true));
         assertEquals(3, PaletteTilePolicy.appSlots(6, true, true, true));
         assertEquals(6, PaletteTilePolicy.columnCount(3, true, true, true));
-        assertEquals(5, PaletteTilePolicy.floatColumn(6));
         // Off, nothing changes for an existing dock.
         assertEquals(PaletteTilePolicy.appSlots(6, true, true),
             PaletteTilePolicy.appSlots(6, true, true, false));
@@ -102,13 +101,78 @@ public class PaletteTilePolicyTest {
             PaletteTilePolicy.columnCount(4, true, true, false));
     }
 
-    @Test public void paletteStaysLeftOfTheFloatTileWhenBothStandAtTheEnd() {
+    @Test public void bothOnTheirDefaultsStandPaletteThenFloatAtTheEnd() {
         int columns = PaletteTilePolicy.columnCount(4, false, true, true);
-        int palette = PaletteTilePolicy.column(PaletteTilePolicy.DEFAULT_COLUMN,
-            PaletteTilePolicy.movableColumns(columns, true));
-        assertEquals(columns - 2, palette);
-        assertEquals(columns - 1, PaletteTilePolicy.floatColumn(columns));
-        assertEquals(columns, PaletteTilePolicy.movableColumns(columns, false));
+        int[] at = PaletteTilePolicy.tileColumns(-1, true, PaletteTilePolicy.DEFAULT_COLUMN,
+            true, PaletteTilePolicy.DEFAULT_COLUMN, columns);
+        assertArrayEquals(new int[] {-1, columns - 2, columns - 1}, at);
+    }
+
+    @Test public void floatAloneOnItsDefaultIsTheLastColumn() {
+        assertArrayEquals(new int[] {-1, -1, 5}, PaletteTilePolicy.tileColumns(-1, false, -1,
+            true, PaletteTilePolicy.DEFAULT_COLUMN, 6));
+    }
+
+    @Test public void aStoredFloatColumnStandsWhereItWasDragged() {
+        assertArrayEquals(new int[] {0, 5, 2}, PaletteTilePolicy.tileColumns(0, true, 5,
+            true, 2, 6));
+        // Kept from a wider row: the last.
+        assertArrayEquals(new int[] {-1, -1, 3}, PaletteTilePolicy.tileColumns(-1, false, -1,
+            true, 9, 4));
+    }
+
+    @Test public void threeTilesNeverShareAColumnWhateverIsStored() {
+        for (int columns = 3; columns <= 7; columns++) {
+            for (int d = 0; d < columns; d++) {
+                for (int p = -1; p < columns; p++) {
+                    for (int f = -1; f < columns; f++) {
+                        int[] at = PaletteTilePolicy.tileColumns(d, true, p, true, f, columns);
+                        boolean[] taken = new boolean[columns];
+                        for (int c : at) {
+                            assertTrue(c >= 0 && c < columns);
+                            assertFalse("shared column " + c, taken[c]);
+                            taken[c] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test public void aDropOnAnotherTilesColumnSwapsTheTwo() {
+        // A tile at 5 dragged onto the first other tile's column 2: that tile takes 5.
+        assertArrayEquals(new int[] {2, 5, 0}, PaletteTilePolicy.dropped(2, 5, 2, 0));
+        // Onto the second other tile.
+        assertArrayEquals(new int[] {0, 4, 5}, PaletteTilePolicy.dropped(0, 5, 4, 0));
+        assertArrayEquals(new int[] {2, 0, 5}, PaletteTilePolicy.dropped(2, 5, 0, 2));
+        // Onto no tile: the others stay, and a missing tile stays missing.
+        assertArrayEquals(new int[] {3, 1, -1}, PaletteTilePolicy.dropped(3, 5, 1, -1));
+    }
+
+    @Test public void theAppsKeepTheirOrderAroundThreeTiles() {
+        int apps = 3;
+        int columns = 6;
+        int[][] places = {{0, 1, 2}, {5, 4, 3}, {1, 5, 3}, {2, 0, 5}};
+        for (int[] t : places) {
+            boolean[] taken = new boolean[columns];
+            int last = -1;
+            for (int app = 0; app < apps; app++) {
+                int col = PaletteTilePolicy.slotOf(app, t[0], t[1], t[2], apps);
+                assertTrue(col > last && col < columns);
+                assertFalse(col == t[0] || col == t[1] || col == t[2]);
+                assertFalse(taken[col]);
+                taken[col] = true;
+                last = col;
+                assertEquals(app, PaletteTilePolicy.appAt(col, t[0], t[1], t[2], apps));
+            }
+            for (int tile : t) assertEquals(-1, PaletteTilePolicy.appAt(tile, t[0], t[1], t[2], apps));
+        }
+        assertEquals(-1, PaletteTilePolicy.slotOf(apps, 0, 1, 2, apps));
+        // A missing tile: as the two-tile maths.
+        for (int app = 0; app < 4; app++) {
+            assertEquals(DrawerTilePolicy.slotOf(app, 1, 5, 4),
+                PaletteTilePolicy.slotOf(app, 1, -1, 5, 4));
+        }
     }
 
     @Test public void aNarrowRowStillKeepsOneAppWithAllThreeTiles() {

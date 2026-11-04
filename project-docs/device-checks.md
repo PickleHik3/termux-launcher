@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Dock tiles lift on a held press (11-04).** On the Tray and Strip dock designs, with the
+  Drawer, Command palette and New float terminal tiles all on: a finger held still on each
+  tile for about half a second lifts it (haptic tick, the tile grows) with no Edit/Hide card
+  opening, and dragging along the row and letting go drops it on the nearest column, swapping
+  with a tile it lands on; the order survives a restart and the Dock card's Reset puts the
+  palette and float tiles back last. A hold on the dock's empty frame still opens the card, and
+  a quick sideways swipe starting on a tile still pages the row · pong or emulator.
 - **MNN 3.6.2 runtime (11-04, #211).** On pong: the MNN chat models already installed load and
   answer (CPU and OpenCL), an embedding model and a diffusion model still run, and
   `taobao-mnn/MobileMoE-S-SFT-MNN` (716 MB, uses IndexedLinear) imports, loads and answers.
