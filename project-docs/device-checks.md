@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Full screen pane under the camera: keyboard up/down slide lands without a jump (11-04).**
+  Fix #190 (the slide's row prediction now reads the text top inset the resize uses). With a pane
+  Full screen under the camera cut-out and a busy shell (prompt on the last row), raise and lower
+  the in-app keyboard, Docked and Floating dock: the rows slide straight to where they rest, with
+  no step at the end of the slide · pong.
+
 - **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
   start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
   diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`

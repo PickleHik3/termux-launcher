@@ -8,7 +8,6 @@ import com.termux.app.wall.PageRef;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalOutput;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.ParameterizedRobolectricTestRunner;
@@ -131,12 +130,10 @@ public class TerminalResizeParityTest {
     }
 
     /**
-     * A pane Full screen lifts under the camera keeps its text clear of it (pong: 92 px). Fails
-     * today on every fixture: the prediction's rows and slack ignore the text inset that
-     * {@code updateSize} subtracts (pong: -872 px predicted, -921 px real).
+     * A pane Full screen lifts under the camera keeps its text clear of it (pong: 92 px). The
+     * prediction reads the same rows and offset as the resize below that inset (#190: it used to
+     * ignore it, -872 px predicted against -921 px real on pong).
      */
-    @Ignore("Motion audit pair 3 (project-docs/active/motion-invariants-2026-10-30.md): "
-        + "predictResize* ignores the text top inset updateSize uses; the reproduction")
     @Test
     public void underTheCamerasTextInsetToo() {
         assertPredictionIsTheResize(92);

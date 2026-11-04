@@ -3464,8 +3464,8 @@ public final class TerminalView extends View {
         if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
         int toRows = rowsForHeight(toHeightPx);
         int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows);
-        return travelDisplacementPx(fromHeightPx, toHeightPx, mEmulator.mRows, toRows, rowShift,
-            mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
+        return travelDisplacementPx(fromHeightPx, toHeightPx, mTextTopInsetPx, mEmulator.mRows,
+            toRows, rowShift, mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
     }
 
     /** How many rows down the settle's resize to {@code toHeightPx} moves the rows on screen. */
@@ -3477,7 +3477,7 @@ public final class TerminalView extends View {
     /** What the centring slack above the grid changes by across that resize. */
     private float predictResizeHeadroomChangePx(int fromHeightPx, int toHeightPx) {
         if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
-        return travelHeadroomChangePx(fromHeightPx, toHeightPx, mEmulator.mRows,
+        return travelHeadroomChangePx(fromHeightPx, toHeightPx, mTextTopInsetPx, mEmulator.mRows,
             rowsForHeight(toHeightPx), mRenderer.mFontLineSpacing,
             mRenderer.mFontLineSpacingAndAscent);
     }
@@ -3487,31 +3487,43 @@ public final class TerminalView extends View {
             && mRenderer.mFontLineSpacing > 0;
     }
 
-    /** The rows {@link #updateSize} gives a view this tall. */
+    /**
+     * The rows {@link #updateSize} gives a view this tall below the text top inset: the same
+     * {@link #rowsFor} it sizes the session with, so the prediction and the resize agree.
+     */
     private int rowsForHeight(int heightPx) {
-        return Math.max(4, (heightPx - mRenderer.mFontLineSpacingAndAscent)
-            / mRenderer.mFontLineSpacing);
+        return rowsFor(heightPx, mTextTopInsetPx, mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing);
     }
 
     /**
-     * The arithmetic behind {@link #predictResizeDisplacementPx}: the grid is drawn centred in
-     * its view ({@link #getVerticalContentOffset}), so a row's move is the change in the slack
-     * above the grid plus the rows the buffer shifts the screen by. The same on either buffer.
+     * The arithmetic behind {@link #predictResizeDisplacementPx}: the grid is drawn below the text
+     * top inset and centred in what is left ({@link #getVerticalContentOffset}), so a row's move is
+     * the change in that offset plus the rows the buffer shifts the screen by. The same on either
+     * buffer.
      *
-     * @param rowShift how many rows down each surviving row lands, from the buffer's prediction
+     * @param topInsetPx the text top inset ({@link #setTextTopInsetPx}), the same on both sides
+     * @param rowShift   how many rows down each surviving row lands, from the buffer's prediction
      */
-    static float travelDisplacementPx(int fromHeightPx, int toHeightPx, int fromRows, int toRows,
-                                      int rowShift, int lineSpacingPx, int ascentPx) {
-        return travelHeadroomChangePx(fromHeightPx, toHeightPx, fromRows, toRows, lineSpacingPx,
-            ascentPx) + rowShift * (float) lineSpacingPx;
+    static float travelDisplacementPx(int fromHeightPx, int toHeightPx, int topInsetPx,
+                                      int fromRows, int toRows, int rowShift, int lineSpacingPx,
+                                      int ascentPx) {
+        return travelHeadroomChangePx(fromHeightPx, toHeightPx, topInsetPx, fromRows, toRows,
+            lineSpacingPx, ascentPx) + rowShift * (float) lineSpacingPx;
     }
 
-    /** The slack part of that move: how far the centred grid's top edge moves with the resize. */
-    static float travelHeadroomChangePx(int fromHeightPx, int toHeightPx, int fromRows,
-                                        int toRows, int lineSpacingPx, int ascentPx) {
-        int fromHeadroom = centredSlackPx(fromHeightPx, fromRows * lineSpacingPx + ascentPx);
-        int toHeadroom = centredSlackPx(toHeightPx, toRows * lineSpacingPx + ascentPx);
-        return toHeadroom - fromHeadroom;
+    /**
+     * The slack part of that move: how far the grid's top edge moves with the resize, read from
+     * {@link #verticalContentOffsetPx} as the drawn grid is.
+     */
+    static float travelHeadroomChangePx(int fromHeightPx, int toHeightPx, int topInsetPx,
+                                        int fromRows, int toRows, int lineSpacingPx,
+                                        int ascentPx) {
+        int fromTop = verticalContentOffsetPx(fromHeightPx, topInsetPx,
+            fromRows * lineSpacingPx + ascentPx);
+        int toTop = verticalContentOffsetPx(toHeightPx, topInsetPx,
+            toRows * lineSpacingPx + ascentPx);
+        return toTop - fromTop;
     }
 
     /**
