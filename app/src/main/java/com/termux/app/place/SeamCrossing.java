@@ -530,6 +530,16 @@ public final class SeamCrossing {
         }
     }
 
+    /**
+     * One look value (an opacity, a tint strength, in percent) at a blend's step from the
+     * committed end's {@code here} to the other end's {@code there}: exactly {@code here} at 0 and
+     * {@code there} at 1, so the frame the wall lands on shows what the landing resolves.
+     */
+    public static int lookBlendValue(int here, int there, float share) {
+        float t = Float.isNaN(share) ? 0f : clamp01(share);
+        return Math.round(here + (there - here) * t);
+    }
+
     /** The steps a look blend moves through across a crossing: the glass is set at most this often. */
     public static final int LOOK_STEPS = 32;
 
@@ -918,6 +928,14 @@ public final class SeamCrossing {
             || !here.stack.equals(there.stack)) return false;
         return SeamTravel.dockPlan(here.layout, there.layout) != DockPlan.NONE
             || SeamTravel.homeBarWearer(here.layout, there.layout) != null;
+    }
+
+    /**
+     * Whether the crossing runs between halves that dress the stack apart only in look, whose
+     * glass blends from one end's to the other's with the wall ({@link Answers#lookShare}).
+     */
+    public boolean lookBlends() {
+        return mRun.other != null && mRun.lookBlends;
     }
 
     /** Whether the crossing runs between two pages of one kind: two Home pages. */

@@ -25182,6 +25182,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : mPreferences.getAppBarOpacity(lookIdOf(herePage));
         mLookBlendThereOpacity = mPreferences == null ? 100
             : mPreferences.getAppBarOpacity(lookIdOf(therePage));
+        beginStackLookBlend(therePage);
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.
         beginNavStripFade(herePage, therePage);
         beginTopBandFade(herePage, therePage);
@@ -25371,14 +25372,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncStackLookBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
         float share = seam.lookShare();
         if (Float.isNaN(share) || share == mLookBlendShare || mChrome == null) return;
+        mLookBlendShare = share;
+        // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
+        if (mLookBlendDock != null) mLookBlendDock.setShare(share);
         android.widget.ImageView backdrop = hotView(R.id.accessory_blur_backdrop);
         if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
-        mLookBlendShare = share;
-        int opacity = Math.round(mLookBlendHereOpacity
-            + (mLookBlendThereOpacity - mLookBlendHereOpacity) * share);
+        int opacity = com.termux.app.place.SeamCrossing.lookBlendValue(mLookBlendHereOpacity,
+            mLookBlendThereOpacity, share);
         backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.withEvenOut(
             mChrome.ink().lastBandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK),
             com.termux.app.chrome.GlassFilters.frost(opacity)));
+    }
+
+    /**
+     * The dock's sheet across a look-only crossing: the glass it wears beside the arriving end's,
+     * built once as the crossing begins, crossed by the blend's step
+     * ({@link #syncStackLookBlend}). The sheet carries the dock's opacity, tint and grain (the
+     * frost filter alone carries only the Clear step), so this is the blend the eye sees. Null
+     * while none runs.
+     */
+    @Nullable private com.termux.app.chrome.CrossfadeDrawable mLookBlendDock;
+
+    private void beginStackLookBlend(@NonNull com.termux.app.wall.PageRef there) {
+        endStackLookBlend();
+        if (mChrome == null || !mCrossing.seam().lookBlends()) return;
+        View sheet = findViewById(R.id.extrakeys_background);
+        Drawable here = sheet == null ? null : sheet.getBackground();
+        // Standing down on a joined Docked frame, the sheet draws nothing to blend.
+        if (here == null) return;
+        mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
+            mChrome.glass().dockSurfaceOf(lookIdOf(there), 0f, 1f, false), 0f);
+        sheet.setBackground(mLookBlendDock);
+    }
+
+    /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */
+    private void endStackLookBlend() {
+        com.termux.app.chrome.CrossfadeDrawable blend = mLookBlendDock;
+        mLookBlendDock = null;
+        if (blend == null) return;
+        View sheet = findViewById(R.id.extrakeys_background);
+        if (sheet != null && sheet.getBackground() == blend) sheet.setBackground(blend.endpoint());
     }
 
     /**
@@ -26313,6 +26346,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // plainly, as that end wears it.
             endNavStripFade();
             endTopBandFade();
+            endStackLookBlend();
             // A stack dressed for the landed half on the way, or a look the crossing blended onto
             // it: the landed frame already shows what the half's re-dress would, which follows it.
             mLandingStackDressed = seamLanding.stackDressedFor(page)

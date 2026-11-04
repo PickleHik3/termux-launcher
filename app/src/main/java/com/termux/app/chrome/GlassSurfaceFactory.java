@@ -187,6 +187,22 @@ public final class GlassSurfaceFactory {
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
     }
 
+    /**
+     * The dock's glass as page {@code lookPage}'s look dresses it, whatever page the stack wears
+     * now: its opacity, tint and grain. A crossing between halves apart only in look builds the
+     * arriving end's once, as it begins, and blends to it with the wall; the landing's re-dress
+     * then builds the same glass.
+     */
+    @NonNull
+    public Drawable dockSurfaceOf(int lookPage, float sliceStart, float sliceEnd,
+                                  boolean withFoot) {
+        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
+        if (preferences == null) return dockSurface(1f, sliceStart, sliceEnd, withFoot);
+        return surface(preferences.getAppBarOpacity(lookPage) / 100f, sliceStart, sliceEnd,
+            withFoot, preferences.getDockGlassGrain(lookPage),
+            preferences.getDockTintStrength(lookPage));
+    }
+
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
