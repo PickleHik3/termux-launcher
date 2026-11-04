@@ -67,6 +67,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     @Nullable private SuggestionBarView dock;
     @Nullable private ExpansionListener expansionListener;
     @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
+    @Nullable private AppDrawerPickupDelegate pickupDelegate;
+    @NonNull private final LauncherAppEntry[] launchEntries = new LauncherAppEntry[LAUNCH_ICON_COUNT];
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     private float tileLeft;
     private float tileSide;
@@ -175,7 +177,16 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         @NonNull AppDrawerCategoryGridMetrics metrics, @NonNull ExpansionListener listener,
         @NonNull AppDrawerAppCellView.ClickGate clickGate,
         @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bind(dock, bucket, metrics, listener, clickGate, categoryChoiceListener, null);
+    }
+
+    public void bind(@Nullable SuggestionBarView dock, @NonNull AppDrawerCategoryBucket bucket,
+        @NonNull AppDrawerCategoryGridMetrics metrics, @NonNull ExpansionListener listener,
+        @NonNull AppDrawerAppCellView.ClickGate clickGate,
+        @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener,
+        @Nullable AppDrawerPickupDelegate pickupDelegate) {
         unbind();
+        this.pickupDelegate = pickupDelegate;
         boolean metricsChanged = this.metrics != metrics;
         this.dock = dock;
         this.bucket = bucket;
@@ -234,15 +245,13 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 // A long press reuses the dock's Material app-context popup (Category row instead
                 // of Pin) rather than jumping straight to the category picker.
                 icon.setLongClickable(true);
-                icon.setOnLongClickListener(view -> {
-                    SuggestionBarView currentDock = this.dock;
-                    AppDrawerCategoryChoiceListener choiceListener = this.categoryChoiceListener;
-                    if (this.clickGate.suppressCellClick() || currentDock == null) return false;
-                    Runnable categoryAction = choiceListener == null ? null
-                        : () -> choiceListener.onCategoryChoiceRequested(entry, view);
-                    currentDock.showDrawerAppContextPopup(view, entry, categoryAction);
-                    return true;
-                });
+                launchEntries[i] = entry;
+                AppDrawerCategoryChoiceListener choiceListener = categoryChoiceListener;
+                Runnable categoryAction = choiceListener == null ? null
+                    : () -> choiceListener.onCategoryChoiceRequested(entry, icon);
+                // Same binding as every drawer cell: a still press opens the popup, a press that
+                // then moves sideways picks the app up for Home through the drag controller.
+                dock.bindDrawerAppContextLongPress(icon, entry, pickupDelegate, categoryAction);
             } else {
                 // Display only: the mini-cluster stands for "there is more in here", so its taps
                 // fall through to the open-category target underneath.
@@ -258,6 +267,17 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         // layout when its text changes. Unconditional here, this forced a full measure+layout of
         // all seven children for every tile bound during a categories scroll.
         if (metricsChanged) requestLayout();
+    }
+
+    /** The app behind a launch icon at tile-local ({@code x}, {@code y}), or null. */
+    @Nullable public LauncherAppEntry launchEntryAt(float x, float y) {
+        for (int i = 0; i < launchEntries.length; i++) {
+            ImageView icon = icons[i];
+            if (launchEntries[i] != null && icon.getVisibility() == VISIBLE
+                && x >= icon.getLeft() && x < icon.getRight()
+                && y >= icon.getTop() && y < icon.getBottom()) return launchEntries[i];
+        }
+        return null;
     }
 
     /** Releases every drawable and app-specific listener while retaining the cheap holder tree. */
@@ -279,6 +299,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         dock = null;
         expansionListener = null;
         categoryChoiceListener = null;
+        pickupDelegate = null;
+        java.util.Arrays.fill(launchEntries, null);
         clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     }
 
