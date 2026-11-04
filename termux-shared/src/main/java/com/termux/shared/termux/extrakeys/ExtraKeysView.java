@@ -584,15 +584,16 @@ public final class ExtraKeysView extends GridLayout {
     @Nullable private Drawable mDeckSavedBackground;
 
     /**
-     * The deck look for the row: an opaque gradient bed and raised push-button keys, the active
-     * button lit with a bar. {@code on == false} restores the normal look.
+     * The deck look for the row: raised push-button keys on the slab its host wears (the dock's
+     * sheet or the plank off it carries the opaque bed, so the row's inset inside the host is
+     * never seen as a second slab), the active button lit with a bar. {@code on == false}
+     * restores the normal look.
      */
     public void setDeckLook(boolean on, int bed, int bedTop, int key, int keyTop, int keyFoot, int lit, int litInk) {
         if (on) {
             if (!mDeckOn)
                 mDeckSavedBackground = getBackground();
-            setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {bedTop, bed}));
+            setBackground(null);
             mDeckOn = true;
             mDeckKey = key;
             mDeckKeyTop = keyTop;

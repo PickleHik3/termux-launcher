@@ -9113,6 +9113,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearInAppKeyboardBackdrop();
             return false;
         }
+        // Under the deck look the host is the slab, not glass (wave 8): the keys draw their own
+        // opaque bed over it, and what they leave uncovered at the card's edge is the same
+        // plastic rather than a glass rim showing through. No band is measured: the legends take
+        // the deck's inks, not a tone judged on glass.
+        Drawable slab = deckSlabOr(null);
+        if (slab != null) {
+            surfaceHost.setBackground(slab);
+            clearInAppKeyboardBackdrop();
+            return false;
+        }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height — and, when
             // there is a frame to blur, its backdrop shows it — the transparent keyboard exposes
@@ -10476,8 +10486,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Under a joined Docked frame the frame's glass is this sheet, but where the row's
             // beads cut the frame (the host clips this sheet to them).
             extraKeysBackground.setBackground(dockSheetStandsDownOnFrame() ? null
-                : mChrome.glass().dockSurface(state.barAlpha,
-                    0f, 1f, false));
+                : deckSlabOr(mChrome.glass().dockSurface(state.barAlpha,
+                    0f, 1f, false)));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }
@@ -13049,7 +13059,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (surface != null) {
             // Without the dark foot: this is a plank floating clear of the screen's edges, not a
             // slab standing on one, so a shaded underside would read as a drawn border.
-            surface.setBackground(mChrome.glass().dockSurface(opacity, sliceStart, 1f, false));
+            surface.setBackground(deckSlabOr(
+                mChrome.glass().dockSurface(opacity, sliceStart, 1f, false)));
             surface.setAlpha(1f);
         }
         // The sheet is what clips, not the host: the host has to let the wave's lift out of it.
@@ -24335,6 +24346,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // same pass ends by laying the slab (applyWindowBarDeckSlab). A hidden bar gets its pass
         // when it is next shown.
         refreshTerminalWindowBarGlass();
+        // The dock's sheet, the plank off it and the keyboard's host take the slab from their own
+        // glass pass (deckSlabOr), which is asked for here: nothing moved, so no geometry pass
+        // would book one.
+        if (mChrome != null)
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Under the deck look, the slab in place of {@code glass}: the dock's sheet, the plank off the
+     * dock and the keyboard's host are opaque plastic in the bezel's tone, one unit with the keys
+     * (wave 8). Off the deck, {@code glass} itself. The host's outline still clips the slab, so a
+     * card keeps its corners and a Docked slice its square edge.
+     */
+    @Nullable
+    private Drawable deckSlabOr(@Nullable Drawable glass) {
+        com.termux.app.terminal.DeckLook deck = mDeckLook;
+        return deck == null ? glass : new com.termux.app.terminal.DeckSlabDrawable(deck);
     }
 
     /** The deck the chrome is wearing now; null while no terminal effect is drawn (wave 8). */
