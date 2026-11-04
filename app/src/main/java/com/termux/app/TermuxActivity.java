@@ -29676,6 +29676,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override @Nullable public View backdrop() {
                     return findViewById(R.id.wallpaper_backdrop);
                 }
+                // The captions' ink follows the wallpaper as Home's labels do: one sampler.
+                @Override public int wallpaperUnder(@NonNull android.graphics.Rect screen) {
+                    int[] origin = new int[2];
+                    root.getLocationOnScreen(origin);
+                    android.graphics.Rect rootRect = new android.graphics.Rect(screen);
+                    rootRect.offset(-origin[0], -origin[1]);
+                    com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+                    int read = ink.wallpaperSample(rootRect);
+                    return android.graphics.Color.alpha(read) != 0 ? read : ink.wallpaperFallback();
+                }
+                @Override public int wallpaperGeneration() {
+                    return mChrome.ink().wallpaperGeneration();
+                }
                 @Override @Nullable public android.view.SurfaceView displaySurface() {
                     if (mPaneWallController == null || !isDisplayUp()) return null;
                     View frame = mPaneWallController.displayWindow();

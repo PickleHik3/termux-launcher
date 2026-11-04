@@ -215,6 +215,13 @@ public final class PageOverviewView extends FrameLayout {
         default boolean editorOpen() { return false; }
         /** The height of the editor's folded sheet along the bottom, which the chips stand above. */
         default int coveredBottom() { return 0; }
+        /**
+         * The wallpaper under {@code screen} (screen pixels), under the launcher's dim, opaque;
+         * transparent while nothing can be read. The captions' ink follows it.
+         */
+        default int wallpaperUnder(@NonNull Rect screen) { return 0; }
+        /** Moves whenever the wallpaper, dim or mode changes: the captions read it again. */
+        default int wallpaperGeneration() { return 0; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -373,6 +380,10 @@ public final class PageOverviewView extends FrameLayout {
     /** How deep the overview is inside a change of its own, which it reads back itself. */
     private int mutating;
     @Nullable private Snackbar snackbar;
+    /** Each caption's last wallpaper read: {cellX, cellY, generation, wallpaper}, by card key. */
+    @NonNull private final Map<Object, int[]> captionWallpaper = new java.util.HashMap<>();
+    @NonNull private final Rect captionScreen = new Rect();
+    @NonNull private final int[] captionOrigin = new int[2];
     /** The long-press menu of a card, or the Display picker; one at a time. */
     @Nullable private com.termux.app.launcher.popup.AnchoredMenu menu;
     /** Where the finger stood when a card's menu opened: moving on from there drags instead. */
@@ -1686,14 +1697,46 @@ public final class PageOverviewView extends FrameLayout {
         labelPaint.setTextSize(dp(13));
         labelPaint.setTextAlign(Paint.Align.LEFT);
         int alpha = labelPaint.getAlpha();
-        labelPaint.setAlpha(Math.round(alpha * zoom));
         float baseline = scratch.top - dp(10);
+        inkCaption(gripText, scratch.left, baseline, labelPaint.measureText(text));
+        labelPaint.setAlpha(Math.round(alpha * zoom));
         canvas.drawText(text, scratch.left, baseline, labelPaint);
         gripRect.set(scratch.left - dp(8), baseline - dp(26),
             scratch.left + labelPaint.measureText(text) + dp(8), baseline + dp(8));
         labelPaint.setAlpha(alpha);
         labelPaint.setTextAlign(Paint.Align.CENTER);
         labelPaint.setTextSize(size);
+        plainCaptionInk();
+    }
+
+    /**
+     * Sets the label paint's ink and shadow for a caption at ({@code x}, {@code baseline}),
+     * {@code width} wide, from the wallpaper under it ({@link OverviewCaptionInk}). Read again
+     * only when the caption moves to another cell or the wallpaper changes.
+     */
+    private void inkCaption(@NonNull Object key, float x, float baseline, float width) {
+        float cellPx = dp(48);
+        int cx = OverviewCaptionInk.cell(x, cellPx);
+        int cy = OverviewCaptionInk.cell(baseline, cellPx);
+        int generation = host.wallpaperGeneration();
+        int[] held = captionWallpaper.get(key);
+        if (held == null || held[0] != cx || held[1] != cy || held[2] != generation) {
+            getLocationOnScreen(captionOrigin);
+            captionScreen.set(captionOrigin[0] + Math.round(x),
+                captionOrigin[1] + Math.round(baseline - dp(14)),
+                captionOrigin[0] + Math.round(x + Math.max(dp(8), width)),
+                captionOrigin[1] + Math.round(baseline + dp(4)));
+            held = new int[] {cx, cy, generation, host.wallpaperUnder(captionScreen)};
+            captionWallpaper.put(key, held);
+        }
+        labelPaint.setColor(OverviewCaptionInk.ink(held[3]));
+        labelPaint.setShadowLayer(dp(3), 0f, dp(1), OverviewCaptionInk.shadow(held[3]));
+    }
+
+    /** Back to the label paint's own white on its dark shadow, for the in-card labels. */
+    private void plainCaptionInk() {
+        labelPaint.setColor(Color.WHITE);
+        labelPaint.setShadowLayer(dp(3), 0f, dp(1), OverviewCaptionInk.UNKNOWN_SHADOW);
     }
 
     /**
@@ -1710,10 +1753,14 @@ public final class PageOverviewView extends FrameLayout {
         float room = Math.max(0f, at.width() / 2f - buttonRadius - dp(8));
         CharSequence text = android.text.TextUtils.ellipsize(labelOf(card),
             new android.text.TextPaint(labelPaint), room, android.text.TextUtils.TruncateAt.END);
-        canvas.drawText(text, 0, text.length(), at.left, at.top - dp(10), labelPaint);
+        float baseline = at.top - dp(10);
+        inkCaption(card.key, at.left, baseline, labelPaint.measureText(text, 0, text.length()));
+        labelPaint.setAlpha(Math.round(alpha * zoom));
+        canvas.drawText(text, 0, text.length(), at.left, baseline, labelPaint);
         labelPaint.setAlpha(alpha);
         labelPaint.setTextAlign(Paint.Align.CENTER);
         labelPaint.setTextSize(size);
+        plainCaptionInk();
     }
 
     /** The launcher's own wallpaper, full-screen behind the cards, while it is showing one. */

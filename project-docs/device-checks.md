@@ -23,6 +23,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
   and Display card carries its name over its top left ("Page 2", "Display", the app's name); a
   renamed card shows its new name at once; a long name ends in "…" short of the red button.
+  The captions and the "Terminal ⋮⋮" grip take dark ink on a light (cream) wallpaper and white
+  on a dark one, in light and dark theme, Material You on and off.
   (3) Rename: the keyboard is up as the dialog opens, the field focused. Emulator or pong.
 - **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
   windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
