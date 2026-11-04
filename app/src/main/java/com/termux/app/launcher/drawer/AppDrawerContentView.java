@@ -408,6 +408,8 @@ public final class AppDrawerContentView extends FrameLayout
             @Override public void onScrollStateChanged(@NonNull RecyclerView recyclerView,
                                                        int newState) {
                 mHorizontalDropGate.onScrollStateChanged(newState);
+                // A sideways page swipe is browsing too, like dragging a list.
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) notifyListDragStarted();
             }
         });
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,

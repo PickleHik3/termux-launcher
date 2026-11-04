@@ -33,6 +33,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   display's start command did not run." once, with no retry. The tap that starts the display on
   a drawer desktop (XFCE from the drawer) does not start a second one · emulator.
 
+- **Drawer pages swipe closes the keyboard (11-04).** Drawer view = pages, "Open keyboard
+  automatically" on: open the drawer (keyboard rises), swipe sideways to the next page: the keyboard
+  goes as the swipe starts, the query stays. Dragging an app to the page edge (which turns the page)
+  does not close it. In-app and system keyboard · pong.
 - **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
   start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
   diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`
