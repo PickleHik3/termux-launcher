@@ -1496,6 +1496,32 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_WINDOW_MANAGER, value == null ? "" : value.trim(), false);
     }
 
+    /** What the display starts with; see {@code TERMUX_APP.KEY_X11_START_WITH}. Trimmed. */
+    @NonNull
+    public String getX11StartWith() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH, TERMUX_APP.DEFAULT_X11_START_WITH, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11StartWith(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH, value == null ? "" : value.trim(), false);
+    }
+
+    /** The command the display starts with when the choice is {@code command}. Trimmed. */
+    @NonNull
+    public String getX11StartWithCommand() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH_COMMAND, TERMUX_APP.DEFAULT_X11_START_WITH_COMMAND, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11StartWithCommand(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_START_WITH_COMMAND, value == null ? "" : value.trim(), false);
+    }
+
     /**
      * @return {@code "bottom"}, {@code "left"} or {@code "right"}; anything else stored reads back
      * as the bottom row, so the keys are never nowhere.

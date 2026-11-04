@@ -468,6 +468,18 @@
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
+    <!-- Linux apps › Start with (#166): what opens on the display each time it starts. -->
+    <string name="settings_x11_start_with_title">Start with</string>
+    <string name="settings_x11_start_with_summary">Open a desktop or a command each time the display starts.</string>
+    <string name="settings_x11_start_with_nothing">Nothing</string>
+    <!-- %1$s is the distro's name, such as Debian. -->
+    <string name="settings_x11_start_with_desktop">%1$s desktop (XFCE)</string>
+    <string name="settings_x11_start_with_command">A command…</string>
+    <string name="settings_x11_start_with_command_title">Start command</string>
+    <string name="settings_x11_start_with_command_message">Runs on the display each time it starts.</string>
+    <string name="termux_x11_start_with_failed">The display\'s start command did not run.</string>
+    <!-- %1$s is the distro's name, such as Debian. -->
+    <string name="termux_x11_start_with_desktop_missing">%1$s has no XFCE desktop installed, so the display started empty.</string>
     <string name="settings_x11_group_sound">Audio</string>
     <string name="settings_launcher_sound_title">Sound</string>
     <string name="settings_launcher_sound_summary">Play sound from the terminal and Linux apps</string>
