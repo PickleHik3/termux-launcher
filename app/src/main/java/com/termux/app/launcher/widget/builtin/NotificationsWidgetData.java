@@ -45,6 +45,8 @@ public final class NotificationsWidgetData {
         public final int glyphColor;
         /** Whether it is a message from a person: a sender is named, or the app says it is one. */
         public final boolean person;
+        /** Whether the notification takes a typed reply: it has an action with a free-form input. */
+        public final boolean canReply;
 
         public Item(@NonNull String key, @NonNull String packageName, @NonNull String app,
                     @NonNull String who, @NonNull String text, long time,
@@ -55,14 +57,20 @@ public final class NotificationsWidgetData {
         public Item(@NonNull String key, @NonNull String packageName, @NonNull String app,
                     @NonNull String who, @NonNull String text, long time,
                     @Nullable String glyph, int glyphColor, boolean person) {
+            this(key, packageName, app, who, text, time, glyph, glyphColor, person, false);
+        }
+
+        public Item(@NonNull String key, @NonNull String packageName, @NonNull String app,
+                    @NonNull String who, @NonNull String text, long time,
+                    @Nullable String glyph, int glyphColor, boolean person, boolean canReply) {
             this.key = key; this.packageName = packageName; this.app = app; this.who = who;
             this.text = text; this.time = time; this.glyph = glyph; this.glyphColor = glyphColor;
-            this.person = person;
+            this.person = person; this.canReply = canReply;
         }
 
         boolean sameAs(@NonNull Item other) {
             return key.equals(other.key) && time == other.time && who.equals(other.who)
-                && text.equals(other.text) && app.equals(other.app);
+                && text.equals(other.text) && app.equals(other.app) && canReply == other.canReply;
         }
     }
 
@@ -173,6 +181,17 @@ public final class NotificationsWidgetData {
     @NonNull
     public static Snapshot select(@NonNull List<LauncherCtlNotificationEvent> rows, long nowMs,
                                   int limit, @NonNull Set<String> silentKeys) {
+        return select(rows, nowMs, limit, silentKeys, Collections.emptySet());
+    }
+
+    /**
+     * As {@link #select(List, long, int, Set)}, with the notifications whose key is in
+     * {@code replyKeys} marked as taking a typed reply ({@link Item#canReply}).
+     */
+    @NonNull
+    public static Snapshot select(@NonNull List<LauncherCtlNotificationEvent> rows, long nowMs,
+                                  int limit, @NonNull Set<String> silentKeys,
+                                  @NonNull Set<String> replyKeys) {
         List<LauncherCtlNotificationEvent> sorted = new ArrayList<>(rows.size());
         for (LauncherCtlNotificationEvent row : rows) {
             if (row != null && row.key != null && row.packageName != null && !isSystem(row)
@@ -189,7 +208,7 @@ public final class NotificationsWidgetData {
         for (LauncherCtlNotificationEvent row : sorted) {
             if (row.removedTime != 0 || row.messageTime < since) continue;
             if (every.size() >= limit) break;
-            Item item = toItem(row);
+            Item item = toItem(row, replyKeys.contains(row.key));
             every.add(item);
             if (!keys.add(row.key)) continue;
             packages.add(row.packageName);
@@ -233,12 +252,17 @@ public final class NotificationsWidgetData {
 
     @NonNull
     static Item toItem(@NonNull LauncherCtlNotificationEvent row) {
+        return toItem(row, false);
+    }
+
+    @NonNull
+    static Item toItem(@NonNull LauncherCtlNotificationEvent row, boolean canReply) {
         String app = firstNonBlank(row.appLabel, row.packageName);
         String who = firstNonBlank(row.sender, row.title, row.conversation, app);
         String text = oneLine(firstNonBlank(row.text, ""));
         boolean person = !firstNonBlank(row.sender).isEmpty() || "msg".equals(row.category);
         return new Item(row.key, row.packageName, app, oneLine(who), text, row.messageTime, null, 0,
-            person);
+            person, canReply);
     }
 
     @NonNull
