@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -20,7 +21,8 @@ import androidx.annotation.Nullable;
  * The cell around it keeps the gutter, the clip and the long press, so a tap here is a launch and
  * a hold is the page's edit mode, as for any widget.
  */
-final class HomeAppIconView extends ViewGroup implements com.termux.app.theme.TextScale.Follower {
+final class HomeAppIconView extends ViewGroup implements com.termux.app.theme.TextScale.Follower,
+    com.termux.app.launcher.animation.LaunchIconSource {
     /** The label's size: the drawer's 11 sp, a step above the dock's tighter 10 sp. */
     static final float LABEL_SP = 11f;
     /** How faint an app that is gone is drawn. */
@@ -68,6 +70,17 @@ final class HomeAppIconView extends ViewGroup implements com.termux.app.theme.Te
     }
 
     @NonNull CharSequence labelText() { return label.getText(); }
+
+    /** The package this icon opens, for the home handoff; null for a shortcut. */
+    @Nullable private String launchPackage;
+
+    void setLaunchPackage(@Nullable String packageName) { launchPackage = packageName; }
+
+    @Override public boolean launchesPackage(@NonNull String packageName) {
+        return packageName.equals(launchPackage);
+    }
+    @Override public boolean isDrawerCell() { return false; }
+    @Override @Nullable public View launchIconView() { return icon; }
 
     /**
      * How Home draws its icons and labels (Settings › Home › Icons and labels). Set when the

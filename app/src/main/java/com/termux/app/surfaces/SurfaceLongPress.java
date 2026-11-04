@@ -332,7 +332,7 @@ public final class SurfaceLongPress {
         return SurfaceLongPressRoute.onKeyCore(x, y, drawn, insetPx);
     }
 
-    private static boolean ownsLongPress(@NonNull View view) {
+    public static boolean ownsLongPress(@NonNull View view) {
         return view.isLongClickable()
             || view instanceof AzScrubRowView
             || view instanceof PinnedNotificationsView

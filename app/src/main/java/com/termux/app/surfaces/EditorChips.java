@@ -106,19 +106,20 @@ public final class EditorChips {
 
     /**
      * Every cell a write of {@code property} lands in: one per kind (Workspace writes Terminal and
-     * Display pages), or the one everywhere cell. A property with no element column and no kind
-     * row (Margin, Vibrancy) has one cell, Base.
+     * Display pages), or the one everywhere cell. A property with no element column (Margin,
+     * Vibrancy) writes all glass at the chips' level; one with no kind row (Vibrancy) has one
+     * cell, Base.
      */
     @NonNull
     public List<LookGrid.Key> cells(@NonNull LookGrid.Property property) {
         List<LookGrid.Key> out = new ArrayList<>();
-        if (!property.perElement || appliesTo.kinds.isEmpty()) {
-            out.add(new LookGrid.Key(property, property.perElement ? element : null,
-                LookGrid.NO_PAGE));
+        LookGrid.Element at = property.perElement ? element : null;
+        if (!property.perKind || appliesTo.kinds.isEmpty()) {
+            out.add(new LookGrid.Key(property, at, LookGrid.NO_PAGE));
             return out;
         }
         for (LookGrid.Kind kind : appliesTo.kinds)
-            out.add(new LookGrid.Key(property, element, kind));
+            out.add(new LookGrid.Key(property, at, kind));
         return out;
     }
 
@@ -133,7 +134,7 @@ public final class EditorChips {
      * kind row) while the chips name an element or a kind (the row then writes Base and says so).
      */
     public boolean elementIgnored(@NonNull LookGrid.Property property) {
-        return (element != null || onKind()) && !property.perElement;
+        return (element != null && !property.perElement) || (onKind() && !property.perKind);
     }
 
     @Override public boolean equals(Object other) {

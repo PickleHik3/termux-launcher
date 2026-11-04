@@ -89,6 +89,19 @@ arrangements and morphs the dress and look from the leaving page to the arriving
 pages that wear the same dress nothing morphs. A session swap on the Terminal page is not a
 crossing; the row is replaced in place.
 
+**Amendment 2026-11-04: the pages turn, the chrome eases, nothing lands.** A crossing moves its
+pages by the **Page transition** (Slide, Depth, Fade, Carousel, Stack), the same setting every other
+page move uses; a live Display page still slides. The status bar, window bar, dock and keyboard
+stay flat on screen while the pages turn, and every difference between the two dresses — Margin,
+glass opacity, frost and tint — eases with the wall's offset, so the frame the wall lands on changes
+nothing in the chrome. This reverses the 2026-11-02 choice (a code comment in `PaneWallLayout`)
+that kept the crossing a flat slide because the status bar rode with its page, and the landing
+re-dress that applied Margin and glass after the slide (`restyleChromeForHalfIfChanged`). Chosen
+because a crossing that snaps margin and glass on landing, and slides flat while Home pages turn,
+reads as two different motions. Considered: let each page carry its own bar (rejected: two bars
+on screen mid-slide), dip the dock and swap it while hidden (rejected: a visible dip for a look
+change), keep the landing snap.
+
 ## 5. Floats and carrying
 
 There is one **Float**: a session window floating over a Home page or over a window of the

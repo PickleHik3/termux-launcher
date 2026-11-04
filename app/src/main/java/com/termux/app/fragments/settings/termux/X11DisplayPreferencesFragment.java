@@ -14,6 +14,7 @@ import androidx.preference.PreferenceManager;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.x11.DisplayStartWith;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.x11.LoriePreferences;
@@ -122,6 +123,97 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
+        setUpStartWith();
+    }
+
+    private static final String KEY_START_WITH =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH;
+    private static final String KEY_START_WITH_COMMAND =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND;
+
+    /**
+     * Start with (#166): Nothing and A command… at once, then one desktop row per installed
+     * distro that has XFCE, found off the main thread. A stored desktop stays listed while the
+     * search runs, so the row never holds a choice it does not show.
+     */
+    private void setUpStartWith() {
+        ListPreference startWith = findPreference(KEY_START_WITH);
+        if (startWith == null) return;
+        String stored = startWith.getValue();
+        java.util.List<String> distros = new java.util.ArrayList<>();
+        DisplayStartWith.Choice choice = DisplayStartWith.parse(stored, "");
+        if (choice.kind == DisplayStartWith.Kind.DESKTOP) distros.add(choice.distro);
+        applyStartWithEntries(startWith, distros);
+        startWith.setSummaryProvider(preference -> {
+            ListPreference list = (ListPreference) preference;
+            String value = list.getValue();
+            if (value == null || value.isEmpty() || list.getEntry() == null) {
+                return list.getContext().getString(R.string.settings_x11_start_with_summary);
+            }
+            return list.getEntry();
+        });
+        applyStartWithCommandRow(stored);
+        startWith.setOnPreferenceChangeListener((preference, value) -> {
+            String picked = String.valueOf(value);
+            applyStartWithCommandRow(picked);
+            Preference command = findPreference(KEY_START_WITH_COMMAND);
+            if (DisplayStartWith.VALUE_COMMAND.equals(picked) && command != null
+                && getListView() != null) {
+                // "A command…" asks for the command straight away, once the list dialog is gone.
+                getListView().post(() -> {
+                    if (isAdded()) onDisplayPreferenceDialog(command);
+                });
+            }
+            return true;
+        });
+        new Thread(() -> {
+            java.util.List<String> found =
+                DisplayStartWith.distrosWithDesktop(com.termux.app.x11.ProotDistro.installed());
+            android.app.Activity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                ListPreference row = findPreference(KEY_START_WITH);
+                if (row == null) return;
+                java.util.List<String> merged = new java.util.ArrayList<>(found);
+                DisplayStartWith.Choice now = DisplayStartWith.parse(row.getValue(), "");
+                if (now.kind == DisplayStartWith.Kind.DESKTOP && !merged.contains(now.distro)) {
+                    merged.add(now.distro);
+                }
+                applyStartWithEntries(row, merged);
+            });
+        }, "x11-start-with-distros").start();
+    }
+
+    /** Nothing, a desktop for each of {@code distros}, then A command…. */
+    private void applyStartWithEntries(@NonNull ListPreference row,
+                                       @NonNull java.util.List<String> distros) {
+        Context context = row.getContext();
+        java.util.List<CharSequence> entries = new java.util.ArrayList<>();
+        java.util.List<CharSequence> values = new java.util.ArrayList<>();
+        entries.add(context.getString(R.string.settings_x11_start_with_nothing));
+        values.add(DisplayStartWith.VALUE_NOTHING);
+        for (String distro : distros) {
+            entries.add(context.getString(R.string.settings_x11_start_with_desktop,
+                DisplayStartWith.distroLabel(distro)));
+            values.add(DisplayStartWith.desktopValue(distro));
+        }
+        entries.add(context.getString(R.string.settings_x11_start_with_command));
+        values.add(DisplayStartWith.VALUE_COMMAND);
+        CharSequence[] newEntries = entries.toArray(new CharSequence[0]);
+        if (java.util.Arrays.equals(newEntries, row.getEntries())) return;
+        row.setEntries(newEntries);
+        row.setEntryValues(values.toArray(new CharSequence[0]));
+        // The summary reads the entry, which may only now exist for a stored desktop.
+        Preference.SummaryProvider<ListPreference> summary = row.getSummaryProvider();
+        if (summary != null) row.setSummaryProvider(summary);
+    }
+
+    /** The command row shows only while the choice is a command. */
+    private void applyStartWithCommandRow(@Nullable String choice) {
+        Preference command = findPreference(KEY_START_WITH_COMMAND);
+        boolean visible = DisplayStartWith.VALUE_COMMAND.equals(choice);
+        if (command != null && command.isVisible() != visible) command.setVisible(visible);
     }
 
     /** Only the size row that the chosen resolution mode reads is shown. */
@@ -186,6 +278,10 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 launcher.setX11DisplayCommand(value == null ? "" : value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 launcher.setX11WindowManager(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH.equals(key)) {
+                launcher.setX11StartWith(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
+                launcher.setX11StartWithCommand(value);
             }
         }
 
@@ -202,6 +298,12 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 return launcher.getX11WindowManager();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH.equals(key)) {
+                return launcher.getX11StartWith();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
+                return launcher.getX11StartWithCommand();
             }
             return defValue;
         }

@@ -425,6 +425,14 @@ public final class SuggestionBarView extends GridLayout
     /** The app/folder context menu, and the shortcuts menu that opens beside it. */
     private final AnchoredMenu appContextMenu = new AnchoredMenu(this, menuTheme);
     private final AnchoredMenu shortcutsMenu = new AnchoredMenu(this, menuTheme);
+    /** The drawer's categories picker, which Move to category opens; null while no drawer is bound. */
+    @Nullable private com.termux.app.launcher.drawer.AppDrawerCategoryChoiceListener categoryChoiceHandler;
+
+    public void setCategoryChoiceHandler(
+            @Nullable com.termux.app.launcher.drawer.AppDrawerCategoryChoiceListener handler) {
+        categoryChoiceHandler = handler;
+    }
+
     private final AnchoredMenu categoryPickerMenu = new AnchoredMenu(this, menuTheme);
     /**
      * Surface used to build the two popups whose windows are owned elsewhere: the folder grid (the
@@ -957,12 +965,11 @@ public final class SuggestionBarView extends GridLayout
         void onDrawerTileTapped();
 
         /**
-         * The Drawer tile or the palette tile was dragged and let go on a column that is not
-         * where it was: the two tiles' columns now, {@code drawerColumn} and {@code
-         * paletteColumn}, each -1 for a tile the row does not hold (a drop on the other tile's
-         * column swapped the two).
+         * A still tile (Drawer, palette, New float terminal) was dragged and let go on a column
+         * that is not where it was: the three tiles' columns now, each -1 for a tile the row
+         * does not hold (a drop on another tile's column swapped the two).
          */
-        void onTileColumnsMoved(int drawerColumn, int paletteColumn);
+        void onTileColumnsMoved(int drawerColumn, int paletteColumn, int floatColumn);
     }
 
     /** Where the Drawer tile stands, or null for a row with none (the toggle off). */
@@ -978,6 +985,8 @@ public final class SuggestionBarView extends GridLayout
     private int drawerTileAppSlots;
     /** The palette tile's column in that render; -1 with none. */
     private int paletteTileColumn = -1;
+    /** The Float tile's column in that render; -1 with none. */
+    private int floatTileColumn = -1;
     /** The page's app slots in that render where it held a tile, by app index; else empty. */
     @NonNull private final List<View> tileRowAppViews = new ArrayList<>();
     /** Whether a long press has picked a still tile (Drawer or palette) up and a drag moves it. */
@@ -1058,6 +1067,81 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    // The New float terminal tile: a third still tile in a column of its own, the row's last
+    // until it is dragged (PaletteTilePolicy); a tap runs the host's float launch.
+    private boolean floatTileOn;
+    /** Its stored column; {@link com.termux.app.dock.PaletteTilePolicy#DEFAULT_COLUMN} the last. */
+    private int floatTileStoredColumn = com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN;
+    @Nullable private Runnable floatTileListener;
+    @Nullable private View floatTileSlot;
+    @Nullable private Drawable floatTileGlyph;
+
+    /** The New float terminal tile on or off, {@code onTap} what a tap does; re-lays the row. */
+    public void setFloatTile(boolean on, @Nullable Runnable onTap) {
+        setFloatTile(on, com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN, onTap);
+    }
+
+    /** {@link #setFloatTile(boolean, Runnable)} standing in the stored {@code column}. */
+    public void setFloatTile(boolean on, int column, @Nullable Runnable onTap) {
+        floatTileListener = onTap;
+        int stored = Math.max(com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN, column);
+        if (floatTileOn == on && floatTileStoredColumn == stored) return;
+        floatTileOn = on;
+        floatTileStoredColumn = stored;
+        invalidateMostUsedCache();
+        pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
+        lastSurfaceRenderSignature = 0;
+        if (configRepository != null && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
+            reload();
+            publishPageIndicator();
+        }
+    }
+
+    private boolean floatTileActive() {
+        return floatTileOn && !vertical;
+    }
+
+    private boolean floatTileShown() {
+        return floatTileSlot != null && floatTileSlot.getParent() == this && floatTileOn;
+    }
+
+    /** The Float tile's slot: a round shell like the palette tile's, without a drag. */
+    @NonNull
+    private View createFloatTileButton() {
+        FrameLayout shell = new FrameLayout(getContext());
+        shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
+        ImageButton tile = new ImageButton(getContext());
+        int size = iconSizePx();
+        tile.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+        tile.setMinimumWidth(size);
+        tile.setMinimumHeight(size);
+        tile.setPadding(0, 0, 0, 0);
+        tile.setBackground(createPinnedFolderShellBackground());
+        tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_status_bar_add_window);
+        floatTileGlyph = null;
+        if (glyph != null) {
+            glyph = DrawableCompat.wrap(glyph.mutate());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            floatTileGlyph = glyph;
+            tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
+        }
+        tile.setContentDescription(getContext().getString(R.string.dock_float_terminal_tile));
+        tile.setOnClickListener(v -> {
+            if (floatTileListener != null) floatTileListener.run();
+        });
+        tile.setOnTouchListener(new DrawerTileTouch(shell, TILE_FLOAT));
+        // A hold on a still tile is the tile's own (it lifts), so the dock's popup leaves it be.
+        tile.setLongClickable(true);
+        shell.addView(tile);
+        slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
+        return shell;
+    }
+
     /** Whether the row lays the palette tile out: it is on, and the row is lying down. */
     private boolean paletteTileActive() {
         return paletteTileOn && !vertical;
@@ -1096,7 +1180,8 @@ public final class SuggestionBarView extends GridLayout
         tile.setOnClickListener(v -> {
             if (paletteTileListener != null) paletteTileListener.run();
         });
-        tile.setOnTouchListener(new DrawerTileTouch(shell, false));
+        tile.setOnTouchListener(new DrawerTileTouch(shell, TILE_PALETTE));
+        tile.setLongClickable(true);
         shell.addView(tile);
         slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
         return shell;
@@ -1120,7 +1205,7 @@ public final class SuggestionBarView extends GridLayout
         tileFace = face;
         tileInkTarget = target;
         int ink = tileGlyphInk();
-        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph}) {
+        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph, floatTileGlyph}) {
             if (glyph == null) continue;
             DrawableCompat.setTint(glyph, ink);
             glyph.invalidateSelf();
@@ -1135,27 +1220,27 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * The still tiles' columns, {@code {drawer, palette}}, on a pinned page of {@code apps} apps
-     * lying down, -1 for a tile the row lays none: each where it is kept (the Drawer tile per
-     * layout, the palette tile globally), never one column for both.
+     * The still tiles' columns, {@code {drawer, palette, float}}, on a pinned page of {@code apps}
+     * apps lying down, -1 for a tile the row lays none: each where it is kept (the Drawer tile
+     * per layout, the palette and Float tiles globally), never one column for two.
      */
     @NonNull
     private int[] tileColumns(int apps) {
         boolean drawer = drawerTileActive();
         boolean palette = paletteTileActive();
-        int columns = com.termux.app.dock.PaletteTilePolicy.columnCount(apps, drawer, palette);
-        return com.termux.app.dock.DrawerTilePolicy.apart(
+        boolean floatTile = floatTileActive();
+        int columns = com.termux.app.dock.PaletteTilePolicy.columnCount(apps, drawer, palette,
+            floatTile);
+        return com.termux.app.dock.PaletteTilePolicy.tileColumns(
             drawer ? drawerTilePlace.columnIn(apps, columns) : -1,
-            palette ? com.termux.app.dock.PaletteTilePolicy.column(paletteTileStoredColumn,
-                columns) : -1,
-            columns);
+            palette, paletteTileStoredColumn, floatTile, floatTileStoredColumn, columns);
     }
 
     /** How many apps a page of the row lying down holds: its slots, less the Drawer tile's. */
     private int pinnedRowAppSlots() {
         int slots = Math.max(1, maxButtonCount);
         return com.termux.app.dock.PaletteTilePolicy.appSlots(slots, drawerTileActive(),
-            paletteTileActive());
+            paletteTileActive(), floatTileActive());
     }
 
     /**
@@ -1187,6 +1272,8 @@ public final class SuggestionBarView extends GridLayout
         if (!Float.isNaN(drawer) && count < out.length) out[count++] = drawer;
         float palette = paletteTileCenterX();
         if (!Float.isNaN(palette) && count < out.length) out[count++] = palette;
+        float floatTile = floatTileShown() ? tileCenterX(floatTileSlot) : Float.NaN;
+        if (!Float.isNaN(floatTile) && count < out.length) out[count++] = floatTile;
         return count;
     }
 
@@ -1202,7 +1289,8 @@ public final class SuggestionBarView extends GridLayout
     /** Whether {@code child} is one of the row's still tiles on screen: no page's, so held still. */
     private boolean isStillTile(@NonNull View child) {
         return (child == drawerTileSlot && drawerTileShown())
-            || (child == paletteTileSlot && paletteTileShown());
+            || (child == paletteTileSlot && paletteTileShown())
+            || (child == floatTileSlot && floatTileShown());
     }
 
     /** Whether the row on screen holds the Drawer tile (a pinned page lying down). */
@@ -1221,6 +1309,11 @@ public final class SuggestionBarView extends GridLayout
         return paletteTileShown() ? paletteTileColumn : -1;
     }
 
+    /** The shown Float tile's column, -1 where the row on screen holds none. */
+    private int shownFloatColumn() {
+        return floatTileShown() ? floatTileColumn : -1;
+    }
+
     /**
      * The column app {@code app} of a pinned page of {@code appSlots} apps stands in, and how many
      * columns the page has, around the still tiles where the row shows them.
@@ -1228,13 +1321,15 @@ public final class SuggestionBarView extends GridLayout
     private int pinnedColumnOf(int app, int appSlots) {
         int drawer = shownDrawerColumn();
         int palette = shownPaletteColumn();
-        if (drawer < 0 && palette < 0) return app;
-        return com.termux.app.dock.DrawerTilePolicy.slotOf(app, drawer, palette, appSlots);
+        int floatTile = shownFloatColumn();
+        if (drawer < 0 && palette < 0 && floatTile < 0) return app;
+        return com.termux.app.dock.PaletteTilePolicy.slotOf(app, drawer, palette, floatTile,
+            appSlots);
     }
 
     private int pinnedColumnCount(int appSlots) {
         return com.termux.app.dock.PaletteTilePolicy.columnCount(appSlots, drawerTileShown(),
-            paletteTileShown());
+            paletteTileShown(), floatTileShown());
     }
 
     /** The Drawer tile's slot: a round shell like a folder's, holding the drawer's glyph. */
@@ -1266,7 +1361,8 @@ public final class SuggestionBarView extends GridLayout
         tile.setOnClickListener(v -> {
             if (drawerTileListener != null) drawerTileListener.onDrawerTileTapped();
         });
-        tile.setOnTouchListener(new DrawerTileTouch(shell, true));
+        tile.setOnTouchListener(new DrawerTileTouch(shell, TILE_DRAWER));
+        tile.setLongClickable(true);
         shell.addView(tile);
         slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
         return shell;
@@ -1281,8 +1377,8 @@ public final class SuggestionBarView extends GridLayout
      */
     private final class DrawerTileTouch implements View.OnTouchListener {
         @NonNull private final View shell;
-        /** Whether this is the Drawer tile's touch (else the palette tile's). */
-        private final boolean drawer;
+        /** Which tile this is: {@link #TILE_DRAWER}, {@link #TILE_PALETTE} or {@link #TILE_FLOAT}. */
+        private final int kind;
         private float downRawX;
         private float downRawY;
         private boolean pickedUp;
@@ -1291,17 +1387,13 @@ public final class SuggestionBarView extends GridLayout
         @Nullable private View pressed;
         private final Runnable pickUp = this::pickUp;
 
-        DrawerTileTouch(@NonNull View shell, boolean drawer) {
+        DrawerTileTouch(@NonNull View shell, int kind) {
             this.shell = shell;
-            this.drawer = drawer;
+            this.kind = kind;
         }
 
         private int ownColumn() {
-            return drawer ? shownDrawerColumn() : shownPaletteColumn();
-        }
-
-        private int otherColumn() {
-            return drawer ? shownPaletteColumn() : shownDrawerColumn();
+            return shownTileColumn(kind);
         }
 
         private void pickUp() {
@@ -1356,7 +1448,7 @@ public final class SuggestionBarView extends GridLayout
                     int over = columnUnder();
                     if (over != target) {
                         target = over;
-                        reflowAroundCarriedTile(drawer, over);
+                        reflowAroundCarriedTile(kind, over);
                     }
                     return true;
                 }
@@ -1377,13 +1469,12 @@ public final class SuggestionBarView extends GridLayout
                         .setInterpolator(new DecelerateInterpolator()).start();
                     if (drop == from || from < 0 || drawerTileListener == null) {
                         // Back where it was: the apps return to their own columns.
-                        reflowAroundCarriedTile(drawer, from);
+                        reflowAroundCarriedTile(kind, from);
                         return true;
                     }
-                    int[] moved = com.termux.app.dock.DrawerTilePolicy.dropped(drop, from,
-                        otherColumn());
-                    if (drawer) drawerTileListener.onTileColumnsMoved(moved[0], moved[1]);
-                    else drawerTileListener.onTileColumnsMoved(moved[1], moved[0]);
+                    int[] to = droppedColumns(kind, drop);
+                    drawerTileListener.onTileColumnsMoved(to[TILE_DRAWER], to[TILE_PALETTE],
+                        to[TILE_FLOAT]);
                     return true;
                 }
                 default:
@@ -1392,40 +1483,73 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    private static final int TILE_DRAWER = 0;
+    private static final int TILE_PALETTE = 1;
+    private static final int TILE_FLOAT = 2;
+
+    /** The shown column of still tile {@code kind}, -1 where the row on screen holds none. */
+    private int shownTileColumn(int kind) {
+        switch (kind) {
+            case TILE_DRAWER: return shownDrawerColumn();
+            case TILE_PALETTE: return shownPaletteColumn();
+            default: return shownFloatColumn();
+        }
+    }
+
     /**
-     * The page's apps and the other still tile eased to where they stand with the carried tile
-     * ({@code drawer}, else the palette tile) on {@code column}: the apps keep their order around
-     * the column it is over, which stands open for it, and the other tile takes the carried one's
-     * column where the drop would swap them. Called only when the column under the tile changes;
-     * {@code column} the tile's own puts everything back. Translations only: the row's layout is
-     * the stored one until a drop re-lays it.
+     * The three tiles' columns, indexed by {@code TILE_*}, once the tile {@code kind} is dropped
+     * on {@code column}: a drop on another tile's column swaps the two.
      */
-    private void reflowAroundCarriedTile(boolean drawer, int column) {
+    @NonNull
+    private int[] droppedColumns(int kind, int column) {
+        int next = (kind + 1) % 3;
+        int after = (kind + 2) % 3;
+        int[] moved = com.termux.app.dock.PaletteTilePolicy.dropped(column,
+            shownTileColumn(kind), shownTileColumn(next), shownTileColumn(after));
+        int[] to = new int[3];
+        to[kind] = moved[0];
+        to[next] = moved[1];
+        to[after] = moved[2];
+        return to;
+    }
+
+    /**
+     * The page's apps and the other still tiles eased to where they stand with the carried tile
+     * ({@code kind}) on {@code column}: the apps keep their order around the column it is over,
+     * which stands open for it, and the tile it is over takes the carried one's column where the
+     * drop would swap them. Called only when the column under the tile changes; {@code column}
+     * the tile's own puts everything back. Translations only: the row's layout is the stored one
+     * until a drop re-lays it.
+     */
+    private void reflowAroundCarriedTile(int kind, int column) {
+        if (shownTileColumn(kind) < 0) return;
         int ownDrawer = shownDrawerColumn();
         int ownPalette = shownPaletteColumn();
-        int from = drawer ? ownDrawer : ownPalette;
-        int other = drawer ? ownPalette : ownDrawer;
-        if (from < 0) return;
-        int[] moved = com.termux.app.dock.DrawerTilePolicy.dropped(column, from, other);
-        int toDrawer = drawer ? moved[0] : moved[1];
-        int toPalette = drawer ? moved[1] : moved[0];
+        int ownFloat = shownFloatColumn();
+        int[] to = droppedColumns(kind, column);
         int columns = Math.max(1, getColumnCount());
         float step = getWidth() / (float) columns
             * (getLayoutDirection() == LAYOUT_DIRECTION_RTL ? -1f : 1f);
         int apps = drawerTileAppSlots;
         for (int i = 0; i < tileRowAppViews.size(); i++) {
             View app = tileRowAppViews.get(i);
-            int was = com.termux.app.dock.DrawerTilePolicy.slotOf(i, ownDrawer, ownPalette, apps);
-            int now = com.termux.app.dock.DrawerTilePolicy.slotOf(i, toDrawer, toPalette, apps);
+            int was = com.termux.app.dock.PaletteTilePolicy.slotOf(i, ownDrawer, ownPalette,
+                ownFloat, apps);
+            int now = com.termux.app.dock.PaletteTilePolicy.slotOf(i, to[TILE_DRAWER],
+                to[TILE_PALETTE], to[TILE_FLOAT], apps);
             if (app == null || was < 0 || now < 0) continue;
             app.animate().translationX((now - was) * step).setDuration(120L)
                 .setInterpolator(new DecelerateInterpolator()).start();
         }
-        View otherTile = drawer ? paletteTileSlot : drawerTileSlot;
-        int otherTo = moved[1];
-        if (otherTile != null && other >= 0 && otherTo >= 0) {
-            otherTile.animate().translationX((otherTo - other) * step).setDuration(120L)
-                .setInterpolator(new DecelerateInterpolator()).start();
+        for (int other = 0; other < 3; other++) {
+            if (other == kind) continue;
+            View tile = other == TILE_DRAWER ? drawerTileSlot
+                : other == TILE_PALETTE ? paletteTileSlot : floatTileSlot;
+            int was = shownTileColumn(other);
+            if (tile != null && was >= 0 && to[other] >= 0) {
+                tile.animate().translationX((to[other] - was) * step).setDuration(120L)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+            }
         }
     }
 
@@ -1459,6 +1583,9 @@ public final class SuggestionBarView extends GridLayout
             View palette = paletteTileSlot;
             if (palette != null && palette.getVisibility() == VISIBLE && isStillTile(palette))
                 drawChild(canvas, palette, getDrawingTime());
+            View floatTile = floatTileSlot;
+            if (floatTile != null && floatTile.getVisibility() == VISIBLE && isStillTile(floatTile))
+                drawChild(canvas, floatTile, getDrawingTime());
         } finally {
             drawingStillTilesUnshifted = false;
         }
@@ -1665,6 +1792,10 @@ public final class SuggestionBarView extends GridLayout
         if (palette != null && paletteTileShown() && !drawerTileDragging
             && palette.getTranslationX() != hold)
             palette.setTranslationX(hold);
+        View floatTile = floatTileSlot;
+        if (floatTile != null && floatTileShown() && !drawerTileDragging
+            && floatTile.getTranslationX() != hold)
+            floatTile.setTranslationX(hold);
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
     }
@@ -4175,7 +4306,8 @@ public final class SuggestionBarView extends GridLayout
             buttonCount = Math.max(1, pinnedItemsPerPage);
             // The Drawer tile takes a slot of its own beside the page's apps.
             buttonCount = com.termux.app.dock.PaletteTilePolicy.columnCount(
-                Math.max(1, pinnedItemsPerPage), drawerTileActive(), paletteTileActive());
+                Math.max(1, pinnedItemsPerPage), drawerTileActive(), paletteTileActive(),
+                floatTileActive());
             if (isMostUsedDynamicPage(pinnedPageIndex)) {
                 // Dynamic most-used page: render ranked apps as launch-only buttons. pinnedForSlots
                 // stays empty so the render loop binds them with pinnedIndex -1 (no drag/reorder),
@@ -4251,15 +4383,19 @@ public final class SuggestionBarView extends GridLayout
         drawerTileAppSlots = 0;
         paletteTileSlot = null;
         paletteTileColumn = -1;
+        floatTileSlot = null;
+        floatTileColumn = -1;
         tileRowAppViews.clear();
         // The still tiles, on every pinned page lying down: each in its own column, the page's
         // app slots keeping their order around them.
         boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePlace != null;
-        boolean tileRow = drawerTileRow || (pinnedSurface && paletteTileActive());
+        boolean tileRow = drawerTileRow
+            || (pinnedSurface && (paletteTileActive() || floatTileActive()));
         int homeAppSlots = tileRow ? Math.max(1, pinnedItemsPerPage) : 0;
-        int[] stillColumns = tileRow ? tileColumns(homeAppSlots) : new int[] {-1, -1};
+        int[] stillColumns = tileRow ? tileColumns(homeAppSlots) : new int[] {-1, -1, -1};
         int homeColumn = drawerTileRow ? stillColumns[0] : -1;
         int paletteHomeColumn = tileRow ? stillColumns[1] : -1;
+        int floatHomeColumn = tileRow ? stillColumns[2] : -1;
         clearAzFocusedEntry();
         clearTerminalSearchFocus();
         lastAzResolvedSlot = -1;
@@ -4294,8 +4430,8 @@ public final class SuggestionBarView extends GridLayout
             int renderCol = azPreview && azPriorityColumns != null
                 ? azPriorityColumns[col]
                 : tileRow
-                    ? com.termux.app.dock.DrawerTilePolicy.slotOf(col, homeColumn,
-                        paletteHomeColumn, homeAppSlots)
+                    ? com.termux.app.dock.PaletteTilePolicy.slotOf(col, homeColumn,
+                        paletteHomeColumn, floatHomeColumn, homeAppSlots)
                     : (renderStartCol + col);
             LayoutParams param = createSlotParams(renderCol);
             view.setLayoutParams(param);
@@ -4367,6 +4503,16 @@ public final class SuggestionBarView extends GridLayout
                 paletteTileSlot = tile;
                 paletteTileColumn = paletteColumn;
             }
+        }
+
+        if (pinnedSurface && floatTileActive() && floatHomeColumn >= 0
+            && floatHomeColumn < buttonCount) {
+            View tile = createFloatTileButton();
+            tile.setLayoutParams(createSlotParams(floatHomeColumn));
+            addView(tile);
+            usedColumns[floatHomeColumn] = true;
+            floatTileSlot = tile;
+            floatTileColumn = floatHomeColumn;
         }
 
         if (pendingPinnedMutationFeedback && !azPreview) {
@@ -4638,6 +4784,7 @@ public final class SuggestionBarView extends GridLayout
         // Where the still tiles stand moves every slot after them.
         signature = (31 * signature) + (drawerTileActive() ? drawerTilePlace.hashCode() + 1 : 0);
         signature = (31 * signature) + (paletteTileActive() ? paletteTileStoredColumn + 2 : 0);
+        signature = (31 * signature) + (floatTileActive() ? 1 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
         signature = (31 * signature) + lastInput.trim().hashCode();
@@ -6708,10 +6855,11 @@ public final class SuggestionBarView extends GridLayout
             View[] source = new View[1];
             shortcutSources.add(source);
             String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
-            shortcutItems.add(new AppMenuCard.Item(label, R.drawable.ic_app_menu_shortcut, () -> {
-                launchShortcut(info, source[0]);
-                dismissAppContextPopup();
-            }));
+            shortcutItems.add(AppMenuCard.Item.withIcon(label, shortcutIcon(info),
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    launchShortcut(info, source[0]);
+                    dismissAppContextPopup();
+                }));
         }
         List<ShortcutInfo> overflow = shortcutCount > visibleShortcuts
             ? new ArrayList<>(shortcuts.subList(Math.max(0, visibleShortcuts - entryShortcuts),
@@ -6733,6 +6881,7 @@ public final class SuggestionBarView extends GridLayout
         inputs.hasWidgets = !linuxApp && addToHomeListener != null
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
+        inputs.canMoveToCategory = categoryChoiceHandler != null;
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -6942,6 +7091,13 @@ public final class SuggestionBarView extends GridLayout
                         showNotificationPopup(entry, context.anchor);
                     });
             }
+            case MOVE_TO_CATEGORY:
+                return appMenuItem(R.string.app_menu_move_to_category,
+                    R.drawable.ic_app_menu_move_to_dock, () -> {
+                        dismissAppContextPopup();
+                        if (categoryChoiceHandler != null)
+                            categoryChoiceHandler.onCategoryChoiceRequested(entry, context.anchor);
+                    });
             case WIDGETS:
                 return appMenuItem(R.string.app_menu_widgets, R.drawable.ic_app_menu_widgets, () -> {
                     AddToHomeListener listener = addToHomeListener;
@@ -7112,33 +7268,33 @@ public final class SuggestionBarView extends GridLayout
         dismissShortcutsPopup();
         if (shortcuts.isEmpty()) return;
 
-        LinearLayout shell = menuRows.newShell();
-        List<MenuRow> shortcutRows = new ArrayList<>();
-
-        for (ShortcutInfo info : shortcuts) {
+        // The side menu is the App menu's card again: the same rows, shades and type.
+        List<AppMenuCard.Item> items = new ArrayList<>(shortcuts.size());
+        View[][] sources = new View[shortcuts.size()][1];
+        for (int i = 0; i < shortcuts.size(); i++) {
+            ShortcutInfo info = shortcuts.get(i);
+            View[] source = sources[i];
             String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
-            final TextView[] shortcutRowHolder = new TextView[1];
-            TextView shortcutRow = menuRows.addActionRow(shell, label, menuHighlight.tintBase(), () -> {
-                launchShortcut(info, shortcutRowHolder[0]);
-                dismissAppContextPopup();
-            });
-            shortcutRowHolder[0] = shortcutRow;
-            shortcutRows.add(new MenuRow(shortcutRow, () -> {
-                launchShortcut(info, shortcutRowHolder[0]);
-                dismissAppContextPopup();
-            }, false));
+            items.add(AppMenuCard.Item.withIcon(label, shortcutIcon(info),
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    launchShortcut(info, source[0]);
+                    dismissAppContextPopup();
+                }));
         }
-        MenuRowWidths.normalize(shortcutRows);
+        AppMenuCard card = AppMenuCard.build(getContext(), menuRows,
+            java.util.Collections.singletonList(items));
+        for (int i = 0; i < sources.length; i++) sources[i][0] = card.rows.get(i).rowView;
 
-        PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
-        int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
-            ? (sourceFolder.tintColor & 0x00FFFFFF)
-            : (inheritedTintColor & 0x00FFFFFF);
-        MenuSpec spec = MenuSpec.of(shell, tintBase).rows(shortcutRows).build();
         if (shortcutsRowAnchor != null && appContextMenu.isShowing()) {
-            shortcutsMenu.showAlignedToRow(spec, shortcutsRowAnchor, appContextMenu);
+            shortcutsMenu.showAppMenuBeside(card, shortcutsRowAnchor, appContextMenu);
         } else {
-            shortcutsMenu.show(spec, context.anchor);
+            Rect anchorRect = new Rect();
+            int[] at = new int[2];
+            context.anchor.getLocationOnScreen(at);
+            anchorRect.set(at[0], at[1], at[0] + context.anchor.getWidth(),
+                at[1] + context.anchor.getHeight());
+            shortcutsMenu.showAppMenu(card, anchorRect, null,
+                getResources().getString(R.string.app_menu_more_shortcuts));
         }
     }
 
@@ -7761,7 +7917,7 @@ public final class SuggestionBarView extends GridLayout
             if (child == null) continue;
             // The Drawer tile and the palette tile are not apps the drop shifts; the apps before
             // them are its children in their own order.
-            if (child == drawerTileSlot || child == paletteTileSlot) continue;
+            if (child == drawerTileSlot || child == paletteTileSlot || child == floatTileSlot) continue;
             float tx = 0f;
             if (folderDragHoverIndex >= 0 && i >= folderDragHoverIndex) {
                 tx += insertShift;
@@ -8146,7 +8302,8 @@ public final class SuggestionBarView extends GridLayout
     private DropSlot dropSlotAt(float localX) {
         int drawerColumn = shownDrawerColumn();
         int paletteColumn = shownPaletteColumn();
-        boolean tiles = drawerColumn >= 0 || paletteColumn >= 0;
+        int floatColumn = shownFloatColumn();
+        boolean tiles = drawerColumn >= 0 || paletteColumn >= 0 || floatColumn >= 0;
         int slotCount = tiles
             ? pinnedColumnCount(drawerTileAppSlots) : Math.max(1, maxButtonCount);
         float width = Math.max(1f, getWidth());
@@ -8160,17 +8317,17 @@ public final class SuggestionBarView extends GridLayout
             // Columns around the still tiles hold the page's apps in order; a drop on a tile
             // itself lands beside the nearest app, on the side the finger is, or the other where
             // none is.
-            int app = com.termux.app.dock.DrawerTilePolicy.appAt(hoveredSlot, drawerColumn,
-                paletteColumn, drawerTileAppSlots);
+            int app = com.termux.app.dock.PaletteTilePolicy.appAt(hoveredSlot, drawerColumn,
+                paletteColumn, floatColumn, drawerTileAppSlots);
             if (app < 0) {
                 int after = -1;
                 for (int c = hoveredSlot + 1; c < slotCount && after < 0; c++)
-                    after = com.termux.app.dock.DrawerTilePolicy.appAt(c, drawerColumn,
-                        paletteColumn, drawerTileAppSlots);
+                    after = com.termux.app.dock.PaletteTilePolicy.appAt(c, drawerColumn,
+                        paletteColumn, floatColumn, drawerTileAppSlots);
                 int before = -1;
                 for (int c = hoveredSlot - 1; c >= 0 && before < 0; c--)
-                    before = com.termux.app.dock.DrawerTilePolicy.appAt(c, drawerColumn,
-                        paletteColumn, drawerTileAppSlots);
+                    before = com.termux.app.dock.PaletteTilePolicy.appAt(c, drawerColumn,
+                        paletteColumn, floatColumn, drawerTileAppSlots);
                 boolean right = (dropXRatio >= 0.5f && after >= 0) || before < 0;
                 app = Math.max(0, right ? after : before);
                 dropXRatio = right ? 0f : 1f;

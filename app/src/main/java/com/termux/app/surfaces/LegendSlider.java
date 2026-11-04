@@ -53,6 +53,11 @@ import java.util.List;
  * prints the name and the value. A horizontal drag takes it at once, a vertical one is the card's
  * ({@link StripTouchPolicy#decideAcross}), and a tap moves the handle where it lands.</p>
  *
+ * <p><b>Value inside</b> ({@link #setInsetValue}, a one-line slider row since 2026-11-04): the
+ * track thickens to M3 Expressive's 40dp "M" track and prints its value at its end side, in
+ * on-primary where the fill runs under it and on-surface-variant over the inactive track. The
+ * stop indicator gives way to the value. Drawn in {@link #onDraw} alone: a drag lays nothing out.</p>
+ *
  * <p>The API is the subset of Material's {@code Slider} the panel used: value, range, step,
  * listeners of the same shape, and a {@link LabelFormatter} as the legend's source. Accessibility
  * presents it as a SeekBar with range info; the legend is its content description's value.</p>
@@ -98,6 +103,10 @@ public final class LegendSlider extends View {
     /** A horizontal slider's track height (the M3 Expressive XS track) and its hit area. */
     static final int ACROSS_TRACK_DP = 16;
     static final int ACROSS_HIT_DP = 48;
+    /** The thick track that holds the value inside it (M3 Expressive's "M" track). */
+    public static final int INSET_TRACK_DP = 40;
+    /** The room between the value and the track's end. */
+    public static final int INSET_VALUE_PAD_DP = 12;
     private static final int DISABLED_TRACK_ALPHA = 31;
 
     private float mValueFrom = 0f;
@@ -163,6 +172,17 @@ public final class LegendSlider extends View {
     private boolean mHorizontal;
     private final float mAcrossTrackPx;
     private final float mAcrossHitPx;
+    /** The value printed inside the track, or null ({@link #setInsetValue}). */
+    @Nullable private LabelFormatter mInset;
+    /** Whether the track is thick and prints the value now ({@link #setInsetShown}). */
+    private boolean mInsetShown;
+    private final TextPaint mInsetPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
+    private final float mInsetTrackPx;
+    private final float mInsetPadPx;
+    private int mOnActiveColor;
+    /** The value's words as last formatted, and the value they were formatted at. */
+    @NonNull private String mInsetText = "";
+    private float mInsetTextValue = Float.NaN;
     /** A touch on the handle drags at once ({@link #setHandleGrabs}). */
     private boolean mHandleGrabs = true;
     /** A touch anywhere on the track's band drags at once ({@link #setTrackGrabs}). */
@@ -272,6 +292,8 @@ public final class LegendSlider extends View {
         mHandleTouchHalfPx = HANDLE_TOUCH_DP * density / 2f;
         mAcrossTrackPx = ACROSS_TRACK_DP * density;
         mAcrossHitPx = ACROSS_HIT_DP * density;
+        mInsetTrackPx = INSET_TRACK_DP * density;
+        mInsetPadPx = INSET_VALUE_PAD_DP * density;
         setClickable(true);
         setFocusable(true);
         resolvePaint();
@@ -352,6 +374,38 @@ public final class LegendSlider extends View {
         mHorizontal = horizontal;
         requestLayout();
         invalidate();
+    }
+
+    /**
+     * The value a horizontal slider prints inside its track, at the end side, while
+     * {@link #setInsetShown} is on; null prints none. Set once, before the first draw.
+     */
+    public void setInsetValue(@Nullable LabelFormatter inset) {
+        mInset = inset;
+        mInsetTextValue = Float.NaN;
+        invalidate();
+    }
+
+    /**
+     * Whether the thick track and the value inside it are drawn now: the row decides while it
+     * measures. Redraws only: the view's size does not change with it.
+     */
+    public void setInsetShown(boolean shown) {
+        if (mInsetShown == shown)
+            return;
+        mInsetShown = shown;
+        invalidate();
+    }
+
+    /** Whether the track prints its value inside it now. */
+    public boolean isInsetShown() {
+        return mInsetShown && mInset != null && mHorizontal;
+    }
+
+    /** The paint the inset value prints in: what a row measures the widest value with. */
+    @NonNull
+    public TextPaint insetValuePaint() {
+        return mInsetPaint;
     }
 
     /** Whether the track stands upright: the question the layout test asks. */
@@ -463,6 +517,15 @@ public final class LegendSlider extends View {
             appearance = value.resourceId;
         probe.setTextAppearance(appearance);
         mTextPaint.set(probe.getPaint());
+        // The inset value: LabelLarge, with figures of one width so a drag does not shimmer.
+        int large = com.google.android.material.R.style.TextAppearance_Material3_LabelLarge;
+        if (getContext().getTheme().resolveAttribute(
+                com.google.android.material.R.attr.textAppearanceLabelLarge, value, true)
+            && value.resourceId != 0)
+            large = value.resourceId;
+        probe.setTextAppearance(large);
+        mInsetPaint.set(probe.getPaint());
+        mInsetPaint.setFontFeatureSettings("tnum");
         mBaseTextSizePx = mTextPaint.getTextSize();
         Paint.FontMetrics base = mTextPaint.getFontMetrics();
         mBaseBandPx = base.descent - base.ascent;
@@ -479,6 +542,8 @@ public final class LegendSlider extends View {
             com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFF49454F);
         mOnSurface = MaterialColors.getColor(this,
             com.google.android.material.R.attr.colorOnSurface, 0xFF1D1B20);
+        mOnActiveColor = MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorOnPrimary, 0xFFFFFFFF);
         mDotPaint.setColor(mActiveColor);
     }
 
@@ -494,9 +559,13 @@ public final class LegendSlider extends View {
         setMeasuredDimension(width, height);
     }
 
-    /** A horizontal track's height in this view: 16dp, less where the view is shorter. */
+    /**
+     * A horizontal track's height in this view: 16dp, 40dp while it prints its value; less where
+     * the view is shorter.
+     */
     float acrossTrackPx() {
-        return Math.max(1f, Math.min(mAcrossTrackPx, getHeight() - 2f * mHandleOverhangPx));
+        float want = isInsetShown() ? mInsetTrackPx : mAcrossTrackPx;
+        return Math.max(1f, Math.min(want, getHeight() - 2f * mHandleOverhangPx));
     }
 
     /** A horizontal handle's centre along the track, from the start edge: there at the minimum. */
@@ -644,7 +713,9 @@ public final class LegendSlider extends View {
             mTrackPaint.setColor(active);
             drawAcrossPiece(canvas, mRect, outer, mInsideCornerPx);
         }
-        // Inactive track: from the gap after the handle to the end edge, its stop at the end.
+        // Inactive track: from the gap after the handle to the end edge, its stop at the end
+        // (the value stands there instead while the track prints it).
+        boolean inset = isInsetShown();
         float inactiveStart = handleX + half + mGapPx;
         if (inactiveStart < width) {
             mRect.set(inactiveStart, top, width, bottom);
@@ -652,14 +723,64 @@ public final class LegendSlider extends View {
             drawAcrossPiece(canvas, mRect, mInsideCornerPx, outer);
             mTrackPaint.setColor(active);
             float stopX = Math.max(width - outer, inactiveStart + mStopPx);
-            if (stopX < width - mStopPx)
+            if (!inset && stopX < width - mStopPx)
                 canvas.drawCircle(stopX, height / 2f, mStopPx / 2f, mTrackPaint);
         }
+        canvas.restore();
+        // The value is drawn unmirrored, so its words read the right way round, under the handle.
+        if (inset)
+            drawInsetValue(canvas, width, top, bottom, Math.max(0f, activeEnd), enabled);
+        canvas.save();
+        if (mirrored())
+            canvas.scale(-1f, 1f, width / 2f, height / 2f);
         // The handle: a 4dp bar standing 2dp past the track above and below.
         mRect.set(handleX - half, top - mHandleOverhangPx, handleX + half,
             bottom + mHandleOverhangPx);
         mTrackPaint.setColor(active);
         canvas.drawRoundRect(mRect, half, half, mTrackPaint);
+        canvas.restore();
+    }
+
+    /**
+     * The value at the track's end side, {@link #mInsetPadPx} in from it: on-primary over the
+     * fill (start edge to {@code fillEnd}, from the start side) and on-surface-variant past it.
+     * Formats only when the value moved.
+     */
+    private void drawInsetValue(@NonNull Canvas canvas, float width, float top, float bottom,
+                                float fillEnd, boolean enabled) {
+        LabelFormatter inset = mInset;
+        if (inset == null)
+            return;
+        if (mInsetTextValue != mValue) {
+            mInsetTextValue = mValue;
+            mInsetText = inset.getFormattedValue(mValue);
+        }
+        String text = mInsetText;
+        if (text.isEmpty())
+            return;
+        boolean rtl = mirrored();
+        Paint.FontMetrics metrics = mInsetPaint.getFontMetrics();
+        float baseline = (top + bottom) / 2f - (metrics.ascent + metrics.descent) / 2f;
+        float x = rtl ? mInsetPadPx : width - mInsetPadPx;
+        mInsetPaint.setTextAlign(rtl ? Paint.Align.LEFT : Paint.Align.RIGHT);
+        float fillLeft = rtl ? width - fillEnd : 0f;
+        float fillRight = rtl ? width : fillEnd;
+        int onFill = enabled ? mOnActiveColor
+            : MaterialColors.compositeARGBWithAlpha(mOnSurface, DISABLED_ALPHA);
+        int onTrack = enabled ? mLegendColor
+            : MaterialColors.compositeARGBWithAlpha(mOnSurface, DISABLED_ALPHA);
+        if (fillRight > fillLeft) {
+            canvas.save();
+            canvas.clipRect(fillLeft, top, fillRight, bottom);
+            mInsetPaint.setColor(onFill);
+            canvas.drawText(text, x, baseline, mInsetPaint);
+            canvas.restore();
+        }
+        canvas.save();
+        if (rtl) canvas.clipRect(0f, top, fillLeft, bottom);
+        else canvas.clipRect(fillRight, top, width, bottom);
+        mInsetPaint.setColor(onTrack);
+        canvas.drawText(text, x, baseline, mInsetPaint);
         canvas.restore();
     }
 

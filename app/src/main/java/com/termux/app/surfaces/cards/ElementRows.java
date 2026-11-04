@@ -42,6 +42,8 @@ public final class ElementRows {
         DRAWER_TILE,
         /** The dock's Command palette tile ({@link DockCard#KEY_COMMAND_PALETTE_BUTTON}). */
         COMMAND_PALETTE_BUTTON,
+        /** The dock's New float terminal tile ({@link DockCard#KEY_FLOAT_TERMINAL_BUTTON}). */
+        FLOAT_TERMINAL_BUTTON,
         /** No eye: the terminal and the widgets cannot be hidden. */
         NONE
     }
@@ -64,6 +66,8 @@ public final class ElementRows {
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.DRAWER_TILE),
         COMMAND_PALETTE(R.string.editor_elements_command_palette, R.drawable.ic_symbol_terminal,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.COMMAND_PALETTE_BUTTON),
+        FLOAT_TERMINAL(R.string.editor_elements_float_terminal, R.drawable.ic_status_bar_add_window,
+            EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.FLOAT_TERMINAL_BUTTON),
         TERMINAL(R.string.editor_elements_terminal, R.drawable.ic_symbol_terminal,
             EditorCard.TERMINAL, null, Row.PANE_BORDERS, Visibility.NONE),
         /** The widgets: their own card (the widgets' glass on Home). */
@@ -110,14 +114,15 @@ public final class ElementRows {
          */
         public boolean ridesTheDock() {
             return visibility == Visibility.SEARCH_FIELD || visibility == Visibility.DRAWER_TILE
-                || visibility == Visibility.COMMAND_PALETTE_BUTTON;
+                || visibility == Visibility.COMMAND_PALETTE_BUTTON
+                || visibility == Visibility.FLOAT_TERMINAL_BUTTON;
         }
     }
 
     /** The rows both screens list, top to bottom. */
     private static final List<Item> SHARED = Collections.unmodifiableList(java.util.Arrays.asList(
         Item.STATUS_BAR, Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD,
-        Item.SEARCH_FIELD, Item.DRAWER_ICON, Item.COMMAND_PALETTE));
+        Item.SEARCH_FIELD, Item.DRAWER_ICON, Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL));
 
     /**
      * The rows {@code screen}'s card lists, top to bottom: the shared ones, then the screen's own

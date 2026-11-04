@@ -89,6 +89,7 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
             views.put(record.appWidgetId, view);
         }
         bound.put(record.appWidgetId, record);
+        view.setLaunchPackage(ref.packageName);
         bind(view, record, ref);
         return view;
     }
@@ -161,6 +162,11 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
                 : ownCopy(LauncherAppDataProvider.artworkFor(context, entry)));
             unavailable.add(entry == null && loaded);
         }
+        java.util.List<String> packages = new ArrayList<>();
+        for (LauncherWidgetRecord.FolderApp member : record.folderApps()) {
+            packages.add(member.app().packageName);
+        }
+        view.setMemberPackages(packages);
         view.bind(record.folderName(), artwork, unavailable);
         final int id = record.appWidgetId;
         view.setOnClickListener(v -> listener.onFolderTapped(id, v));

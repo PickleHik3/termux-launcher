@@ -70,6 +70,12 @@ public final class DressResolver {
         @NonNull
         WallShape shape();
 
+        /** The Style, Corners and Margin a page of {@code kind} wears: Margin is held per kind. */
+        @NonNull
+        default WallShape shape(@NonNull PageKind kind) {
+            return shape();
+        }
+
         /** Whether a kind of page shows one element: the page model's per-kind visibility. */
         boolean shows(@NonNull PageKind kind, @NonNull Element element);
 
@@ -152,6 +158,12 @@ public final class DressResolver {
                 return store != null ? store.shape() : WallShape.read(null);
             }
 
+            @NonNull @Override public WallShape shape(@NonNull PageKind kind) {
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.shape(kind == PageKind.HOME)
+                    : WallShape.read(null);
+            }
+
             @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
                 PlaceLayoutStore store = places.get();
                 return store != null ? store.kindShowsAny(kind, element)
@@ -195,7 +207,7 @@ public final class DressResolver {
         return new Dress(layout, leftOut,
             DockStyle.effectiveStyle(dockDesignFor(layout, kind)),
             mSource.searchField(layout),
-            mSource.drawerTile(layout), mSource.shape());
+            mSource.drawerTile(layout), mSource.shape(kind));
     }
 
     /**

@@ -474,7 +474,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * otherwise hide it. An element card set to Global means everywhere: the element's own
      * Home, Terminal and Display values of the property go. Customization, Home and the
      * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
-     * Mist on Home) on the kinds they write; a value the user set on an element card stays.
+     * Mist on Home) on the kinds they write. The Customization, Home and Workspace sliders go further,
+     * last change wins: the values set beneath them for that property go too
+     * ({@link SurfacePresets#clearBeneathSlider}), once per drag.
      */
     private void releaseShadowingCells(@NonNull Row row) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -494,14 +496,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
         EditorChips chips = mChips;
         for (com.termux.shared.termux.settings.preferences.LookGrid.Property property : properties) {
-            if (!property.perElement) continue;
-            if (chips.element != null) {
+            if (!property.perElement && !property.perKind) continue;
+            if (chips.element != null && property.perElement) {
                 if (chips.onKind()) continue;
                 for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind
                         : com.termux.shared.termux.settings.preferences.LookGrid.Kind.values())
                     if (grid.has(property, chips.element, kind))
                         grid.clear(property, chips.element, kind);
-            } else {
+            } else if (row.kind == EditorRows.Kind.SLIDER
+                    && SurfacePresets.slidersResetBeneath(chips, property)) {
+                if (mSliderDragActive && mBeneathClearedFor == row) continue;
+                SurfacePresets.clearBeneathSlider(grid, chips, property);
+                mBeneathClearedFor = mSliderDragActive ? row : null;
+            } else if (property.perElement) {
                 java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Kind> kinds =
                     chips.onKind() ? chips.appliesTo.kinds : java.util.Arrays.asList(
                         com.termux.shared.termux.settings.preferences.LookGrid.Kind.values());
@@ -2139,6 +2146,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case COMMAND_PALETTE_BUTTON:
                     return mDock.option(
                         com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE);
+                case FLOAT_TERMINAL_BUTTON:
+                    return mDock.option(
+                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL);
                 case NONE:
                 default:
                     return true;
@@ -2170,6 +2180,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case COMMAND_PALETTE_BUTTON:
                     mDock.setOption(
                         com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE, shown);
+                    break;
+                case FLOAT_TERMINAL_BUTTON:
+                    mDock.setOption(
+                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL, shown);
                     break;
                 case NONE:
                 default:
@@ -3035,7 +3049,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DESIGN:
                     return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
-                case MARGIN: return AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
+                case MARGIN: return AppearanceLooks.marginDp(prefs.getBaseMarginDp());
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case TEXT_SIZE:
@@ -3762,6 +3776,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return false;
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
                 grid.write(cell, GlassRows.toCell(row, value));
+            // A kind's Margin moves the shapes as Base's does (writeMargin).
+            if (row == Row.MARGIN) {
+                requestGeometryPreview();
+                syncLayoutSession();
+            }
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -5827,6 +5846,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** A light tick ran this drag; the release owes the full pass it left out. */
     private boolean mDragRanLightPass;
 
+    /** The slider whose drag already reset the values beneath it ({@link #releaseShadowingCells}). */
+    @Nullable private Row mBeneathClearedFor;
+
     private void beginDrag(boolean dragging) {
         mSliderDragActive = dragging;
     }
@@ -5841,6 +5863,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void endDrag() {
         mSliderDragActive = false;
+        mBeneathClearedFor = null;
         setGlassDragPreview(false);
         if (mDragRanLightPass) {
             // The full pass the ticks left out, once, with the values the drag settled on.
@@ -6544,6 +6567,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
                             com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
                 }
+                case FLOAT_TERMINAL: {
+                    SharedPreferences store = dockPrefs();
+                    return store != null && store.getBoolean(
+                        com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
+                        com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
+                }
                 case NOTIFICATION_DOTS:
                     return AppearanceSettingsStore.getBoolean(context,
                         "app_launcher_notification_dots", false);
@@ -6573,6 +6602,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (store != null)
                         store.edit().putBoolean(
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
+                            .apply();
+                    settingsWritten();
+                    break;
+                }
+                case FLOAT_TERMINAL: {
+                    SharedPreferences store = dockPrefs();
+                    if (store != null)
+                        store.edit().putBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON, on)
                             .apply();
                     settingsWritten();
                     break;

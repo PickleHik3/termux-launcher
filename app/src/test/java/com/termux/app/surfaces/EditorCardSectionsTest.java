@@ -24,12 +24,23 @@ public class EditorCardSectionsTest {
     private static final String CARD = "<card name>";
     private static final Offers ALL = new Offers(true, true, true, false);
 
-    private static final List<Row> BLOCK = Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST,
-        Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
+    /** The glass block in group order (EditorRows.Group): Look, sliders, toggles, colours. */
+    private static final List<Row> SLIDERS = Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST,
+        Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH);
 
-    private static List<Row> block(Row... after) {
-        List<Row> out = new ArrayList<>(BLOCK);
-        out.addAll(Arrays.asList(after));
+    /** The block with {@code toggles} after Rim, its other toggle, and Tint colour last. */
+    private static List<Row> block(Row... toggles) {
+        List<Row> out = new ArrayList<>(SLIDERS);
+        out.add(Row.RIM);
+        out.addAll(Arrays.asList(toggles));
+        out.add(Row.TINT_HUE);
+        return out;
+    }
+
+    /** {@link #block} with the page card's own Margin among the sliders, after Depth. */
+    private static List<Row> blockWithMargin(Row... toggles) {
+        List<Row> out = block(toggles);
+        out.add(out.indexOf(Row.DEPTH) + 1, Row.MARGIN);
         return out;
     }
 
@@ -74,9 +85,10 @@ public class EditorCardSectionsTest {
     public void customization() {
         check(EditorCard.APPEARANCE, expect(
             "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH),
-            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.TINT_HUE,
-                Row.WALLPAPER_COLOURS),
+                Row.TINT, Row.CORNERS, Row.MARGIN, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH,
+                Row.RIM),
+            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS,
+                Row.TINT_HUE),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.TOOL_COLOURS)));
@@ -85,12 +97,12 @@ public class EditorCardSectionsTest {
     @Test
     public void home() {
         check(EditorCard.HOME, expect(
-            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.ICON_PACK,
-                Row.HOME_ICON_SIZE, Row.LABEL_SIZE, Row.PAGE_TRANSITION),
+            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.HOME_ICON_SIZE,
+                Row.LABEL_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
                 Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            "SECTION_APPEARANCE", block(),
+            "SECTION_APPEARANCE", blockWithMargin(),
             "SECTION_LINKS", Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES,
                 Row.LINK_SHEETS)));
     }
@@ -105,7 +117,7 @@ public class EditorCardSectionsTest {
     @Test
     public void workspace() {
         check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", block(Row.CONTRAST, Row.MINIMAL),
+            "SECTION_APPEARANCE", blockWithMargin(Row.CONTRAST, Row.MINIMAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
     }
 
@@ -127,16 +139,18 @@ public class EditorCardSectionsTest {
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
             "SECTION_LAYOUT", Arrays.asList(Row.DOCK_BARS),
-            "SECTION_APPEARANCE", block(Row.REFLECTION),
+            "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
+                Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION, Row.RIM,
+                Row.TINT_HUE),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.LINK_GLOBAL)));
     }
 
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            CARD, Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL,
-                Row.EFFECT, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
-                Row.FOCUS_GROWS),
+            CARD, Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.MARGIN, Row.CONTRAST,
+                Row.CURSOR_TRAIL, Row.EFFECT, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+                Row.PANE_BORDERS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
             "SECTION_APPEARANCE", block(),
             "SECTION_LINKS", Arrays.asList(Row.LINK_FONT)));
@@ -148,8 +162,8 @@ public class EditorCardSectionsTest {
             CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING),
             "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
-                Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
-                Row.RIM, Row.GLASS_EDGE, Row.DEPTH),
+                Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
+                Row.DEPTH, Row.RIM, Row.TINT_HUE),
             "SECTION_LINKS", Arrays.asList(Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)));
     }
 

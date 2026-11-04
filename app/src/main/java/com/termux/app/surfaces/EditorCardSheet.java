@@ -1472,17 +1472,25 @@ final class EditorCardSheet {
         Section section = null;
         int tier = 0;
         Strip strip = null;
+        // The row groups inside a container (EditorRows.Group) stand apart by a gap.
+        EditorRows.Group group = null;
         for (EditorRows.Spec spec : specs) {
             if (isSectionHeading(spec.row)) {
                 section = newSection(spec.row.name(), mContext.getString(spec.row.labelRes),
                     isInsetSection(spec.row));
                 tier = 0;
                 strip = null;
+                group = null;
                 continue;
             }
             if (section == null)
                 section = newSection(EditorSectionStore.FIRST, cardTitle, false);
             LinearLayout body = section.body;
+            EditorRows.Group rowGroup = EditorRows.groupOf(spec.row);
+            if (group != null && rowGroup != group && spec.tier == tier
+                    && body.getChildCount() > 0)
+                body.addView(groupGap());
+            group = rowGroup;
             RowViews own = ownRow(spec.row);
             if (own == null && spec.row.kind == Kind.SLIDER) {
                 if (strip == null) {
@@ -1523,7 +1531,18 @@ final class EditorCardSheet {
 
     /** Whether {@code row} heads a collapsible section (a tier-level SECTION_* row). */
     static boolean isSectionHeading(@NonNull Row row) {
-        return row.name().startsWith("SECTION_");
+        return EditorRows.isSectionHeading(row);
+    }
+
+    /** The space between two row groups of one container. */
+    static final int GROUP_GAP_DP = 12;
+
+    @NonNull
+    private View groupGap() {
+        View gap = new android.widget.Space(mContext);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(GROUP_GAP_DP)));
+        return gap;
     }
 
     /** Whether {@code row} heads the always-open Links inset instead of a collapsible section. */

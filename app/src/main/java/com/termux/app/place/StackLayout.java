@@ -66,6 +66,8 @@ public final class StackLayout {
         public boolean keyboardOverlays;
         /** The committed page is Home: the dock floats over its grid. */
         public boolean dockOverlays;
+        /** The content reaches under the whole stack: {@link KeyboardOverlayPolicy#contentUnderStack}. */
+        public boolean contentUnderStack;
         public int systemImeTakePx;
         /** A slide holds the content, and the reservation it was committed with. */
         public boolean travelHoldsContent;
@@ -171,6 +173,11 @@ public final class StackLayout {
             int imeReachPx = in.dockOverlays ? in.systemImeTakePx : 0;
             int overlapPx = KeyboardOverlayPolicy.overlapPx(in.dockOverlays, stackHeightPx,
                 base.marginPx, keyboardOverlapPx, imeReachPx);
+            // A Display page in overlay mode: the display runs on under the whole stack, keyboard
+            // up or down, and a system keyboard still takes its room.
+            if (in.contentUnderStack && !in.dockOverlays)
+                overlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx, base.marginPx,
+                    0, 0);
             sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx,
                 base.marginPx, 0, imeReachPx);
             // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
@@ -293,6 +300,8 @@ public final class StackLayout {
         public boolean keyboardShown;
         public int keyboardHeightPx;
         public boolean keyboardOverlays;
+        /** The content reaches under the whole stack: {@link KeyboardOverlayPolicy#contentUnderStack}. */
+        public boolean contentUnderStack;
         public int flushPaddingPx;
 
         public RestInput(@NonNull DockGeometry.Snapshot dock, @NonNull PageRef page) {
@@ -338,7 +347,9 @@ public final class StackLayout {
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
-        return KeyboardOverlayPolicy.restReservationPx(in.page.isHome(), dockContentPx,
+        // Home's chrome takes no room, and nor does a Display page's in overlay mode.
+        return KeyboardOverlayPolicy.restReservationPx(in.page.isHome() || in.contentUnderStack,
+            dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
             Math.max(0, in.keyboardHeightPx), base.marginPx);
     }

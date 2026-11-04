@@ -58,6 +58,21 @@ public final class KeyboardOverlayPolicy {
     }
 
     /**
+     * Whether the content reaches under the whole accessory stack and the margin below it, down
+     * to the screen's bottom: a Display page in overlay mode. The keyboard there lies over the
+     * live display, so the display runs on under the keyboard and the strip under the pill rather
+     * than stopping where the stack's rest rows begin; the frost under the bed then has display
+     * behind all of it. Keyboard up or down alike, so the display's size, and the X screen's,
+     * never changes as the keyboard comes and goes: the extra keys and a bottom status bar lie
+     * over the display's foot too. Resize mode is the stored choice not to, and Home has its own
+     * rule (the dock floats over the grid).
+     */
+    public static boolean contentUnderStack(@NonNull PaneWallPage place,
+                                            @NonNull PlaceLayout layout) {
+        return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
+    }
+
+    /**
      * Whether a move from {@code from} to {@code to} changes whether the keyboard floats, and so
      * the room the content keeps: the pass that settles the move has to lay the content out again
      * even when no slide held it, as when the display window goes off the Workspace and a

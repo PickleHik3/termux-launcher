@@ -27,7 +27,7 @@ public class ElementRowsTest {
 
     private static final List<Item> SHARED = Arrays.asList(Item.STATUS_BAR, Item.APPS_ROW,
         Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.SEARCH_FIELD, Item.DRAWER_ICON,
-        Item.COMMAND_PALETTE);
+        Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL);
 
     @Test
     public void eachScreenListsTheSharedRowsThenItsOwnContent() {
@@ -69,7 +69,8 @@ public class ElementRowsTest {
 
     @Test
     public void theDocksOwnTilesOpenTheDockCardAtItsOptions() {
-        for (Item tile : new Item[] {Item.SEARCH_FIELD, Item.DRAWER_ICON, Item.COMMAND_PALETTE}) {
+        for (Item tile : new Item[] {Item.SEARCH_FIELD, Item.DRAWER_ICON, Item.COMMAND_PALETTE,
+                Item.FLOAT_TERMINAL}) {
             assertEquals(EditorCard.DOCK, tile.card);
             assertEquals(Row.DOCK_OPTIONS, tile.section);
             assertNull("every bar's settings closed", tile.expandedBar());

@@ -188,6 +188,47 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void sliderRowsStandOnOneLineAtDefaultTextAndNoValueIsCut() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            for (EditorCard card : EditorCard.values()) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.layOut();
+                for (LegendSlider slider : legends(fixture.sheet.rows())) {
+                    if (!(slider.getParent() instanceof com.termux.app.surfaces.rows.SliderRow.Line)
+                            || slider.getWidth() <= 0)
+                        continue;
+                    com.termux.app.surfaces.rows.SliderRow.Line line =
+                        (com.termux.app.surfaces.rows.SliderRow.Line) slider.getParent();
+                    TextView name = (TextView) line.getChildAt(1);
+                    TextView value = (TextView) line.getChildAt(2);
+                    String which = card + " at " + scale + ", " + name.getText();
+                    if (scale == 1f && card == EditorCard.APPEARANCE)
+                        assertTrue(which + " stands on one line", line.isOneLine());
+                    assertEquals(which + ": the track prints the value on one line alone",
+                        line.isOneLine(), slider.isInsetShown());
+                    assertEquals(which + ": the name is whole", 0, ellipsized(name));
+                    if (line.isOneLine()) {
+                        float widest = slider.insetValuePaint().measureText(
+                            String.valueOf(value.getText()));
+                        assertTrue(which + ": the value fits inside the track",
+                            widest + 2 * fixture.dp(LegendSlider.INSET_VALUE_PAD_DP)
+                                <= slider.getWidth());
+                    } else {
+                        assertEquals(which + ": the value is whole", 0, ellipsized(value));
+                    }
+                }
+            }
+        }
+    }
+
+    private static int ellipsized(@NonNull TextView view) {
+        Layout layout = view.getLayout();
+        if (layout == null || layout.getLineCount() == 0)
+            return 0;
+        return layout.getEllipsisCount(layout.getLineCount() - 1);
+    }
+
+    @Test
     public void theHeaderIsSeventyTwoAndTheRowsAtLeastTheirHeights() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
@@ -319,7 +360,7 @@ public class EditorCardSheetFitTest {
                 assertTrue(which + ": no word is cut",
                     layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
             }
-            assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
+            assertEquals("six Show/hide tiles, New float terminal among them (Monochrome is a switch row)", 6, tiles);
         }
     }
 
@@ -346,7 +387,7 @@ public class EditorCardSheetFitTest {
             assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
             assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
         }
-        assertEquals("five Show/hide tiles (Monochrome is a switch row)", 5, tiles);
+        assertEquals("six Show/hide tiles, New float terminal among them (Monochrome is a switch row)", 6, tiles);
     }
 
     @Test

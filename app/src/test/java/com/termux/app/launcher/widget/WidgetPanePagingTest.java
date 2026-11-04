@@ -61,7 +61,7 @@ public class WidgetPanePagingTest {
         assertEquals("every page holds the page shown", 1, fixture.controller.currentPage());
     }
 
-    @Test public void renderShowsOnlyTheCurrentPagesCellsAndLeavingHomeWaitsOnTheLastPage() {
+    @Test public void renderShowsOnlyTheCurrentPagesCellsAndLeavingHomeKeepsItsPage() {
         Fixture fixture = new Fixture();
         assertEquals(1, fixture.repository.addPage());
         assertTrue(fixture.repository.putRecord(record(1, new WidgetCellRect(0, 0, 1, 1), 0)));
@@ -78,8 +78,10 @@ public class WidgetPanePagingTest {
 
         fixture.controller.setCurrentPage(0);
         fixture.controller.onWallPageShown(false);
-        assertEquals("Home waits on its last page, next to the seam", 1,
+        // The wall owns which Home page shows (TLHomeCard, 11-04): leaving Home turns nothing.
+        assertEquals("Home keeps the page the wall bound it to", 0,
             fixture.controller.currentPage());
+        fixture.controller.showHomePage(1);
         fixture.controller.showHomePage(0);
         assertEquals("the home press turns it to page 1", 0, fixture.controller.homePageIndex());
         assertEquals(2, fixture.controller.homePageCount());

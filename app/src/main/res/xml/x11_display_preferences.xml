@@ -52,6 +52,18 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_x11_group_desktop">
+        <!-- Entries are filled in by X11DisplayPreferencesFragment: one per distro with XFCE. -->
+        <ListPreference
+            app:key="x11_start_with"
+            app:title="@string/settings_x11_start_with_title"
+            app:dialogTitle="@string/settings_x11_start_with_title"
+            android:defaultValue="" />
+        <EditTextPreference
+            app:key="x11_start_with_command"
+            app:title="@string/settings_x11_start_with_command_title"
+            app:dialogMessage="@string/settings_x11_start_with_command_message"
+            app:isPreferenceVisible="false"
+            app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="x11_window_manager"
             app:title="@string/settings_x11_window_manager_title"

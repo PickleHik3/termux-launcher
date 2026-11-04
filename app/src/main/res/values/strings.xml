@@ -387,6 +387,8 @@
     <string name="settings_gui_apps_row_with_files">%1$s with a file manager</string>
     <string name="settings_gui_apps_starter_browser">Browser</string>
     <string name="settings_gui_apps_starter_files">File manager</string>
+    <string name="settings_gui_apps_starter_desktop">Desktop</string>
+    <string name="settings_gui_apps_desktop_note">To open the desktop with the display, set Start with to it in Settings › Linux apps.</string>
     <string name="settings_gui_apps_starter_editor">Text editor</string>
     <string name="settings_gui_apps_starter_terminal">Terminal</string>
     <string name="settings_gui_apps_step_source">Source</string>
@@ -411,6 +413,7 @@
     <string name="settings_gui_apps_distro_arch">Arch Linux</string>
     <string name="settings_gui_apps_distro_arch_summary">The newest packages, and more upkeep.</string>
     <string name="settings_gui_apps_recommended">Recommended</string>
+    <string name="settings_gui_apps_installed">Installed</string>
     <string name="settings_gui_apps_apps_headline">Pick your starter apps</string>
     <string name="settings_gui_apps_apps_sentence">You can add more apps later from the terminal.</string>
     <string name="settings_gui_apps_command_headline">Copy the command</string>
@@ -468,6 +471,18 @@
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
+    <!-- Linux apps › Start with (#166): what opens on the display each time it starts. -->
+    <string name="settings_x11_start_with_title">Start with</string>
+    <string name="settings_x11_start_with_summary">Open a desktop or a command each time the display starts.</string>
+    <string name="settings_x11_start_with_nothing">Nothing</string>
+    <!-- %1$s is the distro's name, such as Debian. -->
+    <string name="settings_x11_start_with_desktop">%1$s desktop (XFCE)</string>
+    <string name="settings_x11_start_with_command">A command…</string>
+    <string name="settings_x11_start_with_command_title">Start command</string>
+    <string name="settings_x11_start_with_command_message">Runs on the display each time it starts.</string>
+    <string name="termux_x11_start_with_failed">The display\'s start command did not run.</string>
+    <!-- %1$s is the distro's name, such as Debian. -->
+    <string name="termux_x11_start_with_desktop_missing">%1$s has no XFCE desktop installed, so the display started empty.</string>
     <string name="settings_x11_group_sound">Audio</string>
     <string name="settings_launcher_sound_title">Sound</string>
     <string name="settings_launcher_sound_summary">Play sound from the terminal and Linux apps</string>
@@ -822,6 +837,7 @@
     <string name="app_menu_unpin">Unpin</string>
     <string name="app_menu_move_to_dock">Move to dock</string>
     <string name="app_menu_remove_from_folder">Remove from folder</string>
+    <string name="app_menu_move_to_category">Move to category</string>
     <string name="app_menu_change_icon">Change icon</string>
     <string name="app_menu_reset_icon">Reset icon</string>
     <string name="app_menu_uninstall">Uninstall</string>
@@ -2280,6 +2296,7 @@
     <!-- The Drawer tile (#97), spoken: it opens the app drawer; hold to move it. -->
     <string name="dock_drawer_tile">All apps</string>
     <string name="dock_command_palette_tile">Command palette</string>
+    <string name="dock_float_terminal_tile">New float terminal</string>
     <string name="palette_home_minimise_floats">Minimise all floats</string>
     <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
     <string name="palette_home_restore_floats">Restore floats</string>

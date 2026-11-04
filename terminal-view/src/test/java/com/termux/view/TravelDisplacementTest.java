@@ -35,7 +35,7 @@ public class TravelDisplacementTest {
         int fromRows = rowsFor(from), toRows = rowsFor(to);
         assertEquals(6, headroomFor(from));
         assertEquals(1, headroomFor(to));
-        assertEquals(-21 * LINE - 5f, TerminalView.travelDisplacementPx(from, to, fromRows,
+        assertEquals(-21 * LINE - 5f, TerminalView.travelDisplacementPx(from, to, 0, fromRows,
             toRows, toRows - fromRows, LINE, ASCENT), EPSILON);
     }
 
@@ -46,7 +46,7 @@ public class TravelDisplacementTest {
         int dropped = fromRows - toRows;
         // Five blank rows go first, so the rows move up by five rows less than the keyboard.
         int shift = -(dropped - 5);
-        assertEquals(-21 * LINE - 5f + 5 * LINE, TerminalView.travelDisplacementPx(from, to,
+        assertEquals(-21 * LINE - 5f + 5 * LINE, TerminalView.travelDisplacementPx(from, to, 0,
             fromRows, toRows, shift, LINE, ASCENT), EPSILON);
     }
 
@@ -56,7 +56,7 @@ public class TravelDisplacementTest {
         int fromRows = rowsFor(from), toRows = rowsFor(to);
         // The buffer reveals exactly the added rows above, so the prompt follows the edge down,
         // and the slack above the grid grows from 1 px to 6 px on top of that.
-        assertEquals(21 * LINE + 5f, TerminalView.travelDisplacementPx(from, to, fromRows,
+        assertEquals(21 * LINE + 5f, TerminalView.travelDisplacementPx(from, to, 0, fromRows,
             toRows, toRows - fromRows, LINE, ASCENT), EPSILON);
     }
 
@@ -67,7 +67,7 @@ public class TravelDisplacementTest {
         // Nothing above to reveal: blank rows are added below, and only the change in the slack
         // above the grid - half the sub-row remainder - moves the rows.
         assertEquals(headroomFor(to) - headroomFor(from), TerminalView.travelDisplacementPx(from,
-            to, fromRows, toRows, 0, LINE, ASCENT), EPSILON);
+            to, 0, fromRows, toRows, 0, LINE, ASCENT), EPSILON);
     }
 
     @Test
@@ -83,7 +83,7 @@ public class TravelDisplacementTest {
 
     @Test
     public void theSameHeightMovesNothing() {
-        assertEquals(0f, TerminalView.travelDisplacementPx(1900, 1900, rowsFor(1900),
+        assertEquals(0f, TerminalView.travelDisplacementPx(1900, 1900, 0, rowsFor(1900),
             rowsFor(1900), 0, LINE, ASCENT), EPSILON);
     }
 
@@ -106,7 +106,7 @@ public class TravelDisplacementTest {
     public void theRevealedRowsComeOutFromUnderTheGridsMovingTopEdge() {
         int from = 1050, to = 1900;
         float anchor = headroomFor(from);
-        float headroomChange = TerminalView.travelHeadroomChangePx(from, to, rowsFor(from),
+        float headroomChange = TerminalView.travelHeadroomChangePx(from, to, 0, rowsFor(from),
             rowsFor(to), LINE, ASCENT);
         assertEquals(headroomFor(to) - headroomFor(from), headroomChange, EPSILON);
         // At the start the cut is the grid's top edge as it stands: nothing above row 0 shows.
@@ -122,8 +122,8 @@ public class TravelDisplacementTest {
         int from = 1050, to = 1900;
         int fromRows = rowsFor(from), toRows = rowsFor(to);
         int shift = toRows - fromRows;
-        float target = TerminalView.travelDisplacementPx(from, to, fromRows, toRows, shift, LINE,
-            ASCENT);
+        float target = TerminalView.travelDisplacementPx(from, to, 0, fromRows, toRows, shift,
+            LINE, ASCENT);
         for (int row = -shift; row < fromRows; row++) {
             // Drawn at the end of the travel, from the anchor, displaced the whole way ...
             float drawn = headroomFor(from) + target + ASCENT + row * LINE;
@@ -133,8 +133,8 @@ public class TravelDisplacementTest {
         }
         // And the first revealed row sits right on the cut, so it is whole when the resize lands.
         assertEquals(TerminalView.travelFillClipTopPx(headroomFor(from),
-                TerminalView.travelHeadroomChangePx(from, to, fromRows, toRows, LINE, ASCENT), 1f,
-                ASCENT),
+                TerminalView.travelHeadroomChangePx(from, to, 0, fromRows, toRows, LINE,
+                    ASCENT), 1f, ASCENT),
             headroomFor(from) + target + ASCENT - shift * LINE, EPSILON);
     }
 

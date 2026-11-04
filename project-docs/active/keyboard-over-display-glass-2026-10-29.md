@@ -10,6 +10,17 @@ of the display behind it, and an opt-in live blur.
 > there is no "Over the display" switch and no display-scoped keys. Decision 5 (the still of the
 > display behind the keyboard) stands and waits for a later wave.
 
+> **2026-11-04 (grilled):** decision 5 (the PixelCopy still) and the opt-in ~12 fps live blur are
+> superseded. Over a Display page the keyboard frosts the live display through Android's
+> **cross-window blur**: the keyboard there draws in its own window, and the compositor blurs
+> everything behind it (`setBackgroundBlurRadius` / blur-behind, API 31+), live and at full rate.
+> The Keyboard card's Display-pages look applies (Opacity, Tint, Frost → blur radius). Where
+> Android disables window blur (battery saver, `isCrossWindowBlurEnabled()` false, below API 31)
+> the keyboard falls back to plain see-through: the same Opacity and Tint over the live display,
+> no frost. Keys keep their own opacity and the legibility floor. Rejected: switching the
+> display to a TextureView (latency and cost on the display itself); the snapshot still
+> (not live). Pong: `ro.surface_flinger.supports_background_blur=1`, window blur enabled.
+
 ## Today
 
 - `x11_keyboard_over_display` (res/xml/x11_display_input_preferences.xml:24-28) is `overlay` or
