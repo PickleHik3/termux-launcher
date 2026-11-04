@@ -474,7 +474,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * otherwise hide it. An element card set to Global means everywhere: the element's own
      * Home, Terminal and Display values of the property go. Customization, Home and the
      * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
-     * Mist on Home) on the kinds they write; a value the user set on an element card stays.
+     * Mist on Home) on the kinds they write. The Customization and Workspace sliders go further,
+     * last change wins: the values set beneath them for that property go too
+     * ({@link SurfacePresets#clearBeneathSlider}), once per drag.
      */
     private void releaseShadowingCells(@NonNull Row row) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -501,6 +503,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         : com.termux.shared.termux.settings.preferences.LookGrid.Kind.values())
                     if (grid.has(property, chips.element, kind))
                         grid.clear(property, chips.element, kind);
+            } else if (row.kind == EditorRows.Kind.SLIDER
+                    && SurfacePresets.slidersResetBeneath(chips)) {
+                if (mSliderDragActive && mBeneathClearedFor == row) continue;
+                SurfacePresets.clearBeneathSlider(grid, chips, property);
+                mBeneathClearedFor = mSliderDragActive ? row : null;
             } else {
                 java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Kind> kinds =
                     chips.onKind() ? chips.appliesTo.kinds : java.util.Arrays.asList(
@@ -5834,6 +5841,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** A light tick ran this drag; the release owes the full pass it left out. */
     private boolean mDragRanLightPass;
 
+    /** The slider whose drag already reset the values beneath it ({@link #releaseShadowingCells}). */
+    @Nullable private Row mBeneathClearedFor;
+
     private void beginDrag(boolean dragging) {
         mSliderDragActive = dragging;
     }
@@ -5848,6 +5858,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void endDrag() {
         mSliderDragActive = false;
+        mBeneathClearedFor = null;
         setGlassDragPreview(false);
         if (mDragRanLightPass) {
             // The full pass the ticks left out, once, with the values the drag settled on.

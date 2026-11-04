@@ -105,15 +105,17 @@ public class SurfaceEditorHomeGlassTest {
     }
 
     @Test
-    public void customizationWritesBaseAlone() {
+    public void customizationWritesBaseAndResetsTheDocksOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 30);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 61, false);
         assertEquals(61, grid().value(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE));
-        assertEquals("a dock's own value is not put back on Base", 30,
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-                TermuxAppSharedPreferences.PAGE_WALL));
+        // Last change wins (developer, 2026-11-04): the dock follows Base again.
+        assertFalse("the dock's own value went",
+            grid().has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, LookGrid.NO_PAGE));
+        assertEquals(61, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
+            LookGrid.NO_PAGE));
         for (LookGrid.Kind kind : LookGrid.Kind.values())
             assertFalse(kind.key, grid().has(LookGrid.Property.OPACITY, null, kind));
     }

@@ -74,7 +74,7 @@ public class EditorCardSectionsTest {
     public void customization() {
         check(EditorCard.APPEARANCE, expect(
             "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH),
+                Row.TINT, Row.CORNERS, Row.MARGIN, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),

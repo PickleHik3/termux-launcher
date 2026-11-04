@@ -1343,20 +1343,33 @@ public final class SurfacePresets {
         return false;
     }
 
+    /** Every kind and element, held once: the clears below run on each step of a drag. */
+    private static final LookGrid.Kind[] KINDS = LookGrid.Kind.values();
+    private static final LookGrid.Element[] ELEMENTS = LookGrid.Element.values();
+
     /**
      * Before a Global Look: the Home and Workspace looks (all glass on each kind) and every
      * element's own value, everywhere and on each kind, go, for each of a Look's numbers.
      */
     static void clearBeneathLook(@NonNull LookGrid grid) {
-        for (LookGrid.Property property : LOOK_PROPERTIES) {
-            if (!property.perElement) continue;
-            for (LookGrid.Kind kind : LookGrid.Kind.values())
-                grid.clear(property, null, kind);
-            for (LookGrid.Element element : LookGrid.Element.values()) {
-                grid.clear(property, element, (LookGrid.Kind) null);
-                for (LookGrid.Kind kind : LookGrid.Kind.values())
-                    grid.clear(property, element, kind);
-            }
+        for (LookGrid.Property property : LOOK_PROPERTIES)
+            clearBeneathGlobal(grid, property);
+    }
+
+    /**
+     * Before a Global value of {@code property} (a Look's number, or a slider on the Global card):
+     * the Home and Workspace values (all glass on each kind) and every element's own value,
+     * everywhere and on each kind, go, so every surface follows Base again. Nothing for a
+     * property with no element column (Margin, Vibrancy): Base is its one cell.
+     */
+    static void clearBeneathGlobal(@NonNull LookGrid grid, @NonNull LookGrid.Property property) {
+        if (!property.perElement) return;
+        for (LookGrid.Kind kind : KINDS)
+            clearIfHeld(grid, property, null, kind);
+        for (LookGrid.Element element : ELEMENTS) {
+            clearIfHeld(grid, property, element, null);
+            for (LookGrid.Kind kind : KINDS)
+                clearIfHeld(grid, property, element, kind);
         }
     }
 
@@ -1367,20 +1380,54 @@ public final class SurfacePresets {
      * they did.
      */
     static void clearBeneathKindLook(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds) {
-        for (LookGrid.Property property : LOOK_PROPERTIES) {
-            if (!property.perElement) continue;
-            for (LookGrid.Element element : LookGrid.Element.values()) {
-                for (LookGrid.Kind kind : kinds)
-                    grid.clear(property, element, kind);
-                if (!grid.has(property, element, (LookGrid.Kind) null)) continue;
-                int everywhere = grid.store().getInt(
-                    LookGrid.key(property, element, (LookGrid.Kind) null), property.shipped);
-                for (LookGrid.Kind other : LookGrid.Kind.values())
-                    if (!kinds.contains(other) && !grid.has(property, element, other))
-                        grid.write(property, element, other, everywhere);
-                grid.clear(property, element, (LookGrid.Kind) null);
-            }
+        for (LookGrid.Property property : LOOK_PROPERTIES)
+            clearBeneathKind(grid, kinds, property);
+    }
+
+    /**
+     * {@link #clearBeneathKindLook} for one property: what a page card's slider of
+     * {@code property} resets on {@code kinds} before its value lands there.
+     */
+    static void clearBeneathKind(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds,
+                                 @NonNull LookGrid.Property property) {
+        if (!property.perElement) return;
+        for (LookGrid.Element element : ELEMENTS) {
+            for (int i = 0; i < kinds.size(); i++)
+                clearIfHeld(grid, property, element, kinds.get(i));
+            if (!grid.has(property, element, (LookGrid.Kind) null)) continue;
+            int everywhere = grid.store().getInt(
+                LookGrid.key(property, element, (LookGrid.Kind) null), property.shipped);
+            for (LookGrid.Kind other : KINDS)
+                if (!kinds.contains(other) && !grid.has(property, element, other))
+                    grid.write(property, element, other, everywhere);
+            grid.clear(property, element, (LookGrid.Kind) null);
         }
+    }
+
+    /**
+     * Last change wins (developer, 2026-11-04): a slider on the Global card or the Workspace card
+     * resets the values set beneath it for its one property, at the levels it covers, so they
+     * follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element card's
+     * slider resets nothing: it holds its own value. The Home card's is not part of that decision
+     * and keeps an element's own value, as before.
+     */
+    static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
+                                   @NonNull LookGrid.Property property) {
+        if (!slidersResetBeneath(chips)) return;
+        if (chips.onKind()) clearBeneathKind(grid, chips.appliesTo.kinds, property);
+        else clearBeneathGlobal(grid, property);
+    }
+
+    /** Whether a slider moved at {@code chips} resets what is beneath it ({@link #clearBeneathSlider}). */
+    static boolean slidersResetBeneath(@NonNull EditorChips chips) {
+        return chips.element == null && chips.appliesTo != EditorChips.AppliesTo.HOME;
+    }
+
+    /** Clears a cell the grid holds; an absent cell is left alone (no write, no seed bookkeeping). */
+    private static void clearIfHeld(@NonNull LookGrid grid, @NonNull LookGrid.Property property,
+                                    @Nullable LookGrid.Element element,
+                                    @Nullable LookGrid.Kind kind) {
+        if (grid.has(property, element, kind)) grid.clear(property, element, kind);
     }
 
     /**

@@ -321,3 +321,11 @@ longer counted as an error. Owed:
   fallback, and `app_launcher_animation_safe_mode` stays false. `adb logcat -s
   LauncherTransitionController` shows one "Gesture handoff" line each (source dock, home, none) ·
   pong.
+
+- **Last change wins on the Global and Workspace sliders (11-04).** Dock card (Applies to
+  Global) Opacity to 20, Keyboard card (Applies to Home) Corners to 30. Global card: move Opacity;
+  the dock now wears Global's opacity on Home and Terminal pages, the keyboard keeps its 30 dp
+  corners. Move Global Corners; the keyboard's corners follow. Dock Opacity to 20 again: only the
+  dock changes. Workspace card Opacity: Terminal and Display pages follow, the dock on Home stays
+  at 20. Discard after any of these puts every value back. Global Margin moves the air on every
+  surface · pong.
