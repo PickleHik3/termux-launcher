@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Pane corner panel: More (11-04).** Hold a pane corner on a lone pane and on a split pane:
+  More is the last button in both (lone: Appearance, Minimal, Auto-tiling, Settings, Help, More;
+  split: Close, Move, Maximise, More). Tapping it opens the same sheet a long press on the
+  Workspace opens, and Share, Reset and Kill act on that pane's session (try it from the
+  non-focused pane of a split). The three-dot glyph sits like its neighbours, light and dark
+  theme · pong.
 - **Home press lands on the page set as home (11-04).** Wall Home 1 (set as home), Home 2,
   Terminal: press Android Home from the Terminal page, from Home 2 and from Home 1. Each ends on
   Home 1 (pressing on Home 1 doesn't move). Then swipe Home 1 → Home 2 → Home 1 inside Home:
