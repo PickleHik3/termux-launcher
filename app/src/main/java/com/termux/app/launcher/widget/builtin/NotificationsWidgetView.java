@@ -1,23 +1,37 @@
 package com.termux.app.launcher.widget.builtin;
 
+import android.app.Notification;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.service.notification.StatusBarNotification;
+import android.text.Editable;
 import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.format.DateFormat;
 import android.util.LruCache;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
@@ -31,6 +45,7 @@ import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.NotificationHistoryFragment;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
+import com.termux.app.launcher.notifications.NotificationCardSurface;
 import com.termux.launcherctl.LauncherCtlNotificationEvent;
 import com.termux.launcherctl.LauncherCtlNotificationListener;
 import com.termux.launcherctl.LauncherCtlNotificationStore;
@@ -60,6 +75,13 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     private static final int ICON_ENTRIES = 12;
     /** The largest an app icon is drawn (the one-row layout's); icons are kept at this size. */
     private static final int ICON_DP = 36;
+    /** A row button's glyph, at most; smaller where the row is short. */
+    private static final float BUTTON_GLYPH_SP = 16f;
+    /** The Reply and Dismiss glyphs (Font Awesome's reply and times, in the Nerd font). */
+    private static final String GLYPH_REPLY = "\uf112";
+    private static final String GLYPH_DISMISS = "\uf00d";
+    /** Ripple ink over a row or a button, as the Tasks widget's rows. */
+    private static final int RIPPLE_ALPHA = 0x1F;
 
     private final LruCache<String, Drawable> icons = new LruCache<>(ICON_ENTRIES);
     private final Runnable reload = this::reload;
@@ -75,6 +97,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     /** Null until the first read lands. */
     @Nullable private NotificationsWidgetData.Snapshot snapshot;
     private int generation;
+    /** The reply composer while it is open. */
+    @Nullable private PopupWindow replyPopup;
 
     public NotificationsWidgetView(@NonNull Context context, @NonNull BuiltinWidgetServices services,
                                    @NonNull BuiltinWidgetStyle style) {
@@ -105,6 +129,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         generation++;
         LauncherNotificationBadgeStore.removeListener(badgeListener);
         services.main().removeCallbacks(reload);
+        closeReply();
     }
 
     @Override protected void onTap() {
@@ -140,7 +165,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             services.io().execute(() -> {
                 NotificationsWidgetData.Snapshot next =
                     NotificationsWidgetData.select(readRows(context), System.currentTimeMillis(), LIMIT,
-                        LauncherCtlNotificationListener.activeSilentKeys());
+                        LauncherCtlNotificationListener.activeSilentKeys(),
+                        LauncherCtlNotificationListener.replyableKeys());
                 loadIcons(context, next.iconPackages(6), icons, iconPx);
                 services.main().post(() -> apply(ticket, next));
             });
@@ -205,11 +231,145 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         } catch (RejectedExecutionException ignored) { }
     }
 
+    /**
+     * Opens the thread {@code item} is about, as the shade would: the live notification's own
+     * {@code contentIntent}, looked up by key now. The app's launcher entry only when the
+     * notification is gone or has no such intent.
+     */
+    private void openItem(@NonNull NotificationsWidgetData.Item item) {
+        if (isPreview()) return;
+        try {
+            services.io().execute(() -> {
+                if (LauncherCtlNotificationListener.openNotification(item.key)) return;
+                services.main().post(() -> openApp(item));
+            });
+        } catch (RejectedExecutionException ignored) {
+            openApp(item);
+        }
+    }
+
     private void openApp(@NonNull NotificationsWidgetData.Item item) {
         if (isPreview()) return;
         Context context = getContext();
         Intent launch = context.getPackageManager().getLaunchIntentForPackage(item.packageName);
         SignalsWidgetKit.start(context, launch);
+    }
+
+    private void dismiss(@NonNull NotificationsWidgetData.Item item) {
+        if (isPreview()) return;
+        try {
+            services.io().execute(() -> LauncherCtlNotificationListener.dismissNotification(item.key));
+        } catch (RejectedExecutionException ignored) { }
+    }
+
+    // ----- reply ----------------------------------------------------------------------------
+
+    /**
+     * A small composer over the card, for {@code item}'s reply: a field and Send, the way a
+     * notification card's composer works. The text goes out through the live notification's
+     * reply action, looked up by key when it is sent.
+     */
+    private void openReply(@NonNull NotificationsWidgetData.Item item) {
+        if (isPreview() || !isAttachedToWindow()) return;
+        closeReply();
+        Context context = getContext();
+        BuiltinWidgetStyle s = style();
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        int pad = s.dp(8);
+        row.setPadding(s.dp(12), pad, pad, pad);
+        row.setBackground(ui().rounded(s.containerHigh, s.cornerRadiusPx));
+        row.setElevation(s.dp(6));
+
+        EditText field = new EditText(context);
+        field.setHint(getResources().getString(R.string.notification_card_reply_to_hint, item.who));
+        field.setTextColor(s.onSurface);
+        field.setHintTextColor(s.onSurfaceVariant);
+        field.setBackground(null);
+        field.setMaxLines(4);
+        field.setMinHeight(s.dp(48));
+        field.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+            | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        field.setHorizontallyScrolling(false);
+        row.addView(field, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        com.google.android.material.button.MaterialButton send =
+            new com.google.android.material.button.MaterialButton(context);
+        send.setText(R.string.notification_card_send);
+        send.setSingleLine(true);
+        send.setTextColor(s.onPrimary);
+        send.setBackgroundTintList(ColorStateList.valueOf(s.primary));
+        send.setMinHeight(s.dp(48));
+        send.setMinimumHeight(s.dp(48));
+        send.setEnabled(false);
+        send.setAlpha(0.45f);
+        row.addView(send, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        field.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence t, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence t, int a, int b, int c) {
+                boolean enabled = t != null && !TextUtils.isEmpty(t.toString().trim());
+                send.setEnabled(enabled);
+                send.setAlpha(enabled ? 1f : 0.45f);
+            }
+            @Override public void afterTextChanged(Editable e) { }
+        });
+        Runnable sendReply = () -> {
+            String text = field.getText().toString();
+            if (TextUtils.isEmpty(text.trim())) return;
+            Context app = services.context();
+            try {
+                services.io().execute(() -> {
+                    StatusBarNotification sbn = LauncherCtlNotificationListener.findActive(item.key);
+                    Notification.Action action = sbn == null ? null
+                        : NotificationCardSurface.replyAction(sbn.getNotification());
+                    if (action != null) NotificationCardSurface.sendReply(app, action, text);
+                });
+            } catch (RejectedExecutionException ignored) { }
+            closeReply();
+        };
+        send.setOnClickListener(v -> sendReply.run());
+        field.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEND) return false;
+            sendReply.run();
+            return true;
+        });
+
+        PopupWindow popup = new PopupWindow(row, Math.max(s.dp(240), getWidth()),
+            ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
+        popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            | WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        popup.setOnDismissListener(() -> { if (replyPopup == popup) replyPopup = null; });
+        replyPopup = popup;
+        try {
+            popup.showAsDropDown(this, 0, -getHeight());
+        } catch (RuntimeException e) {
+            replyPopup = null;
+            return;
+        }
+        field.requestFocus();
+        field.post(() -> {
+            InputMethodManager imm = (InputMethodManager)
+                context.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    private void closeReply() {
+        PopupWindow popup = replyPopup;
+        replyPopup = null;
+        if (popup != null && popup.isShowing()) {
+            try {
+                popup.dismiss();
+            } catch (RuntimeException ignored) { }
+        }
     }
 
     // ----- layouts --------------------------------------------------------------------------
@@ -337,8 +497,15 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
                     if (!isPreview()) {
                         View tap = new View(getContext());
                         clickable(tap, shownGroups.get(n).newest);
+                        float radius = Math.min(ui.innerRadius(WidgetTokens.insetDp(plan.span)),
+                            part.box.height * density / 2f);
+                        tap.setBackground(ripple(radius));
                         over.addView(tap, place(part.box, density, rtl, widthPx));
                     }
+                } else if ((part.id.startsWith("reply.") || part.id.startsWith("dismiss."))
+                    && n >= 0 && n < shownGroups.size()) {
+                    over.addView(button(part, shownGroups.get(n).newest, density),
+                        place(part.box, density, rtl, widthPx));
                 } else if (part.id.equals("clear.touch") && !isPreview()) {
                     View tap = new View(getContext());
                     tap.setClickable(true);
@@ -361,6 +528,34 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             } catch (NumberFormatException e) {
                 return -1;
             }
+        }
+
+        /** A row's Reply or Dismiss: its glyph, a round ripple, and its name for a screen reader. */
+        @NonNull private View button(@NonNull WidgetLayoutPlan.Part part,
+                                     @NonNull NotificationsWidgetData.Item item, float density) {
+            boolean reply = part.id.startsWith("reply.");
+            float glyphSp = Math.min(BUTTON_GLYPH_SP, part.box.height * 0.45f);
+            TextView view = ui.glyph(reply ? GLYPH_REPLY : GLYPH_DISMISS, glyphSp,
+                ui.style.onSurfaceVariant);
+            if (isPreview()) return view;
+            view.setClickable(true);
+            view.setFocusable(true);
+            view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            view.setContentDescription(getResources().getString(reply
+                ? R.string.notification_card_reply_hint : R.string.notification_card_dismiss));
+            view.setBackground(ripple(Math.min(part.box.width, part.box.height) * density / 2f));
+            view.setOnClickListener(v -> {
+                if (reply) openReply(item);
+                else dismiss(item);
+            });
+            return view;
+        }
+
+        /** A ripple bounded to its view at {@code radiusPx}, with nothing drawn until pressed. */
+        @NonNull private RippleDrawable ripple(float radiusPx) {
+            GradientDrawable mask = ui.rounded(0xFFFFFFFF, radiusPx);
+            return new RippleDrawable(ColorStateList.valueOf(
+                ColorUtils.setAlphaComponent(ui.style.onSurface, RIPPLE_ALPHA)), null, mask);
         }
 
         @NonNull private FrameLayout.LayoutParams place(@NonNull WidgetLayoutPlan.Box box,
@@ -406,14 +601,14 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         return view;
     }
 
-    /** A row that opens its app; inert in the picker, whose card takes the tap. */
+    /** A row that opens its notification; inert in the picker, whose card takes the tap. */
     private void clickable(@NonNull View view, @NonNull NotificationsWidgetData.Item item) {
         if (isPreview()) return;
         view.setClickable(true);
         view.setFocusable(true);
         view.setContentDescription(getResources().getString(
             R.string.bw_signals_notifications_open_app, item.app) + ", " + item.who + ", " + item.text);
-        view.setOnClickListener(v -> openApp(item));
+        view.setOnClickListener(v -> openItem(item));
     }
 
     @NonNull
@@ -455,7 +650,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             Object[] row = rows[i];
             long time = today.atTime((Integer) row[3], (Integer) row[4]).atZone(zone).toInstant().toEpochMilli();
             items.add(new NotificationsWidgetData.Item("sample" + i, "sample." + row[0], (String) row[0],
-                (String) row[1], (String) row[2], time, (String) row[5], (Integer) row[6], true));
+                (String) row[1], (String) row[2], time, (String) row[5], (Integer) row[6], true,
+                true));
         }
         return new NotificationsWidgetData.Snapshot(items, 2);
     }

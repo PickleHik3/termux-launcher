@@ -631,7 +631,192 @@ public final class WidgetPaneView extends FrameLayout
     /** Whether a widget is being carried out of the picker right now. */
     public boolean carrying() { return carry != null; }
 
+    /**
+     * What the pane asks while a second finger is down: whether the first one is carrying
+     * something across pages, and to turn the page under it.
+     */
+    public interface DragPager {
+        /** Whether something is being dragged that can be carried to another page. */
+        boolean dragTurnsPages();
+        /** Turns the page under the drag: +1 the next page, -1 the previous one. */
+        void turnDragPage(int direction);
+    }
+
+    @Nullable private DragPager dragPager;
+    /**
+     * The fingers that landed while something was being dragged, by pointer id bit. They are
+     * this view's: nothing under it ever hears of them, so the drag and every child go on
+     * reading the one finger that carries, by index 0 as they always have.
+     */
+    private int pagingFingers;
+    private final DragPageSwipe dragSwipe = new DragPageSwipe();
+    @Nullable private VelocityTracker dragSwipeVelocity;
+
+    public void setDragPager(@Nullable DragPager value) { dragPager = value; }
+
+    /** Whether a drag is under way that a second finger may turn the page for. */
+    private boolean dragTurnsPages() {
+        return carry != null || (dragPager != null && dragPager.dragTurnsPages());
+    }
+
+    /**
+     * While one finger carries an icon or a widget, a second finger swiping sideways turns the
+     * page under it ({@link DragPageSwipe}). Such a finger is taken here and kept from everything
+     * below, so the carried item follows only the finger that holds it, a lift of the second
+     * finger is never the drop, and a lift of the first one is: it reaches the children as the
+     * gesture's {@code ACTION_UP}, and whatever fingers are left are this view's until they lift.
+     * With no drag under way every event passes untouched.
+     */
     @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) endDragSwipe();
+        if (action == MotionEvent.ACTION_CANCEL) {
+            endDragSwipe();
+            return dispatchCarriedTouch(event);
+        }
+        if (pagingFingers == 0 && action != MotionEvent.ACTION_POINTER_DOWN) {
+            return dispatchCarriedTouch(event);
+        }
+        if (watchPagingFinger(event, action)) return true;
+        if (pagingFingers == 0) return dispatchCarriedTouch(event);
+        MotionEvent kept = withoutPointers(event, pagingFingers);
+        if (kept == null) return true;
+        try {
+            return dispatchCarriedTouch(kept);
+        } finally {
+            kept.recycle();
+        }
+    }
+
+    /**
+     * Reads a second finger's part of {@code event}; true when the event was that finger's alone
+     * and goes no further.
+     */
+    private boolean watchPagingFinger(@NonNull MotionEvent event, int action) {
+        switch (action) {
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                if (pagingFingers == 0 && !dragTurnsPages()) return false;
+                int id = event.getPointerId(event.getActionIndex());
+                if (id < 0 || id >= 32) return false;
+                pagingFingers |= 1 << id;
+                // The rest of the gesture is the drag's and this finger's, whichever lifts first:
+                // nothing above the pane takes it as a swipe of its own.
+                ViewParent parent = getParent();
+                if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+                if (!dragSwipe.tracking()) {
+                    // A third finger is taken too, but only the first one off the drag swipes.
+                    int index = event.getActionIndex();
+                    dragSwipe.down(id, event.getX(index), event.getY(index));
+                    if (dragSwipeVelocity == null) dragSwipeVelocity = VelocityTracker.obtain();
+                    dragSwipeVelocity.clear();
+                    dragSwipeVelocity.addMovement(event);
+                }
+                return true;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (!dragSwipe.tracking()) return false;
+                int index = event.findPointerIndex(dragSwipe.pointerId());
+                if (index < 0) return false;
+                if (dragSwipeVelocity != null) dragSwipeVelocity.addMovement(event);
+                float commit = com.termux.app.wall.PagePolicy.COMMIT_FRACTION * getWidth();
+                int way = dragSwipe.move(event.getX(index), event.getY(index), touchSlop, commit);
+                if (way != DragPageSwipe.NONE) turnDragPage(way);
+                return false;
+            }
+            case MotionEvent.ACTION_POINTER_UP:
+            case MotionEvent.ACTION_UP: {
+                int index = event.getActionIndex();
+                int id = event.getPointerId(index);
+                if (id < 0 || id >= 32 || (pagingFingers & (1 << id)) == 0) return false;
+                pagingFingers &= ~(1 << id);
+                if (dragSwipe.tracking() && dragSwipe.pointerId() == id) {
+                    float velocityX = 0f;
+                    if (dragSwipeVelocity != null) {
+                        dragSwipeVelocity.addMovement(event);
+                        dragSwipeVelocity.computeCurrentVelocity(1000);
+                        velocityX = dragSwipeVelocity.getXVelocity(id);
+                    }
+                    int way = dragSwipe.lift(event.getX(index), velocityX, getWidth(),
+                        getResources().getDisplayMetrics().density);
+                    if (way != DragPageSwipe.NONE) turnDragPage(way);
+                }
+                if (action == MotionEvent.ACTION_UP) endDragSwipe();
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /** Turns the page under the drag, if one is still under way: the carrying finger may be up. */
+    private void turnDragPage(int direction) {
+        if (dragPager != null && dragTurnsPages()) dragPager.turnDragPage(direction);
+    }
+
+    private void endDragSwipe() {
+        pagingFingers = 0;
+        dragSwipe.reset();
+        if (dragSwipeVelocity != null) dragSwipeVelocity.clear();
+    }
+
+    /**
+     * {@code event} as it would have been had the fingers in {@code dropped} (pointer id bits)
+     * never landed, or null when none of its pointers is left. A lift of the last finger kept is
+     * the gesture's {@code ACTION_UP}. Coordinates, raw ones included, are the original's; the
+     * history is not carried over.
+     */
+    @Nullable static MotionEvent withoutPointers(@NonNull MotionEvent event, int dropped) {
+        int count = event.getPointerCount();
+        int keptCount = 0;
+        for (int i = 0; i < count; i++) {
+            if (!droppedPointer(event.getPointerId(i), dropped)) keptCount++;
+        }
+        if (keptCount == 0) return null;
+        int action = event.getActionMasked();
+        int actionIndex = event.getActionIndex();
+        // Raw minus local: written in raw terms and offset back, so getRawX() stays the screen's.
+        float offsetX = event.getRawX() - event.getX();
+        float offsetY = event.getRawY() - event.getY();
+        MotionEvent.PointerProperties[] properties =
+            new MotionEvent.PointerProperties[keptCount];
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[keptCount];
+        int newActionIndex = -1;
+        for (int i = 0, k = 0; i < count; i++) {
+            if (droppedPointer(event.getPointerId(i), dropped)) continue;
+            if (i == actionIndex) newActionIndex = k;
+            properties[k] = new MotionEvent.PointerProperties();
+            event.getPointerProperties(i, properties[k]);
+            coords[k] = new MotionEvent.PointerCoords();
+            event.getPointerCoords(i, coords[k]);
+            coords[k].x += offsetX;
+            coords[k].y += offsetY;
+            k++;
+        }
+        int newAction = action;
+        if (action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP) {
+            if (newActionIndex < 0) return null; // a dropped finger's own event
+            if (keptCount == 1) {
+                newAction = action == MotionEvent.ACTION_POINTER_UP
+                    ? MotionEvent.ACTION_UP : MotionEvent.ACTION_DOWN;
+            } else {
+                newAction = action
+                    | (newActionIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+            }
+        }
+        MotionEvent kept = MotionEvent.obtain(event.getDownTime(), event.getEventTime(),
+            newAction, keptCount, properties, coords, event.getMetaState(),
+            event.getButtonState(), event.getXPrecision(), event.getYPrecision(),
+            event.getDeviceId(), event.getEdgeFlags(), event.getSource(), event.getFlags());
+        kept.offsetLocation(-offsetX, -offsetY);
+        return kept;
+    }
+
+    private static boolean droppedPointer(int id, int dropped) {
+        return id >= 0 && id < 32 && (dropped & (1 << id)) != 0;
+    }
+
+    /** The stream as the pane always took it: the picker's carry first, then the children. */
+    private boolean dispatchCarriedTouch(@NonNull MotionEvent event) {
         CarryListener carried = carry;
         if (carried != null) {
             switch (event.getActionMasked()) {

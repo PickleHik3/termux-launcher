@@ -141,7 +141,12 @@ public final class PageOverviewView extends FrameLayout {
         boolean displaySupported();
         /** Whether a display is open; only one can be. */
         boolean displayOpen();
-        /** The display window opens and stands at row place {@code row}. */
+        /**
+         * Whether the open display stands on a temporary page (a drawer launch's): "Add display"
+         * is still offered then, and makes that page a lasting one.
+         */
+        default boolean displayTemporary() { return false; }
+        /** The display window opens at row place {@code row}; a temporary page it is on stays. */
         void addDisplay(int row);
         /** The shell the window at {@code row} shows, for its card; null for the display. */
         @Nullable TerminalSession windowSession(int row);
@@ -709,7 +714,8 @@ public final class PageOverviewView extends FrameLayout {
     private void updatePills() {
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
-        boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen());
+        boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
+            host.displayTemporary());
         addDisplay.setEnabled(canAdd);
         addDisplay.setAlpha(canAdd ? 1f : 0.38f);
     }
@@ -747,7 +753,8 @@ public final class PageOverviewView extends FrameLayout {
 
     private void onAddWindow(boolean display) {
         if (!isOpen()) return;
-        if (display && !PageOverviewPolicy.canAddDisplay(host.displayOpen())) return;
+        if (display && !PageOverviewPolicy.canAddDisplay(host.displayOpen(),
+            host.displayTemporary())) return;
         commitPending();
         // Counted in the host's row places: a stopping display's hidden card still holds one.
         Card focused = focusedCard();

@@ -27,6 +27,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.Person;
 
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
+import com.termux.app.launcher.notifications.NotificationCardSurface;
 import com.termux.app.statusbar.EssentialNotificationRule;
 import com.termux.app.statusbar.EssentialNotificationRules;
 import com.termux.app.statusbar.MediaSessionPick;
@@ -365,6 +366,54 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
             Logger.logWarn(LOG_TAG, "Failed to dismiss notification: " + throwable.getMessage());
             return false;
         }
+    }
+
+    /** The live notification behind {@code key}, or null when it is gone or the listener is not bound. */
+    @Nullable
+    public static StatusBarNotification findActive(@Nullable String key) {
+        LauncherCtlNotificationListener listener = activeInstance;
+        if (listener == null || key == null || key.isEmpty()) return null;
+        return listener.activeNotification(key);
+    }
+
+    /** The keys of the notifications in the shade that take a typed reply. */
+    @NonNull
+    public static Set<String> replyableKeys() {
+        Set<String> keys = new HashSet<>();
+        LauncherCtlNotificationListener listener = activeInstance;
+        if (listener == null) return keys;
+        try {
+            StatusBarNotification[] active = listener.getActiveNotifications();
+            if (active == null) return keys;
+            for (StatusBarNotification sbn : active) {
+                if (sbn != null && NotificationCardSurface.replyAction(sbn.getNotification()) != null) {
+                    keys.add(sbn.getKey());
+                }
+            }
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Could not read reply actions: " + throwable.getMessage());
+        }
+        return keys;
+    }
+
+    /**
+     * Opens {@code key} the way tapping it in the shade would, as {@link #openPinned} does: its
+     * {@code contentIntent} is sent and an auto-cancelling notification is cleared. False when the
+     * notification is gone, has no such intent, or the intent was cancelled; the caller then
+     * opens the app.
+     */
+    public static boolean openNotification(@Nullable String key) {
+        StatusBarNotification sbn = findActive(key);
+        Notification notification = sbn == null ? null : sbn.getNotification();
+        if (notification == null || notification.contentIntent == null) return false;
+        try {
+            notification.contentIntent.send();
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Notification content intent failed: " + throwable.getMessage());
+            return false;
+        }
+        if ((notification.flags & Notification.FLAG_AUTO_CANCEL) != 0) dismissNotification(key);
+        return true;
     }
 
     public static String getListenerSettingsAction() {

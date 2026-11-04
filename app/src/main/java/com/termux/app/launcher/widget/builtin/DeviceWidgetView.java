@@ -230,7 +230,7 @@ public class DeviceWidgetView extends BuiltinWidgetView
         int track = s.containerHigh;
         if (ring != null) {
             ring.set(known ? state.level / 100f : 0f, onTrack(ringAccent(state, s), track),
-                known ? String.valueOf(state.level) : "", known && onCharger(state));
+                ringLabel(state), known && onCharger(state));
         }
         if (bolt != null) bolt.set(StatGlyphs.POWER, onTrack(s.done, s.card));
         @ColorInt int fill = onTrack(s.primary, track);
@@ -282,6 +282,11 @@ public class DeviceWidgetView extends BuiltinWidgetView
         return style.onSurfaceVariant;
     }
 
+    /** The number in the ring: the level, or the placeholder with no reading; never empty. */
+    @NonNull static String ringLabel(@NonNull BatterySource.State state) {
+        return BatteryRingView.shown(state.known() ? String.valueOf(state.level) : "");
+    }
+
     /** Charging, or full and still on the charger. */
     static boolean onCharger(@NonNull BatterySource.State state) {
         return state.charging || state.full;
@@ -305,6 +310,9 @@ public class DeviceWidgetView extends BuiltinWidgetView
     @Override protected void onStart() {
         battery = BatterySource.get(getContext());
         battery.acquire(this);
+        // Back from deep sleep or a new process, the kept reading may be stale or absent; the
+        // source reads the battery now and tells every holder (and this view's refresh below).
+        battery.readNow();
         if (wantsSystem(span())) {
             systemHeld = true;
             PrivilegedBackendManager.getInstance().addAvailabilityListener(availabilityListener);

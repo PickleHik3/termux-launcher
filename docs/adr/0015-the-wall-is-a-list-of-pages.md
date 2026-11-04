@@ -9,6 +9,8 @@ amends: 0009 (one chrome, now dressed per page kind), 0012 (a crossing is any sl
 
 Amended by 0016 (2026-10-30): the wall slot and its window of neighbours are replaced by one cell per page; the adjacency rule W4 is lifted, so two Display pages may be neighbours; W8 and the empty-Terminal over-swipe (`emptyStop`, `seamIntoEmpty`) are retired, and the empty Terminal page is always a stop, as section 1 says.
 
+Amended 2026-11-04 (temporary Display pages): a Linux app tapped in the drawer when no Display page is bound to it and no unbound one stands on the wall no longer adds a lasting Display page. It gets a **temporary** Display page after the current one: on the wall for the launch, not listed in Edit pages, and removed (the wall landing on its neighbour) when the display stops or the last app on it has been gone for two seconds; a display that launch started stops with it. A second launch runs on the temporary page. "Add display" in Edit pages stays offered while a display is up on a temporary page and makes that page lasting where it stands, with its app still on it; so does choosing Display as home. The marker is a `temporary` flag on the page in the `wall_pages` JSON (store version 2; a version-1 value reads with every page lasting). At start, a temporary page with no display running or kept to be claimed is removed for good.
+
 ADR 0008 split the wall into two halves, Home and the Workspace, and every later decision took
 the halves for granted: 0009 dressed them with one chrome and an opt-in Home layout, 0012 gave the
 slide between them one owner, 0013 let each half hold its own Look. Edit pages already lists Home
