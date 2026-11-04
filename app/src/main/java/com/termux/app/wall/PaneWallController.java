@@ -576,10 +576,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * The Home frame pages inside its run by its own swipe: the wall stands on the cell of the
-     * Home page it shows. Asked before anything reads the current page.
+     * Home page it shows. Asked before anything reads the current page. Only while the frame is
+     * bound to the cell the wall is on: a wall carried to another Home cell (a home press, a far
+     * jump under way) has not bound the frame yet, and the frame's old page must not pull the
+     * wall back to it.
      */
     private void syncHomeCell() {
         if (mKnownPages == null || mWall.currentPage() != PaneWallPage.WIDGETS) return;
+        if (mWall.boundPageId(PaneWallPage.WIDGETS) != mWall.currentPageId()) return;
         int id = homeIdAt(mHost.innerIndex(PaneWallPage.WIDGETS));
         if (id != PaneWallLayout.NO_PAGE && sameRun(mWall.currentPageId(), id)) mWall.follow(id);
     }

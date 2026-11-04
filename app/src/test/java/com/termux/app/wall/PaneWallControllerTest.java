@@ -834,6 +834,55 @@ public class PaneWallControllerTest {
         assertEquals(0f, wall.offsetPx(), 0f);
     }
 
+    @Test public void theHomePressFromTheTerminalPageLandsOnTheHomePageWhateverTheFrameShows() {
+        // [Home1][Home8][T4]; Home 1 is the home page, the Home frame last stood on Home 8.
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(8, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        controller.refreshPages();
+        host.homePress = 1;
+        controller.goHome(false);
+        assertEquals(8, controller.currentPageId());
+        controller.returnToTerminal(false);
+        assertEquals(4, controller.currentPageId());
+        host.homePress = 0;
+        host.reduced = false;
+        controller.refreshPages();
+        host.homePage = 1;
+        controller.goHome(true);
+        assertTrue("the far press slides", wall.isMoving());
+        // Anything the chrome asks during the slide must not move the wall off its target.
+        assertEquals(1, controller.currentPageId());
+        assertEquals(PaneWallPage.WIDGETS, controller.kindAt(0));
+        idle();
+        assertEquals(1, controller.currentPageId());
+        assertEquals(0, host.homePage);
+        assertEquals(0f, wall.offsetPx(), 0f);
+    }
+
+    @Test public void theHomePressOnTheHomePageDoesNotMove() {
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(8, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        controller.refreshPages();
+        host.homePress = 0;
+        host.reduced = false;
+        controller.refreshPages();
+        controller.goHome(false);
+        assertEquals(1, controller.currentPageId());
+        host.homePage = 1;
+        controller.goHome(true);
+        assertEquals(1, controller.currentPageId());
+        assertFalse(wall.isMoving());
+        assertEquals(0f, wall.offsetPx(), 0f);
+    }
+
     @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheWorkspace() {
         displayPages();
         host.useAs = UseAs.TERMINAL;
