@@ -4310,7 +4310,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
-        return recorder == null ? null : recorder.attach(surface,
+        if (recorder == null) return null;
+        // The picture takes the stored frames' Vibrancy and frame tint, so a hand-off never shows.
+        com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+        recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
+        return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
 
