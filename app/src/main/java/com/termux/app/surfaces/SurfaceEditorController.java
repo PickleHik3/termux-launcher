@@ -474,7 +474,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * otherwise hide it. An element card set to Global means everywhere: the element's own
      * Home, Terminal and Display values of the property go. Customization, Home and the
      * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
-     * Mist on Home) on the kinds they write. The Customization and Workspace sliders go further,
+     * Mist on Home) on the kinds they write. The Customization, Home and Workspace sliders go further,
      * last change wins: the values set beneath them for that property go too
      * ({@link SurfacePresets#clearBeneathSlider}), once per drag.
      */

@@ -340,3 +340,6 @@ longer counted as an error. Owed:
   Type), then colours (Tint colour), then links (Pane borders, Refraction), with a small gap
   between groups and no new headings; the Keyboard's Linked toggle still stands between its two
   opacities; sections and their open or closed state are as before · pong.
+- **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)
+  Opacity to 20; Home card Opacity: the dock on Home pages follows Home, on the Terminal page it
+  stays at 20 · pong.

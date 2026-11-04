@@ -1405,11 +1405,10 @@ public final class SurfacePresets {
     }
 
     /**
-     * Last change wins (developer, 2026-11-04): a slider on the Global card or the Workspace card
-     * resets the values set beneath it for its one property, at the levels it covers, so they
-     * follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element card's
-     * slider resets nothing: it holds its own value. The Home card's is not part of that decision
-     * and keeps an element's own value, as before.
+     * Last change wins (developer, 2026-11-04): a slider on the Global card or a page card (Home,
+     * Workspace) resets the values set beneath it for its one property, at the levels it covers,
+     * so they follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element
+     * card's slider resets nothing: it holds its own value.
      */
     static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
                                    @NonNull LookGrid.Property property) {
@@ -1420,7 +1419,7 @@ public final class SurfacePresets {
 
     /** Whether a slider moved at {@code chips} resets what is beneath it ({@link #clearBeneathSlider}). */
     static boolean slidersResetBeneath(@NonNull EditorChips chips) {
-        return chips.element == null && chips.appliesTo != EditorChips.AppliesTo.HOME;
+        return chips.element == null;
     }
 
     /** Clears a cell the grid holds; an absent cell is left alone (no write, no seed bookkeeping). */

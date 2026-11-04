@@ -246,6 +246,26 @@ public class PresetApplyTest {
     }
 
     @Test
+    public void aHomeSliderResetsHomeAndLeavesTheWorkspacePagesAlone() {
+        TermuxAppSharedPreferences prefs = install();
+        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
+        LookGrid grid = prefs.lookGrid();
+        int terminalStatus = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS,
+            TERMINAL_PAGE);
+
+        slide(open(prefs, EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE), Row.OPACITY, 61);
+
+        for (int page : new int[] {TERMINAL_PAGE, DISPLAY_PAGE})
+            assertEquals("dock on page " + page, 23,
+                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page));
+        assertEquals(terminalStatus,
+            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, TERMINAL_PAGE));
+        assertEquals("the dock follows Home on Home pages",
+            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE),
+            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, HOME_PAGE));
+    }
+
+    @Test
     public void discardPutsTheResetValuesBack() {
         TermuxAppSharedPreferences prefs = install();
         dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);

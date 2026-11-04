@@ -121,12 +121,17 @@ public class SurfaceEditorHomeGlassTest {
     }
 
     @Test
-    public void aDocksOwnValueIsLeftByHomesWrite() {
+    public void homesWriteResetsTheDocksOwnValueOnHomeAlone() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             30);
         SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 70, false);
-        assertEquals(30, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, LookGrid.NO_PAGE));
+        // Last change wins (developer, 2026-11-04): the dock follows Home on Home pages and keeps
+        // its 30 on the Workspace's.
+        assertEquals(grid().value(LookGrid.Property.OPACITY, null, HOME),
+            grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, HOME));
+        assertEquals(30, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
+            LookGrid.Kind.TERMINAL));
     }
 
     @Test

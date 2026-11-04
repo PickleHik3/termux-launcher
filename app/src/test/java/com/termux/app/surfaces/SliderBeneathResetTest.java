@@ -11,8 +11,8 @@ import org.junit.Test;
 /**
  * Last change wins for the Global and Workspace cards' sliders (developer, 2026-11-04), the pure part
  * ({@link SurfacePresets#clearBeneathSlider}): a Global move resets the values beneath it for its
- * one property; the Workspace card's resets those on its kinds only; an element card's resets
- * nothing, and the Home card's is left as it was.
+ * one property; a page card's (Home, Workspace) resets those on its kinds only; an element
+ * card's resets nothing.
  * The editor's side (Discard, the cards' own writes) is in {@link PresetApplyTest}.
  */
 public class SliderBeneathResetTest {
@@ -82,14 +82,19 @@ public class SliderBeneathResetTest {
     }
 
     @Test
-    public void aHomeCardMoveKeepsAnElementsOwnValue() {
+    public void aHomeCardMoveResetsHomeAndLeavesTheWorkspaceAsItLooked() {
         LookGrid grid = grid();
         grid.write(OPACITY, DOCK, (LookGrid.Kind) null, 23);
         grid.write(OPACITY, STATUS, LookGrid.Kind.HOME, 12);
+        grid.write(OPACITY, STATUS, LookGrid.Kind.TERMINAL, 31);
         SurfacePresets.clearBeneathSlider(grid,
             new EditorChips(EditorChips.AppliesTo.HOME, null), OPACITY);
-        assertEquals(23, grid.value(OPACITY, DOCK, (LookGrid.Kind) null));
-        assertEquals(12, grid.value(OPACITY, STATUS, LookGrid.Kind.HOME));
+        assertFalse(grid.has(OPACITY, STATUS, LookGrid.Kind.HOME));
+        assertFalse(grid.has(OPACITY, DOCK, LookGrid.Kind.HOME));
+        assertEquals("the dock's Global value still reaches the Workspace", 23,
+            grid.value(OPACITY, DOCK, LookGrid.Kind.TERMINAL));
+        assertEquals(23, grid.value(OPACITY, DOCK, LookGrid.Kind.DISPLAY));
+        assertEquals(31, grid.value(OPACITY, STATUS, LookGrid.Kind.TERMINAL));
     }
 
     @Test
