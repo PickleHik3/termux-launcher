@@ -12357,6 +12357,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean resolveIsDefaultHomeApp() {
+        // The Home role is the system's own answer; resolving the HOME intent can name the
+        // chooser or another Home activity on some OEM builds even when we hold the role.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            android.app.role.RoleManager roles = getSystemService(android.app.role.RoleManager.class);
+            if (roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME)
+                && roles.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)) return true;
+        }
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         PackageManager packageManager = getPackageManager();
@@ -28891,7 +28898,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeActionsRawX = rawX;
         mHomeActionsRawY = rawY;
         boolean hasPages = mWidgetPaneController != null;
-        boolean defaultHome = isDefaultHomeApp();
+        // Set as default home is for people using the launcher as Home and not yet holding it;
+        // someone who chose Terminal in the welcome card is never asked.
+        boolean defaultHome = isDefaultHomeApp()
+            || useAs() == com.termux.app.wall.UseAs.TERMINAL;
         boolean pageEmpty = hasPages && mWidgetPaneController.currentPageEmpty();
         int pageCount = hasPages ? mWidgetPaneController.homePageCount() : 0;
         mHomeActionsSheet.open(locked -> com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(

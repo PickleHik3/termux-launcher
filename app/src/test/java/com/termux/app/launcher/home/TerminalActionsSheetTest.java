@@ -136,4 +136,19 @@ public class TerminalActionsSheetTest {
         assertEquals(R.drawable.ic_symbol_terminal, HomeActionsSheet.iconFor(HomeActionsSheetPolicy.Item.TERMINAL));
         assertEquals(R.string.home_actions_terminal, HomeActionsSheet.labelFor(HomeActionsSheetPolicy.Item.TERMINAL));
     }
+
+    @Test public void lockRowSaysWhatATapDoesAndFlipsInPlace() {
+        HomeActionsSheet sheet = sheet();
+        sheet.open(locked -> HomeActionsSheetPolicy.itemsFor(true, true, false, 1, locked), false);
+        View row = sheet.rowFor(HomeActionsSheetPolicy.Item.LOCK_LAYOUT);
+        assertNotNull(row);
+        assertEquals(themed.getString(R.string.home_actions_lock_layout),
+            ((TextView) row.findViewById(R.id.home_actions_row_label)).getText().toString());
+        row.performClick();
+        View flipped = sheet.rowFor(HomeActionsSheetPolicy.Item.LOCK_LAYOUT);
+        assertNotNull(flipped);
+        assertEquals(themed.getString(R.string.home_actions_unlock_layout),
+            ((TextView) flipped.findViewById(R.id.home_actions_row_label)).getText().toString());
+        assertTrue(sheet.isOpen());
+    }
 }
