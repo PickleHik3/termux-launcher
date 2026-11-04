@@ -285,6 +285,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * on it hands the wall to the page on its left, which is bound and shown where it stands.
      */
     public void refreshPages() {
+        HomeCardLog.log("refreshPages cur=" + mWall.currentPageId()
+            + " boundW=" + mWall.boundPageId(PaneWallPage.WIDGETS) + HomeCardLog.callers());
         mWall.setReducedMotion(mHost.reducedMotion());
         boolean hasWindow = mHost.hasWindow();
         // A window opened on a wall whose Terminal page was removed: the page comes back after
@@ -503,6 +505,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * frame still shows it (W5: never one run's page while bound to another).
      */
     private void bindHome(int pageId) {
+        HomeCardLog.log("bindHome " + pageId + " inner=" + mHost.innerIndex(PaneWallPage.WIDGETS)
+            + HomeCardLog.callers());
         if (mWall.kindOf(pageId) != PaneWallPage.WIDGETS) return;
         mWall.takePicture(PaneWallPage.WIDGETS, pageId);
         bindRunOf(pageId);
@@ -1015,6 +1019,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * stand-off and the pages between are never shown or started (W3, W9).
      */
     public void goHome(boolean animate) {
+        HomeCardLog.watch(mWall);
+        HomeCardLog.log("goHome animate=" + animate + " cur=" + mWall.currentPageId()
+            + " boundW=" + mWall.boundPageId(PaneWallPage.WIDGETS)
+            + " known=" + (mKnownPages != null) + " press=" + mHost.homePressPage()
+            + " target=" + homeIdAt(Math.max(0, mHost.homePressPage()))
+            + " inner=" + mHost.innerIndex(PaneWallPage.WIDGETS)
+            + " showsHome=" + mHost.useAs().showsHomePage()
+            + " homeIsTerminal=" + homeIsTerminalPage()
+            + " displayHome=" + DisplayPagePolicy.homeDisplayPage(mHost.wallPages())
+            + HomeCardLog.callers());
         // Edit pages set a Display page as home: the press lands there (A3b), and the landing
         // starts the display.
         int displayHome = DisplayPagePolicy.homeDisplayPage(mHost.wallPages());
@@ -1165,6 +1179,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @Override
     public void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
+        HomeCardLog.log("settled page=" + pageId + " kind=" + page
+            + " boundW=" + mWall.boundPageId(PaneWallPage.WIDGETS)
+            + " inner=" + mHost.innerIndex(PaneWallPage.WIDGETS));
         if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
         if (page == PaneWallPage.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
         bindCell(pageId);

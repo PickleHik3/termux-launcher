@@ -904,6 +904,10 @@ public final class PaneWallLayout extends ViewGroup
      */
     public void bind(@NonNull PaneWallPage kind, int pageId) {
         if (kindOf(pageId) != kind) return;
+        if (kind == PaneWallPage.WIDGETS) {
+            HomeCardLog.log("bind WIDGETS " + mBoundIds.get(kind) + " -> " + pageId
+                + HomeCardLog.callers());
+        }
         Integer was = mBoundIds.put(kind, pageId);
         if (was != null && was == pageId) return;
         // Live again: its picture is stale from here on. Not a Display page's: the display
@@ -926,7 +930,10 @@ public final class PaneWallLayout extends ViewGroup
         View view = mPageViews.get(kind);
         if (view == null || getWidth() <= 0 || getHeight() <= 0) return;
         // Still bound to the leaving page here, so stored without keepPicture's live check.
-        storePicture(leaving, drawPicture(view, getWidth(), getHeight()));
+        android.graphics.Bitmap taken = drawPicture(view, getWidth(), getHeight());
+        HomeCardLog.log("takePicture " + kind + " leaving=" + leaving + " next=" + nextPageId
+            + " taken=" + (taken != null));
+        storePicture(leaving, taken);
     }
 
     /**
@@ -1053,11 +1060,59 @@ public final class PaneWallLayout extends ViewGroup
      */
     public void follow(int pageId) {
         if (pageId == mCurrentId || kindOf(pageId) != mCurrent) return;
+        HomeCardLog.log("follow " + mCurrentId + " -> " + pageId + HomeCardLog.callers());
         mCurrentId = pageId;
         mBoundIds.put(mCurrent, pageId);
         keepPicture(pageId, null);
         syncCards();
         applyPagePositions();
+    }
+
+    /** TEMP (never merge): the Home frame's and every Home card's state, for TLHomeCard. */
+    @NonNull
+    String debugHomeCardState() {
+        StringBuilder out = new StringBuilder();
+        out.append("cur=").append(mCurrentId).append('/').append(mCurrent)
+            .append(" off=").append(mOffsetPx).append(" moving=").append(isMoving())
+            .append(" jumpFrom=").append(mJumpFromId)
+            .append(" boundW=").append(boundPageId(PaneWallPage.WIDGETS))
+            .append(" readyW=").append(isReady(PaneWallPage.WIDGETS))
+            .append(" defer=").append(mDeferPositions);
+        View frame = mPageViews.get(PaneWallPage.WIDGETS);
+        if (frame == null) {
+            out.append(" frame=null");
+        } else {
+            out.append(" frame[").append(viewState(frame)).append(" z=").append(indexOfChild(frame));
+            if (frame instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) frame;
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    View child = group.getChildAt(i);
+                    out.append(" c").append(i).append('{')
+                        .append(child.getClass().getSimpleName()).append(' ')
+                        .append(viewState(child)).append('}');
+                }
+            }
+            out.append(']');
+        }
+        for (Cell cell : mCells) {
+            if (cell.kind != PaneWallPage.WIDGETS) continue;
+            out.append(" page").append(cell.pageId).append("{live=").append(isLive(cell.pageId))
+                .append(" pic=").append(mPictures.get(cell.pageId) != null);
+            PageCardView card = mCards.get(cell.pageId);
+            if (card == null) out.append(" card=none");
+            else out.append(" card=").append(viewState(card)).append(" z=").append(indexOfChild(card));
+            out.append('}');
+        }
+        return out.toString();
+    }
+
+    @NonNull
+    private static String viewState(@NonNull View view) {
+        int vis = view.getVisibility();
+        return (vis == VISIBLE ? "V" : vis == INVISIBLE ? "I" : "G")
+            + " a=" + view.getAlpha() + " tx=" + view.getTranslationX()
+            + " " + view.getWidth() + "x" + view.getHeight()
+            + (view.isLayoutRequested() ? " lr" : "");
     }
 
     /** Whether page {@code pageId}'s cell shows its kind's view, live, rather than a still. */
@@ -1132,6 +1187,8 @@ public final class PaneWallLayout extends ViewGroup
      * bound cell of a kind whose view is not built yet shows nothing, as it always has.
      */
     private void syncCards() {
+        HomeCardLog.log("syncCards boundW=" + boundPageId(PaneWallPage.WIDGETS)
+            + " cur=" + mCurrentId);
         java.util.Iterator<Map.Entry<Integer, PageCardView>> it = mCards.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<Integer, PageCardView> entry = it.next();
