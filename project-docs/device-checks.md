@@ -18,6 +18,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
+  from the search field to the page dots, with no dock-high empty band under the last row; the
+  dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
 - **Home press lands on the page set as home (11-04).** Wall Home 1 (set as home), Home 2,
   Terminal: press Android Home from the Terminal page, from Home 2 and from Home 1. Each ends on
   Home 1 (pressing on Home 1 doesn't move). Then swipe Home 1 → Home 2 → Home 1 inside Home:
