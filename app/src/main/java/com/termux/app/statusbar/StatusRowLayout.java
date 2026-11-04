@@ -30,6 +30,35 @@ import com.termux.app.terminal.TerminalWindowBar;
  */
 public final class StatusRowLayout extends LinearLayout {
 
+    /**
+     * How far each edge of the bar is drawn out past where it is laid out while a crossing eases
+     * its Margin (BarMarginEase): each child nearer an edge is drawn moved with that edge, at its
+     * own size. Drawn only, never laid out; 0 at rest, where drawing is untouched.
+     */
+    private float mEdgeGrowPx;
+
+    /** Sets {@link #mEdgeGrowPx}; a redraw of this row only, and only when it moves. */
+    public void setEdgeGrow(float growPx) {
+        if (growPx == mEdgeGrowPx) return;
+        mEdgeGrowPx = growPx;
+        invalidate();
+    }
+
+    @Override
+    protected boolean drawChild(@NonNull android.graphics.Canvas canvas, @NonNull View child,
+                                long drawingTime) {
+        float dx = mEdgeGrowPx == 0f ? 0f : com.termux.app.place.BarMarginEase.contentShiftPx(
+            child.getLeft(), child.getRight(), getWidth(), mEdgeGrowPx);
+        if (dx == 0f) return super.drawChild(canvas, child, drawingTime);
+        int save = canvas.save();
+        try {
+            canvas.translate(dx, 0f);
+            return super.drawChild(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
     /** Whether the readings are standing tight right now. */
     private boolean mTight;
 

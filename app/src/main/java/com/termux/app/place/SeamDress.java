@@ -96,6 +96,19 @@ public final class SeamDress {
                 && look.stackEquals(that.look);
         }
 
+        /**
+         * Whether {@code that} dresses the stack's structure as this does, its shape and sizes,
+         * whatever its look values: two halves apart only in look keep one stack, whose glass
+         * blends from one look to the other with the wall instead of dipping (amendment
+         * 2026-11-04).
+         */
+        public boolean structureEquals(@NonNull StackDress that) {
+            return shape.equals(that.shape)
+                && Float.compare(dockHeightScale, that.dockHeightScale) == 0
+                && Float.compare(keyboardHeightScale, that.keyboardHeightScale) == 0
+                && keyboardChinDp == that.keyboardChinDp;
+        }
+
         @Override
         public int hashCode() {
             return Objects.hash(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp,

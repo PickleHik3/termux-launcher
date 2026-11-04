@@ -18,6 +18,30 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
+  a perfetto trace. The landing frame holds no `Wall.halfRedress` section (it runs in the frame
+  after, as a shape-apart landing's does) and draws under 16 ms; nothing visible hitches as the
+  wall lands. Docked and Floating, keyboard up and down · pong.
+- **Dock opacity blends across a crossing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, same Style, Corners and Margin: swipe Home 2 to the Workspace and back, slow and
+  reversed. The dock stays on screen (no dip) and its opacity eases with the finger; the landing
+  frame changes nothing in the dock. Again with the dock's Tint and Grain apart: both ease too.
+  Known gaps, still changing at the landing: the dock's Blur radius, the keyboard bed's own
+  look, the under-pill strip and the status bar's look. Docked (also on a joined frame, where
+  the dock's sheet stands down and nothing blends) and Floating, keyboard up and down, Live blur
+  on and off · pong.
+- **Terminal pane stays sharp after a crossing (11-04).** Home Margin 16, Workspace Margin 4,
+  and the dock's opacity apart on Home: swipe Home 2 to the Workspace with a session showing
+  text. Record the screen: no frame after the landing shows the pane's text blurred (it was ~4
+  frames). Live blur on and off, Docked and Floating, keyboard up and down · pong.
+- **Crossings turn by the Page transition (11-04).** Page transition Carousel, then Depth, Fade,
+  Stack and Slide: swipe Home 2 to the Workspace and back, slow, flung and reversed mid-way. The
+  two pages move as Home 1 and Home 2 do under the same setting (Slide: flat); the status bar,
+  dock and keyboard stay flat on screen and ease with the finger; a bar only one end wears fades
+  in place under the turning ones; the terminal pane's glass and Live blur (on and off) turn
+  with their page; a Display page in front still slides. Docked and Floating dock, keyboard up
+  and down · pong.
 - **Home page arrives live (11-04).** Home 1 (home), Home 2, Terminal: on Home 1 swipe to Home 2,
   go to the Workspace, keyboard up, then the extra keys' Home key, and again with the phone's
   home press: Home 1 slides in with its widgets and status bar from the first frame, never the
@@ -25,8 +49,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   leaves from Home 1, not Home 2. A float chip for a float on Home 2 lands on Home 2 · pong.
 - **Bar across a Margin apart (11-04).** Home Margin 16, Workspace Margin 4, both with the bar on
   top: swipe Workspace -> Home 2 and Home 2 -> Workspace, slow and flung. The bar stays on screen
-  the whole way (the window chips pan out, Home's content pans in) and settles to the arriving
-  page's Margin at the landing; no bare handle at the top mid-swipe. Same Margins: as before · pong.
+  the whole way (the window chips pan out, Home's content pans in), its width easing to the
+  arriving page's Margin with the finger, and nothing about it changes on the landing frame; a
+  reversal mid-way eases back; no bare handle at the top mid-swipe. Docked and Floating, keyboard
+  up and down, Live blur on and off (the bar's glass stays sharp at its edges while it eases).
+  Only the glass stretches: the clock, chips and readings keep their size mid-swipe (no wide or
+  narrow text), the start ones moving with the left edge and the end ones with the right; on a
+  Floating card the rounded corners follow the eased width both ways (wider and narrower).
+  Same Margins: as before · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
   dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.

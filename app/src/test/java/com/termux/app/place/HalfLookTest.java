@@ -65,6 +65,23 @@ public class HalfLookTest {
             SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace));
     }
 
+    /**
+     * A stack look apart is a dress apart, but not a structure apart: the crossing blends its
+     * glass instead of dipping the stack (amendment 2026-11-04). A shape or a size apart is.
+     */
+    @Test
+    public void stackLookAlone_keepsTheStacksStructure() {
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            TermuxAppSharedPreferences.terminalPageId(), 5);
+        HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
+        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
+        SeamDress.StackDress a = SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home);
+        assertTrue(a.structureEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace)));
+        assertFalse(a.structureEquals(SeamDress.StackDress.of(
+            WallShape.of(LayoutStyle.DOCKED, -1, 16), 1f, 1f, 0, home)));
+        assertFalse(a.structureEquals(SeamDress.StackDress.of(SHAPE, 0.8f, 1f, 0, home)));
+    }
+
     @Test
     public void statusLookAlone_leavesTheStacksDressAlike() {
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,

@@ -3026,8 +3026,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void redressChromeFromState() {
+        redressChromeFromState(true);
+    }
+
+    /**
+     * @param redressPanes whether the panes and pages are dressed again whatever their style key
+     *                     says (the editor's Undo, a Look, a Style). A landing's half re-dress
+     *                     passes false: the panes are dressed again only where their own style
+     *                     moved, so a landing between halves that differ only in the dock's look
+     *                     or the bar's Margin does not rebuild the terminal pane's glass, which
+     *                     drew its text blurred for a few frames after the landing.
+     */
+    private void redressChromeFromState(boolean redressPanes) {
         if (mPreferences == null || mChrome == null) return;
-        mAppliedPaneStyleKey = null;
+        if (redressPanes) mAppliedPaneStyleKey = null;
         // A redress after the editor (Undo, a Look, a Style) or at a settle between halves
         // (restyleChromeForHalfIfChanged): the grid's rim is Home's Margin as it stands now.
         pushHomeMarginToWidgetGrid(true);
@@ -6937,14 +6949,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         if (dressOf(from).shape().equals(dressOf(to).shape()) && !looksDifferAcross(from, to))
             return;
-        redressChromeFromState();
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        refreshTerminalWindowBar();
-        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        applySuggestionBarSurfaceStyling();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // Traced: 58-88 ms on pong, so it must never run inside a landing's frame.
+        Trace.beginSection("Wall.halfRedress");
+        try {
+            redressChromeFromState(false);
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            refreshTerminalWindowBar();
+            if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+            applySuggestionBarSurfaceStyling();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Set through a landing's commit while the stack already wears the half it landed on. */
@@ -6989,6 +7007,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void runLandingSettle() {
         if (isDestroyed()) return;
         flushLandingRestyle();
+        // The re-dress has laid the bar out at the Margin it eased to; whatever it found to do,
+        // no ease outlives the crossing.
+        if (!mCrossing.crossing()) resetStatusMarginEase();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
     }
 
@@ -7238,6 +7259,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     else mlp.height = targetThickness;
                 }
                 host.setLayoutParams(mlp);
+                // Laid out at the Margin the crossing eased it to: it draws unscaled from the
+                // same pass, so the bar keeps the width it landed at.
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(host);
             }
             View topWidgets = findViewById(R.id.terminal_top_widget_area);
             if (topWidgets != null && topWidgets.getLayoutParams() != null) {
@@ -10896,6 +10920,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -10929,6 +10954,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -24740,6 +24766,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPromptFieldUnderPalette);
         // The strip under the pill crosses from the one dress to the other with the finger.
         syncNavStripFade(wallFrame);
+        // A stack whose halves differ only in look blends its glass with the wall.
+        syncStackLookBlend(seam);
         // And the band behind the system bar with the bar's glass, by the same share.
         syncTopBandFade(wallFrame);
         // A band only one half's dock carries follows its page across the seam.
@@ -24799,10 +24827,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // stands higher: the stack's, or the picture of the committed half's stack.
             mCrossing.coverAt(translation, stackPictureCoverPx());
         }
-        // The status bar travels with the Workspace's page wherever the frame reaches Home; it
-        // fades in place only where it cannot ride (a bar on a side or the bottom edge).
+        // The status bar travels with the Workspace's page wherever the frame reaches Home while
+        // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
+        // edge, or pages that turn).
         boolean barRides = syncStatusTravel(wallFrame, seam);
-        float statusAlpha = barRides ? 1f : frame.statusReveal;
+        // A bar that stands still eases from one page's Margin to the other's with the wall.
+        syncStatusMarginEase(seam);
+        // Under a transition that turns the pages, a bar one end wears apart fades in place.
+        float statusFade = seam.statusFade();
+        float statusAlpha = barRides ? 1f : !Float.isNaN(statusFade) ? statusFade
+            : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
@@ -25132,11 +25166,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stackDressOf(otherDress, therePage, orientation),
                 mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
                 otherRowsPx);
+        // The pages turn across the seam by the page transition; a bar that cannot stand still
+        // then fades in place rather than riding a turned page (SeamCrossing.Stage#pagesSlide).
+        boolean pagesSlide = mPaneWallController == null
+            || mPaneWallController.wall().pageTransition()
+                == com.termux.app.launcher.home.HomePageTransition.SLIDE;
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
-                isSplitPanesEnabled()),
+                isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        // A look apart alone blends the dock's glass from here to there (syncStackLookBlend).
+        mLookBlendShare = Float.NaN;
+        mLookBlendHereOpacity = mPreferences == null ? 100
+            : mPreferences.getAppBarOpacity(lookIdOf(herePage));
+        mLookBlendThereOpacity = mPreferences == null ? 100
+            : mPreferences.getAppBarOpacity(lookIdOf(therePage));
+        beginStackLookBlend(therePage);
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.
         beginNavStripFade(herePage, therePage);
         beginTopBandFade(herePage, therePage);
@@ -25308,6 +25354,176 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pass of this frame dressed or showed it.
         if (rides) syncStatusStripTravel();
         return rides;
+    }
+
+    /** The dock's opacity at each end of a look blend, read as the crossing begins. */
+    private int mLookBlendHereOpacity = 100, mLookBlendThereOpacity = 100;
+    /** The blend's step last applied; NaN while none has been. */
+    private float mLookBlendShare = Float.NaN;
+
+    /**
+     * One frame of a crossing between halves that dress the stack apart only in look
+     * (SeamCrossing.Answers#lookShare): the dock's frost, which carries its opacity, is set at the
+     * blend's step between the two ends' opacities, over the even-out matrix last measured. Set
+     * only when the step changes (at most SeamCrossing.LOOK_STEPS times a crossing), never at
+     * rest, and nothing is laid out; the RenderEffect (blur and lens) is left as it is. The
+     * landing's re-dress then sets the arriving look, which the last step already showed.
+     */
+    private void syncStackLookBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
+        float share = seam.lookShare();
+        if (Float.isNaN(share) || share == mLookBlendShare || mChrome == null) return;
+        mLookBlendShare = share;
+        // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
+        if (mLookBlendDock != null) mLookBlendDock.setShare(share);
+        android.widget.ImageView backdrop = hotView(R.id.accessory_blur_backdrop);
+        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
+        int opacity = com.termux.app.place.SeamCrossing.lookBlendValue(mLookBlendHereOpacity,
+            mLookBlendThereOpacity, share);
+        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.withEvenOut(
+            mChrome.ink().lastBandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK),
+            com.termux.app.chrome.GlassFilters.frost(opacity)));
+    }
+
+    /**
+     * The dock's sheet across a look-only crossing: the glass it wears beside the arriving end's,
+     * built once as the crossing begins, crossed by the blend's step
+     * ({@link #syncStackLookBlend}). The sheet carries the dock's opacity, tint and grain (the
+     * frost filter alone carries only the Clear step), so this is the blend the eye sees. Null
+     * while none runs.
+     */
+    @Nullable private com.termux.app.chrome.CrossfadeDrawable mLookBlendDock;
+
+    private void beginStackLookBlend(@NonNull com.termux.app.wall.PageRef there) {
+        endStackLookBlend();
+        if (mChrome == null || !mCrossing.seam().lookBlends()) return;
+        View sheet = findViewById(R.id.extrakeys_background);
+        Drawable here = sheet == null ? null : sheet.getBackground();
+        // Standing down on a joined Docked frame, the sheet draws nothing to blend.
+        if (here == null) return;
+        mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
+            mChrome.glass().dockSurfaceOf(lookIdOf(there), 0f, 1f, false), 0f);
+        sheet.setBackground(mLookBlendDock);
+    }
+
+    /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */
+    private void endStackLookBlend() {
+        com.termux.app.chrome.CrossfadeDrawable blend = mLookBlendDock;
+        mLookBlendDock = null;
+        if (blend == null) return;
+        View sheet = findViewById(R.id.extrakeys_background);
+        if (sheet != null && sheet.getBackground() == blend) sheet.setBackground(blend.endpoint());
+    }
+
+    /**
+     * The status bar, and the strip behind the system bar while it continues the bar's inset,
+     * drawn at the Margin the crossing eases them to (SeamCrossing.Answers#barMarginShare): both
+     * stay laid out at the committed page's Margin and are drawn at the inset between the two
+     * pages' resolved insets, so no frame lays anything out. The bar stretches only its plain
+     * glass; its chips, clock and readings keep their size and move with their edge
+     * ({@link #applyBarMarginEase}). The strip is plain glass and is stretched whole. The frame the wall lands on draws them at the arriving page's inset, which the
+     * landing's re-dress then lays out as it resets the scale ({@link #resetStatusMarginEase}).
+     * Nothing while the Margin holds.
+     */
+    private void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
+        float share = seam.barMarginShare();
+        if (Float.isNaN(share) || isStatusBarVertical()) return;
+        com.termux.app.place.SeamCrossing crossing = mCrossing.seam();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
+        float here = resolveSurfaceHorizontalInsetPx(
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.committedBarMarginDp()),
+            capsule);
+        float there = resolveSurfaceHorizontalInsetPx(
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.otherBarMarginDp()),
+            capsule);
+        float insetPx = here + (there - here) * share;
+        View host = hotView(R.id.terminal_window_bar_host);
+        applyBarMarginEase(host, insetPx);
+        // The strip eases with the bar only where it wears the bar's inset (not a dock sheet's).
+        View strip = hotView(R.id.terminal_status_bar_background);
+        if (host != null && strip != null && strip.getWidth() == host.getWidth())
+            applyStatusMarginEase(strip, insetPx);
+    }
+
+    /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
+    private static final int[] BAR_GLASS_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
+        R.id.terminal_window_bar_background, R.id.terminal_status_lens};
+
+    /**
+     * The bar drawn {@code insetPx} from each side while laid out at the committed page's Margin
+     * (com.termux.app.place.BarMarginEase): its glass layers stretch about the host's centre, its
+     * outline (which clips them on a card) grows or shrinks with them, and its content keeps its
+     * size, each end's cluster drawn moved with its edge. The host itself is never scaled. Writes
+     * only what moved; no layout.
+     */
+    private void applyBarMarginEase(@Nullable View host, float insetPx) {
+        if (host == null || host.getWidth() <= 0 || !(host.getParent() instanceof View)) return;
+        View parent = (View) host.getParent();
+        float room = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        // The inset it is laid out at, read from where it stands: its margins are even.
+        float grow = com.termux.app.place.BarMarginEase.growPx((room - host.getWidth()) / 2f,
+            insetPx);
+        if (host.getScaleX() != 1f) host.setScaleX(1f);
+        float centre = host.getWidth() / 2f;
+        for (int id : BAR_GLASS_LAYERS) easeBarGlassLayer(hotView(id), centre, grow);
+        if (host.getOutlineProvider() == mStatusBarSurfaceOutline
+            && mStatusBarSurfaceOutline.setHorizontalGrow(Math.round(grow)))
+            host.invalidateOutline();
+        com.termux.app.statusbar.StatusRowLayout row = hotView(R.id.terminal_status_row);
+        if (row != null) row.setEdgeGrow(grow);
+        com.termux.app.statusbar.TopPaneWidgetSlot slot = hotView(R.id.terminal_top_widget_area);
+        if (slot != null) slot.setEdgeGrow(grow);
+    }
+
+    /** One glass layer of the bar, stretched about the host's centre by {@code grow} a side. */
+    private static void easeBarGlassLayer(@Nullable View layer, float hostCentre, float grow) {
+        if (layer == null || layer.getWidth() <= 0) return;
+        float pivot = hostCentre - layer.getLeft();
+        float scale = com.termux.app.place.BarMarginEase.layerScale(pivot, grow);
+        if (layer.getPivotX() != pivot) layer.setPivotX(pivot);
+        if (layer.getScaleX() != scale) layer.setScaleX(scale);
+    }
+
+    /** The bar's glass layers, outline and content drawn as laid out again. */
+    private void resetBarMarginEase(@NonNull View host) {
+        if (host.getScaleX() != 1f) host.setScaleX(1f);
+        for (int id : BAR_GLASS_LAYERS) {
+            View layer = findViewById(id);
+            if (layer != null && layer.getScaleX() != 1f) layer.setScaleX(1f);
+        }
+        if (mStatusBarSurfaceOutline.setHorizontalGrow(0)
+            && host.getOutlineProvider() == mStatusBarSurfaceOutline)
+            host.invalidateOutline();
+        com.termux.app.statusbar.StatusRowLayout row = findViewById(R.id.terminal_status_row);
+        if (row != null) row.setEdgeGrow(0f);
+        com.termux.app.statusbar.TopPaneWidgetSlot slot = findViewById(R.id.terminal_top_widget_area);
+        if (slot != null) slot.setEdgeGrow(0f);
+    }
+
+    /** One of the bar's views scaled about its centre so it stands {@code insetPx} from each side. */
+    private static void applyStatusMarginEase(@Nullable View view, float insetPx) {
+        if (view == null || view.getWidth() <= 0 || !(view.getParent() instanceof View)) return;
+        View parent = (View) view.getParent();
+        float room = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        // The inset it is laid out at, read from where it stands: its margins are even.
+        float laidInsetPx = (room - view.getWidth()) / 2f;
+        float scale = (view.getWidth() + 2f * (laidInsetPx - insetPx)) / view.getWidth();
+        if (!(scale > 0f)) return;
+        float pivot = view.getWidth() / 2f;
+        if (view.getPivotX() != pivot) view.setPivotX(pivot);
+        if (view.getScaleX() != scale) view.setScaleX(scale);
+    }
+
+    /** Both of the bar's views drawn at their laid-out width again. */
+    private void resetStatusMarginEase() {
+        resetStatusMarginEase(findViewById(R.id.terminal_window_bar_host));
+        resetStatusMarginEase(findViewById(R.id.terminal_status_bar_background));
+    }
+
+    /** {@code view} drawn at its laid-out width again; the bar's host with everything it eased. */
+    private void resetStatusMarginEase(@Nullable View view) {
+        if (view == null) return;
+        if (view.getId() == R.id.terminal_window_bar_host) resetBarMarginEase(view);
+        else if (view.getScaleX() != 1f) view.setScaleX(1f);
     }
 
     /**
@@ -26130,7 +26346,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // plainly, as that end wears it.
             endNavStripFade();
             endTopBandFade();
-            mLandingStackDressed = seamLanding.stackDressedFor(page);
+            endStackLookBlend();
+            // A stack dressed for the landed half on the way, or a look the crossing blended onto
+            // it: the landed frame already shows what the half's re-dress would, which follows it.
+            mLandingStackDressed = seamLanding.stackDressedFor(page)
+                || seamLanding.lookBlendedOnto(page);
             try {
                 syncPlaceState(page, leavingKeyboardUp);
             } finally {

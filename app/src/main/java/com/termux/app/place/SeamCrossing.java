@@ -154,10 +154,11 @@ public final class SeamCrossing {
         @NonNull final FrameGlass frameGlass;
         final boolean splitPanes;
         /**
-         * Whether the pages slide flat across the screen (Home's Slide page transition): a bar
-         * only one of two Home pages wears rides with its page then, and fades in place under a
+         * Whether the pages slide flat across the screen (the Slide page transition): a bar only
+         * one end wears, or wears apart, rides with its page then, and fades in place under a
          * transition that turns the pages (Carousel, Depth and the rest), which a flat ride would
-         * not follow.
+         * not follow. That holds between two Home pages and across the seam alike (amendment
+         * 2026-11-04); a bar both ends stand alike stays still under every transition.
          */
         final boolean pagesSlide;
 
@@ -210,6 +211,8 @@ public final class SeamCrossing {
         float pictureSlide;
         float stackSlide;
         float statusFade;
+        float barMarginShare;
+        float lookShare;
 
         Answers() {
             clear(1f, 0f);
@@ -232,6 +235,29 @@ public final class SeamCrossing {
             pictureSlide = Float.NaN;
             stackSlide = Float.NaN;
             statusFade = Float.NaN;
+            barMarginShare = Float.NaN;
+            lookShare = Float.NaN;
+        }
+
+        /**
+         * How far the stack's glass has blended from the committed page's look toward the other
+         * page's, 0 to 1 with the wall's offset, on a crossing whose halves dress the stack apart
+         * only in look; NaN otherwise. The blend is quantised ({@link #LOOK_STEPS}), so the glass
+         * is set again only when the step changes.
+         */
+        public float lookShare() {
+            return lookShare;
+        }
+
+        /**
+         * How far a bar that stands still eases from the committed page's Margin toward the other
+         * page's, 0 to 1 with the wall's offset; NaN while the bar's Margin does not ease (one
+         * Margin on both ends, or a bar that rides or fades). The bar is drawn at
+         * {@link SeamCrossing#barMarginDp} of that share, so the frame the wall lands on draws it
+         * at the arriving page's Margin and the landing's re-dress changes nothing on screen.
+         */
+        public float barMarginShare() {
+            return barMarginShare;
         }
 
         /**
@@ -348,6 +374,9 @@ public final class SeamCrossing {
         @Nullable PaneWallPage dressedFor;
         boolean dressDiffered;
         boolean shapeDiffered;
+        /** Whether the halves were apart only in look, which the crossing blended with the wall. */
+        boolean lookBlended;
+        @Nullable PaneWallPage committedKind;
         /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
         public boolean bandsMoved() {
             return bandsMoved;
@@ -380,6 +409,17 @@ public final class SeamCrossing {
          */
         public boolean stackDressedFor(@NonNull PaneWallPage landed) {
             return dressDiffered && dressedFor != null && !SeamTravel.crosses(dressedFor, landed);
+        }
+
+        /**
+         * Whether the crossing blended the stack's look onto {@code landed}: the halves were
+         * apart only in look ({@link Answers#lookShare}) and the wall landed on the other half,
+         * so the frame it lands on already shows the arriving look. Like
+         * {@link #stackDressedFor}, the landing's re-dress has nothing to show that frame and
+         * follows it instead of holding it. A slide that came back commits nothing.
+         */
+        public boolean lookBlendedOnto(@NonNull PaneWallPage landed) {
+            return lookBlended && committedKind != null && SeamTravel.crosses(committedKind, landed);
         }
 
         /** Whether that dress back changes the shape too. */
@@ -443,6 +483,14 @@ public final class SeamCrossing {
          * Workspace's bar out over Home.
          */
         boolean barStill, barRides, statusMayShow;
+        /**
+         * Whether that still bar eases from one Margin to the other with the wall, and the two
+         * Margins in dp as stored.
+         */
+        boolean barMarginEases;
+        /** Whether the halves dress the stack apart only in look, which blends instead of dipping. */
+        boolean lookBlends;
+        int committedMarginDp, otherMarginDp;
         /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
         boolean beadMelt, beadsCommitted;
         /** The halves' Dock designs and Search fields; the designs null while no crossing holds them. */
@@ -482,6 +530,19 @@ public final class SeamCrossing {
         }
     }
 
+    /**
+     * One look value (an opacity, a tint strength, in percent) at a blend's step from the
+     * committed end's {@code here} to the other end's {@code there}: exactly {@code here} at 0 and
+     * {@code there} at 1, so the frame the wall lands on shows what the landing resolves.
+     */
+    public static int lookBlendValue(int here, int there, float share) {
+        float t = Float.isNaN(share) ? 0f : clamp01(share);
+        return Math.round(here + (there - here) * t);
+    }
+
+    /** The steps a look blend moves through across a crossing: the glass is set at most this often. */
+    public static final int LOOK_STEPS = 32;
+
     @NonNull private Run mRun = new Run();
 
     private final Answers mAnswers = new Answers();
@@ -510,14 +571,36 @@ public final class SeamCrossing {
         mRun.otherSearchField = other.dress.searchField();
         mRun.dressDiffers = !committed.stack.equals(other.stack);
         mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
+        // A look apart alone keeps one stack: its glass blends with the wall (amendment
+        // 2026-11-04), so the stack neither dips nor is dressed again mid-slide. The dip stays
+        // for a structure apart: a shape (Style, Corners, Margin) or the layout's sizes.
+        mRun.lookBlends = mRun.dressDiffers
+            && committed.stack.structureEquals(other.stack) && !mRun.oneKind;
+        if (mRun.lookBlends) mRun.dressDiffers = false;
         // One bar across the wall (#90): where both halves stand it alike, in one outline, it
         // stands still on the crossing instead of riding with the Workspace's page. A Margin
-        // apart only insets it, which the landing's half re-dress puts right; riding for it took
-        // the bar off a crossing toward Home, with nothing to bring Home's in.
+        // apart only insets it, and the bar eases from one inset to the other with the wall
+        // (Answers#barMarginShare), so the landing's re-dress finds it already drawn there;
+        // riding for it took the bar off a crossing toward Home, with nothing to bring Home's in.
         mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS))
             && committed.stack.shape.sameOutline(other.stack.shape);
+        // A still bar between two Margins eases from one to the other with the wall's offset.
+        mRun.committedMarginDp = committed.stack.shape.marginDp;
+        mRun.otherMarginDp = other.stack.shape.marginDp;
+        mRun.barMarginEases = mRun.barStill && !here.slot(Element.STATUS).hidden
+            && mRun.committedMarginDp != mRun.otherMarginDp;
         PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
         mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
+        mRun.barEnd = null;
+        mRun.barFades = false;
+        if (mRun.barRides && !stage.pagesSlide && SeamTravel.crosses(committed.page.kind,
+                other.page.kind)) {
+            // The pages turn: the Workspace's bar, which a turned page would not carry flat, fades
+            // in place by the way toward the Workspace's page instead of riding with it.
+            mRun.barRides = false;
+            mRun.barFades = true;
+            mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
+        }
         // A keyboard in the stack, not one floating in a frame of its own.
         mRun.committedKeyboard = committed.keyboardUp
             && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
@@ -697,11 +780,23 @@ public final class SeamCrossing {
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
             }
         }
+        // A look apart alone blends the stack's glass with the wall, in steps.
+        if (mRun.lookBlends) {
+            float share = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.lookShare = Math.round(share * LOOK_STEPS) / (float) LOOK_STEPS;
+            answers.moved = true;
+        }
+        // A still bar eases its Margin with the wall itself, not the chrome's own clock.
+        if (mRun.barMarginEases) {
+            answers.barMarginShare = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.moved = true;
+        }
         // The stack stands the other half's rows, dressed for that half, from the frame the plan
         // says; from Home the Workspace's bar is laid out as the slide starts.
         boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
         boolean statusShown = progress > 0f && mRun.statusMayShow;
-        // A bar only one of two turning Home pages wears fades with the way toward that page.
+        // A bar only one end wears, or wears apart, fades with the way toward that end while the
+        // pages turn.
         if (mRun.barFades && mRun.barEnd != null) {
             float share = clamp01(progress);
             answers.statusFade = mRun.barEnd.equals(committedEnd) ? 1f - share : share;
@@ -721,7 +816,7 @@ public final class SeamCrossing {
             answers.dockReveal = rides ? 1f : pictured ? travel
                 : SeamTravel.dockReveal(mRun.plan, progress);
         }
-        answers.moved = answers.relayout || mRun.plan != DockPlan.NONE;
+        answers.moved = answers.moved || answers.relayout || mRun.plan != DockPlan.NONE;
         // Between halves that dress the stack differently the keyboard dips with the rows, so it
         // is below the screen where the stack changes its dress.
         if (mRun.wholeStack) {
@@ -797,6 +892,27 @@ public final class SeamCrossing {
     }
 
     /**
+     * The Margin, in dp as stored, a still bar is drawn at {@code share} of the way from the
+     * committed page toward the other ({@link Answers#barMarginShare}): the committed page's at 0,
+     * the other's at 1. The activity resolves both ends to px and draws between those, since a
+     * surface's inset is not linear in its Margin; this is the stored value the ends name.
+     */
+    public float barMarginDp(float share) {
+        float t = Float.isNaN(share) ? 0f : clamp01(share);
+        return mRun.committedMarginDp + (mRun.otherMarginDp - mRun.committedMarginDp) * t;
+    }
+
+    /** The committed page's Margin as the crossing read it, in dp as stored. */
+    public int committedBarMarginDp() {
+        return mRun.committedMarginDp;
+    }
+
+    /** The other page's Margin as the crossing read it, in dp as stored. */
+    public int otherBarMarginDp() {
+        return mRun.otherMarginDp;
+    }
+
+    /**
      * Whether two ends make a crossing (#173 slice E, spec #167 E): pages of the two halves
      * always do; two Home pages only where their layouts differ in what can morph mid-slide,
      * the dock's rows ({@link SeamTravel#dockPlan}) or a bar one of them wears
@@ -812,6 +928,14 @@ public final class SeamCrossing {
             || !here.stack.equals(there.stack)) return false;
         return SeamTravel.dockPlan(here.layout, there.layout) != DockPlan.NONE
             || SeamTravel.homeBarWearer(here.layout, there.layout) != null;
+    }
+
+    /**
+     * Whether the crossing runs between halves that dress the stack apart only in look, whose
+     * glass blends from one end's to the other's with the wall ({@link Answers#lookShare}).
+     */
+    public boolean lookBlends() {
+        return mRun.other != null && mRun.lookBlends;
     }
 
     /** Whether the crossing runs between two pages of one kind: two Home pages. */
@@ -849,8 +973,20 @@ public final class SeamCrossing {
         landing.dressedFor = mRun.stackDressPage;
         landing.dressDiffered = mRun.dressDiffers;
         landing.shapeDiffered = mRun.shapeDiffers;
+        landing.lookBlended = mRun.lookBlends;
+        landing.committedKind = mRun.committed;
         mRun = mRun.landed();
         return landing;
+    }
+
+    /**
+     * Whether the landing's re-dress would move the bar from where the last moving frame drew it:
+     * the Margin that frame drew ({@code drawnMarginDp}, {@link #barMarginDp} of its share) apart
+     * from the Margin of the page the wall landed on ({@code landedMarginDp}, what the re-dress
+     * lays it out at). Pure, so the landing's "nothing changes" is tested without the activity.
+     */
+    public static boolean landingMovesBar(float drawnMarginDp, int landedMarginDp) {
+        return Math.abs(drawnMarginDp - landedMarginDp) > 1e-3f;
     }
 
     /** The settle's second half, after the page's commit: the stack's dress lets go. */

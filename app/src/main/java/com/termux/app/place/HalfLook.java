@@ -61,6 +61,15 @@ public final class HalfLook {
         return new HalfLook(cells);
     }
 
+    /** A look whose dock Opacity alone is {@code opacity}, the rest as {@link #NONE}: for tests. */
+    @androidx.annotation.VisibleForTesting
+    static HalfLook ofDockOpacity(int opacity) {
+        int[] cells = new int[CELLS];
+        // The dock's cells come first, a value and a link per property; Opacity is the second.
+        cells[2] = opacity;
+        return new HalfLook(cells);
+    }
+
     /** Whether the dock and the keyboard look alike in both. */
     public boolean stackEquals(@NonNull HalfLook other) {
         return rangeEquals(other, 0, STATUS_START);
