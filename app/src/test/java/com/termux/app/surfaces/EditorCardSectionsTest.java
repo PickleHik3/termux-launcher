@@ -117,7 +117,7 @@ public class EditorCardSectionsTest {
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.MARGIN, Row.STATUS_POSITION, Row.STATUS_INDICATORS),
+            CARD, Arrays.asList(Row.STATUS_POSITION, Row.MARGIN, Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
             "SECTION_APPEARANCE", block(),
@@ -127,7 +127,7 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.MARGIN, Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
                 Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
@@ -152,8 +152,8 @@ public class EditorCardSectionsTest {
     @Test
     public void keyboard() {
         check(EditorCard.KEYBOARD, expect(
-            CARD, Arrays.asList(Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN, Row.KEY_CORNERS,
-                Row.BOTTOM_PADDING, Row.FORM),
+            CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN,
+                Row.KEY_CORNERS, Row.BOTTOM_PADDING),
             "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
                 Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
                 Row.DEPTH, Row.RIM, Row.TINT_HUE),

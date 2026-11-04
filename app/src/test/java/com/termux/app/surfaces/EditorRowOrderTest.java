@@ -45,6 +45,22 @@ public class EditorRowOrderTest {
     }
 
     @Test
+    public void structuralChoicesStandAtTheTopWithTheLook() {
+        for (Row row : new Row[] {Row.DOCK_TYPE, Row.STATUS_POSITION, Row.FORM, Row.STYLE,
+                Row.DESIGN, Row.DOCK_STYLE, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.THEME})
+            assertEquals(row.name(), Group.LOOK, EditorRows.groupOf(row));
+        assertEquals("the Dock opens on its Type", Row.DOCK_TYPE,
+            EditorRows.rows(EditorCard.DOCK, OFFERS[0]).get(0).row);
+        assertEquals("the Status bar opens on its Position", Row.STATUS_POSITION,
+            EditorRows.rows(EditorCard.STATUS, OFFERS[0]).get(0).row);
+        assertEquals("the Keyboard opens on its Form", Row.FORM,
+            EditorRows.rows(EditorCard.KEYBOARD, OFFERS[0]).get(0).row);
+        for (Row row : new Row[] {Row.RIM, Row.CONTRAST, Row.HOME_ICON_SIZE, Row.LABEL_SIZE,
+                Row.PAGE_TRANSITION})
+            assertEquals(row + " is a small choice", Group.TOGGLES, EditorRows.groupOf(row));
+    }
+
+    @Test
     public void theGroupsAreTheRowKinds() {
         assertEquals(Group.LOOK, EditorRows.groupOf(Row.LOOK));
         assertEquals(Group.SLIDERS, EditorRows.groupOf(Row.MARGIN));
@@ -60,14 +76,14 @@ public class EditorRowOrderTest {
     @Test
     public void headingsTiersAndAGroupsOwnOrderStay() {
         List<Spec> listed = new EditorRows.CardRows()
-            .tier(1, Row.DOCK_TYPE, Row.MARGIN, Row.TINT_HUE, Row.CORNERS, Row.LOOK)
+            .tier(1, Row.MULTIPLEXER, Row.MARGIN, Row.TINT_HUE, Row.CORNERS, Row.LOOK)
             .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.RIM)
             .tier(1, Row.HEIGHT)
             .build();
         List<Row> got = new ArrayList<>();
         for (Spec spec : EditorRows.ordered(listed))
             got.add(spec.row);
-        assertEquals(Arrays.asList(Row.LOOK, Row.MARGIN, Row.CORNERS, Row.DOCK_TYPE, Row.TINT_HUE,
+        assertEquals(Arrays.asList(Row.LOOK, Row.MARGIN, Row.CORNERS, Row.MULTIPLEXER, Row.TINT_HUE,
             Row.SECTION_LINKS, Row.RIM, Row.LINK_SHEETS, Row.HEIGHT), got);
     }
 

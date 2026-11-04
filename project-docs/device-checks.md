@@ -336,8 +336,9 @@ longer counted as an error. Owed:
   full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
   its menu; TalkBack reads the value · pong.
 - **Rows in group order (11-04).** Global, Workspace, Dock, Terminal and Keyboard cards: inside
-  each section the Look comes first, then the sliders, then switches and choices (Rim, Contrast,
-  Type), then colours (Tint colour), then links (Pane borders, Refraction), with a small gap
+  each section the Look and the structural choices come first (Dock Type, Status bar Position,
+  Keyboard Form, Style), then the sliders, then switches and small choices (Rim, Contrast), then
+  colours (Tint colour), then links (Pane borders, Refraction), with a small gap
   between groups and no new headings; the Keyboard's Linked toggle still stands between its two
   opacities; sections and their open or closed state are as before · pong.
 - **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)

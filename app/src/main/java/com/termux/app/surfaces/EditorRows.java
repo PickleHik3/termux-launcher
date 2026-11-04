@@ -403,16 +403,41 @@ public final class EditorRows {
     // --------------------------------------------------------------------------- row order
 
     /**
-     * The groups a container's rows stand in, in order (developer, 2026-11-04): the Look, the
-     * sliders (the opacity link with them, between the two it links), the toggles and choices
-     * (switches, tiles, segments, menus), the colours (pickers and swatches), then the links.
-     * Spacing, not a heading, separates them.
+     * The groups a container's rows stand in, in order (developer, 2026-11-04): the Look and the
+     * structural choices beside it (what kind of thing the card is: the dock's Type, the bar's
+     * Position, the keyboard's Form), the sliders (the opacity link with them, between the two
+     * it links), the toggles and small choices (switches, tiles, segments such as Rim and
+     * Contrast, menus), the colours (pickers and swatches), then the links. Spacing, not a
+     * heading, separates them.
      */
     public enum Group { LOOK, SLIDERS, TOGGLES, COLOURS, LINKS }
+
+    /**
+     * Whether {@code row} picks the layout or the variant of what its card edits, and so stands
+     * at the top with the Look.
+     */
+    public static boolean isStructural(@NonNull Row row) {
+        switch (row) {
+            case DOCK_TYPE:
+            case DOCK_STYLE:
+            case DESIGN:
+            case STATUS_POSITION:
+            case CLOCK_FACE:
+            case CLOCK_POSITION:
+            case FORM:
+            case STYLE:
+            case THEME:
+                return true;
+            default:
+                return false;
+        }
+    }
 
     /** The group {@code row} stands in inside its container. */
     @NonNull
     public static Group groupOf(@NonNull Row row) {
+        if (isStructural(row))
+            return Group.LOOK;
         if (row == Row.OPACITY_LINK)
             return Group.SLIDERS;
         if (row == Row.TINT_HUE)
