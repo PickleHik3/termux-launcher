@@ -331,3 +331,32 @@ longer counted as an error. Owed:
   fallback, and `app_launcher_animation_safe_mode` stays false. `adb logcat -s
   LauncherTransitionController` shows one "Gesture handoff" line each (source dock, home, none) ·
   pong.
+
+- **Last change wins on the Global and Workspace sliders (11-04).** Dock card (Applies to
+  Global) Opacity to 20, Keyboard card (Applies to Home) Corners to 30. Global card: move Opacity;
+  the dock now wears Global's opacity on Home and Terminal pages, the keyboard keeps its 30 dp
+  corners. Move Global Corners; the keyboard's corners follow. Dock Opacity to 20 again: only the
+  dock changes. Workspace card Opacity: Terminal and Display pages follow, the dock on Home stays
+  at 20. Discard after any of these puts every value back. Global Margin moves the air on every
+  surface · pong.
+- **One-line slider rows (11-04).** Global, Dock, Terminal and Keyboard cards at font 1.0 and
+  1.3, light, dark and the launcher's scheme chrome: each slider is one line (glyph, name, a thick
+  track) with its value inside the track's end, white-on-fill where the fill reaches it and grey
+  over the empty track, never cut; a long name at 1.3 falls back to name and value over a
+  full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
+  its menu; TalkBack reads the value · pong.
+- **Rows in group order (11-04).** Global, Workspace, Dock, Terminal and Keyboard cards: inside
+  each section the Look and the structural choices come first (Dock Type, Status bar Position,
+  Keyboard Form, Style), then the sliders, then switches and small choices (Rim, Contrast), then
+  colours (Tint colour), then links (Pane borders, Refraction), with a small gap
+  between groups and no new headings; the Keyboard's Linked toggle still stands between its two
+  opacities; sections and their open or closed state are as before · pong.
+- **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)
+  Opacity to 20; Home card Opacity: the dock on Home pages follows Home, on the Terminal page it
+  stays at 20 · pong.
+- **Margin per page kind (11-04).** Before anything: Home and Terminal pages look as they did
+  after the update. Workspace card Margin to 20: Terminal and Display pages' dock, status bar and
+  pane air move, Home pages do not; Home card Margin to 4: Home alone moves; swipe Home ↔
+  Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
+  (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
+  pong.

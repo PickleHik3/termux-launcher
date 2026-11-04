@@ -18223,7 +18223,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ResolvedArrangement arrangement = arrangementOf(page);
         com.termux.app.place.LayoutVariant variant = arrangement.variant();
         PlaceLayoutStore sizes = store.forVariant(variant);
-        com.termux.app.place.WallShape shape = store.shape();
+        com.termux.app.place.WallShape shape = store.shape(home);
         float scale = sizes.dockHeightScale(orientation);
         int stripDp = sizes.wallStripHeightDp(orientation);
         // The one icon size, and the Home grid the dock's side insets follow (spec §8a).

@@ -2,6 +2,7 @@ package com.termux.app.surfaces.rows;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -9,7 +10,6 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -28,10 +28,12 @@ import java.util.List;
 
 /**
  * A run of value sliders, one row under another (the cards' sliders, horizontal since
- * 2026-10-31; they were a strip of vertical columns before). A row is two lines: the glyph, the
- * name with its source dot after it, and the value at the end; under them the track, the row's
- * whole width, in a 48dp hit area. The row's height is measured, so a larger font scale grows
- * the name line rather than cutting it.
+ * 2026-10-31; they were a strip of vertical columns before). A row is one line where it fits
+ * (2026-11-04): the glyph, the name with its source dot after it, and a thick track that prints
+ * its value inside at its end, in a 48dp hit area. Where the name or the value would not fit at
+ * the row's width and font scale ({@link SliderRowFit}), the row keeps two lines: the glyph,
+ * name and value, and under them the track, the row's whole width. The row's height is
+ * measured, so a larger font scale grows the name line rather than cutting it.
  *
  * <p>A horizontal drag on a track takes the slider at once, a vertical one scrolls the card, and
  * a tap moves the handle where it lands ({@link StripTouchPolicy#decideAcross}). A long press on
@@ -43,12 +45,6 @@ import java.util.List;
  * "Not linked" with link_off while off; what the link does is the caller's.</p>
  */
 public final class SliderRow {
-
-    /**
-     * Where a slider's value stands: under the name line ({@link #TWO_LINES}, the default) or
-     * on it, between the name and the value. One switch, should the two-line row be overturned.
-     */
-    static final boolean TWO_LINES = true;
 
     /** A slider's value, as it prints ("20%", "24 dp"). */
     public interface Readout {
@@ -96,7 +92,7 @@ public final class SliderRow {
 
     /** One built row: its root, glyph, name, value and track. */
     public static final class Item {
-        @NonNull public final LinearLayout root;
+        @NonNull public final Line root;
         @NonNull public final ImageView glyph;
         @NonNull public final TextView name;
         @NonNull public final TextView value;
@@ -105,7 +101,7 @@ public final class SliderRow {
         @NonNull private final GradientDrawable mDot = new GradientDrawable();
         private int mDotColor;
 
-        Item(@NonNull LinearLayout root, @NonNull ImageView glyph, @NonNull TextView name,
+        Item(@NonNull Line root, @NonNull ImageView glyph, @NonNull TextView name,
              @NonNull TextView value, @NonNull LegendSlider slider, @NonNull CharSequence label) {
             this.root = root;
             this.glyph = glyph;
@@ -148,8 +144,10 @@ public final class SliderRow {
     static final int DOT_GAP_DP = 6;
     /** The gap between the name and the value. */
     static final int VALUE_GAP_DP = 8;
-    /** Above a row's name line; the track's 48dp hit area keeps its own room below. */
+    /** Above a two-line row's name line; the track's 48dp hit area keeps its own room below. */
     static final int ROW_TOP_DP = 8;
+    /** Above and below a one-line row's 48dp hit area. */
+    static final int ONE_LINE_PAD_DP = 4;
 
     @NonNull public final LinearLayout root;
     @NonNull public final List<Item> items;
@@ -328,21 +326,12 @@ public final class SliderRow {
     @NonNull
     private static Item item(@NonNull Context context, @NonNull Track track, int index,
                              @NonNull Listener listener, @Nullable OnName onName) {
-        LinearLayout root = new LinearLayout(context);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(0, RowKit.dp(context, ROW_TOP_DP), 0, 0);
-
-        LinearLayout head = new LinearLayout(context);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
         ImageView glyph = RowKit.glyph(context, track.glyph, track.name);
         glyph.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
             androidx.appcompat.R.attr.colorPrimary)));
-        head.addView(glyph, RowKit.glyphParams(context));
 
-        // The name takes what the glyph and the value leave, and ellipsizes inside it; the dot
-        // rides after its last glyph as a compound drawable, so it follows a short name.
-        FrameLayout nameBox = new FrameLayout(context);
+        // The name wraps its words, so the dot after its last glyph (a compound drawable)
+        // follows a short name; the row gives it what is left and it ellipsizes inside that.
         TextView name = new TextView(context);
         RowKit.textAppearance(name, com.google.android.material.R.attr.textAppearanceBodyLarge);
         name.setTextColor(RowKit.color(context, com.google.android.material.R.attr.colorOnSurface));
@@ -351,12 +340,9 @@ public final class SliderRow {
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setMinWidth(0);
         name.setMinimumWidth(0);
+        name.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         name.setCompoundDrawablePadding(RowKit.dp(context, DOT_GAP_DP));
         name.setContentDescription(track.name);
-        nameBox.addView(name, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL));
-        head.addView(nameBox, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         LegendSlider slider = new LegendSlider(context);
         slider.setHorizontal(true);
@@ -366,10 +352,10 @@ public final class SliderRow {
         slider.setValue(track.from);
         slider.setContentDescription(track.name);
         slider.setSpokenValue(v -> track.readout.format(Math.round(v)));
-        if (!TWO_LINES)
-            head.addView(slider, new LinearLayout.LayoutParams(0, RowKit.dp(context,
-                RowKit.TOUCH_DP), 2f));
+        slider.setInsetValue(v -> track.readout.format(Math.round(v)));
 
+        // The two-line row's value; on one line the track prints it, and this stays laid out
+        // (so its text changes redraw rather than relayout) but is not drawn.
         TextView value = RowKit.caption(context, track.readout.format(track.from));
         RowKit.textAppearance(value, com.google.android.material.R.attr.textAppearanceLabelLarge);
         value.setTextColor(RowKit.color(context,
@@ -377,16 +363,10 @@ public final class SliderRow {
         value.setTypeface(Typeface.MONOSPACE);
         value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(
-            widestReadoutPx(track, value.getPaint()), ViewGroup.LayoutParams.WRAP_CONTENT);
-        valueParams.setMarginStart(RowKit.dp(context, VALUE_GAP_DP));
-        head.addView(value, valueParams);
-        root.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        if (TWO_LINES)
-            root.addView(slider, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, RowKit.dp(context, RowKit.TOUCH_DP)));
+        Line root = new Line(context, glyph, name, value, slider,
+            widestReadoutPx(track, value.getPaint()),
+            widestReadoutPx(track, slider.insetValuePaint()));
 
         Item item = new Item(root, glyph, name, value, slider, track.name);
         slider.addOnChangeListener((s, v, fromUser) -> {
@@ -410,5 +390,145 @@ public final class SliderRow {
             });
         }
         return item;
+    }
+
+    /**
+     * One slider row, laid out by hand: on one line the glyph, the name and the track (its value
+     * inside it, {@link LegendSlider#setInsetValue}); on two, the glyph, name and value over a
+     * full-width track. Which, {@link SliderRowFit#oneLine} decides as it measures; the slider is
+     * told by a redraw, never a layout, and a drag lays nothing out.
+     */
+    public static final class Line extends ViewGroup {
+        @NonNull private final ImageView mGlyph;
+        @NonNull private final TextView mName;
+        @NonNull private final TextView mValue;
+        @NonNull private final LegendSlider mSlider;
+        private final int mValueWidthPx;
+        private final int mInsetValueWidthPx;
+        private final int mGlyphPx;
+        private final int mColumnStartPx;
+        private final int mTouchPx;
+        private final int mTopPx;
+        private final int mOneLinePadPx;
+        private final int mGapPx;
+        private final int mValueGapPx;
+        private final int mMinTrackPx;
+        private final int mValuePadPx;
+        private final int mInsetTrackPx;
+        private boolean mOneLine;
+
+        Line(@NonNull Context context, @NonNull ImageView glyph, @NonNull TextView name,
+             @NonNull TextView value, @NonNull LegendSlider slider, int valueWidthPx,
+             int insetValueWidthPx) {
+            super(context);
+            mGlyph = glyph;
+            mName = name;
+            mValue = value;
+            mSlider = slider;
+            mValueWidthPx = valueWidthPx;
+            mInsetValueWidthPx = insetValueWidthPx;
+            mGlyphPx = RowKit.dp(context, RowKit.GLYPH_DP);
+            mColumnStartPx = RowKit.dp(context, RowKit.ICON_COLUMN_DP - RowKit.EDGE_DP);
+            mTouchPx = RowKit.dp(context, RowKit.TOUCH_DP);
+            mTopPx = RowKit.dp(context, ROW_TOP_DP);
+            mOneLinePadPx = RowKit.dp(context, ONE_LINE_PAD_DP);
+            mGapPx = RowKit.dp(context, SliderRowFit.NAME_GAP_DP);
+            mValueGapPx = RowKit.dp(context, VALUE_GAP_DP);
+            mMinTrackPx = RowKit.dp(context, SliderRowFit.MIN_TRACK_DP);
+            mValuePadPx = RowKit.dp(context, LegendSlider.INSET_VALUE_PAD_DP);
+            mInsetTrackPx = RowKit.dp(context, LegendSlider.INSET_TRACK_DP);
+            addView(glyph);
+            addView(name);
+            addView(value);
+            addView(slider);
+        }
+
+        /** Whether the row stands on one line, as last measured. */
+        public boolean isOneLine() {
+            return mOneLine;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                ? RowKit.defaultRowWidthPx(getContext())
+                : MeasureSpec.getSize(widthMeasureSpec);
+            int column = Math.max(0, width - mColumnStartPx);
+            int unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            int exactGlyph = MeasureSpec.makeMeasureSpec(mGlyphPx, MeasureSpec.EXACTLY);
+            mGlyph.measure(exactGlyph, exactGlyph);
+            mName.measure(unspecified, unspecified);
+            int nameNatural = mName.getMeasuredWidth();
+            mValue.measure(MeasureSpec.makeMeasureSpec(mValueWidthPx, MeasureSpec.EXACTLY),
+                unspecified);
+            Paint.FontMetrics metrics = mSlider.insetValuePaint().getFontMetrics();
+            int valueLine = (int) Math.ceil(metrics.descent - metrics.ascent);
+            mOneLine = SliderRowFit.oneLine(column, mMinTrackPx, mGapPx, nameNatural,
+                mInsetValueWidthPx, mValuePadPx, valueLine, mInsetTrackPx);
+            int height;
+            if (mOneLine) {
+                int track = SliderRowFit.trackPx(column, mMinTrackPx);
+                mName.measure(MeasureSpec.makeMeasureSpec(
+                    SliderRowFit.nameRoomPx(column, mMinTrackPx, mGapPx), MeasureSpec.AT_MOST),
+                    unspecified);
+                mSlider.measure(MeasureSpec.makeMeasureSpec(track, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(mTouchPx, MeasureSpec.EXACTLY));
+                height = 2 * mOneLinePadPx + Math.max(mTouchPx, mName.getMeasuredHeight());
+            } else {
+                int nameRoom = Math.max(0, column - mValueGapPx - mValueWidthPx);
+                mName.measure(MeasureSpec.makeMeasureSpec(nameRoom, MeasureSpec.AT_MOST),
+                    unspecified);
+                mSlider.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(mTouchPx, MeasureSpec.EXACTLY));
+                height = mTopPx + headPx() + mTouchPx;
+            }
+            // A redraw only: the slider keeps its size, so nothing asks for a layout here.
+            mSlider.setInsetShown(mOneLine);
+            setMeasuredDimension(width, resolveSize(height, heightMeasureSpec));
+        }
+
+        /** The two-line row's name line: the glyph, the name and the value, centred on it. */
+        private int headPx() {
+            return Math.max(mGlyphPx, Math.max(mName.getMeasuredHeight(),
+                mValue.getMeasuredHeight()));
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int width = r - l;
+            if (mOneLine) {
+                int centre = (b - t) / 2;
+                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, width);
+                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, width);
+                int sliderStart = width - mSlider.getMeasuredWidth();
+                place(mSlider, sliderStart, centre - mSlider.getMeasuredHeight() / 2, width);
+                // Laid out at the track's end, where the track prints it; not drawn.
+                place(mValue, width - mValue.getMeasuredWidth(),
+                    centre - mValue.getMeasuredHeight() / 2, width);
+            } else {
+                int head = headPx();
+                int centre = mTopPx + head / 2;
+                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, width);
+                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, width);
+                place(mValue, width - mValue.getMeasuredWidth(),
+                    centre - mValue.getMeasuredHeight() / 2, width);
+                place(mSlider, 0, mTopPx + head, width);
+            }
+        }
+
+        /** Lays {@code child} at {@code start} from the start edge, mirrored right to left. */
+        private void place(@NonNull View child, int start, int top, int width) {
+            int w = child.getMeasuredWidth();
+            int left = getLayoutDirection() == LAYOUT_DIRECTION_RTL ? width - start - w : start;
+            child.layout(left, top, left + w, top + child.getMeasuredHeight());
+        }
+
+        @Override
+        protected boolean drawChild(@NonNull android.graphics.Canvas canvas, @NonNull View child,
+                                    long drawingTime) {
+            if (mOneLine && child == mValue)
+                return false;
+            return super.drawChild(canvas, child, drawingTime);
+        }
     }
 }

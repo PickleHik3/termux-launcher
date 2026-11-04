@@ -849,7 +849,13 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public WallShape shape() {
-        return WallShape.read(mPreferences);
+        return shape(false);
+    }
+
+    /** {@link #shape()} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    @NonNull
+    public WallShape shape(boolean home) {
+        return WallShape.read(mPreferences, home);
     }
 
     /**

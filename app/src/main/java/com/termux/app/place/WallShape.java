@@ -42,9 +42,15 @@ public final class WallShape {
      */
     @NonNull
     public static WallShape read(@Nullable TermuxAppSharedPreferences prefs) {
+        return read(prefs, false);
+    }
+
+    /** {@link #read} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    @NonNull
+    public static WallShape read(@Nullable TermuxAppSharedPreferences prefs, boolean home) {
         if (prefs == null) return DEFAULT;
         return new WallShape(prefs.getLayoutStyle(), prefs.getLayoutCornersDp(false),
-            prefs.getLayoutMarginDp(false));
+            prefs.getLayoutMarginDp(home));
     }
 
     public boolean isFloating() {
