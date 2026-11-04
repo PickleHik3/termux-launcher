@@ -218,3 +218,10 @@ device. Owed:
 - 2026-11-04 · The same in light and dark theme, with the launcher's scheme chrome on and off,
   and with an icon pack pinned (shortcut icons are the app's own, not the pack's) · pong.
 - 2026-11-04 · Font scale 1.3: long shortcut labels ellipsize on one line · pong or emulator.
+
+**Move to category in the App menu (2026-11-04, #199).** Not yet seen on a device. Owed:
+- 2026-11-04 · Long-press an app in the drawer (every view type) and a Home icon of a drawer app:
+  the card shows Move to category alone below the shortcuts; it opens the categories picker, a
+  pick (or Automatic) moves the app and the Categories view regrouping follows · pong.
+- 2026-11-04 · The row is absent on a dock icon, a dock folder member and a Linux app entry · pong.
+- 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.

@@ -425,6 +425,14 @@ public final class SuggestionBarView extends GridLayout
     /** The app/folder context menu, and the shortcuts menu that opens beside it. */
     private final AnchoredMenu appContextMenu = new AnchoredMenu(this, menuTheme);
     private final AnchoredMenu shortcutsMenu = new AnchoredMenu(this, menuTheme);
+    /** The drawer's categories picker, which Move to category opens; null while no drawer is bound. */
+    @Nullable private com.termux.app.launcher.drawer.AppDrawerCategoryChoiceListener categoryChoiceHandler;
+
+    public void setCategoryChoiceHandler(
+            @Nullable com.termux.app.launcher.drawer.AppDrawerCategoryChoiceListener handler) {
+        categoryChoiceHandler = handler;
+    }
+
     private final AnchoredMenu categoryPickerMenu = new AnchoredMenu(this, menuTheme);
     /**
      * Surface used to build the two popups whose windows are owned elsewhere: the folder grid (the
@@ -6734,6 +6742,7 @@ public final class SuggestionBarView extends GridLayout
         inputs.hasWidgets = !linuxApp && addToHomeListener != null
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
+        inputs.canMoveToCategory = categoryChoiceHandler != null;
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -6943,6 +6952,13 @@ public final class SuggestionBarView extends GridLayout
                         showNotificationPopup(entry, context.anchor);
                     });
             }
+            case MOVE_TO_CATEGORY:
+                return appMenuItem(R.string.app_menu_move_to_category,
+                    R.drawable.ic_app_menu_move_to_dock, () -> {
+                        dismissAppContextPopup();
+                        if (categoryChoiceHandler != null)
+                            categoryChoiceHandler.onCategoryChoiceRequested(entry, context.anchor);
+                    });
             case WIDGETS:
                 return appMenuItem(R.string.app_menu_widgets, R.drawable.ic_app_menu_widgets, () -> {
                     AddToHomeListener listener = addToHomeListener;

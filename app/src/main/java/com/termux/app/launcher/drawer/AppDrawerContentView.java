@@ -284,7 +284,10 @@ public final class AppDrawerContentView extends FrameLayout
     public AppDrawerContentView(@NonNull Context context, @Nullable SuggestionBarView dock) {
         super(context);
         mDock = dock;
-        if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
+        if (dock != null) {
+            dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
+            dock.setCategoryChoiceHandler(this::showCategoryOverrideDialog);
+        }
         mDensity = context.getResources().getDisplayMetrics().density;
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryOverrides = new LauncherCategoryOverrideStore(context);
@@ -648,9 +651,15 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     public void setDock(@Nullable SuggestionBarView dock) {
-        if (mDock != null && mDock != dock) mDock.setDrawerConfigChangedListener(null);
+        if (mDock != null && mDock != dock) {
+            mDock.setDrawerConfigChangedListener(null);
+            mDock.setCategoryChoiceHandler(null);
+        }
         mDock = dock;
-        if (dock != null) dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
+        if (dock != null) {
+            dock.setDrawerConfigChangedListener(this::onDockConfigChanged);
+            dock.setCategoryChoiceHandler(this::showCategoryOverrideDialog);
+        }
         mResultsLabel.setTextColor(resultsChromeColor(0x73));
         bindNoResultsText();
         mAdapter.setDock(dock);
