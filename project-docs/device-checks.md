@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Dock opacity blends across a crossing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, same Style, Corners and Margin: swipe Home 2 to the Workspace and back, slow and
+  reversed. The dock stays on screen (no dip) and its opacity eases with the finger; the landing
+  frame changes nothing in the dock. Tint, frost and the keyboard's look still change at the
+  landing (not blended yet). Docked and Floating, keyboard up and down, Live blur on and off ·
+  pong.
 - **Terminal pane stays sharp after a crossing (11-04).** Home Margin 16, Workspace Margin 4,
   and the dock's opacity apart on Home: swipe Home 2 to the Workspace with a session showing
   text. Record the screen: no frame after the landing shows the pane's text blurred (it was ~4

@@ -24760,6 +24760,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPromptFieldUnderPalette);
         // The strip under the pill crosses from the one dress to the other with the finger.
         syncNavStripFade(wallFrame);
+        // A stack whose halves differ only in look blends its glass with the wall.
+        syncStackLookBlend(seam);
         // And the band behind the system bar with the bar's glass, by the same share.
         syncTopBandFade(wallFrame);
         // A band only one half's dock carries follows its page across the seam.
@@ -25168,6 +25170,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
+        // A look apart alone blends the dock's glass from here to there (syncStackLookBlend).
+        mLookBlendShare = Float.NaN;
+        mLookBlendHereOpacity = mPreferences == null ? 100
+            : mPreferences.getAppBarOpacity(lookIdOf(herePage));
+        mLookBlendThereOpacity = mPreferences == null ? 100
+            : mPreferences.getAppBarOpacity(lookIdOf(therePage));
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.
         beginNavStripFade(herePage, therePage);
         beginTopBandFade(herePage, therePage);
@@ -25339,6 +25347,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pass of this frame dressed or showed it.
         if (rides) syncStatusStripTravel();
         return rides;
+    }
+
+    /** The dock's opacity at each end of a look blend, read as the crossing begins. */
+    private int mLookBlendHereOpacity = 100, mLookBlendThereOpacity = 100;
+    /** The blend's step last applied; NaN while none has been. */
+    private float mLookBlendShare = Float.NaN;
+
+    /**
+     * One frame of a crossing between halves that dress the stack apart only in look
+     * (SeamCrossing.Answers#lookShare): the dock's frost, which carries its opacity, is set at the
+     * blend's step between the two ends' opacities, over the even-out matrix last measured. Set
+     * only when the step changes (at most SeamCrossing.LOOK_STEPS times a crossing), never at
+     * rest, and nothing is laid out; the RenderEffect (blur and lens) is left as it is. The
+     * landing's re-dress then sets the arriving look, which the last step already showed.
+     */
+    private void syncStackLookBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
+        float share = seam.lookShare();
+        if (Float.isNaN(share) || share == mLookBlendShare || mChrome == null) return;
+        android.widget.ImageView backdrop = hotView(R.id.accessory_blur_backdrop);
+        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
+        mLookBlendShare = share;
+        int opacity = Math.round(mLookBlendHereOpacity
+            + (mLookBlendThereOpacity - mLookBlendHereOpacity) * share);
+        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.withEvenOut(
+            mChrome.ink().lastBandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK),
+            com.termux.app.chrome.GlassFilters.frost(opacity)));
     }
 
     /**

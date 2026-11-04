@@ -212,6 +212,7 @@ public final class SeamCrossing {
         float stackSlide;
         float statusFade;
         float barMarginShare;
+        float lookShare;
 
         Answers() {
             clear(1f, 0f);
@@ -235,6 +236,17 @@ public final class SeamCrossing {
             stackSlide = Float.NaN;
             statusFade = Float.NaN;
             barMarginShare = Float.NaN;
+            lookShare = Float.NaN;
+        }
+
+        /**
+         * How far the stack's glass has blended from the committed page's look toward the other
+         * page's, 0 to 1 with the wall's offset, on a crossing whose halves dress the stack apart
+         * only in look; NaN otherwise. The blend is quantised ({@link #LOOK_STEPS}), so the glass
+         * is set again only when the step changes.
+         */
+        public float lookShare() {
+            return lookShare;
         }
 
         /**
@@ -462,6 +474,8 @@ public final class SeamCrossing {
          * Margins in dp as stored.
          */
         boolean barMarginEases;
+        /** Whether the halves dress the stack apart only in look, which blends instead of dipping. */
+        boolean lookBlends;
         int committedMarginDp, otherMarginDp;
         /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
         boolean beadMelt, beadsCommitted;
@@ -502,6 +516,9 @@ public final class SeamCrossing {
         }
     }
 
+    /** The steps a look blend moves through across a crossing: the glass is set at most this often. */
+    public static final int LOOK_STEPS = 32;
+
     @NonNull private Run mRun = new Run();
 
     private final Answers mAnswers = new Answers();
@@ -530,6 +547,12 @@ public final class SeamCrossing {
         mRun.otherSearchField = other.dress.searchField();
         mRun.dressDiffers = !committed.stack.equals(other.stack);
         mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
+        // A look apart alone keeps one stack: its glass blends with the wall (amendment
+        // 2026-11-04), so the stack neither dips nor is dressed again mid-slide. The dip stays
+        // for a structure apart: a shape (Style, Corners, Margin) or the layout's sizes.
+        mRun.lookBlends = mRun.dressDiffers
+            && committed.stack.structureEquals(other.stack) && !mRun.oneKind;
+        if (mRun.lookBlends) mRun.dressDiffers = false;
         // One bar across the wall (#90): where both halves stand it alike, in one outline, it
         // stands still on the crossing instead of riding with the Workspace's page. A Margin
         // apart only insets it, and the bar eases from one inset to the other with the wall
@@ -732,6 +755,12 @@ public final class SeamCrossing {
                 float share = clamp01(dressProgress);
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
             }
+        }
+        // A look apart alone blends the stack's glass with the wall, in steps.
+        if (mRun.lookBlends) {
+            float share = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.lookShare = Math.round(share * LOOK_STEPS) / (float) LOOK_STEPS;
+            answers.moved = true;
         }
         // A still bar eases its Margin with the wall itself, not the chrome's own clock.
         if (mRun.barMarginEases) {
