@@ -21,10 +21,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * Across the seam between Home and the Workspace the pages turn as Home's pages do, side by side
- * with the finger (decided 2026-11-02): Home's page leaves by the finger's distance while the
- * Workspace's comes in beside it, flat and off any layer, whatever the page transition. Between
- * the Workspace's own pages the chosen effect still turns them.
+ * Across the seam between Home and the Workspace the pages move by the page transition, as Home's
+ * own pages do (ADR 0015 §4, amendment 2026-11-04, reversing 2026-11-02's flat slide): under Slide
+ * Home's page leaves by the finger's distance with the Workspace's beside it, flat; under any
+ * other effect they are turned, scaled or faded on a layer for those frames. The wall still says
+ * it is moving across the seam, which the chrome eases on.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P})
@@ -73,40 +74,46 @@ public class SeamPageTurnTest {
     }
 
     @Test
-    public void homeLeavesWithTheFingerTowardTheWorkspaceUnderEveryEffect() {
+    public void underSlideHomeLeavesWithTheFingerFlat() {
+        build(HomePageTransition.SLIDE);
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertFalse("at rest", wall.slidesAcrossSeam());
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        assertTrue("across the seam", wall.slidesAcrossSeam());
+        assertEquals("home", -300f, widgets.getTranslationX(), SLOP_PX);
+        assertEquals("workspace", WIDTH + wall.offsetPx(), terminal.getTranslationX(), 0f);
+        assertFlat("home", widgets);
+        assertFlat("workspace", terminal);
+        assertTrue("nothing posed", wall.posedPages().isEmpty());
+    }
+
+    @Test
+    public void everyOtherEffectTurnsThePagesAcrossTheSeam() {
         for (HomePageTransition effect : HomePageTransition.values()) {
+            if (effect == HomePageTransition.SLIDE) continue;
             build(effect);
             wall.goTo(PaneWallPage.WIDGETS, false);
-            assertFalse(effect + " at rest", wall.slidesAcrossSeam());
             wall.beginDrag();
             wall.dragTo(-300f);
             String why = effect.name();
             assertTrue(why + " across the seam", wall.slidesAcrossSeam());
-            // Home's page follows the finger, as a Home page does under a page drag.
-            assertEquals(why + " home", -300f, widgets.getTranslationX(), SLOP_PX);
-            assertEquals(why + " home is the wall", wall.offsetPx(), widgets.getTranslationX(), 0f);
-            // The Workspace's page comes in right beside it.
-            assertEquals(why + " workspace", WIDTH + wall.offsetPx(), terminal.getTranslationX(), 0f);
-            assertFlat(why + " home", widgets);
-            assertFlat(why + " workspace", terminal);
-            assertTrue(why + " nothing posed", wall.posedPages().isEmpty());
+            assertFalse(why + " posed", wall.posedPages().isEmpty());
             wall.cancelDrag();
             assertFalse(why + " back at rest", wall.slidesAcrossSeam());
+            assertFlat(why + " home back", widgets);
             assertEquals(why + " home back", 0f, widgets.getTranslationX(), 0f);
         }
     }
 
     @Test
-    public void theWorkspaceLeavesWithTheFingerTowardHome() {
-        build(HomePageTransition.DEPTH);
+    public void theWorkspaceTurnsTowardHomeUnderCarousel() {
+        build(HomePageTransition.CAROUSEL);
         wall.goTo(PaneWallPage.TERMINAL, false);
         wall.beginDrag();
         wall.dragTo(300f);
         assertTrue(wall.slidesAcrossSeam());
-        assertEquals(300f, terminal.getTranslationX(), SLOP_PX);
-        assertEquals(wall.offsetPx() - WIDTH, widgets.getTranslationX(), 0f);
-        assertFlat("workspace", terminal);
-        assertFlat("home", widgets);
+        assertFalse(wall.posedPages().isEmpty());
     }
 
     @Test

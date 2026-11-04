@@ -154,10 +154,11 @@ public final class SeamCrossing {
         @NonNull final FrameGlass frameGlass;
         final boolean splitPanes;
         /**
-         * Whether the pages slide flat across the screen (Home's Slide page transition): a bar
-         * only one of two Home pages wears rides with its page then, and fades in place under a
+         * Whether the pages slide flat across the screen (the Slide page transition): a bar only
+         * one end wears, or wears apart, rides with its page then, and fades in place under a
          * transition that turns the pages (Carousel, Depth and the rest), which a flat ride would
-         * not follow.
+         * not follow. That holds between two Home pages and across the seam alike (amendment
+         * 2026-11-04); a bar both ends stand alike stays still under every transition.
          */
         final boolean pagesSlide;
 
@@ -543,6 +544,16 @@ public final class SeamCrossing {
             && mRun.committedMarginDp != mRun.otherMarginDp;
         PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
         mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
+        mRun.barEnd = null;
+        mRun.barFades = false;
+        if (mRun.barRides && !stage.pagesSlide && SeamTravel.crosses(committed.page.kind,
+                other.page.kind)) {
+            // The pages turn: the Workspace's bar, which a turned page would not carry flat, fades
+            // in place by the way toward the Workspace's page instead of riding with it.
+            mRun.barRides = false;
+            mRun.barFades = true;
+            mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
+        }
         // A keyboard in the stack, not one floating in a frame of its own.
         mRun.committedKeyboard = committed.keyboardUp
             && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
@@ -731,7 +742,8 @@ public final class SeamCrossing {
         // says; from Home the Workspace's bar is laid out as the slide starts.
         boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
         boolean statusShown = progress > 0f && mRun.statusMayShow;
-        // A bar only one of two turning Home pages wears fades with the way toward that page.
+        // A bar only one end wears, or wears apart, fades with the way toward that end while the
+        // pages turn.
         if (mRun.barFades && mRun.barEnd != null) {
             float share = clamp01(progress);
             answers.statusFade = mRun.barEnd.equals(committedEnd) ? 1f - share : share;

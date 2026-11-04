@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Crossings turn by the Page transition (11-04).** Page transition Carousel, then Depth, Fade,
+  Stack and Slide: swipe Home 2 to the Workspace and back, slow, flung and reversed mid-way. The
+  two pages move as Home 1 and Home 2 do under the same setting (Slide: flat); the status bar,
+  dock and keyboard stay flat on screen and ease with the finger; a bar only one end wears fades
+  in place under the turning ones; the terminal pane's glass and Live blur (on and off) turn
+  with their page; a Display page in front still slides. Docked and Floating dock, keyboard up
+  and down · pong.
 - **Home page arrives live (11-04).** Home 1 (home), Home 2, Terminal: on Home 1 swipe to Home 2,
   go to the Workspace, keyboard up, then the extra keys' Home key, and again with the phone's
   home press: Home 1 slides in with its widgets and status bar from the first frame, never the

@@ -872,8 +872,9 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * Whether the wall slides flat across the seam this frame, the page transition set aside, so
-     * the chrome follows the wall there as it does under the slide.
+     * Whether the wall is moving across the seam this frame. The pages turn there by the page
+     * transition as anywhere else; the chrome, which stays flat, eases on the wall's own offset
+     * across the seam rather than on a clock of its own, as it does under the slide.
      */
     public boolean slidesAcrossSeam() {
         return mSeamSlide;
@@ -3319,10 +3320,11 @@ public final class PaneWallLayout extends ViewGroup
         // A turn has a page to turn to: a window arriving, or a place or window on the side the
         // wall is moving toward. A pull into either end of the row only slides. The slide asks
         // nothing, so its frames cost what they always did.
-        // Across the seam between Home and the Workspace the pages turn as Home's pages are
-        // seen to: side by side with the finger, whatever the effect (decided 2026-11-02).
+        // Across the seam between Home and the Workspace the pages turn by the page transition
+        // too, as Home's pages do (ADR 0015 §4, amendment 2026-11-04); the chrome stays flat
+        // and eases on the wall's offset, which the seam flag tells it.
         mSeamSlide = seamAhead(mOffsetPx);
-        mTurning = mTransition != HomePageTransition.SLIDE && !mSeamSlide && (mNudgePage != null
+        mTurning = mTransition != HomePageTransition.SLIDE && (mNudgePage != null
             || (mOffsetPx != 0f && canStep(mOffsetPx > 0f ? -1 : 1)));
         int current = indexOfCell(mCurrentId);
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {

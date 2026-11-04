@@ -24807,12 +24807,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // stands higher: the stack's, or the picture of the committed half's stack.
             mCrossing.coverAt(translation, stackPictureCoverPx());
         }
-        // The status bar travels with the Workspace's page wherever the frame reaches Home; it
-        // fades in place only where it cannot ride (a bar on a side or the bottom edge).
+        // The status bar travels with the Workspace's page wherever the frame reaches Home while
+        // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
+        // edge, or pages that turn).
         boolean barRides = syncStatusTravel(wallFrame, seam);
         // A bar that stands still eases from one page's Margin to the other's with the wall.
         syncStatusMarginEase(seam);
-        float statusAlpha = barRides ? 1f : frame.statusReveal;
+        // Under a transition that turns the pages, a bar one end wears apart fades in place.
+        float statusFade = seam.statusFade();
+        float statusAlpha = barRides ? 1f : !Float.isNaN(statusFade) ? statusFade
+            : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
@@ -25142,9 +25146,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stackDressOf(otherDress, therePage, orientation),
                 mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
                 otherRowsPx);
+        // The pages turn across the seam by the page transition; a bar that cannot stand still
+        // then fades in place rather than riding a turned page (SeamCrossing.Stage#pagesSlide).
+        boolean pagesSlide = mPaneWallController == null
+            || mPaneWallController.wall().pageTransition()
+                == com.termux.app.launcher.home.HomePageTransition.SLIDE;
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
-                isSplitPanesEnabled()),
+                isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.

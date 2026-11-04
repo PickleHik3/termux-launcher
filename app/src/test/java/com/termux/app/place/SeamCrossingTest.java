@@ -1227,6 +1227,32 @@ public class SeamCrossingTest {
         for (Step step : drive.steps) assertTrue(Float.isNaN(step.barMarginShare));
     }
 
+    /**
+     * Under a page transition that turns the pages, the Workspace's bar of another Style fades in
+     * place by the way toward the Workspace's page instead of riding a turned page (amendment
+     * 2026-11-04).
+     */
+    @Test
+    public void aBarApartFadesInPlaceWhileThePagesTurn() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(LayoutStyle.FLOATING, SHAPE.cornersDp, SHAPE.marginDp);
+            DressResolver dresses = new DressResolver(stored);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = new Drive(
+                half(dresses, from, fromHome ? home() : window(), false),
+                half(dresses, fromHome ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS,
+                    fromHome ? window() : home(), false),
+                SeamCrossing.Stage.of(false, () -> false, true, false));
+            drive.slow(0f, 1f);
+            SeamCrossing.Answers answers = drive.crossing.frame(drive.frameAt(1f), true, false,
+                false);
+            assertEquals("from " + from + ": the Workspace's bar shows there", fromHome ? 1f : 0f,
+                answers.statusFade(), EPSILON);
+            assertEquals("from " + from + ": never rides", 0, drive.count(st -> st.rides));
+        }
+    }
+
     /** A Style apart still reshapes the bar: it rides with the Workspace's page. */
     @Test
     public void aBarOfAnotherStyleStillRidesWithTheWorkspace() {
