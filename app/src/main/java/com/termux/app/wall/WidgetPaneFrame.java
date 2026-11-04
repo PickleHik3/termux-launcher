@@ -131,6 +131,22 @@ public final class WidgetPaneFrame extends PaneContentFrame
         syncLookWorn();
     }
 
+    // A widget's glass blurs what is beneath it at the Look's blur, the stored frame's own.
+    @Override public boolean liveBlur() {
+        return mHost != null && mHost.liveBlur();
+    }
+
+    @Nullable @Override
+    public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+        com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
+        if (mHost == null || look == null) return null;
+        return mHost.attachWidgetLiveGlass(slab, look.spec().blurDp);
+    }
+
+    @Override public void detachLiveGlass(@NonNull View slab) {
+        if (mHost != null) mHost.detachWidgetLiveGlass(slab);
+    }
+
     /**
      * Battery saver, outline text and the system contrast, watched while the page is attached:
      * a change re-dresses its widgets at once instead of at the next dress pass.
@@ -202,6 +218,19 @@ public final class WidgetPaneFrame extends PaneContentFrame
         }
         /** A wheel moved: keep the grid this size, and reflow the page onto it. */
         void setWidgetGrid(int columns, int rows);
+        /** Whether Live blur is in effect now. */
+        default boolean liveBlur() { return false; }
+        /**
+         * A widget slab's live picture at {@code blurDp}, in the budget's widget place; null while
+         * Live blur is off or no place is left.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
+                                                                        int blurDp) {
+            return null;
+        }
+        /** The slab gave its live picture back. */
+        default void detachWidgetLiveGlass(@NonNull View slab) {}
     }
 
     /** The buttons the page's border tab carries. */

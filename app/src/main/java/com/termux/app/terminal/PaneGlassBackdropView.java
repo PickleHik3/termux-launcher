@@ -225,13 +225,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (picture != null) {
             picture.drawable().setCallback(this);
             picture.drawable().setColorFilter(mFramePaint.getColorFilter());
-        } else {
-            mLiveEffectSet = null;
-            if (mLiveNode != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                mLiveNode.setRenderEffect(null);
-                mLiveNode.discardDisplayList();
-            }
         }
+        // The live node is emptied by the next draw, which draws the stored frame in its place
+        // ({@link #retireLiveNode}): emptied now, a frame this slab already recorded would show it
+        // empty.
         mAimStale = true;
         tellEdge();
         invalidate();
@@ -254,6 +251,46 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             && GlassRefraction.available();
     }
 
+    /**
+     * Which picture this slab shows: the live one once it is on the live route and the recorder
+     * has recorded and blurred it whole ({@link LivePicture#ready}), else the stored frame. The
+     * one place the choice is made; a picture handed over before its first recording leaves the
+     * stored frame up, and its first recording invalidates the slab to swap within that frame.
+     */
+    boolean showsLive() {
+        return drawsLive() && mLivePicture.ready();
+    }
+
+    /**
+     * Empties the live node, and gives back its effect's layer, once the slab has no live picture
+     * to show; called from a hardware draw that did not draw the node, so nothing still recorded
+     * refers to it. Nothing to do on most draws: one field and one flag are read.
+     */
+    private void retireLiveNode(@NonNull Canvas canvas) {
+        android.graphics.RenderNode node = mLiveNode;
+        if (node == null || drawsLive() || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+                || !(canvas instanceof android.graphics.RecordingCanvas)) {
+            return;
+        }
+        if (mLiveEffectSet == null && !node.hasDisplayList()) return;
+        mLiveEffectSet = null;
+        node.setRenderEffect(null);
+        node.discardDisplayList();
+    }
+
+    /**
+     * The live picture's first recording asks for the swap ({@link LivePicture#recorded}): the
+     * whole slab redraws, as the picture's bounds are set only when it is drawn.
+     */
+    @Override
+    public void invalidateDrawable(@NonNull Drawable drawable) {
+        if (mLivePicture != null && drawable == mLivePicture.drawable()) {
+            invalidate();
+            return;
+        }
+        super.invalidateDrawable(drawable);
+    }
+
     @Override
     protected boolean verifyDrawable(@NonNull Drawable who) {
         return super.verifyDrawable(who) || (mLivePicture != null && who == mLivePicture.drawable());
@@ -267,7 +304,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * what is beneath it reaches the picture without the slab drawing at all.
      */
     private boolean drawLive(@NonNull Canvas canvas, int width, int height) {
-        if (!drawsLive() || !(canvas instanceof android.graphics.RecordingCanvas)) return false;
+        if (!showsLive() || !(canvas instanceof android.graphics.RecordingCanvas)) return false;
         LivePicture picture = mLivePicture;
         GlassRefraction.Look look = mLook;
         float density = getResources().getDisplayMetrics().density;
@@ -999,6 +1036,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
         boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
+        if (!live) retireLiveNode(canvas);
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
             drawFramePlain(canvas, width, height);

@@ -61,13 +61,49 @@ public final class LivePicture implements GlassPicture {
     int mRecordedWidth = -1;
     int mRecordedHeight = -1;
     int mRecordedMargin = -1;
+    /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
+    int mRank = LiveBackdrop.RANK_CHROME;
     /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
     private boolean mReleased;
+    /**
+     * Whether the nodes hold a whole picture: a recording, and the blur node drawing it. Set by
+     * the recorder's first recording ({@link #recorded}), cleared when the nodes are emptied.
+     */
+    private boolean mReady;
+    /** The nodes {@link #release} let go, emptied a frame later by {@link #mDiscardRetired}. */
+    @Nullable private RenderNode mRetiredRecord;
+    @Nullable private RenderNode mRetiredBlur;
+    /**
+     * Empties the released nodes once the holder has drawn its stored frame in their place: the
+     * frame the holder last recorded may still draw them, so they keep their pictures until the
+     * next frame.
+     */
+    @NonNull private final Runnable mDiscardRetired = this::discardRetired;
 
     LivePicture(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
         mSurface = surface;
         mPanelRadius = panelRadius;
         setBlurRadiusPx(blurRadiusPx);
+    }
+
+    /**
+     * Whether this picture can be shown now: recorded and blurred at least once since it was
+     * made or last emptied, and not released. A holder draws its stored frame until it is, and
+     * the drawable invalidates its holder the moment it becomes so ({@link #recorded}).
+     */
+    public boolean ready() {
+        return mReady && !mReleased;
+    }
+
+    /**
+     * The recorder has just recorded this picture whole (inside a pre-draw, before the frame is
+     * drawn). The first time since it was empty, the holder is invalidated so this same frame
+     * swaps its stored frame for the picture.
+     */
+    void recorded() {
+        if (mReady || mReleased) return;
+        mReady = true;
+        mDrawable.invalidateSelf();
     }
 
     @NonNull
@@ -259,6 +295,7 @@ public final class LivePicture implements GlassPicture {
      * fills it, the picture is back without the surface being redrawn. For a surface that hid.
      */
     void trim() {
+        mReady = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mBlur != null && mBlur.hasDisplayList()) mBlur.discardDisplayList();
             if (mRecord != null && mRecord.hasDisplayList()) mRecord.discardDisplayList();
@@ -268,12 +305,44 @@ public final class LivePicture implements GlassPicture {
         forgetRecording();
     }
 
-    /** {@link #trim} and the nodes too: the picture is done with (Live off, memory short). */
+    /**
+     * {@link #trim} and the nodes too: the picture is done with (Live off, memory short, the
+     * holder let go). The holder draws its stored frame from its next draw on, but the frame it
+     * recorded last may still draw these nodes, so while it is on screen they are emptied a frame
+     * later rather than now; emptied now, that frame would show the glass with nothing in it.
+     */
     void release() {
+        if (mReleased) return;
         mReleased = true;
-        trim();
+        mReady = false;
+        if (mSurface.isAttachedToWindow() && (mBlur != null || mRecord != null)) {
+            mRetiredBlur = mBlur;
+            mRetiredRecord = mRecord;
+            mBlurWidth = -1;
+            mBlurHeight = -1;
+            forgetRecording();
+            mSurface.postOnAnimation(mDiscardRetired);
+        } else {
+            trim();
+        }
         mBlur = null;
         mRecord = null;
+    }
+
+    private void discardRetired() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (mRetiredBlur != null && mRetiredBlur.hasDisplayList()) mRetiredBlur.discardDisplayList();
+            if (mRetiredRecord != null && mRetiredRecord.hasDisplayList()) {
+                mRetiredRecord.discardDisplayList();
+            }
+        }
+        mRetiredBlur = null;
+        mRetiredRecord = null;
+    }
+
+    /** Whether {@link #release} still holds nodes it will empty on the next frame. Tests. */
+    boolean retiring() {
+        return mRetiredBlur != null || mRetiredRecord != null;
     }
 
     /** Whether the blur layer can exist now: what the budget counts. */
