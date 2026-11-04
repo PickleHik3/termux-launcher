@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Temporary Display page (11-04).** With no Display page on the wall: (1) tap a Linux app in
+  the drawer: a Display page appears and the app runs on it; Edit pages lists no Display card and
+  Add display is enabled. (2) Close the app: about 2 s later the page goes, the wall lands on its
+  neighbour, the display stops. (3) Relaunch, open Edit pages, tap Add display: a Display card
+  appears, the app keeps running; close the app and the page stays. (4) Relaunch from a wall with
+  no Display page, force-stop with the app up, start again: no Display page left. Emulator or pong.
 - **Live glass wave 4 owed (11-03).** (1) The bars at a cold start (force-stop, relaunch): no
   see-through status or window bar before the stored frame lands. (2) Live widgets on pong (wave
   3b): Live blur on, a widget shows the icons and widgets beneath it; off shows wallpaper only.

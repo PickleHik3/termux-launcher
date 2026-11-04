@@ -111,6 +111,15 @@ public class AppDrawerAppCellView extends LinearLayout {
         bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, null, categoryChoiceListener);
     }
 
+    /** Category detail grid: the popup's category row plus the drawer's pickup, as in grid and list. */
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+              @Nullable AppDrawerPickupDelegate pickupDelegate,
+              @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate,
+            categoryChoiceListener);
+    }
+
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {

@@ -38,42 +38,57 @@ public final class WallPages {
     /** What an accepted edit did. */
     public enum ChangeType {
         NONE, ADDED, MOVED, REMOVAL_PENDING, UNDONE, REMOVAL_COMMITTED, HOME_SET, RENAMED, BOUND,
-        HOMES_DETACHED, HOMES_ATTACHED
+        HOMES_DETACHED, HOMES_ATTACHED, MADE_PERMANENT
     }
 
     /** The id {@code add} takes for "at the end". */
     public static final int END = -1;
 
-    /** One page: an id never reused, a kind, a name (null = default) and a Display binding. */
+    /**
+     * One page: an id never reused, a kind, a name (null = default), a Display binding, and
+     * whether it is <em>temporary</em>: a Display page a drawer launch put up because the wall had
+     * none to run on (ADR 0015's 2026-11-04 amendment). A temporary page is on the wall while its
+     * display runs, is not listed in Edit pages, and goes when the display or its app stops.
+     */
     public static final class Page {
         public final int id;
         @NonNull public final PageKind kind;
         @Nullable public final String name;
         /** A Linux app id for a Display page bound to one; else null. */
         @Nullable public final String binding;
+        /** A Display page a Linux launch added for itself; it goes with its display. */
+        public final boolean temporary;
 
         public Page(int id, @NonNull PageKind kind, @Nullable String name,
                     @Nullable String binding) {
+            this(id, kind, name, binding, false);
+        }
+
+        public Page(int id, @NonNull PageKind kind, @Nullable String name,
+                    @Nullable String binding, boolean temporary) {
             this.id = id;
             this.kind = kind;
             this.name = name;
             this.binding = binding;
+            this.temporary = temporary;
         }
 
-        Page withName(@Nullable String value) { return new Page(id, kind, value, binding); }
+        Page withName(@Nullable String value) { return new Page(id, kind, value, binding, temporary); }
 
-        Page withBinding(@Nullable String value) { return new Page(id, kind, name, value); }
+        Page withBinding(@Nullable String value) { return new Page(id, kind, name, value, temporary); }
+
+        Page permanent() { return new Page(id, kind, name, binding, false); }
 
         @Override public boolean equals(Object o) {
             if (!(o instanceof Page)) return false;
             Page p = (Page) o;
             return id == p.id && kind == p.kind && Objects.equals(name, p.name)
-                && Objects.equals(binding, p.binding);
+                && Objects.equals(binding, p.binding) && temporary == p.temporary;
         }
 
-        @Override public int hashCode() { return Objects.hash(id, kind, name, binding); }
+        @Override public int hashCode() { return Objects.hash(id, kind, name, binding, temporary); }
 
-        @Override public String toString() { return "Page#" + id + ":" + kind; }
+        @Override public String toString() { return "Page#" + id + ":" + kind + (temporary ? "~" : ""); }
     }
 
     /** One place the wall can land: a page, plus a window index on the Terminal page. */
@@ -241,6 +256,36 @@ public final class WallPages {
         return null;
     }
 
+    /** The pages Edit pages lists: those on the wall without the temporary ones. */
+    @NonNull
+    public List<Page> listedPages() {
+        List<Page> out = new ArrayList<>();
+        for (Page p : pages()) if (!p.temporary) out.add(p);
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The temporary Display page on the wall; null when there is none. */
+    @Nullable
+    public Page temporaryDisplay() {
+        for (Page p : pages()) if (p.temporary) return p;
+        return null;
+    }
+
+    /**
+     * The index on the wall of the page Edit pages shows at {@code listedIndex} (temporary pages
+     * are not shown there); the last index when {@code listedIndex} is past the listed pages.
+     */
+    public int wallIndexOfListed(int listedIndex) {
+        List<Page> visible = pages();
+        int n = 0;
+        for (int i = 0; i < visible.size(); i++) {
+            if (visible.get(i).temporary) continue;
+            if (n == listedIndex) return i;
+            n++;
+        }
+        return visible.size() - 1;
+    }
+
     // ---- cells and named targets ----------------------------------------------------------
 
     /** The index of the page's cell among the pages on the wall; -1 when it is not on the wall. */
@@ -381,6 +426,76 @@ public final class WallPages {
      */
     @NonNull
     public Result add(@NonNull PageKind kind, int afterId, @Nullable String binding) {
+        return add(kind, afterId, binding, false);
+    }
+
+    /**
+     * Adds a temporary unbound Display page after {@code afterId} ({@link #END}: the end): the
+     * page a Linux launch runs on when the wall has no Display page for it.
+     */
+    @NonNull
+    public Result addTemporaryDisplay(int afterId) {
+        return add(PageKind.DISPLAY, afterId, null, true);
+    }
+
+    /**
+     * Edit pages' "Add display": a lasting unbound Display page. A temporary one is made lasting
+     * where it stands (its app stays on it); else a lasting unbound one already on the wall is
+     * the answer (NONE); else a new one goes after {@code afterId} (the end when that page is
+     * not on the wall).
+     */
+    @NonNull
+    public Result addDisplayPage(int afterId) {
+        Page temporary = temporaryDisplay();
+        if (temporary != null) return makePermanent(temporary.id);
+        for (Page p : pages()) {
+            if (p.kind == PageKind.DISPLAY && p.binding == null) {
+                return new Result(this, ChangeType.NONE, p, null, -1, visibleIndex(p.id));
+            }
+        }
+        return add(PageKind.DISPLAY, page(afterId) != null ? afterId : END, null);
+    }
+
+    /**
+     * Makes a temporary page permanent where it stands: it stays on the wall and in Edit pages
+     * after its display stops. NONE when it is already permanent.
+     */
+    @NonNull
+    public Result makePermanent(int id) {
+        Page page = page(id);
+        if (page == null) return refuse(Error.UNKNOWN_PAGE);
+        if (!page.temporary) return new Result(this, ChangeType.NONE, page, null, -1, -1);
+        return replace(page, page.permanent(), ChangeType.MADE_PERMANENT);
+    }
+
+    /**
+     * Without its temporary pages, pending or not, gone for good: the start-up sweep of pages a
+     * display that no longer runs left behind. Home on one moves to the first page left.
+     */
+    @NonNull
+    public WallPages withoutTemporaryPages() {
+        List<Page> list = new ArrayList<>(all.size());
+        List<Integer> marked = new ArrayList<>(pending);
+        boolean any = false;
+        for (Page p : all) {
+            if (p.temporary) {
+                any = true;
+                marked.remove(Integer.valueOf(p.id));
+            } else {
+                list.add(p);
+            }
+        }
+        if (!any) return this;
+        int home = homeId;
+        boolean homeKept = false;
+        for (Page p : list) if (p.id == homeId) homeKept = true;
+        if (!homeIsDisplayWindow && !homeKept) home = firstVisible(list, marked);
+        return copy(list, marked, detached, home, nextId, homeIsDisplayWindow);
+    }
+
+    @NonNull
+    private Result add(@NonNull PageKind kind, int afterId, @Nullable String binding,
+                       boolean temporary) {
         if (binding != null && kind != PageKind.DISPLAY) return refuse(Error.BINDING_NOT_DISPLAY);
         if (kind == PageKind.TERMINAL && hasTerminal()) return refuse(Error.SECOND_TERMINAL);
         int at = all.size();
@@ -389,7 +504,7 @@ public final class WallPages {
             if (i < 0) return refuse(Error.UNKNOWN_PAGE);
             at = i + 1;
         }
-        Page page = new Page(nextId, kind, null, binding);
+        Page page = new Page(nextId, kind, null, binding, temporary);
         List<Page> list = new ArrayList<>(all);
         list.add(at, page);
         boolean first = pages().isEmpty() && !homeIsDisplayWindow;
@@ -455,6 +570,10 @@ public final class WallPages {
         int home = homeId;
         if (!homeIsDisplayWindow && homeId == id) {
             home = visible.get(from == 0 ? 1 : 0).id;
+            // A temporary page is never made home while a lasting one is left.
+            for (Page p : visible) {
+                if (p.id != id && !p.temporary) { home = p.id; break; }
+            }
         }
         WallPages next = copy(all, marked, detached, home, nextId, homeIsDisplayWindow);
         return new Result(next, ChangeType.REMOVAL_PENDING, page, null, from, -1);
@@ -520,8 +639,11 @@ public final class WallPages {
         }
         Page unbound = firstUnboundDisplay();
         if (unbound != null) {
-            Result set = setHome(unbound.id);
-            return new Result(set.pages, ChangeType.HOME_SET, unbound, null, -1, set.toIndex);
+            // Home on a temporary page makes it a lasting one: home outlives the display.
+            WallPages base = unbound.temporary ? makePermanent(unbound.id).pages : this;
+            Result set = base.setHome(unbound.id);
+            return new Result(set.pages, ChangeType.HOME_SET, base.page(unbound.id), null, -1,
+                set.toIndex);
         }
         Page t = terminal();
         Result added = add(PageKind.DISPLAY, t == null ? END : t.id, null);
@@ -533,7 +655,7 @@ public final class WallPages {
     public static final class Route {
         /** The page to open on, or 0 when one has to be added. */
         public final int pageId;
-        /** When {@link #pageId} is 0: the page to add a new unbound Display page after. */
+        /** When {@link #pageId} is 0: the page to add a new temporary Display page after. */
         public final int addAfterId;
 
         Route(int pageId, int addAfterId) {
@@ -543,10 +665,13 @@ public final class WallPages {
 
         public boolean needsNewPage() { return pageId == 0; }
 
-        /** Adds the new unbound Display page {@link #addAfterId} names; null when none is needed. */
+        /**
+         * Adds the new temporary unbound Display page after {@link #addAfterId}; null when none is
+         * needed. It goes again with its display: a drawer launch leaves no lasting page behind.
+         */
         @Nullable
         public Result addTo(@NonNull WallPages pages) {
-            return needsNewPage() ? pages.add(PageKind.DISPLAY, addAfterId, null) : null;
+            return needsNewPage() ? pages.addTemporaryDisplay(addAfterId) : null;
         }
 
         @Override public boolean equals(Object o) {
@@ -563,8 +688,9 @@ public final class WallPages {
 
     /**
      * The page a Linux app opens on: the Display page bound to {@code app} (the id as
-     * {@link Page#binding} stores it), else the first unbound Display page, else a new unbound
-     * Display page after {@code currentPageId} (the end when that page is not on the wall).
+     * {@link Page#binding} stores it), else the first unbound Display page (a lasting one before
+     * a temporary one), else a new temporary unbound Display page after {@code currentPageId}
+     * (the end when that page is not on the wall).
      * Pages pending removal do not count. A null or empty {@code app} skips the bound match.
      */
     @NonNull
@@ -581,10 +707,13 @@ public final class WallPages {
 
     @Nullable
     private Page firstUnboundDisplay() {
+        Page temporary = null;
         for (Page p : pages()) {
-            if (p.kind == PageKind.DISPLAY && p.binding == null) return p;
+            if (p.kind != PageKind.DISPLAY || p.binding != null) continue;
+            if (!p.temporary) return p;
+            if (temporary == null) temporary = p;
         }
-        return null;
+        return temporary;
     }
 
     /** Names a page; null or blank goes back to its default name. */

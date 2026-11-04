@@ -202,6 +202,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         widgets.setGeometrySource(this::orientationGeometry);
         // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
         pane.setOnDragListener(appDropListener);
+        // A second finger's swipe turns the page under whatever the first one carries.
+        pane.setDragPager(new WidgetPaneView.DragPager() {
+            @Override public boolean dragTurnsPages() {
+                return WidgetPaneController.this.dragTurnsPages();
+            }
+            @Override public void turnDragPage(int direction) { swipeDragPage(direction); }
+        });
         catalog.setBuiltinSource(builtins);
         pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
@@ -627,6 +634,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         abortCarry(false);
         abortAppDrop(false);
         pane.setOnDragListener(null);
+        pane.setDragPager(null);
         pane.removeCallbacks(edgeFlip);
         widgets.setListener(null); catalog.cancel();
     }
@@ -1729,16 +1737,52 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /** The pause elapsed with the widget still in the band: the neighbouring page comes in. */
     private void flipDragPage() {
-        if (carry != null) { flipCarryPage(carry); return; }
-        if (appDrop != null) { flipAppDropPage(appDrop); return; }
-        if (edit == null || edit.dragStartBounds == null || !mayTurn(edit.turn)) return;
-        LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        if (record == null) return;
-        if (!liftDraggedWidget(record)) { edit.turn.edgeDirection = 0; return; }
-        if (!turnPage(edit.turn)) return;
-        updateDragCandidate(record);
         // Still in the band: the next page follows after the same pause.
-        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+        if (turnDragPage()) pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /**
+     * Turns whatever is being dragged one page the way its turn's {@code edgeDirection} says,
+     * carrying it across: a widget or icon being moved, a widget from the picker, an app from
+     * the drawer. Whether the page turned.
+     */
+    private boolean turnDragPage() {
+        if (carry != null) return flipCarryPage(carry);
+        if (appDrop != null) return flipAppDropPage(appDrop);
+        if (edit == null || edit.dragStartBounds == null || !mayTurn(edit.turn)) return false;
+        LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
+        if (record == null) return false;
+        if (!liftDraggedWidget(record)) { edit.turn.edgeDirection = 0; return false; }
+        if (!turnPage(edit.turn)) return false;
+        updateDragCandidate(record);
+        return true;
+    }
+
+    /** The turn of the drag under way that can carry its item to another page, or null. */
+    @Nullable private PageTurn dragTurn() {
+        if (carry != null) return carry.turn;
+        if (appDrop != null) return appDrop.turn;
+        if (edit != null && edit.dragStartBounds != null) return edit.turn;
+        return null;
+    }
+
+    /** Whether something is being dragged that a second finger's swipe can turn the page under. */
+    boolean dragTurnsPages() { return dragTurn() != null; }
+
+    /**
+     * A second finger swiped while the first carries something: the page turns one way,
+     * {@code direction} +1 for the next and -1 for the previous, through the same turn the edge
+     * band makes, so the carried item crosses exactly as it does there. The band's own wait is
+     * started afresh by the first finger's next move. Whether the page turned.
+     */
+    boolean swipeDragPage(int direction) {
+        PageTurn turn = dragTurn();
+        if (turn == null || direction == 0) return false;
+        pane.removeCallbacks(edgeFlip);
+        turn.edgeDirection = direction > 0 ? 1 : -1;
+        boolean turned = turnDragPage();
+        turn.edgeDirection = 0;
+        return turned;
     }
 
     /** Whether the band the finger rests in still leads somewhere; it stops watching if not. */
@@ -2582,11 +2626,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * does for a widget moved in edit mode. The picture is already in the drag layer, so nothing
      * has to be lifted first.
      */
-    private void flipCarryPage(@NonNull CarryState state) {
-        if (!mayTurn(state.turn) || !turnPage(state.turn)) return;
+    private boolean flipCarryPage(@NonNull CarryState state) {
+        if (!mayTurn(state.turn) || !turnPage(state.turn)) return false;
         updateCarryCandidate(state);
-        // Still in the band: the next page follows after the same pause.
-        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+        return true;
     }
 
     /** Whether a point in pane coordinates is over the page's grid. */
@@ -2877,10 +2920,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /** The finger rested in the edge band: the next page comes in under the icon. */
-    private void flipAppDropPage(@NonNull AppDropState state) {
-        if (!mayTurn(state.turn) || !turnPage(state.turn)) return;
+    private boolean flipAppDropPage(@NonNull AppDropState state) {
+        if (!mayTurn(state.turn) || !turnPage(state.turn)) return false;
         updateAppDropTarget(state, true);
-        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+        return true;
     }
 
     /**

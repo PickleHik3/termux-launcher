@@ -25,8 +25,14 @@ import java.util.List;
  *
  * <p>Part ids: {@code icon.N}, {@code badge.N} (where the badge sits, drawn by the view) with
  * {@code count.N} (its number), {@code title.N}, {@code body.N.M}, {@code rule.N}, {@code row.N}
- * (where a tap opens the app), {@code header.title}, {@code header.count}, {@code clear} with
+ * (where a tap opens the notification), {@code reply.N} and {@code dismiss.N} (its buttons, at
+ * the row's right end, Reply only where the notification takes one), {@code header.title},
+ * {@code header.count}, {@code clear} with
  * {@code clear.touch}, and {@code glyph}, {@code message.N}, {@code hint} for a notice.</p>
+ *
+ * <p>Rows' type follows the card's size: the body is {@link #bodySp} of the room one row has (the
+ * height a one-row card gives it, or a share of a tall card's, never more than a share of the
+ * width), and the other roles keep their ratio to it; the font scale multiplies on top.</p>
  */
 final class NotificationsLayoutPlanner {
     private NotificationsLayoutPlanner() { }
@@ -47,6 +53,18 @@ final class NotificationsLayoutPlanner {
     /** The narrowest a column of text beside an icon is kept at, or the icon goes. */
     private static final float TEXT_COLUMN_MIN_DP = 72f;
     private static final float TOUCH_DP = WidgetTokens.TOUCH_TARGET_DP;
+
+    /** The rows' body at the most and the least, in sp before the font scale. */
+    static final float BODY_MAX_SP = Role.BODY.sp;
+    static final float BODY_MIN_SP = WidgetTokens.TEXT_FLOOR_SP;
+    /** The body's sp per dp of a row's room: 12 sp in a 2x1's 68 dp, 14 from about 78 dp. */
+    static final float BODY_SP_PER_ROW_DP = 0.18f;
+    /** A row's room is at most this share of the inset's width, so a narrow card stays small. */
+    static final float ROW_WIDTH_SHARE = 0.45f;
+    /** A tall card is planned for two rows under a header: a row's room is its height over this. */
+    static final float TALL_ROWS = 2.4f;
+    /** A row button's box, square where the row is tall enough; its glyph is drawn inside. */
+    static final float BUTTON_DP = 40f;
 
     private static final float GAP_S = WidgetTokens.GAP_TIGHT_DP;
     private static final float GAP_M = WidgetTokens.GAP_DP;
@@ -92,15 +110,26 @@ final class NotificationsLayoutPlanner {
             b.notice(inner, notice == null ? new Notice("", "") : notice);
         } else if (drawn == BuiltinWidgetSpan.ONE_BY_ONE) {
             b.glance(inner, groups);
-        } else if (drawn.isTall()) {
-            b.tall(inner, groups, canClear && drawn.isWide());
         } else {
-            b.oneRow(inner, groups.get(0));
+            b.fit = bodySp(rowRoomDp(drawn, inner)) / Role.BODY.sp;
+            if (drawn.isTall()) b.tall(inner, groups, canClear && drawn.isWide());
+            else b.oneRow(inner, groups.get(0));
         }
-        // The whole card opens the history; a row opens its app.
+        // The whole card opens the history; a row opens its notification.
         b.parts.add(Part.touch("touch", card));
         return new WidgetLayoutPlan(BuiltinWidgetKind.NOTIFICATIONS, span, MAX_SPAN, fontScale,
             card, inner, b.parts);
+    }
+
+    /** The room one row has, in dp, in {@code inner} at {@code span}: what its type is sized from. */
+    static float rowRoomDp(@NonNull BuiltinWidgetSpan span, @NonNull Box inner) {
+        float height = span.isTall() ? inner.height / TALL_ROWS : inner.height;
+        return Math.max(0f, Math.min(height, inner.width * ROW_WIDTH_SHARE));
+    }
+
+    /** The rows' body in sp, before the font scale, for {@code rowDp} of room: grows with it, bounded. */
+    static float bodySp(float rowDp) {
+        return Math.max(BODY_MIN_SP, Math.min(BODY_MAX_SP, rowDp * BODY_SP_PER_ROW_DP));
     }
 
     private static final class Builder {
@@ -109,13 +138,17 @@ final class NotificationsLayoutPlanner {
         @NonNull final Words words;
         @NonNull final Measure measure;
         final List<Part> parts = new ArrayList<>();
+        /** The rows' type against the roles' own sizes: {@link #bodySp} over the Body role's. */
+        float fit = 1f;
 
         Builder(@NonNull BuiltinWidgetSpan span, float fontScale, @NonNull Words words,
                 @NonNull Measure measure) {
             this.span = span; this.fontScale = fontScale; this.words = words; this.measure = measure;
         }
 
-        float size(@NonNull Role role) { return WidgetTokens.sizeDp(role, fontScale); }
+        float size(@NonNull Role role) {
+            return Math.max(WidgetTokens.TEXT_FLOOR_SP, role.sp * fit) * fontScale;
+        }
 
         float line(@NonNull Role role) { return WidgetTokens.lineDp(size(role)); }
 
@@ -197,9 +230,13 @@ final class NotificationsLayoutPlanner {
         void oneRow(@NonNull Box inner, @NonNull Group g) {
             bodyRole = line(Role.BODY) <= inner.height ? Role.BODY : Role.LABEL_FORCED;
             float icon = Math.min(ICON_ROW_DP, inner.height);
-            boolean showIcon = inner.width - icon - GAP_L >= TEXT_COLUMN_MIN_DP;
+            float buttonsW = buttonsWidth(g);
+            boolean buttons = buttonsFit(inner, buttonsW);
+            float right = inner.right() - (buttons ? buttonsW : 0f);
+            // The buttons keep their room before the icon does.
+            boolean showIcon = right - inner.left - icon - GAP_L >= TEXT_COLUMN_MIN_DP;
             float left = showIcon ? inner.left + icon + GAP_L : inner.left;
-            float room = inner.right() - left;
+            float room = right - left;
             String count = g.count > 1 ? words.count(g.count) : "";
             float badgeW = count.isEmpty() ? 0f : badgeSize(count)[0];
             String body = body(g, true);
@@ -227,7 +264,7 @@ final class NotificationsLayoutPlanner {
                 float titleRoom = room - (count.isEmpty() ? 0f : badgeW + GAP_M);
                 text("title.0", g.newest.app, Role.TITLE, false, Ink.STRONG, left, y, titleRoom);
                 if (!count.isEmpty()) {
-                    badge(0, count, inner.right(), y + (line(Role.TITLE) - badgeSize(count)[1]) / 2f);
+                    badge(0, count, right, y + (line(Role.TITLE) - badgeSize(count)[1]) / 2f);
                 }
                 y += line(Role.TITLE);
             }
@@ -235,7 +272,29 @@ final class NotificationsLayoutPlanner {
                 text("body.0." + i, wrapped.get(i), bodyRole, false, Ink.SOFT, left, y, room);
                 y += line(bodyRole);
             }
-            parts.add(Part.touch("row.0", new Box(inner.left, top, inner.width, height)));
+            parts.add(Part.touch("row.0", new Box(inner.left, top, right - inner.left, height)));
+            if (buttons) buttons(0, g, inner, inner.centerY(), inner.height);
+        }
+
+        /** What a row's buttons take at its right end, with the gap before them. */
+        float buttonsWidth(@NonNull Group g) {
+            return (g.newest.canReply ? 2f : 1f) * BUTTON_DP + GAP_S;
+        }
+
+        /** Whether buttons {@code width} wide leave a column of text: never on a one-column span. */
+        boolean buttonsFit(@NonNull Box inner, float width) {
+            return span.columns >= 2 && inner.width - width >= TEXT_COLUMN_MIN_DP;
+        }
+
+        /** Row {@code n}'s Reply (where it takes one) and Dismiss, Dismiss at the far right. */
+        void buttons(int n, @NonNull Group g, @NonNull Box inner, float centerY, float maxHeight) {
+            float h = Math.min(BUTTON_DP, Math.min(maxHeight, inner.height));
+            float top = Math.max(inner.top, Math.min(inner.bottom() - h, centerY - h / 2f));
+            float x = inner.right() - BUTTON_DP;
+            parts.add(Part.touch("dismiss." + n, new Box(x, top, BUTTON_DP, h)));
+            if (g.newest.canReply) {
+                parts.add(Part.touch("reply." + n, new Box(x - BUTTON_DP, top, BUTTON_DP, h)));
+            }
         }
 
         float stack(boolean title, int bodyLines) {
@@ -247,8 +306,13 @@ final class NotificationsLayoutPlanner {
         void tall(@NonNull Box inner, @NonNull List<Group> groups, boolean canClear) {
             bodyRole = line(Role.TITLE) + line(Role.BODY) <= inner.height ? Role.BODY : Role.LABEL_FORCED;
             float icon = ICON_LIST_DP;
-            float left = inner.left + icon + GAP_L;
-            float room = inner.right() - left;
+            float widest = 0f;
+            for (Group g : groups) widest = Math.max(widest, buttonsWidth(g));
+            boolean buttons = buttonsFit(inner, widest);
+            // The buttons keep their room before the icons do.
+            boolean showIcon = !buttons
+                || inner.width - widest - icon - GAP_L >= TEXT_COLUMN_MIN_DP;
+            float left = showIcon ? inner.left + icon + GAP_L : inner.left;
             float headerH = line(Role.TITLE);
             float headerBlock = headerH + 2f * GAP_S + RULE_DP;
             float firstMin = line(Role.TITLE) + line(bodyRole);
@@ -267,6 +331,8 @@ final class NotificationsLayoutPlanner {
                 String count = g.count > 1 ? words.count(g.count) : "";
                 float badgeW = count.isEmpty() ? 0f : badgeSize(count)[0];
                 String body = body(g, false);
+                float right = inner.right() - (buttons ? buttonsWidth(g) : 0f);
+                float room = right - left;
                 boolean title = true;
                 List<String> wrapped = WidgetLayoutPlan.wrap(body, room, MAX_BODY_LINES, measure,
                     bodyRole, size(bodyRole));
@@ -290,14 +356,14 @@ final class NotificationsLayoutPlanner {
                 }
                 float height = stack(title, wrapped.size());
                 float side = Math.min(icon, height);
-                parts.add(Part.touch("icon." + i, new Box(inner.left, y, side, side)));
+                if (showIcon) parts.add(Part.touch("icon." + i, new Box(inner.left, y, side, side)));
                 float ty = y;
                 if (title) {
                     float titleRoom = room - (count.isEmpty() ? 0f : badgeW + GAP_M);
                     text("title." + i, g.person() ? g.newest.who : g.newest.app, Role.TITLE, false,
                         Ink.STRONG, left, ty, titleRoom);
                     if (!count.isEmpty()) {
-                        badge(i, count, inner.right(),
+                        badge(i, count, right,
                             ty + (line(Role.TITLE) - badgeSize(count)[1]) / 2f);
                     }
                     ty += line(Role.TITLE);
@@ -307,7 +373,8 @@ final class NotificationsLayoutPlanner {
                         ty, room);
                     ty += line(bodyRole);
                 }
-                parts.add(Part.touch("row." + i, new Box(inner.left, y, inner.width, height)));
+                parts.add(Part.touch("row." + i, new Box(inner.left, y, right - inner.left, height)));
+                if (buttons) buttons(i, g, inner, y + height / 2f, height);
                 y += height;
             }
         }

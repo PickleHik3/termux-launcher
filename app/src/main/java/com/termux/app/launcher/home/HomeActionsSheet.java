@@ -21,7 +21,6 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.shape.CornerFamily;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -66,7 +65,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
          */
         default void onNavBandCovered(float covered) { }
 
-        /** The Lock layout switch was flipped; the sheet stays up and redraws its rows. */
+        /** The Lock layout row was tapped; the sheet stays up and redraws its rows. */
         default void onLayoutLockChanged(boolean locked) { }
 
         /** The sheet has settled away, by a row, the dim, a swipe down or Back. */
@@ -93,7 +92,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     /** The last cover told to the listener, so a settle that changes nothing tells it nothing. */
     private float reportedCover;
     private boolean open;
-    /** The rows for a layout that is locked (true) or not, so the switch can redraw in place. */
+    /** The rows for a layout that is locked (true) or not, so the lock row can redraw in place. */
     @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
     private boolean locked;
     /** Rows a caller other than Home filled the sheet with, or null while Home's own are up. */
@@ -197,7 +196,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /**
      * Fill the groups from {@code rowsFor} (the rows for a locked or an unlocked layout) and slide
-     * the sheet up. Flipping the Lock layout switch asks it again, with the card still open.
+     * the sheet up. Tapping the Lock layout row asks it again, with the card still open.
      */
     public void open(@NonNull Function<Boolean, List<Item>> rowsFor, boolean layoutLocked) {
         customRows = null;
@@ -324,7 +323,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         for (List<Item> line : HomeActionsSheetPolicy.lines(items)) {
             LinearLayout lineView = new LinearLayout(getContext());
             lineView.setOrientation(LinearLayout.HORIZONTAL);
-            // A line of one is either the switch, which spans it, or an odd row beside a spacer.
+            // A line of one is either the lock row, which spans it, or an odd row beside a spacer.
             boolean spans = line.size() == 1 && line.get(0) == Item.LOCK_LAYOUT;
             for (int column = 0; column < (spans ? 1 : 2); column++) {
                 if (column < line.size()) {
@@ -400,25 +399,14 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         row.setContentDescription(label.getText());
         row.setTag(item);
         if (item == Item.LOCK_LAYOUT) {
-            // A switch row: the whole row flips it and the card stays up.
-            MaterialSwitch toggle = row.findViewById(R.id.home_actions_row_switch);
+            // A plain row that says what a tap does: the open lock and Lock layout while the
+            // layout is free, the closed lock and Unlock layout while it is locked. The card
+            // stays up and redraws the row.
+            icon.setImageResource(locked ? R.drawable.ic_symbol_lock : R.drawable.ic_symbol_lock_open);
+            label.setText(locked ? R.string.home_actions_unlock_layout : R.string.home_actions_lock_layout);
             label.setMaxLines(1);
-            toggle.setVisibility(VISIBLE);
-            toggle.setChecked(locked);
-            toggle.setClickable(false);
-            toggle.setFocusable(false);
+            row.setContentDescription(label.getText());
             row.setOnClickListener(view -> toggleLock(!locked));
-            // The switch itself is not focusable, so the row says it is one, and whether it is on.
-            ViewCompat.setAccessibilityDelegate(row, new androidx.core.view.AccessibilityDelegateCompat() {
-                @Override
-                public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                        @NonNull androidx.core.view.accessibility.AccessibilityNodeInfoCompat info) {
-                    super.onInitializeAccessibilityNodeInfo(host, info);
-                    info.setClassName("android.widget.Switch");
-                    info.setCheckable(true);
-                    info.setChecked(locked);
-                }
-            });
             return row;
         }
         row.setOnClickListener(view -> select(item));

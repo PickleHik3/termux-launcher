@@ -381,3 +381,11 @@ Owed: the bars at a cold start before the stored frame lands.
 **Wave 4 delivered (2026-11-03):** [ADR 0021](../../docs/adr/0021-glass-records-what-is-beneath-it.md),
 `performance.md` rule 3 and baselines, the `docs/en/` line, and the owed checks in
 `device-checks.md`. Wave 3b (widgets) lands alongside.
+
+**Wave 3b on pong** (2026-11-04, release build `2.0.0-pre.3` at 75fa4e3e5, Carousel, Home page of built-in
+widgets, `gfxbench.sh`, 5 cycles of a swipe to page 2 and back across the wallpaper below the widgets):
+Live blur **off** 717 frames, 1.95% janky, p50 20 / p90 25 / p99 38 ms; **on** 696 frames, 2.16% janky,
+p50 18 / p90 24 / p99 46 ms. At rest on Home for 10 s: 10 frames off and 10 on (the clock's seconds hand),
+7–10 after a swipe. One burst of ~330 frames in the 10 s right after switching Live blur on in Settings,
+then back to 10: the switch's first recordings settling, not a steady cost. The one-frame dark flash and
+the stored/live look jump on widgets are gone (developer, pong).
