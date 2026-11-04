@@ -113,9 +113,18 @@ public final class DisplayKeyboardBlur {
         }
     };
 
-    public DisplayKeyboardBlur(@NonNull Activity activity, @NonNull Runnable onAvailabilityChanged) {
+    /**
+     * True while the frost must not show though the bed is up: the Appearance editor's scaled
+     * preview, where the bed's rect on screen is not the one the layer is placed at. The bed is
+     * see-through there; the layer stays made and shows again on the first frame after.
+     */
+    @NonNull private final java.util.function.BooleanSupplier mHeld;
+
+    public DisplayKeyboardBlur(@NonNull Activity activity, @NonNull Runnable onAvailabilityChanged,
+                               @NonNull java.util.function.BooleanSupplier held) {
         mActivity = activity;
         mOnAvailabilityChanged = onAvailabilityChanged;
+        mHeld = held;
     }
 
     /**
@@ -269,7 +278,8 @@ public final class DisplayKeyboardBlur {
                 if (mWanted && parent != null) mOnAvailabilityChanged.run();
                 return;
             }
-            boolean visible = host.isAttachedToWindow() && host.isShown() && display.isShown()
+            boolean visible = !mHeld.getAsBoolean()
+                && host.isAttachedToWindow() && host.isShown() && display.isShown()
                 && host.getWidth() > 0 && host.getHeight() > 0;
             host.getLocationInWindow(mLocation);
             display.getLocationInWindow(mDisplayLocation);

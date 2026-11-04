@@ -30,7 +30,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   still up. Rotate with it up. Open and close the keyboard twenty times, leave the page and come
   back, HOME and back: no stuck blur band with the keyboard down, `dumpsys SurfaceFlinger
   --list | grep -c 'Keyboard frost'` at most 1. Typing lands in X; display taps above the
-  keyboard still reach X. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
+  keyboard still reach X. In overlay mode the display runs to the screen's bottom (or the
+  Floating card's bottom inset) under the keyboard and the strip under the pill, and its size
+  (`xdpyinfo | grep dimensions` in X) is the same with the keyboard up and down; the extra keys
+  lie over its foot with the keyboard down. Resize mode: the display still ends above the
+  keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
+  Appearance editor open over a Display page the bed is see-through, no frost patch anywhere in
+  the preview; the frost is back on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
   pong (API 34+, blur supported), plus an API 30 emulator for the see-through fallback.
 - **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
   Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with

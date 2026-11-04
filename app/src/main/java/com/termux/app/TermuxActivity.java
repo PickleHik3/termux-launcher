@@ -9155,7 +9155,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Battery saver, or the blur setting, turned over while the keyboard is up: the next
             // pass decides again.
             mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
-                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME),
+                // The editor's preview is scaled; the bed is see-through there.
+                mSurfaceEditor::isActive);
         }
         mKeyboardFrost.want();
         android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
@@ -17848,6 +17850,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
         stackIn.keyboardOverlays = keyboardOverlays;
         stackIn.dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        // The place the keyboard question is asked of, so a display window no longer in front
+        // gives the terminal its room back.
+        stackIn.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(
+            KeyboardOverlayPolicy.keyboardPlace(mLastWallPage, isDisplayWindowInFront()),
+            arrangement().layout());
         stackIn.systemImeTakePx = systemImeTakePx();
         stackIn.travelHoldsContent = mCrossing.holdsContent();
         stackIn.heldReservationPx = mCrossing.heldReservationPx();
@@ -25789,8 +25796,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? mKeyboardGeometry.measureHeightPx() : mKeyboardGeometry.desiredHeightPx());
         // The place's own arrangement decides it, like its Style: the one on screen when it is the
         // committed place, else its half's stored layout.
-        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, place == mLastWallPage
-            ? arrangement().layout() : snapshot.half(side).layout);
+        PlaceLayout placeLayout = place == mLastWallPage
+            ? arrangement().layout() : snapshot.half(side).layout;
+        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, placeLayout);
+        in.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(place, placeLayout);
         // The Terminal's flush padding is part of its rest: the applied one while it is the place,
         // else the one it last rested with, so Home's terminal page and the slide back are laid
         // out at the height the landing settles at, not one padding taller.
