@@ -27,7 +27,10 @@ public final class DeckDisplayWindow {
     /** The room the window keeps around the readings along the bar, and its inset across it. */
     private static final int ALONG_PADDING_DP = 8;
     private static final int ACROSS_INSET_DP = 2;
-    /** Tag key for the padding the window added, so it is added once and taken back exactly. */
+    /**
+     * Tag key for the padding the cluster had before the window, so it is dressed once and
+     * undressed to exactly that.
+     */
     private static final int TAG_ADDED = R.id.deck_display_window_padding;
 
     private DeckDisplayWindow() {}
@@ -39,29 +42,35 @@ public final class DeckDisplayWindow {
     public static void apply(@Nullable ViewGroup cluster, @Nullable DeckLook deck) {
         if (cluster == null) return;
         Object tag = cluster.getTag(TAG_ADDED);
-        int[] added = tag instanceof int[] ? (int[]) tag : null;
+        int[] before = tag instanceof int[] ? (int[]) tag : null;
         if (deck == null) {
-            if (added == null) return;
+            if (before == null) return;
             cluster.setTag(TAG_ADDED, null);
-            cluster.setPadding(cluster.getPaddingLeft() - added[0],
-                cluster.getPaddingTop() - added[1], cluster.getPaddingRight() - added[2],
-                cluster.getPaddingBottom() - added[3]);
+            // The background first: a background with padding of its own (the inset window)
+            // hands that padding to the view as it is set, and would do so again here if it
+            // stayed. The padding the cluster had comes back after it, whole.
             cluster.setBackground(null);
+            cluster.setPadding(before[0], before[1], before[2], before[3]);
             return;
         }
+        if (before != null) return;
         float density = cluster.getResources().getDisplayMetrics().density;
         int along = Math.round(ALONG_PADDING_DP * density);
         int across = Math.round(ACROSS_INSET_DP * density);
         boolean column = cluster instanceof LinearLayout
             && ((LinearLayout) cluster).getOrientation() == LinearLayout.VERTICAL;
-        if (added == null) {
-            added = column ? new int[]{0, along, 0, along} : new int[]{along, 0, along, 0};
-            cluster.setTag(TAG_ADDED, added);
-            cluster.setPadding(cluster.getPaddingLeft() + added[0],
-                cluster.getPaddingTop() + added[1], cluster.getPaddingRight() + added[2],
-                cluster.getPaddingBottom() + added[3]);
-            cluster.setBackground(window(density, column ? across : 0, column ? 0 : across));
-        }
+        before = new int[]{cluster.getPaddingLeft(), cluster.getPaddingTop(),
+            cluster.getPaddingRight(), cluster.getPaddingBottom()};
+        cluster.setTag(TAG_ADDED, before);
+        // The window, then the padding: View.setBackground replaces the view's padding with the
+        // drawable's own (the window's across inset) the moment it is set, which once dropped
+        // the room along the bar, left the inset as padding across it, and on undressing left
+        // the cluster with less than it started with: the readings' glyphs clipped at the top
+        // and the last reading's edge cut off.
+        cluster.setBackground(window(density, column ? across : 0, column ? 0 : across));
+        int[] added = column ? new int[]{0, along, 0, along} : new int[]{along, 0, along, 0};
+        cluster.setPadding(before[0] + added[0], before[1] + added[1], before[2] + added[2],
+            before[3] + added[3]);
     }
 
     @NonNull
