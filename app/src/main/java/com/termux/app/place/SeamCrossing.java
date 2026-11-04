@@ -916,6 +916,16 @@ public final class SeamCrossing {
         return landing;
     }
 
+    /**
+     * Whether the landing's re-dress would move the bar from where the last moving frame drew it:
+     * the Margin that frame drew ({@code drawnMarginDp}, {@link #barMarginDp} of its share) apart
+     * from the Margin of the page the wall landed on ({@code landedMarginDp}, what the re-dress
+     * lays it out at). Pure, so the landing's "nothing changes" is tested without the activity.
+     */
+    public static boolean landingMovesBar(float drawnMarginDp, int landedMarginDp) {
+        return Math.abs(drawnMarginDp - landedMarginDp) > 1e-3f;
+    }
+
     /** The settle's second half, after the page's commit: the stack's dress lets go. */
     public void end() {
         mRun = new Run();

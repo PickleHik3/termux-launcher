@@ -1220,6 +1220,40 @@ public class SeamCrossingTest {
         }
     }
 
+    /**
+     * The landing changes nothing the last moving frame drew (amendment 2026-11-04): driven to
+     * that frame between halves with Margins apart, the bar was drawn at the landed page's Margin,
+     * which the landing's re-dress lays it out at; the bar never rode, so nothing puts it back;
+     * and the same holds for a slide that came back, at the committed page's Margin.
+     */
+    @Test
+    public void theLandingChangesNothingTheLastFrameDrew() {
+        for (PaneWallPage from : BOTH) {
+            for (boolean comesBack : new boolean[] {false, true}) {
+                Stored stored = new Stored();
+                stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+                boolean fromHome = from == PaneWallPage.WIDGETS;
+                Drive drive = fromHome
+                    ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                        window(), false, false)
+                    : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                        home(), false, false);
+                drive.slow(0f, 1f);
+                if (comesBack) drive.slow(1f, 0f);
+                Step last = drive.last();
+                PaneWallPage landed = comesBack ? from : drive.there.page.kind;
+                int landedMargin = (landed == drive.here.page.kind ? drive.here : drive.there)
+                    .stack.shape.marginDp;
+                String why = "from " + from + (comesBack ? ", back" : "");
+                assertFalse(why + ": the re-dress moves nothing",
+                    SeamCrossing.landingMovesBar(last.barMarginDp, landedMargin));
+                SeamCrossing.Landing landing = drive.crossing.land();
+                assertFalse(why + ": the bar never rode", landing.barTravelled());
+                assertFalse(why + ": nothing to dress back", landing.redressesBack(landed));
+            }
+        }
+    }
+
     /** One Margin on both ends: nothing eases. */
     @Test
     public void oneMarginEasesNothing() {
