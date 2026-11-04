@@ -510,9 +510,12 @@ public final class SeamCrossing {
         mRun.otherSearchField = other.dress.searchField();
         mRun.dressDiffers = !committed.stack.equals(other.stack);
         mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
-        // One bar across the wall (#90): where both halves stand it alike, in one shape, it
-        // stands still on the crossing instead of riding with the Workspace's page.
-        mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS)) && !mRun.shapeDiffers;
+        // One bar across the wall (#90): where both halves stand it alike, in one outline, it
+        // stands still on the crossing instead of riding with the Workspace's page. A Margin
+        // apart only insets it, which the landing's half re-dress puts right; riding for it took
+        // the bar off a crossing toward Home, with nothing to bring Home's in.
+        mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS))
+            && committed.stack.shape.sameOutline(other.stack.shape);
         PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
         mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
         // A keyboard in the stack, not one floating in a frame of its own.
@@ -615,11 +618,12 @@ public final class SeamCrossing {
     /**
      * Whether the status bar takes off Home's dress for the Workspace's as a crossing begins,
      * while it is still hidden, before any pass lays it out over Home: from Home, toward a half
-     * that shapes the stack otherwise. Asked once, right after the {@link #begin} that started the
-     * crossing.
+     * that shapes the stack otherwise, unless the bar stands still on screen. Asked once, right
+     * after the {@link #begin} that started the crossing.
      */
     public boolean barTakesWorkspaceDressFirst() {
-        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS && !mRun.oneKind;
+        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS && !mRun.oneKind
+            && !mRun.barStill;
     }
 
     /**
