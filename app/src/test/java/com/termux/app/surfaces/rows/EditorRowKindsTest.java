@@ -25,6 +25,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.termux.R;
+import com.termux.app.surfaces.LegendSlider;
 
 import org.junit.After;
 import org.junit.Test;
@@ -230,7 +231,7 @@ public class EditorRowKindsTest {
     // ---------------------------------------------------------------------------------- strip
 
     @Test
-    public void sliderRowsStandTheirNameLineOverTheTrackAndNothingClipsAtLargeText() {
+    public void sliderRowsStandOnOneLineWithTheValueInsideTheTrack() {
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);
             SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
@@ -242,30 +243,33 @@ public class EditorRowKindsTest {
             int previousBottom = -1;
             for (SliderRow.Item item : row.items) {
                 String which = at + ", " + item.name.getText();
-                View head = (View) item.name.getParent().getParent();
+                assertTrue(which + ": one line", item.root.isOneLine());
+                assertTrue(which + ": the track prints the value", item.slider.isInsetShown());
                 assertFalse(which + ": lies along its row", item.slider.isVertical());
-                assertTrue(which + ": the name line stands over the track",
-                    top(f, head) + head.getHeight() <= top(f, item.slider) + 1);
                 assertEquals(which + ": a 48dp hit area", f.dp(48), item.slider.getHeight());
-                assertEquals(which + ": the track spans the row inside its margins",
-                    f.width - 2 * f.dp(16), item.slider.getWidth(), 1);
-                for (View part : new View[] {item.slider, item.glyph, item.name, item.value})
+                int nameTop = top(f, item.name);
+                int sliderTop = top(f, item.slider);
+                assertTrue(which + ": the name and the track share the line",
+                    nameTop >= sliderTop - 1 && nameTop + item.name.getHeight()
+                        <= sliderTop + item.slider.getHeight() + 1);
+                assertTrue(which + ": the name ends before the track",
+                    left(f, item.name) + item.name.getWidth() <= left(f, item.slider) + 1);
+                assertEquals(which + ": the track ends at the row's margin",
+                    f.width - f.dp(16), left(f, item.slider) + item.slider.getWidth(), 1);
+                for (View part : new View[] {item.slider, item.glyph, item.name})
                     assertInsideGutter(f, part, which);
                 assertNotCut(item.name, which);
-                assertNotCut(item.value, which);
-                assertTrue(which + ": the name's line holds the name and the value",
-                    item.name.getHeight() <= head.getHeight()
-                        && item.value.getHeight() <= head.getHeight());
-                assertTrue(which + ": the name ends before the value",
-                    left(f, item.name) + item.name.getWidth() <= left(f, item.value) + 1);
+                assertTrue(which + ": the widest value fits inside the track",
+                    SliderRow.widestReadoutPx(glassStrips().get(row.items.indexOf(item)),
+                        item.slider.insetValuePaint()) + 2 * f.dp(LegendSlider.INSET_VALUE_PAD_DP)
+                        <= item.slider.getWidth());
                 int rowTop = top(f, item.root);
                 assertTrue(which + ": under the row before it", rowTop >= previousBottom - 1);
                 previousBottom = rowTop + item.root.getHeight();
-                assertTrue(which + ": the row holds its name line and its track",
-                    item.root.getHeight() >= head.getHeight() + item.slider.getHeight());
+                assertTrue(which + ": the row holds its track",
+                    item.root.getHeight() >= item.slider.getHeight());
                 System.out.println("slider row " + which + ": " + item.root.getHeight() + " px, "
-                    + Math.round(item.root.getHeight() / density) + " dp; name line "
-                    + Math.round(head.getHeight() / density) + " dp");
+                    + Math.round(item.root.getHeight() / density) + " dp, one line");
             }
             assertEquals("20%", row.items.get(0).value.getText().toString());
             row.setValue(3, 40);
@@ -279,6 +283,38 @@ public class EditorRowKindsTest {
             assertEquals("no dot on a shared value", null,
                 row.items.get(0).name.getCompoundDrawablesRelative()[2]);
         }
+    }
+
+    @Test
+    public void aLongNameAtLargeTextKeepsTheTwoLineRowAndNothingIsCut() {
+        Fixture f = new Fixture(1.3f);
+        SliderRow.Readout percent = v -> v + "%";
+        List<SliderRow.Track> tracks = Arrays.asList(
+            new SliderRow.Track(R.drawable.ic_editor_opacity, "Background opacity behind the keys",
+                0, 100, 1, percent),
+            new SliderRow.Track(R.drawable.ic_editor_blur, "Frost", 0, 100, 1, percent));
+        SliderRow row = SliderRow.build(f.themed, tracks, new int[] {64, 20}, new NoStrip());
+        f.layOut(row.root);
+        SliderRow.Item item = row.items.get(0);
+        String which = "at 1.3, the long name";
+        assertFalse(which + ": two lines", item.root.isOneLine());
+        assertFalse(which + ": the value stands over the track", item.slider.isInsetShown());
+        View head = item.name;
+        assertTrue(which + ": the name line stands over the track",
+            top(f, head) + head.getHeight() <= top(f, item.slider) + 1);
+        assertEquals(which + ": a 48dp hit area", f.dp(48), item.slider.getHeight());
+        assertEquals(which + ": the track spans the row inside its margins",
+            f.width - 2 * f.dp(16), item.slider.getWidth(), 1);
+        for (View part : new View[] {item.slider, item.glyph, item.name, item.value})
+            assertInsideGutter(f, part, which);
+        assertNotCut(item.value, which);
+        assertEquals("64%", item.value.getText().toString());
+        assertTrue(which + ": the name ends before the value",
+            left(f, item.name) + item.name.getWidth() <= left(f, item.value) + 1);
+        assertTrue(which + ": the row holds its name line and its track",
+            item.root.getHeight() >= item.name.getHeight() + item.slider.getHeight());
+        assertTrue("the decision is per row: Frost stands on one line",
+            row.items.get(1).root.isOneLine());
     }
 
     @Test

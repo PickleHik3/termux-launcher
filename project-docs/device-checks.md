@@ -329,3 +329,9 @@ longer counted as an error. Owed:
   dock changes. Workspace card Opacity: Terminal and Display pages follow, the dock on Home stays
   at 20. Discard after any of these puts every value back. Global Margin moves the air on every
   surface · pong.
+- **One-line slider rows (11-04).** Global, Dock, Terminal and Keyboard cards at font 1.0 and
+  1.3, light, dark and the launcher's scheme chrome: each slider is one line (glyph, name, a thick
+  track) with its value inside the track's end, white-on-fill where the fill reaches it and grey
+  over the empty track, never cut; a long name at 1.3 falls back to name and value over a
+  full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
+  its menu; TalkBack reads the value · pong.
