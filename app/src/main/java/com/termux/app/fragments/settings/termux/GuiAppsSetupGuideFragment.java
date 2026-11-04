@@ -430,6 +430,8 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             boolean ticked = choices.starters.contains(app);
             String title = context.getString(app == GuiAppsSetup.StarterApp.BROWSER
                 ? R.string.settings_gui_apps_starter_browser
+                : app == GuiAppsSetup.StarterApp.DESKTOP
+                ? R.string.settings_gui_apps_starter_desktop
                 : R.string.settings_gui_apps_starter_files);
             // The app the command would actually fetch: Firefox ESR on Debian, Falkon on Ubuntu.
             String summary = GuiAppsSetup.starterAppName(choices.route, choices.distro, app);
@@ -472,6 +474,18 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(context, 16);
         mBody.addView(code, lp);
+        if (GuiAppsSetupGuide.read(mPrefs, mEdition).starters
+            .contains(GuiAppsSetup.StarterApp.DESKTOP)) {
+            TextView note = new TextView(context);
+            note.setText(R.string.settings_gui_apps_desktop_note);
+            note.setTextAppearance(
+                com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+            note.setTextColor(M3.onSurface(context));
+            LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            noteLp.topMargin = dp(context, 12);
+            mBody.addView(note, noteLp);
+        }
     }
 
     private void renderGraphics(@NonNull Context context) {
@@ -653,7 +667,11 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             mHandler.post(() -> {
                 if (!isAdded() || found.equals(mInstalled)) return;
                 mInstalled = found;
+                // Only the two steps that show it, and where the user was scrolled to.
+                if (mStep != Step.DISTRO && mStep != Step.COMMAND) return;
+                int scrollY = mScroll == null ? 0 : mScroll.getScrollY();
                 render();
+                if (mScroll != null) mScroll.post(() -> mScroll.scrollTo(0, scrollY));
             });
         });
     }

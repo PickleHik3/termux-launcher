@@ -119,6 +119,7 @@ public final class GuiAppsSetupGuide {
             offered.add(GuiAppsSetup.StarterApp.BROWSER);
         }
         offered.add(GuiAppsSetup.StarterApp.FILE_MANAGER);
+        if (route == GuiAppsSetup.Route.DISTRO) offered.add(GuiAppsSetup.StarterApp.DESKTOP);
         return offered;
     }
 
@@ -156,7 +157,9 @@ public final class GuiAppsSetupGuide {
         GuiAppsSetup.Distro distro = GuiAppsSetup.Distro.of(prefs.getString(KEY_DISTRO, null));
         Set<GuiAppsSetup.StarterApp> starters = EnumSet.noneOf(GuiAppsSetup.StarterApp.class);
         for (GuiAppsSetup.StarterApp app : startersOffered(edition, route)) {
-            if (prefs.getBoolean(KEY_STARTER_PREFIX + app.key, true)) starters.add(app);
+            // The desktop is a big download: off until the user ticks it.
+            boolean fallback = app != GuiAppsSetup.StarterApp.DESKTOP;
+            if (prefs.getBoolean(KEY_STARTER_PREFIX + app.key, fallback)) starters.add(app);
         }
         return new Choices(route, distro, starters);
     }

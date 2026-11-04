@@ -146,12 +146,17 @@ public final class GuiAppsSetup {
         return routes.isEmpty() ? null : routes.get(0);
     }
 
+    /** XFCE's package name: the same on Debian, Ubuntu and Arch (a group there). */
+    static final String DESKTOP_PACKAGE = "xfce4";
+
     /** One of the four apps the screen offers to install alongside the route. */
     public enum StarterApp {
         BROWSER("browser"),
         FILE_MANAGER("files"),
         TEXT_EDITOR("editor"),
-        TERMINAL("terminal");
+        TERMINAL("terminal"),
+        /** A whole desktop (XFCE) inside a distro; offered on the distro route only, off until ticked. */
+        DESKTOP("desktop");
 
         /** The value this app is stored under. */
         @NonNull public final String key;
@@ -252,6 +257,7 @@ public final class GuiAppsSetup {
                 case BROWSER: return browser;
                 case FILE_MANAGER: return fileManager;
                 case TEXT_EDITOR: return textEditor;
+                case DESKTOP: return DESKTOP_PACKAGE;
                 default: return terminal;
             }
         }
@@ -292,6 +298,7 @@ public final class GuiAppsSetup {
             case BROWSER: return "firefox";
             case FILE_MANAGER: return "pcmanfm";
             case TEXT_EDITOR: return "mousepad";
+            case DESKTOP: return DESKTOP_PACKAGE;
             // The x11 repository has no xterm; xfce4-terminal is its plainest terminal.
             default: return "xfce4-terminal";
         }
@@ -322,6 +329,7 @@ public final class GuiAppsSetup {
             case "pcmanfm": return "PCManFM";
             case "mousepad": return "Mousepad";
             case "xfce4-terminal": return "Xfce Terminal";
+            case "xfce4": return "XFCE";
             default: return packageName;
         }
     }
@@ -448,6 +456,8 @@ public final class GuiAppsSetup {
         if (!vaj) packages.add(AUDIO_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
+            // A desktop is a distro-route choice; the x11 route never installs one.
+            if (app == StarterApp.DESKTOP) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
         String install = "pkg install -y " + join(packages);

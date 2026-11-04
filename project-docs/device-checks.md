@@ -211,3 +211,7 @@ nothing clipped. Still owed:
   Linux step: Debian shows "Installed" (in place of "Recommended"), the others do not, and the
   copied command on the last step has no `proot-distro install` line. With nothing installed the
   picker and command are as before · emulator, no pong needed.
+- 2026-11-04 · feat/176-installed-distro · emulator, #177: pick a full Linux, tick Desktop on
+  the Apps step (off by default, not offered on the Termux route); the Command step shows the
+  Start with note and the command installs xfce4. Run it, then `dbus-launch startxfce4` with
+  DISPLAY set draws XFCE. Debian, Ubuntu and Arch (Arch is untested: pacman group xfce4) · emulator.
