@@ -129,8 +129,10 @@ public final class PageOverviewView extends FrameLayout {
         // Use as Terminal only: the Home pages are set aside, and Edit pages offers them back.
         /** Whether the wall shows Home pages; false under Use as Terminal only. */
         default boolean homePagesShown() { return true; }
-        /** How many Home pages are set aside while the wall shows none. */
+        /** How many Home pages are set aside (detached) while the wall shows none. */
         default int detachedHomePages() { return 0; }
+        /** How many Home pages stay in the page list while the wall hides them. */
+        default int hiddenHomePages() { return 0; }
         /** Use as goes back to Home screen, which brings the set-aside Home pages back. */
         default void bringBackHomePages() { }
 
@@ -782,7 +784,8 @@ public final class PageOverviewView extends FrameLayout {
     private void updatePills() {
         boolean homes = host.homePagesShown();
         addPage.setVisibility(PageOverviewAddPolicy.showsAddPage(homes) ? VISIBLE : GONE);
-        int back = PageOverviewAddPolicy.bringBackCount(homes, host.detachedHomePages());
+        int back = PageOverviewAddPolicy.bringBackCount(homes, host.detachedHomePages(),
+            host.hiddenHomePages());
         bringBack.setVisibility(back > 0 ? VISIBLE : GONE);
         if (back > 0) {
             CharSequence text = getResources().getQuantityString(
@@ -1693,6 +1696,26 @@ public final class PageOverviewView extends FrameLayout {
         labelPaint.setTextSize(size);
     }
 
+    /**
+     * A Home or Display card's name over its top left edge, as the Terminal block's grip stands
+     * over its first card: the page's own name once it has one. Kept clear of the remove button.
+     */
+    private void drawCaption(@NonNull Canvas canvas, @NonNull Card card, @NonNull RectF at) {
+        if (zoom <= 0f) return;
+        float size = labelPaint.getTextSize();
+        int alpha = labelPaint.getAlpha();
+        labelPaint.setTextSize(dp(13));
+        labelPaint.setTextAlign(Paint.Align.LEFT);
+        labelPaint.setAlpha(Math.round(alpha * zoom));
+        float room = Math.max(0f, at.width() / 2f - buttonRadius - dp(8));
+        CharSequence text = android.text.TextUtils.ellipsize(labelOf(card),
+            new android.text.TextPaint(labelPaint), room, android.text.TextUtils.TruncateAt.END);
+        canvas.drawText(text, 0, text.length(), at.left, at.top - dp(10), labelPaint);
+        labelPaint.setAlpha(alpha);
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+        labelPaint.setTextSize(size);
+    }
+
     /** The launcher's own wallpaper, full-screen behind the cards, while it is showing one. */
     private void drawBackdrop(@NonNull Canvas canvas) {
         View backdrop = host.backdrop();
@@ -1726,6 +1749,7 @@ public final class PageOverviewView extends FrameLayout {
         canvas.clipPath(clip);
         drawContent(canvas, card, at);
         canvas.restoreToCount(clipped);
+        if (card.kind != PageOverviewPolicy.Kind.TERMINAL) drawCaption(canvas, card, at);
         outlinePaint.setAlpha(Math.round(0x80 * zoom));
         canvas.drawRoundRect(at, radius, radius, outlinePaint);
         if (zoom > 0f) drawButtons(canvas, card, at);

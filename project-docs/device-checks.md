@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Edit pages fixes (11-04, after the emu2 check).** (1) Use as Terminal only set from
+  Settings › Use as (not the welcome sheet): Edit pages shows "Bring back N Home pages" with N
+  the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
+  and Display card carries its name over its top left ("Page 2", "Display", the app's name); a
+  renamed card shows its new name at once; a long name ends in "…" short of the red button.
+  (3) Rename: the keyboard is up as the dialog opens, the field focused. Emulator or pong.
 - **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
   windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
   Terminal?"; Cancel keeps everything; Close stops the shells, the Terminal cards go, no undo

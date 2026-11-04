@@ -15,11 +15,15 @@ public final class PageOverviewAddPolicy {
     }
 
     /**
-     * The N of "Bring back N Home pages": the Home pages set aside, while the wall shows none;
-     * 0 hides the pill.
+     * The N of "Bring back N Home pages" while the wall shows no Home page (Use as Terminal
+     * only): the pages set aside ({@code detachedHomePages}, as the welcome sheet's choice
+     * leaves them) and those still in the page list but hidden ({@code hiddenHomePages}, as
+     * Settings' Use as leaves them). 0 hides the pill.
      */
-    public static int bringBackCount(boolean homePagesShown, int detachedHomePages) {
-        return homePagesShown ? 0 : Math.max(0, detachedHomePages);
+    public static int bringBackCount(boolean homePagesShown, int detachedHomePages,
+                                     int hiddenHomePages) {
+        if (homePagesShown) return 0;
+        return Math.max(0, detachedHomePages) + Math.max(0, hiddenHomePages);
     }
 
     /** Whether "Add terminal" shows: only while the wall has no Terminal page, as only one can. */

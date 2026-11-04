@@ -29267,6 +29267,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGroundLook = null;
     }
 
+    /**
+     * Edit pages' Rename: a name field with the keyboard up and the field focused, the system
+     * IME announced first so its insets are taken.
+     */
+    private void promptPageRename(@Nullable String current,
+                                  @NonNull java.util.function.Consumer<String> done) {
+        float density = getResources().getDisplayMetrics().density;
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine();
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        if (current != null) {
+            input.setText(current);
+            input.setSelection(current.length());
+        }
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        int side = Math.round(24 * density);
+        box.setPadding(side, Math.round(8 * density), side, Math.round(16 * density));
+        box.addView(input);
+        androidx.appcompat.app.AlertDialog dialog =
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.page_overview_rename_title)
+                .setView(box)
+                .setPositiveButton(R.string.page_overview_rename_confirm,
+                    (d, which) -> done.accept(input.getText().toString()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        input.setOnEditorActionListener((v, action, event) -> {
+            done.accept(input.getText().toString());
+            dialog.dismiss();
+            return true;
+        });
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        }
+        onSystemImeRequested();
+        dialog.show();
+        input.requestFocus();
+    }
+
     /** Every terminal window open, across sessions: what removing the Terminal page closes. */
     private int terminalWindowTotal() {
         int n = 0;
@@ -29456,6 +29496,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     return n;
                 }
+                @Override public int hiddenHomePages() {
+                    // Settings' Use as leaves the Home pages in the list, hidden by the wall.
+                    return useAs().showsHomePage() ? 0 : wallPages().homePages().size();
+                }
                 @Override public void bringBackHomePages() {
                     // The setting's own path: the preference, then the pages brought back.
                     com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
@@ -29474,13 +29518,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.wall.WallPages.Page page = overviewPage(kind, index);
                     if (page == null) return;
                     final int id = page.id;
-                    onSystemImeRequested();
-                    TextInputDialogUtils.textInput(TermuxActivity.this,
-                        R.string.page_overview_rename_title, page.name,
-                        R.string.page_overview_rename_confirm, text -> {
-                            editWallPages(pages -> pages.rename(id, text));
-                            renamed.run();
-                        }, -1, null, -1, null, null);
+                    promptPageRename(page.name, text -> {
+                        editWallPages(pages -> pages.rename(id, text));
+                        renamed.run();
+                    });
                 }
                 @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp>
                         displayApps() {
