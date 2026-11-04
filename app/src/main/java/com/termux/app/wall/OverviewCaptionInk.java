@@ -15,8 +15,10 @@ public final class OverviewCaptionInk {
     private OverviewCaptionInk() {}
 
     /** Home's label inks: dark on a light wallpaper, white on a dark one. */
-    @ColorInt public static final int DARK_INK = 0xFF1F1F1F;
-    @ColorInt public static final int PALE_INK = 0xFFFFFFFF;
+    @ColorInt public static final int DARK_INK =
+        com.termux.app.launcher.widget.HomeLabelInk.DARK_INK;
+    @ColorInt public static final int PALE_INK =
+        com.termux.app.launcher.widget.HomeLabelInk.PALE_INK;
     /** The shadow a caption keeps while no wallpaper is known. */
     @ColorInt public static final int UNKNOWN_SHADOW = 0x99000000;
 

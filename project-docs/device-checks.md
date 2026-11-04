@@ -18,6 +18,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Edit pages: a Home page vanished once (emu2, 11-04)** after Bring back → force-stop → Add
+  page → Rename → night toggle; not reproduced. When re-running that sequence, capture
+  `wall_pages.xml` (with `next`) and the widget repository's stored page ids before and after
+  the night toggle · emulator or pong.
 - **Edit pages fixes (11-04, after the emu2 check).** (1) Use as Terminal only set from
   Settings › Use as (not the welcome sheet): Edit pages shows "Bring back N Home pages" with N
   the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
