@@ -18550,7 +18550,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private android.content.SharedPreferences mPaletteTileStore;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mPaletteTileKnob = (preferences, key) -> {
-            if (com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
+            if ((com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON.equals(key))
                 && mSuggestionBarView != null) {
                 // The row takes or gives back the slot, and the dock is dressed again (beads).
                 restyleDockSurface();
@@ -18576,6 +18577,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setPaletteTile(on, column,
             on ? () -> getCommandPaletteController().openFromField(null, true) : null);
+        // New float terminal: the same float the Terminal entry's New float here opens.
+        boolean floatOn = store != null && store.getBoolean(
+            com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
+            com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
+        bar.setFloatTile(floatOn, floatOn ? this::openHomeFloatHere : null);
     }
 
     /**

@@ -1066,6 +1066,69 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    // The New float terminal tile: one more still tile, always the row's last column (after the
+    // palette tile, PaletteTilePolicy), not draggable; a tap runs the host's float launch.
+    private boolean floatTileOn;
+    @Nullable private Runnable floatTileListener;
+    @Nullable private View floatTileSlot;
+    @Nullable private Drawable floatTileGlyph;
+
+    /** The New float terminal tile on or off, {@code onTap} what a tap does; re-lays the row. */
+    public void setFloatTile(boolean on, @Nullable Runnable onTap) {
+        floatTileListener = onTap;
+        if (floatTileOn == on) return;
+        floatTileOn = on;
+        invalidateMostUsedCache();
+        pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
+        lastSurfaceRenderSignature = 0;
+        if (configRepository != null && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
+            reload();
+            publishPageIndicator();
+        }
+    }
+
+    private boolean floatTileActive() {
+        return floatTileOn && !vertical;
+    }
+
+    private boolean floatTileShown() {
+        return floatTileSlot != null && floatTileSlot.getParent() == this && floatTileOn;
+    }
+
+    /** The Float tile's slot: a round shell like the palette tile's, without a drag. */
+    @NonNull
+    private View createFloatTileButton() {
+        FrameLayout shell = new FrameLayout(getContext());
+        shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
+        ImageButton tile = new ImageButton(getContext());
+        int size = iconSizePx();
+        tile.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+        tile.setMinimumWidth(size);
+        tile.setMinimumHeight(size);
+        tile.setPadding(0, 0, 0, 0);
+        tile.setBackground(createPinnedFolderShellBackground());
+        tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_status_bar_add_window);
+        floatTileGlyph = null;
+        if (glyph != null) {
+            glyph = DrawableCompat.wrap(glyph.mutate());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            floatTileGlyph = glyph;
+            tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
+        }
+        tile.setContentDescription(getContext().getString(R.string.dock_float_terminal_tile));
+        tile.setOnClickListener(v -> {
+            if (floatTileListener != null) floatTileListener.run();
+        });
+        shell.addView(tile);
+        slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
+        return shell;
+    }
+
     /** Whether the row lays the palette tile out: it is on, and the row is lying down. */
     private boolean paletteTileActive() {
         return paletteTileOn && !vertical;
@@ -1128,7 +1191,7 @@ public final class SuggestionBarView extends GridLayout
         tileFace = face;
         tileInkTarget = target;
         int ink = tileGlyphInk();
-        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph}) {
+        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph, floatTileGlyph}) {
             if (glyph == null) continue;
             DrawableCompat.setTint(glyph, ink);
             glyph.invalidateSelf();
@@ -1163,7 +1226,7 @@ public final class SuggestionBarView extends GridLayout
     private int pinnedRowAppSlots() {
         int slots = Math.max(1, maxButtonCount);
         return com.termux.app.dock.PaletteTilePolicy.appSlots(slots, drawerTileActive(),
-            paletteTileActive());
+            paletteTileActive(), floatTileActive());
     }
 
     /**
@@ -1195,6 +1258,8 @@ public final class SuggestionBarView extends GridLayout
         if (!Float.isNaN(drawer) && count < out.length) out[count++] = drawer;
         float palette = paletteTileCenterX();
         if (!Float.isNaN(palette) && count < out.length) out[count++] = palette;
+        float floatTile = floatTileShown() ? tileCenterX(floatTileSlot) : Float.NaN;
+        if (!Float.isNaN(floatTile) && count < out.length) out[count++] = floatTile;
         return count;
     }
 
@@ -1210,7 +1275,8 @@ public final class SuggestionBarView extends GridLayout
     /** Whether {@code child} is one of the row's still tiles on screen: no page's, so held still. */
     private boolean isStillTile(@NonNull View child) {
         return (child == drawerTileSlot && drawerTileShown())
-            || (child == paletteTileSlot && paletteTileShown());
+            || (child == paletteTileSlot && paletteTileShown())
+            || (child == floatTileSlot && floatTileShown());
     }
 
     /** Whether the row on screen holds the Drawer tile (a pinned page lying down). */
@@ -1242,7 +1308,7 @@ public final class SuggestionBarView extends GridLayout
 
     private int pinnedColumnCount(int appSlots) {
         return com.termux.app.dock.PaletteTilePolicy.columnCount(appSlots, drawerTileShown(),
-            paletteTileShown());
+            paletteTileShown(), floatTileShown());
     }
 
     /** The Drawer tile's slot: a round shell like a folder's, holding the drawer's glyph. */
@@ -1335,7 +1401,8 @@ public final class SuggestionBarView extends GridLayout
             float fraction = getWidth() <= 0 ? 0.5f : centre / getWidth();
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) fraction = 1f - fraction;
             return com.termux.app.dock.DrawerTilePolicy.dropColumn(fraction,
-                Math.max(1, getColumnCount()));
+                com.termux.app.dock.PaletteTilePolicy.movableColumns(
+                    Math.max(1, getColumnCount()), floatTileShown()));
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -1467,6 +1534,9 @@ public final class SuggestionBarView extends GridLayout
             View palette = paletteTileSlot;
             if (palette != null && palette.getVisibility() == VISIBLE && isStillTile(palette))
                 drawChild(canvas, palette, getDrawingTime());
+            View floatTile = floatTileSlot;
+            if (floatTile != null && floatTile.getVisibility() == VISIBLE && isStillTile(floatTile))
+                drawChild(canvas, floatTile, getDrawingTime());
         } finally {
             drawingStillTilesUnshifted = false;
         }
@@ -1673,6 +1743,10 @@ public final class SuggestionBarView extends GridLayout
         if (palette != null && paletteTileShown() && !drawerTileDragging
             && palette.getTranslationX() != hold)
             palette.setTranslationX(hold);
+        View floatTile = floatTileSlot;
+        if (floatTile != null && floatTileShown() && !drawerTileDragging
+            && floatTile.getTranslationX() != hold)
+            floatTile.setTranslationX(hold);
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
     }
@@ -4183,7 +4257,8 @@ public final class SuggestionBarView extends GridLayout
             buttonCount = Math.max(1, pinnedItemsPerPage);
             // The Drawer tile takes a slot of its own beside the page's apps.
             buttonCount = com.termux.app.dock.PaletteTilePolicy.columnCount(
-                Math.max(1, pinnedItemsPerPage), drawerTileActive(), paletteTileActive());
+                Math.max(1, pinnedItemsPerPage), drawerTileActive(), paletteTileActive(),
+                floatTileActive());
             if (isMostUsedDynamicPage(pinnedPageIndex)) {
                 // Dynamic most-used page: render ranked apps as launch-only buttons. pinnedForSlots
                 // stays empty so the render loop binds them with pinnedIndex -1 (no drag/reorder),
@@ -4259,6 +4334,7 @@ public final class SuggestionBarView extends GridLayout
         drawerTileAppSlots = 0;
         paletteTileSlot = null;
         paletteTileColumn = -1;
+        floatTileSlot = null;
         tileRowAppViews.clear();
         // The still tiles, on every pinned page lying down: each in its own column, the page's
         // app slots keeping their order around them.
@@ -4375,6 +4451,15 @@ public final class SuggestionBarView extends GridLayout
                 paletteTileSlot = tile;
                 paletteTileColumn = paletteColumn;
             }
+        }
+
+        if (pinnedSurface && floatTileActive() && buttonCount > 0) {
+            int floatColumn = com.termux.app.dock.PaletteTilePolicy.floatColumn(buttonCount);
+            View tile = createFloatTileButton();
+            tile.setLayoutParams(createSlotParams(floatColumn));
+            addView(tile);
+            usedColumns[floatColumn] = true;
+            floatTileSlot = tile;
         }
 
         if (pendingPinnedMutationFeedback && !azPreview) {
@@ -4646,6 +4731,7 @@ public final class SuggestionBarView extends GridLayout
         // Where the still tiles stand moves every slot after them.
         signature = (31 * signature) + (drawerTileActive() ? drawerTilePlace.hashCode() + 1 : 0);
         signature = (31 * signature) + (paletteTileActive() ? paletteTileStoredColumn + 2 : 0);
+        signature = (31 * signature) + (floatTileActive() ? 1 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
         signature = (31 * signature) + lastInput.trim().hashCode();
@@ -7778,7 +7864,7 @@ public final class SuggestionBarView extends GridLayout
             if (child == null) continue;
             // The Drawer tile and the palette tile are not apps the drop shifts; the apps before
             // them are its children in their own order.
-            if (child == drawerTileSlot || child == paletteTileSlot) continue;
+            if (child == drawerTileSlot || child == paletteTileSlot || child == floatTileSlot) continue;
             float tx = 0f;
             if (folderDragHoverIndex >= 0 && i >= folderDragHoverIndex) {
                 tx += insertShift;
@@ -8163,7 +8249,7 @@ public final class SuggestionBarView extends GridLayout
     private DropSlot dropSlotAt(float localX) {
         int drawerColumn = shownDrawerColumn();
         int paletteColumn = shownPaletteColumn();
-        boolean tiles = drawerColumn >= 0 || paletteColumn >= 0;
+        boolean tiles = drawerColumn >= 0 || paletteColumn >= 0 || floatTileShown();
         int slotCount = tiles
             ? pinnedColumnCount(drawerTileAppSlots) : Math.max(1, maxButtonCount);
         float width = Math.max(1f, getWidth());

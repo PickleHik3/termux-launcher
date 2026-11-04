@@ -80,4 +80,31 @@ public final class PaletteTilePolicy {
         if (palette < 0) return new int[] {drawer};
         return new int[] {Math.min(drawer, palette), Math.max(drawer, palette)};
     }
+
+    // ---- The New float terminal tile: one more column, always the row's last, after the palette.
+    // Palette then Float is fixed: the Drawer and palette tiles keep their own columns among the
+    // rest, and the Float tile is no column either can be dragged to.
+
+    /** {@link #appSlots(int, boolean, boolean)} with the Float tile's column taken too. */
+    public static int appSlots(int slots, boolean drawerTile, boolean paletteTile,
+                               boolean floatTile) {
+        int tiles = (drawerTile ? 1 : 0) + (paletteTile ? 1 : 0) + (floatTile ? 1 : 0);
+        return Math.max(tiles > 0 ? 1 : 0, Math.max(1, slots) - tiles);
+    }
+
+    /** {@link #columnCount(int, boolean, boolean)} with the Float tile's column. */
+    public static int columnCount(int appSlots, boolean drawerTile, boolean paletteTile,
+                                  boolean floatTile) {
+        return columnCount(appSlots, drawerTile, paletteTile) + (floatTile ? 1 : 0);
+    }
+
+    /** The Float tile's column in a row of {@code columns} columns: the last. */
+    public static int floatColumn(int columns) {
+        return Math.max(0, columns - 1);
+    }
+
+    /** The columns the Drawer and palette tiles may stand in: the row's, less the Float tile's. */
+    public static int movableColumns(int columns, boolean floatTile) {
+        return Math.max(1, columns - (floatTile ? 1 : 0));
+    }
 }

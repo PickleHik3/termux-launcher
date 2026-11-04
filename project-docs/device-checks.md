@@ -225,3 +225,14 @@ device. Owed:
   pick (or Automatic) moves the app and the Categories view regrouping follows · pong.
 - 2026-11-04 · The row is absent on a dock icon, a dock folder member and a Linux app entry · pong.
 - 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.
+
+**New float terminal tile on the dock (2026-11-04, #197 narrow).** Not yet seen on a device; the
+tile is off by default and has no switch in the editor yet (pref `dock_float_terminal_button`). Owed:
+- 2026-11-04 · With the pref on: the apps row gains one last column holding the tile; a tap opens a
+  floating terminal on Home as the Terminal entry's New float here does; Docked and Floating dock
+  styles, keyboard up and down, one pane and many · pong.
+- 2026-11-04 · Both the Command palette tile and the Float tile on: palette then Float, each one
+  column; dragging the palette tile or the Drawer tile never lands on the Float column; a page
+  swipe holds all still tiles, Lens beads keep a bead under each · pong.
+- 2026-11-04 · Light and dark, scheme chrome, glyph ink on a pale wallpaper (glyph is the status
+  bar's add-window drawable, the closest existing) · pong.
