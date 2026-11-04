@@ -78,7 +78,8 @@ public class GuiAppsSetupGuideFragmentTest {
     @Test public void vajsOwnAppsOfferNoBrowser() {
         assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.FILE_MANAGER),
             GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO));
-        assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.BROWSER, GuiAppsSetup.StarterApp.FILE_MANAGER),
+        assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.BROWSER, GuiAppsSetup.StarterApp.FILE_MANAGER,
+                GuiAppsSetup.StarterApp.DESKTOP),
             GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.DISTRO));
     }
 
