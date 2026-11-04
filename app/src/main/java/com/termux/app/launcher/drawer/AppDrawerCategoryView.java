@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -784,6 +785,26 @@ public final class AppDrawerCategoryView extends ViewGroup
         if (expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW && !buckets.isEmpty())
             return overview;
         return null;
+    }
+    /**
+     * The app a finger at this view's local ({@code x}, {@code y}) is on: a row of the open
+     * category, or one of a tile's launch icons. Null anywhere else.
+     */
+    @Nullable public LauncherAppEntry appEntryAt(float x, float y) {
+        RecyclerView active = activeRecyclerView();
+        if (active == null || getVisibility() != VISIBLE) return null;
+        float localX = x - active.getLeft();
+        float localY = y - active.getTop();
+        View child = active.findChildViewUnder(localX, localY);
+        if (child == null) return null;
+        if (active == detailList) {
+            int position = active.getChildAdapterPosition(child);
+            List<LauncherAppEntry> entries = detailAdapter.entries();
+            return position >= 0 && position < entries.size() ? entries.get(position) : null;
+        }
+        if (!(child instanceof AppDrawerCategoryTileView)) return null;
+        return ((AppDrawerCategoryTileView) child).launchEntryAt(
+            localX - child.getLeft(), localY - child.getTop());
     }
     public boolean isOverview() {
         return expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW;

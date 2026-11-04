@@ -23,6 +23,7 @@ public final class AppDrawerCategoryDetailAdapter
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
+    @Nullable private AppDrawerPickupDelegate pickupDelegate;
 
     public AppDrawerCategoryDetailAdapter(@Nullable SuggestionBarView dock) {
         this.dock = dock;
@@ -38,6 +39,11 @@ public final class AppDrawerCategoryDetailAdapter
     }
     public void setCategoryChoiceListener(@Nullable AppDrawerCategoryChoiceListener listener) {
         this.categoryChoiceListener = listener;
+    }
+    /** The drawer's drag controller, so a long press that moves picks the app up for Home. */
+    public void setPickupDelegate(@Nullable AppDrawerPickupDelegate delegate) {
+        this.pickupDelegate = delegate;
+        notifyDataSetChanged();
     }
     public void submit(@NonNull List<LauncherAppEntry> entries) {
         this.entries = new ArrayList<>(entries);
@@ -57,7 +63,7 @@ public final class AppDrawerCategoryDetailAdapter
         if (current == null) { holder.cell.unbind(); return; }
         LauncherAppEntry entry = entries.get(position);
         holder.cell.bind(dock, entry, current.largeIconPx,
-            Math.max(1, Math.round(current.expandedRowHeightPx)), clickGate, categoryChoiceListener);
+            Math.max(1, Math.round(current.expandedRowHeightPx)), clickGate, pickupDelegate, categoryChoiceListener);
     }
     @Override public void onViewRecycled(@NonNull Holder holder) {
         super.onViewRecycled(holder);
