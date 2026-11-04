@@ -23,7 +23,8 @@ import java.util.List;
  * ({@link HomeAppIconMetrics}) so a folder and an icon side by side line up. The miniature is the
  * drawer folder's ({@code AppDrawerFolderCellView}): two 42% minis and a 6% gap, centred.
  */
-final class HomeFolderView extends ViewGroup implements com.termux.app.theme.TextScale.Follower {
+final class HomeFolderView extends ViewGroup implements com.termux.app.theme.TextScale.Follower,
+    com.termux.app.launcher.animation.LaunchIconSource {
     /** The drawer folder's mini size, as a fraction of the icon. */
     static final float MINI_FRACTION = 0.42f;
     /** The gap between minis, as a fraction of the icon. */
@@ -79,6 +80,20 @@ final class HomeFolderView extends ViewGroup implements com.termux.app.theme.Tex
      * The folder's name and the artwork of its first apps, in order; a null drawable is an app
      * that is gone, drawn faint with the system's default icon in its place.
      */
+    /** The packages of the apps inside, for the home handoff. */
+    @NonNull private final java.util.Set<String> memberPackages = new java.util.HashSet<>();
+
+    void setMemberPackages(@NonNull java.util.Collection<String> packages) {
+        memberPackages.clear();
+        memberPackages.addAll(packages);
+    }
+
+    @Override public boolean launchesPackage(@NonNull String packageName) {
+        return memberPackages.contains(packageName);
+    }
+    @Override public boolean isDrawerCell() { return false; }
+    @Override @Nullable public View launchIconView() { return this; }
+
     void bind(@NonNull CharSequence name, @NonNull List<Drawable> artwork,
               @NonNull List<Boolean> unavailable) {
         for (int i = 0; i < SHOWN; i++) {
