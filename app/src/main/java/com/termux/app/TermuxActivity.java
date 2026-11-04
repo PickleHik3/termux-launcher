@@ -8115,7 +8115,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean inAppKeyboardSeesThroughToDisplay() {
         return KeyboardMaterialPolicy.seesThroughToDisplay(inAppKeyboardForm(),
-            inAppKeyboardOnDisplay());
+            inAppKeyboardOverlays(), inAppKeyboardOnDisplay());
     }
 
     @NonNull
@@ -9079,12 +9079,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         mKeyboardTravelSolidFill = null;
-        // Over a Display page, in overlay and resize mode alike, the keyboard wears its
+        // Over a Display page in overlay mode the bed lies over the display and wears its
         // Display-pages look see-through, with no wallpaper frame: its Opacity and Tint over the
         // live display, and the Frost drawn by the compositor in a blur layer under the bed.
         // Neither the unified dock glass nor the joined frame's sheet stands in for it here: both
         // would lay the wallpaper over the display.
-        if (KeyboardMaterialPolicy.seesThroughToDisplay(form, display)) {
+        if (KeyboardMaterialPolicy.seesThroughToDisplay(form, overlays, display)) {
             surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
                 state, surfaceHost, capsule, cornerRadiusPx));
             clearInAppKeyboardBackdrop();
