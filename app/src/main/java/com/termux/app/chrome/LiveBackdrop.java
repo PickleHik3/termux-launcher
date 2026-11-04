@@ -238,7 +238,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /**
      * Runs inside a frame already being drawn: re-records each shown surface whose beneath moved.
-     * Calls nothing that invalidates or schedules a frame.
+     * Invalidates nothing, but for a picture's first whole recording, whose holder is asked to
+     * redraw in this same frame to swap its stored frame for it ({@link LivePicture#recorded}).
      */
     @Override
     public boolean onPreDraw() {
@@ -275,6 +276,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.mRecordedWidth = surface.getWidth();
             picture.mRecordedHeight = surface.getHeight();
             picture.mRecordedMargin = margin;
+            // The first whole recording: its holder swaps the stored frame for it in this frame.
+            picture.recorded();
         }
         if (mPictures.isEmpty()) listen(false);
         return true;
