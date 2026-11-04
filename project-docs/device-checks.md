@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **MNN 3.6.2 runtime (11-04, #211).** On pong: the MNN chat models already installed load and
+  answer (CPU and OpenCL), an embedding model and a diffusion model still run, and
+  `taobao-mnn/MobileMoE-S-SFT-MNN` (716 MB, uses IndexedLinear) imports, loads and answers.
+  Optional: `LFM2.5-8B-A1B-MNN` (4.8 GB) · pong.
+- **AI runtimes updated (11-04).** A LiteRT-LM chat model loads and answers on GPU and on CPU
+  (and the Benchmark route still returns numbers); voice typing's speech detection still starts
+  and stops on speech · pong.
 - **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
   Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
   a perfetto trace. The landing frame holds no `Wall.halfRedress` section (it runs in the frame
