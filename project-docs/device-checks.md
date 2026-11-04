@@ -18,6 +18,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Terminal pane stays sharp after a crossing (11-04).** Home Margin 16, Workspace Margin 4,
+  and the dock's opacity apart on Home: swipe Home 2 to the Workspace with a session showing
+  text. Record the screen: no frame after the landing shows the pane's text blurred (it was ~4
+  frames). Live blur on and off, Docked and Floating, keyboard up and down · pong.
 - **Crossings turn by the Page transition (11-04).** Page transition Carousel, then Depth, Fade,
   Stack and Slide: swipe Home 2 to the Workspace and back, slow, flung and reversed mid-way. The
   two pages move as Home 1 and Home 2 do under the same setting (Slide: flat); the status bar,

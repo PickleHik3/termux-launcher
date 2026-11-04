@@ -3026,8 +3026,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void redressChromeFromState() {
+        redressChromeFromState(true);
+    }
+
+    /**
+     * @param redressPanes whether the panes and pages are dressed again whatever their style key
+     *                     says (the editor's Undo, a Look, a Style). A landing's half re-dress
+     *                     passes false: the panes are dressed again only where their own style
+     *                     moved, so a landing between halves that differ only in the dock's look
+     *                     or the bar's Margin does not rebuild the terminal pane's glass, which
+     *                     drew its text blurred for a few frames after the landing.
+     */
+    private void redressChromeFromState(boolean redressPanes) {
         if (mPreferences == null || mChrome == null) return;
-        mAppliedPaneStyleKey = null;
+        if (redressPanes) mAppliedPaneStyleKey = null;
         // A redress after the editor (Undo, a Look, a Style) or at a settle between halves
         // (restyleChromeForHalfIfChanged): the grid's rim is Home's Margin as it stands now.
         pushHomeMarginToWidgetGrid(true);
@@ -6937,7 +6949,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         if (dressOf(from).shape().equals(dressOf(to).shape()) && !looksDifferAcross(from, to))
             return;
-        redressChromeFromState();
+        redressChromeFromState(false);
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight(true);
         refreshTerminalWindowBar();
