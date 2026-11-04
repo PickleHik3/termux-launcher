@@ -205,3 +205,4 @@ nothing clipped. Still owed:
   theme outline, Primary and no glow · pong, go-ahead.
 - 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
   drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
+- 2026-11-04 · #205 · After `pm install -r` over a running build, with the launcher not opened, `curl $(cat ~/.launcherctl/endpoint)/v1/ai/status` answers (the API binds when the main process is revived as a service host) · pong or emulator.
