@@ -6708,10 +6708,11 @@ public final class SuggestionBarView extends GridLayout
             View[] source = new View[1];
             shortcutSources.add(source);
             String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
-            shortcutItems.add(new AppMenuCard.Item(label, R.drawable.ic_app_menu_shortcut, () -> {
-                launchShortcut(info, source[0]);
-                dismissAppContextPopup();
-            }));
+            shortcutItems.add(AppMenuCard.Item.withIcon(label, shortcutIcon(info),
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    launchShortcut(info, source[0]);
+                    dismissAppContextPopup();
+                }));
         }
         List<ShortcutInfo> overflow = shortcutCount > visibleShortcuts
             ? new ArrayList<>(shortcuts.subList(Math.max(0, visibleShortcuts - entryShortcuts),
@@ -7112,33 +7113,33 @@ public final class SuggestionBarView extends GridLayout
         dismissShortcutsPopup();
         if (shortcuts.isEmpty()) return;
 
-        LinearLayout shell = menuRows.newShell();
-        List<MenuRow> shortcutRows = new ArrayList<>();
-
-        for (ShortcutInfo info : shortcuts) {
+        // The side menu is the App menu's card again: the same rows, shades and type.
+        List<AppMenuCard.Item> items = new ArrayList<>(shortcuts.size());
+        View[][] sources = new View[shortcuts.size()][1];
+        for (int i = 0; i < shortcuts.size(); i++) {
+            ShortcutInfo info = shortcuts.get(i);
+            View[] source = sources[i];
             String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
-            final TextView[] shortcutRowHolder = new TextView[1];
-            TextView shortcutRow = menuRows.addActionRow(shell, label, menuHighlight.tintBase(), () -> {
-                launchShortcut(info, shortcutRowHolder[0]);
-                dismissAppContextPopup();
-            });
-            shortcutRowHolder[0] = shortcutRow;
-            shortcutRows.add(new MenuRow(shortcutRow, () -> {
-                launchShortcut(info, shortcutRowHolder[0]);
-                dismissAppContextPopup();
-            }, false));
+            items.add(AppMenuCard.Item.withIcon(label, shortcutIcon(info),
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    launchShortcut(info, source[0]);
+                    dismissAppContextPopup();
+                }));
         }
-        MenuRowWidths.normalize(shortcutRows);
+        AppMenuCard card = AppMenuCard.build(getContext(), menuRows,
+            java.util.Collections.singletonList(items));
+        for (int i = 0; i < sources.length; i++) sources[i][0] = card.rows.get(i).rowView;
 
-        PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
-        int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
-            ? (sourceFolder.tintColor & 0x00FFFFFF)
-            : (inheritedTintColor & 0x00FFFFFF);
-        MenuSpec spec = MenuSpec.of(shell, tintBase).rows(shortcutRows).build();
         if (shortcutsRowAnchor != null && appContextMenu.isShowing()) {
-            shortcutsMenu.showAlignedToRow(spec, shortcutsRowAnchor, appContextMenu);
+            shortcutsMenu.showAppMenuBeside(card, shortcutsRowAnchor, appContextMenu);
         } else {
-            shortcutsMenu.show(spec, context.anchor);
+            Rect anchorRect = new Rect();
+            int[] at = new int[2];
+            context.anchor.getLocationOnScreen(at);
+            anchorRect.set(at[0], at[1], at[0] + context.anchor.getWidth(),
+                at[1] + context.anchor.getHeight());
+            shortcutsMenu.showAppMenu(card, anchorRect, null,
+                getResources().getString(R.string.app_menu_more_shortcuts));
         }
     }
 

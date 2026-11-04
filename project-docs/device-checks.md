@@ -205,3 +205,16 @@ nothing clipped. Still owed:
   theme outline, Primary and no glow · pong, go-ahead.
 - 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
   drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
+
+**App menu shortcut icons and the More shortcuts card (2026-11-04, #198).** Not yet seen on a
+device. Owed:
+- 2026-11-04 · App menu on a Home icon, a drawer icon and a dock icon of an app that publishes
+  shortcuts (Chrome, Messages): each shortcut row shows that shortcut's own icon, untinted; an
+  app whose shortcuts have none keeps the bolt glyph · pong.
+- 2026-11-04 · More shortcuts on an app with more than four shortcuts: the side menu is the App
+  menu's card (same rows, shades, type, no arrow), beside the card and centred on the More row,
+  on the left when the right has no room, scrolling when taller than the screen; a tap launches
+  and closes both; the main card's drag highlight still follows the finger onto it · pong.
+- 2026-11-04 · The same in light and dark theme, with the launcher's scheme chrome on and off,
+  and with an icon pack pinned (shortcut icons are the app's own, not the pack's) · pong.
+- 2026-11-04 · Font scale 1.3: long shortcut labels ellipsize on one line · pong or emulator.
