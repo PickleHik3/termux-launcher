@@ -29,7 +29,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class WallPagesStore {
 
-    static final int VERSION = 1;
+    /**
+     * 2 (2026-11-04): a page may carry {@code temporary} (ADR 0015 amendment); a version-1 value
+     * reads with every page lasting.
+     */
+    static final int VERSION = 2;
     public static final String PREFS = "wall_pages";
     public static final String KEY_STATE = "state";
 
@@ -248,6 +252,7 @@ public final class WallPagesStore {
             o.put("kind", p.kind.name());
             if (p.name != null) o.put("name", p.name);
             if (p.binding != null) o.put("binding", p.binding);
+            if (p.temporary) o.put("temporary", true);
             array.put(o);
         }
         return array;
@@ -259,9 +264,10 @@ public final class WallPagesStore {
         if (json == null || json.isEmpty()) return null;
         try {
             JSONObject o = new JSONObject(json);
-            if (o.optInt("version", 0) != VERSION) return null;
-            List<Page> all = pagesFromJson(o.getJSONArray("pages"));
-            List<Page> detached = pagesFromJson(o.optJSONArray("detached"));
+            int version = o.optInt("version", 0);
+            if (version != 1 && version != VERSION) return null;
+            List<Page> all = pagesFromJson(o.getJSONArray("pages"), version);
+            List<Page> detached = pagesFromJson(o.optJSONArray("detached"), version);
             List<Integer> pending = new ArrayList<>();
             JSONArray p = o.optJSONArray("pending");
             for (int i = 0; p != null && i < p.length(); i++) pending.add(p.getInt(i));
@@ -273,13 +279,16 @@ public final class WallPagesStore {
         }
     }
 
-    private static List<Page> pagesFromJson(@Nullable JSONArray array) throws JSONException {
+    /** Version 1 knew no temporary pages: every page it holds is a lasting one. */
+    private static List<Page> pagesFromJson(@Nullable JSONArray array, int version)
+            throws JSONException {
         List<Page> out = new ArrayList<>();
         for (int i = 0; array != null && i < array.length(); i++) {
             JSONObject o = array.getJSONObject(i);
             out.add(new Page(o.getInt("id"), PageKind.valueOf(o.getString("kind")),
                 o.has("name") ? o.getString("name") : null,
-                o.has("binding") ? o.getString("binding") : null));
+                o.has("binding") ? o.getString("binding") : null,
+                version >= 2 && o.optBoolean("temporary", false)));
         }
         return out;
     }
