@@ -149,6 +149,43 @@ public class TemporaryDisplayPageTest {
     }
 
     @Test
+    public void addDisplayWithNoPagePlacesOneLastingUnboundPageAfterTheCurrentOne() {
+        Result r = three().addDisplayPage(2);
+        assertEquals(ChangeType.ADDED, r.change);
+        WallPages.Page page = r.pages.page(4);
+        assertEquals(PageKind.DISPLAY, page.kind);
+        assertNull(page.binding);
+        assertFalse(page.temporary);
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(r.pages.pages()));
+        // Edit pages shows its card.
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(r.pages.listedPages()));
+        // An unknown current page puts it at the end; a later drawer launch routes to it.
+        assertEquals(4, ids(three().addDisplayPage(99).pages.pages()).get(3).intValue());
+        assertEquals(4, r.pages.routeLinuxApp("firefox", 1).pageId);
+        assertFalse(r.pages.routeLinuxApp("firefox", 1).needsNewPage());
+    }
+
+    @Test
+    public void addDisplayWithATemporaryPagePromotesThatPage() {
+        WallPages p = launched();
+        Result r = p.addDisplayPage(1);
+        assertEquals(ChangeType.MADE_PERMANENT, r.change);
+        assertEquals(4, r.page.id);
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(r.pages.pages()));
+        assertFalse(r.pages.page(4).temporary);
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(r.pages.listedPages()));
+    }
+
+    @Test
+    public void addDisplayWithALastingUnboundPageAddsNoSecond() {
+        WallPages p = ok(three().add(PageKind.DISPLAY, 3, null));
+        Result r = p.addDisplayPage(1);
+        assertEquals(ChangeType.NONE, r.change);
+        assertEquals(4, r.page.id);
+        assertSame(p, r.pages);
+    }
+
+    @Test
     public void homeOnDisplayMakesTheTemporaryPageLasting() {
         WallPages p = launched();
         Result r = p.homeOnDisplayPage();
