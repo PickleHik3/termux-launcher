@@ -52,7 +52,7 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   (`x11-server/.../x11/input/`: `InputEventSender`, `TouchInputHandler`, `TapGestureDetector`,
   `SwipeDetector`, `InputStub`, `InputStrategyInterface`, `RenderData`) keep that license; the
   notice is reproduced in THIRD_PARTY_LICENSES.txt.
-- **MNN 3.6.1** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
+- **MNN 3.6.2** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
   arm64 native builds and a patched UTF-8 stream processor.
 - **nlohmann/json 3.11.2** — MIT — Copyright 2013–2022 Niels Lohmann. It is statically included in
   the MNN Android JNI library.

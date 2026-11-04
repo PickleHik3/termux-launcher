@@ -18,6 +18,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **MNN 3.6.2 runtime (11-04, #211).** On pong: the MNN chat models already installed load and
+  answer (CPU and OpenCL), an embedding model and a diffusion model still run, and
+  `taobao-mnn/MobileMoE-S-SFT-MNN` (716 MB, uses IndexedLinear) imports, loads and answers.
+  Optional: `LFM2.5-8B-A1B-MNN` (4.8 GB) · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
   dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
