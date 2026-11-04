@@ -1584,8 +1584,39 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * or going: the vertical grid's metrics are width-only and skip the rebind, the paged layouts
      * re-chunk their rows for the height that is left.
      */
+    /**
+     * The height the category cards are sized for: the content's keyboard-down height. The reveal
+     * shortens the content rect above the keyboard, and sizing the cards from that squashed them.
+     */
+    @VisibleForTesting
+    float categoryMetricsHeightPx(@NonNull Frame rect) {
+        Frame base = resolveContentBaseRect(mOpenRect);
+        return base == null ? rect.height() : Math.max(rect.height(), base.height());
+    }
+
+    /**
+     * How far the content ends above the card's usable bottom, for the rectangle it is laid out in.
+     * A rect shorter than the keyboard-down base is a keyboard being up (in-app or system), and the
+     * card then ends where the rect does; keyboard down, the card runs to the screen bottom under
+     * the gesture inset. Read at the keyboard decision with the rest of the content's layout, never
+     * per frame of the reveal.
+     */
+    @VisibleForTesting
+    int resolveContentBottomInsetPx(@NonNull AppDrawerContentView content, @NonNull Frame rect) {
+        Frame base = resolveContentBaseRect(mOpenRect);
+        FrameLayout host = mHostLayout;
+        boolean keyboardUp = base != null && rect.bottom < base.bottom;
+        boolean runsUnderNav = !mRoundedStyle && host != null;
+        float cardBottom = keyboardUp || !runsUnderNav ? rect.bottom : host.getHeight();
+        float navInset = runsUnderNav ? hostBleedBottomPx() : 0f;
+        return Math.round(AppDrawerContentInsetPolicy.contentBottomInsetPx(rect.bottom, cardBottom,
+            navInset, keyboardUp, content.contentInsetPx()));
+    }
+
     private void applyContentMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
                                      boolean heightOnly) {
+        // First: the page rows are sized from the pager's usable height, which this inset decides.
+        content.setBottomInsetPx(resolveContentBottomInsetPx(content, rect));
         float labelHeightPx = resolveCellLabelHeightPx();
         AppDrawerLayoutConfig config = mLayoutConfig;
         switch (config.viewType) {
