@@ -57,6 +57,15 @@ public final class WallShape {
         return style == LayoutStyle.FLOATING;
     }
 
+    /**
+     * Whether {@code other} outlines a surface as this does, its Style and Corners, whatever its
+     * Margin: Margin only insets a surface from the edge, so a bar both halves stand alike keeps
+     * its outline across the seam when only their Margins differ (Margin is per kind).
+     */
+    public boolean sameOutline(@NonNull WallShape other) {
+        return style == other.style && cornersDp == other.cornersDp;
+    }
+
     @Override
     public boolean equals(@Nullable Object other) {
         if (this == other) return true;

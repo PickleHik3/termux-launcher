@@ -866,6 +866,36 @@ public class PaneWallControllerTest {
         assertEquals(0f, wall.offsetPx(), 0f);
     }
 
+    @Test public void theHomePressSlidesTheLiveFrameInNotTheHomePagesCard() {
+        // [Home1][Home8][T4]; the frame paged from Home 1 to Home 8 by its own swipe (no picture
+        // of Home 1 kept), then the wall went to the Workspace.
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(8, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        controller.refreshPages();
+        host.homePress = 0;
+        controller.goHome(false);
+        host.homePage = 1;
+        assertEquals(8, controller.currentPageId());
+        controller.returnToTerminal(false);
+        assertEquals(4, controller.currentPageId());
+        host.reduced = false;
+        controller.refreshPages();
+        controller.goHome(true);
+        assertTrue(wall.isMoving());
+        for (int frame = 0; frame < 40 && wall.isMoving(); frame++) {
+            assertTrue("Home 1 is live at frame " + frame, wall.isLive(1));
+            PageCardView card = wall.cardOf(1);
+            assertTrue("no card over Home 1 at frame " + frame,
+                card == null || card.getVisibility() != View.VISIBLE);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(16,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+    }
+
     @Test public void theHomePressOnTheHomePageDoesNotMove() {
         host.pages = new WallPages(Arrays.asList(
             new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
