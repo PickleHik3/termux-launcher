@@ -39,10 +39,7 @@ android {
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // libtai_xnnpack.so (com.termux.ai.TaiXnnpackDelegate): a JNI shim that dlopens the
-        // already-loaded libtensorflowlite_jni.so and calls its exported XNNPACK delegate C API
-        // directly, so Whisper inference gets a real multi-threaded XNNPACK pthreadpool (see
-        // WhisperSttRuntime).
+        // libtai_xnnpack.so: small JNI helpers (TaiGpuProbe, TaiNativeLog).
         externalNativeBuild {
             ndkBuild {
                 cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
@@ -225,7 +222,7 @@ dependencies {
     // Renders hicolor/scalable SVG icons a Linux app ships when it has no PNG (LinuxAppIcons).
     implementation "com.caverock:androidsvg-aar:1.4"
     implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
-    implementation "com.google.ai.edge.litert:litert:1.4.2"
+    implementation "com.google.ai.edge.litert:litert:2.3.2"
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")

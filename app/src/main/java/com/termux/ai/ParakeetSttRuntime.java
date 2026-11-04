@@ -36,7 +36,7 @@ import java.util.Locale;
  *
  * <p>v3 detects the language itself and has no prompt, so {@code language} and {@code biasText}
  * are accepted and ignored ({@code biased} is always false). CPU only, XNNPACK through
- * {@link TaiXnnpackDelegate}, {@code min(4, cores)} threads, like {@link WhisperSttRuntime}: on
+ * the stock Interpreter XNNPACK path, {@code min(4, cores)} threads, like {@link WhisperSttRuntime}: on
  * pong the encoder takes ~170 ms per 5 s window and a {@code decode_1} step ~1 ms, at +1.2 GB RSS.
  *
  * <p>Locking and residency follow {@link WhisperSttRuntime}: transcribe, warm and close serialize
@@ -57,7 +57,6 @@ final class ParakeetSttRuntime implements SttRuntime {
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
     @Nullable private Interpreter interpreter;
-    @Nullable private TaiXnnpackDelegate xnnpackDelegate;
     @Nullable private ParakeetTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -222,12 +221,8 @@ final class ParakeetSttRuntime implements SttRuntime {
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = ParakeetTokenizer.fromFile(tokenizerFile);
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        // litert 1.4.2's own XNNPACK delegate never gets worker threads (see WhisperSttRuntime);
-        // the JNI shim builds a real one, and only the interpreter's own thread count falls back.
-        xnnpackDelegate = TaiXnnpackDelegate.create(threads);
-        Interpreter.Options options = xnnpackDelegate != null
-            ? new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(false).addDelegate(xnnpackDelegate)
-            : new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
+        // The stock LiteRT Interpreter XNNPACK path, as in WhisperSttRuntime.
+        Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
         try {
@@ -513,10 +508,6 @@ final class ParakeetSttRuntime implements SttRuntime {
         if (interpreter != null) {
             interpreter.close();
             interpreter = null;
-        }
-        if (xnnpackDelegate != null) {
-            xnnpackDelegate.close();
-            xnnpackDelegate = null;
         }
         tokenizer = null;
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.STT, loadedModelId);
