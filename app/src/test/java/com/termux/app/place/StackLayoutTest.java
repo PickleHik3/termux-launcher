@@ -256,6 +256,22 @@ public class StackLayoutTest {
     }
 
     @Test
+    public void aDisplayPageInOverlayModeKeepsTheWholeHeightKeyboardUpOrDown() {
+        for (boolean keyboardShown : new boolean[] {true, false}) {
+            StackLayout.Input in = window(keyboardShown);
+            in.keyboardOverlays = true;
+            in.contentUnderStack = true;
+            in.systemImeTakePx = 25;
+            StackLayout.Result r = run(in);
+            assertEquals(r.stackHeightPx + r.bottomMarginPx, r.contentOverlapPx);
+            assertEquals("the display runs on to the screen's bottom", 0,
+                r.contentReservationPx);
+            assertEquals("Home's band and IME reach stay Home's", 0, r.homeGridDockReservePx);
+            assertEquals(0, r.homeImeReachPx);
+        }
+    }
+
+    @Test
     public void theWorkspaceReservesTheStackAndItsMarginLessWhatTheKeyboardHandsBack() {
         StackLayout.Input in = window(true);
         StackLayout.Result r = run(in);

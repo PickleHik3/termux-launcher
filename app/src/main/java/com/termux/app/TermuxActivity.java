@@ -2598,6 +2598,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // The frost under a keyboard over the display was let go at pause; a pass makes it again.
+        if (isInAppKeyboardShown() && inAppKeyboardSeesThroughToDisplay())
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         reopenAppearanceAfterRelaunch();
         View nudgeContent = findViewById(android.R.id.content);
         if (nudgeContent != null && com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences))
@@ -2961,6 +2964,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         mReturnHold.onPaused();
+        // The frost under a keyboard over the display goes with the screen; onResume's pass
+        // makes it again.
+        releaseKeyboardFrost();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onPause();
         dismissHelpOverlay();
@@ -8068,7 +8074,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, arrangement().floating(), isInAppKeyboardGlassSurface())
             && !hasInAppKeyboardBackgroundOverride()
-            && inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.GLASS;
+            && inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.GLASS
+            // Over a Display page the unified glass would lay the wallpaper over the display.
+            && !inAppKeyboardSeesThroughToDisplay();
     }
 
     /** The form the keyboard on screen is actually in, floating included. */
@@ -8096,6 +8104,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return inAppKeyboardPlace() == com.termux.app.wall.PaneWallPage.WIDGETS;
     }
 
+    /** Whether that same place is a Display page, where the keyboard sees through to the display. */
+    private boolean inAppKeyboardOnDisplay() {
+        return inAppKeyboardPlace() == com.termux.app.wall.PaneWallPage.DISPLAY;
+    }
+
+    /**
+     * Whether the keyboard's glass is the Display page's: no wallpaper frame of its own, the live
+     * display showing through, frosted by {@link com.termux.app.chrome.DisplayKeyboardBlur}.
+     */
+    private boolean inAppKeyboardSeesThroughToDisplay() {
+        return KeyboardMaterialPolicy.seesThroughToDisplay(inAppKeyboardForm(),
+            inAppKeyboardOverlays(), inAppKeyboardOnDisplay());
+    }
+
     @NonNull
     private com.termux.app.wall.PaneWallPage inAppKeyboardPlace() {
         com.termux.app.wall.PaneWallPage travelling = mCrossing.keyboardPlace();
@@ -8106,7 +8128,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private KeyboardMaterialPolicy.Material inAppKeyboardMaterial() {
         return KeyboardMaterialPolicy.hostMaterial(inAppKeyboardForm(), inAppKeyboardOverlays(),
-            inAppKeyboardOnHome());
+            inAppKeyboardOnHome(), inAppKeyboardOnDisplay());
     }
 
     /**
@@ -8115,7 +8137,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * opaque fill. Nothing produces a backdrop for any of them, so nothing may wait on one.
      */
     private boolean paintsNoInAppKeyboardBackdrop() {
-        return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS;
+        // The Display page's glass crops no wallpaper either: the display is its backdrop.
+        return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS
+            || inAppKeyboardSeesThroughToDisplay();
     }
 
     /**
@@ -8584,7 +8608,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // how much of the wallpaper shows through.
         boolean normalized = isInAppKeyboardOpacityLinked()
             || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays(),
-                inAppKeyboardOnHome());
+                inAppKeyboardOnHome(), inAppKeyboardOnDisplay());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
         int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
         // Render only the keyboard's slice of the shared light model; the under-pill nav strip
@@ -9004,14 +9028,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyInAppKeyboardHostMaterial(@NonNull ChromeSpec state) {
+        // The frost under the bed is up only while this pass dresses the host as the Display
+        // page's glass; every other pass (keyboard down, another page, floating, mid-blend) takes
+        // it away, so it can never outlive the material it belongs to.
+        if (!dressInAppKeyboardHost(state)) releaseKeyboardFrost();
+    }
+
+    /** {@link #applyInAppKeyboardHostMaterial}'s dressing; true when the bed frosts the display. */
+    private boolean dressInAppKeyboardHost(@NonNull ChromeSpec state) {
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) {
-            return;
+            return false;
         }
         if (!state.keyboardShown) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
-            return;
+            return false;
         }
 
         boolean capsule = isInAppKeyboardCapsule();
@@ -9030,12 +9062,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout.KeyboardForm form = inAppKeyboardForm();
         boolean overlays = inAppKeyboardOverlays();
         boolean home = inAppKeyboardOnHome();
+        boolean display = inAppKeyboardOnDisplay();
         KeyboardMaterialPolicy.Material material =
-            KeyboardMaterialPolicy.hostMaterial(form, overlays, home);
+            KeyboardMaterialPolicy.hostMaterial(form, overlays, home, display);
         if (material == KeyboardMaterialPolicy.Material.NONE) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
-            return;
+            return false;
         }
         // Mid-slide between a place that paints the keyboard as glass and one that paints it as
         // the panel, the host wears both and the panel's alpha follows the wall; at rest the two
@@ -9043,9 +9076,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // nothing the eye can see. See syncKeyboardMaterialTravel.
         if (mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL) {
             applyInAppKeyboardMaterialTravel(state, surfaceHost, capsule, cornerRadiusPx);
-            return;
+            return false;
         }
         mKeyboardTravelSolidFill = null;
+        // Over a Display page in overlay mode the bed lies over the display and wears its
+        // Display-pages look see-through, with no wallpaper frame: its Opacity and Tint over the
+        // live display, and the Frost drawn by the compositor in a blur layer under the bed.
+        // Neither the unified dock glass nor the joined frame's sheet stands in for it here: both
+        // would lay the wallpaper over the display.
+        if (KeyboardMaterialPolicy.seesThroughToDisplay(form, overlays, display)) {
+            surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
+                state, surfaceHost, capsule, cornerRadiusPx));
+            clearInAppKeyboardBackdrop();
+            com.termux.app.chrome.LiveChromeShape.Clip clip = mKeyboardBaseClip;
+            frostKeyboardOverDisplay(surfaceHost, capsule ? cornerRadiusPx : clip == null ? 0f
+                : com.termux.app.chrome.DisplayKeyboardBlurPolicy.cornerPx(clip.topLeft,
+                    clip.topRight, clip.bottomRight, clip.bottomLeft));
+            return true;
+        }
         // A keyboard that overlays its place is one opaque panel in the overlay surface role: no
         // wallpaper frost, no glass slice, no rim, and the Keyboard surface's opacity and scheme
         // background colour are ignored, because both say how much of the wallpaper shows through
@@ -9056,14 +9104,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, home, capsule)
                     ? cornerRadiusPx : 0f));
             clearInAppKeyboardBackdrop();
-            return;
+            return false;
         }
         // Under a joined Docked frame the frame's glass is the sheet behind the keys; the keys keep
         // their own glass.
         if (stackStandsDownOnFrame()) {
             surfaceHost.setBackground(null);
             clearInAppKeyboardBackdrop();
-            return;
+            return false;
         }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height — and, when
@@ -9085,10 +9133,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
                     state, surfaceHost, false, 0f));
             }
-            return;
+            return false;
         }
         surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
             state, surfaceHost, capsule, cornerRadiusPx));
+        return false;
+    }
+
+    /** The frost under the keyboard on a Display page; made on first use, see {@link #frostKeyboardOverDisplay}. */
+    @Nullable private com.termux.app.chrome.DisplayKeyboardBlur mKeyboardFrost;
+
+    /**
+     * Puts the compositor's blur under the keyboard's bed at the Display-pages look's Frost, or
+     * leaves the bed see-through where Android does not blur windows now
+     * ({@link com.termux.app.chrome.DisplayKeyboardBlurPolicy}). Never waits on the blur: the bed
+     * is already painted, and a layer that cannot be made only leaves it unfrosted.
+     */
+    private void frostKeyboardOverDisplay(@NonNull View surfaceHost, float cornerPx) {
+        if (mPreferences == null) return;
+        if (mKeyboardFrost == null) {
+            // Battery saver, or the blur setting, turned over while the keyboard is up: the next
+            // pass decides again.
+            mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
+                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+        }
+        mKeyboardFrost.want();
+        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+        int radiusPx = com.termux.app.chrome.DisplayKeyboardBlurPolicy.blurRadiusPx(
+            Build.VERSION.SDK_INT, mKeyboardFrost.crossWindowBlurEnabled(),
+            power != null && power.isPowerSaveMode(),
+            mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
+            getResources().getDisplayMetrics().density);
+        mKeyboardFrost.show(surfaceHost, displayView(), radiusPx, cornerPx);
+    }
+
+    /** Takes the frost under the keyboard away and frees it; safe when there is none. */
+    private void releaseKeyboardFrost() {
+        if (mKeyboardFrost != null) mKeyboardFrost.release();
     }
 
     /**
@@ -9123,9 +9204,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout.KeyboardForm form = inAppKeyboardForm();
         float solidness = KeyboardMaterialPolicy.travelSolidness(
             KeyboardMaterialPolicy.hostMaterial(form, KeyboardOverlayPolicy.overlays(frame.from,
-                layout), frame.from == com.termux.app.wall.PaneWallPage.WIDGETS),
+                layout), frame.from == com.termux.app.wall.PaneWallPage.WIDGETS,
+                frame.from == com.termux.app.wall.PaneWallPage.DISPLAY),
             KeyboardMaterialPolicy.hostMaterial(form, KeyboardOverlayPolicy.overlays(frame.toward,
-                layout), frame.toward == com.termux.app.wall.PaneWallPage.WIDGETS),
+                layout), frame.toward == com.termux.app.wall.PaneWallPage.WIDGETS,
+                frame.toward == com.termux.app.wall.PaneWallPage.DISPLAY),
             chromeRestOf(frame.from).keyboardReveal() > 0f,
             chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.chromeFraction);
         if (solidness == mKeyboardTravelSolidness) return;
@@ -9245,7 +9328,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             cornerRadiusPx, noteInAppKeyboardBand(surfaceHost));
         int blurRadiusDp = spec.blurRadiusDp;
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
-        if (ChromePolicy.dockBlurEnabled(blurRadiusDp)) {
+        // Over a Display page the bed is see-through: what is behind it is the live display, which
+        // the frost layer under it blurs, so no wallpaper frame is drawn into it.
+        if (ChromePolicy.dockBlurEnabled(blurRadiusDp) && !inAppKeyboardSeesThroughToDisplay()) {
             Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
             if (frame != null) {
                 // The shared frame, sampled at the host's own position on every draw — through
@@ -11323,6 +11408,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        releaseKeyboardFrost();
         mSurfaceLongPress.dismiss();
         com.termux.app.terminal.TouchDownHint.detach(this);
         if (mScene != null) mScene.detach();
@@ -17762,6 +17848,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
         stackIn.keyboardOverlays = keyboardOverlays;
         stackIn.dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        // The place the keyboard question is asked of, so a display window no longer in front
+        // gives the terminal its room back.
+        stackIn.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(
+            KeyboardOverlayPolicy.keyboardPlace(mLastWallPage, isDisplayWindowInFront()),
+            arrangement().layout());
         stackIn.systemImeTakePx = systemImeTakePx();
         stackIn.travelHoldsContent = mCrossing.holdsContent();
         stackIn.heldReservationPx = mCrossing.heldReservationPx();
@@ -25703,8 +25794,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? mKeyboardGeometry.measureHeightPx() : mKeyboardGeometry.desiredHeightPx());
         // The place's own arrangement decides it, like its Style: the one on screen when it is the
         // committed place, else its half's stored layout.
-        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, place == mLastWallPage
-            ? arrangement().layout() : snapshot.half(side).layout);
+        PlaceLayout placeLayout = place == mLastWallPage
+            ? arrangement().layout() : snapshot.half(side).layout;
+        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, placeLayout);
+        in.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(place, placeLayout);
         // The Terminal's flush padding is part of its rest: the applied one while it is the place,
         // else the one it last rested with, so Home's terminal page and the slide back are laid
         // out at the height the landing settles at, not one padding taller.
