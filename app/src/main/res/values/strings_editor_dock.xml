@@ -55,6 +55,7 @@
     <string name="editor_dock_option_search_field">Search bar</string>
     <string name="editor_dock_option_drawer_icon">Drawer icon</string>
     <string name="editor_dock_option_command_palette">Command palette</string>
+    <string name="editor_dock_option_float_terminal">New float terminal</string>
     <string name="editor_dock_option_notification_dots">Notification dots</string>
     <string name="editor_dock_option_quick_reply">Quick reply</string>
     <string name="editor_dock_option_quick_reply_hint">Swipe up on an app icon with a dot to reply</string>

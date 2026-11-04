@@ -235,3 +235,37 @@ nothing clipped. Still owed:
   the Apps step (off by default, not offered on the Termux route); the Command step shows the
   Start with note and the command installs xfce4. Run it, then `dbus-launch startxfce4` with
   DISPLAY set draws XFCE. Debian, Ubuntu and Arch (Arch is untested: pacman group xfce4) · emulator.
+
+**App menu shortcut icons and the More shortcuts card (2026-11-04, #198).** Not yet seen on a
+device. Owed:
+- 2026-11-04 · App menu on a Home icon, a drawer icon and a dock icon of an app that publishes
+  shortcuts (Chrome, Messages): each shortcut row shows that shortcut's own icon, untinted; an
+  app whose shortcuts have none keeps the bolt glyph · pong.
+- 2026-11-04 · More shortcuts on an app with more than four shortcuts: the side menu is the App
+  menu's card (same rows, shades, type, no arrow), beside the card and centred on the More row,
+  on the left when the right has no room, scrolling when taller than the screen; a tap launches
+  and closes both; the main card's drag highlight still follows the finger onto it · pong.
+- 2026-11-04 · The same in light and dark theme, with the launcher's scheme chrome on and off,
+  and with an icon pack pinned (shortcut icons are the app's own, not the pack's) · pong.
+- 2026-11-04 · Font scale 1.3: long shortcut labels ellipsize on one line · pong or emulator.
+
+**Move to category in the App menu (2026-11-04, #199).** Not yet seen on a device. Owed:
+- 2026-11-04 · Long-press an app in the drawer (every view type) and a Home icon of a drawer app:
+  the card shows Move to category alone below the shortcuts; it opens the categories picker, a
+  pick (or Automatic) moves the app and the Categories view regrouping follows · pong.
+- 2026-11-04 · The row is absent on a dock icon, a dock folder member and a Linux app entry · pong.
+- 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.
+
+**New float terminal tile on the dock (2026-11-04, #197 narrow).** Not yet seen on a device; the
+tile is off by default; the switch is New float terminal in the Dock card's Options and the
+Elements list (pref `dock_float_terminal_button`). Owed:
+- 2026-11-04 · The switch appears in both places, flips the tile live, is undone by Discard and
+  cleared by the Dock card's Reset · pong.
+- 2026-11-04 · With the switch on: the apps row gains one last column holding the tile; a tap opens a
+  floating terminal on Home as the Terminal entry's New float here does; Docked and Floating dock
+  styles, keyboard up and down, one pane and many · pong.
+- 2026-11-04 · Both the Command palette tile and the Float tile on: palette then Float, each one
+  column; dragging the palette tile or the Drawer tile never lands on the Float column; a page
+  swipe holds all still tiles, Lens beads keep a bead under each · pong.
+- 2026-11-04 · Light and dark, scheme chrome, glyph ink on a pale wallpaper (glyph is the status
+  bar's add-window drawable, the closest existing) · pong.

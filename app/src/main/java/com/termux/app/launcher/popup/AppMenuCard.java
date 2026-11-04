@@ -41,6 +41,8 @@ public final class AppMenuCard {
         final boolean header;
         /** A row the host draws itself (a segmented choice), in the group's shade; no action. */
         @Nullable final View custom;
+        /** The row's own artwork (a shortcut's icon), drawn untinted in place of {@link #glyph}. */
+        @Nullable final Drawable icon;
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action) {
             this(label, glyph, action, false);
@@ -48,11 +50,13 @@ public final class AppMenuCard {
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
                     boolean opensSubmenu) {
-            this(label, glyph, action, opensSubmenu, false, null);
+            this(label, glyph, action, opensSubmenu, false, null, null);
         }
 
         private Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
-                     boolean opensSubmenu, boolean header, @Nullable View custom) {
+                     boolean opensSubmenu, boolean header, @Nullable View custom,
+                     @Nullable Drawable icon) {
+            this.icon = icon;
             this.label = label;
             this.glyph = glyph;
             this.action = action;
@@ -64,13 +68,23 @@ public final class AppMenuCard {
         /** A caption over the group it leads, such as the name of what was pressed. */
         @NonNull
         public static Item header(@NonNull String label) {
-            return new Item(label, 0, () -> { }, false, true, null);
+            return new Item(label, 0, () -> { }, false, true, null, null);
         }
 
         /** {@code view} as a row of its own, a row's height, in the group's shade. */
         @NonNull
         public static Item custom(@NonNull View view) {
-            return new Item("", 0, () -> { }, false, false, view);
+            return new Item("", 0, () -> { }, false, false, view, null);
+        }
+
+        /**
+         * A row showing its own artwork when {@code icon} is not null, and {@code fallbackGlyph}
+         * (outlined, tinted) when it is. The row holds {@code icon} only while the card lives.
+         */
+        @NonNull
+        public static Item withIcon(@NonNull String label, @Nullable Drawable icon,
+                                    @DrawableRes int fallbackGlyph, @NonNull Runnable action) {
+            return new Item(label, fallbackGlyph, action, false, false, null, icon);
         }
     }
 
@@ -208,8 +222,14 @@ public final class AppMenuCard {
         row.setEllipsize(TextUtils.TruncateAt.END);
         row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         row.setPaddingRelative(padding, 0, padding, 0);
-        Drawable glyph = item.glyph != 0
-            ? factory.loadMenuIcon(item.glyph, glyphSize, glyphInk) : null;
+        Drawable glyph;
+        if (item.icon != null) {
+            // The row's own artwork keeps its colours; only its size is the glyph slot's.
+            glyph = item.icon;
+            glyph.setBounds(0, 0, glyphSize, glyphSize);
+        } else {
+            glyph = item.glyph != 0 ? factory.loadMenuIcon(item.glyph, glyphSize, glyphInk) : null;
+        }
         if (glyph != null) {
             row.setCompoundDrawablesRelative(glyph, null, null, null);
             row.setCompoundDrawablePadding(glyphGap);

@@ -16,6 +16,8 @@ import static com.termux.app.launcher.popup.AppMenuPlan.Row.UNINSTALL;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.UNPIN;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.WIDGETS;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -169,5 +171,33 @@ public class AppMenuPlanTest {
         assertEquals(Collections.singletonList(Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, PIN,
                 CHANGE_ICON, UNINSTALL)),
             AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void moveToCategory_sitsAloneBelowTheShortcuts_whereTheDrawerCanSortTheApp() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.canMoveToCategory = true;
+        in.shortcutCount = 2;
+        List<List<AppMenuPlan.Row>> groups = AppMenuPlan.groups(in);
+        assertEquals(Arrays.asList(SHORTCUT, SHORTCUT), groups.get(0));
+        assertEquals(Collections.singletonList(AppMenuPlan.Row.MOVE_TO_CATEGORY), groups.get(1));
+        assertEquals(WIDGETS, groups.get(2).get(0));
+    }
+
+    @Test
+    public void moveToCategory_isAbsentOnTheDock_inAFolder_forNonAndroidApps_andWithoutAPicker() {
+        AppMenuPlan.Inputs in = dockApp();
+        assertFalse(AppMenuPlan.movesToCategory(in));
+        in.canMoveToCategory = true;
+        assertTrue(AppMenuPlan.movesToCategory(in));
+        in.onDock = true;
+        assertFalse(AppMenuPlan.movesToCategory(in));
+        in.onDock = false;
+        in.source = AppMenuPlan.Source.FOLDER_MEMBER;
+        assertFalse(AppMenuPlan.movesToCategory(in));
+        in.source = AppMenuPlan.Source.HOME;
+        assertTrue(AppMenuPlan.movesToCategory(in));
+        in.androidPackage = false;
+        assertFalse(AppMenuPlan.movesToCategory(in));
     }
 }

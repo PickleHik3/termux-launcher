@@ -88,4 +88,31 @@ public class PaletteTilePolicyTest {
             DrawerTilePolicy.Position.END, true, 5, true));
         assertArrayEquals(new int[0], PaletteTilePolicy.stillColumns(null, true, 6, true));
     }
+
+    @Test public void floatTileTakesOneColumnAfterTheOthers() {
+        assertEquals(5, PaletteTilePolicy.appSlots(6, false, false, true));
+        assertEquals(4, PaletteTilePolicy.appSlots(6, false, true, true));
+        assertEquals(3, PaletteTilePolicy.appSlots(6, true, true, true));
+        assertEquals(6, PaletteTilePolicy.columnCount(3, true, true, true));
+        assertEquals(5, PaletteTilePolicy.floatColumn(6));
+        // Off, nothing changes for an existing dock.
+        assertEquals(PaletteTilePolicy.appSlots(6, true, true),
+            PaletteTilePolicy.appSlots(6, true, true, false));
+        assertEquals(PaletteTilePolicy.columnCount(4, true, true),
+            PaletteTilePolicy.columnCount(4, true, true, false));
+    }
+
+    @Test public void paletteStaysLeftOfTheFloatTileWhenBothStandAtTheEnd() {
+        int columns = PaletteTilePolicy.columnCount(4, false, true, true);
+        int palette = PaletteTilePolicy.column(PaletteTilePolicy.DEFAULT_COLUMN,
+            PaletteTilePolicy.movableColumns(columns, true));
+        assertEquals(columns - 2, palette);
+        assertEquals(columns - 1, PaletteTilePolicy.floatColumn(columns));
+        assertEquals(columns, PaletteTilePolicy.movableColumns(columns, false));
+    }
+
+    @Test public void aNarrowRowStillKeepsOneAppWithAllThreeTiles() {
+        assertEquals(1, PaletteTilePolicy.appSlots(3, true, true, true));
+        assertEquals(1, PaletteTilePolicy.appSlots(1, false, false, true));
+    }
 }

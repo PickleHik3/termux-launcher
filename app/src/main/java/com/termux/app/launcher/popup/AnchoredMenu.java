@@ -188,6 +188,68 @@ public final class AnchoredMenu {
         return popup;
     }
 
+    /**
+     * Shows the App menu {@code card} as the side menu of {@code mainMenu}'s open card: the same
+     * rows and shades without the arrow, beside the card and centred on {@code rowAnchor}, to its
+     * left when the right has no room.
+     */
+    @NonNull
+    public PopupWindow showAppMenuBeside(@NonNull AppMenuCard card, @NonNull View rowAnchor,
+                                         @NonNull AnchoredMenu mainMenu) {
+        float density = host.getResources().getDisplayMetrics().density;
+        Rect frame = visibleFrame();
+        int shadowRoom = AnchoredMenuGeometry.dp(density, AppMenuGeometry.SHADOW_ROOM_DP);
+        boolean[] scrolls = new boolean[1];
+        int height = AppMenuGeometry.sideWindowHeight(card.measureContentHeight(), frame.height(),
+            shadowRoom, AnchoredMenuGeometry.dp(density, AppMenuGeometry.EDGE_MARGIN_DP), scrolls);
+        int width = card.width + 2 * shadowRoom;
+        card.view.applySide(shadowRoom, scrolls[0]);
+
+        PopupWindow popup = new PopupWindow(card.view, width, height, false);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setElevation(0f);
+        popup.setAnimationStyle(0);
+        popup.setClippingEnabled(false);
+        popup.setTouchable(true);
+        popup.setOutsideTouchable(true);
+        popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
+        popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
+        popup.setOnDismissListener(() -> {
+            if (window == popup) {
+                window = null;
+                rows = Collections.emptyList();
+            }
+        });
+        window = popup;
+        rows = card.rows;
+        ViewCompat.setImportantForAccessibility(card.view,
+            ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        ViewCompat.setAccessibilityPaneTitle(card.view,
+            host.getResources().getString(R.string.app_menu_more_shortcuts));
+        PopupWindow main = mainMenu.window;
+        View mainRoot = main == null ? null : main.getContentView();
+        int[] xy = new int[2];
+        boolean grewRight = true;
+        if (mainRoot == null) {
+            int[] at = new int[2];
+            rowAnchor.getLocationOnScreen(at);
+            xy[0] = at[0];
+            xy[1] = at[1];
+        } else {
+            int[] mainLoc = new int[2];
+            int[] rowLoc = new int[2];
+            mainRoot.getLocationOnScreen(mainLoc);
+            rowAnchor.getLocationOnScreen(rowLoc);
+            AnchoredMenuGeometry.sideAlignedPosition(mainLoc[0], main.getWidth(),
+                rowLoc[1] + rowAnchor.getHeight() / 2, width, height,
+                frame.right, frame.bottom, 0, xy);
+            grewRight = xy[0] > mainLoc[0];
+        }
+        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+        animateAppMenuOpen(card.view, grewRight ? 0f : width, height / 2f);
+        return popup;
+    }
+
     private void animateAppMenuOpen(@NonNull View content, float pivotX, float pivotY) {
         content.setPivotX(pivotX);
         content.setPivotY(pivotY);

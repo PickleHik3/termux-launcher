@@ -2139,6 +2139,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case COMMAND_PALETTE_BUTTON:
                     return mDock.option(
                         com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE);
+                case FLOAT_TERMINAL_BUTTON:
+                    return mDock.option(
+                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL);
                 case NONE:
                 default:
                     return true;
@@ -2170,6 +2173,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case COMMAND_PALETTE_BUTTON:
                     mDock.setOption(
                         com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE, shown);
+                    break;
+                case FLOAT_TERMINAL_BUTTON:
+                    mDock.setOption(
+                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL, shown);
                     break;
                 case NONE:
                 default:
@@ -6544,6 +6551,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
                             com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
                 }
+                case FLOAT_TERMINAL: {
+                    SharedPreferences store = dockPrefs();
+                    return store != null && store.getBoolean(
+                        com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
+                        com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
+                }
                 case NOTIFICATION_DOTS:
                     return AppearanceSettingsStore.getBoolean(context,
                         "app_launcher_notification_dots", false);
@@ -6573,6 +6586,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (store != null)
                         store.edit().putBoolean(
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
+                            .apply();
+                    settingsWritten();
+                    break;
+                }
+                case FLOAT_TERMINAL: {
+                    SharedPreferences store = dockPrefs();
+                    if (store != null)
+                        store.edit().putBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON, on)
                             .apply();
                     settingsWritten();
                     break;
