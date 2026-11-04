@@ -185,7 +185,11 @@ public class EditorCardBodyTest {
         // Background opacity is the glass row set's Opacity now, over More; the link stands
         // beside Key opacity under More.
         assertNotNull(keys);
-        assertTrue("the link after Key opacity", f.left(link) >= f.left(keys));
+        // The slider rows stand on one line now, the track at the row's end: the link stands
+        // between the two opacities' rows, under Background and over Key opacity.
+        assertNotNull(background);
+        assertTrue("the link under Background opacity", f.top(link) >= f.top(background));
+        assertTrue("the link over Key opacity", f.top(link) <= f.top(keys));
         assertFalse(link.isChecked());
         link.performClick();
         assertEquals(Integer.valueOf(1), f.model.values.get(Row.OPACITY_LINK));
@@ -276,6 +280,14 @@ public class EditorCardBodyTest {
 
         int dp(float value) {
             return Math.round(value * themed.getResources().getDisplayMetrics().density);
+        }
+
+        int top(@NonNull View view) {
+            int[] at = new int[2];
+            view.getLocationInWindow(at);
+            int[] parentAt = new int[2];
+            parent.getLocationInWindow(parentAt);
+            return at[1] - parentAt[1];
         }
 
         int left(@NonNull View view) {
