@@ -26812,6 +26812,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
                 // Home is always on the row; the Workspace while there is a window to show.
                 @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @Override public boolean terminalWindowOpen() {
+                    return mTermuxService != null && terminalWindowTotal() > 0;
+                }
+                @Override public boolean restoreTerminalPage() {
+                    com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
+                        com.termux.app.wall.TerminalPageReturn::restore);
+                    if (!back.ok() || back.page == null) return false;
+                    noteTerminalPageId(back.page.id);
+                    return true;
+                }
                 @NonNull @Override public com.termux.app.wall.UseAs useAs() {
                     return TermuxActivity.this.useAs();
                 }
@@ -29257,6 +29267,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGroundLook = null;
     }
 
+    /** Every terminal window open, across sessions: what removing the Terminal page closes. */
+    private int terminalWindowTotal() {
+        int n = 0;
+        for (WSession ws : mWSessions) n += ws.windows.size();
+        return n;
+    }
+
+    /** The Terminal page's id as the look's per-page values know it (set at start, and here). */
+    private void noteTerminalPageId(int id) {
+        if (mPreferences != null) {
+            mPreferences.getSharedPreferences().edit().putInt(
+                com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
+                id).apply();
+        }
+        TermuxAppSharedPreferences.setTerminalPageId(id);
+    }
+
+    /**
+     * Removing the Terminal page (Edit pages, after its question): every window of every session
+     * closes, its shells killed, then the page leaves the wall for good. Closed shells cannot come
+     * back, so there is no undo.
+     */
+    private void removeTerminalPage() {
+        com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+        if (terminal == null) return;
+        int open = terminalWindowTotal();
+        if (mPaneController != null) {
+            for (WSession ws : new java.util.ArrayList<>(mWSessions)) {
+                for (com.termux.app.terminal.TerminalPaneController.Window w
+                        : new java.util.ArrayList<>(ws.windows)) {
+                    for (TerminalSession s : mPaneController.removeWindow(w))
+                        if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+                }
+            }
+        }
+        mWSessions.clear();
+        mCurrentWSession = null;
+        final int id = terminal.id;
+        com.termux.app.wall.WallPages.Result removed =
+            wallPagesStore().edit(pages -> pages.remove(id, open, true));
+        if (removed.ok()) wallPagesStore().edit(pages -> pages.commitRemoval(id));
+        refreshTerminalWindowBar();
+        rebuildDrawerSessions();
+    }
+
     /** The wall page behind an Edit pages card: a Home page by index, a Display page by id. */
     @Nullable
     private com.termux.app.wall.WallPages.Page overviewPage(
@@ -29368,6 +29423,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
+                }
+                @Override public boolean hasTerminalPage() {
+                    return wallPages().terminal() != null;
+                }
+                @Override public boolean terminalPageRemovable() {
+                    return wallPages().terminal() != null && wallPages().listedPages().size() > 1;
+                }
+                @Override public int terminalWindowCount() {
+                    return terminalWindowTotal();
+                }
+                @Override public void removeTerminalPage() {
+                    TermuxActivity.this.removeTerminalPage();
+                }
+                @Override public void addTerminalPage() {
+                    // Empty, as a removed one leaves it: landing on it starts the first shell.
+                    final int after = linuxRouteFromPageId();
+                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+                        pages.add(com.termux.app.wall.WallPages.PageKind.TERMINAL,
+                            pages.page(after) != null ? after
+                                : com.termux.app.wall.WallPages.END, null));
+                    if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
                 }
                 @Override public boolean homePagesShown() {
                     return useAs().showsHomePage();

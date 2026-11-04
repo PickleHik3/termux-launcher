@@ -49,6 +49,16 @@ public class PageCardMenuPolicyTest {
     }
 
     @Test
+    public void aTerminalCardOffersRemoveTerminalWhileAnotherPageIsLeft() {
+        assertEquals(Arrays.asList(Action.REMOVE, Action.REMOVE_TERMINAL),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, false, false, 1, true));
+        assertEquals(Collections.singletonList(Action.REMOVE),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, false, false, 1, false));
+        assertEquals("only terminal cards", Arrays.asList(Action.SET_HOME, Action.RENAME,
+            Action.REMOVE), PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, false, 2, true));
+    }
+
+    @Test
     public void thePickerLeavesOutAppsAnotherPageIsBoundTo() {
         List<String> catalog = Arrays.asList("gimp", "firefox", "xterm");
         assertEquals(Arrays.asList("gimp", "xterm"),

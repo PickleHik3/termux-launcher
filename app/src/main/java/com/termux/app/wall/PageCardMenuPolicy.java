@@ -25,7 +25,9 @@ public final class PageCardMenuPolicy {
         /** A Display page shows the whole display or one Linux app. */
         BIND_APP,
         /** The page leaves the wall, with the undo its removal already has. */
-        REMOVE
+        REMOVE,
+        /** The whole Terminal page leaves the wall, its windows closed after a question. */
+        REMOVE_TERMINAL
     }
 
     /**
@@ -38,6 +40,18 @@ public final class PageCardMenuPolicy {
     @NonNull
     public static List<Action> actions(@NonNull PageOverviewPolicy.Kind kind, boolean isHome,
                                        boolean firstTerminal, int homePages) {
+        return actions(kind, isHome, firstTerminal, homePages, false);
+    }
+
+    /**
+     * As {@link #actions(PageOverviewPolicy.Kind, boolean, boolean, int)}; a terminal window's
+     * card also offers Remove Terminal while {@code terminalRemovable} (another page is left on
+     * the wall).
+     */
+    @NonNull
+    public static List<Action> actions(@NonNull PageOverviewPolicy.Kind kind, boolean isHome,
+                                       boolean firstTerminal, int homePages,
+                                       boolean terminalRemovable) {
         List<Action> out = new ArrayList<>(4);
         if (PageOverviewPolicy.showsHomeButton(kind, firstTerminal) && !isHome) {
             out.add(Action.SET_HOME);
@@ -45,6 +59,9 @@ public final class PageCardMenuPolicy {
         if (kind != PageOverviewPolicy.Kind.TERMINAL) out.add(Action.RENAME);
         if (kind == PageOverviewPolicy.Kind.DISPLAY) out.add(Action.BIND_APP);
         if (PageOverviewPolicy.canDelete(kind, homePages)) out.add(Action.REMOVE);
+        if (kind == PageOverviewPolicy.Kind.TERMINAL && terminalRemovable) {
+            out.add(Action.REMOVE_TERMINAL);
+        }
         return out;
     }
 

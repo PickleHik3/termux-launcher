@@ -134,6 +134,18 @@ public final class PageOverviewView extends FrameLayout {
         /** Use as goes back to Home screen, which brings the set-aside Home pages back. */
         default void bringBackHomePages() { }
 
+        // The Terminal page as a whole (ADR 0015 section 1): removed, and added back.
+        /** Whether the wall has the Terminal page. */
+        default boolean hasTerminalPage() { return true; }
+        /** Whether the Terminal page can leave: another page stays on the wall. */
+        default boolean terminalPageRemovable() { return false; }
+        /** Every terminal window open on the Terminal page, across its sessions. */
+        default int terminalWindowCount() { return 0; }
+        /** Every terminal window closes and the Terminal page leaves the wall, with no undo. */
+        default void removeTerminalPage() { }
+        /** The Terminal page goes back on the wall, empty, after the page the wall stands on. */
+        default void addTerminalPage() { }
+
         // A card's long-press menu and the Display picker (ADR 0015 section 2).
         /** The name Home page {@code page} was given in Edit pages; null for its default. */
         @Nullable default String homePageName(int page) { return null; }
@@ -469,7 +481,7 @@ public final class PageOverviewView extends FrameLayout {
         addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_add,
             v -> onAddPage());
         addTerminal = pill(context, R.string.page_overview_add_terminal,
-            R.drawable.ic_symbol_terminal, v -> onAddWindow(false));
+            R.drawable.ic_symbol_terminal, v -> onAddTerminalPage());
         addDisplay = pill(context, R.string.page_overview_add_display,
             R.drawable.ic_symbol_desktop_windows, v -> showDisplayPicker(null));
         bringBack = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_home,
@@ -648,7 +660,8 @@ public final class PageOverviewView extends FrameLayout {
             homesBefore[j] = Math.max(0, Math.min(pages, displays.get(j).homesBefore));
             after[j] = displays.get(j).afterTerminal;
         }
-        List<Integer> order = PageOverviewPolicy.wallOrder(pages, true, before, homesBefore, after);
+        List<Integer> order = PageOverviewPolicy.wallOrder(pages, host.hasTerminalPage(), before,
+            homesBefore, after);
         if (displayGoing && !host.displayOpen()) displayGoing = false;
         displayCount = 0;
         blockStart = 0;
@@ -776,6 +789,8 @@ public final class PageOverviewView extends FrameLayout {
                 R.plurals.page_overview_bring_back_homes, back, back);
             if (!text.toString().contentEquals(bringBack.getText())) bringBack.setText(text);
         }
+        addTerminal.setVisibility(PageOverviewAddPolicy.showsAddTerminal(host.hasTerminalPage())
+            ? VISIBLE : GONE);
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
         boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
@@ -1063,7 +1078,8 @@ public final class PageOverviewView extends FrameLayout {
     private void showCardMenu(@NonNull Card card, int index) {
         Context context = getContext();
         List<PageCardMenuPolicy.Action> actions = PageCardMenuPolicy.actions(card.kind,
-            isDefault(card), isFirstTerminal(card), homePageCards());
+            isDefault(card), isFirstTerminal(card), homePageCards(),
+            host.terminalPageRemovable());
         if (actions.isEmpty()) return;
         List<com.termux.app.launcher.popup.AppMenuCard.Item> items = new ArrayList<>(5);
         items.add(com.termux.app.launcher.popup.AppMenuCard.Item.header(labelOf(card)));
@@ -1081,6 +1097,10 @@ public final class PageOverviewView extends FrameLayout {
                 case BIND_APP:
                     items.add(menuItem(R.string.page_overview_menu_bind_app, R.drawable.ic_ms_link,
                         key, c -> showDisplayPicker(c)));
+                    break;
+                case REMOVE_TERMINAL:
+                    items.add(menuItem(R.string.page_overview_menu_remove_terminal,
+                        R.drawable.ic_ms_delete_sweep, key, c -> onRemoveTerminalPage()));
                     break;
                 case REMOVE:
                 default:
@@ -1127,6 +1147,47 @@ public final class PageOverviewView extends FrameLayout {
         com.termux.app.launcher.popup.AnchoredMenu shown = menu;
         menu = null;
         if (shown != null) shown.dismiss();
+    }
+
+    /**
+     * Remove Terminal: with windows open it asks first ("Close N windows and remove
+     * Terminal?"), Close or Cancel; closed shells cannot come back, so no undo follows.
+     */
+    private void onRemoveTerminalPage() {
+        if (!isOpen() || !host.terminalPageRemovable()) return;
+        commitPending();
+        int open = host.terminalWindowCount();
+        if (open <= 0) {
+            removeTerminalPageNow();
+            return;
+        }
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(getContext())
+            .setTitle(getResources().getQuantityString(
+                R.plurals.page_overview_remove_terminal_question, open, open))
+            .setMessage(R.string.page_overview_remove_terminal_message)
+            .setPositiveButton(R.string.page_overview_remove_terminal_close,
+                (dialog, which) -> removeTerminalPageNow())
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void removeTerminalPageNow() {
+        if (!isOpen()) return;
+        liveKey = null;
+        mutate(host::removeTerminalPage);
+        reload();
+        focus = clampFocus(focus);
+        invalidate();
+        onSettled();
+    }
+
+    /** Add terminal, offered only while there is no Terminal page: it comes back empty. */
+    private void onAddTerminalPage() {
+        if (!isOpen() || host.hasTerminalPage()) return;
+        commitPending();
+        mutate(host::addTerminalPage);
+        reload();
+        invalidate();
     }
 
     private void onRename(@NonNull Card card) {

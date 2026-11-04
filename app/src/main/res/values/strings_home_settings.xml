@@ -111,6 +111,13 @@
     <string name="page_overview_menu_bind_app">Bind app</string>
     <string name="page_overview_menu_remove">Remove</string>
     <string name="page_overview_whole_display">Whole display</string>
+    <string name="page_overview_menu_remove_terminal">Remove Terminal</string>
+    <plurals name="page_overview_remove_terminal_question">
+        <item quantity="one">Close %1$d window and remove Terminal?</item>
+        <item quantity="other">Close %1$d windows and remove Terminal?</item>
+    </plurals>
+    <string name="page_overview_remove_terminal_message">Their shells stop. Opening a terminal brings the Terminal page back.</string>
+    <string name="page_overview_remove_terminal_close">Close</string>
     <plurals name="page_overview_bring_back_homes">
         <item quantity="one">Bring back %1$d Home page</item>
         <item quantity="other">Bring back %1$d Home pages</item>

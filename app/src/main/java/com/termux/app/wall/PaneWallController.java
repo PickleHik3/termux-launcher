@@ -28,6 +28,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * Terminal only.
          */
         default boolean hasWindow() { return true; }
+        /** Whether a terminal window is open, known for sure (the service is bound). */
+        default boolean terminalWindowOpen() { return false; }
+        /**
+         * The Terminal page goes back on the wall ({@link TerminalPageReturn#restore}); false when
+         * it could not.
+         */
+        default boolean restoreTerminalPage() { return false; }
         /**
          * Use as, read fresh on every ask: under Terminal only the row is the Workspace alone,
          * and the home press, the last window closing and a cold start all land there.
@@ -280,6 +287,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void refreshPages() {
         mWall.setReducedMotion(mHost.reducedMotion());
         boolean hasWindow = mHost.hasWindow();
+        // A window opened on a wall whose Terminal page was removed: the page comes back after
+        // Home and the wall lands on it. Every way a terminal opens reaches here, as the row
+        // changes; the store's change reads the pages again.
+        if (TerminalPageReturn.needed(mHost.wallPages(), mHost.terminalWindowOpen())) {
+            mWorkspacePending = true;
+            if (!mHost.restoreTerminalPage()) mWorkspacePending = false;
+        }
         boolean lostWindow = mHadWindow && !hasWindow;
         mHadWindow = hasWindow;
         if (hasWindow) mLandingShellStarted = false;

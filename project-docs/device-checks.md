@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
+  windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
+  Terminal?"; Cancel keeps everything; Close stops the shells, the Terminal cards go, no undo
+  snackbar, the wall lands on a neighbour, Add terminal appears. (2) Force-stop and relaunch:
+  still no Terminal page, and no shell started (the empty-workspace autosave). (3) Each of
+  Ctrl+Alt+C, the drawer's New terminal, a Terminal=true Linux app and `launcherctl` pane open
+  brings the Terminal page back after the last Home page, lands on it and opens the window
+  there. (4) Edit pages › Add terminal adds an empty Terminal page after the focused card;
+  landing on it starts a shell. (5) The Terminal page's own look (a detached canvas tint) after
+  it comes back. Emulator or pong.
 - **Edit pages under Terminal only (11-04, #203).** Set Use as to Terminal only. (1) Appearance
   editor › Terminal card › Links shows Pages; it opens Edit pages with no Home card and no Add
   page pill, and a "Bring back N Home pages" pill (N = the pages set aside). (2) Tap it: the Home
