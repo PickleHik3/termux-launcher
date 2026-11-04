@@ -324,6 +324,27 @@ public class PresetApplyTest {
         assertMargins(prefs, base, 20, "after Discard");
     }
 
+    @Test
+    public void discardKeepsASeededCellTheSeeds() {
+        TermuxAppSharedPreferences prefs = install();
+        LookGrid grid = prefs.lookGrid();
+        String seeded = null;
+        for (String key : grid.gridKeys())
+            if (grid.isSeeded(key)) { seeded = key; break; }
+        org.junit.Assume.assumeNotNull(seeded);
+        SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
+            HOME_PAGE);
+        LookGrid.Key cell = LookGrid.parse(seeded);
+        Row row = cell.property == LookGrid.Property.FROST ? Row.FROST
+            : cell.property == LookGrid.Property.TINT ? Row.TINT : Row.OPACITY;
+        slide(global, row, 40);
+        assertFalse("the reset took the seeded cell", grid.isSeeded(seeded));
+        ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertTrue("the seeded cell is back", grid.has(cell));
+        assertTrue("and it is the seed's again", grid.isSeeded(seeded));
+    }
+
     private static void assertMargins(TermuxAppSharedPreferences prefs, int home, int workspace,
                                       String what) {
         assertEquals(what + ": Home pages", home, prefs.getLayoutMarginDp(true));

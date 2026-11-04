@@ -101,6 +101,14 @@ final class AppearanceSnapshot {
     private final java.util.TreeMap<String, Object> mHalfKeys;
     /** Every look-grid cell the store held (ADR 0017), by key: put back exactly on restore. */
     private final java.util.TreeMap<String, Integer> mGridCells;
+    /**
+     * Which grid cells still hold the kind seed's value ({@link
+     * com.termux.shared.termux.settings.preferences.LookGrid#KEY_SEEDED_CELLS}), or null for none:
+     * put back with the cells, so a seeded cell a reset cleared is the seed's again after Discard.
+     */
+    @Nullable private final String mSeededCells;
+    /** A snapshot saved before the seed list was kept: restore leaves the list as it stands. */
+    private final boolean mKeepSeeded;
 
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
@@ -167,6 +175,8 @@ final class AppearanceSnapshot {
         mStatusSwitches = statusSwitches(prefs);
         mHalfKeys = halfKeys(prefs);
         mGridCells = gridCells(prefs);
+        mSeededCells = prefs.lookGrid().store().getString(com.termux.shared.termux.settings.preferences.LookGrid.KEY_SEEDED_CELLS, null);
+        mKeepSeeded = false;
     }
 
     /** A snapshot read back from {@link #toJson}; throws when it does not fit this build. */
@@ -218,6 +228,9 @@ final class AppearanceSnapshot {
         mStatusSwitches = booleans(in, "statusSwitches");
         mHalfKeys = halfKeysOf(in.getJSONObject("halfKeys"));
         mGridCells = gridCellsOf(in.getJSONObject("gridCells"));
+        mKeepSeeded = !in.has("seededCells");
+        mSeededCells = mKeepSeeded || in.isNull("seededCells") ? null
+            : in.getString("seededCells");
         // Restore writes by position: a snapshot from a build with other rows or slots is refused.
         if (mBase.length != SurfaceProperty.values().length
             || mRaws.length != SurfaceEditorRows.rows().size()
@@ -322,6 +335,21 @@ final class AppearanceSnapshot {
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
         restoreGridCells(prefs, mGridCells);
+        if (!mKeepSeeded)
+            restoreSeededCells(prefs, mSeededCells);
+    }
+
+    private static void restoreSeededCells(@NonNull TermuxAppSharedPreferences prefs,
+                                           @Nullable String seeded) {
+        com.termux.shared.termux.settings.preferences.LookGrid.Store store =
+            prefs.lookGrid().store();
+        String key = com.termux.shared.termux.settings.preferences.LookGrid.KEY_SEEDED_CELLS;
+        String now = store.getString(key, null);
+        if (seeded == null) {
+            if (now != null) store.remove(key);
+        } else if (!seeded.equals(now)) {
+            store.putString(key, seeded);
+        }
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -412,6 +440,8 @@ final class AppearanceSnapshot {
         out.put("statusSwitches", booleanArray(mStatusSwitches));
         out.put("halfKeys", halfKeysJson(mHalfKeys));
         out.put("gridCells", new JSONObject(mGridCells));
+        if (!mKeepSeeded)
+            out.put("seededCells", mSeededCells == null ? JSONObject.NULL : mSeededCells);
         return out;
     }
 
