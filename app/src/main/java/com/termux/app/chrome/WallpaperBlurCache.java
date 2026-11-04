@@ -409,6 +409,16 @@ public final class WallpaperBlurCache {
         return frame != null && mByRadius.containsValue(frame);
     }
 
+    /** The Vibrancy the resident frames were baked at; what a live picture matches. */
+    public int bakedVibrancy() {
+        return mVibrancy;
+    }
+
+    /** The frame tint the resident frames were baked with; what a live picture matches. */
+    public int bakedFrameTint() {
+        return mFrameTint;
+    }
+
     /**
      * The blur radius, in dp, {@code frame} was cut at, or -1 when it is not a resident frame.
      * Does not touch the LRU order.

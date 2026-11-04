@@ -1,6 +1,7 @@
 package com.termux.app.launcher.widget.builtin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -226,6 +227,38 @@ public class WidgetLiveGlassTest {
         scene.clock.setTranslationX(0f);
         scene.clock.onGlassMoved();
         assertNotNull(scene.slab.livePicture());
+    }
+
+    @Test
+    public void armsOnScreenAndOneScreenAwayButNotFurther() {
+        int w = 1080;
+        int h = 2400;
+        assertTrue("on screen", WidgetLiveGlass.near(100, 200, 400, 300, w, h));
+        assertTrue("the incoming page, one width right", WidgetLiveGlass.near(100 + w, 200, 400, 300, w, h));
+        assertTrue("the incoming page, one width left", WidgetLiveGlass.near(100 - w, 200, 400, 300, w, h));
+        assertTrue("not laid out yet: armed, recorded once it has a size",
+            WidgetLiveGlass.near(0, 0, 0, 0, w, h));
+        assertFalse("two widths right", WidgetLiveGlass.near(2 * w, 200, 400, 300, w, h));
+        assertFalse("two widths left", WidgetLiveGlass.near(-w - 400, 200, 400, 300, w, h));
+        assertFalse("far below", WidgetLiveGlass.near(100, 2 * h, 400, 300, w, h));
+    }
+
+    @Test
+    public void theIncomingPageIsLiveBeforeItSlidesOn() {
+        Scene scene = scene(true);
+        int width = scene.page.getRootView().getWidth();
+        assertTrue(width > 0);
+        // Posed as Home's pager poses the page beside: one page width off, nothing of it showing.
+        scene.clock.setTranslationX(width);
+        scene.clock.onGlassMoved();
+        assertNotNull("armed before its first frame on screen", scene.slab.livePicture());
+        scene.clock.setTranslationX(-width);
+        scene.clock.onGlassMoved();
+        assertNotNull(scene.slab.livePicture());
+        // Further than the page beside: given back.
+        scene.clock.setTranslationX(3 * width);
+        scene.clock.onGlassMoved();
+        assertNull(scene.slab.livePicture());
     }
 
     @Test

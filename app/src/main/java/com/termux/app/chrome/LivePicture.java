@@ -49,6 +49,13 @@ public final class LivePicture implements GlassPicture {
     /** The radius is a panel's {@code RealtimeBlurView} radius, not the stored frame's. */
     private boolean mPanelRadius;
     @Nullable private ColorFilter mFilter;
+    /** The wall's dim the last recording was made under ({@link LiveStoredParity}). */
+    private int mParityDim;
+    /** The Vibrancy and frame tint the stored frames are baked at, which this picture matches. */
+    private int mParityVibrancy = 100;
+    private int mParityFrameTint = GlassFrameTint.NONE;
+    /** {@link LiveStoredParity#matrix} for the three above, or null; rebuilt only when one moves. */
+    @Nullable private ColorFilter mParityFilter;
 
     @Nullable private RenderNode mRecord;
     @Nullable private RenderNode mBlur;
@@ -116,14 +123,49 @@ public final class LivePicture implements GlassPicture {
     @Override
     public void setFrame(@NonNull Bitmap frame, @NonNull Rect frameRect, boolean crossfade) {}
 
+    /**
+     * What the stored frame bakes that a recording does not have ({@link LiveStoredParity}): the
+     * wall's dim the recording carries, to be taken back out, and the Vibrancy and frame tint the
+     * stored frames are baked at. A panel's picture matches its old {@code RealtimeBlurView}, which
+     * recorded the window as this does, so it takes none of it. Rebuilds the effect only on a change.
+     */
+    void setStoredParity(int dimColor, int vibrancyPercent, int frameTint) {
+        if (mPanelRadius) return;
+        if (dimColor == mParityDim && vibrancyPercent == mParityVibrancy
+            && frameTint == mParityFrameTint) return;
+        mParityDim = dimColor;
+        mParityVibrancy = vibrancyPercent;
+        mParityFrameTint = frameTint;
+        rebuildParity();
+    }
+
+    /** {@link #setStoredParity}'s dim alone: the recorder reads it from what it records. */
+    void setRecordedDim(int dimColor) {
+        setStoredParity(dimColor, mParityVibrancy, mParityFrameTint);
+    }
+
+    private void rebuildParity() {
+        float[] matrix = LiveStoredParity.matrix(mParityDim, mParityVibrancy, mParityFrameTint,
+            mRadiusPx > 0f);
+        mParityFilter = matrix == null ? null : new android.graphics.ColorMatrixColorFilter(matrix);
+        if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
+    }
+
+    /** The parity filter this picture's effect carries now, or null; for tests. */
+    @Nullable ColorFilter parityFilter() {
+        return mParityFilter;
+    }
+
     /** The blur radius at full scale, in px; the next recording follows it. */
     public void setBlurRadiusPx(float radiusPx) {
         float radius = Math.max(0f, radiusPx);
         if (radius == mRadiusPx && mMarginPx > 0) return;
+        boolean blursMoved = (radius > 0f) != (mRadiusPx > 0f);
         mRadiusPx = radius;
         mMarginPx = Math.max(1, (int) Math.ceil(radius));
         forgetRecording();
-        if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
+        if (blursMoved && !mPanelRadius) rebuildParity();
+        else if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
     }
 
     /**
@@ -188,6 +230,11 @@ public final class LivePicture implements GlassPicture {
         float r = mPanelRadius ? panelQuarterRadius(mRadiusPx) : renderEffectRadius(mRadiusPx) / SCALE;
         RenderEffect effect = r > 0f
             ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
+        // The stored frame's colours (the dim out, Vibrancy and the frame tint in), then the frost.
+        if (mParityFilter != null) {
+            RenderEffect parity = RenderEffect.createColorFilterEffect(mParityFilter);
+            effect = effect == null ? parity : RenderEffect.createChainEffect(parity, effect);
+        }
         if (mFilter != null) {
             RenderEffect tint = RenderEffect.createColorFilterEffect(mFilter);
             effect = effect == null ? tint : RenderEffect.createChainEffect(tint, effect);
