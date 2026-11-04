@@ -377,12 +377,24 @@ public final class GuiAppsSetup {
     public static String command(@NonNull Route route, @NonNull Distro distro,
                                  @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
                                  @Nullable String user, @Nullable String password) {
+        return command(route, distro, starters, edition, user, password, false);
+    }
+
+    /**
+     * As above; {@code distroInstalled} says the chosen distro is already installed, so the
+     * distro route leaves out the install step instead of guarding it at run time.
+     */
+    @NonNull
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
+                                 @Nullable String user, @Nullable String password,
+                                 boolean distroInstalled) {
         if (user != null && password == null) {
             throw new IllegalArgumentException("a user needs a password");
         }
         return route == Route.X11_REPO
             ? x11Command(starters, edition) + " && " + markerStep(route, distro)
-            : distroCommand(distro, starters, user, password);
+            : distroCommand(distro, starters, user, password, distroInstalled);
     }
 
     /** Where the command's last step records that it finished (Termux side, outside the container). */
@@ -474,7 +486,8 @@ public final class GuiAppsSetup {
     @NonNull
     private static String distroCommand(@NonNull Distro distro,
                                         @NonNull Set<StarterApp> starters,
-                                        @Nullable String user, @Nullable String password) {
+                                        @Nullable String user, @Nullable String password,
+                                        boolean distroInstalled) {
         boolean unattended = user != null;
         StringBuilder out = new StringBuilder();
         out.append("( set -e\n");
@@ -491,8 +504,10 @@ public final class GuiAppsSetup {
         // costs the distro its sound and stops nothing.
         out.append("command -v ").append(AUDIO_PACKAGE).append(" >/dev/null 2>&1 || pkg install -y ")
             .append(AUDIO_PACKAGE).append(" || true\n");
-        out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
-            .append("/rootfs\" ] || ").append(installStep(distro)).append('\n');
+        if (!distroInstalled) {
+            out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
+                .append("/rootfs\" ] || ").append(installStep(distro)).append('\n');
+        }
         // The name is asked for out here, not inside the container: the container is entered once,
         // and a name that was refused would mean entering it again.
         if (unattended) {

@@ -411,6 +411,7 @@
     <string name="settings_gui_apps_distro_arch">Arch Linux</string>
     <string name="settings_gui_apps_distro_arch_summary">The newest packages, and more upkeep.</string>
     <string name="settings_gui_apps_recommended">Recommended</string>
+    <string name="settings_gui_apps_installed">Installed</string>
     <string name="settings_gui_apps_apps_headline">Pick your starter apps</string>
     <string name="settings_gui_apps_apps_sentence">You can add more apps later from the terminal.</string>
     <string name="settings_gui_apps_command_headline">Copy the command</string>

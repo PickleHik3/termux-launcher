@@ -205,3 +205,9 @@ nothing clipped. Still owed:
   theme outline, Primary and no glow · pong, go-ahead.
 - 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
   drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
+**Linux apps guide marks an installed distro (2026-11-04, #176).**
+- 2026-11-04 · feat/176-installed-distro · emulator: install Debian by hand with
+  `proot-distro install debian`, then open Settings › Linux apps › Set up Linux apps and go to the
+  Linux step: Debian shows "Installed" (in place of "Recommended"), the others do not, and the
+  copied command on the last step has no `proot-distro install` line. With nothing installed the
+  picker and command are as before · emulator, no pong needed.
