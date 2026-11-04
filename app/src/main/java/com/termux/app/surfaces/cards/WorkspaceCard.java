@@ -23,7 +23,7 @@ public final class WorkspaceCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        // Minimal layout closes the Appearance section, with no heading of its own.
+        // Contrast and Minimal layout join the Appearance section, with no heading of their own.
         return com.termux.app.surfaces.GlassRows.appearance(new EditorRows.CardRows(), offers, 1)
             .tier(1, Row.CONTRAST, Row.MINIMAL)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)

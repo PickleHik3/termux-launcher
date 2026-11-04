@@ -335,3 +335,8 @@ longer counted as an error. Owed:
   over the empty track, never cut; a long name at 1.3 falls back to name and value over a
   full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
   its menu; TalkBack reads the value · pong.
+- **Rows in group order (11-04).** Global, Workspace, Dock, Terminal and Keyboard cards: inside
+  each section the Look comes first, then the sliders, then switches and choices (Rim, Contrast,
+  Type), then colours (Tint colour), then links (Pane borders, Refraction), with a small gap
+  between groups and no new headings; the Keyboard's Linked toggle still stands between its two
+  opacities; sections and their open or closed state are as before · pong.

@@ -23,8 +23,8 @@ public class GlassRowsTest {
 
     /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
     private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
-        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM,
-        Row.GLASS_EDGE, Row.DEPTH);
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
+        Row.DEPTH, Row.RIM, Row.TINT_HUE);
 
     @Test
     public void everyGlassCardWearsTheAppearanceBlock() {
@@ -34,7 +34,11 @@ public class GlassRowsTest {
             java.util.List<Row> rows = rowsOf(card, ALL);
             int at = rows.indexOf(Row.SECTION_APPEARANCE);
             assertTrue(card.toString(), at >= 0);
-            assertEquals(card.toString(), BLOCK, rows.subList(at, at + BLOCK.size()));
+            // In group order; a card's own rows (the Dock's Reflection) may stand among them.
+            java.util.List<Row> block = new java.util.ArrayList<>();
+            for (Row row : rows.subList(at, rows.size()))
+                if (BLOCK.contains(row) && block.size() < BLOCK.size()) block.add(row);
+            assertEquals(card.toString(), BLOCK, block);
         }
     }
 

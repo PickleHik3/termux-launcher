@@ -378,6 +378,12 @@ public final class EditorRows {
      */
     @NonNull
     public static List<Spec> rows(@NonNull EditorCard card, @NonNull Offers offers) {
+        return ordered(listed(card, offers));
+    }
+
+    /** {@code card}'s rows as its file lists them, before {@link #ordered}. */
+    @NonNull
+    private static List<Spec> listed(@NonNull EditorCard card, @NonNull Offers offers) {
         switch (card) {
             case HOME: return HomeCard.rows(offers);
             case WORKSPACE: return WorkspaceCard.rows(offers);
@@ -392,6 +398,67 @@ public final class EditorRows {
             default:
                 return GlobalCard.rows(offers);
         }
+    }
+
+    // --------------------------------------------------------------------------- row order
+
+    /**
+     * The groups a container's rows stand in, in order (developer, 2026-11-04): the Look, the
+     * sliders (the opacity link with them, between the two it links), the toggles and choices
+     * (switches, tiles, segments, menus), the colours (pickers and swatches), then the links.
+     * Spacing, not a heading, separates them.
+     */
+    public enum Group { LOOK, SLIDERS, TOGGLES, COLOURS, LINKS }
+
+    /** The group {@code row} stands in inside its container. */
+    @NonNull
+    public static Group groupOf(@NonNull Row row) {
+        if (row == Row.OPACITY_LINK)
+            return Group.SLIDERS;
+        if (row == Row.TINT_HUE)
+            return Group.COLOURS;
+        switch (row.kind) {
+            case LOOK: return Group.LOOK;
+            case SLIDER: return Group.SLIDERS;
+            case LINK: return Group.LINKS;
+            default: return Group.TOGGLES;
+        }
+    }
+
+    /** Whether {@code row} heads a container (a collapsible section, or the Links inset). */
+    public static boolean isSectionHeading(@NonNull Row row) {
+        return row.name().startsWith("SECTION_");
+    }
+
+    /**
+     * {@code specs} with each container's rows in {@link Group} order: a container is a run of
+     * one tier between section headings, so headings, tiers and containers stay where the card
+     * lists them, and rows of one group keep their listed order.
+     */
+    @NonNull
+    public static List<Spec> ordered(@NonNull List<Spec> specs) {
+        List<Spec> out = new ArrayList<>(specs.size());
+        List<Spec> run = new ArrayList<>();
+        for (Spec spec : specs) {
+            if (isSectionHeading(spec.row)) {
+                flush(run, out);
+                out.add(spec);
+                continue;
+            }
+            if (!run.isEmpty() && run.get(0).tier != spec.tier)
+                flush(run, out);
+            run.add(spec);
+        }
+        flush(run, out);
+        return Collections.unmodifiableList(out);
+    }
+
+    private static void flush(@NonNull List<Spec> run, @NonNull List<Spec> out) {
+        for (Group group : Group.values())
+            for (Spec spec : run)
+                if (groupOf(spec.row) == group)
+                    out.add(spec);
+        run.clear();
     }
 
     /**
