@@ -207,8 +207,8 @@ public abstract class BuiltinWidgetView extends FrameLayout
     @Nullable private GlassSource glassSource;
     /** What {@link WidgetLiveGlass#wants} last answered; the page's moves act only on a change. */
     private boolean liveAsked;
-    /** Scratch for {@link WidgetLiveGlass#onScreen}. */
-    private final android.graphics.Rect liveRect = new android.graphics.Rect();
+    /** Scratch for {@link WidgetLiveGlass#nearScreen}. */
+    private final int[] liveLocation = new int[2];
     /** Whether the page's ink is the pale one, so the card is the dark one ({@link #resolveStyle}). */
     private boolean inkPale;
     /** Whether the widget wears the Look's glass now: its switch on and no solid fallback. */
@@ -687,7 +687,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
     public final void onGlassMoved() {
         if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
-        // Per frame of a slide: only a page sliding on or off screen changes the answer.
+        // Per frame of a slide: only a page sliding near the screen or away from it changes the answer.
         if (slab != null && wantsLiveGlass() != liveAsked) syncLiveGlass();
     }
 
@@ -696,7 +696,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         GlassSource source = glassSource;
         return source != null && slab != null && WidgetLiveGlass.wants(source.liveBlur(),
             android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE,
-            isShown(), WidgetLiveGlass.onScreen(this, liveRect));
+            isShown(), WidgetLiveGlass.nearScreen(this, liveLocation));
     }
 
     /**
