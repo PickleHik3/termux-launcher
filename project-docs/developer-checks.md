@@ -10,6 +10,12 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Live glass hand-off (2026-11-04)
+- 2026-11-04 · 98eec710c
+  · Live blur on, Carousel, a Home page of built-in widgets: a screen recording of page swipes
+  read frame by frame shows no widget glass dark or empty as a swipe settles or a page leaves;
+  the same for a Home float shown and minimised · pong.
+
 ## Editor sliders (2026-10-31)
 - 2026-10-31 · horizontal slider rows (ef0f80ede) · on pong, the thumb on a card's slider: a
   sideways drag takes the slider at once and never scrolls the card; an up or down swipe that
