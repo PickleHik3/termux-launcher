@@ -160,6 +160,7 @@ public class SeamCrossingTest {
         float beadShare;
         float stripShare, fieldShare;
         float pictureReveal, pictureSlide, stackSlide;
+        float barMarginShare, barMarginDp;
         DockStyle stackDesign;
         boolean active, folds, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
@@ -224,6 +225,8 @@ public class SeamCrossingTest {
             step.pictureReveal = answers.pictureReveal();
             step.pictureSlide = answers.pictureSlide();
             step.stackSlide = answers.stackSlide();
+            step.barMarginShare = answers.barMarginShare();
+            step.barMarginDp = crossing.barMarginDp(answers.barMarginShare());
             step.stackDesign = crossing.stackDesign();
             step.folds = answers.folds();
             step.rowsSink = answers.rowsSink(100);
@@ -1178,6 +1181,50 @@ public class SeamCrossingTest {
             // The stack is still dressed for the arriving half's Margin where none of it shows.
             assertTrue(drive.count(s -> s.restyle && s.restyleShape) > 0);
         }
+    }
+
+    /**
+     * A still bar between two Margins eases from the committed page's to the arriving page's with
+     * the wall (amendment 2026-11-04): the frame the wall lands on draws it at the arriving
+     * Margin, so the landing's re-dress has nothing to show.
+     */
+    @Test
+    public void aStillBarEasesItsMarginWithTheWall() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = new Stored();
+            stored.homeShape = WallShape.of(SHAPE.style, SHAPE.cornersDp, SHAPE.marginDp + 8);
+            Drive drive = from == PaneWallPage.WIDGETS
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    window(), false, false)
+                : drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+                    home(), false, false);
+            drive.slow(0f, 1f);
+            int here = from == PaneWallPage.WIDGETS ? SHAPE.marginDp + 8 : SHAPE.marginDp;
+            int there = from == PaneWallPage.WIDGETS ? SHAPE.marginDp : SHAPE.marginDp + 8;
+            float last = -1f;
+            for (Step step : drive.steps) {
+                if (!step.active) continue;
+                assertFalse("from " + from + ": eases at " + step.fraction,
+                    Float.isNaN(step.barMarginShare));
+                assertTrue("from " + from + ": never goes back", step.barMarginShare >= last);
+                assertEquals(here + (there - here) * step.barMarginShare, step.barMarginDp,
+                    EPSILON);
+                last = step.barMarginShare;
+            }
+            assertEquals("from " + from + ": lands at the arriving Margin", 1f,
+                drive.last().barMarginShare, EPSILON);
+            assertEquals(there, drive.last().barMarginDp, EPSILON);
+            // And back the other way, the committed page's Margin again.
+            drive.slow(1f, 0f);
+            assertEquals(here, drive.last().barMarginDp, EPSILON);
+        }
+    }
+
+    /** One Margin on both ends: nothing eases. */
+    @Test
+    public void oneMarginEasesNothing() {
+        Drive drive = oneLayout(PaneWallPage.WIDGETS).slow(0f, 1f);
+        for (Step step : drive.steps) assertTrue(Float.isNaN(step.barMarginShare));
     }
 
     /** A Style apart still reshapes the bar: it rides with the Workspace's page. */

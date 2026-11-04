@@ -210,6 +210,7 @@ public final class SeamCrossing {
         float pictureSlide;
         float stackSlide;
         float statusFade;
+        float barMarginShare;
 
         Answers() {
             clear(1f, 0f);
@@ -232,6 +233,18 @@ public final class SeamCrossing {
             pictureSlide = Float.NaN;
             stackSlide = Float.NaN;
             statusFade = Float.NaN;
+            barMarginShare = Float.NaN;
+        }
+
+        /**
+         * How far a bar that stands still eases from the committed page's Margin toward the other
+         * page's, 0 to 1 with the wall's offset; NaN while the bar's Margin does not ease (one
+         * Margin on both ends, or a bar that rides or fades). The bar is drawn at
+         * {@link SeamCrossing#barMarginDp} of that share, so the frame the wall lands on draws it
+         * at the arriving page's Margin and the landing's re-dress changes nothing on screen.
+         */
+        public float barMarginShare() {
+            return barMarginShare;
         }
 
         /**
@@ -443,6 +456,12 @@ public final class SeamCrossing {
          * Workspace's bar out over Home.
          */
         boolean barStill, barRides, statusMayShow;
+        /**
+         * Whether that still bar eases from one Margin to the other with the wall, and the two
+         * Margins in dp as stored.
+         */
+        boolean barMarginEases;
+        int committedMarginDp, otherMarginDp;
         /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
         boolean beadMelt, beadsCommitted;
         /** The halves' Dock designs and Search fields; the designs null while no crossing holds them. */
@@ -512,10 +531,16 @@ public final class SeamCrossing {
         mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
         // One bar across the wall (#90): where both halves stand it alike, in one outline, it
         // stands still on the crossing instead of riding with the Workspace's page. A Margin
-        // apart only insets it, which the landing's half re-dress puts right; riding for it took
-        // the bar off a crossing toward Home, with nothing to bring Home's in.
+        // apart only insets it, and the bar eases from one inset to the other with the wall
+        // (Answers#barMarginShare), so the landing's re-dress finds it already drawn there;
+        // riding for it took the bar off a crossing toward Home, with nothing to bring Home's in.
         mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS))
             && committed.stack.shape.sameOutline(other.stack.shape);
+        // A still bar between two Margins eases from one to the other with the wall's offset.
+        mRun.committedMarginDp = committed.stack.shape.marginDp;
+        mRun.otherMarginDp = other.stack.shape.marginDp;
+        mRun.barMarginEases = mRun.barStill && !here.slot(Element.STATUS).hidden
+            && mRun.committedMarginDp != mRun.otherMarginDp;
         PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
         mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
         // A keyboard in the stack, not one floating in a frame of its own.
@@ -697,6 +722,11 @@ public final class SeamCrossing {
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
             }
         }
+        // A still bar eases its Margin with the wall itself, not the chrome's own clock.
+        if (mRun.barMarginEases) {
+            answers.barMarginShare = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.moved = true;
+        }
         // The stack stands the other half's rows, dressed for that half, from the frame the plan
         // says; from Home the Workspace's bar is laid out as the slide starts.
         boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
@@ -721,7 +751,7 @@ public final class SeamCrossing {
             answers.dockReveal = rides ? 1f : pictured ? travel
                 : SeamTravel.dockReveal(mRun.plan, progress);
         }
-        answers.moved = answers.relayout || mRun.plan != DockPlan.NONE;
+        answers.moved = answers.moved || answers.relayout || mRun.plan != DockPlan.NONE;
         // Between halves that dress the stack differently the keyboard dips with the rows, so it
         // is below the screen where the stack changes its dress.
         if (mRun.wholeStack) {
@@ -794,6 +824,27 @@ public final class SeamCrossing {
         PageRef barEnd = mRun.barEnd;
         if (mRun.oneKind && barEnd != null) return SeamTravel.endScreenXPx(frame, barEnd, widthPx);
         return SeamTravel.workspaceScreenXPx(frame, widthPx);
+    }
+
+    /**
+     * The Margin, in dp as stored, a still bar is drawn at {@code share} of the way from the
+     * committed page toward the other ({@link Answers#barMarginShare}): the committed page's at 0,
+     * the other's at 1. The activity resolves both ends to px and draws between those, since a
+     * surface's inset is not linear in its Margin; this is the stored value the ends name.
+     */
+    public float barMarginDp(float share) {
+        float t = Float.isNaN(share) ? 0f : clamp01(share);
+        return mRun.committedMarginDp + (mRun.otherMarginDp - mRun.committedMarginDp) * t;
+    }
+
+    /** The committed page's Margin as the crossing read it, in dp as stored. */
+    public int committedBarMarginDp() {
+        return mRun.committedMarginDp;
+    }
+
+    /** The other page's Margin as the crossing read it, in dp as stored. */
+    public int otherBarMarginDp() {
+        return mRun.otherMarginDp;
     }
 
     /**

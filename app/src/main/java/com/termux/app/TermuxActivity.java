@@ -6989,6 +6989,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void runLandingSettle() {
         if (isDestroyed()) return;
         flushLandingRestyle();
+        // The re-dress has laid the bar out at the Margin it eased to; whatever it found to do,
+        // no ease outlives the crossing.
+        if (!mCrossing.crossing()) resetStatusMarginEase();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
     }
 
@@ -7238,6 +7241,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     else mlp.height = targetThickness;
                 }
                 host.setLayoutParams(mlp);
+                // Laid out at the Margin the crossing eased it to: it draws unscaled from the
+                // same pass, so the bar keeps the width it landed at.
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(host);
             }
             View topWidgets = findViewById(R.id.terminal_top_widget_area);
             if (topWidgets != null && topWidgets.getLayoutParams() != null) {
@@ -10896,6 +10902,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -10929,6 +10936,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
+                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -24802,6 +24810,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The status bar travels with the Workspace's page wherever the frame reaches Home; it
         // fades in place only where it cannot ride (a bar on a side or the bottom edge).
         boolean barRides = syncStatusTravel(wallFrame, seam);
+        // A bar that stands still eases from one page's Margin to the other's with the wall.
+        syncStatusMarginEase(seam);
         float statusAlpha = barRides ? 1f : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
@@ -25308,6 +25318,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pass of this frame dressed or showed it.
         if (rides) syncStatusStripTravel();
         return rides;
+    }
+
+    /**
+     * The status bar, and the strip behind the system bar while it continues the bar's inset,
+     * drawn at the Margin the crossing eases them to (SeamCrossing.Answers#barMarginShare): both
+     * stay laid out at the committed page's Margin, and a horizontal scale about their centre
+     * stands them at the inset between the two pages' resolved insets, so no frame lays anything
+     * out. The frame the wall lands on draws them at the arriving page's inset, which the
+     * landing's re-dress then lays out as it resets the scale ({@link #resetStatusMarginEase}).
+     * Nothing while the Margin holds.
+     */
+    private void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
+        float share = seam.barMarginShare();
+        if (Float.isNaN(share) || isStatusBarVertical()) return;
+        com.termux.app.place.SeamCrossing crossing = mCrossing.seam();
+        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
+        float here = resolveSurfaceHorizontalInsetPx(
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.committedBarMarginDp()),
+            capsule);
+        float there = resolveSurfaceHorizontalInsetPx(
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.otherBarMarginDp()),
+            capsule);
+        float insetPx = here + (there - here) * share;
+        View host = hotView(R.id.terminal_window_bar_host);
+        applyStatusMarginEase(host, insetPx);
+        // The strip eases with the bar only where it wears the bar's inset (not a dock sheet's).
+        View strip = hotView(R.id.terminal_status_bar_background);
+        if (host != null && strip != null && strip.getWidth() == host.getWidth())
+            applyStatusMarginEase(strip, insetPx);
+    }
+
+    /** One of the bar's views scaled about its centre so it stands {@code insetPx} from each side. */
+    private static void applyStatusMarginEase(@Nullable View view, float insetPx) {
+        if (view == null || view.getWidth() <= 0 || !(view.getParent() instanceof View)) return;
+        View parent = (View) view.getParent();
+        float room = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        // The inset it is laid out at, read from where it stands: its margins are even.
+        float laidInsetPx = (room - view.getWidth()) / 2f;
+        float scale = (view.getWidth() + 2f * (laidInsetPx - insetPx)) / view.getWidth();
+        if (!(scale > 0f)) return;
+        float pivot = view.getWidth() / 2f;
+        if (view.getPivotX() != pivot) view.setPivotX(pivot);
+        if (view.getScaleX() != scale) view.setScaleX(scale);
+    }
+
+    /** Both of the bar's views drawn at their laid-out width again. */
+    private void resetStatusMarginEase() {
+        resetStatusMarginEase(findViewById(R.id.terminal_window_bar_host));
+        resetStatusMarginEase(findViewById(R.id.terminal_status_bar_background));
+    }
+
+    private static void resetStatusMarginEase(@Nullable View view) {
+        if (view != null && view.getScaleX() != 1f) view.setScaleX(1f);
     }
 
     /**

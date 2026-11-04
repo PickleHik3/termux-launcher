@@ -25,8 +25,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   leaves from Home 1, not Home 2. A float chip for a float on Home 2 lands on Home 2 · pong.
 - **Bar across a Margin apart (11-04).** Home Margin 16, Workspace Margin 4, both with the bar on
   top: swipe Workspace -> Home 2 and Home 2 -> Workspace, slow and flung. The bar stays on screen
-  the whole way (the window chips pan out, Home's content pans in) and settles to the arriving
-  page's Margin at the landing; no bare handle at the top mid-swipe. Same Margins: as before · pong.
+  the whole way (the window chips pan out, Home's content pans in), its width easing to the
+  arriving page's Margin with the finger, and nothing about it changes on the landing frame; a
+  reversal mid-way eases back; no bare handle at the top mid-swipe. Docked and Floating, keyboard
+  up and down, Live blur on and off (the bar's glass stays sharp at its edges while it eases).
+  Same Margins: as before · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
   dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
