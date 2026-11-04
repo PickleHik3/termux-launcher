@@ -1304,6 +1304,13 @@ public class SeamCrossingTest {
                 }
                 assertEquals(why + ": the last frame shows the landed look", comesBack ? 0f : 1f,
                     last, EPSILON);
+                // The glass the last moving frame drew is the landed end's, which the landing's
+                // re-dress builds: the dock's opacity (20 here, 90 there) and, read the same
+                // way, its tint strength (the sheet's crossfade stands wholly on that end).
+                assertEquals(why + ": opacity", comesBack ? 20 : 90,
+                    SeamCrossing.lookBlendValue(20, 90, last));
+                assertEquals(why + ": tint", comesBack ? 35 : 70,
+                    SeamCrossing.lookBlendValue(35, 70, last));
                 PaneWallPage landed = comesBack ? from : to;
                 SeamCrossing.Landing landing = drive.crossing.land();
                 assertFalse(why, landing.stackDressedFor(landed));
