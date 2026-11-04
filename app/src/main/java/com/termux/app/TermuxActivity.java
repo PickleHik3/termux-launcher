@@ -687,6 +687,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mRoutedLinuxPage = -1;
     /** The Display page the latest Linux launch added itself (#192), -1 when it added none. */
     private int mAddedLinuxPage = -1;
+    /** An app has had a window on the display since the temporary Display page went up. */
+    private boolean mTemporaryDisplaySawApp;
+    /** The launch that put the temporary Display page up also started the display. */
+    private boolean mTemporaryDisplayStartedByLaunch;
+    /** When the display last went empty of apps (uptime ms). */
+    private long mTemporaryDisplayEmptyAtMs;
+    /** How long the display stays empty of apps before its temporary page goes (a relaunch, a
+     *  splash window handing over to the main one, a desktop being replaced all pass through 0). */
+    private static final long TEMPORARY_DISPLAY_APP_GONE_MS = 2000L;
     private long mRoutedLinuxAtMs;
     /** True while a landing runs its bound app: the runner's show-display step must not slide. */
     private boolean mLandingRunsApp;
@@ -28271,8 +28280,73 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int id = mAddedLinuxPage;
         mAddedLinuxPage = -1;
         if (id < 0 || (isDisplayUp() && mBoundDisplayPage == id)) return;
+        // A page made lasting since ("Add display") is the user's now.
+        com.termux.app.wall.WallPages.Page page = wallPages().page(id);
+        if (page == null || !page.temporary) return;
         editWallPages(pages -> pages.remove(id));
         wallPagesStore().commitRemoval(id);
+    }
+
+    /**
+     * The temporary Display page a drawer launch put up goes with its display (ADR 0015's
+     * 2026-11-04 amendment): removed for good the way Edit pages removes a Display page, so a
+     * wall on it lands on its neighbour. Runs when the display stops or its app is gone.
+     */
+    private void removeTemporaryDisplayPage() {
+        mAddedLinuxPage = -1;
+        mTemporaryDisplaySawApp = false;
+        mTemporaryDisplayStartedByLaunch = false;
+        com.termux.app.wall.WallPages.Page page = wallPages().temporaryDisplay();
+        if (page == null) return;
+        final int id = page.id;
+        editWallPages(pages -> pages.remove(id));
+        wallPagesStore().commitRemoval(id);
+    }
+
+    /**
+     * The display's app list changed: once an app has stood on the temporary page's display and
+     * none is left for {@link #TEMPORARY_DISPLAY_APP_GONE_MS}, the page goes, and the display
+     * with it when that launch started it.
+     */
+    private void noteTemporaryDisplayWindows(int count) {
+        if (wallPages().temporaryDisplay() == null) {
+            mTemporaryDisplaySawApp = false;
+            return;
+        }
+        if (count > 0) {
+            mTemporaryDisplaySawApp = true;
+            return;
+        }
+        if (!mTemporaryDisplaySawApp || mPaneWallController == null) return;
+        mTemporaryDisplayEmptyAtMs = android.os.SystemClock.uptimeMillis();
+        mPaneWallController.wall().postDelayed(this::closeTemporaryDisplayIfAppGone,
+            TEMPORARY_DISPLAY_APP_GONE_MS);
+    }
+
+    private void closeTemporaryDisplayIfAppGone() {
+        if (isFinishing() || isDestroyed()) return;
+        if (!mTemporaryDisplaySawApp || !mDisplayWindows.isEmpty()
+            || wallPages().temporaryDisplay() == null) return;
+        // Emptied again since this check was posted: that later one decides.
+        if (android.os.SystemClock.uptimeMillis() - mTemporaryDisplayEmptyAtMs
+            < TEMPORARY_DISPLAY_APP_GONE_MS) return;
+        // The display stopping takes the page with it (tearDownEmbeddedDisplay).
+        if (mTemporaryDisplayStartedByLaunch && isEmbeddedDisplayRunning()) {
+            stopEmbeddedDisplay();
+            return;
+        }
+        removeTemporaryDisplayPage();
+    }
+
+    /**
+     * Start-up sweep: a temporary Display page left in the store (the process died with it up)
+     * goes when no display runs or is kept to be claimed; a live one is left to its display.
+     */
+    private void sweepTemporaryDisplayPages() {
+        if (wallPages().temporaryDisplay() == null) return;
+        if (isEmbeddedDisplayRunning()
+            || com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
+        wallPagesStore().transform(com.termux.app.wall.WallPages::withoutTemporaryPages);
     }
 
     /**
@@ -28352,6 +28426,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
         // The Display pages stay on the wall: a fresh frame stands on the bound one, its card.
         mPaneWallController.wall().post(this::ensureDisplayPageFrame);
+        // A temporary page goes with its display.
+        removeTemporaryDisplayPage();
     }
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
@@ -29138,6 +29214,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         };
+        sweepTemporaryDisplayPages();
         wallPagesStore().addListener(mWallPagesListener);
         // Once at start: page looks whose page is not on the wall or kept aside are dead keys.
         mPageLookPruner = new com.termux.app.look.PageLook(
@@ -29264,7 +29341,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         new java.util.ArrayList<>();
                     int homes = 0;
                     boolean afterTerminal = false;
-                    for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
+                    // A temporary page (a drawer launch's) is not listed: it goes with its display.
+                    for (com.termux.app.wall.WallPages.Page page : pages.listedPages()) {
                         if (terminal != null && page.id == terminal.id) afterTerminal = true;
                         if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) homes++;
                         if (page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) continue;
@@ -29287,13 +29365,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         wallPages().homePages();
                     if (homeIndex < 0 || homeIndex >= homes.size()) return;
                     int id = homes.get(homeIndex).id;
-                    editWallPages(pages -> pages.move(id, wallIndex));
+                    // The overview counts the listed pages; the wall also holds a temporary one.
+                    editWallPages(pages -> pages.move(id, pages.wallIndexOfListed(wallIndex)));
                 }
                 @Override public void moveTerminalPage(int wallIndex) {
                     com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
                     if (terminal == null) return;
                     int id = terminal.id;
-                    editWallPages(pages -> pages.move(id, wallIndex));
+                    editWallPages(pages -> pages.move(id, pages.wallIndexOfListed(wallIndex)));
                 }
                 @Override public void setTerminalHome() {
                     com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
@@ -29335,7 +29414,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean displayOpen() {
                     return isDisplayUp();
                 }
+                @Override public boolean displayTemporary() {
+                    return wallPages().temporaryDisplay() != null;
+                }
                 @Override public void addDisplay(int row) {
+                    // A drawer launch's temporary page is made lasting rather than a second
+                    // added; the app running on it stays.
+                    com.termux.app.wall.WallPages.Page temporary = wallPages().temporaryDisplay();
+                    if (temporary != null) {
+                        final int id = temporary.id;
+                        editWallPages(pages -> pages.makePermanent(id));
+                        mAddedLinuxPage = -1;
+                        mTemporaryDisplaySawApp = false;
+                        mTemporaryDisplayStartedByLaunch = false;
+                        openDisplayWindow(true, id);
+                        return;
+                    }
                     openDisplayWindow(true);
                 }
                 @Override @Nullable public TerminalSession windowSession(int row) {
@@ -29677,8 +29771,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return false;
             }
             // A3c: the app opens on its Display page: the one bound to it, else the first unbound
-            // one, else a new unbound page after the current one. The runner's show-display step
-            // shows that page; the landing there leaves the app to the runner.
+            // one, else a new temporary page after the current one, which goes with its display.
+            // The runner's show-display step shows that page; the landing there leaves the app to
+            // the runner.
             com.termux.app.wall.WallPages.Route route =
                 wallPages().routeLinuxApp(app.id, linuxRouteFromPageId());
             int routedPage = route.pageId;
@@ -29686,6 +29781,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.wall.WallPages.Result added =
                     wallPagesStore().edit(route::addTo);
                 routedPage = added.ok() && added.page != null ? added.page.id : -1;
+                mTemporaryDisplaySawApp = false;
+                mTemporaryDisplayStartedByLaunch = !isEmbeddedDisplayRunning();
             }
             mRoutedLinuxPage = routedPage;
             mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
@@ -29844,6 +29941,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         ? null : mPaneWallController.displayWindow();
                     if (frame != null) frame.applyRunning(false);
                     syncPlaceBar();
+                    // A temporary page goes with its display.
+                    removeTemporaryDisplayPage();
                 }
             });
         mX11Display.setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
@@ -30033,6 +30132,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDisplayActiveWindow = active;
         // A stop in progress is waiting for exactly this: the last app closing itself.
         if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
+        noteTemporaryDisplayWindows(windows.size());
         // The display's chip wears its front app's name and icon, so a new front app re-dresses it.
         if (!isDisplayUp() || !isSplitPanesEnabled()) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);

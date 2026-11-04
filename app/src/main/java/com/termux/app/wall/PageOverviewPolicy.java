@@ -220,7 +220,15 @@ public final class PageOverviewPolicy {
 
     /** Whether "+ Add display" is offered: only while no display is open, as only one can exist. */
     public static boolean canAddDisplay(boolean displayOpen) {
-        return !displayOpen;
+        return canAddDisplay(displayOpen, false);
+    }
+
+    /**
+     * As {@link #canAddDisplay(boolean)}, but a display open on a temporary page (a drawer
+     * launch's) does not count: adding then makes that page a lasting one instead of a second.
+     */
+    public static boolean canAddDisplay(boolean displayOpen, boolean onTemporaryPage) {
+        return !displayOpen || onTemporaryPage;
     }
 
     /** Marks the window block's place in {@link #wallOrder}. */
