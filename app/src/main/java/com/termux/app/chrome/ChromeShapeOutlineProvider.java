@@ -66,6 +66,19 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
         out[3] = height + (clip == null ? 0 : clip.reachBottom);
     }
 
+    /**
+     * How far the outline is drawn out past each side of the view, px: a still status bar easing
+     * its Margin across a crossing (BarMarginEase); 0 at rest.
+     */
+    private int mHorizontalGrowPx;
+
+    /** Sets {@link #mHorizontalGrowPx}; whether it moved, so the caller invalidates the outline. */
+    public boolean setHorizontalGrow(int growPx) {
+        if (growPx == mHorizontalGrowPx) return false;
+        mHorizontalGrowPx = growPx;
+        return true;
+    }
+
     /** The clip's radius, 0 with none. */
     public float radiusPx() {
         return mClip == null ? 0f : mClip.radius;
@@ -81,6 +94,8 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
         LiveChromeShape.Clip clip = mClip;
         int[] rect = mRect;
         cardRect(clip, view.getWidth(), view.getHeight(), rect);
+        rect[0] -= mHorizontalGrowPx;
+        rect[2] += mHorizontalGrowPx;
         if (clip == null) {
             outline.setRect(rect[0], rect[1], rect[2], rect[3]);
             return;

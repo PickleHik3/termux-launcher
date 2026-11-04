@@ -25384,9 +25384,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The status bar, and the strip behind the system bar while it continues the bar's inset,
      * drawn at the Margin the crossing eases them to (SeamCrossing.Answers#barMarginShare): both
-     * stay laid out at the committed page's Margin, and a horizontal scale about their centre
-     * stands them at the inset between the two pages' resolved insets, so no frame lays anything
-     * out. The frame the wall lands on draws them at the arriving page's inset, which the
+     * stay laid out at the committed page's Margin and are drawn at the inset between the two
+     * pages' resolved insets, so no frame lays anything out. The bar stretches only its plain
+     * glass; its chips, clock and readings keep their size and move with their edge
+     * ({@link #applyBarMarginEase}). The strip is plain glass and is stretched whole. The frame the wall lands on draws them at the arriving page's inset, which the
      * landing's re-dress then lays out as it resets the scale ({@link #resetStatusMarginEase}).
      * Nothing while the Margin holds.
      */
@@ -25403,11 +25404,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             capsule);
         float insetPx = here + (there - here) * share;
         View host = hotView(R.id.terminal_window_bar_host);
-        applyStatusMarginEase(host, insetPx);
+        applyBarMarginEase(host, insetPx);
         // The strip eases with the bar only where it wears the bar's inset (not a dock sheet's).
         View strip = hotView(R.id.terminal_status_bar_background);
         if (host != null && strip != null && strip.getWidth() == host.getWidth())
             applyStatusMarginEase(strip, insetPx);
+    }
+
+    /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
+    private static final int[] BAR_GLASS_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
+        R.id.terminal_window_bar_background, R.id.terminal_status_lens};
+
+    /**
+     * The bar drawn {@code insetPx} from each side while laid out at the committed page's Margin
+     * (com.termux.app.place.BarMarginEase): its glass layers stretch about the host's centre, its
+     * outline (which clips them on a card) grows or shrinks with them, and its content keeps its
+     * size, each end's cluster drawn moved with its edge. The host itself is never scaled. Writes
+     * only what moved; no layout.
+     */
+    private void applyBarMarginEase(@Nullable View host, float insetPx) {
+        if (host == null || host.getWidth() <= 0 || !(host.getParent() instanceof View)) return;
+        View parent = (View) host.getParent();
+        float room = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+        // The inset it is laid out at, read from where it stands: its margins are even.
+        float grow = com.termux.app.place.BarMarginEase.growPx((room - host.getWidth()) / 2f,
+            insetPx);
+        if (host.getScaleX() != 1f) host.setScaleX(1f);
+        float centre = host.getWidth() / 2f;
+        for (int id : BAR_GLASS_LAYERS) easeBarGlassLayer(hotView(id), centre, grow);
+        if (host.getOutlineProvider() == mStatusBarSurfaceOutline
+            && mStatusBarSurfaceOutline.setHorizontalGrow(Math.round(grow)))
+            host.invalidateOutline();
+        com.termux.app.statusbar.StatusRowLayout row = hotView(R.id.terminal_status_row);
+        if (row != null) row.setEdgeGrow(grow);
+        com.termux.app.statusbar.TopPaneWidgetSlot slot = hotView(R.id.terminal_top_widget_area);
+        if (slot != null) slot.setEdgeGrow(grow);
+    }
+
+    /** One glass layer of the bar, stretched about the host's centre by {@code grow} a side. */
+    private static void easeBarGlassLayer(@Nullable View layer, float hostCentre, float grow) {
+        if (layer == null || layer.getWidth() <= 0) return;
+        float pivot = hostCentre - layer.getLeft();
+        float scale = com.termux.app.place.BarMarginEase.layerScale(pivot, grow);
+        if (layer.getPivotX() != pivot) layer.setPivotX(pivot);
+        if (layer.getScaleX() != scale) layer.setScaleX(scale);
+    }
+
+    /** The bar's glass layers, outline and content drawn as laid out again. */
+    private void resetBarMarginEase(@NonNull View host) {
+        if (host.getScaleX() != 1f) host.setScaleX(1f);
+        for (int id : BAR_GLASS_LAYERS) {
+            View layer = findViewById(id);
+            if (layer != null && layer.getScaleX() != 1f) layer.setScaleX(1f);
+        }
+        if (mStatusBarSurfaceOutline.setHorizontalGrow(0)
+            && host.getOutlineProvider() == mStatusBarSurfaceOutline)
+            host.invalidateOutline();
+        com.termux.app.statusbar.StatusRowLayout row = findViewById(R.id.terminal_status_row);
+        if (row != null) row.setEdgeGrow(0f);
+        com.termux.app.statusbar.TopPaneWidgetSlot slot = findViewById(R.id.terminal_top_widget_area);
+        if (slot != null) slot.setEdgeGrow(0f);
     }
 
     /** One of the bar's views scaled about its centre so it stands {@code insetPx} from each side. */
@@ -25430,8 +25486,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         resetStatusMarginEase(findViewById(R.id.terminal_status_bar_background));
     }
 
-    private static void resetStatusMarginEase(@Nullable View view) {
-        if (view != null && view.getScaleX() != 1f) view.setScaleX(1f);
+    /** {@code view} drawn at its laid-out width again; the bar's host with everything it eased. */
+    private void resetStatusMarginEase(@Nullable View view) {
+        if (view == null) return;
+        if (view.getId() == R.id.terminal_window_bar_host) resetBarMarginEase(view);
+        else if (view.getScaleX() != 1f) view.setScaleX(1f);
     }
 
     /**

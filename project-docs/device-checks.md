@@ -51,6 +51,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   arriving page's Margin with the finger, and nothing about it changes on the landing frame; a
   reversal mid-way eases back; no bare handle at the top mid-swipe. Docked and Floating, keyboard
   up and down, Live blur on and off (the bar's glass stays sharp at its edges while it eases).
+  Only the glass stretches: the clock, chips and readings keep their size mid-swipe (no wide or
+  narrow text), the start ones moving with the left edge and the end ones with the right; on a
+  Floating card the rounded corners follow the eased width both ways (wider and narrower).
   Same Margins: as before · pong.
 - **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
   from the search field to the page dots, with no dock-high empty band under the last row; the
