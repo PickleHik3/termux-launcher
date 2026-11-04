@@ -18,6 +18,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Edit pages card menu and Display picker (11-04, #201, #200).** (1) Long-press a Home card
+  and let go: a menu with Set as home, Rename, Remove opens at the finger; long-press and move
+  on: the menu goes and the card drags as before. (2) Rename a Home page and a Display page: the
+  dialog's keyboard comes up, the card shows the new name; an empty name goes back to "Page n" /
+  "Display". (3) Remove from the menu: the same undo snackbar as the red button. (4) The first
+  Terminal card offers Set as home and Remove, later ones Remove only. (5) With a Linux app
+  installed, Add display opens a list, Whole display first then apps; an app adds a Display card
+  after the focused card named after it; Bind app on a Display card swaps its app (Whole display
+  unbinds); an app already bound to a page is not listed. (6) With no Linux apps, Add display
+  adds the whole display at once, as before. Light and dark theme, editor open and closed.
+  Emulator or pong.
 - **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
   start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
   diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`

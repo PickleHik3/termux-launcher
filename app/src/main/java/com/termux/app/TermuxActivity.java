@@ -29257,6 +29257,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGroundLook = null;
     }
 
+    /** The wall page behind an Edit pages card: a Home page by index, a Display page by id. */
+    @Nullable
+    private com.termux.app.wall.WallPages.Page overviewPage(
+            @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
+        com.termux.app.wall.WallPages pages = wallPages();
+        if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY) return pages.page(index);
+        if (kind != com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) return null;
+        java.util.List<com.termux.app.wall.WallPages.Page> homes = pages.homePages();
+        return index >= 0 && index < homes.size() ? homes.get(index) : null;
+    }
+
     /** The display window's card key in the page overview: there is only ever one display. */
     private static final Object PAGE_OVERVIEW_DISPLAY_KEY = new Object();
 
@@ -29349,8 +29360,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
                             ? null : displayCards().find(page.binding);
                         out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
-                            com.termux.app.wall.DisplayPagePolicy.cardName(page,
-                                app == null ? null : app.name), homes, afterTerminal));
+                            com.termux.app.wall.PageCardMenuPolicy.cardName(page.name,
+                                com.termux.app.wall.DisplayPagePolicy.cardName(page,
+                                    app == null ? null : app.name)), homes, afterTerminal));
                     }
                     return out;
                 }
@@ -29359,6 +29371,61 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
+                }
+                // A card's menu and the Display picker (ADR 0015 section 2): names and bindings
+                // are the wall's pages', by id.
+                @Override @Nullable public String homePageName(int page) {
+                    java.util.List<com.termux.app.wall.WallPages.Page> homes =
+                        wallPages().homePages();
+                    return page >= 0 && page < homes.size() ? homes.get(page).name : null;
+                }
+                @Override public void promptRename(
+                        @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index,
+                        @NonNull Runnable renamed) {
+                    com.termux.app.wall.WallPages.Page page = overviewPage(kind, index);
+                    if (page == null) return;
+                    final int id = page.id;
+                    onSystemImeRequested();
+                    TextInputDialogUtils.textInput(TermuxActivity.this,
+                        R.string.page_overview_rename_title, page.name,
+                        R.string.page_overview_rename_confirm, text -> {
+                            editWallPages(pages -> pages.rename(id, text));
+                            renamed.run();
+                        }, -1, null, -1, null, null);
+                }
+                @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp>
+                        displayApps() {
+                    java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
+                        displayCards().apps();
+                    // Not read yet: read it now, for the next time the picker opens.
+                    if (apps.isEmpty()) refreshDisplayCards();
+                    java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp> out =
+                        new java.util.ArrayList<>(apps.size());
+                    for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app : apps) {
+                        out.add(new com.termux.app.wall.PageOverviewView.DisplayApp(app.id,
+                            app.name));
+                    }
+                    return out;
+                }
+                @Override @Nullable public String displayBinding(int id) {
+                    com.termux.app.wall.WallPages.Page page = wallPages().page(id);
+                    return page == null ? null : page.binding;
+                }
+                @Override public void bindDisplayPage(int id, @Nullable String app) {
+                    editWallPages(pages -> pages.bind(id, app));
+                    refreshDisplayCards();
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                }
+                @Override public int addBoundDisplay(@NonNull String app) {
+                    final int after = linuxRouteFromPageId();
+                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+                        pages.add(com.termux.app.wall.WallPages.PageKind.DISPLAY,
+                            pages.page(after) != null ? after
+                                : com.termux.app.wall.WallPages.END, app));
+                    if (!added.ok() || added.page == null) return -1;
+                    refreshDisplayCards();
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    return added.page.id;
                 }
                 @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
                     java.util.List<com.termux.app.wall.WallPages.Page> homes =

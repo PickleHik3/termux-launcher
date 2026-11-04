@@ -106,6 +106,13 @@
     <string name="page_overview_terminal_closed">Terminal closed</string>
     <string name="page_overview_display_closed">Display closed</string>
     <string name="page_overview_undo">Undo</string>
+    <string name="page_overview_menu_set_home">Set as home</string>
+    <string name="page_overview_menu_rename">Rename</string>
+    <string name="page_overview_menu_bind_app">Bind app</string>
+    <string name="page_overview_menu_remove">Remove</string>
+    <string name="page_overview_whole_display">Whole display</string>
+    <string name="page_overview_rename_title">Rename page</string>
+    <string name="page_overview_rename_confirm">Rename</string>
     <string name="home_pages_editor_remove_pending">A widget is still being added to this page</string>
     <string name="settings_home_edit_pages_locked">Unlock the Home layout to edit pages</string>
 
