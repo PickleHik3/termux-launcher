@@ -125,7 +125,7 @@ The Android application also uses these independently maintained libraries:
 - Apache Commons IO — Apache-2.0
 - Google Guava — Apache-2.0
 - Google Gson — Apache-2.0 — through LiteRT-LM
-- Google LiteRT 1.4.2 and LiteRT-LM 0.17.1 — Apache-2.0
+- Google LiteRT 1.4.2 and LiteRT-LM 0.19.0 — Apache-2.0
 - Kotlin standard library, kotlin-reflect and kotlinx.coroutines — Apache-2.0 — through LiteRT-LM
   and AndroidX
 - Lottie for Android — Apache-2.0 — renders the bundled Meteocons weather animations
