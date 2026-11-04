@@ -29,7 +29,14 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
  * DOCKED,   overlay, Home -> GLASS  opacity applies  the dock's glass over the wallpaper
  * SPLIT,    any           -> as DOCKED                only the keys part
  * FLOATING, always        -> NONE   opacity ignored  the card is the panel, Home included
+ * DOCKED,   any, Display  -> GLASS  opacity applies  see-through over the live display, frosted
+ *                                                     by the compositor where it can blur
  * </pre>
+ *
+ * <p>A Display page is the second exception, in overlay and resize mode alike: the keyboard wears
+ * the Keyboard card's Display-pages look (Opacity, Tint, Frost), but its glass crops no
+ * wallpaper. The live display, or whatever lies behind the bed, shows through it, and the frost
+ * is a blur layer under the bed ({@link DisplayKeyboardBlurPolicy}).
  *
  * <p>Pure, so the answer can be read and tested without a window: the activity only applies it.
  */
@@ -51,10 +58,26 @@ public final class KeyboardMaterialPolicy {
     @NonNull
     public static Material hostMaterial(@NonNull KeyboardForm form, boolean overlays,
                                         boolean home) {
+        return hostMaterial(form, overlays, home, false);
+    }
+
+    /** {@link #hostMaterial(KeyboardForm, boolean, boolean)} on a place that may be a Display page. */
+    @NonNull
+    public static Material hostMaterial(@NonNull KeyboardForm form, boolean overlays,
+                                        boolean home, boolean display) {
         // The card behind a floating keyboard is already the solid panel; a host fill under it
         // would be a second material inside the first.
         if (form == KeyboardForm.FLOATING) return Material.NONE;
-        return overlays && !home ? Material.SOLID : Material.GLASS;
+        return overlays && !home && !display ? Material.SOLID : Material.GLASS;
+    }
+
+    /**
+     * Whether the host's glass is the Display page's: see-through over the live display, with no
+     * wallpaper frame of its own. Only the docked and split keyboard; a floating card stays the
+     * solid panel it is everywhere.
+     */
+    public static boolean seesThroughToDisplay(@NonNull KeyboardForm form, boolean display) {
+        return display && hostMaterial(form, true, false, true) == Material.GLASS;
     }
 
     /**
@@ -65,7 +88,13 @@ public final class KeyboardMaterialPolicy {
      */
     public static boolean opacityApplies(@NonNull KeyboardForm form, boolean overlays,
                                          boolean home) {
-        return hostMaterial(form, overlays, home) == Material.GLASS;
+        return opacityApplies(form, overlays, home, false);
+    }
+
+    /** {@link #opacityApplies(KeyboardForm, boolean, boolean)} on a place that may be a Display page. */
+    public static boolean opacityApplies(@NonNull KeyboardForm form, boolean overlays,
+                                         boolean home, boolean display) {
+        return hostMaterial(form, overlays, home, display) == Material.GLASS;
     }
 
     /**
