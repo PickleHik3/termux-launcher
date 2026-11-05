@@ -2605,6 +2605,7 @@
     <string name="speech_model_idle_unload_title">Unload after idle</string>
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
     <string name="speech_model_accelerator_title">Speech accelerator</string>
+    <string name="speech_model_accelerator_summary">%1$s · which part of the phone runs voice input</string>
     <string name="speech_model_accelerator_auto">Auto</string>
     <string name="speech_model_accelerator_cpu">CPU</string>
     <string name="speech_model_accelerator_gpu">GPU</string>

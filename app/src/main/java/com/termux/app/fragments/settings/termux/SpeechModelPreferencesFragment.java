@@ -384,9 +384,9 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         String[] labels = getResources().getStringArray(R.array.speech_model_accelerator_entries);
         String[] values = getResources().getStringArray(R.array.speech_model_accelerator_values);
         for (int i = 0; i < values.length && i < labels.length; i++) {
-            if (values[i].equals(selected)) return labels[i];
+            if (values[i].equals(selected)) return getString(R.string.speech_model_accelerator_summary, labels[i]);
         }
-        return labels[0];
+        return getString(R.string.speech_model_accelerator_summary, labels[0]);
     }
 
     @NonNull
