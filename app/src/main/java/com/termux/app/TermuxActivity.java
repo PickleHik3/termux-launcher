@@ -29782,7 +29782,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void addPage() {
                     if (mWidgetPaneController == null) return;
+                    // One look per page kind: the page added wears the Home page in front's own
+                    // look from the start (its overrides copied; none there, it follows global).
+                    int front = homePageInFront();
+                    java.util.List<Integer> before = wallPages().homePageIdsForRepository();
                     mWidgetPaneController.addPage();
+                    java.util.List<Integer> added = wallPages().homePageIdsForRepository();
+                    added.removeAll(before);
+                    if (front >= 0 && !added.isEmpty() && mPreferences != null) {
+                        com.termux.app.look.PrefsLookStore store = new com.termux.app.look.PrefsLookStore(
+                            mPreferences.getSharedPreferences());
+                        for (int id : added)
+                            com.termux.app.look.PageLook.copyOverrides(store, front, id);
+                        refreshGroundStrip();
+                    }
                 }
                 @Override public void chooseHome(
                         @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
