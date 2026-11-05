@@ -287,6 +287,16 @@
         <item>5</item>
         <item>10</item>
     </string-array>
+    <string-array name="speech_model_accelerator_entries">
+        <item>@string/speech_model_accelerator_auto</item>
+        <item>@string/speech_model_accelerator_cpu</item>
+        <item>@string/speech_model_accelerator_gpu</item>
+    </string-array>
+    <string-array name="speech_model_accelerator_values">
+        <item>auto</item>
+        <item>cpu</item>
+        <item>gpu</item>
+    </string-array>
     <string-array name="termux_ai_catalog_backend_filter_entries">
         <item>@string/termux_ai_catalog_backend_all</item>
         <item>@string/termux_ai_backend_label_litert</item>

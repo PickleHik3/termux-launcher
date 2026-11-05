@@ -2604,6 +2604,11 @@
     <string name="speech_model_window_kept">The %1$d-second version could not be downloaded. %2$s keeps its %3$d-second window.</string>
     <string name="speech_model_idle_unload_title">Unload after idle</string>
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
+    <string name="speech_model_accelerator_title">Speech accelerator</string>
+    <string name="speech_model_accelerator_auto">Auto</string>
+    <string name="speech_model_accelerator_cpu">CPU</string>
+    <string name="speech_model_accelerator_gpu">GPU</string>
+    <string name="speech_model_accelerator_gpu_unavailable">GPU unavailable, using CPU</string>
     <string name="speech_output_header">Voice output</string>
     <string name="speech_output_missing_title">No voice yet</string>
     <string name="speech_output_missing_summary">Get the voice model in Model centre to hear text read aloud</string>
