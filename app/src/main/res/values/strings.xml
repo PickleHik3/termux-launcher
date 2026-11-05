@@ -1736,8 +1736,8 @@
         <string name="tai_centre_parallel_title">Simultaneous downloads</string>
         <string name="tai_centre_parallel_summary">Two usually fill a home connection; more only split it.</string>
         <string name="tai_centre_sheet_title">Install %1$s</string>
-        <string name="tai_centre_sheet_size_base">Base · %1$s</string>
-        <string name="tai_centre_sheet_size_small">Small · %1$s</string>
+        <string name="tai_centre_sheet_size_base">Base\n%1$s</string>
+        <string name="tai_centre_sheet_size_small">Small\n%1$s</string>
         <string name="tai_centre_sheet_language_english">English</string>
         <string name="tai_centre_sheet_language_many">Many languages</string>
         <string name="tai_centre_sheet_window_10">10 seconds</string>
@@ -2644,7 +2644,7 @@
     <string name="speech_model_accelerator_gpu">GPU</string>
     <string name="speech_model_accelerator_gpu_choice">GPU · uses less battery, may be slower</string>
     <string name="speech_model_accelerator_gpu_unavailable">GPU unavailable, using CPU</string>
-    <string name="tai_centre_sheet_size_gpu">Base GPU · %1$s</string>
+    <string name="tai_centre_sheet_size_gpu">Base GPU\n%1$s</string>
     <string name="speech_gpu_size_hint">Runs on the GPU and uses little CPU. Many languages, 30-second window.</string>
     <string name="speech_gpu_advice_no_gpu">No usable GPU found on this phone</string>
     <string name="speech_gpu_advice_no_gpu_warning">No usable GPU found on this phone. It may not run, and the CPU is slower.</string>
