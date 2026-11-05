@@ -5,6 +5,8 @@ import android.text.method.LinkMovementMethod;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import java.util.ArrayList;
+import java.util.List;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -14,6 +16,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.termux.R;
 import com.termux.ai.TaiModelCatalog;
+import com.termux.ai.TaiSpeechGpuAdvice;
 
 /**
  * The small sheet Install opens for a Whisper model: size, language and window, each a segmented
@@ -40,6 +43,8 @@ final class TaiSpeechInstallSheet {
 
         boolean[] small = {TaiSpeechActions.isSmall(tappedModelId)};
         boolean[] english = {tappedModelId.endsWith("-en")};
+        boolean[] gpu = {TaiSpeechActions.isGpuModel(tappedModelId)};
+        TaiSpeechGpuAdvice.Advice advice = TaiSpeechGpuAdvice.forContext(context, TaiModelCatalog.WHISPER_BASE_GPU_ID);
         int[] window = {storedWindowSeconds == 5 ? 5 : 10};
 
         TextView title = new TextView(context);
@@ -54,12 +59,16 @@ final class TaiSpeechInstallSheet {
         TextView sizeHint = hint(context);
         TextView windowHint = hint(context);
         MaterialButton install = new MaterialButton(context);
+        List<View> cpuOnlyViews = new ArrayList<>();
         Runnable refresh = () -> {
-            String id = TaiSpeechActions.whisperCatalogId(small[0], english[0]);
+            String id = gpu[0] ? TaiModelCatalog.WHISPER_BASE_GPU_ID : TaiSpeechActions.whisperCatalogId(small[0], english[0]);
+            for (View view : cpuOnlyViews) view.setVisibility(gpu[0] ? View.GONE : View.VISIBLE);
             TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
             long bytes = entry == null ? 0L : entry.withWindow(window[0]).sizeBytes;
-            String hint = context.getString(small[0] ? R.string.speech_model_size_small_hint : R.string.speech_model_size_base_hint);
-            if (small[0] && deviceMemoryBytes > 0L && deviceMemoryBytes < TaiSpeechActions.SMALL_MIN_MEMORY_BYTES) {
+            String hint = context.getString(gpu[0] ? R.string.speech_gpu_size_hint
+                : small[0] ? R.string.speech_model_size_small_hint : R.string.speech_model_size_base_hint);
+            if (gpu[0]) hint = hint + "\n" + TaiSpeechActions.gpuAdviceLine(context, advice, true);
+            if (!gpu[0] && small[0] && deviceMemoryBytes > 0L && deviceMemoryBytes < TaiSpeechActions.SMALL_MIN_MEMORY_BYTES) {
                 hint = hint + "\n" + context.getString(R.string.tai_centre_small_ram_note);
             }
             CharSequence license = TaiModelCentreRows.licenseFact(context, entry == null ? null : entry.license);
@@ -73,16 +82,20 @@ final class TaiSpeechInstallSheet {
         content.addView(label(context, R.string.speech_model_size_label));
         TaiSegmentedTabs size = tabs(context);
         size.setLabels(context.getString(R.string.tai_centre_sheet_size_base, estimate("whisper-acft-base")),
-            context.getString(R.string.tai_centre_sheet_size_small, estimate("whisper-acft-small")));
-        size.select(small[0] ? 1 : 0, false);
+            context.getString(R.string.tai_centre_sheet_size_small, estimate("whisper-acft-small")),
+            context.getString(R.string.tai_centre_sheet_size_gpu, estimate(TaiModelCatalog.WHISPER_BASE_GPU_ID)));
+        size.select(gpu[0] ? 2 : small[0] ? 1 : 0, false);
         size.setOnSegmentSelectedListener(index -> {
+            gpu[0] = index == 2;
             small[0] = index == 1;
             refresh.run();
         });
         content.addView(size, tabParams(density));
         content.addView(sizeHint);
 
-        content.addView(label(context, R.string.speech_model_language_label));
+        TextView languageLabel = label(context, R.string.speech_model_language_label);
+        content.addView(languageLabel);
+        cpuOnlyViews.add(languageLabel);
         TaiSegmentedTabs language = tabs(context);
         language.setLabels(context.getString(R.string.tai_centre_sheet_language_english),
             context.getString(R.string.tai_centre_sheet_language_many));
@@ -92,8 +105,11 @@ final class TaiSpeechInstallSheet {
             refresh.run();
         });
         content.addView(language, tabParams(density));
+        cpuOnlyViews.add(language);
 
-        content.addView(label(context, R.string.speech_model_window_label));
+        TextView windowLabel = label(context, R.string.speech_model_window_label);
+        content.addView(windowLabel);
+        cpuOnlyViews.add(windowLabel);
         TaiSegmentedTabs windows = tabs(context);
         windows.setLabels(context.getString(R.string.tai_centre_sheet_window_10),
             context.getString(R.string.tai_centre_sheet_window_5));
@@ -104,6 +120,8 @@ final class TaiSpeechInstallSheet {
         });
         content.addView(windows, tabParams(density));
         content.addView(windowHint);
+        cpuOnlyViews.add(windows);
+        cpuOnlyViews.add(windowHint);
 
         // A stock filled button: its shape, colour and text style are the theme's.
         LinearLayout.LayoutParams installParams = new LinearLayout.LayoutParams(
@@ -113,7 +131,9 @@ final class TaiSpeechInstallSheet {
         install.setOnClickListener(view -> {
             TaiMotion.tick(view);
             sheet.dismiss();
-            onInstall.install(TaiSpeechActions.whisperCatalogId(small[0], english[0]), window[0]);
+            // The GPU model has one 30 s graph; the stored window stays the preference for the others.
+            onInstall.install(gpu[0] ? TaiModelCatalog.WHISPER_BASE_GPU_ID
+                : TaiSpeechActions.whisperCatalogId(small[0], english[0]), window[0]);
         });
         refresh.run();
 

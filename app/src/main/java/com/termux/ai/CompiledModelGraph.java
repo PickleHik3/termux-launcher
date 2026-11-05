@@ -64,16 +64,34 @@ final class CompiledModelGraph implements LiteRtGraph {
      */
     @NonNull
     static Loader loader(@NonNull Accelerator accelerator) {
-        return (file, threads) -> open(file, threads, accelerator);
+        return (file, threads) -> open(file, threads, accelerator, false);
+    }
+
+    /** As {@link #loader(Accelerator)}; {@code gpuFp32} asks the GPU for full float precision (ignored on the CPU). */
+    @NonNull
+    static Loader loader(@NonNull Accelerator accelerator, boolean gpuFp32) {
+        return (file, threads) -> open(file, threads, accelerator, gpuFp32);
     }
 
     @NonNull
     static CompiledModelGraph open(@NonNull File file, int threads, @NonNull Accelerator accelerator) throws Exception {
+        return open(file, threads, accelerator, false);
+    }
+
+    @NonNull
+    static CompiledModelGraph open(@NonNull File file, int threads, @NonNull Accelerator accelerator,
+                                   boolean gpuFp32) throws Exception {
         // Read first: a file that is not a TFLite flatbuffer fails here, before any native work.
         Map<String, TfliteSignatures.Signature> signatures = TfliteSignatures.read(file);
         Environment environment = Environment.create();
         try {
             CompiledModel.Options options = new CompiledModel.Options(accelerator);
+            if (accelerator == Accelerator.GPU && gpuFp32) {
+                // Full float on the GPU; every other GpuOptions field null = the runtime's default.
+                options.setGpuOptions(new CompiledModel.GpuOptions(null, null, null,
+                    CompiledModel.GpuOptions.Precision.FP32, null, null, null, null, null, null, null,
+                    null, null, null, null));
+            }
             if (accelerator == Accelerator.CPU) {
                 options.setCpuOptions(new CompiledModel.CpuOptions(threads, null, null));
             }

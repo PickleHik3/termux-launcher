@@ -326,7 +326,9 @@ public final class TaiBenchSession {
             TaiModelSpec spec = installed.get(model.modelId);
             if (spec == null) continue;
             boolean gpu = SttAcceleratorChoices.gpuOffered(deviceGpu, SttAcceleratorChoices.gpuFailure(app, spec));
-            targets.add(new TaiVoiceBenchRunner.Target(spec.id, model.displayName, spec.localPath, spec.sizeBytes, gpu));
+            boolean gpuOnly = TaiSpeechModels.needsGpuFp32(spec.id);
+            targets.add(new TaiVoiceBenchRunner.Target(spec.id, model.displayName, spec.localPath, spec.sizeBytes,
+                gpu || gpuOnly, gpuOnly));
         }
         return targets;
     }

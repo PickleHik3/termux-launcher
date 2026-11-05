@@ -43,6 +43,7 @@ import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
+import com.termux.ai.TaiSpeechGpuAdvice;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiReadAloud;
@@ -560,7 +561,10 @@ public class TaiModelCentreFragment extends Fragment
         }
         row.pillPrimary = get.suggested ? getString(R.string.tai_fn_pill_suggested) : "";
         List<String> lines = new ArrayList<>();
-        String fit = TaiFunctionRows.fitLine(get.fit, labels);
+        boolean gpuModel = group == TaiFunctionRows.Group.SPEECH && TaiSpeechActions.isGpuModel(entry.modelId);
+        TaiSpeechGpuAdvice.Advice gpuAdvice = gpuModel ? TaiSpeechGpuAdvice.forContext(context, entry.modelId) : null;
+        // The GPU model's line is its own advice, not the tier's "made for bigger phones".
+        String fit = gpuModel ? "" : TaiFunctionRows.fitLine(get.fit, labels);
         if (!fit.isEmpty()) lines.add(fit);
         String forLine = TaiFunctionRows.forLine(env, get.item.info, labels);
         if (!forLine.isEmpty()) lines.add(forLine);
@@ -573,6 +577,10 @@ public class TaiModelCentreFragment extends Fragment
         if (error != null) {
             row.note = error;
             row.noteIsError = true;
+        } else if (gpuAdvice != null) {
+            row.note = TaiSpeechActions.gpuAdviceLine(context, gpuAdvice, false);
+            row.dimmed = gpuAdvice == TaiSpeechGpuAdvice.Advice.NO_GPU;
+            if (gpuAdvice == TaiSpeechGpuAdvice.Advice.RECOMMENDED) row.pillPrimary = getString(R.string.speech_gpu_advice_recommended);
         } else if (TaiModelCatalog.PARAKEET_TDT_V3_ID.equals(entry.modelId)) {
             String warning = TaiSpeechActions.parakeetRamWarning(context, deviceMemory(context));
             row.note = warning == null ? "" : warning;

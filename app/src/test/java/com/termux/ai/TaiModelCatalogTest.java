@@ -29,14 +29,14 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(11, entries.size());
-        assertEquals(11, new HashSet<>(entries.keySet()).size());
-        assertEquals(11, liteRtCount);
+        assertEquals(12, entries.size());
+        assertEquals(12, new HashSet<>(entries.keySet()).size());
+        assertEquals(12, liteRtCount);
         assertEquals(0, mnnCount);
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
         assertEquals(2, TaiModelCatalog.chatEntries().size());
-        assertEquals(5, TaiModelCatalog.speechEntries().size());
+        assertEquals(6, TaiModelCatalog.speechEntries().size());
         assertEquals(1, TaiModelCatalog.ttsEntries().size());
         assertEquals(3, TaiModelCatalog.embeddingEntries().size());
         assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
@@ -216,7 +216,7 @@ public class TaiModelCatalogTest {
         assertFalse(chat.containsKey("whisper-acft-small-en"));
         assertTrue(chat.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
 
-        assertEquals(5, speech.size());
+        assertEquals(6, speech.size());
         assertFalse(chat.containsKey(TaiModelCatalog.PARAKEET_TDT_V3_ID));
         assertTrue(speech.containsKey(TaiModelCatalog.PARAKEET_TDT_V3_ID));
         for (TaiModelCatalog.CatalogEntry entry : speech.values()) {

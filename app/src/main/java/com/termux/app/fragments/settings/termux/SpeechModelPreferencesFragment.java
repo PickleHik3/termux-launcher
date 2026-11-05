@@ -17,6 +17,7 @@ import com.termux.ai.TaiModelStore;
 import com.termux.ai.SttAcceleratorChoices;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiReadAloud;
+import com.termux.ai.TaiSpeechGpuAdvice;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTtsModels;
 import com.termux.ai.TaiTtsVoices;
@@ -194,7 +195,9 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
                 TaiSpeechModels.windowSeconds(download.optString("path", ""))));
             card.setWindowAction(null, null);
         } else {
-            card.setStatus(null);
+            // The GPU model says how it does on this phone; no other card has a status here.
+            card.setStatus(TaiSpeechActions.isGpuModel(spec.id)
+                ? TaiSpeechActions.gpuAdviceLine(context, TaiSpeechGpuAdvice.forContext(context, spec.id), false) : null);
             card.setWindowAction(otherWindow > 0 ? getString(R.string.speech_model_action_window) : null,
                 otherWindow > 0 ? view -> TaiSpeechActions.showWindowDialog(context, spec, otherWindow, () -> refresh(context)) : null);
         }

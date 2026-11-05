@@ -211,6 +211,53 @@ public final class TaiVoiceBench {
         return withGpu ? 2 * cpu + ESTIMATE_GPU_EXTRA_MS : cpu;
     }
 
+    /** A model that only runs right on the GPU: just the GPU, whether or not the usual check offers it. */
+    @NonNull
+    public static List<String> gpuOnlyAccelerators() {
+        List<String> out = new ArrayList<>(1);
+        out.add(TaiBenchSuite.ACCELERATOR_GPU);
+        return out;
+    }
+
+    /**
+     * Whether a voice record's text is usable: complete figures, word errors below
+     * {@link #WRONG_TEXT_WER}, some text, and no clip that is one word said over and over (what a
+     * graph at the wrong precision produces).
+     */
+    public static boolean textSane(@Nullable JSONObject record) {
+        JSONObject voice = headline(record);
+        if (voice == null) return false;
+        double wer = voice.optDouble("wer", Double.NaN);
+        if (Double.isNaN(wer) || wer >= WRONG_TEXT_WER) return false;
+        JSONObject phases = record.optJSONObject("phases");
+        JSONArray clips = phases == null ? null : phases.optJSONArray("clips");
+        if (clips == null) return false;
+        boolean anyText = false;
+        for (int i = 0; i < clips.length(); i++) {
+            JSONObject clip = clips.optJSONObject(i);
+            String text = clip == null ? "" : clip.optString("text", "");
+            if (text.trim().isEmpty()) continue;
+            anyText = true;
+            if (repeatsOneWord(text)) return false;
+        }
+        return anyText;
+    }
+
+    /** Six words or more of which more than 60% are the same one. */
+    static boolean repeatsOneWord(@NonNull String text) {
+        List<String> words = words(text);
+        if (words.size() < 6) return false;
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        int most = 0;
+        for (String word : words) {
+            Integer count = counts.get(word);
+            int next = count == null ? 1 : count + 1;
+            counts.put(word, next);
+            most = Math.max(most, next);
+        }
+        return most > words.size() * 0.6;
+    }
+
     /** {@code CPU}, then {@code GPU} when offered. */
     @NonNull
     public static List<String> accelerators(boolean gpuOffered) {
