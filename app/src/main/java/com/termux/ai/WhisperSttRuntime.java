@@ -8,25 +8,18 @@ import androidx.annotation.Nullable;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.Tensor;
 
 import java.io.File;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * On-device speech-to-text on the Whisper ACFT LiteRT graphs ({@code litert-community/whisper-acft}):
- * one {@link Interpreter} with an {@code encode} signature (log-mel {@code [1, 80, frames]} →
+ * one {@link LiteRtGraph} with an {@code encode} signature (log-mel {@code [1, 80, frames]} →
  * audio features {@code [1, frames/2, 512]}) and a {@code decode} signature (features, a fixed
  * 128-slot token sequence and an additive causal mask → logits {@code [1, 128, vocab]}), run
- * through {@link Interpreter#runSignature} with inputs bound by name. The mel front end is
+ * through the graph with inputs bound by name ({@link InterpreterGraph}: the stock Interpreter). The mel front end is
  * {@link WhisperMel}, the vocabulary {@link WhisperTokenizer}, the prompt and greedy loop
  * {@link WhisperDecoder}, the language when none is given {@link WhisperLanguageDetection}, the
  * pause-based cutting {@link WhisperSegmenter}.
@@ -54,7 +47,8 @@ final class WhisperSttRuntime implements SttRuntime {
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
-    @Nullable private Interpreter interpreter;
+    private final LiteRtGraph.Loader loader;
+    @Nullable private LiteRtGraph graph;
     @Nullable private WhisperTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -68,21 +62,29 @@ final class WhisperSttRuntime implements SttRuntime {
     private String decodeTokensInput = "";
     private String decodeMaskInput = "";
     private String decodeOutput = "";
-    @Nullable private ByteBuffer melBuffer;
-    @Nullable private ByteBuffer featuresBuffer;
-    @Nullable private ByteBuffer tokensBuffer;
-    @Nullable private ByteBuffer maskBuffer;
-    @Nullable private ByteBuffer logitsBuffer;
+    @Nullable private LiteRtGraph.Tensor melTensor;
+    @Nullable private LiteRtGraph.Tensor logitsTensor;
+    @Nullable private LiteRtGraph.Tensor tokensTensor;
+    @Nullable private LiteRtGraph.Signature encodeRun;
+    @Nullable private LiteRtGraph.Signature decodeRun;
+    /** The log-mel rows laid end to end, reused for every piece. */
+    @Nullable private float[] melScratch;
 
     WhisperSttRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
+        this(residency, context, InterpreterGraph.LOADER);
+    }
+
+    /** With the graph runtime behind {@link LiteRtGraph} chosen by the caller; tests pass a fake. */
+    WhisperSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull LiteRtGraph.Loader loader) {
         this.residency = residency;
         this.appContext = context == null ? null : context.getApplicationContext();
+        this.loader = loader;
     }
 
     /** Whether {@code modelId} is the graph held right now. */
     @Override
     public synchronized boolean isLoaded(@NonNull String modelId) {
-        return interpreter != null && modelId.equals(loadedModelId);
+        return graph != null && modelId.equals(loadedModelId);
     }
 
     /** Loads the graph and tokenizer without transcribing, so a load overlaps the first words spoken. */
@@ -264,24 +266,23 @@ final class WhisperSttRuntime implements SttRuntime {
     private void ensureLoaded(@NonNull TaiModelSpec spec) throws Exception {
         File modelFile = new File(spec.localPath);
         String modelPath = modelFile.getAbsolutePath();
-        if (interpreter != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
+        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
         close();
         File tokenizerFile = tokenizerFileFor(modelFile);
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = WhisperTokenizer.fromFile(tokenizerFile);
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        // The stock LiteRT Interpreter XNNPACK path with `threads` interpreter threads.
-        Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
-        // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
+        // The same MemAvailable meter a chat load runs, across the graph's construction only
+        // (InterpreterGraph: the stock LiteRT Interpreter XNNPACK path with `threads` threads).
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
         try {
-            interpreter = new Interpreter(modelFile, options);
+            graph = loader.load(modelFile, threads);
         } finally {
             measured = meter.stop();
         }
         try {
-            bindSignatures(interpreter);
+            bindSignatures(graph);
         } catch (RuntimeException e) {
             close();
             throw e;
@@ -304,102 +305,102 @@ final class WhisperSttRuntime implements SttRuntime {
      * float tensor the audio features — never by position: the export lists them as
      * {@code (mask, audio, tokens)} in one place and {@code args_0..2} in another.
      */
-    private void bindSignatures(@NonNull Interpreter interpreter) {
+    private void bindSignatures(@NonNull LiteRtGraph graph) {
         boolean encode = false, decode = false;
-        for (String key : interpreter.getSignatureKeys()) {
+        for (String key : graph.signatureKeys()) {
             encode |= SIGNATURE_ENCODE.equals(key);
             decode |= SIGNATURE_DECODE.equals(key);
         }
-        if (!encode || !decode) throw new IllegalStateException("Graph lacks the encode/decode signatures: " + java.util.Arrays.toString(interpreter.getSignatureKeys()));
-        String[] encodeInputs = interpreter.getSignatureInputs(SIGNATURE_ENCODE);
-        String[] encodeOutputs = interpreter.getSignatureOutputs(SIGNATURE_ENCODE);
+        if (!encode || !decode) throw new IllegalStateException("Graph lacks the encode/decode signatures: " + java.util.Arrays.toString(graph.signatureKeys()));
+        String[] encodeInputs = graph.inputNames(SIGNATURE_ENCODE);
+        String[] encodeOutputs = graph.outputNames(SIGNATURE_ENCODE);
         if (encodeInputs.length != 1 || encodeOutputs.length != 1) throw new IllegalStateException("Unexpected encode signature arity");
         encodeInput = encodeInputs[0];
         encodeOutput = encodeOutputs[0];
-        int[] melShape = interpreter.getInputTensorFromSignature(encodeInput, SIGNATURE_ENCODE).shape();
+        int[] melShape = graph.input(SIGNATURE_ENCODE, encodeInput).shape;
         if (melShape.length != 3 || melShape[1] != WhisperMel.N_MELS) throw new IllegalStateException("Unexpected encode input shape " + java.util.Arrays.toString(melShape));
         frames = melShape[2];
-        Tensor featuresTensor = interpreter.getOutputTensorFromSignature(encodeOutput, SIGNATURE_ENCODE);
         decodeAudioInput = decodeTokensInput = decodeMaskInput = "";
-        for (String name : interpreter.getSignatureInputs(SIGNATURE_DECODE)) {
-            Tensor tensor = interpreter.getInputTensorFromSignature(name, SIGNATURE_DECODE);
-            if (tensor.dataType() == DataType.INT32 && tensor.numDimensions() == 2) {
+        for (String name : graph.inputNames(SIGNATURE_DECODE)) {
+            LiteRtGraph.TensorSpec tensor = graph.input(SIGNATURE_DECODE, name);
+            if (tensor.type == LiteRtGraph.ElementType.INT32 && tensor.rank() == 2) {
                 decodeTokensInput = name;
-                sequenceLength = tensor.shape()[1];
-            } else if (tensor.numDimensions() == 4) {
+                sequenceLength = tensor.shape[1];
+            } else if (tensor.rank() == 4) {
                 decodeMaskInput = name;
-            } else if (tensor.numDimensions() == 3) {
+            } else if (tensor.rank() == 3) {
                 decodeAudioInput = name;
             }
         }
         if (decodeAudioInput.isEmpty() || decodeTokensInput.isEmpty() || decodeMaskInput.isEmpty()) {
             throw new IllegalStateException("Could not identify the decode inputs by shape");
         }
-        String[] decodeOutputs = interpreter.getSignatureOutputs(SIGNATURE_DECODE);
+        String[] decodeOutputs = graph.outputNames(SIGNATURE_DECODE);
         if (decodeOutputs.length != 1) throw new IllegalStateException("Unexpected decode signature arity");
         decodeOutput = decodeOutputs[0];
-        Tensor logitsTensor = interpreter.getOutputTensorFromSignature(decodeOutput, SIGNATURE_DECODE);
-        int[] logitsShape = logitsTensor.shape();
+        int[] logitsShape = graph.output(SIGNATURE_DECODE, decodeOutput).shape;
         if (logitsShape.length != 3 || logitsShape[1] != sequenceLength) throw new IllegalStateException("Unexpected decode output shape " + java.util.Arrays.toString(logitsShape));
         vocabularySize = logitsShape[2];
-        Tensor maskTensor = interpreter.getInputTensorFromSignature(decodeMaskInput, SIGNATURE_DECODE);
-        int[] maskShape = maskTensor.shape();
+        int[] maskShape = graph.input(SIGNATURE_DECODE, decodeMaskInput).shape;
         if (maskShape[2] != sequenceLength || maskShape[3] != sequenceLength) throw new IllegalStateException("Unexpected mask shape " + java.util.Arrays.toString(maskShape));
-        // Buffers sized exactly to the tensors (TFLite compares a ByteBuffer's capacity to the
-        // tensor's bytes), allocated once and rewound before every run; the encoder's output buffer
-        // is fed straight back into the decoder without a copy. Sizes come from the static shapes,
-        // which are known before the signature's tensors are allocated.
-        melBuffer = direct(WhisperMel.N_MELS * frames * 4);
-        featuresBuffer = direct(elements(featuresTensor.shape()) * 4);
-        tokensBuffer = direct(sequenceLength * 4);
-        maskBuffer = direct(elements(maskShape) * 4);
-        logitsBuffer = direct(elements(logitsShape) * 4);
-        FloatBuffer mask = maskBuffer.asFloatBuffer();
+        // Tensors made once, sized by the graph from the static shapes, and reused for every run;
+        // the encoder's output tensor is bound straight into the decoder as its audio input,
+        // without a copy.
+        LiteRtGraph.Tensor mel = graph.newInput(SIGNATURE_ENCODE, encodeInput);
+        LiteRtGraph.Tensor features = graph.newOutput(SIGNATURE_ENCODE, encodeOutput);
+        LiteRtGraph.Tensor tokens = graph.newInput(SIGNATURE_DECODE, decodeTokensInput);
+        LiteRtGraph.Tensor mask = graph.newInput(SIGNATURE_DECODE, decodeMaskInput);
+        LiteRtGraph.Tensor logits = graph.newOutput(SIGNATURE_DECODE, decodeOutput);
+        float[] causal = new float[sequenceLength * sequenceLength];
         for (int i = 0; i < sequenceLength; i++) {
-            for (int j = 0; j < sequenceLength; j++) mask.put(j > i ? MASK_DENY : MASK_ALLOW);
+            for (int j = 0; j < sequenceLength; j++) causal[i * sequenceLength + j] = j > i ? MASK_DENY : MASK_ALLOW;
         }
+        mask.writeFloats(causal, causal.length);
+        HashMap<String, LiteRtGraph.Tensor> encodeIn = new HashMap<>();
+        encodeIn.put(encodeInput, mel);
+        HashMap<String, LiteRtGraph.Tensor> encodeOut = new HashMap<>();
+        encodeOut.put(encodeOutput, features);
+        HashMap<String, LiteRtGraph.Tensor> decodeIn = new HashMap<>();
+        decodeIn.put(decodeAudioInput, features);
+        decodeIn.put(decodeTokensInput, tokens);
+        decodeIn.put(decodeMaskInput, mask);
+        HashMap<String, LiteRtGraph.Tensor> decodeOut = new HashMap<>();
+        decodeOut.put(decodeOutput, logits);
+        encodeRun = graph.bind(SIGNATURE_ENCODE, encodeIn, encodeOut);
+        decodeRun = graph.bind(SIGNATURE_DECODE, decodeIn, decodeOut);
+        melTensor = mel;
+        tokensTensor = tokens;
+        logitsTensor = logits;
+        melScratch = new float[WhisperMel.N_MELS * frames];
     }
 
     private void encode(@NonNull float[][] mel) {
-        Interpreter runner = interpreter;
-        if (runner == null || melBuffer == null || featuresBuffer == null) throw new IllegalStateException("STT runtime is not loaded.");
-        melBuffer.rewind();
-        FloatBuffer floats = melBuffer.asFloatBuffer();
-        for (float[] row : mel) floats.put(row, 0, frames);
-        melBuffer.rewind();
-        featuresBuffer.rewind();
-        HashMap<String, Object> inputs = new HashMap<>();
-        inputs.put(encodeInput, melBuffer);
-        HashMap<String, Object> outputs = new HashMap<>();
-        outputs.put(encodeOutput, featuresBuffer);
-        runner.runSignature(inputs, outputs, SIGNATURE_ENCODE);
+        LiteRtGraph.Signature run = encodeRun;
+        LiteRtGraph.Tensor input = melTensor;
+        float[] flat = melScratch;
+        if (graph == null || run == null || input == null || flat == null) throw new IllegalStateException("STT runtime is not loaded.");
+        int at = 0;
+        for (float[] row : mel) {
+            System.arraycopy(row, 0, flat, at, frames);
+            at += frames;
+        }
+        input.writeFloats(flat, at);
+        run.run();
     }
 
     /** One decoder run over the current features; the logits at slot {@code filled − 1}. */
     @NonNull
     private float[] decodeStep(@NonNull int[] tokens, int filled) {
-        Interpreter runner = interpreter;
-        if (runner == null || featuresBuffer == null || tokensBuffer == null || maskBuffer == null || logitsBuffer == null) {
+        LiteRtGraph.Signature run = decodeRun;
+        LiteRtGraph.Tensor input = tokensTensor;
+        LiteRtGraph.Tensor output = logitsTensor;
+        if (graph == null || run == null || input == null || output == null) {
             throw new IllegalStateException("STT runtime is not loaded.");
         }
-        tokensBuffer.rewind();
-        IntBuffer ints = tokensBuffer.asIntBuffer();
-        ints.put(tokens, 0, sequenceLength);
-        tokensBuffer.rewind();
-        featuresBuffer.rewind();
-        maskBuffer.rewind();
-        logitsBuffer.rewind();
-        HashMap<String, Object> inputs = new HashMap<>();
-        inputs.put(decodeAudioInput, featuresBuffer);
-        inputs.put(decodeTokensInput, tokensBuffer);
-        inputs.put(decodeMaskInput, maskBuffer);
-        HashMap<String, Object> outputs = new HashMap<>();
-        outputs.put(decodeOutput, logitsBuffer);
-        runner.runSignature(inputs, outputs, SIGNATURE_DECODE);
+        input.writeInts(tokens, sequenceLength);
+        run.run();
         float[] logits = new float[vocabularySize];
-        logitsBuffer.position((filled - 1) * vocabularySize * 4);
-        logitsBuffer.asFloatBuffer().get(logits, 0, vocabularySize);
-        logitsBuffer.rewind();
+        output.readFloats((filled - 1) * vocabularySize, logits, vocabularySize);
         return logits;
     }
 
@@ -415,17 +416,6 @@ final class WhisperSttRuntime implements SttRuntime {
         if (dir == null) return null;
         File tokenizer = new File(dir, TOKENIZER_FILE);
         return tokenizer.isFile() && tokenizer.canRead() ? tokenizer : null;
-    }
-
-    @NonNull
-    private static ByteBuffer direct(int bytes) {
-        return ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder());
-    }
-
-    private static int elements(@NonNull int[] shape) {
-        int count = 1;
-        for (int dim : shape) count *= Math.max(1, dim);
-        return count;
     }
 
     @NonNull
@@ -448,15 +438,17 @@ final class WhisperSttRuntime implements SttRuntime {
 
     @Override
     public synchronized void close() {
-        if (interpreter != null) {
-            interpreter.close();
-            interpreter = null;
+        if (graph != null) {
+            graph.close();
+            graph = null;
         }
         tokenizer = null;
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.STT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
-        melBuffer = featuresBuffer = tokensBuffer = maskBuffer = logitsBuffer = null;
+        melTensor = tokensTensor = logitsTensor = null;
+        encodeRun = decodeRun = null;
+        melScratch = null;
         frames = sequenceLength = vocabularySize = 0;
     }
 }
