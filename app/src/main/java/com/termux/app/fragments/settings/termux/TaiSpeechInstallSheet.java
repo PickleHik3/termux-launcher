@@ -80,44 +80,37 @@ final class TaiSpeechInstallSheet {
         };
 
         content.addView(label(context, R.string.speech_model_size_label));
-        TaiSegmentedTabs size = tabs(context);
-        size.setLabels(context.getString(R.string.tai_centre_sheet_size_base, estimate("whisper-acft-base")),
-            context.getString(R.string.tai_centre_sheet_size_small, estimate("whisper-acft-small")),
-            context.getString(R.string.tai_centre_sheet_size_gpu, estimate(TaiModelCatalog.WHISPER_BASE_GPU_ID)));
-        size.select(gpu[0] ? 2 : small[0] ? 1 : 0, false);
-        size.setOnSegmentSelectedListener(index -> {
-            gpu[0] = index == 2;
-            small[0] = index == 1;
-            refresh.run();
-        });
-        content.addView(size, tabParams(density));
+        content.addView(TaiSheetPill.create(context, new CharSequence[]{TaiSheetPill.twoLine(context.getString(R.string.tai_centre_sheet_size_base, estimate("whisper-acft-base"))),
+            TaiSheetPill.twoLine(context.getString(R.string.tai_centre_sheet_size_small, estimate("whisper-acft-small"))),
+            TaiSheetPill.twoLine(context.getString(R.string.tai_centre_sheet_size_gpu, estimate(TaiModelCatalog.WHISPER_BASE_GPU_ID)))},
+            gpu[0] ? 2 : small[0] ? 1 : 0, index -> {
+                gpu[0] = index == 2;
+                small[0] = index == 1;
+                refresh.run();
+            }), tabParams(density));
         content.addView(sizeHint);
 
         TextView languageLabel = label(context, R.string.speech_model_language_label);
         content.addView(languageLabel);
         cpuOnlyViews.add(languageLabel);
-        TaiSegmentedTabs language = tabs(context);
-        language.setLabels(context.getString(R.string.tai_centre_sheet_language_english),
-            context.getString(R.string.tai_centre_sheet_language_many));
-        language.select(english[0] ? 0 : 1, false);
-        language.setOnSegmentSelectedListener(index -> {
-            english[0] = index == 0;
-            refresh.run();
-        });
+        View language = TaiSheetPill.create(context, new CharSequence[]{
+            context.getString(R.string.tai_centre_sheet_language_english),
+            context.getString(R.string.tai_centre_sheet_language_many)}, english[0] ? 0 : 1, index -> {
+                english[0] = index == 0;
+                refresh.run();
+            });
         content.addView(language, tabParams(density));
         cpuOnlyViews.add(language);
 
         TextView windowLabel = label(context, R.string.speech_model_window_label);
         content.addView(windowLabel);
         cpuOnlyViews.add(windowLabel);
-        TaiSegmentedTabs windows = tabs(context);
-        windows.setLabels(context.getString(R.string.tai_centre_sheet_window_10),
-            context.getString(R.string.tai_centre_sheet_window_5));
-        windows.select(window[0] == 5 ? 1 : 0, false);
-        windows.setOnSegmentSelectedListener(index -> {
-            window[0] = index == 1 ? 5 : 10;
-            refresh.run();
-        });
+        View windows = TaiSheetPill.create(context, new CharSequence[]{
+            context.getString(R.string.tai_centre_sheet_window_10),
+            context.getString(R.string.tai_centre_sheet_window_5)}, window[0] == 5 ? 1 : 0, index -> {
+                window[0] = index == 1 ? 5 : 10;
+                refresh.run();
+            });
         content.addView(windows, tabParams(density));
         content.addView(windowHint);
         cpuOnlyViews.add(windows);
@@ -147,11 +140,6 @@ final class TaiSpeechInstallSheet {
         if (entry == null) return "?";
         return entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
             ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
-    }
-
-    @NonNull
-    private static TaiSegmentedTabs tabs(@NonNull Context context) {
-        return new TaiSegmentedTabs(context);
     }
 
     @NonNull
