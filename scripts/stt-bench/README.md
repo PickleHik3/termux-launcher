@@ -57,10 +57,10 @@ accelerator/path name printed on every line (a label you choose: it is not detec
 `cpu-compiledmodel`, `gpu`, ...), `--language en` for Whisper (default: the app's auto-detect),
 `--interval-ms 200` battery sampling period. Either model flag may be left out.
 
-`--accel interp|cpu|gpu|auto` picks where Whisper runs: `interp` (the default) is the stock
+`--accel interp|cpu|gpu|auto` picks where Whisper and Parakeet run: `interp` (the default) is the stock
 Interpreter with XNNPACK, the path before CompiledModel; `cpu` and `gpu` are LiteRT's CompiledModel
 on that accelerator; `auto` tries the GPU and falls back to the CPU as the app does (the bench
-remembers nothing between runs). Parakeet always runs on the Interpreter for now. `STTBENCH_LOAD`
+remembers nothing between runs). `STTBENCH_LOAD`
 prints the accelerator actually used (`accel=`), why it is not the GPU when the GPU was asked for
 (`fallback=`), whether logits are read as one row per token (`sliceReads=true`) or as the whole
 tensor, and how many inputs needed a copy of their own (`copiedBindings=`). Keep `--path` matching:

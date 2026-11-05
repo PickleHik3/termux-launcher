@@ -34,7 +34,10 @@ import java.util.Map;
  *       may want a different buffer type there): {@link #bind} shares the tensor when the input's
  *       requirements list the output buffer's type and size, and otherwise gives that input a
  *       buffer of its own, copied from the shared tensor only after the tensor has changed
- *       ({@link #copiedBindings()} counts them).</li>
+ *       ({@link #copiedBindings()} counts them). An output bound into a signature it was not
+ *       made for (Parakeet's LSTM state, written by both decoders) is checked the same way: when
+ *       it does not fit, that signature writes a buffer of its own, copied into the shared
+ *       tensor after each run.</li>
  * </ul>
  */
 final class CompiledModelGraph implements LiteRtGraph {
@@ -203,13 +206,33 @@ final class CompiledModelGraph implements LiteRtGraph {
         }
         HashMap<String, TensorBuffer> out = new HashMap<>();
         Buffer[] written = new Buffer[outputs.size()];
+        List<Buffer> outTwins = new ArrayList<>();
+        List<Buffer> outTargets = new ArrayList<>();
         int i = 0;
         for (Map.Entry<String, LiteRtGraph.Tensor> entry : outputs.entrySet()) {
             Buffer buffer = (Buffer) entry.getValue();
-            out.put(entry.getKey(), buffer.buffer);
-            written[i++] = buffer;
+            TensorBufferRequirements wanted;
+            try {
+                wanted = compiled.getOutputBufferRequirements(entry.getKey(), signature);
+            } catch (LiteRtException e) {
+                throw unchecked(e);
+            }
+            if (fits(buffer.requirements, wanted)) {
+                out.put(entry.getKey(), buffer.buffer);
+                written[i++] = buffer;
+            } else {
+                // The shared tensor was made for another signature's output and does not fit this
+                // one: this signature writes a buffer of its own, copied into the shared tensor after each run.
+                Buffer twin = (Buffer) newOutput(signature, entry.getKey());
+                out.put(entry.getKey(), twin.buffer);
+                written[i++] = twin;
+                outTwins.add(twin);
+                outTargets.add(buffer);
+                copiedBindings++;
+            }
         }
-        return new Bound(signature, in, out, sources.toArray(new Buffer[0]), twins.toArray(new Buffer[0]), written);
+        return new Bound(signature, in, out, sources.toArray(new Buffer[0]), twins.toArray(new Buffer[0]), written,
+            outTwins.toArray(new Buffer[0]), outTargets.toArray(new Buffer[0]));
     }
 
     /**
@@ -381,9 +404,15 @@ final class CompiledModelGraph implements LiteRtGraph {
         final Buffer[] twins;
         final long[] copiedAt;
         final Buffer[] written;
+        /** Output buffers of this signature's own, and the shared tensors they are copied into after a run. */
+        final Buffer[] outTwins;
+        final Buffer[] outTargets;
 
         Bound(@NonNull String key, @NonNull Map<String, TensorBuffer> inputs, @NonNull Map<String, TensorBuffer> outputs,
-              @NonNull Buffer[] sources, @NonNull Buffer[] twins, @NonNull Buffer[] written) {
+              @NonNull Buffer[] sources, @NonNull Buffer[] twins, @NonNull Buffer[] written,
+              @NonNull Buffer[] outTwins, @NonNull Buffer[] outTargets) {
+            this.outTwins = outTwins;
+            this.outTargets = outTargets;
             this.key = key;
             this.inputs = inputs;
             this.outputs = outputs;
@@ -408,6 +437,7 @@ final class CompiledModelGraph implements LiteRtGraph {
                 throw unchecked(e);
             }
             for (Buffer buffer : written) buffer.version++;
+            for (int i = 0; i < outTwins.length; i++) outTargets[i].copyFrom(outTwins[i]);
         }
     }
 }
