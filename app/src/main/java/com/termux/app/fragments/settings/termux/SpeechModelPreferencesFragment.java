@@ -358,7 +358,8 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         List<String> shownValues = new java.util.ArrayList<>();
         for (int i = 0; i < values.length && i < labels.length; i++) {
             if (!offered.contains(values[i])) continue;
-            shownLabels.add(labels[i]);
+            // The choice says what GPU trades: on the phones measured it saves battery but is slower.
+            shownLabels.add("gpu".equals(values[i]) ? getString(R.string.speech_model_accelerator_gpu_choice) : labels[i]);
             shownValues.add(values[i]);
         }
         int checked = Math.max(0, shownValues.indexOf(settings.getSttAccelerator()));
