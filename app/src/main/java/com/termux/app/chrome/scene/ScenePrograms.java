@@ -22,7 +22,34 @@ final class ScenePrograms {
         @NonNull SceneProgram create(float scale);
     }
 
+    /** The debug override of the render scale: {@code 1} or {@code 0.5}; unset follows {@link #renderScale}. */
+    static final String PROP_SCALE = "debug.tl.scene_scale";
+
     private ScenePrograms() {}
+
+    /**
+     * Pixels per screen pixel, each way, that a kind's surface buffer is drawn at: the soft scenes
+     * (Aurora, Nebula Drift, Fractal Bloom) at half, thin lines and crisp points at full.
+     */
+    static float renderScale(String kind) {
+        if (NEBULA.equals(kind) || BLOOM.equals(kind) || AURORA.equals(kind)) return 0.5f;
+        return 1f;
+    }
+
+    /** The scale to use for {@code kind} given the {@link #PROP_SCALE} value: {@code 1} or {@code 0.5} win, anything else is the kind's own. */
+    static float resolveScale(String kind, String override) {
+        if (override != null) {
+            String v = override.trim();
+            if ("1".equals(v) || "1.0".equals(v)) return 1f;
+            if ("0.5".equals(v) || ".5".equals(v)) return 0.5f;
+        }
+        return renderScale(kind);
+    }
+
+    /** A buffer edge for a view edge of {@code px} at {@code scale}: rounded, at least 1. */
+    static int bufferSize(int px, float scale) {
+        return Math.max(1, Math.round(px * scale));
+    }
 
     /** Whether {@code value} names a scene. */
     static boolean isKind(String value) {

@@ -117,6 +117,10 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private volatile int mRestartGen;
     /** Battery saver or severe heat: no ambient motion, the t = 0 frame held. */
     private volatile boolean mPowerHold;
+    private static final com.termux.terminal.DebugChoice RENDER_SCALE = new com.termux.terminal.DebugChoice(
+        ScenePrograms.PROP_SCALE, "", com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
+    /** The surface buffer size last asked for (main thread); 0 while the buffer follows the layout. */
+    private int mBufW, mBufH;
     private static final com.termux.terminal.DebugChoice GLASS_DIV = new com.termux.terminal.DebugChoice(
         SceneFramePolicy.PROP_GLASS_DIV, Integer.toString(SceneFramePolicy.DEFAULT_GLASS_DIV),
         com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
@@ -152,6 +156,30 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         // the window, which the display composites over it.
         getHolder().addCallback(this);
         addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> publishRect());
+    }
+
+    /**
+     * Sizes the surface buffer at the kind's render scale (see {@link ScenePrograms#renderScale}): a
+     * soft scene draws a quarter of the pixels and SurfaceFlinger scales the buffer up to the view.
+     * The view, its rect and the glass pass keep the screen size.
+     */
+    private void applyBufferSize() {
+        int w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return;
+        float scale = ScenePrograms.resolveScale(mKind, RENDER_SCALE.get(SystemClock.uptimeMillis()));
+        int bw = scale >= 1f ? 0 : ScenePrograms.bufferSize(w, scale);
+        int bh = scale >= 1f ? 0 : ScenePrograms.bufferSize(h, scale);
+        if (bw == mBufW && bh == mBufH) return;
+        mBufW = bw;
+        mBufH = bh;
+        if (bw == 0) getHolder().setSizeFromLayout();
+        else getHolder().setFixedSize(bw, bh);
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        applyBufferSize();
     }
 
     /** Tells the glass where on screen the live frame lies: this layer's rect. */
@@ -315,6 +343,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private void poll() {
         // mPolling stays set while this runs, so updateRun() does not post a second poll loop.
         refreshGates(SystemClock.uptimeMillis());
+        applyBufferSize();
         updateRun();
         if (!mRun) {
             mPolling = false;
@@ -365,7 +394,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @Nullable private HardwareRenderer mRenderer;
         @Nullable private SceneProgram mProgram;
         @Nullable private SceneLowRes mLowRes;
-        private int mSurfaceW, mSurfaceH;
+        /** The buffer's size (what the program draws at) and the view's (the screen: what the glass pass is sized from). */
+        private int mSurfaceW, mSurfaceH, mViewW, mViewH;
         private boolean mSurfaceReady;
         /** The surface has no frame of ours yet (new or resized): draw once even when ambient is off. */
         private boolean mSurfaceBlank;
@@ -512,7 +542,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         }
 
         private void renderLowRes(long nowMs) {
-            int w = mSurfaceW, h = mSurfaceH;
+            int w = mViewW, h = mViewH;
             if (w <= 0 || h <= 0) return;
             SceneLowRes low = mLowRes;
             int div = SceneFramePolicy.parseGlassDiv(GLASS_DIV.get(nowMs));
@@ -587,11 +617,13 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             start();
         }
 
-        void resize(int width, int height) {
+        void resize(int width, int height, int viewWidth, int viewHeight) {
             Trace.beginSection("Scene.surface");
             try {
                 mSurfaceW = width;
                 mSurfaceH = height;
+                mViewW = viewWidth > 0 ? viewWidth : width;
+                mViewH = viewHeight > 0 ? viewHeight : height;
                 mNode.setPosition(0, 0, width, height);
                 mSurfaceBlank = true;
                 closeLowRes();
@@ -671,7 +703,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         Loop loop = mLoop;
         if (loop == null) return;
         publishRect();
-        loop.handler.post(() -> loop.resize(width, height));
+        final int viewW = getWidth(), viewH = getHeight();
+        loop.handler.post(() -> loop.resize(width, height, viewW, viewH));
         updateRun();
     }
 
