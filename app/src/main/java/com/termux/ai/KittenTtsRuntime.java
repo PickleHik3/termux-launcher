@@ -46,9 +46,9 @@ import java.util.Map;
  * {@code allocateTensors}; outputs are read from the tensors after the run, since the waveform's
  * shape only exists once the vocoder has run.
  *
- * <p>Runs on the CPU through {@link TaiXnnpackDelegate} ({@code min(4, cores)} threads), with the
- * stock interpreter as a fallback: if a delegated run ever fails for anything but a cancellation,
- * the graphs are reloaded without the delegate and the sentence retried once. Locking and residency
+ * <p>Runs on the CPU through the stock Interpreter XNNPACK path ({@code min(4, cores)} threads), with the
+ * plain interpreter as a fallback: if an XNNPACK run ever fails for anything but a cancellation,
+ * the graphs are reloaded with XNNPACK off and the sentence retried once. Locking and residency
  * follow {@link ParakeetSttRuntime}: synthesize, warm and close serialise on this object's monitor;
  * {@link #interrupt} does not take it, so a stop reaches a running graph.
  */
@@ -482,7 +482,7 @@ final class KittenTtsRuntime implements TtsRuntime {
     }
 
     /**
-     * One graph: its interpreter, its delegate, its inputs by canonical name (so
+     * One graph: its interpreter, its inputs by canonical name (so
      * {@code serving_default_style:0} and the vocoder's plain {@code style} are both "style"), and
      * one grow-only direct buffer per input handed out as an exactly-sized slice — the interpreter
      * insists an input buffer's capacity equals the tensor's byte size, and a fresh buffer per
@@ -490,16 +490,14 @@ final class KittenTtsRuntime implements TtsRuntime {
      */
     private static final class Graph {
         private final Interpreter interpreter;
-        @Nullable private final TaiXnnpackDelegate delegate;
         private final String[] inputNames;
         private final String[] outputNames;
         private final ByteBuffer[] backing;
         private final ByteBuffer[] slices;
         private volatile boolean closed;
 
-        private Graph(@NonNull Interpreter interpreter, @Nullable TaiXnnpackDelegate delegate) {
+        private Graph(@NonNull Interpreter interpreter) {
             this.interpreter = interpreter;
-            this.delegate = delegate;
             int inputs = interpreter.getInputTensorCount();
             inputNames = new String[inputs];
             for (int i = 0; i < inputs; i++) inputNames[i] = canonical(interpreter.getInputTensor(i).name());
@@ -513,14 +511,11 @@ final class KittenTtsRuntime implements TtsRuntime {
         @NonNull
         static Graph open(@NonNull File file, int threads, boolean useDelegate) throws IOException {
             if (!file.isFile()) throw new IOException("Missing " + file.getName());
-            TaiXnnpackDelegate delegate = useDelegate ? TaiXnnpackDelegate.create(threads) : null;
-            Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setCancellable(true);
-            if (delegate != null) options.setUseXNNPACK(false).addDelegate(delegate);
-            else options.setUseXNNPACK(useDelegate);
+            Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setCancellable(true)
+                .setUseXNNPACK(useDelegate);
             try {
-                return new Graph(new Interpreter(file, options), delegate);
+                return new Graph(new Interpreter(file, options));
             } catch (RuntimeException e) {
-                if (delegate != null) delegate.close();
                 throw new IOException(file.getName() + ": " + e.getMessage(), e);
             }
         }
@@ -639,7 +634,6 @@ final class KittenTtsRuntime implements TtsRuntime {
         void close() {
             closed = true;
             interpreter.close();
-            if (delegate != null) delegate.close();
         }
 
         @NonNull

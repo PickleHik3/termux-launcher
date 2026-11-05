@@ -28,8 +28,8 @@ import java.util.Map;
  * new instance starts from zeros.
  *
  * <p>One interpreter thread with the stock XNNPACK path: a chunk is about 0.7 M multiply-adds, far
- * too little for a thread pool to pay for itself, so the {@code TaiXnnpackDelegate} the speech
- * models use for their worker threads buys nothing here. All buffers are allocated once; a chunk
+ * too little for a thread pool to pay for itself, so the extra threads the speech
+ * models use buy nothing here. All buffers are allocated once; a chunk
  * run allocates nothing on the Java side.
  */
 final class SileroVad implements SileroVoiceDecider.ProbabilitySource {
