@@ -4822,7 +4822,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /** Corners: one radius for every surface and the terminal, on both halves. */
     /** The Home tab's dim of the editor's page: its own override, else the wall-wide dim. */
     private com.termux.app.look.PageLook.Scope wallpaperDimScope() {
         return mScopePageId < 0 ? com.termux.app.look.PageLook.Scope.GLOBAL
@@ -4845,6 +4844,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncDirty();
     }
 
+    /** Corners: one radius for every surface and the terminal, on both halves. */
     private void writeCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
