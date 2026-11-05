@@ -240,6 +240,58 @@ final class TaiBenchViews {
         return accelerator.toUpperCase(Locale.ROOT);
     }
 
+    // ---- voice ----
+
+    /** "4.2× real time"; "—" with nothing measured. One decimal under 10, whole numbers above. */
+    @NonNull
+    static String realtime(@NonNull Context context, double value) {
+        if (Double.isNaN(value) || value <= 0.0) return context.getString(R.string.tai_bench_none);
+        return context.getString(R.string.tai_bench_voice_realtime, value >= 10.0 ? String.format(Locale.US, "%.0f", value)
+            : String.format(Locale.US, "%.1f", value));
+    }
+
+    /** "3% word errors"; one decimal under 10%; "—" when unmeasured. */
+    @NonNull
+    static String wordErrors(@NonNull Context context, double wer) {
+        if (Double.isNaN(wer) || wer < 0.0) return context.getString(R.string.tai_bench_none);
+        double percent = wer * 100.0;
+        return context.getString(R.string.tai_bench_voice_wer, percent >= 10.0 || percent == 0.0
+            ? String.format(Locale.US, "%.0f", percent) : String.format(Locale.US, "%.1f", percent));
+    }
+
+    /** A voice result's numbers: "4.2× real time · 3% word errors · loads in 0.9 s". */
+    @NonNull
+    static String voiceSummaryLine(@NonNull Context context, double realtime, double wer, long loadMs) {
+        StringBuilder line = new StringBuilder();
+        if (realtime > 0.0) line.append(realtime(context, realtime));
+        if (!Double.isNaN(wer)) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(wordErrors(context, wer));
+        }
+        if (loadMs > 0L) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(context.getString(R.string.tai_bench_voice_loads, millis(context, loadMs)));
+        }
+        return line.toString();
+    }
+
+    /** "Whisper" or "Parakeet" for a voice record's engine. */
+    @NonNull
+    static String engineLabel(@NonNull String engine) {
+        return com.termux.ai.TaiVoiceBench.ENGINE_PARAKEET.equals(engine) ? "Parakeet" : "Whisper";
+    }
+
+    /** A clip's plain name: "JFK, 11 s". */
+    @NonNull
+    static String clipName(@NonNull Context context, @NonNull String clipId) {
+        switch (clipId) {
+            case "jfk-3s": return context.getString(R.string.tai_bench_voice_clip_jfk_short);
+            case "jfk-11s": return context.getString(R.string.tai_bench_voice_clip_jfk);
+            case "bush-45s": return context.getString(R.string.tai_bench_voice_clip_bush);
+            default: return clipId;
+        }
+    }
+
     /** "21.3 tok/s"; "—" with nothing measured. */
     @NonNull
     static String tps(@NonNull Context context, double value) {
@@ -385,6 +437,7 @@ final class TaiBenchViews {
             case TaiBenchSuite.PHASE_LONG_INPUT: return context.getString(R.string.tai_bench_phase_long_input);
             case TaiBenchSuite.PHASE_CHECK: return context.getString(R.string.tai_bench_phase_check);
             case TaiFeatureCheckRunner.PHASE_FEATURE: return context.getString(R.string.tai_check_phase_feature);
+            case com.termux.ai.TaiVoiceBench.PHASE_VOICE: return context.getString(R.string.tai_bench_phase_voice);
             default: return phase;
         }
     }
@@ -392,6 +445,7 @@ final class TaiBenchViews {
     /** "Test 1 of 3: Chat" for the three tests; the load and warm-up have their own words. */
     @NonNull
     static String testLabel(@NonNull Context context, @Nullable String phase) {
+        if (com.termux.ai.TaiVoiceBench.PHASE_VOICE.equals(phase)) return context.getString(R.string.tai_bench_test_voice);
         int number = TaiBenchRunState.testNumber(phase);
         if (number == 0) {
             return context.getString(TaiBenchSuite.PHASE_WARMUP.equals(phase) ? R.string.tai_bench_test_warmup : R.string.tai_bench_test_loading);

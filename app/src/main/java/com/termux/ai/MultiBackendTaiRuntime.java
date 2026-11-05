@@ -371,6 +371,12 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return sttFor(model).warm(model);
     }
 
+    /** Closes both speech engines (each waits for a transcription in progress), so the next load is cold. */
+    public void closeStt() {
+        whisperStt.close();
+        parakeetStt.close();
+    }
+
     /**
      * Speech output for a {@code text_to_speech} model, sentence by sentence into {@code sink}. No
      * router lock, like {@link #transcribe}: the TTS runtime serialises on its own monitor, and

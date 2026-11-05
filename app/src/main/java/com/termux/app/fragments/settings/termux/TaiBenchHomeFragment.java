@@ -27,6 +27,7 @@ import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.ai.MnnTaiRuntime;
 import com.termux.ai.TaiBenchGuardRules;
+import com.termux.ai.TaiBenchStats;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDeviceConditions;
 import com.termux.ai.TaiFeatureCheck;
@@ -70,6 +71,10 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private static final int TYPE_NOTE = 5;
     private static final int TYPE_EMPTY = 6;
     private static final int TYPE_FEATURES = 7;
+    private static final int TYPE_KIND = 8;
+    private static final String STATE_VOICE = "tai_bench_voice";
+    /** The Text / Voice choice last made, for the next time the screen opens in this process. */
+    private static volatile boolean lastVoice;
     /** The initial place that opens the Check sheet for one feature: {@code check:<feature id>}. */
     static final String PLACE_CHECK = "check:";
 
@@ -122,6 +127,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     });
     private final TaiBenchListAdapter adapter = new TaiBenchListAdapter(this);
     @Nullable private TaiBenchLeaderboard.Board board;
+    @Nullable private TaiBenchLeaderboard.Board voiceBoard;
+    /** The Text / Voice choice at the top: which models the board, the history and "Run a benchmark" are about. */
+    private boolean voice = lastVoice;
     @Nullable private DeviceFacts facts;
     @Nullable private View bar;
     private int lastSeenEntries = -1;
@@ -165,6 +173,17 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         }
     }
 
+    /** Opens Choose for a voice run with only {@code modelId} selected; the Run screen while a run is going. */
+    public static void openVoice(@Nullable Activity activity, @NonNull String modelId) {
+        if (!(activity instanceof SettingsActivity)) return;
+        if (TaiBenchSession.get().isActive()) {
+            ((SettingsActivity) activity).openScreen(TaiBenchRunFragment.class, R.string.tai_bench_run_title, null);
+            return;
+        }
+        ((SettingsActivity) activity).openScreen(TaiBenchChooseFragment.class, R.string.tai_bench_choose_title,
+            TaiBenchChooseFragment.voiceArguments(modelId));
+    }
+
     /** Opens the benchmark's Home with the Check sheet up for {@code feature}: the Model Centre's one-time offer. */
     public static void openFeatureCheck(@Nullable Activity activity, @NonNull TaiFunction feature) {
         if (activity == null) return;
@@ -182,7 +201,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     /** The versions this build is, for the "older version" mark. */
     @NonNull
     static TaiBenchLeaderboard.Versions versions() {
-        return new TaiBenchLeaderboard.Versions(BuildConfig.VERSION_NAME, BuildConfig.LITERT_LM_VERSION, MnnTaiRuntime.RUNTIME_VERSION);
+        return new TaiBenchLeaderboard.Versions(BuildConfig.VERSION_NAME, BuildConfig.LITERT_LM_VERSION, MnnTaiRuntime.RUNTIME_VERSION,
+            BuildConfig.LITERT_VERSION);
     }
 
     @Override
@@ -191,6 +211,14 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         Bundle arguments = getArguments();
         String place = arguments == null || savedInstanceState != null ? null : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
         if (place != null && place.startsWith(PLACE_CHECK)) pendingCheck = TaiFunction.fromId(place.substring(PLACE_CHECK.length()));
+        if (pendingCheck != null) voice = false;
+        if (savedInstanceState != null) voice = savedInstanceState.getBoolean(STATE_VOICE, voice);
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(STATE_VOICE, voice);
     }
 
     @Nullable
@@ -274,16 +302,21 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         Context app = context.getApplicationContext();
         executor.execute(() -> {
             TaiBenchLeaderboard.Board loaded = null;
+            TaiBenchLeaderboard.Board loadedVoice = null;
             try {
-                loaded = TaiBenchLeaderboard.read(TaiManager.getInstance(app).benchmarks(), versions());
+                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                loaded = TaiBenchLeaderboard.read(benchmarks, versions());
+                loadedVoice = TaiBenchLeaderboard.read(benchmarks, versions(), true);
             } catch (JSONException | RuntimeException ignored) {
             }
+            TaiBenchLeaderboard.Board finalVoice = loadedVoice;
             DeviceFacts gathered = gather(app);
             List<FeatureRow> rows = gatherFeatures(app);
             TaiBenchLeaderboard.Board finalBoard = loaded;
             handler.post(() -> {
                 if (!isAdded()) return;
                 if (finalBoard != null) board = finalBoard;
+                if (finalVoice != null) voiceBoard = finalVoice;
                 facts = gathered;
                 features = rows;
                 rebuild();
@@ -390,7 +423,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             String text = getString(R.string.tai_bench_banner_running, state.entries.size(), Math.max(state.entries.size(), state.planned.size()));
             items.add(new TaiBenchListAdapter.Item(TYPE_BANNER, "running", text, text));
         }
-        if (!features.isEmpty()) {
+        items.add(new TaiBenchListAdapter.Item(TYPE_KIND, "kind", "kind|" + voice, voice));
+        // Your features are the text models' checks; the voice board stands on its own.
+        if (!voice && !features.isEmpty()) {
             StringBuilder signature = new StringBuilder().append(session.isActive());
             for (FeatureRow row : features) signature.append('|').append(row.signature());
             items.add(new TaiBenchListAdapter.Item(TYPE_FEATURES, "features", signature.toString(), features));
@@ -399,7 +434,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         String deviceSignature = d == null ? "" : d.soc + '|' + d.gpu + '|' + d.ramClassBytes + '|' + d.freeRamBytes + '|' + d.freeStorageBytes
             + '|' + d.batteryPercent + '|' + d.charging + '|' + d.thermalStatus;
         items.add(new TaiBenchListAdapter.Item(TYPE_DEVICE, "device", deviceSignature, d));
-        TaiBenchLeaderboard.Board b = board;
+        TaiBenchLeaderboard.Board b = voice ? voiceBoard : board;
         if (b == null || b.empty()) {
             items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty", b == null ? "loading" : "empty", b == null));
         } else {
@@ -407,7 +442,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
                 items.add(new TaiBenchListAdapter.Item(TYPE_ROW, row.key, rowSignature(row), row));
             }
             if (!b.broken.isEmpty()) {
-                String header = getString(R.string.tai_bench_broken_header);
+                String header = getString(voice ? R.string.tai_bench_voice_apart_header : R.string.tai_bench_broken_header);
                 items.add(new TaiBenchListAdapter.Item(TYPE_SECTION, "broken", header, header));
                 for (TaiBenchLeaderboard.Row row : b.broken) {
                     items.add(new TaiBenchListAdapter.Item(TYPE_ROW, row.key, rowSignature(row), row));
@@ -419,8 +454,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             }
         }
         String lastRun = b == null || b.lastRunMs <= 0L ? "" : getString(R.string.tai_bench_last_run, TaiBenchViews.ago(b.lastRunMs));
-        boolean featuresArrive = !features.isEmpty() && !featuresShown;
-        featuresShown = !features.isEmpty();
+        boolean featuresArrive = !voice && !features.isEmpty() && !featuresShown;
+        featuresShown = !voice && !features.isEmpty();
         // The list keeps its first row in place across an insert, so a card arriving above it
         // would sit off screen until the user pulls down: when the list rests at the top, stay there.
         boolean atTop = featuresArrive && restsAtTop();
@@ -451,6 +486,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_NOTE: return createNote(context);
             case TYPE_FEATURES: return createFeatures(context);
+            case TYPE_KIND: return createKind(context);
             default: return createEmpty(context);
         }
     }
@@ -464,6 +500,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_SECTION: bindSection(view, (String) item.data); break;
             case TYPE_NOTE: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
             case TYPE_FEATURES: bindFeatures(view, features); break;
+            case TYPE_KIND: bindKind(view); break;
             default: bindEmpty(view, Boolean.TRUE.equals(item.data)); break;
         }
     }
@@ -591,7 +628,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         rank.setText(row.rank > 0 ? row.rank + "." : "");
         rank.setVisibility(row.rank > 0 ? View.VISIBLE : View.GONE);
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(row.displayName);
-        StringBuilder sub = new StringBuilder(TaiBenchViews.backendLabel(context, row.backend))
+        StringBuilder sub = new StringBuilder(row.voice ? TaiBenchViews.engineLabel(row.engine) : TaiBenchViews.backendLabel(context, row.backend))
             .append(" · ").append(TaiBenchViews.processorLabel(row.accelerator));
         if (row.speculative) sub.append(" · ").append(getString(R.string.tai_bench_mark_draft));
         sub.append(" · ").append(TaiBenchViews.ago(row.timestamp));
@@ -605,19 +642,24 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (row.screenOff) addMark(marks, getString(R.string.tai_bench_mark_screen_off), TaiModelCentreRows.Tone.WARN);
         if (row.olderVersion) addMark(marks, getString(R.string.tai_bench_mark_older_version), TaiModelCentreRows.Tone.NEUTRAL);
         if (!row.installed) addMark(marks, getString(R.string.tai_bench_mark_not_installed), TaiModelCentreRows.Tone.NEUTRAL);
+        if (row.gpuFallback) addMark(marks, getString(R.string.tai_bench_voice_fell_back), TaiModelCentreRows.Tone.WARN);
         marks.setVisibility(marks.getChildCount() == 0 ? View.GONE : View.VISIBLE);
         TextView numbers = view.findViewById(R.id.tai_bench_numbers);
-        numbers.setText(row.crashed ? "" : TaiBenchViews.summaryLine(context, row.decodeTps, row.ttftMs, row.readMs));
+        numbers.setText(row.crashed ? "" : row.voice ? TaiBenchViews.voiceSummaryLine(context, row.realtime, row.wer, row.loadMs)
+            : TaiBenchViews.summaryLine(context, row.decodeTps, row.ttftMs, row.readMs));
         numbers.setVisibility(row.crashed ? View.GONE : View.VISIBLE);
         TextView memory = view.findViewById(R.id.tai_bench_figure);
-        String memoryText = TaiBenchViews.memoryLine(context, row.memBytes);
+        String memoryText = row.voice ? "" : TaiBenchViews.memoryLine(context, row.memBytes);
         memory.setText(memoryText);
         memory.setVisibility(memoryText.isEmpty() ? View.GONE : View.VISIBLE);
         TextView verdict = view.findViewById(R.id.tai_bench_verdict);
-        String label = TaiBenchViews.verdictLabel(context, row.verdict);
+        // A voice row has no verdict word; text it got wrong says so instead.
+        String shown = row.voice ? (row.crashed ? TaiBenchStats.VERDICT_CRASHED : row.wrongText ? TaiBenchStats.VERDICT_BROKEN : "") : row.verdict;
+        String label = row.voice && row.wrongText && !row.crashed ? getString(R.string.tai_bench_voice_wrong_text)
+            : TaiBenchViews.verdictLabel(context, shown);
         verdict.setText(label);
         verdict.setVisibility(label.isEmpty() ? View.GONE : View.VISIBLE);
-        TaiModelCentreAdapter.tonePill(verdict, TaiBenchViews.verdictTone(row.verdict));
+        TaiModelCentreAdapter.tonePill(verdict, TaiBenchViews.verdictTone(shown));
         View core = ((ViewGroup) ((ViewGroup) view).getChildAt(0)).getChildAt(0);
         core.setOnClickListener(v -> openResult(row.key));
         core.setContentDescription(getString(R.string.tai_bench_row_desc, row.displayName));
@@ -660,7 +702,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private void bindEmpty(@NonNull View view, boolean loading) {
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(loading ? "" : getString(R.string.tai_bench_empty_title));
         ((TextView) view.findViewById(R.id.tai_bench_text)).setText(loading ? getString(R.string.tai_bench_loading)
-            : getString(R.string.tai_bench_empty_summary));
+            : getString(voice ? R.string.tai_bench_voice_empty_summary : R.string.tai_bench_empty_summary));
     }
 
     /** True when the list shows its first row from its top edge, i.e. the user has not scrolled. */
@@ -673,6 +715,34 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (first == RecyclerView.NO_POSITION) return true;
         View child = manager.findViewByPosition(first);
         return first == 0 && child != null && child.getTop() >= list.getPaddingTop();
+    }
+
+    // ---- text or voice ----
+
+    @NonNull
+    private View createKind(@NonNull Context context) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 12), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 2));
+        TaiSegmentedTabs tabs = new TaiSegmentedTabs(context);
+        tabs.setId(R.id.tai_bench_tabs);
+        tabs.setContentDescription(getString(R.string.tai_bench_kind_desc));
+        tabs.setLabels(getString(R.string.tai_bench_kind_text), getString(R.string.tai_bench_kind_voice));
+        tabs.setOnSegmentSelectedListener(index -> {
+            boolean chosen = index == 1;
+            if (chosen == voice) return;
+            voice = chosen;
+            lastVoice = chosen;
+            rebuild();
+        });
+        column.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TaiBenchViews.dp(context, 42)));
+        return column;
+    }
+
+    private void bindKind(@NonNull View view) {
+        TaiSegmentedTabs tabs = view.findViewById(R.id.tai_bench_tabs);
+        int index = voice ? 1 : 0;
+        if (tabs.selectedIndex() != index) tabs.select(index, tabs.selectedIndex() >= 0);
     }
 
     // ---- your features ----
@@ -878,7 +948,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
 
     private void openChoose() {
         if (getActivity() instanceof SettingsActivity) {
-            ((SettingsActivity) getActivity()).openScreen(TaiBenchChooseFragment.class, R.string.tai_bench_choose_title, null);
+            ((SettingsActivity) getActivity()).openScreen(TaiBenchChooseFragment.class, R.string.tai_bench_choose_title,
+                voice ? TaiBenchChooseFragment.voiceArguments(null) : null);
         }
     }
 
@@ -908,5 +979,10 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     /** Whether the board on show has any ranked or broken row, for tests. */
     boolean hasRowsForTest() {
         return board != null && !board.empty();
+    }
+
+    /** Whether the screen shows the voice board, for tests. */
+    boolean voiceForTest() {
+        return voice;
     }
 }
