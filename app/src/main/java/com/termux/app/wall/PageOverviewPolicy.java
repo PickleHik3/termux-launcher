@@ -21,6 +21,16 @@ public final class PageOverviewPolicy {
     public static final int NONE = -1;
 
     /** What a card shows. */
+    /**
+     * Whether a card of {@code kind} is drawn live (the activity's own content, chrome included)
+     * while it is focused. Not the display window's, whose picture is its surface's, and not the
+     * Assistant page's, whose card is the still card with its icon and name: a live draw showed
+     * whatever chrome stood on screen and the chat's heading at the root's scale.
+     */
+    public static boolean drawsLive(@androidx.annotation.NonNull Kind kind) {
+        return kind != Kind.DISPLAY && kind != Kind.ASSISTANT;
+    }
+
     public enum Kind {
         /** A Home page. */
         HOME_PAGE,
