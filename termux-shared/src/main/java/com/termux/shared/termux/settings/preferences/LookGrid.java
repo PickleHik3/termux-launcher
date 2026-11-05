@@ -146,7 +146,7 @@ public final class LookGrid {
 
     /** The kinds of page (ADR 0018 §3): a kind's cells hold for every page of it. */
     public enum Kind {
-        HOME("home"), TERMINAL("terminal"), DISPLAY("display");
+        HOME("home"), TERMINAL("terminal"), DISPLAY("display"), ASSISTANT("assistant");
 
         public final String key;
 
@@ -565,6 +565,30 @@ public final class LookGrid {
     public void write(@NonNull Property property, @Nullable Element element, @Nullable Kind kind,
                       int value) {
         put(key(property, element, kind), property.clamp(value));
+    }
+
+    /**
+     * Copies every cell {@code from} holds to {@code to}, where {@code to} holds none of its own:
+     * a kind first created starts from another's look (ADR 0022). Returns whether a cell moved.
+     */
+    public boolean seedKind(@NonNull Kind from, @NonNull Kind to) {
+        boolean moved = false;
+        for (Property property : Property.values()) {
+            if (!property.perKind) continue;
+            moved |= seedCell(property, null, from, to);
+            if (!property.perElement) continue;
+            for (Element element : Element.values()) moved |= seedCell(property, element, from, to);
+        }
+        return moved;
+    }
+
+    private boolean seedCell(@NonNull Property property, @Nullable Element element,
+                             @NonNull Kind from, @NonNull Kind to) {
+        String source = key(property, element, from);
+        String target = key(property, element, to);
+        if (!mStore.contains(source) || mStore.contains(target)) return false;
+        mStore.putInt(target, mStore.getInt(source, property.shipped));
+        return true;
     }
 
     /** Resets one kind's cell: it follows again. */

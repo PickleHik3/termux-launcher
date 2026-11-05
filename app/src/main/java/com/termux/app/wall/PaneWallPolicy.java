@@ -86,6 +86,7 @@ public final class PaneWallPolicy {
         switch (kind) {
             case HOME: return PaneWallPage.WIDGETS;
             case DISPLAY: return PaneWallPage.DISPLAY;
+            case ASSISTANT: return PaneWallPage.ASSISTANT;
             case TERMINAL:
             default: return PaneWallPage.TERMINAL;
         }
@@ -113,7 +114,7 @@ public final class PaneWallPolicy {
     public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
                                   int terminalFrameAirPx) {
         if (page == PaneWallPage.TERMINAL) return terminalMarginPx;
-        if (page == homePage()) return 0;
+        if (page == homePage() || page == PaneWallPage.ASSISTANT) return 0;
         return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
     }
 

@@ -102,6 +102,7 @@ public final class DressResolver {
     @NonNull
     public static PageKind kindOf(@NonNull PaneWallPage page) {
         if (page == PaneWallPage.WIDGETS) return PageKind.HOME;
+        if (page == PaneWallPage.ASSISTANT) return PageKind.ASSISTANT;
         return page == PaneWallPage.DISPLAY ? PageKind.DISPLAY : PageKind.TERMINAL;
     }
 

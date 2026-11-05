@@ -66,6 +66,7 @@ public final class WallLookKinds implements LookGrid.PageKinds {
         switch (kind) {
             case HOME: return LookGrid.Kind.HOME;
             case DISPLAY: return LookGrid.Kind.DISPLAY;
+            case ASSISTANT: return LookGrid.Kind.ASSISTANT;
             case TERMINAL:
             default:
                 return LookGrid.Kind.TERMINAL;

@@ -6,14 +6,15 @@ import androidx.annotation.Nullable;
 import com.termux.app.wall.WallPages.PageKind;
 
 /**
- * The four layouts a page can wear (ADR 0020 §1): one per page kind, and Terminal-minimal, which
- * the Terminal and the Display wear while minimal mode is on. Home pages ignore minimal mode.
+ * The five layouts a page can wear (ADR 0020 §1, ADR 0022): one per page kind, and Terminal-minimal, which
+ * the Terminal and the Display wear while minimal mode is on. Home and Assistant pages ignore minimal mode.
  */
 public enum LayoutKind {
     HOME("home", "Home layout"),
     TERMINAL("terminal", "Terminal layout"),
     TERMINAL_MINIMAL("terminal_minimal", "Terminal minimal layout"),
-    DISPLAY("display", "Display layout");
+    DISPLAY("display", "Display layout"),
+    ASSISTANT("assistant", "Assistant layout");
 
     /** The document's key in the {@code layouts} file, and its name on the command line. */
     @NonNull public final String key;
@@ -31,6 +32,7 @@ public enum LayoutKind {
         switch (kind) {
             case HOME: return HOME;
             case DISPLAY: return minimal ? TERMINAL_MINIMAL : DISPLAY;
+            case ASSISTANT: return ASSISTANT;
             case TERMINAL:
             default: return minimal ? TERMINAL_MINIMAL : TERMINAL;
         }
@@ -42,6 +44,7 @@ public enum LayoutKind {
         switch (this) {
             case HOME: return PageKind.HOME;
             case DISPLAY: return PageKind.DISPLAY;
+            case ASSISTANT: return PageKind.ASSISTANT;
             default: return PageKind.TERMINAL;
         }
     }
