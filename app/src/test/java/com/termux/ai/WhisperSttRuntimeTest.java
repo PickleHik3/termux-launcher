@@ -148,11 +148,11 @@ public class WhisperSttRuntimeTest {
         assertTrue(result.getString("acceleratorFallback").contains("GPU accelerator"));
         assertEquals(1, memory.records.size());
         assertTrue(memory.records.get(0).startsWith("gpu:false:"));
-        // The record holds: the next load goes straight to the CPU.
+        // A GPU pick tries again after an ordinary failure, and still falls back to the CPU.
         runtime.close();
         assertTrue(transcribeGitStatus(runtime, model).getBoolean("ok"));
-        assertEquals(1, memory.records.size());
-        assertEquals(1, memory.begun);
+        assertEquals(2, memory.records.size());
+        assertEquals(2, memory.begun);
     }
 
     @Test
