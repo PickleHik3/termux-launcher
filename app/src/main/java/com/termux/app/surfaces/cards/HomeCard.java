@@ -32,7 +32,7 @@ public final class HomeCard {
                 Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
         com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.MARGIN)
+            .tier(3, Row.WALLPAPER_DIM, Row.MARGIN)
             .tier(3, Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES);
         // Pages is not offered while the overview it opens is already up.
         if (!offers.overviewUp) rows.tier(3, Row.LINK_PAGES);

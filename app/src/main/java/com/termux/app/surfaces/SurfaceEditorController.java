@@ -3080,6 +3080,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
+                case WALLPAPER_DIM: return wallpaperDimValue(prefs);
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -3185,6 +3186,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case GLASS_EDGE:
                 case REFLECTION:
                 case GRAIN:
+                case WALLPAPER_DIM:
                     return getString(R.string.appearance_readout_percent, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
@@ -3885,6 +3887,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
                 break;
+            case WALLPAPER_DIM: writeWallpaperDim(value); break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
@@ -4820,6 +4823,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Corners: one radius for every surface and the terminal, on both halves. */
+    /** The Home tab's dim of the editor's page: its own override, else the wall-wide dim. */
+    private com.termux.app.look.PageLook.Scope wallpaperDimScope() {
+        return mScopePageId < 0 ? com.termux.app.look.PageLook.Scope.GLOBAL
+            : com.termux.app.look.PageLook.Scope.page(mScopePageId);
+    }
+
+    private int wallpaperDimValue(@NonNull TermuxAppSharedPreferences prefs) {
+        com.termux.app.look.PageLook look = pageLook();
+        int own = look == null ? -1
+            : look.read(wallpaperDimScope(), TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
+        return own >= 0 ? Math.min(100, own) : prefs.getWallpaperBackdropDim();
+    }
+
+    private void writeWallpaperDim(int value) {
+        com.termux.app.look.PageLook look = pageLook();
+        if (look == null)
+            return;
+        look.write(wallpaperDimScope(),
+            TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, clamp(value, 0, 100));
+        syncDirty();
+    }
+
     private void writeCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -6744,6 +6769,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return com.termux.app.place.layout.IconSize.values().length - 1;
             case TINT_HUE:
                 return 2;
+            case WALLPAPER_DIM:
+                return 100;
             default:
                 return 1;
         }
@@ -6868,6 +6895,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
             case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
             case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case WALLPAPER_DIM: return R.drawable.ic_ms_wallpaper;
             case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
             case LINK_GESTURES: return R.drawable.ic_ms_swipe;
             case LINK_GLASS_REFRACTION: return R.drawable.ic_ms_blur_on;

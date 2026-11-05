@@ -44,6 +44,13 @@ public class EditorCardSectionsTest {
         return out;
     }
 
+    /** {@link #blockWithMargin}, with the Home card's Wallpaper dim between Depth and Margin. */
+    private static List<Row> blockWithDim() {
+        List<Row> out = blockWithMargin();
+        out.add(out.indexOf(Row.MARGIN), Row.WALLPAPER_DIM);
+        return out;
+    }
+
     /** The card's sections in order, each with its rows. */
     private static Map<String, List<Row>> sections(EditorCard card, Offers offers) {
         Map<String, List<Row>> out = new LinkedHashMap<>();
@@ -102,7 +109,7 @@ public class EditorCardSectionsTest {
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
                 Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            "SECTION_APPEARANCE", blockWithMargin(),
+            "SECTION_APPEARANCE", blockWithDim(),
             "SECTION_LINKS", Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES,
                 Row.LINK_SHEETS)));
     }
