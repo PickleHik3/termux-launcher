@@ -483,6 +483,8 @@ longer counted as an error. Owed:
   Speech picker card read "Recommended" or "Slower on this phone"; (2) dictation with it on Auto
   and on GPU gives correct text, and on CPU still works (slow); (3) the accelerator dialog lists
   Auto, CPU and "GPU · uses less battery, may be slower"; (4) no crash or `stt_gpu_unavailable` in
-  logcat on pong; (5) the speech card offers no language or window switch for it; (6) put the
+  logcat on pong; (5) the speech card offers no language or window switch for it; the install sheet's size pill
+  (Base / Small / Base GPU, size on a second line, aadab9db7) fits on pong at font 1.0 and 1.3,
+  as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
