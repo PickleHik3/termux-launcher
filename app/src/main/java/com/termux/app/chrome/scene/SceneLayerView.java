@@ -121,7 +121,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
     @NonNull private final Runnable mPoll = this::poll;
 
-    /** {@code kind}: {@link ScenePrograms#CONTOUR} or {@link ScenePrograms#FILAMENT}. */
+    /** {@code kind}: a {@code ScenePrograms} kind constant. */
     public SceneLayerView(@NonNull Context context, @NonNull String kind,
                           @Nullable PaneSource panes, @NonNull BooleanSupplier lazyMode) {
         super(context);
