@@ -8,14 +8,8 @@ import androidx.annotation.Nullable;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.Tensor;
 
 import java.io.File;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -25,7 +19,7 @@ import java.util.Locale;
 /**
  * On-device speech-to-text on NVIDIA Parakeet TDT 0.6B v3 as Google converted it for LiteRT
  * ({@code litert-community/parakeet-tdt-0.6b-v3}, {@code parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite}):
- * one {@link Interpreter} with an {@code encode} signature (NeMo log-mel {@code [1, 128, 500]} →
+ * one {@link LiteRtGraph} with an {@code encode} signature (NeMo log-mel {@code [1, 128, 500]} →
  * encoder output {@code [1, 1024, 63]}), a stateless {@code decode} (encoder output, a 4-slot
  * token sequence, zero LSTM state → logits {@code [1, 63, 4, 8198]} and the state) and a stateful
  * {@code decode_1} (one token and the carried state). The front end is {@link ParakeetFeatures},
@@ -56,7 +50,8 @@ final class ParakeetSttRuntime implements SttRuntime {
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
-    @Nullable private Interpreter interpreter;
+    private final LiteRtGraph.Loader loader;
+    @Nullable private LiteRtGraph graph;
     @Nullable private ParakeetTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -66,18 +61,27 @@ final class ParakeetSttRuntime implements SttRuntime {
     private String encodeOutput = "";
     @Nullable private Signature decodeSignature;
     @Nullable private Signature statefulSignature;
-    @Nullable private ByteBuffer melBuffer;
-    @Nullable private ByteBuffer encoderBuffer;
-    @Nullable private ByteBuffer stateHIn, stateCIn, stateHOut, stateCOut;
+    @Nullable private LiteRtGraph.Signature encodeRun;
+    @Nullable private LiteRtGraph.Tensor melTensor;
+    /** The LSTM state, shared by {@code decode} and {@code decode_1}. */
+    @Nullable private LiteRtGraph.Tensor stateHIn, stateCIn, stateHOut, stateCOut;
+    /** The feature rows laid end to end, reused for every piece. */
+    @Nullable private float[] melScratch;
 
     ParakeetSttRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
+        this(residency, context, InterpreterGraph.LOADER);
+    }
+
+    /** With the graph runtime behind {@link LiteRtGraph} chosen by the caller; tests pass a fake. */
+    ParakeetSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull LiteRtGraph.Loader loader) {
         this.residency = residency;
         this.appContext = context == null ? null : context.getApplicationContext();
+        this.loader = loader;
     }
 
     @Override
     public synchronized boolean isLoaded(@NonNull String modelId) {
-        return interpreter != null && modelId.equals(loadedModelId);
+        return graph != null && modelId.equals(loadedModelId);
     }
 
     @NonNull
@@ -215,23 +219,22 @@ final class ParakeetSttRuntime implements SttRuntime {
     private void ensureLoaded(@NonNull TaiModelSpec spec) throws Exception {
         File modelFile = new File(spec.localPath);
         String modelPath = modelFile.getAbsolutePath();
-        if (interpreter != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
+        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
         close();
         File tokenizerFile = tokenizerFileFor(modelFile);
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = ParakeetTokenizer.fromFile(tokenizerFile);
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        // The stock LiteRT Interpreter XNNPACK path, as in WhisperSttRuntime.
-        Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
+        // InterpreterGraph: the stock LiteRT Interpreter XNNPACK path, as in WhisperSttRuntime.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
         try {
-            interpreter = new Interpreter(modelFile, options);
+            graph = loader.load(modelFile, threads);
         } finally {
             measured = meter.stop();
         }
         try {
-            bindSignatures(interpreter);
+            bindSignatures(graph);
         } catch (RuntimeException e) {
             close();
             throw e;
@@ -252,69 +255,82 @@ final class ParakeetSttRuntime implements SttRuntime {
      * the encoder input, the remaining two the LSTM state ({@code h} then {@code c}, in name order,
      * as the outputs are {@code output_1} then {@code output_2}) — never by position alone.
      */
-    private void bindSignatures(@NonNull Interpreter interpreter) {
+    private void bindSignatures(@NonNull LiteRtGraph graph) {
         boolean encode = false, decode = false, stateful = false;
-        for (String key : interpreter.getSignatureKeys()) {
+        for (String key : graph.signatureKeys()) {
             encode |= SIGNATURE_ENCODE.equals(key);
             decode |= SIGNATURE_DECODE.equals(key);
             stateful |= SIGNATURE_DECODE_STATEFUL.equals(key);
         }
         if (!encode || !decode || !stateful) {
-            throw new IllegalStateException("Graph lacks the encode/decode/decode_1 signatures: " + Arrays.toString(interpreter.getSignatureKeys()));
+            throw new IllegalStateException("Graph lacks the encode/decode/decode_1 signatures: " + Arrays.toString(graph.signatureKeys()));
         }
-        String[] encodeInputs = interpreter.getSignatureInputs(SIGNATURE_ENCODE);
-        String[] encodeOutputs = interpreter.getSignatureOutputs(SIGNATURE_ENCODE);
+        String[] encodeInputs = graph.inputNames(SIGNATURE_ENCODE);
+        String[] encodeOutputs = graph.outputNames(SIGNATURE_ENCODE);
         if (encodeInputs.length != 1 || encodeOutputs.length != 1) throw new IllegalStateException("Unexpected encode signature arity");
         encodeInput = encodeInputs[0];
         encodeOutput = encodeOutputs[0];
-        int[] melShape = interpreter.getInputTensorFromSignature(encodeInput, SIGNATURE_ENCODE).shape();
+        int[] melShape = graph.input(SIGNATURE_ENCODE, encodeInput).shape;
         if (melShape.length != 3 || melShape[1] != ParakeetFeatures.N_MELS || melShape[2] != ParakeetFeatures.FRAMES) {
             throw new IllegalStateException("Unexpected encode input shape " + Arrays.toString(melShape));
         }
-        int[] encoderShape = interpreter.getOutputTensorFromSignature(encodeOutput, SIGNATURE_ENCODE).shape();
+        int[] encoderShape = graph.output(SIGNATURE_ENCODE, encodeOutput).shape;
         if (encoderShape.length != 3) throw new IllegalStateException("Unexpected encode output shape " + Arrays.toString(encoderShape));
         encoderFrames = encoderShape[2];
-        this.decodeSignature = Signature.bind(interpreter, SIGNATURE_DECODE, encoderShape, encoderFrames);
-        this.statefulSignature = Signature.bind(interpreter, SIGNATURE_DECODE_STATEFUL, encoderShape, encoderFrames);
-        if (this.statefulSignature.slots != 1) throw new IllegalStateException("decode_1 should take one token, takes " + this.statefulSignature.slots);
-        if (this.decodeSignature.vocabulary != this.statefulSignature.vocabulary) throw new IllegalStateException("decode and decode_1 disagree on the vocabulary");
-        vocabularySize = this.decodeSignature.vocabulary;
+        Signature decodeSignature = Signature.bind(graph, SIGNATURE_DECODE, encoderShape, encoderFrames);
+        Signature statefulSignature = Signature.bind(graph, SIGNATURE_DECODE_STATEFUL, encoderShape, encoderFrames);
+        if (statefulSignature.slots != 1) throw new IllegalStateException("decode_1 should take one token, takes " + statefulSignature.slots);
+        if (decodeSignature.vocabulary != statefulSignature.vocabulary) throw new IllegalStateException("decode and decode_1 disagree on the vocabulary");
+        vocabularySize = decodeSignature.vocabulary;
         if (vocabularySize != ParakeetTdtDecoder.BLANK + 1 + ParakeetTdtDecoder.NUM_DURATIONS) {
             throw new IllegalStateException("Unexpected logits width " + vocabularySize);
         }
-        if (!Arrays.equals(this.decodeSignature.stateShape, this.statefulSignature.stateShape)) throw new IllegalStateException("decode and decode_1 disagree on the state shape");
-        // Buffers sized exactly to the tensors, allocated once and rewound before every run; the
-        // encoder's output buffer is fed straight into both decoders without a copy.
-        melBuffer = direct(ParakeetFeatures.N_MELS * ParakeetFeatures.FRAMES * 4);
-        encoderBuffer = direct(elements(encoderShape) * 4);
-        int stateBytes = elements(this.decodeSignature.stateShape) * 4;
-        stateHIn = direct(stateBytes);
-        stateCIn = direct(stateBytes);
-        stateHOut = direct(stateBytes);
-        stateCOut = direct(stateBytes);
+        if (!Arrays.equals(decodeSignature.stateShape, statefulSignature.stateShape)) throw new IllegalStateException("decode and decode_1 disagree on the state shape");
+        // Tensors made once and reused for every run; the encoder's output tensor is bound
+        // straight into both decoders without a copy, and both decoders share the one state.
+        LiteRtGraph.Tensor mel = graph.newInput(SIGNATURE_ENCODE, encodeInput);
+        LiteRtGraph.Tensor encoder = graph.newOutput(SIGNATURE_ENCODE, encodeOutput);
+        LiteRtGraph.Tensor hIn = graph.newInput(SIGNATURE_DECODE, decodeSignature.stateHInput);
+        LiteRtGraph.Tensor cIn = graph.newInput(SIGNATURE_DECODE, decodeSignature.stateCInput);
+        LiteRtGraph.Tensor hOut = graph.newOutput(SIGNATURE_DECODE, decodeSignature.stateHOutput);
+        LiteRtGraph.Tensor cOut = graph.newOutput(SIGNATURE_DECODE, decodeSignature.stateCOutput);
+        HashMap<String, LiteRtGraph.Tensor> encodeIn = new HashMap<>();
+        encodeIn.put(encodeInput, mel);
+        HashMap<String, LiteRtGraph.Tensor> encodeOut = new HashMap<>();
+        encodeOut.put(encodeOutput, encoder);
+        encodeRun = graph.bind(SIGNATURE_ENCODE, encodeIn, encodeOut);
+        decodeSignature.attach(graph, encoder, hIn, cIn, hOut, cOut);
+        statefulSignature.attach(graph, encoder, hIn, cIn, hOut, cOut);
+        this.decodeSignature = decodeSignature;
+        this.statefulSignature = statefulSignature;
+        melTensor = mel;
+        stateHIn = hIn;
+        stateCIn = cIn;
+        stateHOut = hOut;
+        stateCOut = cOut;
+        melScratch = new float[ParakeetFeatures.N_MELS * ParakeetFeatures.FRAMES];
     }
 
     private void encode(@NonNull float[][] features) {
-        Interpreter runner = interpreter;
-        if (runner == null || melBuffer == null || encoderBuffer == null || stateHIn == null || stateCIn == null) {
+        LiteRtGraph.Signature run = encodeRun;
+        LiteRtGraph.Tensor input = melTensor;
+        float[] flat = melScratch;
+        if (graph == null || run == null || input == null || flat == null || stateHIn == null || stateCIn == null) {
             throw new IllegalStateException("STT runtime is not loaded.");
         }
-        melBuffer.rewind();
-        FloatBuffer floats = melBuffer.asFloatBuffer();
-        for (float[] row : features) floats.put(row, 0, ParakeetFeatures.FRAMES);
-        melBuffer.rewind();
-        encoderBuffer.rewind();
-        HashMap<String, Object> inputs = new HashMap<>();
-        inputs.put(encodeInput, melBuffer);
-        HashMap<String, Object> outputs = new HashMap<>();
-        outputs.put(encodeOutput, encoderBuffer);
-        runner.runSignature(inputs, outputs, SIGNATURE_ENCODE);
+        int at = 0;
+        for (float[] row : features) {
+            System.arraycopy(row, 0, flat, at, ParakeetFeatures.FRAMES);
+            at += ParakeetFeatures.FRAMES;
+        }
+        input.writeFloats(flat, at);
+        run.run();
         // A fresh window starts from a zero LSTM state.
-        zero(stateHIn);
-        zero(stateCIn);
+        stateHIn.zero();
+        stateCIn.zero();
     }
 
-    /** {@link ParakeetTdtDecoder.Graph} over the loaded interpreter and the current encoder output. */
+    /** {@link ParakeetTdtDecoder.Graph} over the loaded graph and the current encoder output. */
     private final class GraphAdapter implements ParakeetTdtDecoder.Graph {
         @Override
         public int slots() {
@@ -341,46 +357,29 @@ final class ParakeetSttRuntime implements SttRuntime {
         @Override
         public void adoptState() {
             if (stateHIn == null || stateCIn == null || stateHOut == null || stateCOut == null) throw new IllegalStateException("STT runtime is not loaded.");
-            copy(stateHOut, stateHIn);
-            copy(stateCOut, stateCIn);
+            stateHIn.copyFrom(stateHOut);
+            stateCIn.copyFrom(stateCOut);
         }
     }
 
     /** One decoder run over the current encoder output; the logits at {@code (t, slot)}. */
     @NonNull
     private float[] run(@NonNull Signature signature, @NonNull int[] tokens, int t, int slot) {
-        Interpreter runner = interpreter;
-        if (runner == null || encoderBuffer == null || stateHIn == null || stateCIn == null || stateHOut == null || stateCOut == null) {
+        LiteRtGraph.Signature bound = signature.bound;
+        LiteRtGraph.Tensor tokensTensor = signature.tokensTensor;
+        LiteRtGraph.Tensor logitsTensor = signature.logitsTensor;
+        if (graph == null || bound == null || tokensTensor == null || logitsTensor == null) {
             throw new IllegalStateException("STT runtime is not loaded.");
         }
         if (tokens.length != signature.slots) throw new IllegalArgumentException("Expected " + signature.slots + " tokens, got " + tokens.length);
-        signature.tokensBuffer.rewind();
-        signature.tokensBuffer.asIntBuffer().put(tokens, 0, signature.slots);
-        signature.tokensBuffer.rewind();
-        encoderBuffer.rewind();
-        stateHIn.rewind();
-        stateCIn.rewind();
-        stateHOut.rewind();
-        stateCOut.rewind();
-        signature.logitsBuffer.rewind();
-        HashMap<String, Object> inputs = new HashMap<>();
-        inputs.put(signature.encoderInput, encoderBuffer);
-        inputs.put(signature.tokensInput, signature.tokensBuffer);
-        inputs.put(signature.stateHInput, stateHIn);
-        inputs.put(signature.stateCInput, stateCIn);
-        HashMap<String, Object> outputs = new HashMap<>();
-        outputs.put(signature.logitsOutput, signature.logitsBuffer);
-        outputs.put(signature.stateHOutput, stateHOut);
-        outputs.put(signature.stateCOutput, stateCOut);
-        runner.runSignature(inputs, outputs, signature.key);
+        tokensTensor.writeInts(tokens, signature.slots);
+        bound.run();
         float[] logits = new float[vocabularySize];
-        signature.logitsBuffer.position(((t * signature.slots) + slot) * vocabularySize * 4);
-        signature.logitsBuffer.asFloatBuffer().get(logits, 0, vocabularySize);
-        signature.logitsBuffer.rewind();
+        logitsTensor.readFloats(((t * signature.slots) + slot) * vocabularySize, logits, vocabularySize);
         return logits;
     }
 
-    /** One of the two decoder signatures: its tensor names, its slot count and its own buffers. */
+    /** One of the two decoder signatures: its tensor names, its slot count and, once attached, its own tensors. */
     private static final class Signature {
         final String key;
         final String encoderInput, tokensInput, stateHInput, stateCInput;
@@ -388,58 +387,57 @@ final class ParakeetSttRuntime implements SttRuntime {
         final int slots;
         final int vocabulary;
         final int[] stateShape;
-        final ByteBuffer tokensBuffer;
-        final ByteBuffer logitsBuffer;
+        @Nullable LiteRtGraph.Tensor tokensTensor;
+        @Nullable LiteRtGraph.Tensor logitsTensor;
+        @Nullable LiteRtGraph.Signature bound;
 
         private Signature(String key, String encoderInput, String tokensInput, String stateHInput, String stateCInput,
                           String logitsOutput, String stateHOutput, String stateCOutput,
-                          int slots, int vocabulary, int[] stateShape, int[] logitsShape) {
+                          int slots, int vocabulary, int[] stateShape) {
             this.key = key;
             this.encoderInput = encoderInput; this.tokensInput = tokensInput;
             this.stateHInput = stateHInput; this.stateCInput = stateCInput;
             this.logitsOutput = logitsOutput; this.stateHOutput = stateHOutput; this.stateCOutput = stateCOutput;
             this.slots = slots; this.vocabulary = vocabulary; this.stateShape = stateShape;
-            tokensBuffer = direct(slots * 4);
-            logitsBuffer = direct(elements(logitsShape) * 4);
         }
 
         @NonNull
-        static Signature bind(@NonNull Interpreter interpreter, @NonNull String key, @NonNull int[] encoderShape, int encoderFrames) {
+        static Signature bind(@NonNull LiteRtGraph graph, @NonNull String key, @NonNull int[] encoderShape, int encoderFrames) {
             String encoderInput = null, tokensInput = null;
             List<String> stateInputs = new ArrayList<>();
             int slots = 0;
             int[] stateShape = null;
-            for (String name : interpreter.getSignatureInputs(key)) {
-                Tensor tensor = interpreter.getInputTensorFromSignature(name, key);
-                if (tensor.dataType() == DataType.INT32 && tensor.numDimensions() == 2) {
+            for (String name : graph.inputNames(key)) {
+                LiteRtGraph.TensorSpec tensor = graph.input(key, name);
+                if (tensor.type == LiteRtGraph.ElementType.INT32 && tensor.rank() == 2) {
                     tokensInput = name;
-                    slots = tensor.shape()[1];
-                } else if (Arrays.equals(tensor.shape(), encoderShape) && encoderInput == null) {
+                    slots = tensor.shape[1];
+                } else if (Arrays.equals(tensor.shape, encoderShape) && encoderInput == null) {
                     encoderInput = name;
                 } else {
                     stateInputs.add(name);
-                    if (stateShape == null) stateShape = tensor.shape();
-                    else if (!Arrays.equals(stateShape, tensor.shape())) throw new IllegalStateException(key + ": state inputs differ in shape");
+                    if (stateShape == null) stateShape = tensor.shape;
+                    else if (!Arrays.equals(stateShape, tensor.shape)) throw new IllegalStateException(key + ": state inputs differ in shape");
                 }
             }
             if (encoderInput == null || tokensInput == null || stateInputs.size() != 2 || slots < 1 || stateShape == null) {
-                throw new IllegalStateException(key + ": could not identify the inputs by shape: " + Arrays.toString(interpreter.getSignatureInputs(key)));
+                throw new IllegalStateException(key + ": could not identify the inputs by shape: " + Arrays.toString(graph.inputNames(key)));
             }
             String logitsOutput = null;
             List<String> stateOutputs = new ArrayList<>();
             int[] logitsShape = null;
-            for (String name : interpreter.getSignatureOutputs(key)) {
-                Tensor tensor = interpreter.getOutputTensorFromSignature(name, key);
-                if (tensor.numDimensions() == 4) {
+            for (String name : graph.outputNames(key)) {
+                LiteRtGraph.TensorSpec tensor = graph.output(key, name);
+                if (tensor.rank() == 4) {
                     logitsOutput = name;
-                    logitsShape = tensor.shape();
+                    logitsShape = tensor.shape;
                 } else {
                     stateOutputs.add(name);
-                    if (!Arrays.equals(stateShape, tensor.shape())) throw new IllegalStateException(key + ": state output " + name + " has shape " + Arrays.toString(tensor.shape()));
+                    if (!Arrays.equals(stateShape, tensor.shape)) throw new IllegalStateException(key + ": state output " + name + " has shape " + Arrays.toString(tensor.shape));
                 }
             }
             if (logitsOutput == null || logitsShape == null || stateOutputs.size() != 2) {
-                throw new IllegalStateException(key + ": could not identify the outputs by shape: " + Arrays.toString(interpreter.getSignatureOutputs(key)));
+                throw new IllegalStateException(key + ": could not identify the outputs by shape: " + Arrays.toString(graph.outputNames(key)));
             }
             if (logitsShape[1] != encoderFrames || logitsShape[2] != slots) {
                 throw new IllegalStateException(key + ": unexpected logits shape " + Arrays.toString(logitsShape));
@@ -448,7 +446,27 @@ final class ParakeetSttRuntime implements SttRuntime {
             java.util.Collections.sort(stateInputs);
             java.util.Collections.sort(stateOutputs);
             return new Signature(key, encoderInput, tokensInput, stateInputs.get(0), stateInputs.get(1),
-                logitsOutput, stateOutputs.get(0), stateOutputs.get(1), slots, logitsShape[3], stateShape, logitsShape);
+                logitsOutput, stateOutputs.get(0), stateOutputs.get(1), slots, logitsShape[3], stateShape);
+        }
+
+        /** Makes this signature's token and logits tensors and binds it to them and the shared ones. */
+        void attach(@NonNull LiteRtGraph graph, @NonNull LiteRtGraph.Tensor encoder,
+                    @NonNull LiteRtGraph.Tensor stateHIn, @NonNull LiteRtGraph.Tensor stateCIn,
+                    @NonNull LiteRtGraph.Tensor stateHOut, @NonNull LiteRtGraph.Tensor stateCOut) {
+            LiteRtGraph.Tensor tokens = graph.newInput(key, tokensInput);
+            LiteRtGraph.Tensor logits = graph.newOutput(key, logitsOutput);
+            HashMap<String, LiteRtGraph.Tensor> inputs = new HashMap<>();
+            inputs.put(encoderInput, encoder);
+            inputs.put(tokensInput, tokens);
+            inputs.put(stateHInput, stateHIn);
+            inputs.put(stateCInput, stateCIn);
+            HashMap<String, LiteRtGraph.Tensor> outputs = new HashMap<>();
+            outputs.put(logitsOutput, logits);
+            outputs.put(stateHOutput, stateHOut);
+            outputs.put(stateCOutput, stateCOut);
+            bound = graph.bind(key, inputs, outputs);
+            tokensTensor = tokens;
+            logitsTensor = logits;
         }
     }
 
@@ -458,31 +476,6 @@ final class ParakeetSttRuntime implements SttRuntime {
         if (dir == null) return null;
         File tokenizer = new File(dir, TOKENIZER_FILE);
         return tokenizer.isFile() && tokenizer.canRead() ? tokenizer : null;
-    }
-
-    @NonNull
-    private static ByteBuffer direct(int bytes) {
-        return ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder());
-    }
-
-    private static void zero(@NonNull ByteBuffer buffer) {
-        buffer.rewind();
-        while (buffer.hasRemaining()) buffer.put((byte) 0);
-        buffer.rewind();
-    }
-
-    private static void copy(@NonNull ByteBuffer from, @NonNull ByteBuffer to) {
-        from.rewind();
-        to.rewind();
-        to.put(from);
-        from.rewind();
-        to.rewind();
-    }
-
-    private static int elements(@NonNull int[] shape) {
-        int count = 1;
-        for (int dim : shape) count *= Math.max(1, dim);
-        return count;
     }
 
     @NonNull
@@ -505,16 +498,18 @@ final class ParakeetSttRuntime implements SttRuntime {
 
     @Override
     public synchronized void close() {
-        if (interpreter != null) {
-            interpreter.close();
-            interpreter = null;
+        if (graph != null) {
+            graph.close();
+            graph = null;
         }
         tokenizer = null;
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.STT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
         decodeSignature = statefulSignature = null;
-        melBuffer = encoderBuffer = stateHIn = stateCIn = stateHOut = stateCOut = null;
+        encodeRun = null;
+        melTensor = stateHIn = stateCIn = stateHOut = stateCOut = null;
+        melScratch = null;
         encoderFrames = vocabularySize = 0;
     }
 }
