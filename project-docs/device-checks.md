@@ -467,3 +467,11 @@ longer counted as an error. Owed:
   "What a key can be" with eight facts on their own lines, at font 1.0 and 1.3; Cancel / Save
   stay pinned; in landscape Row 1 and Add row fit above the fold and the bar is one compact row ·
   pong.
+- **No flash when the display closes itself (11-06).** Firefox (or any app started as the
+  display's start-up app) on the Display page, quit it from inside (Ctrl+Q): the page goes from
+  the app's last frame straight to the empty state on its panel, with no frame of bare wallpaper
+  and no white sheet; same for Stop from the page's menu; a temporary Display page (opened from a
+  Linux app) still disappears with its display · pong.
+- **New Home page wears the page in front's look (11-06).** Home 1 with its own dim and glass,
+  Edit pages > Add page: Home 2 looks the same from its first frame; add a page while Home 1 has
+  no overrides: the new page follows Global · pong.
