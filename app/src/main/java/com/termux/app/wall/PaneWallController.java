@@ -407,6 +407,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mWall.addView(view);
             mAssistantView = view;
             mWall.setPageView(PaneWallPage.ASSISTANT, view);
+            if (view instanceof com.termux.app.assistant.AssistantPageView) {
+                ((com.termux.app.assistant.AssistantPageView) view).applyStyle(mStyle);
+            }
         }
         if (id >= 0) mWall.bind(PaneWallPage.ASSISTANT, id);
     }
@@ -786,6 +789,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.refreshGrabberColor();
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
         if (mDisplayWindow != null) mDisplayWindow.applyStyle(style);
+        if (mAssistantView instanceof com.termux.app.assistant.AssistantPageView) {
+            ((com.termux.app.assistant.AssistantPageView) mAssistantView).applyStyle(style);
+        }
     }
 
     /** The kind of the page the wall is on. */
@@ -1344,6 +1350,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mOutlineAlpha = alpha;
             if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
             if (mDisplayWindow != null) mDisplayWindow.setOutlineTravelAlpha(alpha);
+            if (mAssistantView instanceof com.termux.app.assistant.AssistantPageView) {
+                ((com.termux.app.assistant.AssistantPageView) mAssistantView).setOutlineTravelAlpha(alpha);
+            }
         }
         // The terminal's rims are drawn in its page: while the transition fades that page they
         // go with its fade, not ahead of it (PaneWallPolicy#terminalRimAlpha).
@@ -1428,6 +1437,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private void reaimPages() {
         if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
         if (mDisplayWindow != null) mDisplayWindow.onWallMoved();
+        if (mAssistantView instanceof com.termux.app.assistant.AssistantPageView) {
+            ((com.termux.app.assistant.AssistantPageView) mAssistantView).onWallMoved();
+        }
     }
 
     @Override
