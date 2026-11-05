@@ -444,3 +444,26 @@ longer counted as an error. Owed:
   Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
   (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
   pong.
+- **Volume keys on the Display page (11-05).** Display page in front with a display running:
+  volume up and down move the phone's volume and show the system panel; same with no display
+  running; a physical keyboard still types into X (that path now runs through the X11 input
+  handler, which also releases stuck modifiers) · pong.
+- **Home Wallpaper dim (11-05).** Home tab > Appearance > Wallpaper dim (after Depth): drag 0 →
+  60 with Home behind the editor: the wallpaper darkens live, stays after Done, Cancel restores.
+  With two Home pages, one drag darkens both; the Terminal page keeps its own dim. Add a third
+  Home page afterwards: it is as dark as the others · pong.
+- **Display page after its display stops (11-05).** Display page in front, kill or stop the
+  display: only "No display is running." / Start display / Get GUI apps, no monitor icon behind
+  the text and no "Display" word on the button, not a black page in the dark theme; same in
+  landscape. Swipe to Home and back with a display running, then stop it: the empty state, not a
+  frozen picture. First visit after a cold start: at most a brief card, then the display. The
+  text group sits on a readable glass panel over a busy wallpaper, light and dark theme · pong.
+- **Key combos in the extra keys picker (11-05).** Row + , type `ctrl+f7`: the first row reads
+  "Send Ctrl+F7 as keys", the cap reads Ctrl+F7; in xev on the display it arrives as Control
+  press, F7, Control release. `ctrl + m` saved as a plain macro sends Ctrl+M (Enter) in the
+  terminal. A category chip unchecks while a query is typed and returns when it is cleared ·
+  pong.
+- **Terminal extra keys guide (11-05).** Settings > Keyboard > Terminal extra keys: below Add row,
+  "What a key can be" with eight facts on their own lines, at font 1.0 and 1.3; Cancel / Save
+  stay pinned; in landscape Row 1 and Add row fit above the fold and the bar is one compact row ·
+  pong.
