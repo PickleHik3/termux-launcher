@@ -315,6 +315,12 @@ public final class ExtraKeyActionPicker {
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) {
                 query = s.toString();
+                // A typed query searches every category: no chip reads as selected.
+                boolean searching = !query.trim().isEmpty();
+                Category[] categories = Category.values();
+                for (int i = 0; i < chips.getChildCount() && i < categories.length; i++) {
+                    ((Chip) chips.getChildAt(i)).setChecked(!searching && categories[i] == category);
+                }
                 adapter.rebuild();
                 grid.scrollToPosition(0);
             }
