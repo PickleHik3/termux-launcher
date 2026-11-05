@@ -158,8 +158,11 @@ public class AssistantEngineTest {
         engine.send(chat, big);
         engine.send(chat, big);
         JSONArray messages = new JSONObject(transport.bodies.get(1)).getJSONArray("messages");
-        assertEquals(2, messages.length());
-        assertEquals("short", messages.getJSONObject(0).getString("content"));
+        // The older turn (question + answer) no longer fits as a whole, so only the newest
+        // question goes; an answer is never sent without its question.
+        assertEquals(1, messages.length());
+        assertEquals(big, messages.getJSONObject(0).getString("content"));
+        assertEquals("user", messages.getJSONObject(0).getString("role"));
     }
 
     @Test

@@ -55,10 +55,12 @@ public class ContextFitterTest {
         }
         chat.add(user("last"));
         ContextFitter.Result r = ContextFitter.fit(chat, 2048);
-        // last (6) + five 304s = 1526 fits; a sixth would pass 1536.
-        assertEquals(6, r.sent.size());
-        assertEquals(chat.size() - 6, r.cutIndex);
-        assertEquals("last", r.sent.get(5).text);
+        // History goes in whole turns of 608: last (6) + two turns = 1222 fits; a third would
+        // pass 1536.
+        assertEquals(5, r.sent.size());
+        assertEquals(chat.size() - 5, r.cutIndex);
+        assertEquals(AssistantMessage.ROLE_USER, r.sent.get(0).role);
+        assertEquals("last", r.sent.get(4).text);
         assertEquals(chars(900), r.sent.get(0).text);
         assertFalse(r.newestTruncated);
     }
@@ -79,6 +81,7 @@ public class ContextFitterTest {
         String huge = "START" + chars(20000) + "END";
         List<AssistantMessage> chat = new ArrayList<>();
         chat.add(user("older"));
+        chat.add(answer("reply", AssistantMessage.STATE_COMPLETE));
         chat.add(user(huge));
         ContextFitter.Result r = ContextFitter.fit(chat, 2048);
         assertEquals(1, r.sent.size());
@@ -87,7 +90,7 @@ public class ContextFitterTest {
         assertTrue(sent.endsWith("END"));
         assertFalse(sent.startsWith("START"));
         assertTrue(ContextFitter.estimateTokens(sent) <= 1536);
-        assertEquals(1, r.cutIndex);
+        assertEquals(2, r.cutIndex);
     }
 
     @Test
@@ -115,6 +118,25 @@ public class ContextFitterTest {
         assertEquals(3, r.sent.size());
         assertEquals("partial", r.sent.get(1).text);
         assertEquals(-1, r.cutIndex);
+    }
+
+    @Test
+    public void aQuestionWhoseAnswerFailedIsLeftOutSoRolesAlternate() {
+        List<AssistantMessage> chat = new ArrayList<>();
+        chat.add(user("q1"));
+        chat.add(answer("boom", AssistantMessage.STATE_ERROR));
+        chat.add(user("q2"));
+        chat.add(answer("a2", AssistantMessage.STATE_COMPLETE));
+        chat.add(user("q3"));
+        ContextFitter.Result r = ContextFitter.fit(chat, 4096);
+        assertEquals(3, r.sent.size());
+        assertEquals("q2", r.sent.get(0).text);
+        assertEquals("a2", r.sent.get(1).text);
+        assertEquals("q3", r.sent.get(2).text);
+        for (int i = 0; i < r.sent.size(); i++) {
+            assertEquals(i % 2 == 0 ? AssistantMessage.ROLE_USER : AssistantMessage.ROLE_ASSISTANT,
+                r.sent.get(i).role);
+        }
     }
 
     @Test

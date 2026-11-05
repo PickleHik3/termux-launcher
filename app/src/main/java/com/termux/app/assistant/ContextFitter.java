@@ -106,19 +106,29 @@ public final class ContextFitter {
             used = budget;
         }
         reversed.add(new Sent(last.role, lastText));
+        // Older history goes in whole turns, a question and the answer after it, so the roles
+        // always alternate user, assistant, user: a question whose answer failed is left out
+        // with it, and an answer is never sent without its question.
         int first = newest;
         boolean skipped = false;
-        for (int i = newest - 1; i >= 0; i--) {
+        AssistantMessage answer = null;
+        for (int i = newest - 1; i >= 0 && !skipped; i--) {
             AssistantMessage m = messages.get(i);
             if (!isSendable(m)) continue;
-            if (skipped) continue;
-            int cost = estimateTokens(m.text);
+            if (!m.isUser()) {
+                if (answer == null) answer = m;
+                continue;
+            }
+            if (answer == null) continue;
+            int cost = estimateTokens(m.text) + estimateTokens(answer.text);
             if (used + cost > budget) {
                 skipped = true;
                 continue;
             }
             used += cost;
+            reversed.add(new Sent(answer.role, answer.text));
             reversed.add(new Sent(m.role, m.text));
+            answer = null;
             first = i;
         }
         Collections.reverse(reversed);
