@@ -85,8 +85,6 @@ public final class AssistantRows {
         public long generatingId;
         /** The engine's text for that answer right now, or null. */
         @Nullable public String liveText;
-        /** Questions held for the model, oldest first. */
-        @NonNull public List<String> pending = Collections.emptyList();
         /** Questions just handed to the engine that the store does not hold yet, oldest first. */
         @NonNull public List<String> sending = Collections.emptyList();
         /** Gemma E2B is on the phone and the chat model is not it: memory errors offer it. */
@@ -152,12 +150,6 @@ public final class AssistantRows {
         }
         if (!context.sending.isEmpty()) {
             rows.add(new Row(Type.WORKING, 0, "", true, false, false, false, null, false, "sw"));
-        }
-        for (int i = 0; i < context.pending.size(); i++) {
-            rows.add(new Row(Type.USER, 0, context.pending.get(i), false, false, false, false, null, false, "p" + i));
-        }
-        if (!context.pending.isEmpty()) {
-            rows.add(new Row(Type.WAITING, 0, "", false, false, false, false, null, false, "pw"));
         }
         return rows;
     }

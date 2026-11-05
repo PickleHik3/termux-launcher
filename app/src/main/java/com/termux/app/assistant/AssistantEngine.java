@@ -62,6 +62,7 @@ public final class AssistantEngine {
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
     @Nullable private Generation current;
+    private volatile boolean modelReady = true;
 
     private static final class Generation {
         final long chatId;
@@ -168,6 +169,48 @@ public final class AssistantEngine {
         if (!begin(g)) return false;
         streamExecutor.execute(() -> run(g));
         return true;
+    }
+
+    /**
+     * Keeps a question the model cannot answer yet: stores it and a "waiting" answer under it, so
+     * it is titled, searchable and survives a restart. It is answered, oldest first, once
+     * {@link #setModelReady} says the model can. Returns false when the text is empty or the chat
+     * is gone.
+     */
+    public boolean hold(long chatId, @NonNull String text) {
+        if (text.trim().isEmpty()) return false;
+        controlExecutor.execute(() -> {
+            long now = clock.getAsLong();
+            long userId = store.appendMessage(chatId, AssistantMessage.ROLE_USER, text,
+                AssistantMessage.STATE_COMPLETE, now);
+            long waitId = userId < 0 ? -1L : store.appendMessage(chatId, AssistantMessage.ROLE_ASSISTANT, "",
+                AssistantMessage.STATE_WAITING, now);
+            if (waitId >= 0) notifyMessage(chatId, waitId);
+            notifyChats();
+            drainWaiting();
+        });
+        return true;
+    }
+
+    /**
+     * Says whether the default model can answer now. When it can, the oldest waiting answer starts,
+     * and each finished answer starts the next. It begins true.
+     */
+    public void setModelReady(boolean ready) {
+        modelReady = ready;
+        if (ready) drainWaiting();
+    }
+
+    private void drainWaiting() {
+        if (!modelReady) return;
+        controlExecutor.execute(() -> {
+            if (!modelReady || isGenerating()) return;
+            AssistantMessage w = store.oldestWaiting();
+            if (w == null) return;
+            Generation g = new Generation(w.chatId, null, w.id);
+            if (!begin(g)) return;
+            streamExecutor.execute(() -> run(g));
+        });
     }
 
     /**
@@ -348,6 +391,7 @@ public final class AssistantEngine {
         clear(g);
         notifyMessage(g.chatId, g.messageId);
         notifyChats();
+        drainWaiting();
     }
 
     private void clear(Generation g) {

@@ -351,4 +351,65 @@ public class AssistantEngineTest {
         assertFalse(engine.isGenerating());
         assertEquals(0, transport.bodies.size());
     }
+
+    @Test
+    public void heldQuestionIsStoredWithWaitingAnswerTitledAndSearchable() {
+        long chat = store.createChat(1);
+        engine.setModelReady(false);
+        assertTrue(engine.hold(chat, "hello world"));
+        List<AssistantMessage> all = store.messages(chat);
+        assertEquals(2, all.size());
+        assertEquals("hello world", all.get(0).text);
+        assertEquals(AssistantMessage.STATE_WAITING, all.get(1).state);
+        assertEquals("hello world", store.chat(chat).title);
+        assertEquals(1, store.listChats("hello").size());
+        assertTrue(transport.bodies.isEmpty());
+    }
+
+    @Test
+    public void readyTurnsWaitingIntoAnAnswer() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(delta("Hi"));
+            sink.onEvent(finish());
+        };
+        long chat = store.createChat(1);
+        engine.setModelReady(false);
+        engine.hold(chat, "hello");
+        engine.setModelReady(true);
+        AssistantMessage a = last(chat);
+        assertEquals(AssistantMessage.STATE_COMPLETE, a.state);
+        assertEquals("Hi", a.text);
+        assertEquals(1, transport.bodies.size());
+        assertEquals(2, store.messages(chat).size());
+    }
+
+    @Test
+    public void waitingSurvivesReopen() {
+        long chat = store.createChat(1);
+        engine.setModelReady(false);
+        engine.hold(chat, "later");
+        store.close();
+        AssistantChatStore reopened = new AssistantChatStore(file);
+        assertEquals(AssistantMessage.STATE_WAITING, reopened.messages(chat).get(1).state);
+        reopened.close();
+    }
+
+    @Test
+    public void twoHeldQuestionsAreAnsweredInOrder() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(delta("ok"));
+            sink.onEvent(finish());
+        };
+        long a = store.createChat(1);
+        long b = store.createChat(2);
+        engine.setModelReady(false);
+        engine.hold(a, "first");
+        engine.hold(b, "second");
+        engine.setModelReady(true);
+        assertEquals(2, transport.bodies.size());
+        assertTrue(transport.bodies.get(0).contains("first"));
+        assertTrue(transport.bodies.get(1).contains("second"));
+        assertEquals(AssistantMessage.STATE_COMPLETE, last(a).state);
+        assertEquals(AssistantMessage.STATE_COMPLETE, last(b).state);
+    }
 }
