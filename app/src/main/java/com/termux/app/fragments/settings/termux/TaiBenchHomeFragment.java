@@ -436,7 +436,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         items.add(new TaiBenchListAdapter.Item(TYPE_DEVICE, "device", deviceSignature, d));
         TaiBenchLeaderboard.Board b = voice ? voiceBoard : board;
         if (b == null || b.empty()) {
-            items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty", b == null ? "loading" : "empty", b == null));
+            // The kind is in the content so the row rebinds its copy when Text / Voice flips.
+            items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty", (b == null ? "loading:" : "empty:") + (voice ? "voice" : "text"), b == null));
         } else {
             for (TaiBenchLeaderboard.Row row : b.ranked) {
                 items.add(new TaiBenchListAdapter.Item(TYPE_ROW, row.key, rowSignature(row), row));
