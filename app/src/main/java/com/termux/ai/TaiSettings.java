@@ -55,7 +55,7 @@ public final class TaiSettings {
     public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
-    /** Where speech-to-text runs: auto, cpu or gpu ({@link SttAccelerator}); no settings row yet (#218). */
+    /** Where speech-to-text runs: auto, cpu or gpu ({@link SttAccelerator}); the Speech accelerator row sets it (#218). */
     public static final String KEY_STT_ACCELERATOR = "tai_stt_accelerator";
     public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
     /** Speech output: the voice (one of {@link TaiTtsVoices#VOICES}) and the speed (a float, 1.0 = the voice's own pace). */
