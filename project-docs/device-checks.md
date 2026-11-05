@@ -18,6 +18,24 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Assistant page with a real model (11-06, 41019af0b, ADR 0022).** On pong, add the Assistant
+  page (Edit pages › Add assistant, or the drawer's Assistant entry), download Gemma E2B from
+  the model chip's sheet, ask a question: the answer streams in plain text, Stop turns it into
+  "Stopped" with its text kept, Copy/Share/Try again sit under a finished answer, a fenced code
+  block scrolls sideways with its own Copy while a sideways swipe elsewhere pages the wall. A
+  question sent before the model was ready ("Waiting for the model") is answered once it loads.
+  Leave the page mid-answer and come back: the text has kept growing. Stop must not cut off a
+  local-API answer started elsewhere (stop() uses the runtime-wide cancel). Watchdog on
+  MemAvailable while loading (pong memory rule). How: pong, `ad -s pong`, with the go-ahead.
+- **Assistant page dictation (11-06, 41019af0b).** The composer's mic: a Listening row with
+  levels, phrases appear as each pause closes, Done puts them in the field; first use asks for
+  the microphone. How: pong (the emulator has no microphone).
+- **Assistant page theme and font (11-06, 41019af0b).** Switching dark/light while the launcher
+  runs re-themes the page and its model sheet without a relaunch and stays on the Assistant page
+  (emulator: it kept the old theme and dropped to the Terminal page). At font scale 1.5 the
+  no-model notice's Download button doesn't wrap (emulator: "Downloa/d"). The "Assistant page
+  added" snackbar doesn't cover the composer. How: emulator or pong.
+
 - **Voice models in the Benchmark (11-05, #223).** On-device AI › Benchmark: a Text | Voice
   choice heads Home; Voice shows the voice board (or "No results yet"), Run a benchmark opens
   Choose listing the installed speech models (one line on top, no Quick/Standard), Continue →
