@@ -91,28 +91,32 @@ public final class ExtraKeyChord {
     }
 
     /**
-     * A typed macro the replay understands: a "+" standing alone between tokens is dropped, and a
-     * token naming a modifier, a named key or F1 to F12 is upper-cased ("ctrl + m" becomes
-     * "CTRL m"). Every other token stays as typed.
+     * A typed macro the replay understands: a "+" standing alone between tokens is dropped, a
+     * modifier token is upper-cased, and a token naming a named key or F1 to F12 is upper-cased
+     * only right after a modifier ("ctrl + tab" becomes "CTRL TAB", "cd home" stays). Every other
+     * token stays as typed.
      */
     @NonNull
     public static String normaliseMacro(@NonNull String macro) {
         String[] tokens = macro.trim().split("\\s+");
         StringBuilder out = new StringBuilder();
+        boolean afterModifier = false;
         for (String token : tokens) {
             if (token.equals("+")) continue;
             if (out.length() > 0) out.append(' ');
+            String mod = modifier(token);
             String upper = token.toUpperCase(Locale.ROOT);
-            boolean named = token.length() > 1 && (modifier(token) != null
-                || FUNCTION.matcher(token).matches()
-                || (ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.containsKey(upper)
-                    && ExtraKeyPickerCatalog.allKeys().contains(upper)));
-            if (named) {
-                String mod = modifier(token);
-                out.append(mod != null ? mod : upper);
-            } else {
-                out.append(token);
+            if (mod != null) {
+                out.append(mod);
+                afterModifier = true;
+                continue;
             }
+            boolean named = afterModifier && token.length() > 1
+                && (FUNCTION.matcher(token).matches()
+                    || (ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.containsKey(upper)
+                        && ExtraKeyPickerCatalog.allKeys().contains(upper)));
+            out.append(named ? upper : token);
+            afterModifier = false;
         }
         return out.length() == 0 ? macro.trim() : out.toString();
     }

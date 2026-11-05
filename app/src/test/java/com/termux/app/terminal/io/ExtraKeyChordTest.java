@@ -45,7 +45,10 @@ public class ExtraKeyChordTest {
     public void normalisesMacro() {
         assertEquals("CTRL m", ExtraKeyChord.normaliseMacro("ctrl + m"));
         assertEquals("CTRL m", ExtraKeyChord.normaliseMacro("CTRL + m"));
-        assertEquals("ls ENTER", ExtraKeyChord.normaliseMacro("ls enter"));
+        assertEquals("ls enter", ExtraKeyChord.normaliseMacro("ls enter"));
+        assertEquals("cd home", ExtraKeyChord.normaliseMacro("cd home"));
+        assertEquals("CTRL TAB", ExtraKeyChord.normaliseMacro("ctrl tab"));
+        assertEquals("ALT SHIFT TAB", ExtraKeyChord.normaliseMacro("alt shift tab"));
         assertEquals("CTRL F7", ExtraKeyChord.normaliseMacro("ctrl f7"));
         assertEquals("+", ExtraKeyChord.normaliseMacro("+"));
         assertEquals("hello world", ExtraKeyChord.normaliseMacro("hello world"));
