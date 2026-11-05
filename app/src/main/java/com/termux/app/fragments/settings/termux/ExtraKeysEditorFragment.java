@@ -774,20 +774,28 @@ public class ExtraKeysEditorFragment extends Fragment
 
     private View saveBar(@NonNull Context context) {
         LinearLayout bar = row(context);
-        bar.setPadding(dp(16), dp(10), dp(16), dp(12));
+        boolean landscape = getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        int buttonHeight = dp(landscape ? 40 : 48);
+        if (landscape) bar.setPadding(dp(16), dp(2), dp(16), dp(2));
+        else bar.setPadding(dp(16), dp(10), dp(16), dp(12));
         bar.setBackgroundColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurface, Color.BLACK));
         MaterialButton cancelButton = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         cancelButton.setText(android.R.string.cancel);
-        cancelButton.setMinHeight(dp(48));
+        cancelButton.setMinHeight(buttonHeight);
+        if (landscape) cancelButton.setInsetTop(0);
+        if (landscape) cancelButton.setInsetBottom(0);
         cancelButton.setOnClickListener(v -> cancel());
         bar.addView(cancelButton);
         View spacer = new View(context);
         bar.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
         saveButton = new MaterialButton(context);
         saveButton.setText(R.string.settings_extra_keys_save_changes);
-        saveButton.setMinHeight(dp(48));
+        saveButton.setMinHeight(buttonHeight);
+        if (landscape) saveButton.setInsetTop(0);
+        if (landscape) saveButton.setInsetBottom(0);
         saveButton.setSingleLine(true);
         saveButton.setEllipsize(TextUtils.TruncateAt.END);
         saveButton.setOnClickListener(v -> save());
