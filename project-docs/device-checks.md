@@ -444,3 +444,47 @@ longer counted as an error. Owed:
   Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
   (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
   pong.
+- **Volume keys on the Display page (11-05).** Display page in front with a display running:
+  volume up and down move the phone's volume and show the system panel; same with no display
+  running; a physical keyboard still types into X (that path now runs through the X11 input
+  handler, which also releases stuck modifiers) · pong.
+- **Home Wallpaper dim (11-05).** Home tab > Appearance > Wallpaper dim (after Depth): drag 0 →
+  60 with Home behind the editor: the wallpaper darkens live, stays after Done, Cancel restores.
+  With two Home pages, one drag darkens both; the Terminal page keeps its own dim. Add a third
+  Home page afterwards: it is as dark as the others · pong.
+- **Display page after its display stops (11-05).** Display page in front, kill or stop the
+  display: only "No display is running." / Start display / Get GUI apps, no monitor icon behind
+  the text and no "Display" word on the button, not a black page in the dark theme; same in
+  landscape. Swipe to Home and back with a display running, then stop it: the empty state, not a
+  frozen picture. First visit after a cold start: at most a brief card, then the display. The
+  text group sits on a readable glass panel over a busy wallpaper, light and dark theme · pong.
+- **Key combos in the extra keys picker (11-05).** Row + , type `ctrl+f7`: the first row reads
+  "Send Ctrl+F7 as keys", the cap reads Ctrl+F7; in xev on the display it arrives as Control
+  press, F7, Control release. `ctrl + m` saved as a plain macro sends Ctrl+M (Enter) in the
+  terminal. A category chip unchecks while a query is typed and returns when it is cleared ·
+  pong.
+- **Terminal extra keys guide (11-05).** Settings > Keyboard > Terminal extra keys: below Add row,
+  "What a key can be" with eight facts on their own lines, at font 1.0 and 1.3; Cancel / Save
+  stay pinned; in landscape Row 1 and Add row fit above the fold and the bar is one compact row ·
+  pong.
+- **No flash when the display closes itself (11-06).** Firefox (or any app started as the
+  display's start-up app) on the Display page, quit it from inside (Ctrl+Q): the page goes from
+  the app's last frame straight to the empty state on its panel, with no frame of bare wallpaper
+  and no white sheet; same for Stop from the page's menu; a temporary Display page (opened from a
+  Linux app) still disappears with its display · pong.
+- **New Home page wears the page in front's look (11-06).** Home 1 with its own dim and glass,
+  Edit pages > Add page: Home 2 looks the same from its first frame; add a page while Home 1 has
+  no overrides: the new page follows Global · pong.
+- **Whisper Base on the GPU (11-06, #227, b6ff781a3).** On-device AI › Speech: "Base GPU ·
+  Many languages" is listed with "Runs on the GPU and uses little CPU. Many languages, 30-second
+  window." and "Try it on this phone's GPU" (dimmed with "No usable GPU found on this phone"
+  only where there is no OpenCL). Seen on pong 11-06 up to install and select; still owed: (1) the
+  Voice benchmark runs Base GPU on the GPU and afterwards the sheet, the Model centre row and the
+  Speech picker card read "Recommended" or "Slower on this phone"; (2) dictation with it on Auto
+  and on GPU gives correct text, and on CPU still works (slow); (3) the accelerator dialog lists
+  Auto, CPU and "GPU · uses less battery, may be slower"; (4) no crash or `stt_gpu_unavailable` in
+  logcat on pong; (5) the speech card offers no language or window switch for it; the install sheet's size pill
+  (Base / Small / Base GPU, size on a second line, aadab9db7) fits on pong at font 1.0 and 1.3,
+  as it did on emu2; (6) put the
+  developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
+  audio in ~14 s on GPU, Small.en CPU ~17 s · pong.

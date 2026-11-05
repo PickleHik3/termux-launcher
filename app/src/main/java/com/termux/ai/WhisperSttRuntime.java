@@ -126,6 +126,8 @@ final class WhisperSttRuntime implements SttRuntime {
         boolean wasLoaded = isLoaded(spec.id);
         try {
             ensureLoaded(spec);
+        } catch (SttGpuUnavailableException e) {
+            return gpuUnavailable(e);
         } catch (Throwable t) {
             return error(500, "stt_load_failed", "Whisper model failed to load: " + message(t));
         }
@@ -174,6 +176,8 @@ final class WhisperSttRuntime implements SttRuntime {
         long loadStarted = System.currentTimeMillis();
         try {
             ensureLoaded(spec);
+        } catch (SttGpuUnavailableException e) {
+            return gpuUnavailable(e);
         } catch (Throwable t) {
             return error(500, "stt_load_failed", "Whisper model failed to load: " + message(t));
         }
@@ -277,6 +281,15 @@ final class WhisperSttRuntime implements SttRuntime {
         return response;
     }
 
+    /** What a GPU-only model says when the GPU cannot run it; the reason stays in {@code detail}. */
+    @NonNull
+    private JSONObject gpuUnavailable(@NonNull SttGpuUnavailableException e) throws JSONException {
+        JSONObject response = error(500, SttGpuUnavailableException.CODE,
+            "This phone's GPU can't run Whisper Base. Choosing CPU under Accelerator uses it anyway (slower, more battery).");
+        response.getJSONObject("error").put("detail", message(e));
+        return response;
+    }
+
     /** The model file and its tokenizer.json sidecar must both be there before anything is loaded. */
     @Nullable
     private JSONObject checkFiles(@NonNull TaiModelSpec spec) throws JSONException {
@@ -314,7 +327,7 @@ final class WhisperSttRuntime implements SttRuntime {
                 graph = loaded;
                 bindSignatures(loaded);
                 if (verify) verifySane();
-            });
+            }, TaiSpeechModels.needsGpuFp32(spec.id));
         } catch (Throwable t) {
             // The chooser has closed every graph it opened; only the bindings are left to drop.
             graph = null;

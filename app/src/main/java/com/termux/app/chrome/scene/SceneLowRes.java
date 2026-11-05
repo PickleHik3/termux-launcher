@@ -23,18 +23,19 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.terminal.FrameProbe;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * The scene rendered a second time at {@link #DIVISOR} of the screen per axis into an offscreen
+ * The scene rendered a second time at 1/{@code divisor} of the screen per axis into an offscreen
  * target, blurred, and published as {@link LiveSceneFrame} for the glass surfaces to sample. The
  * target is an {@link ImageReader} surface drawn by a {@link HardwareRenderer}: the scene's
  * program on a RenderNode. Scene thread only (its handler is the scene thread's).
  *
- * <p>Blur: a {@link RenderEffect} blur on the node, so it runs on the GPU at 1/8 size, keyed to the
+ * <p>Blur: a {@link RenderEffect} blur on the node, so it runs on the GPU at 1/divisor size, keyed to the
  * radius glass currently asks the blur cache for ({@link LiveSceneFrame#blurRadiusDp()}): sigma is
  * half the radius in pixels of this pass, which reads close to the stock blur's frost (eyeballed on
  * paper, not measured). The 8x bilinear upscale in the glass draw softens it further.</p>
@@ -52,8 +53,8 @@ import java.nio.ByteOrder;
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 final class SceneLowRes {
 
-    /** Pixels per axis at which the glass reads the scene: one eighth. */
-    static final int DIVISOR = 8;
+    /** The Look's default glass blur ({@code DEFAULT_SURFACE_BASE_BLUR}), used while no glass has asked. */
+    static final int FALLBACK_BLUR_DP = TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
     /** Images held open at most: the frame on screen and those not yet safe to give back. */
     static final int HELD = 4;
     /** One more than {@link #HELD}, so the producer always has a buffer to draw into. */
@@ -75,6 +76,8 @@ final class SceneLowRes {
     @NonNull private final SceneImageLedger<Image> mLedger =
         new SceneImageLedger<>(HELD, MIN_NEWER, MIN_AGE_MS, Image::close);
     private final int mWidth, mHeight;
+    /** Screen pixels per low-res pixel, per axis: 2, 4 or 8 ({@code debug.tl.scene_glass_div}). */
+    private final int mDivisor;
     /** Soft path: the reader's images are CPU readable, so no GPU readback is needed. */
     private boolean mCpuReadable;
     @NonNull private final SceneSoftPool mPool = new SceneSoftPool(POOL);
@@ -86,11 +89,12 @@ final class SceneLowRes {
     private boolean mClosed;
     private boolean mEventsSet;
 
-    SceneLowRes(int screenWidth, int screenHeight, @NonNull Handler sceneHandler,
+    SceneLowRes(int screenWidth, int screenHeight, int divisor, @NonNull Handler sceneHandler,
                 @NonNull ScenePrograms.Factory programs) {
-        mProgram = programs.create(1f / DIVISOR);
-        mWidth = Math.max(1, screenWidth / DIVISOR);
-        mHeight = Math.max(1, screenHeight / DIVISOR);
+        mDivisor = divisor;
+        mProgram = programs.create(1f / divisor);
+        mWidth = Math.max(1, screenWidth / divisor);
+        mHeight = Math.max(1, screenHeight / divisor);
         ImageReader reader = null;
         if ("soft".equals(COPY.get(SystemClock.uptimeMillis()))) {
             try {
@@ -116,6 +120,14 @@ final class SceneLowRes {
         mRenderer.setOpaque(true);
         mRenderer.setContentRoot(mNode);
         mRenderer.setSurface(mReader.getSurface());
+    }
+
+    void setKnobs(float speed, float density, int palette) {
+        mProgram.setKnobs(speed, density, palette);
+    }
+
+    void restart() {
+        mProgram.restart();
     }
 
     /** Renders one frame; the caller has set nothing, the program is brought up to date here. */
@@ -146,9 +158,11 @@ final class SceneLowRes {
     /** The node's blur follows the radius glass asks for; changed only when that moves. */
     private void syncBlur(float density) {
         int dp = LiveSceneFrame.blurRadiusDp();
+        // Glass has not asked for a radius yet: blur at the Look's default, never hand it raw texels.
+        if (dp <= 0) dp = FALLBACK_BLUR_DP;
         if (dp == mBlurDp) return;
         mBlurDp = dp;
-        float sigma = dp * density / DIVISOR / 2f;
+        float sigma = dp * density / mDivisor / 2f;
         mNode.setRenderEffect(sigma < 0.3f ? null
             : RenderEffect.createBlurEffect(sigma, sigma, Shader.TileMode.CLAMP));
     }
@@ -266,6 +280,10 @@ final class SceneLowRes {
         LiveSceneFrame.publish(mPoolBitmaps[slot], mPoolShaders[slot]);
         GLASS.tick();
         return true;
+    }
+
+    int divisor() {
+        return mDivisor;
     }
 
     long framesRendered() {

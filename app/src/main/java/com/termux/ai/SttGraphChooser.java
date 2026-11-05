@@ -99,23 +99,47 @@ final class SttGraphChooser {
     @NonNull private final LiteRtGraph.Loader interpreter;
     @NonNull private final LiteRtGraph.Loader cpu;
     @NonNull private final LiteRtGraph.Loader gpu;
+    /** The GPU at full float precision, for the models that need it. */
+    @NonNull private final LiteRtGraph.Loader gpuFp32;
 
     SttGraphChooser(@NonNull LiteRtGraph.Loader interpreter, @NonNull LiteRtGraph.Loader cpu, @NonNull LiteRtGraph.Loader gpu) {
+        this(interpreter, cpu, gpu, gpu);
+    }
+
+    SttGraphChooser(@NonNull LiteRtGraph.Loader interpreter, @NonNull LiteRtGraph.Loader cpu, @NonNull LiteRtGraph.Loader gpu,
+                    @NonNull LiteRtGraph.Loader gpuFp32) {
         this.interpreter = interpreter;
         this.cpu = cpu;
         this.gpu = gpu;
+        this.gpuFp32 = gpuFp32;
     }
 
     /** The real loaders: InterpreterGraph, and CompiledModelGraph on CPU and GPU. */
     @NonNull
     static SttGraphChooser standard() {
         return new SttGraphChooser(InterpreterGraph.LOADER,
-            CompiledModelGraph.loader(Accelerator.CPU), CompiledModelGraph.loader(Accelerator.GPU));
+            CompiledModelGraph.loader(Accelerator.CPU), CompiledModelGraph.loader(Accelerator.GPU),
+            CompiledModelGraph.loader(Accelerator.GPU, true));
     }
 
     @NonNull
     Opened open(@NonNull File model, int threads, @NonNull SttAccelerator requested, @NonNull Memory memory,
                 @NonNull Prepare prepare) throws Exception {
+        return open(model, threads, requested, memory, prepare, false);
+    }
+
+    /**
+     * As above; with {@code needsGpuFp32} (a model that is only right on the GPU at full precision)
+     * Auto and GPU both mean the GPU at FP32, and a GPU that fails to load, to prove itself or that
+     * crashed the process before throws {@link SttGpuUnavailableException}: no silent CPU fallback.
+     * An explicit CPU (or the Interpreter) still runs the model there.
+     */
+    @NonNull
+    Opened open(@NonNull File model, int threads, @NonNull SttAccelerator requested, @NonNull Memory memory,
+                @NonNull Prepare prepare, boolean needsGpuFp32) throws Exception {
+        if (needsGpuFp32 && requested != SttAccelerator.CPU && requested != SttAccelerator.INTERPRETER) {
+            return openGpuOnly(model, threads, memory, prepare);
+        }
         if (requested == SttAccelerator.INTERPRETER) return load(interpreter, model, threads, prepare, "interp", "");
         if (requested == SttAccelerator.CPU || requested == SttAccelerator.AUTO) return load(cpu, model, threads, prepare, "cpu", "");
         String failure = memory.gpuFailure();
@@ -140,6 +164,37 @@ final class SttGraphChooser {
             String reason = message(t);
             memory.recordGpu(false, reason);
             return load(cpu, model, threads, prepare, "cpu", reason);
+        }
+        memory.endGpuAttempt();
+        memory.recordGpu(true, "");
+        return new Opened(graph, "gpu", "");
+    }
+
+    @NonNull
+    private Opened openGpuOnly(@NonNull File model, int threads, @NonNull Memory memory,
+                               @NonNull Prepare prepare) throws Exception {
+        String failure = memory.gpuFailure();
+        if (failure != null && failure.startsWith(CRASH_REASON_PREFIX)) {
+            throw new SttGpuUnavailableException("gpu failed before: " + failure);
+        }
+        int unfinished = memory.beginGpuAttempt();
+        if (unfinished >= MAX_UNFINISHED_GPU_ATTEMPTS) {
+            memory.endGpuAttempt();
+            String reason = CRASH_REASON_PREFIX + " the process died during " + unfinished + " GPU loads in a row";
+            memory.recordGpu(false, reason);
+            throw new SttGpuUnavailableException(reason);
+        }
+        LiteRtGraph graph = null;
+        try {
+            graph = gpuFp32.load(model, threads);
+            prepare.apply(graph, true);
+        } catch (Throwable t) {
+            closeQuietly(graph);
+            memory.endGpuAttempt();
+            if (isCancellation(t)) throw asException(t);
+            String reason = message(t);
+            memory.recordGpu(false, reason);
+            throw new SttGpuUnavailableException(reason, t);
         }
         memory.endGpuAttempt();
         memory.recordGpu(true, "");

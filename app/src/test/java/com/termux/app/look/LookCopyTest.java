@@ -46,4 +46,13 @@ public class LookCopyTest {
         assertEquals(0, PageLook.copyOverrides(store, 3, 3));
         assertEquals(0, PageLook.copyOverrides(store, -1, 4));
     }
+
+    @Test
+    public void carriesTheWallpaperDimToANewPage() {
+        MemoryLookStore store = new MemoryLookStore();
+        String dim = TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
+        store.putInt(dim + "@3", 61);
+        assertEquals(1, PageLook.copyOverrides(store, 3, 9));
+        assertEquals(61, store.getInt(dim + "@9", -1));
+    }
 }

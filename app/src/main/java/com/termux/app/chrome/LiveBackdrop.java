@@ -11,6 +11,9 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
+import com.termux.app.chrome.scene.LiveSceneFrame;
+import com.termux.app.chrome.scene.SceneLayerView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -194,7 +197,10 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     private int dimBeneath() {
         for (int i = 0; i < mBeneath.size(); i++) {
             View below = mBeneath.get(i);
-            if (below instanceof WallpaperBackdropView) return ((WallpaperBackdropView) below).dimColor();
+            // A scene on: the photo is left out of the recording, and so is its dim.
+            if (below instanceof WallpaperBackdropView) {
+                return LiveSceneFrame.current() != null ? 0 : ((WallpaperBackdropView) below).dimColor();
+            }
         }
         return 0;
     }
@@ -306,7 +312,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 && picture.mRecordedHeight == surface.getHeight()
                 && picture.mRecordedMargin == margin
                 && picture.mRecordedMatrix.equals(mMatrix)
-                && picture.mRecordedBeneath.equals(mBeneath)) {
+                && picture.mRecordedBeneath.equals(mBeneath)
+                && picture.mRecordedSceneGen == sceneGeneration()) {
                 continue;
             }
             int width = surface.getWidth() + 2 * margin;
@@ -318,6 +325,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.mRecordedWidth = surface.getWidth();
             picture.mRecordedHeight = surface.getHeight();
             picture.mRecordedMargin = margin;
+            picture.mRecordedSceneGen = sceneGeneration();
             // The first whole recording: its holder swaps the stored frame for it in this frame.
             picture.recorded();
         }
@@ -414,7 +422,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             canvas.translate(-mRoot.getScrollX(), -mRoot.getScrollY());
             if (z) enableZ(canvas);
             for (int i = 0; i < mBeneath.size(); i++) {
-                ((Container) mRoot).drawChildForBackdrop(canvas, mBeneath.get(i));
+                drawBeneath((Container) mRoot, canvas, mBeneath.get(i));
             }
             if (z) disableZ(canvas);
         } finally {
@@ -441,6 +449,37 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         canvas.translate(mLocation[0] - mRootLocation[0], mLocation[1] - mRootLocation[1]);
         background.draw(canvas);
         canvas.restoreToCount(save);
+    }
+
+    /** The live scene frame's generation, 0 with no scene: a recording made over another is stale. */
+    private static int sceneGeneration() {
+        LiveSceneFrame.Frame frame = LiveSceneFrame.current();
+        return frame == null ? 0 : frame.generation;
+    }
+
+    @NonNull private final android.graphics.Paint mScenePaint =
+        new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+    @NonNull private final android.graphics.Rect mSceneDest = new android.graphics.Rect();
+
+    /**
+     * Draws one view beneath a surface. With a scene on, the scene's SurfaceView cannot be
+     * recorded, so its live frame is drawn over its bounds in its place (the frame covers the
+     * layer's screen rect, as the stored-frame branch of the slab aims it) and the photo under it
+     * is left out: the scene frame is the one ground. Otherwise the view draws itself.
+     */
+    private void drawBeneath(@NonNull Container parent, @NonNull Canvas canvas, @NonNull View below) {
+        LiveSceneFrame.Frame frame = LiveSceneFrame.current();
+        LiveGround.Draw how = LiveGround.choose(frame != null,
+            below instanceof SceneLayerView, below instanceof WallpaperBackdropView);
+        if (how == LiveGround.Draw.SKIP) return;
+        if (how == LiveGround.Draw.SCENE_FRAME && frame != null) {
+            if (!frame.bitmap.isRecycled() && below.getVisibility() == View.VISIBLE) {
+                mSceneDest.set(below.getLeft(), below.getTop(), below.getRight(), below.getBottom());
+                canvas.drawBitmap(frame.bitmap, null, mSceneDest, mScenePaint);
+            }
+            return;
+        }
+        parent.drawChildForBackdrop(canvas, below);
     }
 
     /** Shadows and Z order among the views drawn, as a parent's own hardware draw has them. */
@@ -578,7 +617,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             canvas.translate(-parent.getScrollX(), -parent.getScrollY());
             if (z) enableZ(canvas);
             for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
-                ((Container) parent).drawChildForBackdrop(canvas, below);
+                drawBeneath((Container) parent, canvas, below);
             }
             if (z) disableZ(canvas);
             canvas.restoreToCount(save);

@@ -40,13 +40,21 @@ public final class TaiVoiceBenchRunner {
         public final long sizeBytes;
         /** Whether the Speech accelerator row offers the GPU for this model on this phone. */
         public final boolean gpuOffered;
+        /** A model that only runs right on the GPU (its default path): it is run there and not on the CPU. */
+        public final boolean gpuOnly;
 
         public Target(@NonNull String modelId, @NonNull String displayName, @Nullable String path, long sizeBytes, boolean gpuOffered) {
+            this(modelId, displayName, path, sizeBytes, gpuOffered, false);
+        }
+
+        public Target(@NonNull String modelId, @NonNull String displayName, @Nullable String path, long sizeBytes,
+                      boolean gpuOffered, boolean gpuOnly) {
             this.modelId = modelId;
             this.displayName = displayName;
             this.path = path;
             this.sizeBytes = sizeBytes;
             this.gpuOffered = gpuOffered;
+            this.gpuOnly = gpuOnly;
         }
     }
 
@@ -150,7 +158,8 @@ public final class TaiVoiceBenchRunner {
     private static List<Planned> expand(@NonNull List<Target> targets) {
         List<Planned> out = new ArrayList<>();
         for (Target target : targets) {
-            for (String accelerator : TaiVoiceBench.accelerators(target.gpuOffered)) out.add(new Planned(target, accelerator));
+            List<String> accelerators = target.gpuOnly ? TaiVoiceBench.gpuOnlyAccelerators() : TaiVoiceBench.accelerators(target.gpuOffered);
+            for (String accelerator : accelerators) out.add(new Planned(target, accelerator));
         }
         return out;
     }

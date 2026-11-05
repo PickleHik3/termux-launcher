@@ -202,6 +202,52 @@ public class WhisperSttRuntimeTest {
         }
     }
 
+    private JSONObject transcribeAs(String modelId, WhisperSttRuntime runtime, File model) throws Exception {
+        File audio = new File(tmp.getRoot(), "clip.wav");
+        if (!audio.isFile()) Files.write(audio.toPath(), WhisperMelTest.readBytes("whisper/git_status_16k.wav"));
+        TaiModelSpec base = spec(model.getAbsolutePath());
+        TaiModelSpec as = new TaiModelSpec(modelId, base.displayName, base.roleHint, "test", base.localPath, "MIT", 123L,
+            base.capabilities, false, null, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM,
+            "whisper-acft", "float32", 128, 0, null);
+        return runtime.transcribe(as, audio, null, null);
+    }
+
+    @Test
+    public void theGpuModelOnAGpuThatFailsSaysWhyAndStaysOffTheCpu() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = whisperGraph();
+        LiteRtGraph.Loader brokenGpu = (file, threads) -> {
+            throw new IllegalStateException("Failed to create the GPU accelerator");
+        };
+        for (SttAccelerator ask : new SttAccelerator[] {SttAccelerator.AUTO, SttAccelerator.GPU}) {
+            WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+                new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu, brokenGpu), () -> ask);
+            runtime.setMemory(spec -> new SttGraphChooserTest.FakeMemory());
+            JSONObject result = transcribeAs(TaiModelCatalog.WHISPER_BASE_GPU_ID, runtime, model);
+            assertFalse(result.toString(), result.getBoolean("ok"));
+            assertEquals("stt_gpu_unavailable", result.getJSONObject("error").getString("code"));
+            assertTrue(result.getJSONObject("error").getString("message").startsWith("This phone's GPU can't run Whisper Base"));
+            assertTrue(result.getJSONObject("error").getString("message").contains("CPU under Accelerator"));
+            assertTrue(result.getJSONObject("error").getString("detail").contains("GPU accelerator"));
+        }
+        assertEquals(0, cpu.loads);
+    }
+
+    @Test
+    public void theGpuModelRunsOnTheCpuWhenCpuIsChosen() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = whisperGraph();
+        LiteRtGraph.Loader brokenGpu = (file, threads) -> {
+            throw new IllegalStateException("Failed to create the GPU accelerator");
+        };
+        WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu, brokenGpu), () -> SttAccelerator.CPU);
+        runtime.setMemory(spec -> new SttGraphChooserTest.FakeMemory());
+        JSONObject result = transcribeAs(TaiModelCatalog.WHISPER_BASE_GPU_ID, runtime, model);
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("cpu", result.getString("accelerator"));
+    }
+
     private JSONObject transcribeGitStatus(WhisperSttRuntime runtime, File model) throws Exception {
         File audio = new File(tmp.getRoot(), "clip.wav");
         if (!audio.isFile()) Files.write(audio.toPath(), WhisperMelTest.readBytes("whisper/git_status_16k.wav"));

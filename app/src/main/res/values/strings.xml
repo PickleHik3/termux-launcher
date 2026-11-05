@@ -282,13 +282,7 @@
     <string name="settings_extra_keys_row_options_cd">Row options</string>
     <string name="settings_extra_keys_add_key_cd">Add key</string>
     <string name="settings_extra_keys_guide_title">What a key can be</string>
-    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.
-Text: typed as written.
-Combination: ctrl+f7 or alt+shift+tab, pressed together.
-Macro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.
-Tool: a launcher action, like the keyboard, mouse mode or a page.
-Swipe up: a second key on the same cap.
-While a Linux display is showing, the row sends its keys to it.</string>
+    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.\nText: typed as written.\nCombination: ctrl+f7 or alt+shift+tab, pressed together.\nMacro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.\nTool: a launcher action, like the keyboard, mouse mode or a page.\nDisplay label: any text, or a glyph from the Ω button\'s search.\nSwipe up: a second key on the same cap.\nWhile a Linux display is showing, the row sends its keys to it.</string>
     <string name="settings_extra_keys_hint">Tap to edit · Hold the handle to reorder</string>
     <plurals name="settings_extra_keys_row_count">
         <item quantity="one">%d row</item>
@@ -988,6 +982,12 @@ While a Linux display is showing, the row sends its keys to it.</string>
     <string name="wallpaper_target_home_screen">Home screen</string>
     <string name="wallpaper_target_lock_screen">Lock screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
+    <string name="live_palette_aurora_natural">Natural</string>
+    <string name="live_palette_aurora_purple_pink">Purple-pink</string>
+    <string name="live_palette_aurora_high_red">High red</string>
+    <string name="live_palette_particles_cool">Cool</string>
+    <string name="live_palette_particles_warm">Warm</string>
+    <string name="live_palette_particles_mono">Mono</string>
     <string name="title_wallpaper_read_permission">Allow wallpaper access</string>
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
@@ -1744,8 +1744,8 @@ While a Linux display is showing, the row sends its keys to it.</string>
         <string name="tai_centre_parallel_title">Simultaneous downloads</string>
         <string name="tai_centre_parallel_summary">Two usually fill a home connection; more only split it.</string>
         <string name="tai_centre_sheet_title">Install %1$s</string>
-        <string name="tai_centre_sheet_size_base">Base · %1$s</string>
-        <string name="tai_centre_sheet_size_small">Small · %1$s</string>
+        <string name="tai_centre_sheet_size_base">Base\n%1$s</string>
+        <string name="tai_centre_sheet_size_small">Small\n%1$s</string>
         <string name="tai_centre_sheet_language_english">English</string>
         <string name="tai_centre_sheet_language_many">Many languages</string>
         <string name="tai_centre_sheet_window_10">10 seconds</string>
@@ -2652,6 +2652,13 @@ While a Linux display is showing, the row sends its keys to it.</string>
     <string name="speech_model_accelerator_gpu">GPU</string>
     <string name="speech_model_accelerator_gpu_choice">GPU · uses less battery, may be slower</string>
     <string name="speech_model_accelerator_gpu_unavailable">GPU unavailable, using CPU</string>
+    <string name="tai_centre_sheet_size_gpu">Base GPU\n%1$s</string>
+    <string name="speech_gpu_size_hint">Runs on the GPU and uses little CPU. Many languages, 30-second window.</string>
+    <string name="speech_gpu_advice_no_gpu">No usable GPU found on this phone</string>
+    <string name="speech_gpu_advice_no_gpu_warning">No usable GPU found on this phone. It may not run, and the CPU is slower.</string>
+    <string name="speech_gpu_advice_try">Try it on this phone\'s GPU</string>
+    <string name="speech_gpu_advice_recommended">Recommended</string>
+    <string name="speech_gpu_advice_slower">Slower on this phone</string>
     <string name="speech_output_header">Voice output</string>
     <string name="speech_output_missing_title">No voice yet</string>
     <string name="speech_output_missing_summary">Get the voice model in Model centre to hear text read aloud</string>

@@ -107,6 +107,9 @@ public class ExtraKeysEditorFragment extends Fragment
     private RowAdapter adapter;
     private ItemTouchHelper touchHelper;
     private View saveBar;
+    private View hintView;
+    private int[][] stockButton;
+    private MaterialButton cancelBtn;
     private MaterialButton saveButton;
 
     private final OnBackPressedCallback backCallback = new OnBackPressedCallback(false) {
@@ -142,7 +145,8 @@ public class ExtraKeysEditorFragment extends Fragment
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         content.addView(pagesBar(context));
-        content.addView(hintRow(context));
+        hintView = hintRow(context);
+        content.addView(hintView);
 
         RecyclerView list = new RecyclerView(context);
         list.setLayoutManager(new LinearLayoutManager(context));
@@ -161,6 +165,7 @@ public class ExtraKeysEditorFragment extends Fragment
         saveBar = saveBar(context);
         column.addView(saveBar);
         root = column;
+        applyCompact();
 
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),
             backCallback);
@@ -772,22 +777,62 @@ public class ExtraKeysEditorFragment extends Fragment
 
     // ------------------------------------------------------------- save bar
 
+    /** True when the window is short (a phone in landscape), whatever the orientation says. */
+    private boolean isShort() {
+        return getResources().getConfiguration().screenHeightDp < 480;
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // The activity handles configChanges, so this view survives rotation: restyle it.
+        applyCompact();
+    }
+
+    /** Compact save bar and no hint row when short; the stock sizes otherwise. */
+    private void applyCompact() {
+        if (saveBar == null || cancelBtn == null || saveButton == null) return;
+        boolean compact = isShort();
+        saveBar.setPadding(dp(16), dp(compact ? 2 : 10), dp(16), dp(compact ? 2 : 12));
+        int h = dp(compact ? 40 : 48);
+        MaterialButton[] buttons = {cancelBtn, saveButton};
+        if (stockButton == null) {
+            stockButton = new int[buttons.length][];
+            for (int i = 0; i < buttons.length; i++) {
+                MaterialButton b = buttons[i];
+                stockButton[i] = new int[]{b.getInsetTop(), b.getInsetBottom(),
+                    b.getMinHeight(), b.getMinimumHeight()};
+            }
+        }
+        for (int i = 0; i < buttons.length; i++) {
+            MaterialButton b = buttons[i];
+            int[] stock = stockButton[i];
+            // View minimum height is what measure honours; TextView.setMinHeight alone loses to
+            // the style's 48dp-with-insets, so set both and drop the 4dp insets when compact.
+            b.setMinHeight(h);
+            b.setMinimumHeight(h);
+            b.setInsetTop(compact ? 0 : stock[0]);
+            b.setInsetBottom(compact ? 0 : stock[1]);
+            if (!compact) { b.setMinHeight(stock[2]); b.setMinimumHeight(stock[3]); }
+            b.requestLayout();
+        }
+        if (hintView != null) hintView.setVisibility(compact ? View.GONE : View.VISIBLE);
+    }
+
     private View saveBar(@NonNull Context context) {
         LinearLayout bar = row(context);
-        bar.setPadding(dp(16), dp(10), dp(16), dp(12));
         bar.setBackgroundColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurface, Color.BLACK));
         MaterialButton cancelButton = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        cancelBtn = cancelButton;
         cancelButton.setText(android.R.string.cancel);
-        cancelButton.setMinHeight(dp(48));
         cancelButton.setOnClickListener(v -> cancel());
         bar.addView(cancelButton);
         View spacer = new View(context);
         bar.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
         saveButton = new MaterialButton(context);
         saveButton.setText(R.string.settings_extra_keys_save_changes);
-        saveButton.setMinHeight(dp(48));
         saveButton.setSingleLine(true);
         saveButton.setEllipsize(TextUtils.TruncateAt.END);
         saveButton.setOnClickListener(v -> save());

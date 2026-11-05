@@ -157,6 +157,14 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Nullable private PaneGlassBackdropView mGlass;
     @Nullable private PaneGlassBackdropView mCornerMask;
     @Nullable private View mEmptyState;
+    /** The empty state's glass panel; fed by {@link #applyEmptyPanel}. */
+    @Nullable private PaneGlassBackdropView mEmptyGlass;
+    /** The empty state's text group; it wears {@link #mEmptyScrim} while the page is see-through. */
+    @Nullable private View mEmptyGroup;
+    /** The panel's own contrast: the surface colour, rounded as the panel is, over its blur. */
+    @Nullable private android.graphics.drawable.GradientDrawable mEmptyScrim;
+    /** The page shows the wallpaper behind it (see-through mode), slab or no slab. */
+    private boolean mSeeThrough;
     @Nullable private Host mHost;
     @Nullable private PaneSurfaceStyle mStyle;
     @Nullable private TapListener mTapListener;
@@ -237,6 +245,13 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
+        mEmptyGlass = findViewById(R.id.x11_pane_empty_glass);
+        mEmptyGroup = findViewById(R.id.x11_pane_empty_group);
+        PaneGlass.followLayout(mEmptyGlass);
+        // The panel's radius is capped against its own size, known only once it is laid out.
+        if (mEmptyState != null) mEmptyState.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) applyEmptyPanel();
+        });
         if (mDisplay != null) {
             // Above the display, so it covers the surface while both are up at the swap; below
             // the corner mask, so the arcs round it as they round the picture.
@@ -1476,6 +1491,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     public void onWallMoved() {
         if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mEmptyGlass != null) mEmptyGlass.invalidateGlassPosition();
         if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
         if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
@@ -1484,6 +1500,44 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     public void setOutlineTravelAlpha(float alpha) {
         mRim.setTravelAlpha(alpha);
     }
+
+    /**
+     * Feed the empty state's panel, so the text group stays readable over a busy wallpaper: the
+     * Base Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
+     * a frosted-card scrim of the surface colour that gives the panel contrast of its own - the
+     * slab's tint alone can be all but clear. The scrim shows whenever the page is see-through,
+     * slab or no slab; an opaque page has its own ground and wears neither.
+     */
+    private void applyEmptyPanel() {
+        if (mEmptyGlass == null || mEmptyState == null) return;
+        float density = getResources().getDisplayMetrics().density;
+        float requested = PaneGlass.radiusPx(mStyle, density);
+        PaneGlass.apply(mStyle, mEmptyState, mEmptyGlass, requested);
+        if (mEmptyGroup == null) return;
+        if (!(mSeeThrough || PaneGlass.isActive(mStyle))) {
+            mEmptyGroup.setBackground(null);
+            return;
+        }
+        if (mEmptyScrim == null) mEmptyScrim = new android.graphics.drawable.GradientDrawable();
+        int surface = com.termux.shared.theme.ThemeUtils.getSystemAttrColor(getContext(),
+            com.termux.shared.R.attr.termuxColorSurfacePanel, android.graphics.Color.BLACK);
+        mEmptyScrim.setColor((EMPTY_SCRIM_ALPHA << 24) | (surface & 0x00FFFFFF));
+        final float radius = com.termux.app.terminal.PaneShape.radiusForBounds(requested,
+            mEmptyGroup.getWidth(), mEmptyGroup.getHeight());
+        mEmptyScrim.setCornerRadius(radius);
+        if (mEmptyGroup.getBackground() != mEmptyScrim) mEmptyGroup.setBackground(mEmptyScrim);
+        // The blur under the scrim is a plain rectangle: clipped to the same corners, or its
+        // corners show past the card's as slivers of unrounded blur.
+        mEmptyGlass.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(android.view.View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        });
+        mEmptyGlass.setClipToOutline(true);
+    }
+
+    /** The empty panel's scrim alpha: about 65%, a frosted card over the blurred wallpaper. */
+    private static final int EMPTY_SCRIM_ALPHA = 0xA6;
 
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
@@ -1502,6 +1556,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // dressed while a display runs — the surface simply covers it — so the page has the glass
         // it should the moment the display stops, without a pass of its own to run then.
         PaneGlass.apply(style, this, mGlass, radiusPx);
+        // Non-null exactly while the wall shows the wallpaper (see-through mode).
+        android.graphics.Bitmap wallBehind = style != null ? style.wallBehindFrame() : null;
+        mSeeThrough = wallBehind != null;
+        applyEmptyPanel();
         // The tab is part of the page's own outline, exactly as the Widgets page's is: flush in the
         // corner inside the rim's line, in the tab's own fixed material. It stays inside that line
         // rather than against the bounding box, where the page's own corner mask would paint the
@@ -1537,7 +1595,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 // behind. The arcs are never left open, or the surface would show square.
                 // Only a mask that actually took new paint needs re-aiming: every chrome apply
                 // comes through here, and the page's own layout listener re-aims it when it moves.
-                if (mCornerMask.setGlass(style.wallBehindFrame(), style.paneGlassBlurFrameRect(),
+                if (mCornerMask.setGlass(wallBehind, style.paneGlassBlurFrameRect(),
                     android.graphics.Color.TRANSPARENT, null, 0, radiusPx, null)) {
                     mCornerMask.invalidateGlassPosition();
                 }

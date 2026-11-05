@@ -1,7 +1,13 @@
 package com.termux.app.chrome.scene;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
@@ -10,6 +16,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.terminal.DebugChoice;
 import com.termux.terminal.DebugSwitch;
 import com.termux.terminal.LatencyProbe;
@@ -41,17 +48,19 @@ public final class SceneController implements LatencyProbe.CommitListener {
         @Nullable TerminalView focusedPane();
 
         boolean lazyMode();
+
+        /** The preferences the live wallpaper choice is stored in, or null before they exist. */
+        @Nullable TermuxAppSharedPreferences preferences();
     }
 
     private static final DebugChoice SCENE =
         new DebugChoice(SceneFramePolicy.PROP_SCENE, "off", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice RATE =
-        new DebugChoice(SceneFramePolicy.PROP_RATE, "30", DebugSwitch.SYSTEM_PROPERTIES);
+        new DebugChoice(SceneFramePolicy.PROP_RATE, "", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS =
         new DebugChoice(SceneFramePolicy.PROP_GLASS, "lowres", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS_RATE =
-        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE,
-            Integer.toString(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ), DebugSwitch.SYSTEM_PROPERTIES);
+        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE, "", DebugSwitch.SYSTEM_PROPERTIES);
 
     private static final DebugChoice TRACE_INVAL =
         new DebugChoice("debug.tl.scene_trace_inval", "0", DebugSwitch.SYSTEM_PROPERTIES);
@@ -66,6 +75,21 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @Nullable private String mWindowName;
     private boolean mAttached;
     @Nullable private SceneInvalTrace mInvalTrace;
+    /** The persisted choice as of the last attach or {@link #refresh}; read here, never per touch. */
+    @NonNull private LiveWallpaperChoice mChoice = LiveWallpaperChoice.none();
+    @Nullable private SharedPreferences mStore;
+    private final SharedPreferences.OnSharedPreferenceChangeListener mChoiceListener =
+        (prefs, key) -> {
+            if (LiveWallpaperChoice.isChoiceKey(key)) refresh();
+        };
+    private boolean mPowerWatched;
+    private boolean mPowerHold;
+    private final BroadcastReceiver mPowerReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            updatePowerHold();
+        }
+    };
+    @Nullable private PowerManager.OnThermalStatusChangedListener mThermalListener;
 
     private final View.OnLayoutChangeListener mPlace =
         (v, l, t, r, b, ol, ot, or, ob) -> place();
@@ -82,13 +106,48 @@ public final class SceneController implements LatencyProbe.CommitListener {
     public void attach() {
         mAttached = true;
         LatencyProbe.setCommitListener(this);
+        listenForChoice();
+        readChoice();
         poll();
+    }
+
+    /**
+     * Re-reads the persisted choice and applies it now: a different scene switches the layer, the
+     * same scene takes the new knobs in place. Cheap when nothing changed. Triggered by this
+     * controller's own preference listener (while attached); a caller may also call it directly.
+     */
+    public void refresh() {
+        if (!mAttached) return;
+        readChoice();
+        poll();
+    }
+
+    private void readChoice() {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        mChoice = prefs == null ? LiveWallpaperChoice.none() : LiveWallpaperChoice.read(prefs);
+    }
+
+    private void listenForChoice() {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store == mStore) return;
+        unlistenForChoice();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mChoiceListener);
+        mStore = store;
+    }
+
+    private void unlistenForChoice() {
+        SharedPreferences store = mStore;
+        mStore = null;
+        if (store != null) store.unregisterOnSharedPreferenceChangeListener(mChoiceListener);
     }
 
     /** From onStop: the layer goes away with the screen it was drawn on. */
     public void detach() {
         mAttached = false;
         LatencyProbe.clearCommitListener(this);
+        unlistenForChoice();
         removeLayer();
     }
 
@@ -144,7 +203,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private void poll() {
         if (!mAttached) return;
         long now = SystemClock.uptimeMillis();
-        String value = SCENE.get(now);
+        // A set debug property overrides the user's choice; without one the choice decides.
+        String prop = SCENE.get(now);
+        String value = SceneFramePolicy.sceneOn(prop) ? prop : mChoice.effectiveScene();
         boolean on = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && SceneFramePolicy.sceneOn(value);
         // A different scene is a different layer: the property switches it on the next poll.
@@ -152,9 +213,14 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (on && mLayer == null) installLayer(value);
         SceneLayerView layer = mLayer;
         if (layer == null) return;
-        layer.setRateHz(SceneFramePolicy.parseRate(RATE.get(now)));
+        String rateProp = RATE.get(now);
+        int sceneRate = rateProp == null || rateProp.isEmpty()
+            ? mChoice.rateHz : SceneFramePolicy.parseRate(rateProp);
+        layer.setRateHz(sceneRate);
+        layer.setKnobs(mChoice.speed, mChoice.density, mChoice.palette);
+        layer.setPowerHold(mPowerHold);
         layer.setGlassLowRes(SceneFramePolicy.glassLowRes(GLASS.get(now)));
-        layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now)));
+        layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now), sceneRate));
     }
 
     private void installLayer(@NonNull String kind) {
@@ -162,6 +228,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, 0);
         int index = mBackdrop == null ? 0 : mContainer.indexOfChild(mBackdrop) + 1;
         mLayer = layer;
+        watchPower();
+        layer.setPowerHold(mPowerHold);
         mContainer.addView(layer, Math.max(0, index), lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
@@ -238,11 +306,54 @@ public final class SceneController implements LatencyProbe.CommitListener {
         SceneLayerView layer = mLayer;
         if (layer == null) return;
         mLayer = null;
+        unwatchPower();
         mContainer.removeOnLayoutChangeListener(mPlace);
         removeInvalTrace();
         layer.destroy();
         mContainer.removeView(layer);
         LiveSceneFrame.clear();
+    }
+
+    // ---- Battery saver and heat -----------------------------------------------------------------
+
+    /** While a layer exists: listens for battery saver and thermal changes (SceneFramePolicy.holdAtStill decides). */
+    private void watchPower() {
+        if (mPowerWatched || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        mPowerWatched = true;
+        mActivity.registerReceiver(mPowerReceiver,
+            new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), Context.RECEIVER_NOT_EXPORTED);
+        PowerManager pm = mActivity.getSystemService(PowerManager.class);
+        if (pm != null) {
+            mThermalListener = status -> updatePowerHold();
+            pm.addThermalStatusListener(mActivity.getMainExecutor(), mThermalListener);
+        }
+        mPowerHold = currentPowerHold();
+    }
+
+    private void unwatchPower() {
+        if (!mPowerWatched) return;
+        mPowerWatched = false;
+        try {
+            mActivity.unregisterReceiver(mPowerReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Not registered: nothing to undo.
+        }
+        PowerManager pm = mActivity.getSystemService(PowerManager.class);
+        PowerManager.OnThermalStatusChangedListener l = mThermalListener;
+        mThermalListener = null;
+        if (pm != null && l != null) pm.removeThermalStatusListener(l);
+    }
+
+    private boolean currentPowerHold() {
+        PowerManager pm = mActivity.getSystemService(PowerManager.class);
+        if (pm == null) return false;
+        return SceneFramePolicy.holdAtStill(pm.isPowerSaveMode(), pm.getCurrentThermalStatus());
+    }
+
+    private void updatePowerHold() {
+        mPowerHold = currentPowerHold();
+        SceneLayerView layer = mLayer;
+        if (layer != null) layer.setPowerHold(mPowerHold);
     }
 
     /** Sizes the layer to the whole decor: margins pull it out to the window's origin. */

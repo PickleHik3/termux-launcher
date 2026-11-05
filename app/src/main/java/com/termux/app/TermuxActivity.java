@@ -2013,6 +2013,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean lazyMode() {
                         return isLazyModeEnabled();
                     }
+                    @Nullable @Override public com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences() {
+                        return mPreferences;
+                    }
                 });
         }
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
@@ -28933,10 +28936,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Taking the page away hands the wall to a window with no settle after it, and may move
         // the panes under the hand-back above: the keys are checked once more where they ended.
         if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
-        // The Display pages stay on the wall: a fresh frame stands on the bound one, its card.
-        mPaneWallController.wall().post(this::ensureDisplayPageFrame);
         // A temporary page goes with its display.
         removeTemporaryDisplayPage();
+        // The Display pages stay on the wall: a fresh frame stands on the bound one, its card. It
+        // goes up in this same pass, not a posted one: with the old frame off and nothing on the
+        // page, a frame between would draw the bare wallpaper.
+        ensureDisplayPageFrame();
     }
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
@@ -29917,7 +29922,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void addPage() {
                     if (mWidgetPaneController == null) return;
+                    // One look per page kind: the page added wears the Home page in front's own
+                    // look from the start (its overrides copied; none there, it follows global).
+                    int front = homePageInFront();
+                    java.util.List<Integer> before = wallPages().homePageIdsForRepository();
                     mWidgetPaneController.addPage();
+                    java.util.List<Integer> added = wallPages().homePageIdsForRepository();
+                    added.removeAll(before);
+                    if (front >= 0 && !added.isEmpty() && mPreferences != null) {
+                        com.termux.app.look.PrefsLookStore store = new com.termux.app.look.PrefsLookStore(
+                            mPreferences.getSharedPreferences());
+                        for (int id : added)
+                            com.termux.app.look.PageLook.copyOverrides(store, front, id);
+                        refreshGroundStrip();
+                    }
                 }
                 @Override public void chooseHome(
                         @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
@@ -34121,9 +34139,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.terminal.DepartureCard.Ground wallpaperGlassGround(@NonNull View terminal) {
-        android.graphics.Bitmap frame = obtainTerminalPaneGlassFrame();
-        if (frame == null || frame.isRecycled()) return null;
-        android.graphics.Rect frameRect = mChrome.blurCache().frameRectRef();
+        // A wallpaper scene on: its live frame is the ground, over the scene layer's screen rect
+        // and without the parallax (the scene does not pan), as PaneGlassBackdropView aims it.
+        // A hardware bitmap (debug.tl.scene_glass_copy=hw) cannot be drawn on this software canvas.
+        com.termux.app.chrome.scene.LiveSceneFrame.Frame live =
+            com.termux.app.chrome.scene.LiveSceneFrame.current();
+        android.graphics.Bitmap frame;
+        android.graphics.Rect frameRect;
+        float parallaxPx;
+        if (live != null && !live.bitmap.isRecycled()
+                && live.bitmap.getConfig() != android.graphics.Bitmap.Config.HARDWARE
+                && !com.termux.app.chrome.scene.LiveSceneFrame.rect().isEmpty()) {
+            frame = live.bitmap;
+            frameRect = com.termux.app.chrome.scene.LiveSceneFrame.rect();
+            parallaxPx = 0f;
+        } else {
+            frame = obtainTerminalPaneGlassFrame();
+            if (frame == null || frame.isRecycled()) return null;
+            frameRect = mChrome.blurCache().frameRectRef();
+            parallaxPx = mWallpaperParallax.offsetPx();
+        }
         if (frameRect.isEmpty()) return null;
         int[] location = new int[2];
         terminal.getLocationOnScreen(location);
@@ -34133,7 +34168,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The live slabs sample the frame the wallpaper's parallax further along (GlassAnchor's
         // aim); without it the card showed Home's stretch of the picture under any window, so a
         // window switch began with the wallpaper a step per window the wrong way.
-        matrix.postTranslate(frameRect.left - location[0] - mWallpaperParallax.offsetPx(),
+        matrix.postTranslate(frameRect.left - location[0] - parallaxPx,
             frameRect.top - location[1]);
         android.graphics.BitmapShader shader = new android.graphics.BitmapShader(
             frame, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
