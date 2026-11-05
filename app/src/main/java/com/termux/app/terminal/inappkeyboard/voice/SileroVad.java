@@ -68,7 +68,12 @@ final class SileroVad implements SileroVoiceDecider.ProbabilitySource {
 
     @NonNull
     static SileroVad load(@NonNull Context context) throws IOException {
-        ByteBuffer model = readAsset(context, ASSET_PATH);
+        return load(readAsset(context, ASSET_PATH));
+    }
+
+    /** As {@link #load(Context)} from a model already in a direct buffer (the debug bench reads it from a file). */
+    @NonNull
+    static SileroVad load(@NonNull ByteBuffer model) {
         Interpreter interpreter = new Interpreter(model,
             new Interpreter.Options().setNumThreads(1).setUseXNNPACK(true));
         try {

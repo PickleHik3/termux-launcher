@@ -103,3 +103,59 @@ STTBENCH_DONE
   fuel-gauge sysfs file (`none`: `mA=NA`). `charging=true` anywhere means the current is not usable.
 - `sameText=false` means the transcript changed between runs of one clip.
 - A model that fails to load prints `ok=false` with the error and the bench goes on to the next one.
+
+## Aux bench (TTS, embeddings, VAD on the Interpreter)
+
+`AuxBench` times the features that still run on LiteRT's `Interpreter`: KittenTTS with its phonemizer,
+the Interpreter embedder (`LiteRtEmbeddingRuntime`) and Silero VAD, and writes their outputs so two builds
+(for example LiteRT 1.4.2 against 2.3.2) can be compared. Code: `app/src/debug/java/com/termux/ai/AuxBench*.java`.
+It runs like `SttBench` (same APK copy, same `chmod 444`, same unzipped `lib/`), and its lines start `AUXBENCH`.
+
+```
+chmod 444 bench.apk
+unzip -oq bench.apk 'lib/arm64-v8a/*' -d lib
+LIB=$PWD/lib/lib/arm64-v8a
+mkdir -p out-1.4.2
+CLASSPATH=$PWD/bench.apk app_process -Djava.library.path=$LIB /system/bin com.termux.ai.AuxBench \
+  --tts /data/data/com.termux/files/tai/models/kittentts-nano-0.8 \
+  --vad asset --clips ~/stt-bench/clips \
+  --out out-1.4.2 --path 1.4.2 | tee aux-bench-1.4.2.txt
+```
+
+Each section runs only when its flag is given, so a section can be run alone:
+
+| Section | Flags | Notes |
+|---|---|---|
+| TTS | `--tts DIR` | `DIR` holds `kitten_predictor.tflite` and its sidecars. Three fixed sentences (6, 25, about 85 words), default voice and speed. |
+| Embeddings | `--embed FILE.tflite` | Eight short sentences and one of about 400 tokens. See the note below. |
+| VAD | `--vad FILE\|asset --clips DIR` | `asset` reads `assets/vad/silero_vad_v5.tflite` from the first class-path entry (the APK); or pass the extracted tflite. Runs the whole `stt-45s-bush.wav` from `--clips`. |
+
+Common flags: `--out DIR` (writes the outputs below), `--runs 5`, `--warmup 1` (excluded runs per item),
+`--path LABEL`, `--interval-ms 200`. There is no `--threads`: the runtimes pick their own, and the `ENV`
+line prints what they ask for (`threadsTts`/`threadsEmbed` = min(4, cores), `threadsVad` = 1). Which
+engine ran those threads (the 1.4.2 JNI delegate or the stock 2.x Interpreter) is the build under test.
+
+**Embeddings.** `LiteRtEmbeddingRuntime` is the path for raw `.tflite` EmbeddingGemma 300M (windows
+`embeddinggemma-300M_seq*_mixed-precision.tflite` with `sentencepiece.model` next to them). The
+`embeddinggemma-2-*.litertlm` models do not use the Interpreter: `LiteRtLmEmbeddingRuntime` serves them
+through LiteRT-LM's `EmbeddingEngine`, so they are not part of this bench.
+
+Output files in `--out`:
+
+- `tts-1.f32`, `tts-2.f32`, `tts-3.f32`: raw little-endian float32 PCM at 24 kHz (short, medium, long). The
+  `RUN` lines carry the sample count and a `sha256` of those bytes.
+- `emb.f32`: float32 vector count, float32 dimension, then the vectors back to back.
+- `vad.f32`: one speech probability per 512-sample chunk (about 31 per second).
+
+Lines: `AUXBENCH_ENV`, then per section `AUXBENCH_LOAD` (model load; for embeddings the first call),
+`AUXBENCH_RUN` (per run; TTS has `g2pMs` and `synthMs` from the runtime's own timers), `AUXBENCH_ITEM`
+(median and min over runs), `AUXBENCH_SUMMARY`, and `AUXBENCH_DONE`. CPU and battery are measured as for `SttBench`.
+
+Compare two output directories (host JVM with the compiled classes, or on the phone under `app_process`):
+
+```
+CLASSPATH=$PWD/bench.apk app_process /system/bin com.termux.ai.AuxBenchCompare out-1.4.2 out-2.3.2
+```
+
+It prints `AUXCOMPARE_TTS` (max abs diff, SNR in dB, A as the reference), `AUXCOMPARE_EMB` (cosine per vector)
+with `AUXCOMPARE_EMB_SUMMARY minCosine`, and `AUXCOMPARE_VAD` (max abs diff, `flipsAt0.5`).
