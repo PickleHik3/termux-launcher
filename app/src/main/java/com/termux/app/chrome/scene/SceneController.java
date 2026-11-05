@@ -50,8 +50,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private static final DebugChoice GLASS =
         new DebugChoice(SceneFramePolicy.PROP_GLASS, "lowres", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS_RATE =
-        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE,
-            Integer.toString(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ), DebugSwitch.SYSTEM_PROPERTIES);
+        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE, "", DebugSwitch.SYSTEM_PROPERTIES);
 
     private static final DebugChoice TRACE_INVAL =
         new DebugChoice("debug.tl.scene_trace_inval", "0", DebugSwitch.SYSTEM_PROPERTIES);
@@ -152,9 +151,10 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (on && mLayer == null) installLayer(value);
         SceneLayerView layer = mLayer;
         if (layer == null) return;
-        layer.setRateHz(SceneFramePolicy.parseRate(RATE.get(now)));
+        int sceneRate = SceneFramePolicy.parseRate(RATE.get(now));
+        layer.setRateHz(sceneRate);
         layer.setGlassLowRes(SceneFramePolicy.glassLowRes(GLASS.get(now)));
-        layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now)));
+        layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now), sceneRate));
     }
 
     private void installLayer(@NonNull String kind) {

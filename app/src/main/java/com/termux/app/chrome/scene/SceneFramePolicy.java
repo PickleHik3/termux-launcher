@@ -4,12 +4,14 @@ package com.termux.app.chrome.scene;
  * Pure rules of the wallpaper scene prototype: how the three debug properties read, and the
  * ambient frame-skip gate the layer's Choreographer callback asks on every vsync.
  *
- * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour} or
- * {@code filament} the scene of that name.
+ * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour}, {@code filament}, {@code contour-waves}, {@code nebula}, {@code bloom}, {@code aurora} or
+ * {@code particles} the scene of that name.
  * {@code debug.tl.scene_rate}: ambient frames per second when nothing is happening, {@code 30}
  * (default), {@code 90}, or {@code 0} for no ambient motion. {@code debug.tl.scene_glass}:
  * {@code lowres} (default) or {@code still}. {@code debug.tl.scene_glass_rate}: the low-res
- * pass's frames per second, 8 by default, 0 for none.</p>
+ * pass's frames per second, half the scene's ambient rate by default (15 at 30, 45 at 90, 0 when
+ * the scene is still), 0 for none. {@code debug.tl.scene_glass_div}: the low-res pass's divisor of the
+ * screen, 2, 4 (default) or 8.</p>
  */
 public final class SceneFramePolicy {
 
@@ -19,14 +21,17 @@ public final class SceneFramePolicy {
     public static final String PROP_GLASS_RATE = "debug.tl.scene_glass_rate";
 
     public static final int DEFAULT_RATE_HZ = 30;
-    public static final int DEFAULT_GLASS_RATE_HZ = 8;
+    /** The glass rate at the default scene rate: half of it. */
+    public static final int DEFAULT_GLASS_RATE_HZ = DEFAULT_RATE_HZ / 2;
+    public static final String PROP_GLASS_DIV = "debug.tl.scene_glass_div";
+    public static final int DEFAULT_GLASS_DIV = 4;
     /** A callback may land this much before the period is up and still draw: vsync jitter. */
     static final long SLACK_NS = 4_000_000L;
 
     private SceneFramePolicy() {}
 
     public static boolean sceneOn(String value) {
-        return "contour".equals(value) || "filament".equals(value);
+        return ScenePrograms.isKind(value);
     }
 
     /** 0, 30 or 90 (anything else reads as 30), the ambient rate in Hz. */
@@ -41,15 +46,34 @@ public final class SceneFramePolicy {
         return !"still".equals(value);
     }
 
-    /** The low-resolution glass pass's own rate: 0..90, anything unreadable reads as 15. */
-    public static int parseGlassRate(String value) {
-        if (value == null) return DEFAULT_GLASS_RATE_HZ;
+    /** Half the scene's ambient rate: the glass refresh when no property sets it. */
+    public static int defaultGlassRate(int sceneRateHz) {
+        return Math.max(0, sceneRateHz) / 2;
+    }
+
+    /**
+     * The low-resolution glass pass's own rate: 0..90; unset, empty or unreadable (or negative)
+     * reads as half {@code sceneRateHz}.
+     */
+    public static int parseGlassRate(String value, int sceneRateHz) {
+        int fallback = defaultGlassRate(sceneRateHz);
+        if (value == null) return fallback;
         try {
             int hz = Integer.parseInt(value.trim());
-            return hz < 0 ? DEFAULT_GLASS_RATE_HZ : Math.min(hz, 90);
+            return hz < 0 ? fallback : Math.min(hz, 90);
         } catch (NumberFormatException e) {
-            return DEFAULT_GLASS_RATE_HZ;
+            return fallback;
         }
+    }
+
+    /** The low-res pass's divisor of the screen: 2, 4 or 8; anything else reads as 4. */
+    public static int parseGlassDiv(String value) {
+        if (value != null) {
+            String v = value.trim();
+            if ("2".equals(v)) return 2;
+            if ("8".equals(v)) return 8;
+        }
+        return DEFAULT_GLASS_DIV;
     }
 
     /** The ambient period: 0 draws on every vsync, {@link Long#MAX_VALUE} never. */

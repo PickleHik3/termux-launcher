@@ -109,6 +109,9 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private volatile long mPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_RATE_HZ);
     private volatile long mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
     private volatile boolean mGlassLowRes = true;
+    private static final com.termux.terminal.DebugChoice GLASS_DIV = new com.termux.terminal.DebugChoice(
+        SceneFramePolicy.PROP_GLASS_DIV, Integer.toString(SceneFramePolicy.DEFAULT_GLASS_DIV),
+        com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
     /** The scene thread has a frame callback pending or is mid-frame: it will see new work by itself. */
     private volatile boolean mAwake;
     private final AtomicBoolean mKickPending = new AtomicBoolean();
@@ -121,7 +124,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
     @NonNull private final Runnable mPoll = this::poll;
 
-    /** {@code kind}: {@link ScenePrograms#CONTOUR} or {@link ScenePrograms#FILAMENT}. */
+    /** {@code kind}: a {@code ScenePrograms} kind constant. */
     public SceneLayerView(@NonNull Context context, @NonNull String kind,
                           @Nullable PaneSource panes, @NonNull BooleanSupplier lazyMode) {
         super(context);
@@ -454,8 +457,14 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             int w = mSurfaceW, h = mSurfaceH;
             if (w <= 0 || h <= 0) return;
             SceneLowRes low = mLowRes;
+            int div = SceneFramePolicy.parseGlassDiv(GLASS_DIV.get(nowMs));
+            // A changed divisor rebuilds the target here, where it is sized, never per frame.
+            if (low != null && low.divisor() != div) {
+                closeLowRes();
+                low = null;
+            }
             if (low == null) {
-                low = new SceneLowRes(w, h, handler, mPrograms);
+                low = new SceneLowRes(w, h, div, handler, mPrograms);
                 mLowRes = low;
             }
             low.render(mEvents, nowMs, mTimeMs, mDensity, mEventsStale);

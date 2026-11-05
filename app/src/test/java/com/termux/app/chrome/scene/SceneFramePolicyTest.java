@@ -32,4 +32,31 @@ public class SceneFramePolicyTest {
     public void overdueDoesNotGoNegative() {
         assertEquals(0L, SceneFramePolicy.nextCallbackDelayMs(false, 33 * MS, 0L, 500 * MS));
     }
+
+    @Test
+    public void glassRateDefaultsToHalfTheSceneRate() {
+        assertEquals(15, SceneFramePolicy.parseGlassRate(null, 30));
+        assertEquals(15, SceneFramePolicy.parseGlassRate("", 30));
+        assertEquals(45, SceneFramePolicy.parseGlassRate(null, 90));
+        assertEquals(0, SceneFramePolicy.parseGlassRate(null, 0));
+        assertEquals(15, SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
+    }
+
+    @Test
+    public void glassRateSetWinsOverTheDefault() {
+        assertEquals(8, SceneFramePolicy.parseGlassRate("8", 90));
+        assertEquals(0, SceneFramePolicy.parseGlassRate("0", 30));
+        assertEquals(15, SceneFramePolicy.parseGlassRate("-1", 30));
+    }
+
+    @Test
+    public void glassDivisorIsTwoFourOrEight() {
+        assertEquals(2, SceneFramePolicy.parseGlassDiv("2"));
+        assertEquals(4, SceneFramePolicy.parseGlassDiv("4"));
+        assertEquals(8, SceneFramePolicy.parseGlassDiv(" 8 "));
+        assertEquals(4, SceneFramePolicy.parseGlassDiv(null));
+        assertEquals(4, SceneFramePolicy.parseGlassDiv(""));
+        assertEquals(4, SceneFramePolicy.parseGlassDiv("3"));
+        assertEquals(4, SceneFramePolicy.parseGlassDiv("16"));
+    }
 }
