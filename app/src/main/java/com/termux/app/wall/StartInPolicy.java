@@ -36,6 +36,7 @@ public final class StartInPolicy {
     public static String read(@Nullable String stored) {
         if (WallRow.START_IN_WORKSPACE.equals(stored)) return WallRow.START_IN_WORKSPACE;
         if (WallRow.START_IN_DISPLAY.equals(stored)) return WallRow.START_IN_DISPLAY;
+        if (WallRow.START_IN_ASSISTANT.equals(stored)) return WallRow.START_IN_ASSISTANT;
         return WallRow.START_IN_HOME;
     }
 

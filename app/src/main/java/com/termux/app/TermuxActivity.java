@@ -2077,6 +2077,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
             handleHomePagesEditorIntent(getIntent());
+            handleOpenAssistantIntent(getIntent());
             handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
             handleShowHelpIntent(getIntent());
@@ -2250,6 +2251,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
         handleHomePagesEditorIntent(intent);
+        handleOpenAssistantIntent(intent);
         handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
         handleShowHelpIntent(intent);
@@ -6862,6 +6864,61 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 pages.page(afterId) != null ? afterId : com.termux.app.wall.WallPages.END, null));
         if (mPaneWallController != null) mPaneWallController.refreshPages();
         return added.ok() && added.page != null ? added.page.id : -1;
+    }
+
+    /** The chats are kept (ADR 0022): only the page leaves, and with no confirm. */
+    private void removeAssistantPageFromWall(int id) {
+        com.termux.app.wall.WallPages.Result removed =
+            wallPagesStore().edit(pages -> pages.remove(id, 0, true));
+        if (removed.ok()) wallPagesStore().edit(pages -> pages.commitRemoval(id));
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+    }
+
+    /**
+     * Opens the Assistant page, adding it after Home 1 first when the wall has none (ADR 0022
+     * section 1). The drawer's entry, a pinned dock icon and {@link
+     * com.termux.app.assistant.AssistantEntry#ACTION_OPEN_ASSISTANT} come here.
+     */
+    private void openAssistant() {
+        if (mPaneWallController == null) return;
+        closeAppDrawerForLinuxLaunch();
+        com.termux.app.assistant.AssistantEntry.open(new com.termux.app.assistant.AssistantEntry.Host() {
+            @Override public boolean hasAssistantPage() { return wallPages().assistant() != null; }
+            @Override public int firstHomePageId() {
+                java.util.List<com.termux.app.wall.WallPages.Page> homes = wallPages().homePages();
+                return homes.isEmpty() ? -1 : homes.get(0).id;
+            }
+            @Override public int currentPageId() { return mPaneWallController.currentPageId(); }
+            @Override public boolean goToAssistantPage(boolean animate) {
+                return mPaneWallController.goToAssistantPage(animate && isVisible());
+            }
+            @Override public int addAssistantPage(int afterId) {
+                return TermuxActivity.this.addAssistantPage(afterId);
+            }
+            @Override public void removeAssistantPage(int id) { removeAssistantPageFromWall(id); }
+            @Override public void goToPage(int id, boolean animate) {
+                mPaneWallController.goToPageId(id, animate && isVisible());
+            }
+            @Override public void showAdded(@NonNull Runnable undo) {
+                View anchor = mPaneWallController.assistantView();
+                if (anchor == null) anchor = findViewById(android.R.id.content);
+                if (anchor == null) return;
+                com.google.android.material.snackbar.Snackbar.make(anchor,
+                        R.string.assistant_page_added, 4000)
+                    .setAction(R.string.page_overview_undo, v -> undo.run()).show();
+            }
+        });
+    }
+
+    /** Opens the Assistant page for an {@code ACTION_OPEN_ASSISTANT} intent (once). */
+    private void handleOpenAssistantIntent(@Nullable Intent intent) {
+        if (intent == null || !com.termux.app.assistant.AssistantEntry.ACTION_OPEN_ASSISTANT
+            .equals(intent.getAction())) return;
+        intent.setAction(null);
+        // A cold start delivers the intent before the wall is laid out.
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root != null) root.post(this::openAssistant);
+        else openAssistant();
     }
 
     /** The id of the Assistant page, or -1 while the wall has none. */
@@ -29249,6 +29306,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     openDisplayWindow(true);
                     return true;
                 }
+                if (com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(entryId)) {
+                    openAssistant();
+                    return true;
+                }
                 if (!com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)) return false;
                 // Into an empty Workspace from Home, the tap launches a terminal: a Home float.
                 if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.ENTRY_TAP))
@@ -29851,11 +29912,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this.addAssistantPage(linuxRouteFromPageId());
                 }
                 @Override public void removeAssistantPage(int id) {
-                    // The chats are kept (ADR 0022): only the page leaves, and with no confirm.
-                    com.termux.app.wall.WallPages.Result removed =
-                        wallPagesStore().edit(pages -> pages.remove(id, 0, true));
-                    if (removed.ok()) wallPagesStore().edit(pages -> pages.commitRemoval(id));
-                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    removeAssistantPageFromWall(id);
                 }
                 // The wall's order (ADR 0015, A2a): the Terminal page anywhere among Home's.
                 @Override public int homePagesBeforeTerminal() {

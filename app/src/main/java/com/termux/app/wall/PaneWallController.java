@@ -417,6 +417,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mAssistantView;
     }
 
+    /** Go to page {@code pageId}'s cell; false when the wall has no such page. */
+    public boolean goToPageId(int pageId, boolean animate) {
+        return goToPage(pageId, animate);
+    }
+
     /** Go to the Assistant page; false when the wall has none. */
     public boolean goToAssistantPage(boolean animate) {
         WallPages pages = mKnownPages;
@@ -1087,6 +1092,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // starts the display.
         int displayHome = DisplayPagePolicy.homeDisplayPage(mHost.wallPages());
         if (displayHome >= 0 && goToDisplayPage(displayHome, animate)) return;
+        // Edit pages set the Assistant page as home: the press and the cold start land on it.
+        if (homeIsAssistantPage() && goToAssistantPage(animate)) return;
         if (!mHost.useAs().showsHomePage()) {
             // Terminal only: the home press lands on the Workspace.
             goToWorkspace(animate);
@@ -1101,6 +1108,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // The home press's page, wherever the wall is: a far one slides one width from a
         // stand-off, the pages between never shown (W3, W9).
         goToHomePage(Math.max(0, mHost.homePressPage()), animate, true);
+    }
+
+    private boolean homeIsAssistantPage() {
+        WallPages pages = mHost.wallPages();
+        WallPages.Page home = pages == null ? null : pages.home();
+        return home != null && home.kind == WallPages.PageKind.ASSISTANT;
     }
 
     private boolean homeIsTerminalPage() {

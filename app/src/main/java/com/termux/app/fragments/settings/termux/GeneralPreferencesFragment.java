@@ -138,13 +138,20 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             keptEntries[i] = entries[kept.get(i)];
             keptValues[i] = values[kept.get(i)];
         }
+        String shown = useAs.startIn(
+            com.termux.app.wall.WallPagesStore.open(context).current().startIn());
+        // The Assistant page as home is a state Edit pages sets; the list names it while it holds.
+        if (com.termux.app.wall.WallRow.START_IN_ASSISTANT.equals(shown)) {
+            keptEntries = java.util.Arrays.copyOf(keptEntries, keptEntries.length + 1);
+            keptValues = java.util.Arrays.copyOf(keptValues, keptValues.length + 1);
+            keptEntries[keptEntries.length - 1] = context.getString(R.string.settings_start_in_assistant);
+            keptValues[keptValues.length - 1] = com.termux.app.wall.WallRow.START_IN_ASSISTANT;
+        }
         startIn.setEntries(keptEntries);
         startIn.setEntryValues(keptValues);
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
         if (prefs == null) return;
-        String shown = useAs.startIn(
-            com.termux.app.wall.WallPagesStore.open(context).current().startIn());
         // setValue would write it; the stored Home stays for a return to Home screen. The list's
         // summary reads the value it holds, so it is set without persisting.
         boolean persistent = startIn.isPersistent();

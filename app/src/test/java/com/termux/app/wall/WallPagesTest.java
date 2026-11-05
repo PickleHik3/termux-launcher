@@ -676,6 +676,19 @@ public class WallPagesTest {
     }
 
     @Test
+    public void startInNamesTheAssistantPageWhileItIsHomeAndChoosingItMakesItHome() {
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        assertEquals("home", p.startIn());
+        WallPages home = ok(p.chooseStartIn(WallRow.START_IN_ASSISTANT));
+        assertEquals(WallRow.START_IN_ASSISTANT, home.startIn());
+        assertEquals(PageKind.ASSISTANT, home.home().kind);
+        // Choosing Home again leaves the Assistant page for a Home page.
+        assertEquals("home", ok(home.chooseStartIn("home")).startIn());
+        // With no Assistant page there is nothing to choose.
+        assertEquals(Error.UNKNOWN_PAGE, three().chooseStartIn(WallRow.START_IN_ASSISTANT).error);
+    }
+
+    @Test
     public void theAssistantPageIsNamedHasOneStopAndCanBeHome() {
         WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
         assertEquals("Assistant", p.displayName(p.assistant(), null));

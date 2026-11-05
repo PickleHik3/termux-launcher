@@ -106,6 +106,21 @@
     <string name="page_overview_assistant">Assistant</string>
     <string name="page_overview_start_on_assistant">Start on Assistant</string>
     <string name="page_overview_remove_assistant">Remove the Assistant page</string>
+    <string name="page_overview_assistant_removed">Assistant page removed. Your chats are kept.</string>
+    <string name="assistant_page_added">Assistant page added</string>
+    <string name="tai_chats_category_title">Chats</string>
+    <string name="tai_delete_all_chats_title">Delete all chats</string>
+    <string name="tai_chats_none">No chats</string>
+    <plurals name="tai_chats_on_phone">
+        <item quantity="one">%d chat on this phone</item>
+        <item quantity="other">%d chats on this phone</item>
+    </plurals>
+    <string name="tai_delete_all_chats_dialog_title">Delete all chats?</string>
+    <plurals name="tai_delete_all_chats_dialog_message">
+        <item quantity="one">The chat is removed from this phone. This can\'t be undone.</item>
+        <item quantity="other">All %d chats are removed from this phone. This can\'t be undone.</item>
+    </plurals>
+    <string name="tai_delete_all_chats_confirm">Delete all</string>
     <string name="page_overview_page_removed">Page %1$d removed</string>
     <string name="page_overview_terminal_closed">Terminal closed</string>
     <string name="page_overview_display_closed">Display closed</string>

@@ -977,7 +977,7 @@ public final class PageOverviewView extends FrameLayout {
                 text = getContext().getString(R.string.page_overview_terminal_closed);
                 break;
             case ASSISTANT:
-                text = getContext().getString(R.string.page_overview_remove_assistant);
+                text = getContext().getString(R.string.page_overview_assistant_removed);
                 break;
             default:
                 text = getContext().getString(R.string.page_overview_display_closed);

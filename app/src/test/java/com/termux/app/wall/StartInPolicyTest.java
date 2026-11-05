@@ -104,6 +104,16 @@ public class StartInPolicyTest {
     }
 
     @Test
+    public void assistantIsAStartInValueAndNoHomeCardWearsItsMarker() {
+        assertEquals(WallRow.START_IN_ASSISTANT, StartInPolicy.read(WallRow.START_IN_ASSISTANT));
+        assertEquals(0, StartInPolicy.homePage(2, WallRow.START_IN_ASSISTANT));
+        for (Kind kind : Kind.values()) {
+            assertFalse(kind.name(), StartInPolicy.isHome(kind, true, true,
+                WallRow.START_IN_ASSISTANT));
+        }
+    }
+
+    @Test
     public void exactlyOneKindWearsTheMarkerForEachValue() {
         for (String startIn : new String[] {HOME, WORKSPACE, DISPLAY}) {
             int marked = 0;

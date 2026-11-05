@@ -751,6 +751,7 @@ public final class WallPages {
         if (homeIsDisplayWindow) return WallRow.START_IN_DISPLAY;
         Page home = home();
         if (home != null && home.kind == PageKind.DISPLAY) return WallRow.START_IN_DISPLAY;
+        if (home != null && home.kind == PageKind.ASSISTANT) return WallRow.START_IN_ASSISTANT;
         return home != null && home.kind == PageKind.TERMINAL
             ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
     }
@@ -779,6 +780,10 @@ public final class WallPages {
     public Result chooseStartIn(@Nullable String startIn) {
         String value = StartInPolicy.read(startIn);
         if (WallRow.START_IN_DISPLAY.equals(value)) return homeOnDisplayPage();
+        if (WallRow.START_IN_ASSISTANT.equals(value)) {
+            Page a = assistant();
+            return a == null ? refuse(Error.UNKNOWN_PAGE) : setHome(a.id);
+        }
         if (WallRow.START_IN_WORKSPACE.equals(value)) {
             Page t = terminal();
             return t == null ? refuse(Error.UNKNOWN_PAGE) : setHome(t.id);
