@@ -107,13 +107,13 @@ public class WhisperSttRuntimeTest {
     }
 
     @Test
-    public void autoKeepsASaneGpuAndSaysSo() throws Exception {
+    public void aGpuAskKeepsASaneGpuAndSaysSo() throws Exception {
         File model = modelDir();
         FakeLiteRtGraph cpu = whisperGraph();
         FakeLiteRtGraph gpu = whisperGraph(0.25f);
         SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
         WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribeGitStatus(runtime, model);
@@ -138,7 +138,7 @@ public class WhisperSttRuntimeTest {
             throw new IllegalStateException("Failed to create the GPU accelerator");
         };
         WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribeGitStatus(runtime, model);
@@ -162,7 +162,7 @@ public class WhisperSttRuntimeTest {
         FakeLiteRtGraph gpu = whisperGraph(Float.NaN);
         SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
         WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribeGitStatus(runtime, model);

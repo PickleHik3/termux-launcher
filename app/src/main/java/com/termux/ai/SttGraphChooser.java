@@ -15,12 +15,13 @@ import java.util.concurrent.CancellationException;
  * Opens a speech graph on the accelerator asked for, with the GPU never able to break a
  * transcription.
  *
- * <p>{@link SttAccelerator#AUTO}: when {@link Memory} holds an unexpired GPU failure for this
- * model on this phone, straight to CPU. Otherwise the GPU is tried: the graph loads, the caller's
- * {@link Prepare} binds it and runs a fixed input through it ({@code verify}), and any throw from
- * either (a load the accelerator refuses, an output that is not sane) closes the GPU graph,
- * records the failure and loads the CPU graph instead. A GPU that worked is recorded as such.
- * {@link SttAccelerator#GPU} tries the GPU whatever the record says, with the same fallback.
+ * <p>{@link SttAccelerator#AUTO} and {@link SttAccelerator#CPU} load CompiledModel on the CPU and
+ * never touch the GPU or {@link Memory}: on the phones measured the GPU was slower or wrong for the
+ * shipped speech models. {@link SttAccelerator#GPU} is the only way onto the GPU: the graph loads,
+ * the caller's {@link Prepare} binds it and runs a fixed input through it ({@code verify}), and any
+ * throw from either (a load the accelerator refuses, an output that is not sane) closes the GPU
+ * graph, records the failure and loads the CPU graph instead. A GPU that worked is recorded as such.
+ * An ordinary failure on record does not stop a {@code GPU} request, which tries again.
  *
  * <p>Two things are not verdicts on the GPU:
  * <ul>
@@ -29,8 +30,8 @@ import java.util.concurrent.CancellationException;
  *   <li>A process that dies during the GPU attempt (a native crash in the GPU compiler, but also
  *       a kill or an eviction) leaves its attempt unfinished in {@link Memory}. One unfinished
  *       attempt is tried again; the second one in a row is recorded as a GPU crash and the load
- *       goes to CPU, so a GPU that kills the process cannot do it forever. A crash record also
- *       stops an explicit {@code GPU} request, which would otherwise crash every time.</li>
+ *       goes to CPU, so a GPU that kills the process cannot do it forever. A crash record
+ *       stops a {@code GPU} request, which would otherwise crash every time.</li>
  * </ul>
  */
 final class SttGraphChooser {
@@ -116,9 +117,9 @@ final class SttGraphChooser {
     Opened open(@NonNull File model, int threads, @NonNull SttAccelerator requested, @NonNull Memory memory,
                 @NonNull Prepare prepare) throws Exception {
         if (requested == SttAccelerator.INTERPRETER) return load(interpreter, model, threads, prepare, "interp", "");
-        if (requested == SttAccelerator.CPU) return load(cpu, model, threads, prepare, "cpu", "");
+        if (requested == SttAccelerator.CPU || requested == SttAccelerator.AUTO) return load(cpu, model, threads, prepare, "cpu", "");
         String failure = memory.gpuFailure();
-        if (failure != null && (requested == SttAccelerator.AUTO || failure.startsWith(CRASH_REASON_PREFIX))) {
+        if (failure != null && failure.startsWith(CRASH_REASON_PREFIX)) {
             return load(cpu, model, threads, prepare, "cpu", "gpu failed before: " + failure);
         }
         int unfinished = memory.beginGpuAttempt();
