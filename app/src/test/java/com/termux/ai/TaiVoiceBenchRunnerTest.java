@@ -269,4 +269,53 @@ public class TaiVoiceBenchRunnerTest {
         // The Interpreter is the shell bench's, never a request's.
         assertEquals("cpu", TaiManager.sttAcceleratorFor(new JSONObject().put("accelerator", "interp"), "cpu"));
     }
+
+    /** The Run screen's reducer over a real voice run's events: entries, phases, the dial and the fallback. */
+    @Test
+    public void theRunScreenStateFollowsAVoiceRun() {
+        com.termux.app.fragments.settings.termux.TaiBenchRunState state = new com.termux.app.fragments.settings.termux.TaiBenchRunState();
+        state.begin(TaiVoiceBench.PRESET_ID, Collections.singletonList(
+            new com.termux.app.fragments.settings.termux.TaiBenchRunState.Planned(TaiModelCatalog.PARAKEET_TDT_V3_ID, "Parakeet", false)),
+            0.0, 0L);
+        assertTrue(state.voice());
+        FakeHost host = new FakeHost();
+        host.gpuLandsOn = "cpu";
+        new TaiVoiceBenchRunner(host, TaiBenchGuard.ALWAYS_CONTINUE, store(), state::apply, "1.0", "2.3.2", new JSONObject())
+            .run(Collections.singletonList(parakeet(true)), false);
+        assertEquals(com.termux.app.fragments.settings.termux.TaiBenchRunState.Phase.DONE, state.phase);
+        assertEquals(2, state.entries.size());
+        com.termux.app.fragments.settings.termux.TaiBenchRunState.Entry cpu = state.entries.get(0);
+        assertTrue(cpu.voice);
+        assertEquals(com.termux.app.fragments.settings.termux.TaiBenchRunState.EntryStatus.DONE, cpu.status);
+        assertEquals(59_000.0 / 1_500.0, cpu.realtime, 1e-9);
+        assertEquals(0.0, cpu.wer, 1e-9);
+        assertEquals(790L, cpu.loadMs);
+        assertFalse(cpu.gpuFellBack());
+        assertTrue(state.entries.get(1).gpuFellBack());
+        assertEquals(Arrays.asList("load", "warmup", "voice"),
+            com.termux.app.fragments.settings.termux.TaiBenchRunState.phasesFor(cpu));
+        // The live view's prompt is the last clip's spoken text; its reply what was heard.
+        assertEquals(TaiVoiceBench.CLIPS.get(2).reference, state.live.prompt);
+        assertEquals(TaiVoiceBench.CLIPS.get(2).reference, state.live.reply.toString());
+    }
+
+    @Test
+    public void theDialShowsSpeedWhileClipsRun() {
+        com.termux.app.fragments.settings.termux.TaiBenchRunState state = new com.termux.app.fragments.settings.termux.TaiBenchRunState();
+        state.begin(TaiVoiceBench.PRESET_ID, Collections.emptyList(), 0.0, 0L);
+        FakeHost host = new FakeHost();
+        List<JSONObject> seen = new ArrayList<>();
+        TaiVoiceBenchRunner runner = new TaiVoiceBenchRunner(host, TaiBenchGuard.ALWAYS_CONTINUE, store(), event -> {
+            state.apply(event);
+            seen.add(event);
+        }, "1.0", "2.3.2", new JSONObject());
+        // Stop after the first timed run so the state is caught mid-entry.
+        host.afterTranscribe = () -> {
+            if (host.calls.size() == 3) runner.requestStop("cancelled");
+        };
+        runner.run(Collections.singletonList(parakeet(false)), false);
+        com.termux.app.fragments.settings.termux.TaiBenchRunState.Dial dial = state.dial(0L);
+        assertEquals(com.termux.app.fragments.settings.termux.TaiBenchRunState.DialKind.REALTIME, dial.kind);
+        assertEquals(3_000.0 / 500.0, dial.value, 1e-9);
+    }
 }

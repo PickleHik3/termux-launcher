@@ -24,7 +24,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
+import com.termux.ai.SttAcceleratorChoices;
 import com.termux.ai.TaiBenchSuite;
+import com.termux.ai.TaiVoiceBench;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
@@ -64,6 +66,9 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     private static final int TYPE_HIDDEN = 3;
     private static final int TYPE_REASON = 4;
     private static final int TYPE_EMPTY = 5;
+    private static final int TYPE_VOICE_HINT = 6;
+    /** Argument: choose speech models for a voice run instead of chat models. */
+    static final String ARG_VOICE = "tai_bench_choose_voice";
     private static final String STATE_PRESET = "tai_bench_preset";
     private static final String STATE_COMPARE = "tai_bench_compare";
     private static final String STATE_SELECTED = "tai_bench_selected";
@@ -105,6 +110,19 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     private boolean touched;
     private boolean showWhy;
     @Nullable private String preselect;
+    /** A voice run: the installed speech models, each on the CPU and on the GPU where offered. */
+    private boolean voice;
+    /** Speech models the Speech accelerator row offers the GPU for on this phone. */
+    @NonNull private Set<String> gpuModels = Collections.emptySet();
+
+    /** The arguments that open this screen for a voice run, with {@code modelId} alone selected when named. */
+    @NonNull
+    static Bundle voiceArguments(@Nullable String modelId) {
+        Bundle arguments = new Bundle();
+        arguments.putBoolean(ARG_VOICE, true);
+        if (modelId != null && !modelId.isEmpty()) arguments.putString(SettingsActivity.EXTRA_INITIAL_PLACE, modelId);
+        return arguments;
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -112,6 +130,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         Bundle arguments = getArguments();
         preselect = arguments == null ? null : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
         if (preselect != null && preselect.isEmpty()) preselect = null;
+        voice = arguments != null && arguments.getBoolean(ARG_VOICE, false);
         if (savedInstanceState != null) {
             TaiBenchSuite.Preset saved = TaiBenchSuite.Preset.fromId(savedInstanceState.getString(STATE_PRESET));
             if (saved != null) preset = saved;
@@ -193,6 +212,10 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         Context context = getContext();
         if (context == null || executor.isShutdown()) return;
         Context app = context.getApplicationContext();
+        if (voice) {
+            loadVoice(app);
+            return;
+        }
         executor.execute(() -> {
             TaiBenchChoice.Device seen = readDevice(app);
             List<Offer> shownInstalled = new ArrayList<>();
@@ -242,6 +265,49 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 hidden = hiddenOnes;
                 tested = finalTested;
                 crashed = finalCrashed;
+                applyDefaultSelection();
+                rebuild();
+            });
+        });
+    }
+
+    /** The installed speech models, whether the GPU is offered for each, and which already have a voice result. */
+    private void loadVoice(@NonNull Context app) {
+        executor.execute(() -> {
+            TaiBenchChoice.Device seen = readDevice(app);
+            List<Offer> shown = new ArrayList<>();
+            Set<String> gpu = new LinkedHashSet<>();
+            boolean deviceGpu = SttAcceleratorChoices.deviceSupportsGpu(app);
+            List<TaiModelSpec> speech = TaiSpeechModels.installed(new TaiModelStore(app));
+            Collections.sort(speech, (a, b) -> a.displayName.compareToIgnoreCase(b.displayName));
+            for (TaiModelSpec spec : speech) {
+                String name = TaiSpeechModels.plainName(spec);
+                TaiBenchChoice.Candidate candidate = new TaiBenchChoice.Candidate(spec.id, name,
+                    TaiVoiceBench.engineOf(spec.id, spec.localPath), spec.sizeBytes, true, false, spec.localPath);
+                shown.add(new Offer(candidate, new TaiBenchChoice.Verdict(TaiBenchChoice.Fit.SHOWN, null)));
+                if (SttAcceleratorChoices.gpuOffered(deviceGpu, SttAcceleratorChoices.gpuFailure(app, spec))) gpu.add(spec.id);
+            }
+            Set<String> benchmarked = new LinkedHashSet<>();
+            Set<String> crashedModels;
+            try {
+                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks, TaiBenchHomeFragment.versions(), true);
+                for (TaiBenchLeaderboard.Row row : board.ranked) benchmarked.add(row.modelId);
+                for (TaiBenchLeaderboard.Row row : board.broken) if (!row.crashed) benchmarked.add(row.modelId);
+                crashedModels = TaiBenchChoice.crashedModels(benchmarks, TaiVoiceBench.BENCH_VERSION);
+            } catch (JSONException | RuntimeException e) {
+                crashedModels = Collections.emptySet();
+            }
+            Set<String> finalCrashed = crashedModels;
+            handler.post(() -> {
+                if (!isAdded()) return;
+                device = seen;
+                installed = shown;
+                downloads = Collections.emptyList();
+                hidden = Collections.emptyList();
+                tested = benchmarked;
+                crashed = finalCrashed;
+                gpuModels = gpu;
                 applyDefaultSelection();
                 rebuild();
             });
@@ -300,7 +366,12 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         List<TaiBenchListAdapter.Item> items = new ArrayList<>();
         TaiBenchChoice.Device seen = device;
         boolean canCompare = seen != null && seen.gpuSupported;
-        items.add(new TaiBenchListAdapter.Item(TYPE_PRESET, "preset", "preset|" + preset.id + '|' + (canCompare && compare) + '|' + canCompare, preset));
+        if (voice) {
+            String hint = getString(R.string.tai_bench_voice_choose_hint);
+            items.add(new TaiBenchListAdapter.Item(TYPE_VOICE_HINT, "voice", hint, hint));
+        } else {
+            items.add(new TaiBenchListAdapter.Item(TYPE_PRESET, "preset", "preset|" + preset.id + '|' + (canCompare && compare) + '|' + canCompare, preset));
+        }
         if (seen == null) {
             items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "loading", "loading", getString(R.string.tai_bench_loading)));
             adapter.submit(items);
@@ -310,7 +381,8 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         String installedHeader = getString(R.string.tai_bench_section_installed);
         items.add(new TaiBenchListAdapter.Item(TYPE_SECTION, "installed", installedHeader, installedHeader));
         if (installed.isEmpty()) {
-            items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty-installed", "empty-installed", getString(R.string.tai_bench_empty_installed)));
+            items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty-installed", "empty-installed|" + voice,
+                getString(voice ? R.string.tai_bench_voice_empty_installed : R.string.tai_bench_empty_installed)));
         }
         for (Offer offer : installed) items.add(modelItem(offer, seen));
         if (!downloads.isEmpty()) {
@@ -332,7 +404,8 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         long bytes = 0L;
         for (Offer offer : selectedOffers()) {
             count++;
-            totalMs += TaiBenchChoice.estimateMs(preset, compare, seen);
+            totalMs += voice ? TaiVoiceBench.estimateMs(offer.candidate.backend, gpuModels.contains(offer.candidate.modelId))
+                : TaiBenchChoice.estimateMs(preset, compare, seen);
             if (!offer.candidate.installed) bytes += Math.max(0L, offer.candidate.sizeBytes);
         }
         adapter.submit(items);
@@ -363,6 +436,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         Context context = parent.getContext();
         switch (type) {
             case TYPE_PRESET: return createPreset(context);
+            case TYPE_VOICE_HINT: return createVoiceHint(context);
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_MODEL: return createModel(context);
             case TYPE_HIDDEN: return createHidden(context);
@@ -375,6 +449,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     public void bind(@NonNull View view, @NonNull TaiBenchListAdapter.Item item) {
         switch (item.type) {
             case TYPE_PRESET: bindPreset(view, (TaiBenchSuite.Preset) item.data); break;
+            case TYPE_VOICE_HINT: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
             case TYPE_SECTION: ((TextView) ((ViewGroup) view).getChildAt(0)).setText((String) item.data); break;
             case TYPE_MODEL: bindModel(view, (Offer) item.data); break;
             case TYPE_HIDDEN: bindHidden(view, (Integer) item.data); break;
@@ -423,6 +498,18 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         });
         compareRow.addView(compareSwitch);
         column.addView(compareRow, TaiBenchViews.block(context, 12));
+        return column;
+    }
+
+    /** A voice run has no preset: one line says what it runs. */
+    @NonNull
+    private View createVoiceHint(@NonNull Context context) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(TaiBenchViews.dp(context, 22), TaiBenchViews.dp(context, 14), TaiBenchViews.dp(context, 22), TaiBenchViews.dp(context, 4));
+        TextView hint = TaiBenchViews.body(context, "");
+        hint.setId(R.id.tai_bench_text);
+        column.addView(hint);
         return column;
     }
 
@@ -496,17 +583,19 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             : TaiBenchViews.color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant)));
         check.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(offer.candidate.displayName);
-        int processors = seen == null ? 1 : TaiBenchChoice.processors(compare, seen);
+        boolean gpu = gpuModels.contains(offer.candidate.modelId);
+        int processors = voice ? (gpu ? 2 : 1) : seen == null ? 1 : TaiBenchChoice.processors(compare, seen);
         StringBuilder sub = new StringBuilder();
         if (offer.candidate.sizeBytes > 0L) sub.append(TaiModelCentreRows.formatBytes(offer.candidate.sizeBytes)).append(" · ");
         sub.append(getString(processors == 2 ? R.string.tai_bench_processors_both : R.string.tai_bench_processors_cpu));
-        sub.append(" · ").append(TaiBenchViews.duration(context, TaiBenchSuite.estimateMs(preset, processors)));
+        sub.append(" · ").append(TaiBenchViews.duration(context, voice ? TaiVoiceBench.estimateMs(offer.candidate.backend, gpu)
+            : TaiBenchSuite.estimateMs(preset, processors)));
         if (!offer.candidate.installed) sub.append(" · ").append(getString(R.string.tai_bench_row_download));
         if (tested.contains(offer.candidate.modelId)) sub.append(" · ").append(getString(R.string.tai_bench_row_tested));
         if (crashed.contains(offer.candidate.modelId)) sub.append(" · ").append(getString(R.string.tai_bench_row_crashed));
         ((TextView) view.findViewById(R.id.tai_bench_subtitle)).setText(sub);
         TextView backend = view.findViewById(R.id.tai_bench_marks);
-        String label = TaiBenchViews.backendLabel(context, offer.candidate.backend);
+        String label = voice ? TaiBenchViews.engineLabel(offer.candidate.backend) : TaiBenchViews.backendLabel(context, offer.candidate.backend);
         backend.setText(label);
         backend.setVisibility(label.isEmpty() ? View.GONE : View.VISIBLE);
         TextView tight = view.findViewById(R.id.tai_bench_verdict);
@@ -666,6 +755,11 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 offer.candidate.sizeBytes));
         }
         if (models.isEmpty()) return;
+        if (voice) {
+            TaiBenchCheckSheet.show(context, getString(R.string.tai_bench_voice_check_summary, models.size()), TaiVoiceBench.PRESET_ID,
+                false, models, this::startVoice);
+            return;
+        }
         TaiBenchCheckSheet.show(context, preset, compare && device != null && device.gpuSupported, models, this::start);
     }
 
@@ -692,6 +786,18 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 }
             });
         });
+    }
+
+    private void startVoice(@NonNull TaiBenchSession.Plan plan) {
+        Context context = getContext();
+        if (context == null) return;
+        if (!TaiBenchSession.get().startVoice(context.getApplicationContext(), plan.models)) {
+            AppNotice.show(context, R.string.tai_bench_already_running, true);
+            return;
+        }
+        if (getActivity() instanceof SettingsActivity) {
+            ((SettingsActivity) getActivity()).openScreen(TaiBenchRunFragment.class, R.string.tai_bench_run_title, null);
+        }
     }
 
     /** The ids selected now, for tests. */
