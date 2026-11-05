@@ -368,14 +368,21 @@ public final class ExtraKeyActionPicker {
             // Anything typed is also usable as-is: the literal always leads the results, and a
             // space-separated value can additionally become a macro.
             String typed = query.trim();
+            ExtraKeyChord.Parsed chord = ExtraKeyChord.parse(typed);
+            if (chord != null) {
+                cells.add(new Cell(CELL_WIDE,
+                    context.getString(R.string.settings_extra_keys_action_send_chord, chord.display), null,
+                    new Choice("macro:" + chord.macro, chord.display,
+                        new ExtraKeysLayoutModel.Key(chord.macro, true, chord.display, null))));
+            }
             cells.add(new Cell(CELL_WIDE,
                 context.getString(R.string.settings_extra_keys_action_send_text, typed), null,
                 new Choice("text:" + typed, typed, new ExtraKeysLayoutModel.Key(typed))));
             if (typed.contains(" ")) {
                 cells.add(new Cell(CELL_WIDE, typed,
                     context.getString(R.string.settings_extra_keys_action_macro_summary),
-                    new Choice("macro:" + typed, typed,
-                        new ExtraKeysLayoutModel.Key(typed, true, null, null))));
+                    new Choice("macro:" + ExtraKeyChord.normaliseMacro(typed), typed,
+                        new ExtraKeysLayoutModel.Key(ExtraKeyChord.normaliseMacro(typed), true, null, null))));
             }
             List<String> keys = ExtraKeyPickerCatalog.search(needle);
             if (!keys.isEmpty()) {
