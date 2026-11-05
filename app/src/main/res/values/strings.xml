@@ -2648,6 +2648,7 @@ While a Linux display is showing, the row sends its keys to it.</string>
     <string name="speech_model_accelerator_auto">Auto</string>
     <string name="speech_model_accelerator_cpu">CPU</string>
     <string name="speech_model_accelerator_gpu">GPU</string>
+    <string name="speech_model_accelerator_gpu_choice">GPU · uses less battery, may be slower</string>
     <string name="speech_model_accelerator_gpu_unavailable">GPU unavailable, using CPU</string>
     <string name="speech_output_header">Voice output</string>
     <string name="speech_output_missing_title">No voice yet</string>
