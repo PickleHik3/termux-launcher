@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- View tags of the Assistant page's markdown column. -->
+    <item name="assistant_block_kind" type="id" />
+    <item name="assistant_code_state" type="id" />
+</resources>
