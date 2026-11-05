@@ -472,4 +472,37 @@ public class DressResolverTest {
         assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.TERMINAL));
         assertSame(LayoutVariant.DISPLAY, empty.layoutOf(PaneWallPage.DISPLAY));
     }
+
+    // ---- the Assistant page (ADR 0022) ---------------------------------------------------------
+
+    private void assistantShowsAsShipped() {
+        for (Element element : Element.values())
+            stored.kindShown.put(PageKind.ASSISTANT + "." + element,
+                com.termux.app.place.PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT,
+                    element));
+    }
+
+    @Test
+    public void theAssistantPageIsOfTheAssistantKind() {
+        assertEquals(PageKind.ASSISTANT, DressResolver.kindOf(PaneWallPage.ASSISTANT));
+    }
+
+    @Test
+    public void theAssistantPageWearsTheStatusBarAndNoDockExtraKeysOrWindowBar() {
+        assistantShowsAsShipped();
+        Dress assistant = dresses.dressOf(PaneWallPage.ASSISTANT);
+        assertTrue(assistant.wears(Element.STATUS));
+        for (Element element : Element.values()) {
+            if (element == Element.STATUS) continue;
+            assertFalse(element + " is off by default", assistant.wears(element));
+        }
+    }
+
+    @Test
+    public void minimalModeDoesNotApplyToTheAssistantPage() {
+        assistantShowsAsShipped();
+        stored.minimal = true;
+        assertEquals(LayoutVariant.ASSISTANT, dresses.layoutOf(PaneWallPage.ASSISTANT));
+        assertTrue(dresses.wears(PaneWallPage.ASSISTANT, Element.STATUS));
+    }
 }

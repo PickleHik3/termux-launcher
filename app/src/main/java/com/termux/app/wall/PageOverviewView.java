@@ -126,6 +126,16 @@ public final class PageOverviewView extends FrameLayout {
         /** Display page {@code id} leaves the wall ({@link WallPages#remove}). */
         default void removeDisplayPage(int id) { }
 
+        // The Assistant page (ADR 0022), listed with {@link #displayPages} as a {@link DisplayPage}.
+        /** Whether the wall has an Assistant page. */
+        default boolean hasAssistantPage() { return false; }
+        /** Whether the Assistant page is home. */
+        default boolean assistantIsHome() { return false; }
+        /** An Assistant page goes on the wall after the page the wall stands on. */
+        default void addAssistantPage() { }
+        /** Assistant page {@code id} leaves the wall; the chats stay. */
+        default void removeAssistantPage(int id) { }
+
         // Use as Terminal only: the Home pages are set aside, and Edit pages offers them back.
         /** Whether the wall shows Home pages; false under Use as Terminal only. */
         default boolean homePagesShown() { return true; }
@@ -252,12 +262,20 @@ public final class PageOverviewView extends FrameLayout {
         public final int homesBefore;
         /** Whether it stands after the Terminal page. */
         public final boolean afterTerminal;
+        /** Whether it is the Assistant page (ADR 0022), which stands in the strip as a Display page does. */
+        public final boolean assistant;
 
         public DisplayPage(int id, @NonNull String label, int homesBefore, boolean afterTerminal) {
+            this(id, label, homesBefore, afterTerminal, false);
+        }
+
+        public DisplayPage(int id, @NonNull String label, int homesBefore, boolean afterTerminal,
+                           boolean assistant) {
             this.id = id;
             this.label = label;
             this.homesBefore = homesBefore;
             this.afterTerminal = afterTerminal;
+            this.assistant = assistant;
         }
     }
 
@@ -450,6 +468,7 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final LinearLayout pills;
     @NonNull private final TextView addPage;
     @NonNull private final TextView addTerminal;
+    @NonNull private final TextView addAssistant;
     @NonNull private final TextView addDisplay;
     @NonNull private final TextView bringBack;
     @NonNull private final Touch accessibility;
@@ -495,6 +514,8 @@ public final class PageOverviewView extends FrameLayout {
             v -> onAddPage());
         addTerminal = pill(context, R.string.page_overview_add_terminal,
             R.drawable.ic_symbol_terminal, v -> onAddTerminalPage());
+        addAssistant = pill(context, R.string.page_overview_add_assistant,
+            R.drawable.ic_symbol_smart_toy, v -> onAddAssistantPage());
         addDisplay = pill(context, R.string.page_overview_add_display,
             R.drawable.ic_symbol_desktop_windows, v -> showDisplayPicker(null));
         bringBack = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_home,
@@ -503,6 +524,7 @@ public final class PageOverviewView extends FrameLayout {
         pills.addView(addPage);
         pills.addView(addTerminal);
         pills.addView(addDisplay);
+        pills.addView(addAssistant);
         addView(pills, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
@@ -695,7 +717,8 @@ public final class PageOverviewView extends FrameLayout {
                 Object key = displayKeys.get(page.id);
                 if (key == null) displayKeys.put(page.id, key = new Object());
                 if (isPending(key)) continue;
-                Card card = new Card(PageOverviewPolicy.Kind.DISPLAY, key, page.id, 0);
+                Card card = new Card(page.assistant ? PageOverviewPolicy.Kind.ASSISTANT
+                    : PageOverviewPolicy.Kind.DISPLAY, key, page.id, 0);
                 card.label = page.label;
                 cards.add(card);
                 displayCount++;
@@ -784,6 +807,9 @@ public final class PageOverviewView extends FrameLayout {
         if (card.kind == PageOverviewPolicy.Kind.DISPLAY) {
             return new WallRow.Position(com.termux.app.wall.PaneWallPage.DISPLAY, 0);
         }
+        if (card.kind == PageOverviewPolicy.Kind.ASSISTANT) {
+            return new WallRow.Position(com.termux.app.wall.PaneWallPage.ASSISTANT, 0);
+        }
         return card.isHome() ? WallRow.homePage(card.index) : WallRow.window(card.index);
     }
 
@@ -805,6 +831,8 @@ public final class PageOverviewView extends FrameLayout {
         }
         addTerminal.setVisibility(PageOverviewAddPolicy.showsAddTerminal(host.hasTerminalPage())
             ? VISIBLE : GONE);
+        addAssistant.setVisibility(PageOverviewAddPolicy.showsAddAssistant(
+            host.hasAssistantPage()) ? VISIBLE : GONE);
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
         boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
@@ -929,6 +957,9 @@ public final class PageOverviewView extends FrameLayout {
             if (host.displayPageHolds(card.index)) displayGoing = true;
             mutate(() -> host.removeDisplayPage(card.index));
             displayKeys.remove(card.index);
+        } else if (card.kind == PageOverviewPolicy.Kind.ASSISTANT) {
+            mutate(() -> host.removeAssistantPage(card.index));
+            displayKeys.remove(card.index);
         } else {
             mutate(() -> host.removeWindow(card.index));
         }
@@ -944,6 +975,9 @@ public final class PageOverviewView extends FrameLayout {
                 break;
             case TERMINAL:
                 text = getContext().getString(R.string.page_overview_terminal_closed);
+                break;
+            case ASSISTANT:
+                text = getContext().getString(R.string.page_overview_remove_assistant);
                 break;
             default:
                 text = getContext().getString(R.string.page_overview_display_closed);
@@ -1002,6 +1036,13 @@ public final class PageOverviewView extends FrameLayout {
                 int before = host.pageCount();
                 mutate(() -> host.removePage(page));
                 if (host.pageCount() < before) homeKeys.remove(page);
+            }
+        } else if (held.kind == PageOverviewPolicy.Kind.ASSISTANT) {
+            for (Map.Entry<Integer, Object> e : new ArrayList<>(displayKeys.entrySet())) {
+                if (e.getValue() != held.key) continue;
+                int id = e.getKey();
+                mutate(() -> host.removeAssistantPage(id));
+                displayKeys.remove(id);
             }
         } else if (held.kind == PageOverviewPolicy.Kind.DISPLAY) {
             for (Map.Entry<Integer, Object> e : new ArrayList<>(displayKeys.entrySet())) {
@@ -1063,7 +1104,8 @@ public final class PageOverviewView extends FrameLayout {
             }
             Object key = homeKeys.remove(moving.index);
             homeKeys.add(Math.min(homeTo, homeKeys.size()), key);
-        } else if (moving.kind == PageOverviewPolicy.Kind.DISPLAY) {
+        } else if (moving.kind == PageOverviewPolicy.Kind.DISPLAY
+            || moving.kind == PageOverviewPolicy.Kind.ASSISTANT) {
             // Display cards stay where they stand (dropTarget refuses them).
             invalidate();
             return;
@@ -1200,6 +1242,14 @@ public final class PageOverviewView extends FrameLayout {
         if (!isOpen() || host.hasTerminalPage()) return;
         commitPending();
         mutate(host::addTerminalPage);
+        reload();
+        invalidate();
+    }
+
+    private void onAddAssistantPage() {
+        if (!isOpen() || host.hasAssistantPage()) return;
+        commitPending();
+        mutate(host::addAssistantPage);
         reload();
         invalidate();
     }
@@ -1515,6 +1565,9 @@ public final class PageOverviewView extends FrameLayout {
         boolean defaultPage = card.isHome() && card.index
             == com.termux.app.launcher.home.HomePageEdits.clampDefault(host.defaultPage(),
                 host.pageCount());
+        // The wall's home is one page: while it is the Assistant, no other card wears the marker.
+        if (card.kind == PageOverviewPolicy.Kind.ASSISTANT) return host.assistantIsHome();
+        if (host.assistantIsHome()) return false;
         return StartInPolicy.isHome(card.kind, defaultPage, isFirstTerminal(card), host.startIn());
     }
 
@@ -1984,6 +2037,9 @@ public final class PageOverviewView extends FrameLayout {
                     getContext().getString(R.string.home_pages_editor_page, card.number));
             case TERMINAL:
                 return getContext().getString(R.string.page_overview_terminal, card.number);
+            case ASSISTANT:
+                return card.label != null ? card.label
+                    : getContext().getString(R.string.page_overview_assistant);
             default:
                 return card.label != null ? card.label
                     : getContext().getString(R.string.page_overview_display);
@@ -2506,6 +2562,8 @@ public final class PageOverviewView extends FrameLayout {
                 return getContext().getString(R.string.home_pages_editor_make_default, card.number);
             case TERMINAL:
                 return getContext().getString(R.string.page_overview_start_in_terminal);
+            case ASSISTANT:
+                return getContext().getString(R.string.page_overview_start_on_assistant);
             default:
                 return getContext().getString(R.string.page_overview_start_on_display);
         }
@@ -2518,6 +2576,8 @@ public final class PageOverviewView extends FrameLayout {
                 return getContext().getString(R.string.home_pages_editor_remove, card.number);
             case TERMINAL:
                 return getContext().getString(R.string.page_overview_close_terminal, card.number);
+            case ASSISTANT:
+                return getContext().getString(R.string.page_overview_remove_assistant);
             default:
                 return getContext().getString(R.string.page_overview_close_display);
         }

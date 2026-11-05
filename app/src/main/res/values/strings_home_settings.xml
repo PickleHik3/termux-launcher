@@ -102,6 +102,10 @@
     <string name="page_overview_add_page">Add page</string>
     <string name="page_overview_add_terminal">Add terminal</string>
     <string name="page_overview_add_display">Add display</string>
+    <string name="page_overview_add_assistant">Add assistant</string>
+    <string name="page_overview_assistant">Assistant</string>
+    <string name="page_overview_start_on_assistant">Start on Assistant</string>
+    <string name="page_overview_remove_assistant">Remove the Assistant page</string>
     <string name="page_overview_page_removed">Page %1$d removed</string>
     <string name="page_overview_terminal_closed">Terminal closed</string>
     <string name="page_overview_display_closed">Display closed</string>

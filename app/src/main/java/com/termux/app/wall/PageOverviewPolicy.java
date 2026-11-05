@@ -27,7 +27,9 @@ public final class PageOverviewPolicy {
         /** A terminal window of the current session. */
         TERMINAL,
         /** The display window. */
-        DISPLAY
+        DISPLAY,
+        /** The Assistant page (ADR 0022). */
+        ASSISTANT
     }
 
     /** How a card's removal goes. */
@@ -122,7 +124,7 @@ public final class PageOverviewPolicy {
         int count = strip.size();
         if (from < 0 || from >= count || over < 0 || over >= count) return NONE;
         int[] block = blockBounds(strip);
-        if (strip.get(from) == Kind.DISPLAY) return NONE;
+        if (strip.get(from) == Kind.DISPLAY || strip.get(from) == Kind.ASSISTANT) return NONE;
         if (!isHome(from, strip)) {
             return block != null && over >= block[0] && over <= block[1] ? over : NONE;
         }
@@ -183,6 +185,9 @@ public final class PageOverviewPolicy {
         }
         if (position >= 0 && position < strip.size() && strip.get(position) == Kind.DISPLAY) {
             return new WallRow.Position(PaneWallPage.DISPLAY, 0);
+        }
+        if (position >= 0 && position < strip.size() && strip.get(position) == Kind.ASSISTANT) {
+            return new WallRow.Position(PaneWallPage.ASSISTANT, 0);
         }
         int[] block = blockBounds(strip);
         return WallRow.window(block == null ? 0 : Math.max(0, position - block[0]));
@@ -278,6 +283,8 @@ public final class PageOverviewPolicy {
         switch (kind) {
             case HOME_PAGE: return contents > 0 ? Removal.WITH_UNDO : Removal.AT_ONCE;
             case TERMINAL: return busy ? Removal.WITH_UNDO : Removal.AT_ONCE;
+            // The chats are kept when the page goes (ADR 0022), so there is nothing to undo.
+            case ASSISTANT: return Removal.AT_ONCE;
             default: return Removal.WITH_UNDO;
         }
     }

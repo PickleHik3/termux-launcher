@@ -26,6 +26,11 @@ public final class PageOverviewAddPolicy {
         return Math.max(0, detachedHomePages) + Math.max(0, hiddenHomePages);
     }
 
+    /** Whether "Add assistant" shows: only while the wall has no Assistant page, as only one can. */
+    public static boolean showsAddAssistant(boolean hasAssistantPage) {
+        return !hasAssistantPage;
+    }
+
     /** Whether "Add terminal" shows: only while the wall has no Terminal page, as only one can. */
     public static boolean showsAddTerminal(boolean hasTerminalPage) {
         return !hasTerminalPage;

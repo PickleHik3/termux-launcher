@@ -1033,6 +1033,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         switch (kind) {
             case HOME: return getString(R.string.editor_chip_kind_home);
             case DISPLAY: return getString(R.string.editor_chip_kind_display);
+            case ASSISTANT: return getString(R.string.editor_chip_kind_assistant);
             case TERMINAL:
             default:
                 return getString(R.string.editor_chip_kind_terminal);

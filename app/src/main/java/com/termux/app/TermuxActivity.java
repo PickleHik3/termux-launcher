@@ -6817,7 +6817,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLastWallPage, stackPage, mCrossing.seam().barDressedAcross());
         com.termux.app.wall.PaneWallPage window =
             surface == com.termux.app.place.SeamDress.Surface.STACK ? stackPage : mLastWallPage;
-        int displayId = window == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage : -1;
+        // The Assistant page reads its own page's look cells (@kind:assistant, ADR 0022).
+        int displayId = window == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage
+            : window == com.termux.app.wall.PaneWallPage.ASSISTANT ? assistantPageId() : -1;
         return com.termux.app.place.SeamDress.lookPageId(kind,
             kind == com.termux.app.wall.PaneWallPage.WIDGETS ? homePageInFront() : -1, displayId,
             terminalLookPageId());
@@ -6830,8 +6832,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.wall.PaneWallPage.WIDGETS, page.id >= 0 ? page.id : homePageInFront(),
                 -1, terminalLookPageId());
         return com.termux.app.place.SeamDress.lookPageId(page.kind, -1,
-            page.kind == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage : -1,
+            page.kind == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage
+                : page.kind == com.termux.app.wall.PaneWallPage.ASSISTANT ? assistantPageId() : -1,
             terminalLookPageId());
+    }
+
+    /**
+     * Puts the Assistant page on the wall after page {@code afterId} (the end when there is no
+     * such page), unless it has one. The first time, its layout and look start from Home's
+     * (ADR 0022 section 2). Returns the page's id, or -1 when none was added.
+     */
+    private int addAssistantPage(int afterId) {
+        if (wallPages().assistant() != null) return -1;
+        com.termux.app.place.layout.LayoutStore layouts =
+            com.termux.app.place.layout.LayoutStore.shared(this);
+        if (com.termux.app.place.layout.AssistantSeed.needsSeed(layouts.current())) {
+            layouts.update(com.termux.app.place.layout.LayoutKind.ASSISTANT, assistant ->
+                com.termux.app.place.layout.AssistantSeed.seed(assistant,
+                    layouts.current().kind(com.termux.app.place.layout.LayoutKind.HOME)));
+        }
+        android.content.SharedPreferences prefs =
+            mPreferences == null ? null : mPreferences.getSharedPreferences();
+        if (prefs != null) {
+            com.termux.app.look.AssistantLookSeed.seed(
+                new com.termux.app.look.PrefsLookStore(prefs));
+        }
+        com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+            pages.add(com.termux.app.wall.WallPages.PageKind.ASSISTANT,
+                pages.page(afterId) != null ? afterId : com.termux.app.wall.WallPages.END, null));
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+        return added.ok() && added.page != null ? added.page.id : -1;
+    }
+
+    /** The id of the Assistant page, or -1 while the wall has none. */
+    private int assistantPageId() {
+        com.termux.app.wall.WallPages.Page page = wallPages().assistant();
+        return page == null ? -1 : page.id;
     }
 
     /**
@@ -29731,7 +29767,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.wall.WallPages.Page overviewPage(
             @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
         com.termux.app.wall.WallPages pages = wallPages();
-        if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY) return pages.page(index);
+        if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY
+            || kind == com.termux.app.wall.PageOverviewPolicy.Kind.ASSISTANT) return pages.page(index);
         if (kind != com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) return null;
         java.util.List<com.termux.app.wall.WallPages.Page> homes = pages.homePages();
         return index >= 0 && index < homes.size() ? homes.get(index) : null;
@@ -29795,7 +29832,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         editWallPages(pages -> pages.chooseHomePage(index));
                         return;
                     }
+                    if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.ASSISTANT) {
+                        editWallPages(pages -> pages.setHome(index));
+                        return;
+                    }
                     applyStartIn(com.termux.app.wall.StartInPolicy.choose(kind));
+                }
+                @Override public boolean hasAssistantPage() {
+                    return wallPages().assistant() != null;
+                }
+                @Override public boolean assistantIsHome() {
+                    com.termux.app.wall.WallPages pages = wallPages();
+                    com.termux.app.wall.WallPages.Page assistant = pages.assistant();
+                    com.termux.app.wall.WallPages.Page home = pages.home();
+                    return assistant != null && home != null && home.id == assistant.id;
+                }
+                @Override public void addAssistantPage() {
+                    TermuxActivity.this.addAssistantPage(linuxRouteFromPageId());
+                }
+                @Override public void removeAssistantPage(int id) {
+                    // The chats are kept (ADR 0022): only the page leaves, and with no confirm.
+                    com.termux.app.wall.WallPages.Result removed =
+                        wallPagesStore().edit(pages -> pages.remove(id, 0, true));
+                    if (removed.ok()) wallPagesStore().edit(pages -> pages.commitRemoval(id));
+                    if (mPaneWallController != null) mPaneWallController.refreshPages();
                 }
                 // The wall's order (ADR 0015, A2a): the Terminal page anywhere among Home's.
                 @Override public int homePagesBeforeTerminal() {
@@ -29822,6 +29882,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     for (com.termux.app.wall.WallPages.Page page : pages.listedPages()) {
                         if (terminal != null && page.id == terminal.id) afterTerminal = true;
                         if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) homes++;
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.ASSISTANT) {
+                            out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
+                                com.termux.app.wall.PageCardMenuPolicy.cardName(page.name,
+                                    getString(R.string.page_overview_assistant)), homes,
+                                afterTerminal, true));
+                            continue;
+                        }
                         if (page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) continue;
                         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
                             ? null : displayCards().find(page.binding);
@@ -30028,6 +30095,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mSurfaceEditor.onOverviewCard(
                             position.kind == com.termux.app.wall.PaneWallPage.DISPLAY
                             ? com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY
+                            : position.kind == com.termux.app.wall.PaneWallPage.ASSISTANT
+                            ? com.termux.app.wall.PageOverviewPolicy.Kind.ASSISTANT
                             : com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL);
                     }
                 }
@@ -30103,6 +30172,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setOverviewPreviewing(!landing);
         if (position.kind == com.termux.app.wall.PaneWallPage.WIDGETS) {
             mPaneWallController.goToHomePageAt(position.index, false);
+            return;
+        }
+        if (position.kind == com.termux.app.wall.PaneWallPage.ASSISTANT) {
+            mPaneWallController.goToAssistantPage(false);
             return;
         }
         int row = position.index;

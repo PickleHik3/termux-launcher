@@ -25,8 +25,14 @@ public final class AssistantSeed {
      */
     @NonNull
     public static Layouts seeded(@NonNull Layouts layouts) {
-        if (!needsSeed(layouts)) return layouts;
-        KindLayout home = layouts.kind(LayoutKind.HOME);
+        return layouts.withKind(LayoutKind.ASSISTANT,
+            seed(layouts.kind(LayoutKind.ASSISTANT), layouts.kind(LayoutKind.HOME)));
+    }
+
+    /** The Assistant's document: {@code assistant} when it holds anything, else Home's, trimmed. */
+    @NonNull
+    public static KindLayout seed(@NonNull KindLayout assistant, @NonNull KindLayout home) {
+        if (!assistant.equals(KindLayout.EMPTY)) return assistant;
         KindLayout seed = home.withWide(home.wide().without(LayoutsJson.KEYBOARD_OPEN));
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             LayoutFields fields = seed.orientation(orientation);
@@ -36,6 +42,6 @@ public final class AssistantSeed {
             }
             seed = seed.withOrientation(orientation, fields);
         }
-        return layouts.withKind(LayoutKind.ASSISTANT, seed);
+        return seed;
     }
 }
