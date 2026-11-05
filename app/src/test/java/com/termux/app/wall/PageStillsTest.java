@@ -139,6 +139,11 @@ public class PageStillsTest {
             assertEquals(k, PageStillPolicy.Shows.PICTURE,
                 PageStillPolicy.shows(4, 4, false, true));
             assertEquals(k, PageStillPolicy.Shows.CARD, PageStillPolicy.shows(4, -1, true, false));
+            // Bound, in front, down, no picture: nothing of its own; the empty state shows.
+            assertEquals(k, PageStillPolicy.Shows.NONE, PageStillPolicy.shows(4, 4, false, false));
+            // Unbound or pending (bound -1) and down: still its card.
+            assertEquals(k, PageStillPolicy.Shows.CARD, PageStillPolicy.shows(4, -1, false, false));
+            assertEquals(k, PageStillPolicy.Shows.CARD, PageStillPolicy.shows(5, 4, false, false));
         }
     }
 
