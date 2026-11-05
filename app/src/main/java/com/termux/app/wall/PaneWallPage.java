@@ -18,7 +18,12 @@ public enum PaneWallPage {
      * Not a page of the row (amended 2026-10-19): the place while the display window — a window
      * of the Workspace, on {@link #TERMINAL}'s stretch (ADR 0008; since ADR 0015 A3b the Display pages) — is the one in front.
      */
-    DISPLAY;
+    DISPLAY,
+    /**
+     * The Assistant page (ADR 0022): a page of its own kind, one view bound to the one page, which
+     * shows the chat. Not a stretch of the Workspace.
+     */
+    ASSISTANT;
 
     /** The name {@code wall.go} and {@code launcherctl} use. */
     public String toolName() {

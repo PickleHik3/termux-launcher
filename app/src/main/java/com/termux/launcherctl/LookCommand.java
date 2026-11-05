@@ -46,6 +46,7 @@ final class LookCommand {
         switch (kind) {
             case HOME: return "Home pages";
             case DISPLAY: return "Display pages";
+            case ASSISTANT: return "the Assistant page";
             case TERMINAL:
             default:
                 return "the Terminal page";

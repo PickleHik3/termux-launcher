@@ -183,6 +183,13 @@ public final class PageCardView extends View {
                 canvas.drawLine(cx - h / 2f, cy + h, cx + h / 2f, cy + h, mInk);
                 break;
             }
+            case ASSISTANT: {
+                // A speech bubble with a tail.
+                canvas.drawRect(cx - h, cy - h, cx + h, cy + h / 3f, mInk);
+                canvas.drawLine(cx - h / 2f, cy + h / 3f, cx - h / 2f, cy + h, mInk);
+                canvas.drawLine(cx - h / 2f, cy + h, cx, cy + h / 3f, mInk);
+                break;
+            }
             case TERMINAL:
             default: {
                 // A prompt: a chevron and a cursor bar.

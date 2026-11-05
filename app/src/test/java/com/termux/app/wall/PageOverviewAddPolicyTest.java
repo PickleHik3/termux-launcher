@@ -48,4 +48,10 @@ public class PageOverviewAddPolicyTest {
         assertTrue(PageOverviewAddPolicy.showsAddTerminal(false));
         assertFalse(PageOverviewAddPolicy.showsAddTerminal(true));
     }
+
+    @Test
+    public void addAssistantShowsOnlyWhileThereIsNoAssistantPage() {
+        assertTrue(PageOverviewAddPolicy.showsAddAssistant(false));
+        assertFalse(PageOverviewAddPolicy.showsAddAssistant(true));
+    }
 }

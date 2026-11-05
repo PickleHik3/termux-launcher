@@ -243,4 +243,16 @@ public class WallPagesStoreTest {
         store.replace(WallPagesMigration.seed("home", 0, "home", 1));
         assertEquals(0, rec.changed);
     }
+
+    @Test
+    public void anAssistantPageRoundTripsThroughMemoryStorage() {
+        WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+        WallPages value = WallPagesMigration.seed("home", 0, "home", 2)
+            .add(WallPages.PageKind.ASSISTANT, 1, null).pages;
+        new WallPagesStore(storage).replace(value);
+        WallPages again = new WallPagesStore(storage).current();
+        assertEquals(value, again);
+        assertEquals(WallPages.PageKind.ASSISTANT, again.assistant().kind);
+        assertEquals("Assistant", again.displayName(again.assistant(), null));
+    }
 }

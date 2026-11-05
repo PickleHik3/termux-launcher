@@ -141,6 +141,8 @@ public final class HelpTargets {
             // space bar with its swipes. Each is measured on the keys it is about.
             add(s, "prefix", union(keyRect("ctrl"), keyRect("alt")), 0);
             add(s, "space", keyRect("space"), 0);
+        } else if (place == PaneWallPage.ASSISTANT) {
+            // The Assistant page has no controls of its own to point at yet (ADR 0022).
         } else if (place == PaneWallPage.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),

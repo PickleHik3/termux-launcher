@@ -604,6 +604,9 @@ public final class PlaceLayoutStore {
         /** The id of the Display page the display is bound to, or -1 while there is none. */
         default int displayPage() { return -1; }
 
+        /** The id of the Assistant page, or -1 while there is none. */
+        default int assistantPage() { return -1; }
+
         /** The ids of every Home page, in order; empty while the wall has none yet. */
         @NonNull
         java.util.List<Integer> homePageIds();
@@ -642,6 +645,7 @@ public final class PlaceLayoutStore {
         if (pages == null) return -1;
         if (page == PaneWallPage.WIDGETS) return pages.homePageInFront();
         if (page == PaneWallPage.DISPLAY) return pages.displayPage();
+        if (page == PaneWallPage.ASSISTANT) return pages.assistantPage();
         return pages.terminalPage();
     }
 
@@ -888,11 +892,13 @@ public final class PlaceLayoutStore {
 
     /**
      * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
-     * and the A-Z index); Terminal and Display pages the status bar and the extra keys.
+     * and the A-Z index); Terminal and Display pages the status bar and the extra keys; Assistant pages the status bar alone.
      */
     public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
         if (element == Element.STATUS) return true;
         if (kind == PageKind.HOME) return element == Element.APPS || element == Element.AZ;
+        // The Assistant page's composer owns the bottom edge (ADR 0022 section 2).
+        if (kind == PageKind.ASSISTANT) return false;
         return element == Element.EXTRA_KEYS;
     }
 

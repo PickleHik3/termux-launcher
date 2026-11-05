@@ -88,6 +88,9 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.DISPLAY,
             LayoutsJson.KEYBOARD_OPEN)))
             return new Route(LayoutKind.DISPLAY, null, LayoutsJson.KEYBOARD_OPEN);
+        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.ASSISTANT,
+            LayoutsJson.KEYBOARD_OPEN)))
+            return new Route(LayoutKind.ASSISTANT, null, LayoutsJson.KEYBOARD_OPEN);
         return null;
     }
 
@@ -95,7 +98,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     private static Route routeLayout(@NonNull String rest) {
         LayoutKind kind = LayoutKind.TERMINAL;
         for (LayoutKind k : new LayoutKind[]{LayoutKind.HOME, LayoutKind.TERMINAL_MINIMAL,
-            LayoutKind.DISPLAY}) {
+            LayoutKind.DISPLAY, LayoutKind.ASSISTANT}) {
             String scope = scopeOf(k);
             if (rest.startsWith(scope)) {
                 kind = k;
@@ -145,6 +148,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
             case HOME: return LayoutVariant.HOME.keyScope();
             case TERMINAL_MINIMAL: return LayoutVariant.MINIMAL.keyScope();
             case DISPLAY: return LayoutVariant.DISPLAY.keyScope();
+            case ASSISTANT: return LayoutVariant.ASSISTANT.keyScope();
             default: return LayoutVariant.NORMAL.keyScope();
         }
     }
@@ -206,9 +210,12 @@ final class LayoutDocumentPrefs implements SharedPreferences {
             String scope = LAYOUT + scopeOf(kind);
             for (String field : layout.wide().keys()) {
                 if (LayoutsJson.KEYBOARD_OPEN.equals(field)) {
-                    if (kind == LayoutKind.TERMINAL || kind == LayoutKind.DISPLAY)
+                    if (kind == LayoutKind.TERMINAL || kind == LayoutKind.DISPLAY
+                        || kind == LayoutKind.ASSISTANT)
                         all.put(PlaceLayoutStore.memoryKey(kind == LayoutKind.TERMINAL
                                 ? com.termux.app.wall.PaneWallPage.TERMINAL
+                                : kind == LayoutKind.ASSISTANT
+                                ? com.termux.app.wall.PaneWallPage.ASSISTANT
                                 : com.termux.app.wall.PaneWallPage.DISPLAY, field),
                             layout.wide().get(field));
                 } else if (LayoutsJson.WIDE_FIELDS.contains(field)) {

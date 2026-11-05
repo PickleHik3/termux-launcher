@@ -81,6 +81,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * here when it is down ({@link DisplayPagePolicy#startsOnLanding}).
          */
         default void onDisplayPageLanded(int pageId) { }
+        /**
+         * What builds the Assistant page's view (ADR 0022), asked when the wall first holds an
+         * Assistant page. The wall owns the view; the host only says how it is made.
+         */
+        @NonNull default com.termux.app.assistant.AssistantPageHost assistantPageHost() {
+            return com.termux.app.assistant.AssistantPageHost.DEFAULT;
+        }
         /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
         default void showInnerPage(@NonNull PaneWallPage page, int index) { }
         /**
@@ -209,6 +216,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull private final Host mHost;
     @Nullable private WidgetPaneFrame mWidgetsPage;
     @Nullable private com.termux.app.x11.X11PaneFrame mDisplayWindow;
+    /** The Assistant page's one view while the wall holds the page. */
+    @Nullable private View mAssistantView;
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -313,6 +322,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
+        syncAssistantPage();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the
         // wall hands to the Home page beside it (ADR 0015). Closing a window is not a landing,
         // so no shell starts.
@@ -348,7 +358,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 if (kind == PaneWallPage.WIDGETS && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PaneWallPage.WIDGETS;
                 hasTerminal |= kind == PaneWallPage.TERMINAL;
-                hasDisplay |= kind == PaneWallPage.DISPLAY;
+                // The Assistant page stands off the default order as a Display page does.
+                hasDisplay |= kind == PaneWallPage.DISPLAY || kind == PaneWallPage.ASSISTANT;
                 out.add(new PaneWallLayout.Cell(page.id, kind, pages.displayName(page, null)));
             }
         }
@@ -374,6 +385,44 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Whether the wall has a cell of {@code kind}. */
     private boolean has(@NonNull PaneWallPage kind) {
         return mWall.boundPageId(kind) != PaneWallLayout.NO_PAGE;
+    }
+
+    /**
+     * Builds the Assistant page's view while the wall holds an Assistant page and binds it, and
+     * drops it once the page is gone.
+     */
+    private void syncAssistantPage() {
+        WallPages.Page page = mKnownPages == null ? null : mKnownPages.assistant();
+        int id = page == null ? -1 : page.id;
+        if (id < 0) {
+            View view = mAssistantView;
+            if (view == null) return;
+            mAssistantView = null;
+            mWall.setPageView(PaneWallPage.ASSISTANT, null);
+            mWall.removeView(view);
+            return;
+        }
+        if (mAssistantView == null) {
+            View view = mHost.assistantPageHost().createPageView(mWall.getContext());
+            mWall.addView(view);
+            mAssistantView = view;
+            mWall.setPageView(PaneWallPage.ASSISTANT, view);
+        }
+        if (id >= 0) mWall.bind(PaneWallPage.ASSISTANT, id);
+    }
+
+    /** The Assistant page's view while the wall holds the page; null otherwise. */
+    @Nullable
+    public View assistantView() {
+        return mAssistantView;
+    }
+
+    /** Go to the Assistant page; false when the wall has none. */
+    public boolean goToAssistantPage(boolean animate) {
+        WallPages pages = mKnownPages;
+        if (pages == null) return false;
+        WallPages.Page page = pages.assistant();
+        return page != null && goToPage(page.id, animate);
     }
 
     /** Bind the display view to Display page {@code pageId}, telling the host when it moved. */
@@ -899,6 +948,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         WallPages.Stop stop;
         if (kind == PaneWallPage.DISPLAY) {
             int id = pageId >= 0 ? pageId : mDisplayPageId;
+            if (id < 0) return 0;
+            stop = WallPages.Stop.of(id);
+        } else if (kind == PaneWallPage.ASSISTANT) {
+            WallPages.Page assistant = pages.assistant();
+            int id = pageId >= 0 ? pageId : assistant == null ? -1 : assistant.id;
             if (id < 0) return 0;
             stop = WallPages.Stop.of(id);
         } else if (kind == PaneWallPage.WIDGETS) {

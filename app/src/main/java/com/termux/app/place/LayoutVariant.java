@@ -30,6 +30,10 @@ public final class LayoutVariant {
     public static final LayoutVariant DISPLAY =
         new LayoutVariant("DISPLAY", "display.", -1, PageKind.DISPLAY);
 
+    /** The Assistant's layout (ADR 0022): Assistant pages wear it whatever minimal mode says. */
+    public static final LayoutVariant ASSISTANT =
+        new LayoutVariant("ASSISTANT", "assistant.", -1, PageKind.ASSISTANT);
+
     /** The fixed variants, in their old enum order: what the migrations walk. */
     private static final LayoutVariant[] FIXED = {NORMAL, MINIMAL, HOME};
 
@@ -69,12 +73,13 @@ public final class LayoutVariant {
     }
 
     /**
-     * The layout a page of {@code kind} wears (ADR 0020 §1): Home's, the Display's, or the
+     * The layout a page of {@code kind} wears (ADR 0020 §1): Home's, the Assistant's (ADR 0022), the Display's, or the
      * Terminal's ({@link #NORMAL}); Terminal-minimal for the last two while {@code minimal}.
      */
     @NonNull
     public static LayoutVariant ofKind(@NonNull PageKind kind, boolean minimal) {
         if (kind == PageKind.HOME) return HOME;
+        if (kind == PageKind.ASSISTANT) return ASSISTANT;
         if (minimal) return MINIMAL;
         return kind == PageKind.DISPLAY ? DISPLAY : NORMAL;
     }
