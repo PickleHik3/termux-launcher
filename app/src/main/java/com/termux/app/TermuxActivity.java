@@ -800,6 +800,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private ResolvedArrangement mHomeArrangement;
     @Nullable private ResolvedArrangement mWorkspaceArrangement;
+    /** The Assistant page's (ADR 0022): its own kind's layout, never the Workspace's. */
+    @Nullable private ResolvedArrangement mAssistantArrangement;
     @Nullable private PlaceLayoutStore mArrangedStore;
     @Nullable private PlaceOrientation mArrangedOrientation;
     private int mArrangedRevision = Integer.MIN_VALUE;
@@ -4723,9 +4725,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int groundOfWallPage(@NonNull com.termux.app.wall.PaneWallPage wallPage) {
         if (!shouldUseWallpaperPassthroughMode()) return mWallGroundColor;
         com.termux.app.wall.WallPages pages = wallPages();
-        boolean terminal = wallPage != com.termux.app.wall.PaneWallPage.WIDGETS;
+        boolean terminal = com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(wallPage);
         com.termux.app.wall.WallPages.Page page = null;
-        if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0) {
+        if (wallPage == com.termux.app.wall.PaneWallPage.ASSISTANT) {
+            // The Assistant page wears its own dim; its pane is its own glass, never the
+            // terminal's tint (ADR 0022).
+            page = pages.assistant();
+        } else if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0) {
             // A Display page wears its own dim (W6).
             page = pages.page(mBoundDisplayPage);
             if (page == null) page = pages.terminal();
@@ -7271,7 +7277,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null,
             // The insert stands as close to the bars as the terminal does, on the Workspace only.
             !chromeWearsHomeShape(surface)
-                && mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS);
+                && com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(mLastWallPage));
     }
 
     /**
@@ -16264,13 +16270,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The page {@code page}'s arrangement is read for, with no id said: Home's for a Home page,
-     * the Terminal page's for every window. Builds nothing, so a frame's readers may ask it.
+     * the Assistant page's own for it (status bar alone, ADR 0022), the Terminal page's for every
+     * window. Builds nothing, so a frame's readers may ask it.
      */
     @NonNull
     private static com.termux.app.wall.PageRef arrangedPageOf(
             @NonNull com.termux.app.wall.PaneWallPage page) {
-        return page == com.termux.app.wall.PaneWallPage.WIDGETS
-            ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
+        if (com.termux.app.wall.PaneWallPolicy.isHomePlace(page))
+            return com.termux.app.wall.PageRef.HOME;
+        return page == com.termux.app.wall.PaneWallPage.ASSISTANT
+            ? com.termux.app.wall.PageRef.ASSISTANT : com.termux.app.wall.PageRef.TERMINAL;
     }
 
     /**
@@ -16330,6 +16339,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mArrangedRotation = rotation;
             mHomeArrangement = null;
             mWorkspaceArrangement = null;
+            mAssistantArrangement = null;
             mArrangedStore = store;
             mArrangedOrientation = orientation;
         }
@@ -16345,6 +16355,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
             return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
+        if (page.kind == com.termux.app.wall.PaneWallPage.ASSISTANT) {
+            ResolvedArrangement assistant = mAssistantArrangement;
+            if (assistant == null) {
+                assistant = ResolvedArrangement.resolve(store, orientation,
+                    com.termux.app.wall.PageRef.ASSISTANT);
+                // A first read can seed a layout: every half is read again on its next ask.
+                if (store.revision() != revision) {
+                    mHomeArrangement = null;
+                    mWorkspaceArrangement = null;
+                } else {
+                    mAssistantArrangement = assistant;
+                }
+            }
+            mArrangedRevision = store.revision();
+            return assistant;
+        }
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -16356,6 +16382,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (store.revision() != revision) {
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
+                mAssistantArrangement = null;
             }
             if (home) held = withSideBarDock(held);
             if (home) mHomeArrangement = held;
@@ -18540,6 +18567,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (rotation == mArrangedRotation || mArrangedRotation < 0) return;
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
+                mAssistantArrangement = null;
                 scheduleLayoutsRelayout();
             }
         };
@@ -32465,6 +32493,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean visible = isSplitPanesEnabled()
             && !arrangement().layout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
+        // The Assistant page wears the status bar alone: no window chips (ADR 0022 section 2).
+        int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
+            ? View.VISIBLE : View.GONE;
+        if (bar.getVisibility() != chips) bar.setVisibility(chips);
         syncBorderStatusSwipe(visible);
         if (!visible) {
             // With the bar put away the Wall strip's tiles still read

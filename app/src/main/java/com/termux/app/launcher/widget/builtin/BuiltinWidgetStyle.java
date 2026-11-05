@@ -245,24 +245,26 @@ public final class BuiltinWidgetStyle {
     }
 
     /** The Material dark scheme's tone for each role a dark card re-tones. */
-    static final class DarkTones {
+    public static final class DarkTones {
         private DarkTones() { }
-        static final double CARD = 12d;
-        static final double CONTAINER = 17d;
-        static final double CONTAINER_HIGH = 22d;
-        static final double ON_SURFACE = 90d;
-        static final double ON_SURFACE_VARIANT = 80d;
-        static final double OUTLINE_VARIANT = 30d;
-        static final double OUTLINE = 60d;
-        static final double PRIMARY = 80d;
-        static final double ON_PRIMARY = 20d;
-        static final double CONTAINER_ACCENT = 30d;
-        static final double ON_CONTAINER_ACCENT = 90d;
-        static final double ERROR = 80d;
+        public static final double CARD = 12d;
+        public static final double CONTAINER = 17d;
+        public static final double CONTAINER_HIGH = 22d;
+        /** The highest container (the Assistant page's model chip and code blocks). */
+        public static final double CONTAINER_HIGHEST = 24d;
+        public static final double ON_SURFACE = 90d;
+        public static final double ON_SURFACE_VARIANT = 80d;
+        public static final double OUTLINE_VARIANT = 30d;
+        public static final double OUTLINE = 60d;
+        public static final double PRIMARY = 80d;
+        public static final double ON_PRIMARY = 20d;
+        public static final double CONTAINER_ACCENT = 30d;
+        public static final double ON_CONTAINER_ACCENT = 90d;
+        public static final double ERROR = 80d;
     }
 
     /** {@code color} at HCT {@code tone}, its hue and chroma kept, opaque. */
-    @ColorInt static int atTone(@ColorInt int color, double tone) {
+    @ColorInt public static int atTone(@ColorInt int color, double tone) {
         int opaque = ColorUtils.setAlphaComponent(color, 255);
         return com.termux.app.theme.SchemeTone.toneShift(opaque,
             tone - com.termux.app.theme.SchemeTone.tone(opaque));

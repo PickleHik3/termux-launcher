@@ -538,7 +538,7 @@ public final class PageOverviewView extends FrameLayout {
         if (focus < 0) focus = 0;
         for (Card card : cards) card.place = cards.indexOf(card);
         Card focused = focusedCard();
-        liveKey = focused == null || focused.kind == PageOverviewPolicy.Kind.DISPLAY ? null
+        liveKey = focused == null || !PageOverviewPolicy.drawsLive(focused.kind) ? null
             : focused.key;
     }
 
@@ -604,7 +604,7 @@ public final class PageOverviewView extends FrameLayout {
         Runnable zoomIn = () -> {
             WallRow.Position position = positionOf(card);
             host.preview(position);
-            if (card.kind != PageOverviewPolicy.Kind.DISPLAY) liveKey = card.key;
+            if (PageOverviewPolicy.drawsLive(card.kind)) liveKey = card.key;
             animateZoom(0f, () -> finish(position, byBack));
         };
         if (Math.abs(focus - index) < 0.01f) zoomIn.run();
@@ -1392,7 +1392,7 @@ public final class PageOverviewView extends FrameLayout {
         Card card = focusedCard();
         if (card != null && card.key != liveKey) {
             host.preview(positionOf(card));
-            liveKey = card.kind == PageOverviewPolicy.Kind.DISPLAY ? null : card.key;
+            liveKey = PageOverviewPolicy.drawsLive(card.kind) ? card.key : null;
         }
         handler.removeCallbacks(capture);
         if (liveKey != null) handler.postDelayed(capture, CAPTURE_DELAY_MS);

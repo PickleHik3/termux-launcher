@@ -1325,12 +1325,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * A terminal window's text pages the row by a sideways swipe, as its border does. Not the
-     * display window's: what it shows takes every touch, and only its border pages.
+     * A terminal window's text pages the row by a sideways swipe, as its border does, and so does
+     * the Assistant page's chat, as a Home page's grid does. Not the display window's: what it
+     * shows takes every touch, and only its border pages.
      */
     @Override
     public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
-        return page == PaneWallPage.TERMINAL && mHost.bodySwipePagesWall(rawX, rawY);
+        // Each side asked only for its own page, so a terminal is never asked about a touch
+        // on the Assistant page.
+        boolean terminal = page == PaneWallPage.TERMINAL && mHost.bodySwipePagesWall(rawX, rawY);
+        boolean assistant = page == PaneWallPage.ASSISTANT
+            && mAssistantView instanceof com.termux.app.assistant.AssistantPageView
+            && ((com.termux.app.assistant.AssistantPageView) mAssistantView)
+                .bodySwipePagesWall(rawX, rawY);
+        return PaneWallPolicy.bodySwipePages(page, terminal, assistant);
     }
 
     /**

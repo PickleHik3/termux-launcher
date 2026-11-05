@@ -92,6 +92,48 @@ public final class PaneWallPolicy {
         }
     }
 
+    /**
+     * Whether {@code page} is a place of the Workspace: a terminal window, or the display window
+     * in front. The one test every chrome decision that used to read "not Home" asks, so the
+     * Assistant page (ADR 0022), which is neither Home nor the Workspace, is never dressed as a
+     * window by inversion.
+     */
+    public static boolean isWorkspacePlace(@Nullable PaneWallPage page) {
+        return page == PaneWallPage.TERMINAL || page == PaneWallPage.DISPLAY;
+    }
+
+    /** Whether {@code page} is a Home page. */
+    public static boolean isHomePlace(@Nullable PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS;
+    }
+
+    /**
+     * Whether the window bar's chips (the session's windows, the add button, the stats) show on
+     * {@code page}'s bar: everywhere but the Assistant page, which wears the status bar alone
+     * (ADR 0022 section 2).
+     */
+    public static boolean showsWindowChips(@Nullable PaneWallPage page) {
+        return page != PaneWallPage.ASSISTANT;
+    }
+
+    /**
+     * Whether a sideways swipe on the page's own content pages the wall: a terminal window's text
+     * where the terminal gives the swipe away ({@code terminalGivesAway}), and the Assistant page
+     * anywhere its view does not keep it for a sideways scroller ({@code assistantGivesAway}).
+     * Home pages page by their own plain swipe, and the display window's picture takes every touch.
+     */
+    public static boolean bodySwipePages(@NonNull PaneWallPage page, boolean terminalGivesAway,
+                                         boolean assistantGivesAway) {
+        if (page == PaneWallPage.TERMINAL) return terminalGivesAway;
+        if (page == PaneWallPage.ASSISTANT) return assistantGivesAway;
+        return false;
+    }
+
+    /** The Assistant page's pane stands this far in from the wall's left and right edges (sheet 01, row 3). */
+    public static final float ASSISTANT_SIDE_INSET_DP = 12f;
+    /** The Assistant page's pane stands this far in from the wall's top and bottom (sheet 01: bottom gap 8). */
+    public static final float ASSISTANT_END_INSET_DP = 8f;
+
     /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
     @NonNull
     public static PaneWallPage homePage() {
@@ -114,8 +156,24 @@ public final class PaneWallPolicy {
     public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
                                   int terminalFrameAirPx) {
         if (page == PaneWallPage.TERMINAL) return terminalMarginPx;
-        if (page == homePage() || page == PaneWallPage.ASSISTANT) return 0;
+        if (page == homePage()) return 0;
         return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
+    }
+
+    /**
+     * {@link #pageInsetPx(PaneWallPage, int, int)} with the Assistant page's own pane: it stands
+     * {@link #ASSISTANT_SIDE_INSET_DP} in on the sides and {@link #ASSISTANT_END_INSET_DP} at the
+     * top and bottom, whatever the Workspace's Margin (sheet 01: x 12..400, bottom gap 8). The one
+     * owner of that geometry; the page's view adds no margins of its own.
+     *
+     * @param side true for the left and right edges, false for the top and bottom
+     */
+    public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
+                                  int terminalFrameAirPx, boolean side, float density) {
+        if (page == PaneWallPage.ASSISTANT) {
+            return Math.round((side ? ASSISTANT_SIDE_INSET_DP : ASSISTANT_END_INSET_DP) * density);
+        }
+        return pageInsetPx(page, terminalMarginPx, terminalFrameAirPx);
     }
 
     /**
