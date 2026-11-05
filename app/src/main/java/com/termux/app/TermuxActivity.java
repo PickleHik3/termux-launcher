@@ -28358,6 +28358,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             frame.hidePageStill();
             return;
         }
+        // Landed with the display down: the empty state is all there is. A picture kept from
+        // the last live visit is of a display that is gone, worth nothing in front of it.
+        if (!running && !mDisplayPageStillPending) {
+            frame.hidePageStill();
+            return;
+        }
         android.graphics.Bitmap picture = mPaneWallController.wall().pictureOf(pageId);
         switch (com.termux.app.wall.PageStillPolicy.shows(pageId,
                 mDisplayPageStillPending ? -1 : pageId, running, picture != null)) {
