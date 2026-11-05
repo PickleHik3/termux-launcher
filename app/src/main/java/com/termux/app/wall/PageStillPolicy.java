@@ -30,7 +30,9 @@ public final class PageStillPolicy {
         /** The page's last picture, kept from when it was last live. */
         PICTURE,
         /** A card: the page's name over its kind's icon. */
-        CARD
+        CARD,
+        /** Nothing of its own: the bound page is in front and its view is down, so the view's empty state is all there is. */
+        NONE
     }
 
     /**
@@ -42,7 +44,8 @@ public final class PageStillPolicy {
     @NonNull
     public static Shows shows(int pageId, int boundPageId, boolean ready, boolean hasPicture) {
         if (ready && pageId == boundPageId) return Shows.LIVE;
-        return hasPicture ? Shows.PICTURE : Shows.CARD;
+        if (hasPicture) return Shows.PICTURE;
+        return pageId == boundPageId ? Shows.NONE : Shows.CARD;
     }
 
     /**

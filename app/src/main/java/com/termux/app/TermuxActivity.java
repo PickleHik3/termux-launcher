@@ -28362,6 +28362,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         switch (com.termux.app.wall.PageStillPolicy.shows(pageId,
                 mDisplayPageStillPending ? -1 : pageId, running, picture != null)) {
             case LIVE:
+            case NONE:
                 frame.hidePageStill();
                 return;
             case PICTURE:

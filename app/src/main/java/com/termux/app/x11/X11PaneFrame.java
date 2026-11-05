@@ -719,7 +719,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // The power glyph turns to the error colour while a display is running, as a close does.
         if (mControls != null) mControls.setActionAlert(ACTION_POWER, running);
         applyDisplaySurfaceVisibility();
-        if (mEmptyState != null) mEmptyState.setVisibility(running ? GONE : VISIBLE);
+        if (mEmptyState != null) mEmptyState.setVisibility(running || isPageStillShown() ? GONE : VISIBLE);
         if (running) return;
         // No picture of a display that is gone is worth keeping; one standing in goes at rest.
         if (mStill.drop()) recycleStill();
@@ -1078,6 +1078,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mPageStill == null) return;
         mPageStill.set(picture, icon, name);
         mPageStill.setVisibility(VISIBLE);
+        if (mEmptyState != null) mEmptyState.setVisibility(GONE);
     }
 
     /** The display is live on the bound page: its still goes. */
@@ -1085,6 +1086,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mPageStill == null) return;
         mPageStill.setVisibility(INVISIBLE);
         mPageStill.set(null, null, "");
+        if (mEmptyState != null && !mRunning) mEmptyState.setVisibility(VISIBLE);
     }
 
     public boolean isPageStillShown() {
