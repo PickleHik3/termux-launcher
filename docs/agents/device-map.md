@@ -427,3 +427,21 @@ a Linux app.
 - Each `ad runas` call is a new shell: keep a pane id in a file (`$HOME/pid`) between calls.
 - The Benchmark graphics toast shows on the launcher after Settings closes: `ad frames 6 <dir> --
   tap "Benchmark graphics"` and read the last frames.
+
+## Surface Pro 7 (`ad -s surface`, 2026-11-05)
+
+- Bliss OS 18.8 (Android 15, x86_64, Mesa on Intel GL), 2736×1824 landscape at 320 dpi, 8 CPU
+  threads. `su` works from `ad shell` (root): prefs
+  (`su -c cat /data/data/com.termux/shared_prefs/com.termux_preferences.xml`), a Java thread dump
+  (`su -c 'kill -3 <pid>'`, then `/data/anr/trace_00`) and `simpleperf record -p <pid> --duration N`
+  all work on the release build, which is not debuggable (no `run-as`, no `ad runas`).
+- The dock glyphs are page tabs, laid out per page: on the Workspace the house at 870,1710 goes to
+  Home; on Home the terminal glyph at 500,1700 goes back to the Workspace (1203,1710 is empty there). A border drag along the pane's bottom edge (y≈1685) did not cross, and a horizontal
+  `input swipe` on Home's free area at y=1500 pulled the notification shade instead.
+- `ad -s surface frames` and `record` refuse with "no lease on 100.68.34.42_5555" while the lease
+  on `surface` is held: run `screenrecord` through `ad shell` and `adb pull` the file instead.
+- The developer's own terminal (claude under herdr) is usually in front: never type into it, and
+  leave the Workspace page in front when done.
+- RenderScript has no GPU driver here: `ScriptIntrinsicBlur` runs in `libRSCpuRef.so` on an
+  8-thread pool whose threads inherit the submitter's name (`wallpaper-blur`), so nine
+  `wallpaper-blur` threads are one worker plus the pool, not nine executors.
