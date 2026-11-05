@@ -773,6 +773,40 @@ public class PaneWallControllerTest {
         assertFalse("the Terminal page is not showing", controller.isTerminalShowing());
     }
 
+    /** [Home 1][Assistant 4][Home 2][Terminal 3], the Assistant page as home. */
+    private void assistantAsHome() {
+        WallPages seeded = WallPagesMigration.seed("home", 0, "home", 2, false);
+        WallPages.Result added = seeded.add(WallPages.PageKind.ASSISTANT, 1, null);
+        assertTrue(added.ok());
+        WallPages.Result home = added.pages.setHome(added.page.id);
+        assertTrue(home.ok());
+        host.pages = home.pages;
+        host.homePages = 2;
+        controller.refreshPages();
+    }
+
+    @Test public void aColdStartWithTheAssistantPageAsHomeLandsOnIt() {
+        assistantAsHome();
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.landOnColdStart(WallRow.START_IN_ASSISTANT);
+        assertEquals(PaneWallPage.ASSISTANT, controller.currentPage());
+    }
+
+    @Test public void theHomePressLandsOnAnAssistantHome() {
+        assistantAsHome();
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.goHome(false);
+        assertEquals(PaneWallPage.ASSISTANT, controller.currentPage());
+    }
+
+    @Test public void aColdStartWithAHomePageAsHomeStillLandsOnHome() {
+        WallPages seeded = WallPagesMigration.seed("home", 0, "home", 2, false);
+        host.pages = seeded.add(WallPages.PageKind.ASSISTANT, 1, null).pages;
+        controller.refreshPages();
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+    }
+
     @Test public void theHomePressLandsOnADisplayHome() {
         displayPages();
         WallPages.Result home = host.pages.setHome(4);

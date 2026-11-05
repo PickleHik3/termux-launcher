@@ -30,6 +30,8 @@ public final class WallRow {
      * that is on; see {@link StartInPolicy}.
      */
     public static final String START_IN_DISPLAY = "display";
+    /** Start in when the Assistant page is home. */
+    public static final String START_IN_ASSISTANT = "assistant";
 
     private WallRow() {}
 

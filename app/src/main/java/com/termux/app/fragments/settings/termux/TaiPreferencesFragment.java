@@ -61,6 +61,55 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         openOnClick("tai_remote_provider", TaiRemotePreferencesFragment.class, R.string.tai_remote_screen_title);
         openOnClick("tai_local_api", TaiApiPreferencesFragment.class, R.string.termux_ai_local_api_title);
         openOnClick("tai_advanced", TaiAdvancedPreferencesFragment.class, R.string.termux_ai_zone_advanced_title);
+        Preference deleteChats = findPreference("tai_delete_all_chats");
+        if (deleteChats != null) deleteChats.setOnPreferenceClickListener(row -> {
+            confirmDeleteAllChats();
+            return true;
+        });
+    }
+
+    /** Reads the chat count off the main thread and writes it to the Delete all chats row. */
+    private void refreshChatsRow(@NonNull Context context) {
+        final Context app = context.getApplicationContext();
+        new Thread(() -> {
+            int count = com.termux.app.assistant.AssistantChatStore.getInstance(app)
+                .listChats(null).size();
+            handler.post(() -> showChatCount(count));
+        }, "ChatCount").start();
+    }
+
+    private void showChatCount(int count) {
+        Preference row = findPreference("tai_delete_all_chats");
+        if (!isAdded() || row == null) return;
+        row.setEnabled(count > 0);
+        row.setSummary(count > 0
+            ? getResources().getQuantityString(R.plurals.tai_chats_on_phone, count, count)
+            : getString(R.string.tai_chats_none));
+    }
+
+    /** Sheet 05.6: confirm, then delete; no snackbar and no undo. */
+    private void confirmDeleteAllChats() {
+        Context context = getContext();
+        if (context == null) return;
+        final Context app = context.getApplicationContext();
+        new Thread(() -> {
+            int count = com.termux.app.assistant.AssistantChatStore.getInstance(app)
+                .listChats(null).size();
+            handler.post(() -> {
+                Context now = getContext();
+                if (!isAdded() || now == null || count <= 0) return;
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(now)
+                    .setTitle(R.string.tai_delete_all_chats_dialog_title)
+                    .setMessage(getResources().getQuantityString(
+                        R.plurals.tai_delete_all_chats_dialog_message, count, count))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.tai_delete_all_chats_confirm, (d, w) -> {
+                        com.termux.app.assistant.AssistantChatStore.getInstance(app).deleteAllChats();
+                        showChatCount(0);
+                    })
+                    .show();
+            });
+        }, "ChatCount").start();
     }
 
     private void openOnClick(String key, Class<? extends Fragment> page, @StringRes int titleRes) {
@@ -98,6 +147,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             runtimePoll.start(context, this::updateRuntimeStatus);
             refreshBenchmarkRow(context);
             refreshRemoteRow(context);
+            refreshChatsRow(context);
         }
     }
 

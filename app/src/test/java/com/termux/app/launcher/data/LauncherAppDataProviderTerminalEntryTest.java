@@ -65,7 +65,39 @@ public class LauncherAppDataProviderTerminalEntryTest {
         assertNull(provider.findByRef(new AppRef("com.example.gone", "com.example.gone.Main")));
     }
 
-    @Test public void onlyTerminalIsAlwaysListed() {
+    @Test public void theAssistantEntryIsListedResolvesAndIsSearchableByItsName() {
+        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(context);
+        assertNotNull(provider.findByRef(LauncherEntries.assistant()));
+        assertTrue(contains(provider, LauncherEntries.assistant()));
+
+        LauncherAppEntry entry = provider.findByRef(LauncherEntries.assistant());
+        assertEquals("Assistant", entry.label);
+        java.util.List<LauncherAppEntry> found = LauncherRankingEngine.filterAndRank(
+            provider.getAllAppsBlocking(), "Assistant", 70);
+        assertFalse(found.isEmpty());
+        assertEquals(LauncherEntries.assistant().stableId(), found.get(0).appRef.stableId());
+        found = LauncherRankingEngine.filterAndRank(provider.getAllAppsBlocking(), "assist", 70);
+        boolean listed = false;
+        for (LauncherAppEntry e : found) {
+            listed |= LauncherEntries.assistant().stableId().equals(e.appRef.stableId());
+        }
+        assertTrue(listed);
+    }
+
+    @Test public void theAssistantEntryIsNeverPinnedOnItsOwn() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("t", 0);
+        TerminalEntryPin.pinOnce(prefs, LauncherConfigRepository.getInstance(context));
+        for (com.termux.app.launcher.model.PinnedItem item
+                : LauncherConfigRepository.getInstance(context).loadPinnedItems()) {
+            if (item instanceof com.termux.app.launcher.model.PinnedAppItem) {
+                assertFalse(LauncherEntries.assistant().stableId().equals(
+                    ((com.termux.app.launcher.model.PinnedAppItem) item).appRef.stableId()));
+            }
+        }
+    }
+
+    @Test public void onlyTerminalAndAssistantAreAlwaysListed() {
+        assertTrue(LauncherEntries.isAlwaysListed(LauncherEntries.assistant()));
         assertTrue(LauncherEntries.isAlwaysListed(LauncherEntries.terminal()));
         assertFalse(LauncherEntries.isAlwaysListed(LauncherEntries.display()));
         assertFalse(LauncherEntries.isAlwaysListed(new AppRef("com.example", "terminal")));

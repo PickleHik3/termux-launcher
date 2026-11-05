@@ -341,6 +341,7 @@ While a Linux display is showing, the row sends its keys to it.</string>
     <string name="settings_start_in_home">Home</string>
     <string name="settings_start_in_workspace">Terminal</string>
     <string name="settings_start_in_display">Display</string>
+    <string name="settings_start_in_assistant">Assistant</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
         <item>@string/settings_start_in_workspace</item>
@@ -512,6 +513,7 @@ While a Linux display is showing, the row sends its keys to it.</string>
     <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
     <string name="launcher_entry_terminal">Terminal</string>
     <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_assistant">Assistant</string>
     <string name="launcher_entry_new_float">New float here</string>
     <string name="window_chip_home_float">Home float, page %1$d</string>
     <!-- A minimised Home float's window chip in the bar, spoken after its label: it is folded into the chip. -->

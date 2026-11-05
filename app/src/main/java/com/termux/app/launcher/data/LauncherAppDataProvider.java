@@ -154,9 +154,11 @@ public final class LauncherAppDataProvider {
     /** The mark the launcher's own entries wear: a prompt for Terminal, a screen for Display. */
     @Nullable
     private Drawable launcherEntryIcon(@NonNull AppRef ref) {
-        int icon = com.termux.app.launcher.LauncherEntries.DISPLAY.equals(
-            com.termux.app.launcher.LauncherEntries.idOf(ref))
-            ? com.termux.R.drawable.ic_symbol_desktop_windows : com.termux.R.drawable.ic_symbol_terminal;
+        String id = com.termux.app.launcher.LauncherEntries.idOf(ref);
+        int icon = com.termux.app.launcher.LauncherEntries.DISPLAY.equals(id)
+            ? com.termux.R.drawable.ic_symbol_desktop_windows
+            : com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(id)
+                ? com.termux.R.drawable.ic_symbol_smart_toy : com.termux.R.drawable.ic_symbol_terminal;
         return androidx.core.content.ContextCompat.getDrawable(context, icon);
     }
 
@@ -168,6 +170,8 @@ public final class LauncherAppDataProvider {
     private void addLauncherEntries(@NonNull Snapshot snapshot) {
         addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.terminal(),
             context.getString(com.termux.R.string.launcher_entry_terminal));
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.assistant(),
+            context.getString(com.termux.R.string.launcher_entry_assistant));
         if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return;
         addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.display(),
             context.getString(com.termux.R.string.launcher_entry_display));
@@ -679,12 +683,24 @@ public final class LauncherAppDataProvider {
             // Terminal is in every catalogue, so it resolves even while none is loaded (before
             // the first load, after an invalidate): the dock's prune of unresolvable pins must
             // never take the way back to the Workspace off the row.
-            entry = terminalEntry();
+            entry = com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(
+                com.termux.app.launcher.LauncherEntries.idOf(ref)) ? assistantEntry() : terminalEntry();
         }
         return entry;
     }
 
     @Nullable private LauncherAppEntry terminalEntry;
+    @Nullable private LauncherAppEntry assistantEntry;
+
+    @NonNull
+    private LauncherAppEntry assistantEntry() {
+        if (assistantEntry == null) {
+            assistantEntry = new LauncherAppEntry(com.termux.app.launcher.LauncherEntries.assistant(),
+                context.getString(com.termux.R.string.launcher_entry_assistant), null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        }
+        return assistantEntry;
+    }
 
     @NonNull
     private LauncherAppEntry terminalEntry() {
