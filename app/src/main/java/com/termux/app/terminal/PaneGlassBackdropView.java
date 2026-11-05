@@ -305,6 +305,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     private boolean drawLive(@NonNull Canvas canvas, int width, int height) {
         if (!showsLive() || !(canvas instanceof android.graphics.RecordingCanvas)) return false;
+        // A scene on: the recording holds its frame, so this slab is redrawn at each publish and
+        // the recorder (a pre-draw of that frame) records the new one.
+        if (LiveSceneFrame.current() != null) LiveSceneFrame.noteDrawn(this);
         LivePicture picture = mLivePicture;
         GlassRefraction.Look look = mLook;
         float density = getResources().getDisplayMetrics().density;
