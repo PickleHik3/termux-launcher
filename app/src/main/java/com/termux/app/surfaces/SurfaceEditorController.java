@@ -4835,12 +4835,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return own >= 0 ? Math.min(100, own) : prefs.getWallpaperBackdropDim();
     }
 
+    /**
+     * The Home tab dims every Home page alike (one look per page kind, ADR 0020), each under its
+     * own key so the Terminal page keeps the wall-wide dim; with no pages to name, the wall-wide one.
+     */
     private void writeWallpaperDim(int value) {
         com.termux.app.look.PageLook look = pageLook();
         if (look == null)
             return;
-        look.write(wallpaperDimScope(),
-            TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, clamp(value, 0, 100));
+        int dim = clamp(value, 0, 100);
+        String key = TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
+        boolean written = false;
+        for (com.termux.app.wall.WallPages.Page page : scopePages()) {
+            if (page.kind != com.termux.app.wall.WallPages.PageKind.HOME) continue;
+            look.write(com.termux.app.look.PageLook.Scope.page(page.id), key, dim);
+            written = true;
+        }
+        if (!written) look.write(wallpaperDimScope(), key, dim);
         syncDirty();
     }
 
