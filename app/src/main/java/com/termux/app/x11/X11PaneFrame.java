@@ -157,6 +157,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Nullable private PaneGlassBackdropView mGlass;
     @Nullable private PaneGlassBackdropView mCornerMask;
     @Nullable private View mEmptyState;
+    /** The empty state's glass panel; fed by {@link #applyEmptyPanel}. */
+    @Nullable private PaneGlassBackdropView mEmptyGlass;
     @Nullable private Host mHost;
     @Nullable private PaneSurfaceStyle mStyle;
     @Nullable private TapListener mTapListener;
@@ -237,6 +239,12 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
+        mEmptyGlass = findViewById(R.id.x11_pane_empty_glass);
+        PaneGlass.followLayout(mEmptyGlass);
+        // The panel's radius is capped against its own size, known only once it is laid out.
+        if (mEmptyState != null) mEmptyState.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) applyEmptyPanel();
+        });
         if (mDisplay != null) {
             // Above the display, so it covers the surface while both are up at the swap; below
             // the corner mask, so the arcs round it as they round the picture.
@@ -1476,6 +1484,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     public void onWallMoved() {
         if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mEmptyGlass != null) mEmptyGlass.invalidateGlassPosition();
         if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
         if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
@@ -1483,6 +1492,17 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
     public void setOutlineTravelAlpha(float alpha) {
         mRim.setTravelAlpha(alpha);
+    }
+
+    /**
+     * Feed the empty state's glass panel from the same Base Look the page's slab reads, so the
+     * text group stays readable over a busy wallpaper. Hidden with the group, and while the page
+     * wears no glass (an opaque page has its own ground).
+     */
+    private void applyEmptyPanel() {
+        if (mEmptyGlass == null || mEmptyState == null) return;
+        float density = getResources().getDisplayMetrics().density;
+        PaneGlass.apply(mStyle, mEmptyState, mEmptyGlass, PaneGlass.radiusPx(mStyle, density));
     }
 
     /**
@@ -1502,6 +1522,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // dressed while a display runs — the surface simply covers it — so the page has the glass
         // it should the moment the display stops, without a pass of its own to run then.
         PaneGlass.apply(style, this, mGlass, radiusPx);
+        applyEmptyPanel();
         // The tab is part of the page's own outline, exactly as the Widgets page's is: flush in the
         // corner inside the rim's line, in the tab's own fixed material. It stays inside that line
         // rather than against the bounding box, where the page's own corner mask would paint the

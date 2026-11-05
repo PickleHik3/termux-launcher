@@ -40,14 +40,30 @@
 
     <!-- Shown whenever no server is running, which is the state a home screen rests in: the
          launcher never starts one on its own. -->
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/x11_pane_empty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center">
+
+    <!-- The text group's own glass panel: the Base Look's slab at the group's rect, so the
+         message and buttons stay readable over any wallpaper. Shown only while the page wears
+         glass (X11PaneFrame.applyEmptyPanel); an opaque page has a ground already. -->
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/x11_pane_empty_glass"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:gravity="center"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp">
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="16dp">
 
         <TextView
             android:id="@+id/x11_pane_empty_message"
@@ -133,4 +149,5 @@
             android:visibility="gone"
             android:text="@string/termux_x11_start_failed_help" />
     </LinearLayout>
+    </FrameLayout>
 </com.termux.app.x11.X11PaneFrame>
