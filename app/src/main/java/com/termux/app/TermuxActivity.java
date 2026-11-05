@@ -28803,10 +28803,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Taking the page away hands the wall to a window with no settle after it, and may move
         // the panes under the hand-back above: the keys are checked once more where they ended.
         if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
-        // The Display pages stay on the wall: a fresh frame stands on the bound one, its card.
-        mPaneWallController.wall().post(this::ensureDisplayPageFrame);
         // A temporary page goes with its display.
         removeTemporaryDisplayPage();
+        // The Display pages stay on the wall: a fresh frame stands on the bound one, its card. It
+        // goes up in this same pass, not a posted one: with the old frame off and nothing on the
+        // page, a frame between would draw the bare wallpaper.
+        ensureDisplayPageFrame();
     }
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
