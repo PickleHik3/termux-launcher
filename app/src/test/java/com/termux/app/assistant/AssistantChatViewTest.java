@@ -65,9 +65,10 @@ public class AssistantChatViewTest {
             user(3, "And videos?"),
             answer(4, "It stopped half wa", AssistantMessage.STATE_STOPPED, null),
             user(5, "Again"),
-            answer(6, "partial", AssistantMessage.STATE_ERROR, AssistantMessage.ERROR_RUNTIME_DIED)));
+            answer(6, "partial", AssistantMessage.STATE_ERROR, AssistantMessage.ERROR_RUNTIME_DIED),
+            user(7, "held question"),
+            answer(8, "", AssistantMessage.STATE_WAITING, null)));
         AssistantRows.Context rc = new AssistantRows.Context();
-        rc.pending = Arrays.asList("held question");
         rc.sending = Arrays.asList("just sent");
         List<AssistantRows.Row> rows = AssistantRows.build(messages, 2, rc);
         chat.adapter().submit(rows);

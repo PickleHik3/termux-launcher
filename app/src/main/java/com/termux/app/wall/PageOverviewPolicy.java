@@ -283,8 +283,8 @@ public final class PageOverviewPolicy {
         switch (kind) {
             case HOME_PAGE: return contents > 0 ? Removal.WITH_UNDO : Removal.AT_ONCE;
             case TERMINAL: return busy ? Removal.WITH_UNDO : Removal.AT_ONCE;
-            // The chats are kept when the page goes (ADR 0022), so there is nothing to undo.
-            case ASSISTANT: return Removal.AT_ONCE;
+            // The chats are kept either way (ADR 0022), but the page itself is brought back by Undo.
+            case ASSISTANT: return Removal.WITH_UNDO;
             default: return Removal.WITH_UNDO;
         }
     }

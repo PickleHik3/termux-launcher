@@ -173,15 +173,13 @@ public class AssistantRowsTest {
     }
 
     @Test
-    public void heldQuestionsShowAfterTheChatWithOneWaitingLine() {
-        AssistantRows.Context context = new AssistantRows.Context();
-        context.pending = Arrays.asList("How long for an egg?", "And rice?");
-        List<AssistantRows.Row> rows = build(Collections.<AssistantMessage>emptyList(), -1, context);
-        assertEquals(3, rows.size());
+    public void aStoredWaitingAnswerShowsAsWaitingUnderItsQuestion() {
+        List<AssistantMessage> messages = Arrays.asList(user(1, "How long for an egg?"),
+            answer(2, "", AssistantMessage.STATE_WAITING, null));
+        List<AssistantRows.Row> rows = build(messages, -1, new AssistantRows.Context());
+        assertEquals(2, rows.size());
         assertEquals(AssistantRows.Type.USER, rows.get(0).type);
-        assertEquals("How long for an egg?", rows.get(0).text);
-        assertEquals(AssistantRows.Type.USER, rows.get(1).type);
-        assertEquals(AssistantRows.Type.WAITING, rows.get(2).type);
+        assertEquals(AssistantRows.Type.WAITING, rows.get(1).type);
     }
 
     private static String repeat(char c, int n) {

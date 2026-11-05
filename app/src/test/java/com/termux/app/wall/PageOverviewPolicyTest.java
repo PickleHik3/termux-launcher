@@ -108,6 +108,7 @@ public class PageOverviewPolicyTest {
         assertEquals(Removal.WITH_UNDO, PageOverviewPolicy.removal(Kind.HOME_PAGE, 2, 3, false));
         assertEquals(Removal.AT_ONCE, PageOverviewPolicy.removal(Kind.TERMINAL, 2, 0, false));
         assertEquals(Removal.WITH_UNDO, PageOverviewPolicy.removal(Kind.TERMINAL, 2, 0, true));
+        assertEquals(Removal.WITH_UNDO, PageOverviewPolicy.removal(Kind.ASSISTANT, 2, 0, false));
         assertEquals("an open display always", Removal.WITH_UNDO,
             PageOverviewPolicy.removal(Kind.DISPLAY, 2, 0, false));
     }

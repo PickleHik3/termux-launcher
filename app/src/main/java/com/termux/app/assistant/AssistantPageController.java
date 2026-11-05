@@ -67,7 +67,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     private final AssistantEngine engine;
     private final AssistantChatStore store;
     private final AssistantModelStatus status;
-    private final AssistantSendQueue queue = new AssistantSendQueue();
     private final AssistantDictation dictation;
     private final AssistantContextWindow window;
     private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
@@ -253,7 +252,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         long generating = engine.generatingMessageId();
         rc.generatingId = generating;
         rc.liveText = generating == 0L ? null : engine.liveText(generating);
-        rc.pending = queue.pending(chatId);
         rc.sending = sending;
         AssistantModelStatus.Snapshot snap = snapshot;
         rc.offerE2b = snap != null && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.NOT_DOWNLOADED
@@ -297,7 +295,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         loadRecent();
         if (chatsOpen) loadChats();
         reload();
-        drain();
     }
 
     // ------------------------------------------------------------------------- sending
@@ -327,12 +324,12 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     private void submit(long id, @NonNull String text) {
         AssistantModelStatus.Snapshot snap = snapshot;
         boolean ready = snap != null && AssistantModelPresenter.canAnswer(snap);
-        if (ready && queue.pending(id).isEmpty()) {
+        engine.setModelReady(ready);
+        if (ready && !hasWaiting()) {
             if (engine.send(id, text)) noteSending(id, text);
             else chatView.composer().setText(text);
-        } else {
-            queue.add(id, text);
-            drain();
+        } else if (!engine.hold(id, text)) {
+            chatView.composer().setText(text);
         }
         render();
     }
@@ -345,15 +342,12 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         sending = next;
     }
 
-    private void drain() {
-        AssistantModelStatus.Snapshot snap = snapshot;
-        if (snap == null) return;
-        boolean sent = queue.drain(AssistantModelPresenter.canAnswer(snap), engine.isGenerating(), (id, text) -> {
-            if (!engine.send(id, text)) return false;
-            noteSending(id, text);
-            return true;
-        });
-        if (sent) render();
+    /** A question of the open chat is stored as waiting for the model. */
+    private boolean hasWaiting() {
+        for (AssistantMessage m : messages) {
+            if (AssistantMessage.STATE_WAITING.equals(m.state)) return true;
+        }
+        return false;
     }
 
     @Override
@@ -620,7 +614,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         final long id = pendingDeleteId;
         if (id <= 0) return;
         pendingDeleteId = -1L;
-        queue.clear(id);
         io.execute(() -> store.deleteChat(id));
         main.post(this::loadRecent);
     }
@@ -641,7 +634,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         if (sheet != null) sheet.refresh();
         updateChip();
         updateNotice();
-        drain();
+        engine.setModelReady(AssistantModelPresenter.canAnswer(next));
     }
 
     /** A download that stopped without the person cancelling it failed. */
@@ -726,7 +719,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
                     null, null, context.getString(R.string.assistant_cancel), () -> cancelDownload(def.modelId), false);
             }
             case LOADING:
-                if (queue.isEmpty()) return null;
+                if (!hasWaiting()) return null;
                 return new AssistantNoticeView.Content(context.getString(R.string.assistant_notice_loading_title, name),
                     context.getString(R.string.assistant_notice_loading_body), -1, false, null, null, null, null, false);
             default:

@@ -20915,6 +20915,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
+        // The Assistant page's Chats list closes before Back leaves the page.
+        registry.register(() -> mPaneWallController != null
+            && mPaneWallController.assistantView() instanceof com.termux.app.assistant.AssistantPageView
+            && ((com.termux.app.assistant.AssistantPageView) mPaneWallController.assistantView()).handleBack());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!isCommandPaletteOpen()) return false;

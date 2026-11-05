@@ -22,7 +22,8 @@ import java.util.Set;
  * lazily, no open helper.
  *
  * <p>A message left {@code streaming} by a process that died is {@code stopped} the next time the
- * file is opened, keeping whatever text had been saved.
+ * file is opened, keeping whatever text had been saved. A {@code waiting} answer (a question held
+ * for the model) stays waiting.
  */
 public final class AssistantChatStore {
     private static final String LOG_TAG = "AssistantChatStore";
@@ -177,6 +178,18 @@ public final class AssistantChatStore {
             while (c.moveToNext()) out.add(readMessage(c));
         }
         return out;
+    }
+
+    /** The oldest answer still waiting for the model, in any chat, or null. */
+    @Nullable
+    public synchronized AssistantMessage oldestWaiting() {
+        SQLiteDatabase database = getDb();
+        if (database == null) return null;
+        try (Cursor c = database.rawQuery(
+            "SELECT id, chat_id, role, text, state, error_code, created_ms FROM messages "
+                + "WHERE state = ? ORDER BY id LIMIT 1", new String[]{AssistantMessage.STATE_WAITING})) {
+            return c.moveToFirst() ? readMessage(c) : null;
+        }
     }
 
     @Nullable
