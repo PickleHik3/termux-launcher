@@ -282,13 +282,7 @@
     <string name="settings_extra_keys_row_options_cd">Row options</string>
     <string name="settings_extra_keys_add_key_cd">Add key</string>
     <string name="settings_extra_keys_guide_title">What a key can be</string>
-    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.
-Text: typed as written.
-Combination: ctrl+f7 or alt+shift+tab, pressed together.
-Macro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.
-Tool: a launcher action, like the keyboard, mouse mode or a page.
-Swipe up: a second key on the same cap.
-While a Linux display is showing, the row sends its keys to it.</string>
+    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.\nText: typed as written.\nCombination: ctrl+f7 or alt+shift+tab, pressed together.\nMacro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.\nTool: a launcher action, like the keyboard, mouse mode or a page.\nSwipe up: a second key on the same cap.\nWhile a Linux display is showing, the row sends its keys to it.</string>
     <string name="settings_extra_keys_hint">Tap to edit · Hold the handle to reorder</string>
     <plurals name="settings_extra_keys_row_count">
         <item quantity="one">%d row</item>
