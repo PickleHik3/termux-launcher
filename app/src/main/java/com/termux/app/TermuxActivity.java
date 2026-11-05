@@ -23952,19 +23952,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         slots, overviewListener(), navigator::close,
                         start, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
                 // The picker's frame over the editor: back to the editor, and the editor's Done.
+                // Photo | Live above the picker where scenes can run; the sheet frames the host.
+                final com.termux.app.chrome.wallpaper.WallpaperLiveHost liveHost =
+                    new com.termux.app.chrome.wallpaper.WallpaperLiveHost(TermuxActivity.this, picker,
+                        () -> applyHomeWallpaperInPlace(true));
                 final com.termux.app.surfaces.WallpaperSheet shell =
                     new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,
-                        picker.root());
+                        liveHost.root());
                 mLiveWallpaperPage = picker;
                 ready.accept(new com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage() {
                     @NonNull @Override public View root() { return shell.root(); }
                     @NonNull @Override public CharSequence title() { return picker.title(); }
-                    @Override public void onShown() { picker.onShown(); }
+                    @Override public void onShown() { picker.onShown(); liveHost.onShown(); }
                     @Override public void onHidden() { picker.onHidden(); }
                     @Override public void release() {
                         if (mLiveWallpaperPage == picker) mLiveWallpaperPage = null;
+                        liveHost.release();
                         picker.release();
                     }
+                    @Override public boolean consumeBack() { return liveHost.consumeBack(); }
                     @Override public void holdBusy(boolean held) { picker.holdBusy(held); }
                     @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
                     @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
@@ -24060,6 +24066,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Choice choice) {
                 // The applier's changed listener has already told the live host; the glass
                 // still has to pick up the new still as its managed picture.
+                // A photo chosen here ends a live scene (it would keep drawing over the photo).
+                if (com.termux.app.chrome.wallpaper.LiveSceneLogic.photoEndsScene(slot))
+                    com.termux.app.chrome.wallpaper.LiveWallpaperApplier.photoChosen(TermuxActivity.this);
                 if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
                 applyHomeWallpaperInPlace(choice.photo);
             }

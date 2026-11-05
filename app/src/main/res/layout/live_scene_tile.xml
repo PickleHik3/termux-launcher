@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One scene in the Live grid: a phone-proportioned thumbnail, its name, and "In use" on the
+     scene that is. LiveScenePickerPage binds it. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/live_scene_tile"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <com.termux.app.chrome.wallpaper.LiveAspectFrame
+        android:id="@+id/live_scene_frame"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainerHighest">
+
+        <com.termux.app.chrome.scene.SceneThumbView
+            android:id="@+id/live_scene_thumb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </com.termux.app.chrome.wallpaper.LiveAspectFrame>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/live_scene_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/live_scene_in_use"
+            style="@style/Widget.Material3.Chip.Assist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:text="@string/live_in_use"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:visibility="gone"
+            app:chipMinHeight="24dp"
+            app:chipStrokeWidth="0dp"
+            app:ensureMinTouchTargetSize="false" />
+    </LinearLayout>
+</LinearLayout>

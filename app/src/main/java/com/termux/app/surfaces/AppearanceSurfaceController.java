@@ -111,6 +111,14 @@ public final class AppearanceSurfaceController {
         }
 
         /**
+         * Back, before the picker goes down: true when the page spent it going up a level (a
+         * Live scene's page back to the scenes). False by default.
+         */
+        default boolean consumeBack() {
+            return false;
+        }
+
+        /**
          * Held: the page stays busy, showing its progress and taking no choice, after its apply
          * while the surface waits for the new colours. Nothing by default.
          */
@@ -583,6 +591,9 @@ public final class AppearanceSurfaceController {
         if (mCommitting)
             return true;
         if (mWallpaperShown) {
+            OverviewPage overview = mOverview;
+            if (overview != null && overview.consumeBack())
+                return true;
             hideWallpaper();
             return true;
         }
