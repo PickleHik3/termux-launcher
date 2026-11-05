@@ -99,10 +99,125 @@ public class ParakeetSttRuntimeGraphTest {
         assertFalse(runtime.isLoaded("parakeet-tdt-0.6b-v3"));
     }
 
+    @Test
+    public void autoKeepsASaneGpuProvesItAndCarriesTheStateThroughIt() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = parakeetGraph();
+        FakeLiteRtGraph gpu = parakeetGraph(0.25f);
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribe(runtime, model);
+
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status hello café", result.getString("text"));
+        assertEquals("gpu", result.getString("accelerator"));
+        assertFalse(result.has("acceleratorFallback"));
+        assertEquals(0, cpu.loads);
+        assertEquals(Arrays.asList("gpu:true:"), memory.records);
+        // The proof: one encode and one stateless decode step on the fixed input, before the piece.
+        assertEquals(2, gpu.runs(ParakeetSttRuntime.SIGNATURE_ENCODE));
+        assertEquals(1 + SLOTS, gpu.runs(ParakeetSttRuntime.SIGNATURE_DECODE));
+        assertEquals(2, gpu.runs(ParakeetSttRuntime.SIGNATURE_DECODE_STATEFUL));
+        // The state: zeroed in the proof and once for the window, adopted at every step after.
+        FakeLiteRtGraph.Bound decode = gpu.bindingOf(ParakeetSttRuntime.SIGNATURE_DECODE);
+        FakeLiteRtGraph.FakeTensor h = decode.inputs.get("args_2");
+        FakeLiteRtGraph.FakeTensor c = decode.inputs.get("args_3");
+        assertEquals(2, h.zeroes);
+        assertEquals(2, c.zeroes);
+        assertEquals(2, h.copies);
+        assertEquals(2, c.copies);
+        assertEquals(9f, h.floats[0], 0f);
+    }
+
+    @Test
+    public void aGpuThatFailsToLoadNeverBreaksParakeet() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = parakeetGraph();
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        LiteRtGraph.Loader brokenGpu = (file, threads) -> {
+            throw new IllegalStateException("Failed to create the GPU accelerator");
+        };
+        ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribe(runtime, model);
+
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status hello café", result.getString("text"));
+        assertEquals("cpu", result.getString("accelerator"));
+        assertTrue(result.getString("acceleratorFallback").contains("GPU accelerator"));
+        assertEquals(1, memory.records.size());
+        assertTrue(memory.records.get(0).startsWith("gpu:false:"));
+    }
+
+    @Test
+    public void aGpuWhoseEncoderOutputIsFlatIsDroppedForTheCpuAndRecorded() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = parakeetGraph();
+        FakeLiteRtGraph gpu = parakeetGraph();   // its encoder output stays all zero: flat
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribe(runtime, model);
+
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status hello café", result.getString("text"));
+        assertEquals("cpu", result.getString("accelerator"));
+        assertTrue(result.getString("acceleratorFallback"), result.getString("acceleratorFallback").contains("flat"));
+        assertEquals(1, gpu.closes);
+        assertEquals(1, memory.records.size());
+        assertTrue(memory.records.get(0).startsWith("gpu:false:"));
+    }
+
+    @Test
+    public void autoWithAFailureOnRecordGoesStraightToTheCpu() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = parakeetGraph();
+        FakeLiteRtGraph gpu = parakeetGraph(0.25f);
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        memory.failure = "earlier failure";
+        ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribe(runtime, model);
+
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("cpu", result.getString("accelerator"));
+        assertEquals(0, gpu.loads);
+        // No proof run on the CPU path: the window's zero is the only one.
+        assertEquals(1, cpu.runs(ParakeetSttRuntime.SIGNATURE_ENCODE));
+        assertEquals(1, cpu.bindingOf(ParakeetSttRuntime.SIGNATURE_DECODE).inputs.get("args_2").zeroes);
+    }
+
+    private JSONObject transcribe(ParakeetSttRuntime runtime, File model) throws Exception {
+        File audio = tmp.newFile();
+        Files.write(audio.toPath(), WhisperMelTest.readBytes("whisper/git_status_16k.wav"));
+        return runtime.transcribe(spec(model.getAbsolutePath()), audio, null, null);
+    }
+
     private static FakeLiteRtGraph parakeetGraph() {
+        return parakeetGraph(0f);
+    }
+
+    /** With {@code step != 0} the encoder fills its output with a ramp, as a GPU that works would. */
+    private static FakeLiteRtGraph parakeetGraph(float step) {
         FakeLiteRtGraph graph = new FakeLiteRtGraph();
         declare(graph, VOCAB);
-        return graph.script(ParakeetSttRuntimeGraphTest::run);
+        return graph.script((signature, in, out) -> {
+            if (signature.equals(ParakeetSttRuntime.SIGNATURE_ENCODE)) {
+                float[] enc = out.get("enc").floats;
+                for (int i = 0; i < enc.length; i++) enc[i] = i * step;
+                return;
+            }
+            run(signature, in, out);
+        });
     }
 
     private static void declare(FakeLiteRtGraph graph, int vocab) {

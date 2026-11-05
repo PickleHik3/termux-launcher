@@ -15,6 +15,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * On-device speech-to-text on NVIDIA Parakeet TDT 0.6B v3 as Google converted it for LiteRT
@@ -29,9 +31,13 @@ import java.util.Locale;
  * of {@code scripts/parakeet_replay_server.py}, which the replay rig measured against Whisper.
  *
  * <p>v3 detects the language itself and has no prompt, so {@code language} and {@code biasText}
- * are accepted and ignored ({@code biased} is always false). CPU only, XNNPACK through
- * the stock Interpreter XNNPACK path, {@code min(4, cores)} threads, like {@link WhisperSttRuntime}: on
- * pong the encoder takes ~170 ms per 5 s window and a {@code decode_1} step ~1 ms, at +1.2 GB RSS.
+ * are accepted and ignored ({@code biased} is always false). The graph runs on LiteRT's
+ * CompiledModel ({@link CompiledModelGraph}), on the GPU or on the CPU ({@code min(4, cores)}
+ * XNNPACK threads), as {@link SttAccelerator#requested()} says at each load, with the same Auto
+ * choice, sanity proof ({@link #verifySane}) and per-model failure record as
+ * {@link WhisperSttRuntime} ({@link SttGraphChooser}). One accelerator serves the whole graph:
+ * splitting encoder and decoder would load the whole graph file twice (two CompiledModels, two sets of weights in memory). On the Interpreter path on pong
+ * the encoder took ~170 ms per 5 s window and a {@code decode_1} step ~1 ms, at +1.2 GB RSS.
  *
  * <p>Locking and residency follow {@link WhisperSttRuntime}: transcribe, warm and close serialize
  * on this object's monitor; the graph is registered as {@link TaiResidency.Kind#STT} after the
@@ -50,8 +56,16 @@ final class ParakeetSttRuntime implements SttRuntime {
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
-    private final LiteRtGraph.Loader loader;
+    private final SttGraphChooser chooser;
+    private final Supplier<SttAccelerator> accelerators;
+    /** Where a load's GPU verdicts are remembered; tests swap it. */
+    private Function<TaiModelSpec, SttGraphChooser.Memory> memories;
     @Nullable private LiteRtGraph graph;
+    /** What was asked for when the graph was loaded; a different ask reloads it. */
+    @Nullable private SttAccelerator loadedRequest;
+    /** Where the graph runs ({@code gpu}, {@code cpu}, {@code interp}) and why not on the GPU. */
+    private String loadedAccelerator = "";
+    private String loadedFallback = "";
     @Nullable private ParakeetTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -63,20 +77,36 @@ final class ParakeetSttRuntime implements SttRuntime {
     @Nullable private Signature statefulSignature;
     @Nullable private LiteRtGraph.Signature encodeRun;
     @Nullable private LiteRtGraph.Tensor melTensor;
+    @Nullable private LiteRtGraph.Tensor encoderTensor;
     /** The LSTM state, shared by {@code decode} and {@code decode_1}. */
     @Nullable private LiteRtGraph.Tensor stateHIn, stateCIn, stateHOut, stateCOut;
     /** The feature rows laid end to end, reused for every piece. */
     @Nullable private float[] melScratch;
 
     ParakeetSttRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
-        this(residency, context, InterpreterGraph.LOADER);
+        this(residency, context, SttGraphChooser.standard(), SttAccelerator::requested);
     }
 
-    /** With the graph runtime behind {@link LiteRtGraph} chosen by the caller; tests pass a fake. */
+    /** One graph runtime behind {@link LiteRtGraph} whatever is asked for, on the CPU path; tests pass a fake. */
     ParakeetSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull LiteRtGraph.Loader loader) {
+        this(residency, context, new SttGraphChooser(loader, loader, loader), () -> SttAccelerator.CPU);
+    }
+
+    /** With the loaders and the accelerator ask chosen by the caller (the bench, tests). */
+    ParakeetSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull SttGraphChooser chooser,
+                       @NonNull Supplier<SttAccelerator> accelerators) {
         this.residency = residency;
         this.appContext = context == null ? null : context.getApplicationContext();
-        this.loader = loader;
+        this.chooser = chooser;
+        this.accelerators = accelerators;
+        Context app = appContext;
+        this.memories = app == null ? spec -> SttGraphChooser.NO_MEMORY
+            : spec -> new SttGpuMemory(app, spec, TaiDeviceCapabilities.detect(app));
+    }
+
+    /** Tests: where GPU verdicts are remembered. */
+    void setMemory(@NonNull Function<TaiModelSpec, SttGraphChooser.Memory> memories) {
+        this.memories = memories;
     }
 
     @Override
@@ -103,6 +133,7 @@ final class ParakeetSttRuntime implements SttRuntime {
         response.put("alreadyLoaded", wasLoaded);
         response.put("windowSeconds", ParakeetFeatures.WINDOW_SECONDS);
         response.put("loadMs", System.currentTimeMillis() - started);
+        putAccelerator(response);
         response.put("_runtime", RUNTIME_NAME);
         return response;
     }
@@ -183,6 +214,7 @@ final class ParakeetSttRuntime implements SttRuntime {
         response.put("windowSeconds", ParakeetFeatures.WINDOW_SECONDS);
         response.put("biased", false);
         response.put("timings", timings);
+        putAccelerator(response);
         response.put("_backend", TaiModelSpec.BACKEND_LITERT_LM);
         response.put("_runtime", RUNTIME_NAME);
         return response;
@@ -219,34 +251,88 @@ final class ParakeetSttRuntime implements SttRuntime {
     private void ensureLoaded(@NonNull TaiModelSpec spec) throws Exception {
         File modelFile = new File(spec.localPath);
         String modelPath = modelFile.getAbsolutePath();
-        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
+        SttAccelerator requested = accelerators.get();
+        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath) && requested == loadedRequest) return;
         close();
         File tokenizerFile = tokenizerFileFor(modelFile);
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = ParakeetTokenizer.fromFile(tokenizerFile);
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        // InterpreterGraph: the stock LiteRT Interpreter XNNPACK path, as in WhisperSttRuntime.
+        // The same MemAvailable meter a chat load runs, across the graph's construction, a GPU
+        // attempt and its CPU fallback included.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
+        SttGraphChooser.Opened opened;
         try {
-            graph = loader.load(modelFile, threads);
+            opened = chooser.open(modelFile, threads, requested, memories.apply(spec), (loaded, verify) -> {
+                graph = loaded;
+                bindSignatures(loaded);
+                if (verify) verifySane();
+            });
+        } catch (Throwable t) {
+            // The chooser has closed every graph it opened; only the bindings are left to drop.
+            graph = null;
+            close();
+            throw t;
         } finally {
             measured = meter.stop();
         }
-        try {
-            bindSignatures(graph);
-        } catch (RuntimeException e) {
-            close();
-            throw e;
-        }
+        graph = opened.graph;
+        loadedRequest = requested;
+        loadedAccelerator = opened.accelerator;
+        loadedFallback = opened.fallbackReason;
         loadedModelId = spec.id;
         loadedModelPath = modelPath;
         residency.register(TaiResidency.Entry.stt(spec, ParakeetFeatures.WINDOW_SECONDS)
             .withMeasured(measured >= 0L ? measured : null));
         if (measured >= 0L && appContext != null) {
             TaiRuntimeHistory.recordMeasuredLoad(appContext, spec, TaiDeviceCapabilities.detect(appContext),
-                TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0, measured);
+                TaiModelSpec.BACKEND_LITERT_LM, "gpu".equals(loadedAccelerator) ? "gpu" : "cpu", 0, measured);
         }
+    }
+
+    /** Where the graph runs, for warm and transcribe answers (the bench prints it). */
+    private void putAccelerator(@NonNull JSONObject response) throws JSONException {
+        response.put("accelerator", loadedAccelerator);
+        if (!loadedFallback.isEmpty()) response.put("acceleratorFallback", loadedFallback);
+        LiteRtGraph held = graph;
+        if (held instanceof CompiledModelGraph) {
+            CompiledModelGraph compiled = (CompiledModelGraph) held;
+            response.put("sliceReads", compiled.sliceReads());
+            response.put("copiedBindings", compiled.copiedBindings());
+        }
+    }
+
+    /**
+     * Proves a GPU graph sane before it is kept: a fixed log-mel input through the encoder, then
+     * the first stateless decode step on {@code [BLANK, 0, 0, 0]} and a zero LSTM state. Every
+     * encoder value and every logit of that step must be finite, at most
+     * {@link WhisperSttRuntime#SANE_LIMIT} in magnitude and not flat, as an all-zero or all-NaN
+     * GPU output would be ({@link WhisperSttRuntime#requireSane}). Throws when not.
+     */
+    private void verifySane() {
+        float[] flat = melScratch;
+        LiteRtGraph.Tensor mel = melTensor;
+        LiteRtGraph.Tensor encoder = encoderTensor;
+        LiteRtGraph.Signature run = encodeRun;
+        Signature decode = decodeSignature;
+        LiteRtGraph held = graph;
+        if (held == null || flat == null || mel == null || encoder == null || run == null || decode == null
+            || stateHIn == null || stateCIn == null) {
+            throw new IllegalStateException("STT runtime is not loaded.");
+        }
+        for (int i = 0; i < flat.length; i++) flat[i] = ((i * 37) % 101) / 101f - 0.5f;
+        mel.writeFloats(flat, flat.length);
+        run.run();
+        int count = held.output(SIGNATURE_ENCODE, encodeOutput).elements();
+        float[] encoded = new float[count];
+        encoder.readFloats(0, encoded, count);
+        WhisperSttRuntime.requireSane(encoded, "encoder output");
+        stateHIn.zero();
+        stateCIn.zero();
+        int[] tokens = new int[decode.slots];
+        tokens[0] = ParakeetTdtDecoder.BLANK;
+        WhisperSttRuntime.requireSane(run(decode, tokens, 0, 0), "first-step logits");
     }
 
     /**
@@ -304,6 +390,7 @@ final class ParakeetSttRuntime implements SttRuntime {
         this.decodeSignature = decodeSignature;
         this.statefulSignature = statefulSignature;
         melTensor = mel;
+        encoderTensor = encoder;
         stateHIn = hIn;
         stateCIn = cIn;
         stateHOut = hOut;
@@ -508,7 +595,9 @@ final class ParakeetSttRuntime implements SttRuntime {
         loadedModelPath = null;
         decodeSignature = statefulSignature = null;
         encodeRun = null;
-        melTensor = stateHIn = stateCIn = stateHOut = stateCOut = null;
+        melTensor = encoderTensor = stateHIn = stateCIn = stateHOut = stateCOut = null;
+        loadedRequest = null;
+        loadedAccelerator = loadedFallback = "";
         melScratch = null;
         encoderFrames = vocabularySize = 0;
     }

@@ -27,10 +27,9 @@ import java.util.List;
  * {@code CLASSPATH=$(pm path com.termux | cut -d: -f2) LD_LIBRARY_PATH=<apk>!/lib/arm64-v8a
  * app_process /system/bin com.termux.ai.SttBench --clips DIR --whisper W.tflite --parakeet P.tflite
  * [--runs 5] [--warmup 1] [--path LABEL] [--accel interp|cpu|gpu|auto] [--language en]
- * [--interval-ms 200]}. {@code --accel} picks where Whisper runs: the stock Interpreter, or
+ * [--interval-ms 200]}. {@code --accel} picks where Whisper and Parakeet run: the stock Interpreter, or
  * CompiledModel on CPU or GPU, or Auto (GPU, CPU when the GPU fails; nothing is remembered in the
- * bench); the default is {@code interp}, the path Whisper ran before CompiledModel. Parakeet
- * always runs on the Interpreter. See
+ * bench); the default is {@code interp}, the path both ran before CompiledModel. See
  * {@code scripts/stt-bench/README.md}. Output lines all start {@code STTBENCH}.
  */
 public final class SttBench {
@@ -129,7 +128,7 @@ public final class SttBench {
         }
         if (parakeet != null) {
             targets.add(new Target("parakeet", spec(TaiModelCatalog.PARAKEET_TDT_V3_ID, parakeet, "parakeet-tdt"),
-                new ParakeetSttRuntime(new TaiResidency(), null)));
+                new ParakeetSttRuntime(new TaiResidency(), null, SttGraphChooser.standard(), () -> chosen)));
         }
         SttBenchBattery.Sampler sampler = new SttBenchBattery.Sampler(battery, intervalMs);
         for (Target target : targets) {
