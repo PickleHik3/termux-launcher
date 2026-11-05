@@ -381,8 +381,8 @@ public final class ExtraKeyActionPicker {
             if (typed.contains(" ")) {
                 cells.add(new Cell(CELL_WIDE, typed,
                     context.getString(R.string.settings_extra_keys_action_macro_summary),
-                    new Choice("macro:" + ExtraKeyChord.stripPlus(typed), typed,
-                        new ExtraKeysLayoutModel.Key(ExtraKeyChord.stripPlus(typed), true, null, null))));
+                    new Choice("macro:" + ExtraKeyChord.normaliseMacro(typed), typed,
+                        new ExtraKeysLayoutModel.Key(ExtraKeyChord.normaliseMacro(typed), true, null, null))));
             }
             List<String> keys = ExtraKeyPickerCatalog.search(needle);
             if (!keys.isEmpty()) {

@@ -90,15 +90,29 @@ public final class ExtraKeyChord {
         }
     }
 
-    /** A typed macro without the "+" that stands alone between its tokens: "ctrl + m" becomes "ctrl m". */
+    /**
+     * A typed macro the replay understands: a "+" standing alone between tokens is dropped, and a
+     * token naming a modifier, a named key or F1 to F12 is upper-cased ("ctrl + m" becomes
+     * "CTRL m"). Every other token stays as typed.
+     */
     @NonNull
-    public static String stripPlus(@NonNull String macro) {
+    public static String normaliseMacro(@NonNull String macro) {
         String[] tokens = macro.trim().split("\\s+");
         StringBuilder out = new StringBuilder();
         for (String token : tokens) {
             if (token.equals("+")) continue;
             if (out.length() > 0) out.append(' ');
-            out.append(token);
+            String upper = token.toUpperCase(Locale.ROOT);
+            boolean named = token.length() > 1 && (modifier(token) != null
+                || FUNCTION.matcher(token).matches()
+                || (ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.containsKey(upper)
+                    && ExtraKeyPickerCatalog.allKeys().contains(upper)));
+            if (named) {
+                String mod = modifier(token);
+                out.append(mod != null ? mod : upper);
+            } else {
+                out.append(token);
+            }
         }
         return out.length() == 0 ? macro.trim() : out.toString();
     }

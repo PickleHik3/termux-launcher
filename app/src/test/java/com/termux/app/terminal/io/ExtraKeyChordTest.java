@@ -42,9 +42,12 @@ public class ExtraKeyChordTest {
     }
 
     @Test
-    public void stripsStrayPlus() {
-        assertEquals("CTRL m", ExtraKeyChord.stripPlus("CTRL + m"));
-        assertEquals("ls ENTER", ExtraKeyChord.stripPlus("ls ENTER"));
-        assertEquals("+", ExtraKeyChord.stripPlus("+"));
+    public void normalisesMacro() {
+        assertEquals("CTRL m", ExtraKeyChord.normaliseMacro("ctrl + m"));
+        assertEquals("CTRL m", ExtraKeyChord.normaliseMacro("CTRL + m"));
+        assertEquals("ls ENTER", ExtraKeyChord.normaliseMacro("ls enter"));
+        assertEquals("CTRL F7", ExtraKeyChord.normaliseMacro("ctrl f7"));
+        assertEquals("+", ExtraKeyChord.normaliseMacro("+"));
+        assertEquals("hello world", ExtraKeyChord.normaliseMacro("hello world"));
     }
 }
