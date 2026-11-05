@@ -23,7 +23,15 @@ public final class LauncherEntries {
     /** The Display entry, under Linux Apps: the bare display, started if none is up. */
     public static final String DISPLAY = "display";
 
+    /** The Assistant entry: the chat page, added to the wall first when it has none (ADR 0022). */
+    public static final String ASSISTANT = "assistant";
+
     private LauncherEntries() {}
+
+    @NonNull
+    public static AppRef assistant() {
+        return new AppRef(PACKAGE, ASSISTANT);
+    }
 
     @NonNull
     public static AppRef terminal() {
@@ -40,11 +48,13 @@ public final class LauncherEntries {
     }
 
     /**
-     * Whether {@code ref} is in every catalogue whatever the device holds: Terminal is. Display
+     * Whether {@code ref} is in every catalogue whatever the device holds: Terminal and Assistant
+     * are. Display
      * comes and goes with Show Linux apps in drawer, so a Display pin can go unresolved.
      */
     public static boolean isAlwaysListed(@Nullable AppRef ref) {
-        return TERMINAL.equals(idOf(ref));
+        String id = idOf(ref);
+        return TERMINAL.equals(id) || ASSISTANT.equals(id);
     }
 
     /** Which entry a ref names, or null for any other app. */
