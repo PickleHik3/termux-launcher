@@ -47,7 +47,7 @@ android {
         }
 
         ndk {
-            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+            abiFilters 'x86_64', 'armeabi-v7a', 'arm64-v8a'
         }
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
@@ -73,7 +73,7 @@ android {
                 enable ((gradle.startParameter.taskNames.any { it.contains("Debug") || it.contains("Staging") } && splitAPKsForDebugBuilds == "1") ||
                     (gradle.startParameter.taskNames.any { it.contains("Release") } && splitAPKsForReleaseBuilds == "1"))
                 reset()
-                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                include 'x86_64', 'armeabi-v7a', 'arm64-v8a'
                 universalApk true
             }
         }
@@ -641,13 +641,11 @@ task downloadBootstraps() {
             def version = "2026.10.18-r1" + "%2B" + "apt.android-7"
             downloadBootstrap("aarch64", "7b170ff5ef0befe501d01febc61382f3c6e34456521853cff9ba0b277aa52fe9", version)
             downloadBootstrap("arm", "d891f4b53761da7e946ead69a24365025c52605a37d4fd9f3916a445f7402fa4", version)
-            downloadBootstrap("i686", "c1bc56d2e0d2bd76df75e32b017d5a183b8462820ff50923d83dc145d6be1183", version)
             downloadBootstrap("x86_64", "50d8b9d75d13a3001ad0b3d15a901a58f2487128f6bd11805c115235400430fd", version)
         } else if (packageVariant == "apt-android-5") {
             def version = "2022.04.28-r6" + "+" + packageVariant
             downloadBootstrap("aarch64", "913609d439415c828c5640be1b0561467e539cb1c7080662decaaca2fb4820e7", version)
             downloadBootstrap("arm", "26bfb45304c946170db69108e5eb6e3641aad751406ce106c80df80cad2eccf8", version)
-            downloadBootstrap("i686", "46dcfeb5eef67ba765498db9fe4c50dc4690805139aa0dd141a9d8ee0693cd27", version)
             downloadBootstrap("x86_64", "615b590679ee6cd885b7fd2ff9473c845e920f9b422f790bb158c63fe42b8481", version)
         } else {
             throw new GradleException("Unsupported TERMUX_PACKAGE_VARIANT \"" + packageVariant + "\"")
