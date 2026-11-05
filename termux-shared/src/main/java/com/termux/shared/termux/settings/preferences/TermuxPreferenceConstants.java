@@ -1882,6 +1882,35 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
 
         /**
+         * The live wallpaper scene the launcher draws behind everything: {@code aurora},
+         * {@code contour-waves}, {@code nebula}, {@code bloom} or {@code particles}; empty is none.
+         * An unknown value reads as none (see {@code LiveWallpaperChoice}).
+         */
+        public static final String KEY_LIVE_WALLPAPER_SCENE = "live_wallpaper_scene";
+        public static final String DEFAULT_VALUE_LIVE_WALLPAPER_SCENE = "";
+
+        /** The live scene's speed, 0.25 to 2.0 times. */
+        public static final String KEY_LIVE_WALLPAPER_SPEED = "live_wallpaper_speed";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_SPEED = 1f;
+        public static final float MIN_LIVE_WALLPAPER_SPEED = 0.25f;
+        public static final float MAX_LIVE_WALLPAPER_SPEED = 2f;
+
+        /** The live scene's frame rate in Hz: 15, 30 or 60. */
+        public static final String KEY_LIVE_WALLPAPER_RATE_HZ = "live_wallpaper_rate_hz";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ = 30;
+
+        /** The live scene's density, -1 (sparser) to 1 (denser); only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_DENSITY = "live_wallpaper_density";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY = 0f;
+        public static final float MIN_LIVE_WALLPAPER_DENSITY = -1f;
+        public static final float MAX_LIVE_WALLPAPER_DENSITY = 1f;
+
+        /** The live scene's palette, 0 to 2; only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_PALETTE = "live_wallpaper_palette";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_PALETTE = 0;
+        public static final int MAX_LIVE_WALLPAPER_PALETTE = 2;
+
+        /**
          * The launcher wears a picture of its own: the managed exact copy, set from the picker
          * while the launcher was not the home app, which Android's home and lock screens never got.
          * While it is set (and the copy is on disk) the launcher draws that copy itself and the

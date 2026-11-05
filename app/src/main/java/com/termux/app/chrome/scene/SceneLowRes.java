@@ -122,6 +122,14 @@ final class SceneLowRes {
         mRenderer.setSurface(mReader.getSurface());
     }
 
+    void setKnobs(float speed, float density, int palette) {
+        mProgram.setKnobs(speed, density, palette);
+    }
+
+    void restart() {
+        mProgram.restart();
+    }
+
     /** Renders one frame; the caller has set nothing, the program is brought up to date here. */
     void render(@NonNull SceneEvents events, long nowMs, long timeMs, float density,
                 boolean eventsStale) {

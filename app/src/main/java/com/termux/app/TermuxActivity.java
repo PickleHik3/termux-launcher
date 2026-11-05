@@ -2011,6 +2011,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean lazyMode() {
                         return isLazyModeEnabled();
                     }
+                    @Nullable @Override public com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences() {
+                        return mPreferences;
+                    }
                 });
         }
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);

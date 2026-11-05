@@ -4257,6 +4257,72 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             normaliseWallpaperLockChoice(choice), false);
     }
 
+    /** The live wallpaper scene's kind as stored, or empty for none; the model validates it. */
+    @androidx.annotation.NonNull
+    public String getLiveWallpaperSceneRaw() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SCENE,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SCENE, false);
+    }
+
+    public void setLiveWallpaperSceneRaw(@Nullable String kind) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SCENE,
+            kind == null ? "" : kind, false);
+    }
+
+    /** Speed, clamped to 0.25..2 (a missing or non-finite value reads as 1). */
+    public float getLiveWallpaperSpeed() {
+        float v = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SPEED,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED);
+        if (Float.isNaN(v) || Float.isInfinite(v)) return TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED;
+        return Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_SPEED, v));
+    }
+
+    public void setLiveWallpaperSpeed(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SPEED,
+            Float.isNaN(value) ? TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED
+                : Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_SPEED, value)),
+            false);
+    }
+
+    /** Frame rate in Hz: 15, 30 or 60; anything else reads as 30. */
+    public int getLiveWallpaperRateHz() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_RATE_HZ,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ);
+        return v == 15 || v == 60 ? v : TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ;
+    }
+
+    public void setLiveWallpaperRateHz(int hz) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_RATE_HZ,
+            hz == 15 || hz == 60 ? hz : TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ, false);
+    }
+
+    /** Density, clamped to -1..1. */
+    public float getLiveWallpaperDensity() {
+        float v = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_DENSITY,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY);
+        if (Float.isNaN(v) || Float.isInfinite(v)) return TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY;
+        return Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_DENSITY, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_DENSITY, v));
+    }
+
+    public void setLiveWallpaperDensity(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_DENSITY,
+            Float.isNaN(value) ? TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY
+                : Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_DENSITY, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_DENSITY, value)),
+            false);
+    }
+
+    /** Palette, clamped to 0..2. */
+    public int getLiveWallpaperPalette() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_PALETTE,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_PALETTE);
+        return Math.max(0, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_PALETTE, v));
+    }
+
+    public void setLiveWallpaperPalette(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_PALETTE,
+            Math.max(0, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_PALETTE, value)), false);
+    }
+
     @androidx.annotation.NonNull
     public static String normaliseWallpaperLockChoice(@Nullable String choice) {
         if (choice == null) return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;

@@ -109,6 +109,14 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private volatile long mPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_RATE_HZ);
     private volatile long mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
     private volatile boolean mGlassLowRes = true;
+    /** The user's knobs; written on main, applied by the scene thread when {@link #mKnobGen} moves. */
+    private volatile float mSpeed = 1f, mDensityKnob = 0f;
+    private volatile int mPalette = 0;
+    private volatile int mKnobGen;
+    /** Moves whenever the scene clock must restart at t = 0: the layer resumed, or a power hold began. */
+    private volatile int mRestartGen;
+    /** Battery saver or severe heat: no ambient motion, the t = 0 frame held. */
+    private volatile boolean mPowerHold;
     private static final com.termux.terminal.DebugChoice GLASS_DIV = new com.termux.terminal.DebugChoice(
         SceneFramePolicy.PROP_GLASS_DIV, Integer.toString(SceneFramePolicy.DEFAULT_GLASS_DIV),
         com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
@@ -129,7 +137,13 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                           @Nullable PaneSource panes, @NonNull BooleanSupplier lazyMode) {
         super(context);
         mKind = kind;
-        mPrograms = ScenePrograms.factory(kind, mFilament);
+        ScenePrograms.Factory base = ScenePrograms.factory(kind, mFilament);
+        // Every program, full resolution or glass, starts with the knobs as they are now.
+        mPrograms = scale -> {
+            SceneProgram p = base.create(scale);
+            p.setKnobs(mSpeed, mDensityKnob, mPalette);
+            return p;
+        };
         mPanes = panes;
         mLazyMode = lazyMode;
         mDensity = context.getResources().getDisplayMetrics().density;
@@ -154,6 +168,27 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         long period = SceneFramePolicy.ambientPeriodNs(hz);
         if (period == mPeriodNs) return;
         mPeriodNs = period;
+        kick();
+    }
+
+    /** The user's speed (0.25..2), density (-1..1) and palette (0..2); applied in place, the layer stays. */
+    public void setKnobs(float speed, float density, int palette) {
+        if (speed == mSpeed && density == mDensityKnob && palette == mPalette) return;
+        mSpeed = speed;
+        mDensityKnob = density;
+        mPalette = palette;
+        mKnobGen++;
+        kick();
+    }
+
+    /**
+     * Battery saver or severe heat (see {@link SceneFramePolicy#holdAtStill}): while set the scene
+     * holds its t = 0 frame and draws nothing more; when cleared it resumes from t = 0.
+     */
+    public void setPowerHold(boolean hold) {
+        if (hold == mPowerHold) return;
+        mPowerHold = hold;
+        mRestartGen++;
         kick();
     }
 
@@ -265,6 +300,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private void updateRun() {
         boolean run = !mDestroyed && mScreenOn && isShown() && getWindowVisibility() == VISIBLE
             && mMainSurfaceReady && !mLazy && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        // Coming back (screen on, uncovered, surface ready) restarts the scene at its still.
+        if (run && !mRun) mRestartGen++;
         mRun = run;
         if (!run) return;
         if (!mPolling) {
@@ -344,6 +381,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         /** The reaction uniforms need re-setting before the next draw. */
         private boolean mEventsStale = true;
         private boolean mWasActive;
+        private int mSeenKnobGen, mSeenRestartGen;
 
         Loop() {
             thread = new HandlerThread("SceneThread", Process.THREAD_PRIORITY_DISPLAY);
@@ -397,7 +435,27 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             boolean active = motion && mEvents.active(nowMs);
             long holdUntil = mHoldUntilMs;
             boolean held = nowMs < holdUntil;
-            long period = motion && !held ? mPeriodNs : Long.MAX_VALUE;
+            // Knobs and restarts reach every program, which then draws once even when ambient is off.
+            int knobGen = mKnobGen, restartGen = mRestartGen;
+            if (knobGen != mSeenKnobGen || restartGen != mSeenRestartGen) {
+                boolean knobs = knobGen != mSeenKnobGen, restart = restartGen != mSeenRestartGen;
+                mSeenKnobGen = knobGen;
+                mSeenRestartGen = restartGen;
+                SceneProgram program = mProgram;
+                SceneLowRes low = mLowRes;
+                if (knobs) {
+                    if (program != null) program.setKnobs(mSpeed, mDensityKnob, mPalette);
+                    if (low != null) low.setKnobs(mSpeed, mDensityKnob, mPalette);
+                }
+                if (restart) {
+                    if (program != null) program.restart();
+                    if (low != null) low.restart();
+                }
+                mSurfaceBlank = true;
+                mEventsStale = true;
+            }
+            boolean powerHold = mPowerHold;
+            long period = motion && !held && !powerHold ? mPeriodNs : Long.MAX_VALUE;
             if (period == Long.MAX_VALUE) {
                 if (!mFrozen) mFrozenTimeMs = nowMs;
                 mFrozen = true;
