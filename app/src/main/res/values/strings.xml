@@ -255,6 +255,7 @@
     <string name="settings_extra_keys_action_types_title">Types \"%1$s\"</string>
     <string name="settings_extra_keys_action_picker_title">Choose a key</string>
     <string name="settings_extra_keys_action_search_hint">Search keys or actions</string>
+    <string name="settings_extra_keys_action_send_chord">Send %1$s as keys</string>
     <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
     <string name="settings_extra_keys_action_macro_summary">Send as a macro (keys separated by spaces)</string>
     <string name="settings_extra_keys_action_keys">Terminal keys</string>
