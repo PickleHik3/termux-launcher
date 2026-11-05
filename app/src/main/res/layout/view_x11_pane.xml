@@ -40,26 +40,34 @@
 
     <!-- Shown whenever no server is running, which is the state a home screen rests in: the
          launcher never starts one on its own. -->
-    <FrameLayout
+    <!-- A RelativeLayout, not a FrameLayout: a wrap_content FrameLayout measures a match_parent
+         child at the page's whole size (a plain View answers AT_MOST with the bound), so the
+         panel grew to the page. Here the panel is aligned to the group's edges instead. -->
+    <RelativeLayout
         android:id="@+id/x11_pane_empty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center">
 
-    <!-- The text group's own glass panel: the Base Look's slab at the group's rect, so the
-         message and buttons stay readable over any wallpaper. Shown only while the page wears
-         glass (X11PaneFrame.applyEmptyPanel); an opaque page has a ground already. -->
+    <!-- The text group's own glass panel: the Base Look's blur and radius at the group's rect,
+         under the group's own scrim, so the message and buttons stay readable over any
+         wallpaper. Shown only while the page is see-through (X11PaneFrame.applyEmptyPanel); an
+         opaque page has a ground already. -->
     <com.termux.app.terminal.PaneGlassBackdropView
         android:id="@+id/x11_pane_empty_glass"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_alignLeft="@+id/x11_pane_empty_group"
+        android:layout_alignTop="@+id/x11_pane_empty_group"
+        android:layout_alignRight="@+id/x11_pane_empty_group"
+        android:layout_alignBottom="@+id/x11_pane_empty_group"
         android:importantForAccessibility="no"
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/x11_pane_empty_group"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
         android:gravity="center"
         android:orientation="vertical"
         android:paddingHorizontal="24dp"
@@ -149,5 +157,5 @@
             android:visibility="gone"
             android:text="@string/termux_x11_start_failed_help" />
     </LinearLayout>
-    </FrameLayout>
+    </RelativeLayout>
 </com.termux.app.x11.X11PaneFrame>
