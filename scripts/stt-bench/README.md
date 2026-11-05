@@ -35,11 +35,20 @@ Models are the two already imported ones; each `.tflite` has its `tokenizer.json
 
 ## Run (from a Termux shell, charger unplugged, screen on, phone cool)
 
+The bench does not need the APK installed: copy a debug APK of the build under test to the phone and
+run it from the file. Three things the first run on pong (Android 16) showed:
+
+- the APK file must be read-only (`chmod 444`), or ART refuses it as a "writable dex file";
+- `System.loadLibrary` under `app_process` ignores `LD_LIBRARY_PATH`: unzip `lib/arm64-v8a/` from the
+  APK and pass it as `-Djava.library.path`;
+- Termux's default shell may be fish; run this from `bash`.
+
 ```
-APK=$(pm path com.termux | cut -d: -f2)
-CLASSPATH=$APK LD_LIBRARY_PATH=$APK!/lib/arm64-v8a \
-  app_process /system/bin com.termux.ai.SttBench \
-  --clips ~/stt-bench --whisper /path/to/whisper.tflite --parakeet /path/to/parakeet.tflite \
+chmod 444 bench.apk
+unzip -oq bench.apk 'lib/arm64-v8a/*' -d lib
+LIB=$PWD/lib/lib/arm64-v8a
+CLASSPATH=$PWD/bench.apk app_process -Djava.library.path=$LIB /system/bin com.termux.ai.SttBench \
+  --clips ~/stt-bench/clips --whisper /path/to/whisper.tflite --parakeet /path/to/parakeet.tflite \
   --path 1.4.2-shim | tee stt-bench.txt
 ```
 
@@ -47,8 +56,6 @@ Flags: `--runs 5` timed runs per clip, `--warmup 1` excluded runs per clip, `--p
 accelerator/path name printed on every line (a label you choose: it is not detected; later tickets pass
 `cpu-compiledmodel`, `gpu`, ...), `--language en` for Whisper (default: the app's auto-detect),
 `--interval-ms 200` battery sampling period. Either model flag may be left out.
-This is the same invocation pattern as `SpeechGraphProbe`; if `LD_LIBRARY_PATH` does not find the
-natives on your ROM, point it at the extracted `nativeLibraryDir` from `dumpsys package com.termux`.
 
 ## Output
 
