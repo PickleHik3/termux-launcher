@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Live half of the wallpaper picker (LiveScenePickerPage, LiveSceneDetailPage,
+     WallpaperLiveHost). Headings name the thing; descriptions state one fact. -->
+<resources>
+    <string name="wallpaper_kind_photo">Photo</string>
+    <string name="wallpaper_kind_live">Live</string>
+    <string name="wallpaper_kind_label">Wallpaper kind</string>
+
+    <string name="live_scenes_heading">Scenes</string>
+    <string name="live_in_use">In use</string>
+    <string name="live_needs_android_13">Live needs Android 13 or later.</string>
+
+    <string name="live_scene_aurora">Aurora</string>
+    <string name="live_scene_contour_waves">Contour Waves</string>
+    <string name="live_scene_nebula">Nebula Drift</string>
+    <string name="live_scene_bloom">Fractal Bloom</string>
+    <string name="live_scene_particles">Particles</string>
+    <string name="live_scene_aurora_desc">Curtains of light hang over a night sky.</string>
+    <string name="live_scene_contour_waves_desc">Thin contour lines curve around a hidden hill.</string>
+    <string name="live_scene_nebula_desc">Gas clouds drift slowly past fixed stars.</string>
+    <string name="live_scene_bloom_desc">Layered petals turn around a bright centre.</string>
+    <string name="live_scene_particles_desc">Points flow in three layers along one current.</string>
+    <string name="live_scene_open">%1$s scene</string>
+
+    <string name="live_detail_over">Live</string>
+    <string name="live_knob_speed">Speed</string>
+    <string name="live_knob_frame_rate">Frame rate</string>
+    <string name="live_knob_density">Density</string>
+    <string name="live_knob_colour">Colour</string>
+    <string name="live_speed_value">%1$.2f×</string>
+    <string name="live_density_default">Default</string>
+    <string name="live_density_value">%1$+.1f</string>
+    <string name="live_rate_15">15 fps</string>
+    <string name="live_rate_30">30 fps</string>
+    <string name="live_rate_60">60 fps</string>
+
+    <string name="live_use">Use as wallpaper</string>
+    <string name="live_back_to_photo">Back to photo</string>
+    <string name="live_lock_note">The lock screen shows a still of this scene.</string>
+    <string name="live_also_phone_hint">Sets a still of this scene on the home and lock screen.</string>
+    <string name="live_still_failed">Could not draw the still. The scene plays in the app only.</string>
+</resources>
