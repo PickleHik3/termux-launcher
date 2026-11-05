@@ -452,15 +452,25 @@ public class ExtraKeysEditorFragment extends Fragment
         return line;
     }
 
+    /** What a key can be: a heading in the page's label style, then one fact per line. */
     private View guideView(@NonNull Context context) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(dp(4), dp(24), dp(4), dp(8));
+        TextView title = new TextView(context);
+        title.setText(R.string.settings_extra_keys_guide_title);
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_LabelMedium);
+        title.setTextColor(colorSubtle);
+        column.addView(title);
         TextView guide = new TextView(context);
-        guide.setText(getString(R.string.settings_extra_keys_guide_title) + "\n"
-            + getString(R.string.settings_extra_keys_guide_body));
+        guide.setText(R.string.settings_extra_keys_guide_body);
         guide.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
         guide.setTextColor(colorSubtle);
         guide.setLineSpacing(dp(4), 1f);
-        guide.setPadding(dp(4), dp(24), dp(4), dp(8));
-        return guide;
+        guide.setPadding(0, dp(8), 0, 0);
+        column.addView(guide);
+        return column;
     }
 
     private View addRowButton(@NonNull Context context) {
