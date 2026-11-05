@@ -5,6 +5,7 @@ import android.os.Bundle;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 
@@ -13,6 +14,7 @@ import com.termux.R;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.SttAcceleratorChoices;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiReadAloud;
 import com.termux.ai.TaiSpeechModels;
@@ -49,6 +51,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
     static final String KEY_GET_MORE = "speech_model_get_more";
     private static final String KEY_PICK = "speech_model_pick";
     private static final String KEY_IDLE_UNLOAD = "speech_model_idle_unload";
+    private static final String KEY_ACCELERATOR = "speech_model_accelerator";
     private static final String KEY_OUTPUT_MISSING = "speech_output_missing";
     private static final String KEY_OUTPUT_VOICE = "speech_output_voice";
     private static final String KEY_OUTPUT_SPEED = "speech_output_speed";
@@ -82,6 +85,11 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         Preference idleUnload = findPreference(KEY_IDLE_UNLOAD);
         if (idleUnload != null) idleUnload.setOnPreferenceClickListener(preference -> {
             showIdleUnloadDialog(context);
+            return true;
+        });
+        Preference accelerator = findPreference(KEY_ACCELERATOR);
+        if (accelerator != null) accelerator.setOnPreferenceClickListener(preference -> {
+            showAcceleratorDialog(context);
             return true;
         });
         bindVoiceOutput(context);
@@ -155,6 +163,8 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         if (empty != null) empty.setVisible(keep.isEmpty());
         Preference idleUnload = findPreference(KEY_IDLE_UNLOAD);
         if (idleUnload != null) idleUnload.setSummary(idleUnloadSummary(settings.getSttIdleUnloadMinutes()));
+        Preference accelerator = findPreference(KEY_ACCELERATOR);
+        if (accelerator != null) accelerator.setSummary(acceleratorSummary(context, settings, active));
         refreshVoiceOutput(context, store, settings);
     }
 
@@ -329,6 +339,54 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    // ---- speech accelerator ----
+
+    /**
+     * Picks where speech-to-text runs. TaiManager reads the setting on every speech request, so a
+     * pick applies to the next transcription. GPU is left out when this phone cannot run it or a
+     * GPU crash is on record for the selected model ({@link SttAcceleratorChoices}).
+     */
+    private void showAcceleratorDialog(@NonNull Context context) {
+        String[] labels = getResources().getStringArray(R.array.speech_model_accelerator_entries);
+        String[] values = getResources().getStringArray(R.array.speech_model_accelerator_values);
+        TaiSettings settings = new TaiSettings(context);
+        List<String> offered = SttAcceleratorChoices.options(SttAcceleratorChoices.deviceSupportsGpu(context),
+            SttAcceleratorChoices.gpuFailure(context, TaiSpeechModels.resolveActive(context)));
+        List<String> shownLabels = new java.util.ArrayList<>();
+        List<String> shownValues = new java.util.ArrayList<>();
+        for (int i = 0; i < values.length && i < labels.length; i++) {
+            if (!offered.contains(values[i])) continue;
+            shownLabels.add(labels[i]);
+            shownValues.add(values[i]);
+        }
+        int checked = Math.max(0, shownValues.indexOf(settings.getSttAccelerator()));
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.speech_model_accelerator_title)
+            .setSingleChoiceItems(shownLabels.toArray(new String[0]), checked, (dialog, which) -> {
+                settings.setSttAccelerator(shownValues.get(which));
+                refresh(context);
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** The pick, or "GPU unavailable, using CPU" when GPU is picked and cannot run for the model in use. */
+    @NonNull
+    private String acceleratorSummary(@NonNull Context context, @NonNull TaiSettings settings, @Nullable TaiModelSpec active) {
+        String selected = settings.getSttAccelerator();
+        if (SttAcceleratorChoices.gpuForcedButUnavailable(selected, SttAcceleratorChoices.deviceSupportsGpu(context),
+                SttAcceleratorChoices.gpuFailure(context, active))) {
+            return getString(R.string.speech_model_accelerator_gpu_unavailable);
+        }
+        String[] labels = getResources().getStringArray(R.array.speech_model_accelerator_entries);
+        String[] values = getResources().getStringArray(R.array.speech_model_accelerator_values);
+        for (int i = 0; i < values.length && i < labels.length; i++) {
+            if (values[i].equals(selected)) return getString(R.string.speech_model_accelerator_summary, labels[i]);
+        }
+        return getString(R.string.speech_model_accelerator_summary, labels[0]);
     }
 
     @NonNull

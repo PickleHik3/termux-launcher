@@ -55,6 +55,8 @@ public final class TaiSettings {
     public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
+    /** Where speech-to-text runs: auto, cpu or gpu ({@link SttAccelerator}); the Speech accelerator row sets it (#218). */
+    public static final String KEY_STT_ACCELERATOR = "tai_stt_accelerator";
     public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
     /** Speech output: the voice (one of {@link TaiTtsVoices#VOICES}) and the speed (a float, 1.0 = the voice's own pace). */
     public static final String KEY_TTS_VOICE = "tai_tts_voice";
@@ -432,6 +434,20 @@ public final class TaiSettings {
     public int getSttIdleUnloadMinutes() {
         int value = preferences.getInt(KEY_STT_IDLE_UNLOAD_MINUTES, DEFAULT_STT_IDLE_UNLOAD_MINUTES);
         return Math.max(0, value);
+    }
+
+    /** {@code auto}, {@code cpu} or {@code gpu}: where speech-to-text runs (auto until set). */
+    @NonNull
+    public String getSttAccelerator() {
+        SttAccelerator stored = SttAccelerator.parse(preferences.getString(KEY_STT_ACCELERATOR, null));
+        // The Interpreter path is the bench's, never a setting.
+        return stored == SttAccelerator.INTERPRETER ? SttAccelerator.AUTO.id : stored.id;
+    }
+
+    public void setSttAccelerator(@Nullable String accelerator) {
+        SttAccelerator parsed = SttAccelerator.parse(accelerator);
+        preferences.edit().putString(KEY_STT_ACCELERATOR,
+            parsed == SttAccelerator.INTERPRETER ? SttAccelerator.AUTO.id : parsed.id).apply();
     }
 
     public void setSttIdleUnloadMinutes(int minutes) {

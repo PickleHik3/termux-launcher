@@ -18,6 +18,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Voice models in the Benchmark (11-05, #223).** On-device AI › Benchmark: a Text | Voice
+  choice heads Home; Voice shows the voice board (or "No results yet"), Run a benchmark opens
+  Choose listing the installed speech models (one line on top, no Quick/Standard), Continue →
+  Check sheet → Run. Each model runs load, warm-up, clips on the CPU, then the GPU where the
+  Speech accelerator row offers it; the dial reads "N× real time"; the whole run on pong stays
+  under about five minutes plus cool-downs. Rows read "4.2× real time · 3% word errors · loads in
+  0.9 s"; a GPU that fell back says "GPU unavailable, ran on CPU" and sits under Not ranked. A
+  result's Use this sets Keyboard › Voice input › Speech model and its accelerator row to that
+  model and processor, and a dictation afterwards works. The Text board and the Model centre
+  speed pills are unchanged · pong or emulator.
+
 - **Dock tiles lift on a held press (11-04).** On the Tray and Strip dock designs, with the
   Drawer, Command palette and New float terminal tiles all on: a finger held still on each
   tile for about half a second lifts it (haptic tick, the tile grows) with no Edit/Hide card
