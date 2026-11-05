@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
 /**
- * One of the design-tool scenes (Contour Waves, Nebula Drift, Fractal Bloom) as an AGSL program
+ * One of the design-tool scenes (Contour Waves, Nebula Drift, Fractal Bloom, Aurora, Particles) as an AGSL program
  * (API 33+): the source comes from {@link DesignSceneSources}, the only uniforms are the size in
  * pixels and the time. Compiled once per instance; the full-resolution layer and the low-resolution
  * glass pass hold one each, so each sees its own {@code uResolution}.
@@ -27,6 +27,9 @@ final class DesignSceneProgram implements SceneProgram {
     /** @param source one of the {@link DesignSceneSources} constants. */
     DesignSceneProgram(@NonNull String source) {
         shader = new RuntimeShader(source);
+        // AGSL throws on an undeclared uniform, so the two knobs are set only where the source declares them.
+        if (source.contains("uniform float uDensity;")) shader.setFloatUniform("uDensity", 0f);
+        if (source.contains("uniform float uPalette;")) shader.setFloatUniform("uPalette", 0f);
     }
 
     @NonNull @Override

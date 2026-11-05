@@ -119,6 +119,8 @@ public class SceneEventsTest {
         assertTrue(SceneFramePolicy.sceneOn("contour-waves"));
         assertTrue(SceneFramePolicy.sceneOn("nebula"));
         assertTrue(SceneFramePolicy.sceneOn("bloom"));
+        assertTrue(SceneFramePolicy.sceneOn("aurora"));
+        assertTrue(SceneFramePolicy.sceneOn("particles"));
         assertFalse(SceneFramePolicy.sceneOn("fractal"));
         assertEquals(30, SceneFramePolicy.parseRate(""));
         assertEquals(30, SceneFramePolicy.parseRate("junk"));
