@@ -133,11 +133,11 @@ public class SceneEventsTest {
 
     @Test
     public void glassRateParsesAndClamps() {
-        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate(null));
-        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate("x"));
-        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate("-3"));
-        assertEquals(0, SceneFramePolicy.parseGlassRate("0"));
-        assertEquals(30, SceneFramePolicy.parseGlassRate(" 30 "));
-        assertEquals(90, SceneFramePolicy.parseGlassRate("500"));
+        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate(null, 30));
+        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate("x", 30));
+        assertEquals(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ, SceneFramePolicy.parseGlassRate("-3", 30));
+        assertEquals(0, SceneFramePolicy.parseGlassRate("0", 30));
+        assertEquals(30, SceneFramePolicy.parseGlassRate(" 30 ", 30));
+        assertEquals(90, SceneFramePolicy.parseGlassRate("500", 30));
     }
 }
