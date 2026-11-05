@@ -1522,9 +1522,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         int surface = com.termux.shared.theme.ThemeUtils.getSystemAttrColor(getContext(),
             com.termux.shared.R.attr.termuxColorSurfacePanel, android.graphics.Color.BLACK);
         mEmptyScrim.setColor((EMPTY_SCRIM_ALPHA << 24) | (surface & 0x00FFFFFF));
-        mEmptyScrim.setCornerRadius(com.termux.app.terminal.PaneShape.radiusForBounds(requested,
-            mEmptyGroup.getWidth(), mEmptyGroup.getHeight()));
+        final float radius = com.termux.app.terminal.PaneShape.radiusForBounds(requested,
+            mEmptyGroup.getWidth(), mEmptyGroup.getHeight());
+        mEmptyScrim.setCornerRadius(radius);
         if (mEmptyGroup.getBackground() != mEmptyScrim) mEmptyGroup.setBackground(mEmptyScrim);
+        // The blur under the scrim is a plain rectangle: clipped to the same corners, or its
+        // corners show past the card's as slivers of unrounded blur.
+        mEmptyGlass.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(android.view.View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        });
+        mEmptyGlass.setClipToOutline(true);
     }
 
     /** The empty panel's scrim alpha: about 65%, a frosted card over the blurred wallpaper. */
