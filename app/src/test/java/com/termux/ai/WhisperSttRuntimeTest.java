@@ -106,7 +106,139 @@ public class WhisperSttRuntimeTest {
         assertFalse(runtime.isLoaded("whisper-base-en"));
     }
 
+    @Test
+    public void autoKeepsASaneGpuAndSaysSo() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = whisperGraph();
+        FakeLiteRtGraph gpu = whisperGraph(0.25f);
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribeGitStatus(runtime, model);
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status", result.getString("text"));
+        assertEquals("gpu", result.getString("accelerator"));
+        assertFalse(result.has("acceleratorFallback"));
+        assertEquals(0, cpu.loads);
+        // The proof: one encode and one decode step on the fixed input, before any piece.
+        int pieces = result.getJSONObject("timings").getInt("pieces");
+        assertEquals(1 + pieces, gpu.runs(WhisperSttRuntime.SIGNATURE_ENCODE));
+        assertEquals(1 + 3 * pieces, gpu.runs(WhisperSttRuntime.SIGNATURE_DECODE));
+        assertEquals(Arrays.asList("gpu:true:"), memory.records);
+    }
+
+    @Test
+    public void aGpuThatFailsToLoadNeverBreaksTranscription() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = whisperGraph();
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        LiteRtGraph.Loader brokenGpu = (file, threads) -> {
+            throw new IllegalStateException("Failed to create the GPU accelerator");
+        };
+        WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribeGitStatus(runtime, model);
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status", result.getString("text"));
+        assertEquals("cpu", result.getString("accelerator"));
+        assertTrue(result.getString("acceleratorFallback").contains("GPU accelerator"));
+        assertEquals(1, memory.records.size());
+        assertTrue(memory.records.get(0).startsWith("gpu:false:"));
+        // The record holds: the next load goes straight to the CPU.
+        runtime.close();
+        assertTrue(transcribeGitStatus(runtime, model).getBoolean("ok"));
+        assertEquals(1, memory.records.size());
+        assertEquals(1, memory.begun);
+    }
+
+    @Test
+    public void aGpuWithNanOutputIsDroppedForTheCpu() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph cpu = whisperGraph();
+        FakeLiteRtGraph gpu = whisperGraph(Float.NaN);
+        SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
+        WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+        runtime.setMemory(spec -> memory);
+
+        JSONObject result = transcribeGitStatus(runtime, model);
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals("git status", result.getString("text"));
+        assertEquals("cpu", result.getString("accelerator"));
+        assertTrue(result.getString("acceleratorFallback"), result.getString("acceleratorFallback").contains("encoder output"));
+        assertEquals(1, gpu.closes);
+        assertEquals(1, cpu.loads);
+    }
+
+    @Test
+    public void aDifferentAskReloadsTheGraph() throws Exception {
+        File model = modelDir();
+        FakeLiteRtGraph graph = whisperGraph(0.25f);
+        SttAccelerator[] ask = {SttAccelerator.CPU};
+        WhisperSttRuntime runtime = new WhisperSttRuntime(new TaiResidency(), null,
+            new SttGraphChooser(graph.loader(), graph.loader(), graph.loader()), () -> ask[0]);
+        assertEquals("cpu", runtime.warm(spec(model.getAbsolutePath())).getString("accelerator"));
+        assertEquals("cpu", runtime.warm(spec(model.getAbsolutePath())).getString("accelerator"));
+        assertEquals(1, graph.loads);
+        ask[0] = SttAccelerator.GPU;
+        assertEquals("gpu", runtime.warm(spec(model.getAbsolutePath())).getString("accelerator"));
+        assertEquals(2, graph.loads);
+    }
+
+    @Test
+    public void sanityRejectsNonFiniteHugeAndFlatOutput() {
+        WhisperSttRuntime.requireSane(new float[] {0f, 1f, -2f}, "ok");
+        for (float[] bad : new float[][] {{0f, Float.NaN}, {0f, Float.POSITIVE_INFINITY}, {0f, 2e6f}, {3f, 3f, 3f}, {}}) {
+            try {
+                WhisperSttRuntime.requireSane(bad, "x");
+                org.junit.Assert.fail(Arrays.toString(bad));
+            } catch (IllegalStateException expected) {
+                // As it should.
+            }
+        }
+    }
+
+    private JSONObject transcribeGitStatus(WhisperSttRuntime runtime, File model) throws Exception {
+        File audio = new File(tmp.getRoot(), "clip.wav");
+        if (!audio.isFile()) Files.write(audio.toPath(), WhisperMelTest.readBytes("whisper/git_status_16k.wav"));
+        return runtime.transcribe(spec(model.getAbsolutePath()), audio, null, null);
+    }
+
     private static FakeLiteRtGraph whisperGraph() {
+        return whisperShapes().script(decodeOnly());
+    }
+
+    private static FakeLiteRtGraph.Script decodeOnly() {
+        return (signature, in, out) -> {
+            if (!signature.equals(WhisperSttRuntime.SIGNATURE_DECODE)) return;
+            int[] tokens = in.get("tokens").ints;
+            float[] logits = out.get("logits").floats;
+            Arrays.fill(logits, 0f);
+            for (int slot = 0; slot < SEQUENCE; slot++) logits[slot * VOCAB + next(tokens[slot])] = 10f;
+        };
+    }
+
+    /**
+     * A Whisper graph whose encoder writes {@code featureStep × index} into every feature (NaN:
+     * every feature NaN); its decoder is {@link #decodeOnly()}.
+     */
+    private static FakeLiteRtGraph whisperGraph(float featureStep) {
+        FakeLiteRtGraph.Script decode = decodeOnly();
+        return whisperShapes().script((signature, in, out) -> {
+            if (signature.equals(WhisperSttRuntime.SIGNATURE_ENCODE)) {
+                float[] features = out.get("features").floats;
+                for (int i = 0; i < features.length; i++) features[i] = Float.isNaN(featureStep) ? Float.NaN : featureStep * (i % 7);
+                return;
+            }
+            decode.run(signature, in, out);
+        });
+    }
+
+    private static FakeLiteRtGraph whisperShapes() {
         return new FakeLiteRtGraph()
             .input(WhisperSttRuntime.SIGNATURE_ENCODE, "mel", LiteRtGraph.ElementType.FLOAT32, 1, WhisperMel.N_MELS, FRAMES)
             .output(WhisperSttRuntime.SIGNATURE_ENCODE, "features", LiteRtGraph.ElementType.FLOAT32, 1, FRAMES / 2, 512)
@@ -114,14 +246,7 @@ public class WhisperSttRuntimeTest {
             .input(WhisperSttRuntime.SIGNATURE_DECODE, "mask", LiteRtGraph.ElementType.FLOAT32, 1, 1, SEQUENCE, SEQUENCE)
             .input(WhisperSttRuntime.SIGNATURE_DECODE, "audio", LiteRtGraph.ElementType.FLOAT32, 1, FRAMES / 2, 512)
             .input(WhisperSttRuntime.SIGNATURE_DECODE, "tokens", LiteRtGraph.ElementType.INT32, 1, SEQUENCE)
-            .output(WhisperSttRuntime.SIGNATURE_DECODE, "logits", LiteRtGraph.ElementType.FLOAT32, 1, SEQUENCE, VOCAB)
-            .script((signature, in, out) -> {
-                if (!signature.equals(WhisperSttRuntime.SIGNATURE_DECODE)) return;
-                int[] tokens = in.get("tokens").ints;
-                float[] logits = out.get("logits").floats;
-                Arrays.fill(logits, 0f);
-                for (int slot = 0; slot < SEQUENCE; slot++) logits[slot * VOCAB + next(tokens[slot])] = 10f;
-            });
+            .output(WhisperSttRuntime.SIGNATURE_DECODE, "logits", LiteRtGraph.ElementType.FLOAT32, 1, SEQUENCE, VOCAB);
     }
 
     private static int next(int token) {

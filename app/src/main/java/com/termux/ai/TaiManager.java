@@ -51,6 +51,8 @@ public final class TaiManager {
     private static final String INTERNAL_FEATURE_PLAN = "_taiFeaturePlan";
     /** The STT idle-unload setting, carried to the runtime process with every speech request. */
     private static final String INTERNAL_STT_IDLE_MINUTES = "_taiSttIdleUnloadMinutes";
+    /** The speech accelerator setting ({@link SttAccelerator}), carried with every speech request like the idle limit. */
+    private static final String INTERNAL_STT_ACCELERATOR = "_taiSttAccelerator";
     /** Where the app process puts audio for the runtime process; files here are deleted once transcribed. */
     public static final String STT_IPC_DIR = "tai-ipc";
 
@@ -3132,11 +3134,18 @@ public final class TaiManager {
         request.put("model", spec.id);
         request.put(INTERNAL_MODEL_SPEC, spec.toJson());
         request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
+        request.put(INTERNAL_STT_ACCELERATOR, settings.getSttAccelerator());
         return request.toString();
     }
 
+    /** In the runtime process: the STT idle limit and accelerator the app process sent with this request. */
     private void rememberSttIdleLimit(@NonNull JSONObject request) {
-        if (!runtimeProcess || !request.has(INTERNAL_STT_IDLE_MINUTES)) return;
+        if (!runtimeProcess) return;
+        // The speech runtimes read it at their next load; a different ask reloads the graph.
+        if (request.has(INTERNAL_STT_ACCELERATOR)) {
+            SttAccelerator.setRequested(SttAccelerator.parse(request.optString(INTERNAL_STT_ACCELERATOR, null)));
+        }
+        if (!request.has(INTERNAL_STT_IDLE_MINUTES)) return;
         sttIdleLimitMs = java.util.concurrent.TimeUnit.MINUTES.toMillis(Math.max(0, request.optInt(INTERNAL_STT_IDLE_MINUTES, 0)));
     }
 
