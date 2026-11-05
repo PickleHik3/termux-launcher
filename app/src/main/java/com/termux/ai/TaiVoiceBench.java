@@ -64,6 +64,13 @@ public final class TaiVoiceBench {
      * Half the words wrong is far past any accent or punctuation slip.
      */
     public static final double WRONG_TEXT_WER = 0.5;
+    /**
+     * Results within this many word errors of each other count as equally accurate, and speed
+     * orders them; a result further behind the most accurate one ranks below every result in that
+     * band. On pong, Whisper small.en (12%, it drops a phrase at a window boundary) was 0.1x faster
+     * than the multilingual small (0.6%) and ranked first on speed alone.
+     */
+    static final double ACCURACY_BAND_WER = 0.03;
 
     /** Rough time per entry for the Choose screen; a GPU entry adds its slower load. */
     static final long ESTIMATE_WHISPER_MS = 60_000L;
@@ -298,8 +305,8 @@ public final class TaiVoiceBench {
 
     /**
      * The voice leaderboard: one record per entry (model + processor), the latest clean complete one
-     * (one that ran warm only stands in when there is no clean one), ranked by speed, then by fewer
-     * word errors. Listed apart and unranked: wrong text ({@link #WRONG_TEXT_WER} or worse), a GPU
+     * (one that ran warm only stands in when there is no clean one), ranked by speed among the
+     * results within {@link #ACCURACY_BAND_WER} of the fewest word errors, then the rest by speed. Listed apart and unranked: wrong text ({@link #WRONG_TEXT_WER} or worse), a GPU
      * entry that fell back to the CPU, and an entry whose latest record is a crash. Only records of
      * {@link #BENCH_VERSION} are looked at. Rows have the text board's keys where they mean the same
      * ({@code key, recordId, modelId, displayName, backend, accelerator, speculative, timestamp, preset,
@@ -335,7 +342,13 @@ public final class TaiVoiceBench {
             (row.optBoolean("wrongText", false) || row.optBoolean("gpuFallback", false) ? apart : ranked).add(row);
         }
         for (Map.Entry<String, JSONObject> entry : crashed.entrySet()) apart.add(row(entry.getKey(), entry.getValue()));
+        double best = 1.0;
+        for (JSONObject row : ranked) best = Math.min(best, row.optDouble("wer", 1.0));
+        final double bandEdge = best + ACCURACY_BAND_WER;
         Collections.sort(ranked, (a, b) -> {
+            boolean aInBand = a.optDouble("wer", 1.0) <= bandEdge;
+            boolean bInBand = b.optDouble("wer", 1.0) <= bandEdge;
+            if (aInBand != bInBand) return aInBand ? -1 : 1;
             int bySpeed = Double.compare(b.optDouble("realtime", 0.0), a.optDouble("realtime", 0.0));
             if (bySpeed != 0) return bySpeed;
             return Double.compare(a.optDouble("wer", 1.0), b.optDouble("wer", 1.0));

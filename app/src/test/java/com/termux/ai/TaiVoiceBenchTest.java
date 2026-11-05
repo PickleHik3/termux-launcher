@@ -169,6 +169,18 @@ public class TaiVoiceBenchTest {
     }
 
     @Test
+    public void aFasterResultWithManyMoreWordErrorsRanksBelowAnAccurateOne() throws Exception {
+        JSONArray records = new JSONArray()
+            .put(record("whisper-en", "cpu", "cpu", 3.2, 0.12, TaiBenchStore.STATUS_COMPLETE, 1L))
+            .put(record("whisper-multi", "cpu", "cpu", 3.1, 0.006, TaiBenchStore.STATUS_COMPLETE, 2L))
+            .put(record("parakeet", "cpu", "cpu", 15.0, 0.02, TaiBenchStore.STATUS_COMPLETE, 3L));
+        JSONArray ranked = TaiVoiceBench.leaderboard(records).getJSONArray("ranked");
+        assertEquals("parakeet", ranked.getJSONObject(0).getString("modelId"));
+        assertEquals("whisper-multi", ranked.getJSONObject(1).getString("modelId"));
+        assertEquals("whisper-en", ranked.getJSONObject(2).getString("modelId"));
+    }
+
+    @Test
     public void leaderboardIgnoresTextRecordsAndTheTextBoardIgnoresVoice() throws Exception {
         JSONObject text = new JSONObject().put("id", "t1").put("benchVersion", TaiBenchSuite.BENCH_VERSION)
             .put("modelId", "gemma").put("backend", "litert-lm").put("accelerator", "cpu").put("status", "complete")
