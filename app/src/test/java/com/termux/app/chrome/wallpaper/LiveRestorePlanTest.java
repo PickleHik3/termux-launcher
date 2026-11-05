@@ -56,6 +56,15 @@ public class LiveRestorePlanTest {
         assertEquals(LiveRestorePlan.Remember.TAKE, LiveRestorePlan.remember(true, bad, -1, 8));
     }
 
+    @Test
+    public void photoChosen_dropsAMemoryTheNewWallpaperMadeStale() {
+        LiveRestorePlan.Memory m = mem(true, false, SAME, false);
+        assertTrue(LiveRestorePlan.dropOnPhotoChosen(m, 9, 8));
+        assertTrue(LiveRestorePlan.dropOnPhotoChosen(m, 7, 9));
+        assertFalse("the phone still shows the still (a launcher-only photo)", LiveRestorePlan.dropOnPhotoChosen(m, 7, 8));
+        assertFalse("no memory", LiveRestorePlan.dropOnPhotoChosen(null, 9, 8));
+    }
+
     // --- restore ---
 
     @Test

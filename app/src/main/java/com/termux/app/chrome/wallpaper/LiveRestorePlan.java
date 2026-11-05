@@ -166,6 +166,15 @@ final class LiveRestorePlan {
         return memory != null && memory.hasAnything() && stillIsOnPhone(memory, homeId, lockId);
     }
 
+    /**
+     * Whether the memory goes when the user applies a photo themselves: it is stale, because the
+     * phone's wallpaper is no longer the still. A launcher-only photo leaves the phone showing the
+     * still, so the memory (the photos under it) stays for Back to photo.
+     */
+    static boolean dropOnPhotoChosen(@Nullable Memory memory, int homeId, int lockId) {
+        return memory != null && !stillIsOnPhone(memory, homeId, lockId);
+    }
+
     /** One set Back to photo makes. */
     static final class Step {
         enum Kind {

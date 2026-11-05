@@ -209,6 +209,34 @@ public final class LiveWallpaperApplier {
         }
     }
 
+    // --- a photo chosen on the Photo page ---
+
+    /**
+     * The user applied a photo themselves ({@link LiveSceneLogic#photoEndsScene}): the scene ends
+     * (so nothing keeps drawing over the photo) and a memory the new wallpaper made stale is
+     * dropped ({@link LiveRestorePlan#dropOnPhotoChosen}). Writes nothing while no scene is in use.
+     */
+    @MainThread
+    public static void photoChosen(@NonNull Context ctx) {
+        final Context app = ctx.getApplicationContext();
+        final TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
+        if (prefs != null && LiveWallpaperChoice.read(prefs).scene != null) {
+            LiveWallpaperChoice.none().write(prefs);
+        }
+        GeneratedWallpaperApplier.onWorker(() -> {
+            try {
+                LiveRestorePlan.Memory memory = readMemory(app);
+                if (LiveRestorePlan.dropOnPhotoChosen(memory, ManagedWallpaper.currentSystemWallpaperId(app),
+                        ManagedWallpaper.currentLockWallpaperId(app))) {
+                    clearMemory(app);
+                    deleteStill(app);
+                }
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Dropping the photo memory failed", e);
+            }
+        });
+    }
+
     // --- the memory on disk ---
 
     @NonNull

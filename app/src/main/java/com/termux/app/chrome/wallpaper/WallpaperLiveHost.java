@@ -56,6 +56,8 @@ public final class WallpaperLiveHost {
     private LiveSceneLogic.Kind mKind = LiveSceneLogic.Kind.PHOTO;
     private boolean mDetailShown;
     private boolean mReleased;
+    /** Use as wallpaper or Back to photo changed what the Photo page read: it reads again when shown. */
+    private boolean mPhotoStale;
 
     public WallpaperLiveHost(@NonNull Context context, @NonNull WallpaperPickerPage picker,
                              @NonNull Listener listener) {
@@ -170,6 +172,10 @@ public final class WallpaperLiveHost {
             int id = live ? R.id.segmented_pill_capsule : R.id.segmented_pill_default;
             if (group.getCheckedButtonId() != id) group.check(id);
         }
+        if (!live && mPhotoStale) {
+            mPhotoStale = false;
+            mPicker.refreshStored();
+        }
         mPhotoRoot.setVisibility(live ? View.GONE : View.VISIBLE);
         mLive.setVisibility(live ? View.VISIBLE : View.GONE);
         if (live) showGrid();
@@ -222,8 +228,13 @@ public final class WallpaperLiveHost {
                 default:
                     break;
             }
-            // The scene is in use whatever the phone said: the page shows it.
-            mDetail.setBackToPhotoVisible(true);
+            mPhotoStale = true;
+            if (LiveSceneLogic.staysOnScenePage(result)) {
+                // The scene plays in the app all the same: the page keeps the message and Back to photo.
+                mDetail.setBackToPhotoVisible(true);
+            } else {
+                showGrid();
+            }
         });
     }
 
@@ -233,6 +244,7 @@ public final class WallpaperLiveHost {
         LiveWallpaperApplier.backToPhoto(mContext, result -> {
             if (mReleased || mDetail == null) return;
             mDetail.setBusy(false);
+            mPhotoStale = true;
             if (result == LiveWallpaperApplier.Result.SET) mListener.onSystemWallpaperChanged();
             else if (result == LiveWallpaperApplier.Result.FAILED) toast(R.string.wallpaper_picker_apply_failed);
             // Back on the grid, with no scene in use.

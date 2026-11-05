@@ -23936,6 +23936,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Choice choice) {
                 // The applier's changed listener has already told the live host; the glass
                 // still has to pick up the new still as its managed picture.
+                // A photo chosen here ends a live scene (it would keep drawing over the photo).
+                if (com.termux.app.chrome.wallpaper.LiveSceneLogic.photoEndsScene(slot))
+                    com.termux.app.chrome.wallpaper.LiveWallpaperApplier.photoChosen(TermuxActivity.this);
                 if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
                 applyHomeWallpaperInPlace(choice.photo);
             }

@@ -122,4 +122,18 @@ public class LiveSceneLogicTest {
         assertEquals(R.string.live_scene_contour_waves, LiveSceneLogic.nameRes("contour-waves"));
         assertEquals(R.string.live_scene_bloom_desc, LiveSceneLogic.descRes("bloom"));
     }
+
+    @Test
+    public void photoEndsScene_onlyForAHomePhoto() {
+        assertTrue(LiveSceneLogic.photoEndsScene(WallpaperSlots.Slot.HOME));
+        assertFalse(LiveSceneLogic.photoEndsScene(WallpaperSlots.Slot.LOCK));
+    }
+
+    @Test
+    public void useAsWallpaper_returnsToTheGridUnlessItFailed() {
+        assertFalse(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.SET));
+        assertFalse(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.IN_APP_ONLY));
+        assertTrue(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.STILL_FAILED));
+        assertTrue(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.FAILED));
+    }
 }

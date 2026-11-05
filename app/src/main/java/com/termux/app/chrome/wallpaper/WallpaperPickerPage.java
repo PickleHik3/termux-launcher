@@ -716,6 +716,31 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     }
 
     /**
+     * Reads the slots again (off the main thread) and shows them: what Live changed behind the
+     * page. A slot with a choice of the user's own, not yet applied, keeps it; every other slot
+     * takes what is stored now.
+     */
+    @MainThread
+    void refreshStored() {
+        if (mReleased) return;
+        final WallpaperSlots.State before = mStored;
+        mIo.run(this::readSafe, state -> {
+            if (mReleased || state == null) return;
+            for (WallpaperSlots.Slot slot : WallpaperSlots.Slot.values()) {
+                WallpaperSlots.Choice was = slot == WallpaperSlots.Slot.HOME ? before.home : before.lock;
+                if (!WallpaperPickerLogic.pendingApplies(slot, mPending[slot.ordinal()], was)) {
+                    mPending[slot.ordinal()] = slot == WallpaperSlots.Slot.HOME ? state.home : state.lock;
+                }
+            }
+            mStored = state;
+            applyGlassHint();
+            refreshCards();
+            refreshSameAsHomeThumb();
+            refreshSelection();
+        });
+    }
+
+    /**
      * The hint under Choose photo shows while the Home slot holds no picture of the launcher's
      * own: {@link WallpaperSlots#read} names the managed copy only while the system still shows
      * it, the same fact as {@code WallpaperSourceFacts.managedOnScreen()}. Follows every read.

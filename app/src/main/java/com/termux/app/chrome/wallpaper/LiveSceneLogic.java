@@ -26,6 +26,23 @@ public final class LiveSceneLogic {
         return supported && stored.scene != null ? Kind.LIVE : Kind.PHOTO;
     }
 
+    /**
+     * Whether a photo applied from the Photo page ends the scene: one set for Home does (the user
+     * chose a photo themselves); a lock-only photo does not (scenes play on the home screen).
+     */
+    public static boolean photoEndsScene(@NonNull WallpaperSlots.Slot appliedSlot) {
+        return appliedSlot == WallpaperSlots.Slot.HOME;
+    }
+
+    /**
+     * Whether Use as wallpaper leaves the scene's page open: only when it did not go through (the
+     * still could not be drawn, or the phone refused it), so the message has a page to sit on.
+     * Otherwise the page returns to the grid, where "In use" confirms it.
+     */
+    public static boolean staysOnScenePage(@NonNull LiveWallpaperApplier.Result result) {
+        return result == LiveWallpaperApplier.Result.STILL_FAILED || result == LiveWallpaperApplier.Result.FAILED;
+    }
+
     /** Whether {@code kind} is the scene in use. */
     public static boolean inUse(@NonNull LiveWallpaperChoice stored, @NonNull String kind) {
         return kind.equals(stored.scene);
