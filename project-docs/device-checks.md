@@ -475,3 +475,14 @@ longer counted as an error. Owed:
 - **New Home page wears the page in front's look (11-06).** Home 1 with its own dim and glass,
   Edit pages > Add page: Home 2 looks the same from its first frame; add a page while Home 1 has
   no overrides: the new page follows Global · pong.
+- **Whisper Base on the GPU (11-06, #227, b6ff781a3).** On-device AI › Speech: "Base GPU ·
+  Many languages" is listed with "Runs on the GPU and uses little CPU. Many languages, 30-second
+  window." and "Try it on this phone's GPU" (dimmed with "No usable GPU found on this phone"
+  only where there is no OpenCL). Seen on pong 11-06 up to install and select; still owed: (1) the
+  Voice benchmark runs Base GPU on the GPU and afterwards the sheet, the Model centre row and the
+  Speech picker card read "Recommended" or "Slower on this phone"; (2) dictation with it on Auto
+  and on GPU gives correct text, and on CPU still works (slow); (3) the accelerator dialog lists
+  Auto, CPU and "GPU · uses less battery, may be slower"; (4) no crash or `stt_gpu_unavailable` in
+  logcat on pong; (5) the speech card offers no language or window switch for it; (6) put the
+  developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
+  audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
