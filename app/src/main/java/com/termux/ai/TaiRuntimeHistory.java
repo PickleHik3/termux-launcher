@@ -78,6 +78,51 @@ public final class TaiRuntimeHistory {
         record(context, model, device, backend, accelerator, false, reason);
     }
 
+    /**
+     * Marks one more attempt of {@code model} on {@code accelerator} as begun and returns how many
+     * were unfinished before it: attempts whose process died before {@link #endAttempt} (the
+     * speech GPU loads, {@link SttGraphChooser}). Kept as its own entry ({@code accelerator}
+     * suffixed {@code -pending}, {@code success} true so no reader takes it for a failure); a count
+     * written by another app version starts again at zero.
+     */
+    static int beginAttempt(@NonNull Context context, @NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device,
+                            @NonNull String backend, @NonNull String accelerator) {
+        final long version = appVersionCode(context);
+        final int[] before = {0};
+        final String key = key(model, device, accelerator + PENDING_SUFFIX);
+        withLock(context, history -> {
+            try {
+                JSONObject old = history.optJSONObject(key);
+                long recorded = old == null ? 0L : old.optLong("appVersionCode", 0L);
+                boolean sameVersion = recorded == 0L || version == 0L || recorded == version;
+                before[0] = old != null && sameVersion ? Math.max(0, old.optInt("pending", 0)) : 0;
+                JSONObject entry = new JSONObject();
+                entry.put("modelId", model.id);
+                entry.put("device", deviceKey(device));
+                entry.put("backend", backend);
+                entry.put("accelerator", normalizeAccelerator(accelerator) + PENDING_SUFFIX);
+                entry.put("success", true);
+                entry.put("pending", before[0] + 1);
+                entry.put("updatedAtMs", System.currentTimeMillis());
+                if (version > 0L) entry.put("appVersionCode", version);
+                history.put(key, entry);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
+            }
+        });
+        return before[0];
+    }
+
+    /** The attempt {@link #beginAttempt} marked ended in this process, either way: none is unfinished. */
+    static void endAttempt(@NonNull Context context, @NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device,
+                           @NonNull String accelerator) {
+        final String key = key(model, device, accelerator + PENDING_SUFFIX);
+        withLock(context, history -> history.remove(key) != null);
+    }
+
+    private static final String PENDING_SUFFIX = "-pending";
+
     public static boolean hasSuccessfulGpu(
         @NonNull Context context,
         @NonNull TaiModelSpec model,

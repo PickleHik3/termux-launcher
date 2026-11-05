@@ -39,7 +39,7 @@ android {
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // libtai_xnnpack.so: small JNI helpers (TaiGpuProbe, TaiNativeLog).
+        // libtai_xnnpack.so: small JNI helpers (TaiGpuProbe, TaiNativeLog, TaiTensorRead).
         externalNativeBuild {
             ndkBuild {
                 cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
@@ -223,6 +223,8 @@ dependencies {
     implementation "com.caverock:androidsvg-aar:1.4"
     implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
     implementation "com.google.ai.edge.litert:litert:2.3.2"
+    // The GPU accelerator (libLiteRtClGlAccelerator.so) CompiledModel loads for Accelerator.GPU.
+    implementation "com.google.ai.edge.litert:litert-gpu:2.3.2"
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")

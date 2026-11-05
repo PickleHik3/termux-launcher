@@ -13,21 +13,26 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * On-device speech-to-text on the Whisper ACFT LiteRT graphs ({@code litert-community/whisper-acft}):
  * one {@link LiteRtGraph} with an {@code encode} signature (log-mel {@code [1, 80, frames]} →
  * audio features {@code [1, frames/2, 512]}) and a {@code decode} signature (features, a fixed
  * 128-slot token sequence and an additive causal mask → logits {@code [1, 128, vocab]}), run
- * through the graph with inputs bound by name ({@link InterpreterGraph}: the stock Interpreter). The mel front end is
+ * through the graph with inputs bound by name. The mel front end is
  * {@link WhisperMel}, the vocabulary {@link WhisperTokenizer}, the prompt and greedy loop
  * {@link WhisperDecoder}, the language when none is given {@link WhisperLanguageDetection}, the
  * pause-based cutting {@link WhisperSegmenter}.
  *
- * <p>CPU only, XNNPACK, {@code min(4, cores)} threads: the graphs are dynamic-range int8 with fp32
- * activations, the GPU delegate creates zero kernels for them on pong, and keeping STT off the GPU
- * means dictating to an agent never contends with that agent's own generation. Every decode step
- * re-runs the whole decoder (no KV cache), so a 2–4 token command is ~150 ms on base.en 10 s.
+ * <p>The graph runs on LiteRT's CompiledModel ({@link CompiledModelGraph}), on the GPU or on the
+ * CPU ({@code min(4, cores)} XNNPACK threads), as {@link SttAccelerator#requested()} says at each
+ * load: Auto tries the GPU, proves it on a fixed input ({@link #verifySane}) and falls back to the
+ * CPU, remembering the outcome per model on this phone ({@link SttGraphChooser}, {@link SttGpuMemory}).
+ * The stock Interpreter ({@link InterpreterGraph}) stays selectable for the bench. Every decode
+ * step re-runs the whole decoder (no KV cache), so a 2–4 token command is ~150 ms on base.en 10 s
+ * on the CPU.
  *
  * <p>Locking follows {@link LiteRtEmbeddingRuntime}: transcribe and close serialize on this
  * object's monitor, so an eviction waits for a running transcription and never interrupts it;
@@ -47,8 +52,16 @@ final class WhisperSttRuntime implements SttRuntime {
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
-    private final LiteRtGraph.Loader loader;
+    private final SttGraphChooser chooser;
+    private final Supplier<SttAccelerator> accelerators;
+    /** Where a load's GPU verdicts are remembered; tests swap it. */
+    private Function<TaiModelSpec, SttGraphChooser.Memory> memories;
     @Nullable private LiteRtGraph graph;
+    /** What was asked for when the graph was loaded; a different ask reloads it. */
+    @Nullable private SttAccelerator loadedRequest;
+    /** Where the graph runs ({@code gpu}, {@code cpu}, {@code interp}) and why not on the GPU. */
+    private String loadedAccelerator = "";
+    private String loadedFallback = "";
     @Nullable private WhisperTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -63,6 +76,7 @@ final class WhisperSttRuntime implements SttRuntime {
     private String decodeMaskInput = "";
     private String decodeOutput = "";
     @Nullable private LiteRtGraph.Tensor melTensor;
+    @Nullable private LiteRtGraph.Tensor featuresTensor;
     @Nullable private LiteRtGraph.Tensor logitsTensor;
     @Nullable private LiteRtGraph.Tensor tokensTensor;
     @Nullable private LiteRtGraph.Signature encodeRun;
@@ -71,14 +85,29 @@ final class WhisperSttRuntime implements SttRuntime {
     @Nullable private float[] melScratch;
 
     WhisperSttRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
-        this(residency, context, InterpreterGraph.LOADER);
+        this(residency, context, SttGraphChooser.standard(), SttAccelerator::requested);
     }
 
-    /** With the graph runtime behind {@link LiteRtGraph} chosen by the caller; tests pass a fake. */
+    /** One graph runtime behind {@link LiteRtGraph} whatever is asked for, on the CPU path; tests pass a fake. */
     WhisperSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull LiteRtGraph.Loader loader) {
+        this(residency, context, new SttGraphChooser(loader, loader, loader), () -> SttAccelerator.CPU);
+    }
+
+    /** With the loaders and the accelerator ask chosen by the caller (the bench, tests). */
+    WhisperSttRuntime(@NonNull TaiResidency residency, @Nullable Context context, @NonNull SttGraphChooser chooser,
+                      @NonNull Supplier<SttAccelerator> accelerators) {
         this.residency = residency;
         this.appContext = context == null ? null : context.getApplicationContext();
-        this.loader = loader;
+        this.chooser = chooser;
+        this.accelerators = accelerators;
+        Context app = appContext;
+        this.memories = app == null ? spec -> SttGraphChooser.NO_MEMORY
+            : spec -> new SttGpuMemory(app, spec, TaiDeviceCapabilities.detect(app));
+    }
+
+    /** Tests: where GPU verdicts are remembered. */
+    void setMemory(@NonNull Function<TaiModelSpec, SttGraphChooser.Memory> memories) {
+        this.memories = memories;
     }
 
     /** Whether {@code modelId} is the graph held right now. */
@@ -107,6 +136,7 @@ final class WhisperSttRuntime implements SttRuntime {
         response.put("alreadyLoaded", wasLoaded);
         response.put("windowSeconds", frames / WhisperMel.FRAMES_PER_SECOND);
         response.put("loadMs", System.currentTimeMillis() - started);
+        putAccelerator(response);
         response.put("_runtime", RUNTIME_NAME);
         return response;
     }
@@ -241,6 +271,7 @@ final class WhisperSttRuntime implements SttRuntime {
         response.put("windowSeconds", frames / WhisperMel.FRAMES_PER_SECOND);
         response.put("biased", biasText != null && !biasText.trim().isEmpty());
         response.put("timings", timings);
+        putAccelerator(response);
         response.put("_backend", TaiModelSpec.BACKEND_LITERT_LM);
         response.put("_runtime", RUNTIME_NAME);
         return response;
@@ -266,27 +297,36 @@ final class WhisperSttRuntime implements SttRuntime {
     private void ensureLoaded(@NonNull TaiModelSpec spec) throws Exception {
         File modelFile = new File(spec.localPath);
         String modelPath = modelFile.getAbsolutePath();
-        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath)) return;
+        SttAccelerator requested = accelerators.get();
+        if (graph != null && tokenizer != null && modelPath.equals(loadedModelPath) && requested == loadedRequest) return;
         close();
         File tokenizerFile = tokenizerFileFor(modelFile);
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = WhisperTokenizer.fromFile(tokenizerFile);
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        // The same MemAvailable meter a chat load runs, across the graph's construction only
-        // (InterpreterGraph: the stock LiteRT Interpreter XNNPACK path with `threads` threads).
+        // The same MemAvailable meter a chat load runs, across the graph's construction, a GPU
+        // attempt and its CPU fallback included.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
+        SttGraphChooser.Opened opened;
         try {
-            graph = loader.load(modelFile, threads);
+            opened = chooser.open(modelFile, threads, requested, memories.apply(spec), (loaded, verify) -> {
+                graph = loaded;
+                bindSignatures(loaded);
+                if (verify) verifySane();
+            });
+        } catch (Throwable t) {
+            // The chooser has closed every graph it opened; only the bindings are left to drop.
+            graph = null;
+            close();
+            throw t;
         } finally {
             measured = meter.stop();
         }
-        try {
-            bindSignatures(graph);
-        } catch (RuntimeException e) {
-            close();
-            throw e;
-        }
+        graph = opened.graph;
+        loadedRequest = requested;
+        loadedAccelerator = opened.accelerator;
+        loadedFallback = opened.fallbackReason;
         englishOnly = isEnglishOnly(spec, modelFile);
         loadedModelId = spec.id;
         loadedModelPath = modelPath;
@@ -295,7 +335,68 @@ final class WhisperSttRuntime implements SttRuntime {
         if (measured >= 0L && appContext != null) {
             // Keyed at window 0 like an embedding load: the graph's audio window is not a context window.
             TaiRuntimeHistory.recordMeasuredLoad(appContext, spec, TaiDeviceCapabilities.detect(appContext),
-                TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0, measured);
+                TaiModelSpec.BACKEND_LITERT_LM, "gpu".equals(loadedAccelerator) ? "gpu" : "cpu", 0, measured);
+        }
+    }
+
+    /** Where the graph runs, for warm and transcribe answers (the bench prints it). */
+    private void putAccelerator(@NonNull JSONObject response) throws JSONException {
+        response.put("accelerator", loadedAccelerator);
+        if (!loadedFallback.isEmpty()) response.put("acceleratorFallback", loadedFallback);
+        LiteRtGraph held = graph;
+        if (held instanceof CompiledModelGraph) {
+            CompiledModelGraph compiled = (CompiledModelGraph) held;
+            response.put("sliceReads", compiled.sliceReads());
+            response.put("copiedBindings", compiled.copiedBindings());
+        }
+    }
+
+    static final float SANE_LIMIT = 1e6f;
+    static final float SANE_MIN_SPREAD = 1e-4f;
+
+    /**
+     * Proves a GPU graph sane before it is kept: a fixed log-mel input through the encoder, then
+     * one decoder step on the transcription prompt. Every encoder feature and every first-step
+     * logit must be finite and at most {@link #SANE_LIMIT} in magnitude, and neither may be flat
+     * (a spread under {@link #SANE_MIN_SPREAD}), as an all-zero or all-NaN GPU output would be.
+     * Throws when not.
+     */
+    private void verifySane() {
+        float[] flat = melScratch;
+        LiteRtGraph.Tensor mel = melTensor;
+        LiteRtGraph.Tensor features = featuresTensor;
+        LiteRtGraph.Signature run = encodeRun;
+        WhisperTokenizer vocabulary = tokenizer;
+        LiteRtGraph held = graph;
+        if (held == null || flat == null || mel == null || features == null || run == null || vocabulary == null) {
+            throw new IllegalStateException("STT runtime is not loaded.");
+        }
+        for (int i = 0; i < flat.length; i++) flat[i] = ((i * 37) % 101) / 101f - 0.5f;
+        mel.writeFloats(flat, flat.length);
+        run.run();
+        int count = held.output(SIGNATURE_ENCODE, encodeOutput).elements();
+        float[] encoded = new float[count];
+        features.readFloats(0, encoded, count);
+        requireSane(encoded, "encoder output");
+        int[] prompt = WhisperDecoder.prompt(vocabulary, WhisperLanguageDetection.DEFAULT_LANGUAGE, null);
+        int filled = Math.min(prompt.length, sequenceLength);
+        int[] tokens = new int[sequenceLength];
+        System.arraycopy(prompt, 0, tokens, 0, filled);
+        requireSane(decodeStep(tokens, filled), "first-step logits");
+    }
+
+    /** Throws unless every value is finite and within {@link #SANE_LIMIT}, and they are not all alike. */
+    static void requireSane(@NonNull float[] values, @NonNull String what) {
+        float min = Float.POSITIVE_INFINITY, max = Float.NEGATIVE_INFINITY;
+        for (float value : values) {
+            if (Float.isNaN(value) || Float.isInfinite(value) || Math.abs(value) > SANE_LIMIT) {
+                throw new IllegalStateException("GPU " + what + " is not sane: " + value);
+            }
+            if (value < min) min = value;
+            if (value > max) max = value;
+        }
+        if (values.length == 0 || max - min < SANE_MIN_SPREAD) {
+            throw new IllegalStateException("GPU " + what + " is flat (" + min + ".." + max + ")");
         }
     }
 
@@ -351,6 +452,7 @@ final class WhisperSttRuntime implements SttRuntime {
         LiteRtGraph.Tensor tokens = graph.newInput(SIGNATURE_DECODE, decodeTokensInput);
         LiteRtGraph.Tensor mask = graph.newInput(SIGNATURE_DECODE, decodeMaskInput);
         LiteRtGraph.Tensor logits = graph.newOutput(SIGNATURE_DECODE, decodeOutput);
+        featuresTensor = features;
         float[] causal = new float[sequenceLength * sequenceLength];
         for (int i = 0; i < sequenceLength; i++) {
             for (int j = 0; j < sequenceLength; j++) causal[i * sequenceLength + j] = j > i ? MASK_DENY : MASK_ALLOW;
@@ -446,7 +548,9 @@ final class WhisperSttRuntime implements SttRuntime {
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.STT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
-        melTensor = tokensTensor = logitsTensor = null;
+        melTensor = featuresTensor = tokensTensor = logitsTensor = null;
+        loadedRequest = null;
+        loadedAccelerator = loadedFallback = "";
         encodeRun = decodeRun = null;
         melScratch = null;
         frames = sequenceLength = vocabularySize = 0;

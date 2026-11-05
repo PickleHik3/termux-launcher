@@ -26,7 +26,11 @@ import java.util.List;
  * <p>Run (as the Termux app user, the APK on the class path, its native libs on LD_LIBRARY_PATH):
  * {@code CLASSPATH=$(pm path com.termux | cut -d: -f2) LD_LIBRARY_PATH=<apk>!/lib/arm64-v8a
  * app_process /system/bin com.termux.ai.SttBench --clips DIR --whisper W.tflite --parakeet P.tflite
- * [--runs 5] [--warmup 1] [--path LABEL] [--language en] [--interval-ms 200]}. See
+ * [--runs 5] [--warmup 1] [--path LABEL] [--accel interp|cpu|gpu|auto] [--language en]
+ * [--interval-ms 200]}. {@code --accel} picks where Whisper runs: the stock Interpreter, or
+ * CompiledModel on CPU or GPU, or Auto (GPU, CPU when the GPU fails; nothing is remembered in the
+ * bench); the default is {@code interp}, the path Whisper ran before CompiledModel. Parakeet
+ * always runs on the Interpreter. See
  * {@code scripts/stt-bench/README.md}. Output lines all start {@code STTBENCH}.
  */
 public final class SttBench {
@@ -60,6 +64,7 @@ public final class SttBench {
     public static void main(String[] args) throws Exception {
         String clipsDir = null, whisper = null, parakeet = null, language = null;
         String path = "default";
+        SttAccelerator accel = SttAccelerator.INTERPRETER;
         int runs = 5, warmup = 1;
         long intervalMs = 200L;
         for (int i = 0; i < args.length; i++) {
@@ -76,6 +81,13 @@ public final class SttBench {
                 case "--runs": runs = Integer.parseInt(value); break;
                 case "--warmup": warmup = Integer.parseInt(value); break;
                 case "--path": path = value; break;
+                case "--accel":
+                    accel = SttAccelerator.parse(value);
+                    if (!accel.id.equals(value) && !"interpreter".equals(value)) {
+                        usage();
+                        return;
+                    }
+                    break;
                 case "--language": language = value; break;
                 case "--interval-ms": intervalMs = Long.parseLong(value); break;
                 default:
@@ -109,10 +121,11 @@ public final class SttBench {
             "charging", String.valueOf(battery.charging()),
             "clips", String.valueOf(clips.length)));
 
+        final SttAccelerator chosen = accel;
         List<Target> targets = new ArrayList<>();
         if (whisper != null) {
             targets.add(new Target("whisper", spec("bench-whisper", whisper, null),
-                new WhisperSttRuntime(new TaiResidency(), null)));
+                new WhisperSttRuntime(new TaiResidency(), null, SttGraphChooser.standard(), () -> chosen)));
         }
         if (parakeet != null) {
             targets.add(new Target("parakeet", spec(TaiModelCatalog.PARAKEET_TDT_V3_ID, parakeet, "parakeet-tdt"),
@@ -139,6 +152,10 @@ public final class SttBench {
         System.out.println(SttBenchStats.line("STTBENCH_LOAD", "runtime", target.runtime, "path", path,
             "model", model, "ok", String.valueOf(loaded.optBoolean("ok", false)),
             "loadMs", SttBenchStats.num(loadMs, 0), "cpuS", SttBenchStats.num(loadCpu, 2),
+            "accel", loaded.optString("accelerator", ""),
+            "fallback", loaded.optString("acceleratorFallback", ""),
+            "sliceReads", loaded.has("sliceReads") ? String.valueOf(loaded.optBoolean("sliceReads")) : "",
+            "copiedBindings", loaded.has("copiedBindings") ? String.valueOf(loaded.optInt("copiedBindings")) : "",
             "error", loaded.optString("error", "")));
         if (!loaded.optBoolean("ok", false)) {
             target.engine.close();
@@ -257,6 +274,6 @@ public final class SttBench {
 
     private static void usage() {
         System.out.println("usage: SttBench --clips DIR [--whisper W.tflite] [--parakeet P.tflite] [--runs 5] "
-            + "[--warmup 1] [--path LABEL] [--language en] [--interval-ms 200]");
+            + "[--warmup 1] [--path LABEL] [--accel interp|cpu|gpu|auto] [--language en] [--interval-ms 200]");
     }
 }
