@@ -96,7 +96,7 @@ final class TfliteSignatures {
     }
 
     /** Bounds-checked flatbuffer reads; every position is absolute in {@code bytes}. */
-    private static final class Reader {
+    static final class Reader {
         final ByteBuffer bytes;
         final int base;
         final int limit;

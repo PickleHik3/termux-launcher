@@ -412,12 +412,55 @@ final class KittenTtsRuntime implements TtsRuntime {
         int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
         predictor = Graph.open(predictorFile, threads, useDelegate);
         prosody = Graph.open(new File(dir, PROSODY_FILE), threads, useDelegate);
-        vocoder = Graph.open(new File(dir, VOCODER_FILE), threads, useDelegate);
+        vocoder = openVocoder(new File(dir, VOCODER_FILE), threads, useDelegate);
         predictor.requireInputs("input_ids", "style", "speed");
         predictor.requireOutputs(":0", ":1", ":2");
         prosody.requireInputs("en", "style");
         prosody.requireOutputs(":0", ":1", ":2");
         vocoder.requireInputs("asr", "f0", "n", "har", "style");
+    }
+
+    /**
+     * The vocoder's first-allocation shapes: those of a 40-frame chunk (about 1 s of speech), from
+     * the pipeline above with T = 40: asr [1,T,128], f0 and noise [1,2T], harmonics [1,120T+1,22].
+     * A short real chunk, and mutually consistent, which is what XNNPACK needs to prepare.
+     */
+    @VisibleForTesting
+    static final int VOCODER_OPEN_FRAMES = 40;
+
+    @NonNull
+    static Map<String, int[]> vocoderOpenShapes() {
+        int t = VOCODER_OPEN_FRAMES;
+        Map<String, int[]> shapes = new java.util.LinkedHashMap<>();
+        shapes.put("asr", new int[] {1, t, ASR_DIM});
+        shapes.put("f0", new int[] {1, 2 * t});
+        shapes.put("n", new int[] {1, 2 * t});
+        shapes.put("har", new int[] {1, 120 * t + 1, HAR_DIM});
+        return shapes;
+    }
+
+    /**
+     * LiteRT 2.3.2's Interpreter allocates every tensor at the model's declared input shapes inside
+     * its constructor, with no hook to resize first, and the vocoder declares dynamic dimensions
+     * ({@code asr [1,-1,128]} ...) that XNNPACK cannot prepare ("failed to reshape runtime"). So the
+     * vocoder is opened from a private in-memory copy of the file whose declared input shapes are a
+     * real chunk's ({@link #vocoderOpenShapes}); every run then resizes as before.
+     *
+     * <p>Always patched, not retried: one path that is the one tested, instead of a failed load
+     * (slow, and matched by message text) before the one that works. If the file cannot be patched
+     * (a different export), it is opened as it is, as every graph was before.
+     */
+    @NonNull
+    private static Graph openVocoder(@NonNull File file, int threads, boolean useDelegate) throws IOException {
+        if (!file.isFile()) throw new IOException("Missing " + file.getName());
+        ByteBuffer patched;
+        try {
+            patched = TfliteShapePatcher.readPatched(file, vocoderOpenShapes());
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Vocoder shapes not patched, opening as declared: " + e.getMessage());
+            return Graph.open(file, threads, useDelegate);
+        }
+        return Graph.open(patched, file.getName(), threads, useDelegate);
     }
 
     @NonNull
@@ -495,9 +538,12 @@ final class KittenTtsRuntime implements TtsRuntime {
         private final ByteBuffer[] backing;
         private final ByteBuffer[] slices;
         private volatile boolean closed;
+        /** The buffer an interpreter built from memory reads from; held so it outlives it. */
+        @Nullable private final ByteBuffer model;
 
-        private Graph(@NonNull Interpreter interpreter) {
+        private Graph(@NonNull Interpreter interpreter, @Nullable ByteBuffer model) {
             this.interpreter = interpreter;
+            this.model = model;
             int inputs = interpreter.getInputTensorCount();
             inputNames = new String[inputs];
             for (int i = 0; i < inputs; i++) inputNames[i] = canonical(interpreter.getInputTensor(i).name());
@@ -514,9 +560,20 @@ final class KittenTtsRuntime implements TtsRuntime {
             Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setCancellable(true)
                 .setUseXNNPACK(useDelegate);
             try {
-                return new Graph(new Interpreter(file, options));
+                return new Graph(new Interpreter(file, options), null);
             } catch (RuntimeException e) {
                 throw new IOException(file.getName() + ": " + e.getMessage(), e);
+            }
+        }
+
+        @NonNull
+        static Graph open(@NonNull ByteBuffer model, @NonNull String name, int threads, boolean useDelegate) throws IOException {
+            Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setCancellable(true)
+                .setUseXNNPACK(useDelegate);
+            try {
+                return new Graph(new Interpreter(model, options), model);
+            } catch (RuntimeException e) {
+                throw new IOException(name + ": " + e.getMessage(), e);
             }
         }
 
