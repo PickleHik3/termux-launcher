@@ -207,7 +207,8 @@ public final class HelpTopics {
                 R.string.help_topic_places_summary, R.string.help_topic_places_action)
             .steps(R.string.help_topic_places_step1)
             .wayBack(R.string.help_topic_places_back)
-            .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
+            .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
+                PaneWallPage.ASSISTANT)
             .gesture(HelpGesture.HOLD_DRAG)
             .lesson(LESSON_PAGE_SWIPE)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
@@ -218,7 +219,8 @@ public final class HelpTopics {
             .steps(R.string.help_topic_corners_step1, R.string.help_topic_corners_step2)
             .wayBack(R.string.help_topic_corners_back)
             .reveal(R.string.help_topic_corners_reveal)
-            .target("corners", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
+            .target("corners", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
+                PaneWallPage.ASSISTANT)
             .lesson(LESSON_FIND_HELP)
             .related("palette", "layout_editor", "appearance_editor", "move_panes")
             .terms("pane", "corner_tab")
@@ -246,7 +248,8 @@ public final class HelpTopics {
                 R.string.help_topic_status_step3)
             .wayBack(R.string.help_topic_status_back)
             .reveal(R.string.help_topic_status_reveal)
-            .target("status", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS)
+            .target("status", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
+                PaneWallPage.ASSISTANT)
             .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_STATUS_SWIPE)
             .related("places", "windows", "pinned_notifications")
@@ -366,7 +369,8 @@ public final class HelpTopics {
             .steps(R.string.help_topic_kswipe_step1, R.string.help_topic_kswipe_step2)
             .wayBack(R.string.help_topic_kswipe_back)
             .target("keyboard_grabber", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY,
-                PaneWallPage.WIDGETS)
+                PaneWallPage.WIDGETS,
+                PaneWallPage.ASSISTANT)
             .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_KEYBOARD)
             .related("keyboard", "keyboard_layouts", "fix_keyboard")

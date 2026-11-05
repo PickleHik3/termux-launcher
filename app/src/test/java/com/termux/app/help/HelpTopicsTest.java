@@ -162,7 +162,7 @@ public class HelpTopicsTest {
 
     @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
         HelpTopics.Entry status = HelpTopics.entry("status");
-        assertEquals(3, status.places.size());
+        assertEquals(4, status.places.size());
         for (PaneWallPage place : PaneWallPage.values()) {
             assertTrue(place.name(), status.onPlace(place));
             assertEquals(status, HelpTopics.forTarget(place, "status"));
