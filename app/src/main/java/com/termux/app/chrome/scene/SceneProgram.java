@@ -26,4 +26,13 @@ interface SceneProgram {
 
     /** The reaction uniforms for {@code nowMs}, scaled to this program's resolution. */
     void setEvents(@NonNull SceneEvents events, long nowMs, float density);
+
+    /**
+     * The user's knobs: speed (0.25..2), density (-1..1) and palette (0..2). Programs without a
+     * knob ignore it; the default does nothing.
+     */
+    default void setKnobs(float speed, float density, int palette) {}
+
+    /** Restarts the scene clock at t = 0: the next {@link #setTime} is the zero frame. */
+    default void restart() {}
 }

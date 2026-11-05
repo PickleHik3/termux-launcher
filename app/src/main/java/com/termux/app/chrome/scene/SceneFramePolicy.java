@@ -34,11 +34,29 @@ public final class SceneFramePolicy {
         return ScenePrograms.isKind(value);
     }
 
-    /** 0, 30 or 90 (anything else reads as 30), the ambient rate in Hz. */
+    /** 0, 15, 30, 60 or 90 (anything else reads as 30), the ambient rate in Hz. */
     public static int parseRate(String value) {
-        if ("0".equals(value)) return 0;
-        if ("90".equals(value)) return 90;
+        if (value != null) {
+            switch (value.trim()) {
+                case "0": return 0;
+                case "15": return 15;
+                case "60": return 60;
+                case "90": return 90;
+                default: break;
+            }
+        }
         return DEFAULT_RATE_HZ;
+    }
+
+    /** {@code PowerManager.THERMAL_STATUS_SEVERE}: at this status and above the scene holds still. */
+    static final int THERMAL_SEVERE = 3;
+
+    /**
+     * Whether the scene stops animating and holds its t = 0 frame: battery saver is on, or the
+     * device's thermal status is severe or worse. When neither holds, it resumes from t = 0.
+     */
+    public static boolean holdAtStill(boolean powerSaveMode, int thermalStatus) {
+        return powerSaveMode || thermalStatus >= THERMAL_SEVERE;
     }
 
     /** True for {@code lowres} and anything unrecognised; false only for {@code still}. */
