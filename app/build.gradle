@@ -275,12 +275,13 @@ tasks.register("verifyReleaseHardening") {
     }
 }
 
-// Debug only: the STT bench (src/debug SttBench) reports the LiteRT the build really resolved, read
-// from the dependency graph so a version bump needs no second edit here.
+// Every variant: BuildConfig.LITERT_VERSION is the LiteRT the build really resolved, read from the
+// dependency graph so a version bump needs no second edit here. The STT bench (src/debug SttBench)
+// reports it, and TaiTensorRead uses the native slice read only on the version it was verified on.
 androidComponents {
-    onVariants(selector().withBuildType("debug")) { variant ->
+    onVariants(selector().all()) { variant ->
         variant.buildConfigFields.put("LITERT_VERSION", provider {
-            def litert = configurations.getByName("debugRuntimeClasspath").incoming.resolutionResult
+            def litert = configurations.getByName("${variant.name}RuntimeClasspath").incoming.resolutionResult
                 .allComponents.collect { it.moduleVersion }
                 .find { it.group == "com.google.ai.edge.litert" && it.name == "litert" }
             new com.android.build.api.variant.BuildConfigField("String", "\"${litert ? litert.version : 'unknown'}\"", "LiteRT as resolved")

@@ -6,9 +6,9 @@ import androidx.annotation.Nullable;
 import java.util.Locale;
 
 /**
- * Where a speech-to-text graph runs: {@link #AUTO} (GPU when this phone has shown it works for
- * the model, else CPU; see {@link SttGraphChooser}), {@link #CPU} or {@link #GPU} on LiteRT's
- * CompiledModel, or {@link #INTERPRETER}, the stock Interpreter path the runtimes used before
+ * Where a speech-to-text graph runs: {@link #AUTO} (CompiledModel on the CPU, the same as
+ * {@link #CPU}; see {@link SttGraphChooser}) or {@link #GPU} (a manual opt-in, with a fallback to
+ * CPU) on LiteRT's CompiledModel, or {@link #INTERPRETER}, the stock Interpreter path the runtimes used before
  * (kept for the bench to compare against, not offered in settings).
  *
  * <p>The runtime process keeps the value the app process last sent with a speech request in

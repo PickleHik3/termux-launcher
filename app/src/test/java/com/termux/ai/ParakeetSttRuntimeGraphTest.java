@@ -100,13 +100,13 @@ public class ParakeetSttRuntimeGraphTest {
     }
 
     @Test
-    public void autoKeepsASaneGpuProvesItAndCarriesTheStateThroughIt() throws Exception {
+    public void aGpuAskKeepsASaneGpuProvesItAndCarriesTheStateThroughIt() throws Exception {
         File model = modelDir();
         FakeLiteRtGraph cpu = parakeetGraph();
         FakeLiteRtGraph gpu = parakeetGraph(0.25f);
         SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
         ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribe(runtime, model);
@@ -141,7 +141,7 @@ public class ParakeetSttRuntimeGraphTest {
             throw new IllegalStateException("Failed to create the GPU accelerator");
         };
         ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), brokenGpu), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribe(runtime, model);
@@ -161,7 +161,7 @@ public class ParakeetSttRuntimeGraphTest {
         FakeLiteRtGraph gpu = parakeetGraph();   // its encoder output stays all zero: flat
         SttGraphChooserTest.FakeMemory memory = new SttGraphChooserTest.FakeMemory();
         ParakeetSttRuntime runtime = new ParakeetSttRuntime(new TaiResidency(), null,
-            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.AUTO);
+            new SttGraphChooser(cpu.loader(), cpu.loader(), gpu.loader()), () -> SttAccelerator.GPU);
         runtime.setMemory(spec -> memory);
 
         JSONObject result = transcribe(runtime, model);
@@ -176,7 +176,7 @@ public class ParakeetSttRuntimeGraphTest {
     }
 
     @Test
-    public void autoWithAFailureOnRecordGoesStraightToTheCpu() throws Exception {
+    public void autoLoadsTheCpuAndNeverTriesTheGpu() throws Exception {
         File model = modelDir();
         FakeLiteRtGraph cpu = parakeetGraph();
         FakeLiteRtGraph gpu = parakeetGraph(0.25f);

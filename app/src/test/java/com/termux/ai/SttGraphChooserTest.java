@@ -52,8 +52,8 @@ public class SttGraphChooserTest {
     }
 
     @Test
-    public void autoKeepsAGpuThatLoadsAndIsSaneAndRemembersIt() throws Exception {
-        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+    public void aGpuAskKeepsAGpuThatLoadsAndIsSaneAndRemembersIt() throws Exception {
+        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
         assertSame(gpuGraph, opened.graph);
         assertEquals("gpu", opened.accelerator);
         assertEquals("", opened.fallbackReason);
@@ -64,9 +64,9 @@ public class SttGraphChooserTest {
     }
 
     @Test
-    public void autoFallsBackToCpuWhenTheGpuLoadThrowsAndRecordsIt() throws Exception {
+    public void aGpuAskFallsBackToCpuWhenTheGpuLoadThrowsAndRecordsIt() throws Exception {
         gpuLoadThrows = new IllegalStateException("no OpenCL");
-        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
         assertSame(cpuGraph, opened.graph);
         assertEquals("cpu", opened.accelerator);
         assertTrue(opened.fallbackReason, opened.fallbackReason.contains("no OpenCL"));
@@ -78,8 +78,8 @@ public class SttGraphChooserTest {
     }
 
     @Test
-    public void autoFallsBackToCpuWhenTheGpuOutputIsNotSaneAndClosesTheGpuGraph() throws Exception {
-        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(false));
+    public void aGpuAskFallsBackToCpuWhenTheGpuOutputIsNotSaneAndClosesTheGpuGraph() throws Exception {
+        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(false));
         assertSame(cpuGraph, opened.graph);
         assertEquals(1, gpuGraph.closes);
         assertEquals(Arrays.asList("gpu+verify", "cpu"), prepared);
@@ -87,14 +87,29 @@ public class SttGraphChooserTest {
     }
 
     @Test
-    public void autoGoesStraightToCpuOnARememberedGpuFailure() throws Exception {
+    public void autoLoadsTheCpuAndNeverInvokesTheGpuLoaderOrMemory() throws Exception {
+        SttGraphChooser.Memory untouchable = new SttGraphChooser.Memory() {
+            @Nullable @Override public String gpuFailure() { throw new AssertionError("memory read"); }
+            @Override public int beginGpuAttempt() { throw new AssertionError("memory attempt"); }
+            @Override public void endGpuAttempt() { throw new AssertionError("memory end"); }
+            @Override public void recordGpu(boolean worked, @NonNull String reason) { throw new AssertionError("memory record"); }
+        };
+        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, untouchable, prepare(true));
+        assertSame(cpuGraph, opened.graph);
+        assertEquals("cpu", opened.accelerator);
+        assertEquals("", opened.fallbackReason);
+        assertEquals(0, gpuGraph.loads);
+        assertEquals(Arrays.asList("cpu"), prepared);
+    }
+
+    @Test
+    public void autoIgnoresARememberedGpuFailureAndStaysOnCpu() throws Exception {
         memory.failure = "no OpenCL";
         SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
         assertSame(cpuGraph, opened.graph);
         assertEquals(0, gpuGraph.loads);
         assertEquals(0, memory.begun);
         assertTrue(memory.records.isEmpty());
-        assertTrue(opened.fallbackReason, opened.fallbackReason.contains("no OpenCL"));
     }
 
     @Test
@@ -110,7 +125,7 @@ public class SttGraphChooserTest {
     public void aCancelledGpuLoadIsRethrownAndNotRecorded() throws Exception {
         gpuLoadThrows = new CancellationException("Model load cancelled.");
         try {
-            chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+            chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
             fail("a cancelled load must not fall back");
         } catch (CancellationException expected) {
             // The transcription was abandoned; the GPU was not judged.
@@ -125,7 +140,7 @@ public class SttGraphChooserTest {
         gpuLoadThrows = new IllegalStateException("native load aborted");
         Thread.currentThread().interrupt();
         try {
-            chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+            chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
             fail("an interrupted load must not fall back");
         } catch (IllegalStateException expected) {
             assertEquals("native load aborted", expected.getMessage());
@@ -136,11 +151,11 @@ public class SttGraphChooserTest {
     @Test
     public void oneUnfinishedAttemptIsRetriedAndTheSecondInARowIsACrash() throws Exception {
         memory.unfinished = 1;
-        assertSame(gpuGraph, chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true)).graph);
+        assertSame(gpuGraph, chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true)).graph);
 
         memory.records.clear();
         memory.unfinished = SttGraphChooser.MAX_UNFINISHED_GPU_ATTEMPTS;
-        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+        SttGraphChooser.Opened opened = chooser().open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
         assertSame(cpuGraph, opened.graph);
         assertEquals(1, gpuGraph.loads);
         assertEquals(0, memory.unfinished);
@@ -169,7 +184,7 @@ public class SttGraphChooserTest {
             throw gpuLoadThrows;
         });
         try {
-            chooser.open(MODEL, 4, SttAccelerator.AUTO, memory, prepare(true));
+            chooser.open(MODEL, 4, SttAccelerator.GPU, memory, prepare(true));
             fail();
         } catch (IllegalStateException expected) {
             assertEquals("bad file", expected.getMessage());
