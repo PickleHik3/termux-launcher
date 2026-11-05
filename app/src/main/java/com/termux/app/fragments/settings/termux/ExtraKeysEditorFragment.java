@@ -156,6 +156,7 @@ public class ExtraKeysEditorFragment extends Fragment
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         content.addView(addRowButton(context));
+        content.addView(guideView(context));
 
         saveBar = saveBar(context);
         column.addView(saveBar);
@@ -449,6 +450,17 @@ public class ExtraKeysEditorFragment extends Fragment
         countParams.setMarginStart(dp(8));
         line.addView(countLabel, countParams);
         return line;
+    }
+
+    private View guideView(@NonNull Context context) {
+        TextView guide = new TextView(context);
+        guide.setText(getString(R.string.settings_extra_keys_guide_title) + "\n"
+            + getString(R.string.settings_extra_keys_guide_body));
+        guide.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
+        guide.setTextColor(colorSubtle);
+        guide.setLineSpacing(dp(4), 1f);
+        guide.setPadding(dp(4), dp(24), dp(4), dp(8));
+        return guide;
     }
 
     private View addRowButton(@NonNull Context context) {
