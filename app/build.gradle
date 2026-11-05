@@ -1,6 +1,8 @@
 plugins {
     id "com.android.application"
 }
+apply plugin: "io.github.takahirom.roborazzi"
+
 
 ext {
     // The packageVariant defines the bootstrap variant that will be included in the app APK.
@@ -239,6 +241,10 @@ dependencies {
     implementation "com.jakewharton:process-phoenix:3.0.0"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.robolectric:robolectric:4.13"
+    testImplementation "io.github.takahirom.roborazzi:roborazzi:1.43.0"
+    // Compile-only: Java overload resolution of RoborazziKt.captureRoboImage loads the Compose
+    // SemanticsNodeInteraction overload's type. Nothing of Compose runs.
+    testCompileOnly "androidx.compose.ui:ui-test:1.7.8"
     testImplementation "org.json:json:20240303"
     testImplementation "androidx.test:core:1.6.1"
     androidTestImplementation "androidx.test:runner:1.6.2"
