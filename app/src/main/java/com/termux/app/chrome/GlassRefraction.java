@@ -60,7 +60,9 @@ import java.util.Arrays;
  * one is handed in, so the face is nearly the backdrop itself and the edge carries the glass. Dim
  * ({@code uDim}) tones the face after that: a bright backdrop is darkened toward black, up to 35%
  * over white, so white content stays legible, and a dark one is lifted a touch toward white, 6%
- * over black; the rim's gathered light comes after the tone and is not toned. Size lens
+ * over black; the rim's gathered light comes after the tone and is not toned. The tone is a wallpaper's, so it
+ * runs only where a frame is the content ({@link Program#setInput}), never under a {@code RenderEffect},
+ * whose content is the view's own icons and text. Size lens
  * ({@code uSizeLens}) scales the band and the bend by the surface's short side against 72 dp, from
  * three quarters to one and a half times, so a larger surface reads thicker; the half-short-side
  * cap still holds over the scaled band.</p>
@@ -2252,6 +2254,13 @@ public final class GlassRefraction {
         private boolean mSharpBound;
         private float mClarityWritten = Float.NaN;
         private float mFaceClarityWritten = Float.NaN;
+        private float mDimWritten = Float.NaN;
+        /**
+         * Whether {@link #setInput} bound a wallpaper frame as the content: false under a
+         * {@code RenderEffect}, where the content is the view's own pixels (icons, text) and the
+         * face tone must not touch them.
+         */
+        private boolean mInputBound;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
         private float mLagX = Float.NaN, mLagY;
@@ -2475,6 +2484,7 @@ public final class GlassRefraction {
                 ((BitmapShader) content).setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
             }
             mShader.setInputShader("content", content);
+            mInputBound = true;
             // The clearer picture is the frost itself until a caller hands one in, so the mix
             // reads back what it was given; the clarity term is then free to be written.
             mShader.setInputShader("sharp", content);
@@ -2535,6 +2545,13 @@ public final class GlassRefraction {
             if (face != mFaceClarityWritten) {
                 mFaceClarityWritten = face;
                 mShader.setFloatUniform("uFaceClarity", face);
+            }
+            // The face tone is a wallpaper's: only where a frame is the content, never under a
+            // RenderEffect, whose content is the view's own icons and text.
+            float dim = look != null && mInputBound ? look.dim() : 0f;
+            if (dim != mDimWritten) {
+                mDimWritten = dim;
+                mShader.setFloatUniform("uDim", dim);
             }
             float live = mSharpBound && mSharpDistinct ? LIVE_CLARITY : 0f;
             if (live != mLiveClarityWritten) {
@@ -2600,7 +2617,6 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uStrength", look.strengthPx(mDensity));
             mShader.setFloatUniform("uDisp", look.dispersion());
             mShader.setFloatUniform("uEdgeGain", look.edgeGain());
-            mShader.setFloatUniform("uDim", look.dim());
             mShader.setFloatUniform("uSizeLens", look.sizeLens());
             syncClarity();
         }
