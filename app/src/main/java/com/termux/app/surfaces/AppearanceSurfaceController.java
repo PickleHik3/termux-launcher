@@ -123,6 +123,23 @@ public final class AppearanceSurfaceController {
          * while the surface waits for the new colours. Nothing by default.
          */
         default void holdBusy(boolean held) {}
+
+        /** The side the page shows (its Photo | Live tab, by name), for a relaunch; null for none. */
+        @Nullable
+        default String shownSide() {
+            return null;
+        }
+
+        /** How far the shown side is scrolled, px, for a relaunch. 0 by default. */
+        default int sideScrollY() {
+            return 0;
+        }
+
+        /**
+         * Shows {@code side} (a name {@link #shownSide} gave) scrolled to {@code scrollY} once it
+         * is laid out: a relaunch's page as the last one stood. Nothing by default.
+         */
+        default void restoreSide(@NonNull String side, int scrollY) {}
     }
 
     /** What the picker asks of the surface. */
@@ -367,6 +384,8 @@ public final class AppearanceSurfaceController {
      * takes it over or {@link #releasePrepared} lets it go.
      */
     private boolean mPrepared;
+    /** A relaunch's picker side and scroll, for the picker {@link #reopen} builds; else null. */
+    @Nullable private AppearanceReturnState mCarriedSide;
     /**
      * The picker's Done is applying, or holding for the colours: its destination is the card
      * under it, which a relaunch now carries ({@link #carry}).
@@ -537,6 +556,7 @@ public final class AppearanceSurfaceController {
         mLeaveRemembered = false;
         mPickerIsDoor = false;
         mInPlace = false;
+        mCarriedSide = null;
         resetHold();
         mEditor.setOnDone(this::onEditorDone);
         mEditor.setPageListener(new PageListener() {
@@ -670,9 +690,12 @@ public final class AppearanceSurfaceController {
         AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(
             mWallpaperShown && !mReturningToCard);
         out.card(mEditor.shownCard());
+        out.pickerIsDoor(mPickerIsDoor);
         OverviewPage overview = mOverview;
-        if (overview != null)
+        if (overview != null) {
             out.wallpaperSlot(overview.centredSlotName());
+            out.wallpaperSide(overview.shownSide(), overview.sideScrollY());
+        }
         return out.build(mHost.now());
     }
 
@@ -699,9 +722,13 @@ public final class AppearanceSurfaceController {
         beginOpen(content);
         mInPlace = true;
         mOnReopened = onShown;
+        // A door's picker stays the door: its Done still closes the editor with it.
+        mPickerIsDoor = carried.where.pickerIsDoor;
         mEditor.adoptSessionNext(carried.editor);
-        if (carried.where.wallpaper)
+        if (carried.where.wallpaper) {
+            mCarriedSide = carried.where;
             buildOverview();
+        }
         presentEditor(carried.where.editorCard(), null,
             carried.where.wallpaper, REOPEN_ATTEMPTS);
         return true;
@@ -762,6 +789,11 @@ public final class AppearanceSurfaceController {
             mOverview = built;
             built.root().setVisibility(View.INVISIBLE);
             addPage(built.root());
+            // A relaunch's picker shows the side it stood on, before it says when it can draw.
+            AppearanceReturnState side = mCarriedSide;
+            mCarriedSide = null;
+            if (side != null && side.wallpaperSide != null)
+                built.restoreSide(side.wallpaperSide, side.wallpaperScrollY);
             built.whenReady(() -> {
                 if (!live(token) || mOverview != built)
                     return;
@@ -790,12 +822,16 @@ public final class AppearanceSurfaceController {
         if (!mWallpaperShown || overview == null)
             return;
         mWallpaperShown = false;
-        setTakesTouches(false);
+        // The page falls over the card sheet and uncovers it as it goes: the host stays drawn
+        // above the sheet until the page is down (dropped to the sheet's Z now, the sheet would
+        // stand over the falling page from its first frame), letting every touch through.
+        letTouchesThrough();
         // Put down mid-entry, it uncovers the card sheet as it goes.
         mEditor.setChromeVeiled(false);
         final View page = overview.root();
         rise(page, false, () -> {
             if (!mWallpaperShown) {
+                setTakesTouches(false);
                 page.setVisibility(View.INVISIBLE);
                 overview.onHidden();
             }
@@ -1080,6 +1116,8 @@ public final class AppearanceSurfaceController {
         FrameLayout view = mView;
         if (view == null)
             return;
+        if (view instanceof SurfaceHostView)
+            ((SurfaceHostView) view).mPassThrough = false;
         view.setClickable(takes);
         view.setFocusable(takes);
         if (takes)
@@ -1087,6 +1125,20 @@ public final class AppearanceSurfaceController {
         // Draw order goes by Z before child order: the card sheet and the editor bar have
         // elevation, so bringToFront alone leaves them over the picker and its Choose photo.
         view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
+    }
+
+    /**
+     * The host keeps its Z over the card sheet and the bar but takes no touch: each goes to what
+     * lies under it, the picker on its way down answering none.
+     */
+    private void letTouchesThrough() {
+        FrameLayout view = mView;
+        if (view == null)
+            return;
+        view.setClickable(false);
+        view.setFocusable(false);
+        if (view instanceof SurfaceHostView)
+            ((SurfaceHostView) view).mPassThrough = true;
     }
 
     /** The highest Z among the host's siblings (the editor's sheet and bar). */
@@ -1203,6 +1255,7 @@ public final class AppearanceSurfaceController {
         mOverviewReady = false;
         mOverviewWaiter = null;
         mShowWhenBuilt = false;
+        mCarriedSide = null;
         for (Animator a : new ArrayList<>(mRunning))
             a.cancel();
         mRunning.clear();
@@ -1276,6 +1329,8 @@ public final class AppearanceSurfaceController {
      */
     private static final class SurfaceHostView extends FrameLayout {
         boolean mLeaving;
+        /** The picker is falling over the editor: touches pass to what lies under the host. */
+        boolean mPassThrough;
 
         SurfaceHostView(@NonNull Context context) {
             super(context);
@@ -1283,13 +1338,16 @@ public final class AppearanceSurfaceController {
 
         @Override
         public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
-            return mLeaving || super.onInterceptTouchEvent(event);
+            return mLeaving || mPassThrough || super.onInterceptTouchEvent(event);
         }
 
         @Override
         @SuppressWarnings("ClickableViewAccessibility")
         public boolean onTouchEvent(android.view.MotionEvent event) {
-            return mLeaving || super.onTouchEvent(event);
+            if (mLeaving)
+                return true;
+            // Unanswered, the down goes on to the views under the host.
+            return !mPassThrough && super.onTouchEvent(event);
         }
     }
 

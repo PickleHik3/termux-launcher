@@ -23925,6 +23925,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else open.run();
     }
 
+    /** The wallpaper picker's sides, as a relaunch carries them. */
+    private static final String WALLPAPER_SIDE_PHOTO = "PHOTO";
+    private static final String WALLPAPER_SIDE_LIVE = "LIVE";
+
     /**
      * A menu's Wallpaper row was tapped: the picker starts loading while the menu slides away,
      * so the door that follows opens the editor without a wait.
@@ -24018,6 +24022,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void whenReady(@NonNull Runnable ready) {
                         if (liveHost.showingLive()) ready.run();
                         else picker.whenReady(ready);
+                    }
+                    // Photo | Live and the scenes' scroll, carried over a recolour relaunch.
+                    @Nullable @Override public String shownSide() {
+                        return liveHost.showingLive() ? WALLPAPER_SIDE_LIVE : WALLPAPER_SIDE_PHOTO;
+                    }
+                    @Override public int sideScrollY() { return liveHost.gridScrollY(); }
+                    @Override public void restoreSide(@NonNull String side, int scrollY) {
+                        liveHost.restoreSide(WALLPAPER_SIDE_LIVE.equals(side), scrollY);
                     }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {

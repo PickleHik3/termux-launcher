@@ -76,6 +76,26 @@ public final class LiveScenePickerPage {
         if (mScroll.getScrollY() != y) mScroll.scrollTo(0, y);
     }
 
+    /**
+     * {@link #restoreScrollY} once the grid has its size: a relaunch's grid is not laid out yet,
+     * and a scroll before then is clamped to nothing. Applied in the layout pass that sizes it,
+     * so the first frame drawn stands there.
+     */
+    void restoreScrollYWhenLaidOut(int y) {
+        if (mScroll.isLaidOut() && !mScroll.isLayoutRequested()) {
+            restoreScrollY(y);
+            return;
+        }
+        mScroll.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int l, int t, int r, int b,
+                                       int ol, int ot, int or, int ob) {
+                v.removeOnLayoutChangeListener(this);
+                restoreScrollY(y);
+            }
+        });
+    }
+
     /** Shows {@code stored}: the scene in use wears its own knobs and the chip, the rest their defaults. */
     public void bind(@NonNull LiveWallpaperChoice stored) {
         for (int i = 0; i < LiveWallpaperChoice.USER_KINDS.length; i++) {

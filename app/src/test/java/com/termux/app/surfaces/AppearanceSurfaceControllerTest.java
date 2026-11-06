@@ -284,6 +284,72 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void aRelaunchKeepsTheDoorTheSideAndTheScroll() {
+        surface.resumeWallpaper();
+        settle();
+        host.page.side = "LIVE";
+        host.page.scrollY = 420;
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.where.pickerIsDoor);
+        assertEquals("LIVE", carried.where.wallpaperSide);
+        assertEquals(420, carried.where.wallpaperScrollY);
+        surface.onHostDestroyed();
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        assertTrue(next.reopen(carried, null));
+        ShadowLooper.runUiThreadTasks();
+        assertTrue(next.isWallpaperShown());
+        assertEquals("the side it stood on", "LIVE", host.page.restoredSide);
+        assertEquals("scrolled where it was", 420, host.page.restoredScrollY);
+
+        host.navigator.done();
+        assertFalse("the door's Done still closes the editor with the picker", next.isOpen());
+        assertEquals(1, editor.saves);
+    }
+
+    @Test
+    public void aPickerRaisedFromTheCardIsNoDoorAfterARelaunch() {
+        openPicker();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertFalse(carried.where.pickerIsDoor);
+        surface.onHostDestroyed();
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        assertTrue(next.reopen(carried, null));
+        settle();
+        host.navigator.done();
+        settle();
+        assertTrue("Done puts the picker down over the card", next.isOpen());
+        assertFalse(next.isWallpaperShown());
+        assertEquals(0, editor.saves);
+    }
+
+    @Test
+    public void thePickerFallsOverTheCardSheetAndLetsItsTouchesThrough() {
+        ViewGroup content = activity.findViewById(android.R.id.content);
+        View sheet = new View(activity);
+        sheet.setElevation(12f);
+        content.addView(sheet);
+        openPicker();
+        View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
+        assertNotNull(hostView);
+        assertTrue(hostView.getZ() > sheet.getZ());
+
+        surface.onBack();
+        assertFalse(hostView.isClickable());
+        assertTrue("drawn over the sheet while it falls", hostView.getZ() > sheet.getZ());
+        assertFalse("a touch goes on to the sheet", hostView.dispatchTouchEvent(
+            android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0)));
+
+        settle();
+        assertEquals("down, it rests at the sheet's level", 0f, hostView.getTranslationZ(), 0f);
+    }
+
+    @Test
     public void aReopenThatClosesStillLetsTheWindowDraw() {
         surface.open(EditorCard.DOCK, null);
         settle();
@@ -749,6 +815,24 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void holdBusy(boolean held) {
             this.held = held;
+        }
+
+        @Nullable String side;
+        int scrollY;
+        @Nullable String restoredSide;
+        int restoredScrollY;
+
+        @Nullable @Override public String shownSide() {
+            return side;
+        }
+
+        @Override public int sideScrollY() {
+            return scrollY;
+        }
+
+        @Override public void restoreSide(@NonNull String side, int scrollY) {
+            restoredSide = side;
+            restoredScrollY = scrollY;
         }
     }
 

@@ -133,6 +133,27 @@ public class WallpaperLiveHostTest {
     }
 
     @Test
+    public void aRelaunchShowsTheSideItCarried_atTheScrollItCarried() {
+        WallpaperLiveHost host = open(true);
+        assertEquals(0, host.gridScrollY());
+        host.restoreSide(true, 300);
+        assertTrue(host.showingLive());
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        android.widget.ScrollView scroll = host.grid().root().findViewById(R.id.live_picker_scroll);
+        int most = Math.max(0, scroll.getChildAt(0).getHeight() - scroll.getHeight());
+        assertEquals("put back once laid out", Math.min(300, most), scroll.getScrollY());
+        assertEquals(scroll.getScrollY(), host.gridScrollY());
+
+        // A scene's page over the grid: the scroll it opened from is the one carried.
+        tap(host.grid().tile(1));
+        scroll.scrollTo(0, 0);
+        assertEquals(Math.min(300, most), host.gridScrollY());
+
+        host.restoreSide(false, 0);
+        assertFalse(host.showingLive());
+    }
+
+    @Test
     public void backFromASceneGoesToTheGrid_thenIsNotSpent() {
         WallpaperLiveHost host = open(true);
         assertFalse(host.consumeBack());

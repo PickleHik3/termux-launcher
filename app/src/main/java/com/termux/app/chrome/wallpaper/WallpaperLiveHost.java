@@ -177,6 +177,29 @@ public final class WallpaperLiveHost {
         return mKind == LiveSceneLogic.Kind.LIVE;
     }
 
+    /**
+     * How far the scenes are scrolled, px: where the grid stands, or stood when the scene's page
+     * now open over it opened. A relaunch carries it ({@link #restoreSide}).
+     */
+    public int gridScrollY() {
+        if (mGrid == null) return 0;
+        return mDetailShown ? mGridScrollY : mGrid.scrollY();
+    }
+
+    /**
+     * The side a relaunch carried: Live ({@code live}) with the scenes scrolled to
+     * {@code gridScrollY} once laid out, or Photo. Where Live is not offered, nothing.
+     */
+    public void restoreSide(boolean live, int gridScrollY) {
+        if (mReleased || !mSupported) return;
+        LiveSceneLogic.Kind kind = live ? LiveSceneLogic.Kind.LIVE : LiveSceneLogic.Kind.PHOTO;
+        if (kind != mKind) showKind(kind);
+        if (live && mGrid != null) {
+            mGridScrollY = gridScrollY;
+            mGrid.restoreScrollYWhenLaidOut(gridScrollY);
+        }
+    }
+
     private void showKind(@NonNull LiveSceneLogic.Kind kind) {
         mSwap.cancel();
         mKind = kind;
