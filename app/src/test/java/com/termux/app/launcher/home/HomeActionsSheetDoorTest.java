@@ -103,11 +103,54 @@ public class HomeActionsSheetDoorTest {
         assertTrue(told.toString(), told.isEmpty());
     }
 
+    @Test
+    public void onlyTheWallpaperDoorsPrepareThePicker() {
+        assertTrue(HomeActionsSheetPolicy.preparesWallpaper(HomeActionsSheetPolicy.Item.WALLPAPER));
+        assertFalse(HomeActionsSheetPolicy.preparesWallpaper(HomeActionsSheetPolicy.Item.APPEARANCE));
+        assertFalse(HomeActionsSheetPolicy.preparesWallpaper(HomeActionsSheetPolicy.Item.ADD_WIDGET));
+        assertTrue(TerminalActionsSheet.Action.SET_WALLPAPER.preparesWallpaper());
+        assertFalse(TerminalActionsSheet.Action.APPEARANCE.preparesWallpaper());
+    }
+
+    @Test
+    public void theWallpaperRowIsArmedAtTheTapAndTheSheetIsGoneOnlyAfterItsDoor() {
+        HomeActionsSheet sheet = openSheet();
+        View row = sheet.rowFor(HomeActionsSheetPolicy.Item.WALLPAPER);
+        assertNotNull(row);
+        row.performClick();
+        assertEquals("armed in the tap, while the card slides",
+            Arrays.asList("armed WALLPAPER"), steps);
+
+        idle(2000);
+        assertEquals(Arrays.asList("armed WALLPAPER", "door WALLPAPER", "gone"), steps);
+    }
+
+    @Test
+    public void aSheetPutAwayWithoutItsSlideIsGoneWithNoDoor() {
+        HomeActionsSheet sheet = openSheet();
+        View row = sheet.rowFor(HomeActionsSheetPolicy.Item.WALLPAPER);
+        assertNotNull(row);
+        row.performClick();
+        sheet.closeImmediately();
+        assertEquals(Arrays.asList("armed WALLPAPER", "gone"), steps);
+    }
+
+    private final List<String> steps = new ArrayList<>();
+
     @NonNull
     private HomeActionsSheet openSheet() {
         HomeActionsSheet sheet = new HomeActionsSheet(themed, new HomeActionsSheet.Listener() {
             @Override public void onHomeAction(@NonNull HomeActionsSheetPolicy.Item item) {
                 told.add(item);
+                steps.add("door " + item);
+            }
+
+            @Override public void onActionArmed(@NonNull HomeActionsSheetPolicy.Item item) {
+                steps.add("armed " + item);
+            }
+
+            @Override public void onSheetGone() {
+                steps.add("gone");
             }
         });
         content.addView(sheet, new FrameLayout.LayoutParams(
@@ -115,6 +158,7 @@ public class HomeActionsSheetDoorTest {
         sheet.open(locked -> HomeActionsSheetPolicy.itemsFor(false, true, true, 2, locked), false);
         idle(2000);
         assertTrue(sheet.isOpen());
+        steps.clear();
         return sheet;
     }
 

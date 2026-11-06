@@ -136,6 +136,82 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void aPickerPreparedWhileTheMenuSlidesIsTakenOverAndTheEntryStartsAtOnce() {
+        surface.prepareWallpaper();
+        assertFalse("nothing opens while the menu slides", surface.isOpen());
+        assertTrue(surface.isPrepared());
+        assertEquals(1, editor.wallpaperPrepares);
+        assertEquals(java.util.Arrays.asList("build"), host.events);
+        assertNotNull("held unseen under the host",
+            activity.findViewById(com.termux.R.id.appearance_surface_host));
+
+        surface.resumeWallpaper();
+        assertTrue("ready first, the entry starts in the door's own call", editor.presented);
+        assertEquals("one build, reused", java.util.Arrays.asList("build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+        assertTrue(editor.veiledAtPresent);
+        assertFalse(surface.isPrepared());
+        assertFalse(host.page.released);
+        assertEquals(0, editor.wallpaperDrops);
+    }
+
+    @Test
+    public void aDoorBeforeThePreparedPickerIsReadyWaitsForIt() {
+        host.page.deferReady = true;
+        surface.prepareWallpaper();
+        surface.resumeWallpaper();
+        ShadowLooper.runUiThreadTasks();
+        assertFalse(editor.presented);
+
+        host.page.becomeReady();
+        ShadowLooper.runUiThreadTasks();
+        assertTrue(editor.presented);
+        assertEquals(java.util.Arrays.asList("build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void aPreparedPickerNoDoorTookIsLetGo() {
+        surface.prepareWallpaper();
+        surface.releasePrepared();
+        assertFalse(surface.isPrepared());
+        assertTrue(host.page.released);
+        assertEquals(1, editor.wallpaperDrops);
+        assertNull(activity.findViewById(com.termux.R.id.appearance_surface_host));
+        assertFalse(surface.isOpen());
+
+        // The next door builds its own.
+        host.page.released = false;
+        surface.resumeWallpaper();
+        settle();
+        assertEquals(java.util.Arrays.asList("build", "build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void anotherDoorLetsAPreparedPickerGo() {
+        surface.prepareWallpaper();
+        surface.open(EditorCard.DOCK, null);
+        settle();
+        assertTrue(host.page.released);
+        assertTrue(editor.presented);
+        assertNull(surface.overview());
+        // The door's menu closing afterwards finds nothing left to let go.
+        surface.releasePrepared();
+        assertTrue(surface.isOpen());
+    }
+
+    @Test
+    public void aPreparedBuildAnsweringAfterItWasLetGoIsReleased() {
+        host.deferBuild = true;
+        surface.prepareWallpaper();
+        surface.releasePrepared();
+        host.finishBuild();
+        assertTrue(host.page.released);
+        assertNull(surface.overview());
+    }
+
+    @Test
     public void aPickerThatCannotDrawInTimeOpensTheEditorWithItsCardSheet() {
         host.page.deferReady = true;
         surface.resumeWallpaper();
@@ -488,6 +564,17 @@ public class AppearanceSurfaceControllerTest {
             sessions++;
         }
 
+        int wallpaperPrepares;
+        int wallpaperDrops;
+
+        @Override public void prepareWallpaper() {
+            wallpaperPrepares++;
+        }
+
+        @Override public void dropPreparedWallpaper() {
+            wallpaperDrops++;
+        }
+
         @Override public void awaitWallpaper(@NonNull Runnable ready) {
             ready.run();
         }
@@ -692,7 +779,22 @@ public class AppearanceSurfaceControllerTest {
                                              @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
             this.navigator = navigator;
             events.add("build");
+            if (deferBuild) {
+                built = ready;
+                return;
+            }
             ready.accept(page);
+        }
+
+        /** The build answers only when {@link #finishBuild} runs. */
+        boolean deferBuild;
+        @Nullable Consumer<AppearanceSurfaceController.OverviewPage> built;
+
+        void finishBuild() {
+            Consumer<AppearanceSurfaceController.OverviewPage> ready = built;
+            built = null;
+            if (ready != null)
+                ready.accept(page);
         }
 
         @Nullable @Override public String readReturnState() {

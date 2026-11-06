@@ -247,6 +247,15 @@ public final class AppearanceSurfaceController {
          * {@link #present}; the editor's exit clears it. Nothing by default.
          */
         default void setChromeVeiled(boolean veiled) {}
+
+        /**
+         * Starts reading the editor's wallpaper ahead of {@link #beginSession}, which takes the
+         * read over (a Wallpaper door's tap, while its menu slides away). Nothing by default.
+         */
+        default void prepareWallpaper() {}
+
+        /** Lets go of a {@link #prepareWallpaper} read no session took. Nothing by default. */
+        default void dropPreparedWallpaper() {}
     }
 
     /** An editor's session, opaque to the surface; only the editor that made it reads it. */
@@ -353,6 +362,12 @@ public final class AppearanceSurfaceController {
     /** The surface was opened onto the picker ({@link #resumeWallpaper}): its Done closes. */
     private boolean mPickerIsDoor;
     /**
+     * A Wallpaper door's picker is being built ahead of the door, the surface still closed
+     * ({@link #prepareWallpaper}): the host view holds it unseen until {@link #resumeWallpaper}
+     * takes it over or {@link #releasePrepared} lets it go.
+     */
+    private boolean mPrepared;
+    /**
      * The picker's Done is applying, or holding for the colours: its destination is the card
      * under it, which a relaunch now carries ({@link #carry}).
      */
@@ -436,9 +451,13 @@ public final class AppearanceSurfaceController {
             return;
         }
         ViewGroup content = mHost.content();
-        if (content == null)
+        if (content == null) {
+            releasePrepared();
             return;
-        beginOpen(content);
+        }
+        // A picker prepared while the door's menu slid away is taken over as it stands: ready,
+        // the entry starts at once.
+        beginOpen(content, true);
         mPickerIsDoor = true;
         // Built while the editor waits for its wallpaper and its frame, so the sheet rises with
         // the entry rather than being inflated in the middle of it.
@@ -446,15 +465,77 @@ public final class AppearanceSurfaceController {
         presentEditor(EditorCard.APPEARANCE, null, true, 1);
     }
 
-    /** Marks the surface open, begins the session, and adds the host view and the scrim. */
-    private void beginOpen(@NonNull ViewGroup content) {
-        mOpen = true;
+    /**
+     * A Wallpaper door was tapped and its menu is sliding away: the picker (and the editor's
+     * wallpaper) start loading now, unseen, so the door's {@link #resumeWallpaper} finds them
+     * ready. What no door takes, {@link #releasePrepared} lets go. Open already, nothing.
+     */
+    public void prepareWallpaper() {
+        if (mOpen || mPrepared)
+            return;
+        ViewGroup content = mHost.content();
+        if (content == null)
+            return;
+        mPrepared = true;
         mToken++;
-        mLeaveRemembered = false;
-        mPickerIsDoor = false;
         mOverviewReady = false;
         mOverviewWaiter = null;
         mShowWhenBuilt = false;
+        hostView(content);
+        mEditor.prepareWallpaper();
+        buildOverview();
+    }
+
+    /** Lets go of a {@link #prepareWallpaper} no door took (its menu closed another way). */
+    public void releasePrepared() {
+        if (!mPrepared)
+            return;
+        mPrepared = false;
+        mToken++;
+        mOverviewLoading = false;
+        mOverviewReady = false;
+        mOverviewWaiter = null;
+        mShowWhenBuilt = false;
+        mEditor.dropPreparedWallpaper();
+        OverviewPage overview = mOverview;
+        mOverview = null;
+        if (overview != null)
+            overview.release();
+        FrameLayout view = mView;
+        mView = null;
+        if (view != null && view.getParent() instanceof ViewGroup)
+            ((ViewGroup) view.getParent()).removeView(view);
+    }
+
+    @VisibleForTesting
+    boolean isPrepared() {
+        return mPrepared;
+    }
+
+    /** {@link #beginOpen(ViewGroup, boolean)}, letting go of anything prepared. */
+    private void beginOpen(@NonNull ViewGroup content) {
+        beginOpen(content, false);
+    }
+
+    /**
+     * Marks the surface open, begins the session, and adds the host view and the scrim;
+     * {@code takePrepared} keeps what {@link #prepareWallpaper} built, else it is let go.
+     */
+    private void beginOpen(@NonNull ViewGroup content, boolean takePrepared) {
+        boolean taken = takePrepared && mPrepared;
+        if (!taken)
+            releasePrepared();
+        mPrepared = false;
+        mOpen = true;
+        if (!taken) {
+            // A prepared picker's build and readiness answer under the token they began with.
+            mToken++;
+            mOverviewReady = false;
+            mOverviewWaiter = null;
+            mShowWhenBuilt = false;
+        }
+        mLeaveRemembered = false;
+        mPickerIsDoor = false;
         mInPlace = false;
         resetHold();
         mEditor.setOnDone(this::onEditorDone);
@@ -673,16 +754,16 @@ public final class AppearanceSurfaceController {
         mOverviewLoading = true;
         final int token = mToken;
         mHost.createOverview(mNavigator, null, built -> {
-            mOverviewLoading = false;
-            if (!mOpen || token != mToken || mView == null) {
+            if (!live(token) || mView == null) {
                 built.release();
                 return;
             }
+            mOverviewLoading = false;
             mOverview = built;
             built.root().setVisibility(View.INVISIBLE);
             addPage(built.root());
             built.whenReady(() -> {
-                if (!mOpen || token != mToken || mOverview != built)
+                if (!live(token) || mOverview != built)
                     return;
                 mOverviewReady = true;
                 Runnable waiter = mOverviewWaiter;
@@ -696,6 +777,11 @@ public final class AppearanceSurfaceController {
                 showWallpaper();
             }
         });
+    }
+
+    /** Whether a callback begun under {@code token} still belongs: the surface open, or prepared. */
+    private boolean live(int token) {
+        return (mOpen || mPrepared) && token == mToken;
     }
 
     /** Puts the picker down; its pending choice stays for Done. */
@@ -911,6 +997,7 @@ public final class AppearanceSurfaceController {
      */
     public void onHostDestroyed() {
         mOnReopened = null;
+        releasePrepared();
         if (!mOpen)
             return;
         mOpen = false;

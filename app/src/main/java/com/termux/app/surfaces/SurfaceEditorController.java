@@ -779,10 +779,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
         mWallpaperSettled = false;
-        if (mHost.editorPaintsWallpaper())
-            loadEditorWallpaper(rootContainer);
-        else
+        if (!mHost.editorPaintsWallpaper()) {
+            mPreparedWallpaper = null;
             mWallpaperSettled = true;
+        } else if (!takePreparedWallpaper(rootContainer)) {
+            loadEditorWallpaper(rootContainer);
+        }
     }
 
     @Override
@@ -2615,7 +2617,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLabelInk;
 
     /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
-    private void loadEditorWallpaper(@NonNull View rootContainer) {
+    private int loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
         View decor = rootContainer.getRootView();
         final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
@@ -2637,26 +2639,102 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 ? sampleLabelPicture(picture, decorWidth, decorHeight)
                 : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
             final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
-            rootContainer.post(() -> {
-                if (!mSession || token != mWallpaperToken)
-                    return;
-                mLabelPicture = sample;
-                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
-                mLabelPictureHeight = sampleHeight;
-                // The bar may not be up yet (the first open after a theme relaunch); present()
-                // applies the ink again once it is.
-                applyLabelInk();
-                if (picture != null) {
-                    mEditorWallpaper = picture;
-                    showEditorWallpaper(picture);
-                } else if (mPageListener != null) {
-                    mPageListener.onFrameWallpaperMissing();
-                }
-                wallpaperSettled();
-            });
+            rootContainer.post(() -> landWallpaper(token, picture, sample, sampleHeight));
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
+        return token;
+    }
+
+    /**
+     * A read of the editor's wallpaper answered: painted into the session, or, read ahead of it
+     * ({@link #prepareWallpaper}), kept for {@link #beginSession}.
+     */
+    private void landWallpaper(int token, @Nullable Drawable picture, @Nullable int[] sample,
+                               int sampleHeight) {
+        if (token != mWallpaperToken)
+            return;
+        if (!mSession) {
+            PreparedWallpaper prepared = mPreparedWallpaper;
+            if (prepared != null && prepared.token == token)
+                prepared.answer(picture, sample, sampleHeight);
+            return;
+        }
+        mLabelPicture = sample;
+        mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+        mLabelPictureHeight = sampleHeight;
+        // The bar may not be up yet (the first open after a theme relaunch); present()
+        // applies the ink again once it is.
+        applyLabelInk();
+        if (picture != null) {
+            mEditorWallpaper = picture;
+            showEditorWallpaper(picture);
+        } else if (mPageListener != null) {
+            mPageListener.onFrameWallpaperMissing();
+        }
+        wallpaperSettled();
+    }
+
+    /** The editor's wallpaper read ahead of the session; null when none is. */
+    @Nullable private PreparedWallpaper mPreparedWallpaper;
+
+    /** A read begun by {@link #prepareWallpaper}, and what it answered once it has. */
+    private static final class PreparedWallpaper {
+        final int token;
+        boolean answered;
+        @Nullable Drawable picture;
+        @Nullable int[] sample;
+        int sampleHeight;
+
+        PreparedWallpaper(int token) {
+            this.token = token;
+        }
+
+        void answer(@Nullable Drawable picture, @Nullable int[] sample, int sampleHeight) {
+            answered = true;
+            this.picture = picture;
+            this.sample = sample;
+            this.sampleHeight = sampleHeight;
+        }
+    }
+
+    /**
+     * A Wallpaper door's tap: the editor's wallpaper starts reading now, while the door's menu
+     * slides away, and the session it opens takes the read over.
+     */
+    @Override
+    public void prepareWallpaper() {
+        if (mSession || mPreparedWallpaper != null || prefs() == null
+            || !mHost.editorPaintsWallpaper())
+            return;
+        View rootContainer = mHost.findView(R.id.terminal_root_container);
+        if (rootContainer == null)
+            return;
+        mPreparedWallpaper = new PreparedWallpaper(loadEditorWallpaper(rootContainer));
+    }
+
+    @Override
+    public void dropPreparedWallpaper() {
+        if (mPreparedWallpaper == null || mSession)
+            return;
+        mPreparedWallpaper = null;
+        mWallpaperToken++;
+    }
+
+    /**
+     * The session takes over a read {@link #prepareWallpaper} began: posted when it has answered,
+     * as a fresh read's answer is, so the surface's scrim is up first. False when there is none.
+     */
+    private boolean takePreparedWallpaper(@NonNull View rootContainer) {
+        PreparedWallpaper prepared = mPreparedWallpaper;
+        mPreparedWallpaper = null;
+        if (prepared == null || prepared.token != mWallpaperToken)
+            return false;
+        if (prepared.answered)
+            rootContainer.post(() -> landWallpaper(prepared.token, prepared.picture,
+                prepared.sample, prepared.sampleHeight));
+        // Not yet answered: the read lands into the session when it does.
+        return true;
     }
 
     /**

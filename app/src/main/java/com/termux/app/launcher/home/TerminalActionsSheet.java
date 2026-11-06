@@ -55,6 +55,15 @@ public final class TerminalActionsSheet {
         public boolean opensEditor() {
             return this == APPEARANCE || this == SET_WALLPAPER;
         }
+
+        /**
+         * Whether tapping the row starts loading the wallpaper picker while the sheet slides
+         * away ({@link HomeActionsSheetPolicy#preparesWallpaper}).
+         */
+        public boolean preparesWallpaper() {
+            EditorDoor door = door();
+            return door != null && door.opensWallpaperPicker();
+        }
     }
 
     private TerminalActionsSheet() {}

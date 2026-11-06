@@ -75,6 +75,22 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
         /** The sheet has settled away, by a row, the dim, a swipe down or Back. */
         default void onSheetClosed() { }
+
+        /**
+         * Home's row {@code item} was tapped and the sheet starts sliding away: what its action
+         * needs can start loading now ({@link HomeActionsSheetPolicy#preparesWallpaper}). The
+         * action itself follows in {@link #onHomeAction}.
+         */
+        default void onActionArmed(@NonNull Item item) { }
+
+        /** {@link #onActionArmed} for a row a caller other than Home filled the sheet with. */
+        default void onRowArmed(@NonNull ActionSheetRow row) { }
+
+        /**
+         * The sheet has gone and the tapped row's action, if any, has run: whatever an armed row
+         * started loading and no action took is let go now.
+         */
+        default void onSheetGone() { }
     }
 
     /** The card's top corners: the M3 extra-large corner. */
@@ -321,6 +337,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             dropAfterHidden();
             action.run();
         }
+        listener.onSheetGone();
     }
 
     /**
@@ -424,6 +441,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
                 close();
                 return;
             }
+            listener.onRowArmed(item);
             closeThen(item.afterClose, () -> picked.accept(item));
         });
         return row;
@@ -460,6 +478,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     private void select(@NonNull Item item) {
         if (!open) return;
+        listener.onActionArmed(item);
         closeThen(HomeActionsSheetPolicy.opensEditor(item), () -> listener.onHomeAction(item));
     }
 

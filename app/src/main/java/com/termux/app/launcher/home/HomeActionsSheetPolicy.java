@@ -150,4 +150,13 @@ public final class HomeActionsSheetPolicy {
     public static boolean runsOnceHidden(boolean waits, boolean settledHidden) {
         return waits && !settledHidden;
     }
+
+    /**
+     * Whether tapping {@code item} starts loading the wallpaper picker while the sheet slides
+     * away: the Wallpaper door, so the editor's entry follows the slide without a wait. What the
+     * door does not take is let go once the sheet has gone.
+     */
+    public static boolean preparesWallpaper(@NonNull Item item) {
+        return item == Item.WALLPAPER;
+    }
 }
