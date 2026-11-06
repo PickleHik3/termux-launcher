@@ -141,6 +141,24 @@ public final class CameraHoleGeometry {
         return Split.COVERED;
     }
 
+    /** How far a traced path may stand past its bounding rect, in px: the path's round-out. */
+    public static final int TRACE_SLACK_PX = 1;
+
+    /**
+     * Whether the cutout path's traced bounds {@code [traceLeft, traceRight)} can stand for the
+     * camera inside Android's bounding rect {@code [rectLeft, rectRight)}: they must lie inside
+     * it (within {@link #TRACE_SLACK_PX}) and fill at least half its width. Android builds the
+     * rect from the same path, so a trace beside it or a sliver of it is in another space than
+     * the window's, and the rect is the answer.
+     */
+    public static boolean pathTraceFits(int rectLeft, int rectRight, int traceLeft,
+                                        int traceRight) {
+        if (rectRight <= rectLeft || traceRight <= traceLeft) return false;
+        if (traceLeft < rectLeft - TRACE_SLACK_PX || traceRight > rectRight + TRACE_SLACK_PX)
+            return false;
+        return 2 * (traceRight - traceLeft) >= rectRight - rectLeft;
+    }
+
     /** {@link #barCardMargins}'s slots in its {@code out} array. */
     public static final int MAIN_LEFT = 0, MAIN_RIGHT = 1, SIDE_LEFT = 2, SIDE_RIGHT = 3;
 

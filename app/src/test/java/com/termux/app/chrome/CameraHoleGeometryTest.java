@@ -219,6 +219,23 @@ public class CameraHoleGeometryTest {
         assertCards(margins, 30, 1050, 551, 1050, 30, 443);
     }
 
+    /**
+     * Pong's cutout path traced 511..540 (or past the rect's right edge) against a bounding rect
+     * of 454..540: a sliver at one end, so the rect is the shape and the box centres on it.
+     */
+    @Test public void aTraceBesideOrInsideASliverOfTheRectFallsBackToTheRect() {
+        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 511, 540));
+        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 511, 569));
+        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 400, 450));
+        // A circle traced inside its rect, round-out included, stands for the camera.
+        assertTrue(CameraHoleGeometry.pathTraceFits(454, 540, 460, 534));
+        assertTrue(CameraHoleGeometry.pathTraceFits(454, 540, 453, 541));
+        assertTrue(CameraHoleGeometry.pathTraceFits(440, 640, 440, 540));
+        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 0, 0));
+        // With the rect as the shape pong's box is 443..551, not 500..551.
+        assertArrayEquals(new int[] {443, 0, 551, 126}, auto(454, 0, 540, 126));
+    }
+
     @Test public void aWiderLeftSideMakesTheLeftCardTheMainOne() {
         int[] margins = new int[4];
         assertTrue(CameraHoleGeometry.barCardMargins(bar(auto(700, 30, 760, 90)), 21, 1059,
