@@ -48,6 +48,20 @@ What a surface draws behind its glass comes through `GlassPicture`: `StoredPictu
 stored frame, `LivePicture` draws the recorded node at the surface's aim. There is no copy per
 dock style or per surface; a dock style changes only `DockSurfaceSpec` numbers.
 
+### 2a. The page layer (amendment, 2026-11-07)
+
+On pong a Home ↔ Workspace swipe under Look Clear cost about 4 ms more RenderThread time a frame
+than under Look Solid: every frame re-blurred both pages' whole content under each live surface.
+While the wall moves (`LiveBackdrop.Wall`, `PaneWallLayout.isMoving`), a surface whose beneath
+holds the wall draws two layers (`WallSwipeGlassPolicy`): the ground and the chrome stay in the
+recording and are drawn live, so the parallax, the scene, the bars, the dock and the keyboard move
+as they do; in the wall's place is a quarter-scale picture of the pages, rendered once offscreen
+as the swipe starts (`PageLayerCapture`) and only moved by the pages' travel. What animates in
+place on a page holds still under the glass for the swipe. When the pages stop moving together, or
+the picture has not landed yet, the surface records as in §2. At rest under a live scene the page
+layer is the pages themselves on a cached layer, so a scene frame no longer re-blurs them. The
+page layer counts in the picture's own share of the budget (§4).
+
 ## 4. Live is opt-in and budgeted
 
 One **Live blur** row in Battery & performance, off by default, covers the dock, floats and

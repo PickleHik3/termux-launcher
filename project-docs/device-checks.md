@@ -18,6 +18,26 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live glass during a page swipe, the look (11-07, perf/glass-slide-on-swipe).** Look Clear,
+  Live blur on, a float over Home's glass widgets, the dock showing pages under it. Swipe Home ↔
+  Workspace slowly and fast, scene off and on. Passes: the float's glass still shows the widgets'
+  glass under it all the way across; the dock's glass shows both pages sliding under it, blurred,
+  with the scene still moving under it; nothing pops or jumps in the glass on the first frame of
+  the swipe or as the wall settles (a terminal printing or the clock ticking under the glass may
+  hold still for the quarter second and catch up at settle); a slow drag that reverses past rest
+  shows the other neighbour, not an empty strip; keyboard up on the Workspace (the dock lifts as
+  it crosses). How: pong with the developer's go-ahead, `screenrecord` of five swipes each way.
+- **Live glass during a page swipe, the cost (11-07, perf/glass-slide-on-swipe).** Look Clear
+  against Look Solid, 10 Home ↔ Workspace round trips each, swipe frames from `gfxinfo
+  framestats`, scene off and on. Passes: Clear within about 1–2 ms of Solid at the median of
+  total and of ISSUE_DRAW_COMMANDS_START → FRAME_COMPLETED (before this change Clear 23 / p90
+  43 ms total, 16.4 ms issue → completed; Solid 16.7 / 22, 12.1); no frame at the swipe's start
+  worse than before (the page layer's capture runs there); at rest on Home with a scene, the
+  frame count per 30 s no worse than before; PSS within noise. How: pong with the developer's
+  go-ahead, the same scripted round trips as the measurement that motivated it, a perfetto trace
+  for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
+  swipe and usually one).
+
 - **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
   input now holds the Speech model row (opens a list of installed models plus Get more models),
   Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
