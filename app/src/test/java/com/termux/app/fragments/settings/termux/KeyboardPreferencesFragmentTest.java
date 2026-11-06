@@ -127,11 +127,12 @@ public class KeyboardPreferencesFragmentTest {
     }
 
     @Test
-    public void theCleanupModelRowShowsAutomaticByDefault() {
+    public void theCleanupRowsAreOnThePage() {
         KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
-        Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
-        assertNotNull(polishModel);
-        assertEquals("Automatic", polishModel.getSummary().toString());
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_accelerator"));
+        assertTrue(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level")
+            instanceof com.termux.app.fragments.settings.SegmentedPillPreference);
     }
 
     @Test

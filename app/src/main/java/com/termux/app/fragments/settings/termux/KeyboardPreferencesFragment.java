@@ -60,7 +60,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
     /** The Voice input page's Speech model rows; null on every other keyboard page. */
     @Nullable private VoiceSpeechModelRows voiceSpeechModelRows;
-    private static final String KEY_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
+    @Nullable private VoiceCleanupRows voiceCleanupRows;
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -183,37 +183,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             voiceSpeechModelRows.bind(context);
         }
 
-        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
-        if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
-            // The Cleanup model choice is the TIDY_DICTATION function's picker sheet.
-            TaiFunctionPickerSheet.show(this, com.termux.ai.TaiFunction.TIDY_DICTATION);
-            return true;
-        });
-        refreshPolishModelSummary(context);
+        // The Voice input page holds the cleanup model rows too.
+        if (findPreference(VoiceCleanupRows.KEY_MODEL) != null) {
+            voiceCleanupRows = new VoiceCleanupRows(this);
+            voiceCleanupRows.bind(context);
+        }
 
         SettingsLayoutUtils.applyScreenLayout(this);
-    }
-
-    /** The chosen model's plain name, "Automatic" when the stored id is empty, the remote id for a remote pick, "Raw text" for off. */
-    private void refreshPolishModelSummary(@NonNull Context context) {
-        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
-        if (polishModel == null) return;
-        String modelId = TermuxAppSharedPreferences.build(context, true).getInAppKeyboardVoicePolishModelId();
-        if (modelId.isEmpty()) {
-            polishModel.setSummary(R.string.cleanup_model_automatic_title);
-            return;
-        }
-        if (com.termux.ai.TaiFunctionModels.VALUE_OFF.equals(modelId)) {
-            polishModel.setSummary(R.string.tai_callers_cleanup_raw_text);
-            return;
-        }
-        if (com.termux.ai.TaiFunctionModels.isRemote(modelId)) {
-            polishModel.setSummary(modelId.substring(com.termux.ai.TaiFunctionModels.REMOTE_PREFIX.length()));
-            return;
-        }
-        com.termux.ai.TaiModelSpec spec = com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher
-            .installedChatModels(context).get(modelId);
-        polishModel.setSummary(spec == null ? getString(R.string.cleanup_model_automatic_title) : spec.displayName);
     }
 
     /** The status row says learning, active or paused and how much was learned; reset follows. */
@@ -299,8 +275,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         // The file may have been hand-edited while the screen was away.
         if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
-            refreshPolishModelSummary(getContext());
             if (voiceSpeechModelRows != null) voiceSpeechModelRows.refresh(getContext());
+            if (voiceCleanupRows != null) voiceCleanupRows.refresh(getContext());
             // The keyboard may have learned more, or paused itself, while the screen was away.
             refreshTapCorrectionRows();
         }

@@ -187,7 +187,7 @@ public final class SettingsRowIcons {
         // Voice output and speech models
         key(R.drawable.ic_ms_record_voice_over, "speech_model_pick", "keyboard_voice_model");
         key(R.drawable.ic_ms_timer, "speech_model_idle_unload", "keyboard_voice_silence_timeout_ms");
-        key(R.drawable.ic_ms_developer_board, "speech_model_accelerator");
+        key(R.drawable.ic_ms_developer_board, "speech_model_accelerator", "keyboard_voice_polish_accelerator");
         key(R.drawable.ic_ms_graphic_eq, "speech_output_voice", "keyboard_voice_mic_sensitivity");
         key(R.drawable.ic_ms_play_arrow, "speech_output_sample");
         key(R.drawable.ic_ms_record_voice_over, "tai_read_aloud");

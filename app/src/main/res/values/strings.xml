@@ -2603,7 +2603,7 @@
     <string name="settings_keyboard_voice_polish_title">Clean up dictation</string>
     <string name="settings_keyboard_voice_polish_summary">Review local corrections before inserting; requires a cleanup model.</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
-    <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
+    <string name="settings_keyboard_voice_polish_level_title">Level</string>
     <string name="settings_keyboard_voice_polish_level_light">Light: what you meant, as one cleaned-up paragraph.</string>
     <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists.</string>
     <string name="settings_keyboard_voice_pause_title">Phrase pause</string>
@@ -2674,6 +2674,7 @@
     <string name="speech_output_sample_playing">Playing · tap to stop</string>
     <string name="speech_output_sample_text">Hi, I am %1$s. This is how I will sound when I read to you.</string>
     <string name="cleanup_model_automatic_title">Automatic</string>
+    <string name="cleanup_model_automatic_with">Automatic · %1$s</string>
     <string name="voice_input_listening">Listening…</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_cleaning_up">Cleaning up…</string>
