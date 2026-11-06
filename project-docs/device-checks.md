@@ -18,6 +18,42 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live glass during a page swipe, the look (11-07, perf/glass-slide-on-swipe).** Look Clear,
+  Live blur on, a float over Home's glass widgets, the dock showing pages under it. Swipe Home ↔
+  Workspace slowly and fast, scene off and on. Passes: the float's glass still shows the widgets'
+  glass under it all the way across; the dock's glass shows both pages sliding under it, blurred,
+  with the scene still moving under it; nothing pops or jumps in the glass on the first frame of
+  the swipe or as the wall settles (a terminal printing or the clock ticking under the glass may
+  hold still for the quarter second and catch up at settle); a slow drag that reverses past rest
+  shows the other neighbour, not an empty strip; keyboard up on the Workspace (the dock lifts as
+  it crosses). How: pong with the developer's go-ahead, `screenrecord` of five swipes each way.
+- **Live glass during a page swipe, the cost (11-07, perf/glass-slide-on-swipe).** Look Clear
+  against Look Solid, 10 Home ↔ Workspace round trips each, swipe frames from `gfxinfo
+  framestats`, scene off and on. Passes: Clear within about 1–2 ms of Solid at the median of
+  total and of ISSUE_DRAW_COMMANDS_START → FRAME_COMPLETED (before this change Clear 23 / p90
+  43 ms total, 16.4 ms issue → completed; Solid 16.7 / 22, 12.1); no frame at the swipe's start
+  worse than before (the page layer's capture runs there); at rest on Home with a scene, the
+  frame count per 30 s no worse than before; PSS within noise. How: pong with the developer's
+  go-ahead, the same scripted round trips as the measurement that motivated it, a perfetto trace
+  for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
+  swipe and usually one).
+
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
 - **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
   shows what is beneath the float (the page, the terminal behind, another float's glass), not only
   the wallpaper; drag it over a second float and the strip shows that float through it; resize
@@ -78,6 +114,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
   edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
   line behind them, the reflections run the card's full height behind the letters, and the letters stay legible.
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections fade out above the letters, and the letters stay legible.
   Check Docked and Floating, Home keyboard up and down (the card stands on the keyboard), the A–Z
   row hidden (as before), the A–Z row ordered over the apps row (falls back to the Tray slab),
   extra keys on the bottom (Tray slab), a Workspace page (Lens beads unchanged), and at the
