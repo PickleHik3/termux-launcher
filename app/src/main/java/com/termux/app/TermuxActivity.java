@@ -11051,6 +11051,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             side.setVisibility(sideWanted ? View.VISIBLE : View.GONE);
             changed = true;
         }
+        // A split card ends at the camera inside the host, where the host's outline does not
+        // round it: each layer clips to the card's own rounded rect, inner ends included.
+        boolean cut = sideWanted || mainLeft != 0 || mainRight != 0;
+        clipBarCardLayer(main, cut);
+        clipBarCardLayer(mainFrost, cut);
+        clipBarCardLayer(side, cut);
+        clipBarCardLayer(sideFrost, cut);
         // The slot (clock, pinned cards, media) stands in the main card only.
         View slot = findViewById(R.id.terminal_top_widget_area);
         if (slot != null) changed |= setBarCardMargins(slot, mainLeft, mainRight);
@@ -11066,10 +11073,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The second card's glass: the main card's own dress, built for the bar as it stands now. */
     private void dressBarSideCard(@NonNull View host) {
+        // A re-dress may carry a new Corners: the cards' clips take it.
+        for (int id : BAR_CARD_LAYERS) {
+            View layer = findViewById(id);
+            if (layer != null && layer.getOutlineProvider() == mBarCardOutline)
+                layer.invalidateOutline();
+        }
         View side = findViewById(R.id.terminal_window_bar_background_side);
         if (side == null || side.getVisibility() != View.VISIBLE) return;
         side.setBackground(buildTerminalWindowBarBackground(host));
         applyWindowBarDeckSlab();
+    }
+
+    /** The layers that draw the split bar's two cards: each card's frost and its tint and rim. */
+    private static final int[] BAR_CARD_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
+        R.id.terminal_window_bar_background, R.id.terminal_window_bar_wallpaper_backdrop_side,
+        R.id.terminal_window_bar_background_side};
+
+    /**
+     * A split bar card's own shape: its rect at the bar's radius for its height, so a card that
+     * grows with the expanded bar keeps the radius the host's outline has.
+     */
+    private final android.view.ViewOutlineProvider mBarCardOutline =
+        new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                int width = view.getWidth();
+                int height = view.getHeight();
+                if (width <= 0 || height <= 0) {
+                    outline.setEmpty();
+                    return;
+                }
+                outline.setRoundRect(0, 0, width, height,
+                    resolveStatusBarCapsuleCornerRadiusPx(height));
+            }
+        };
+
+    /** Clips one layer of a bar card to the card's rounded rect, or lets it draw as laid out. */
+    private void clipBarCardLayer(@Nullable View layer, boolean cut) {
+        if (layer == null) return;
+        android.view.ViewOutlineProvider provider = cut ? mBarCardOutline
+            : android.view.ViewOutlineProvider.BACKGROUND;
+        if (layer.getOutlineProvider() != provider) layer.setOutlineProvider(provider);
+        if (layer.getClipToOutline() != cut) layer.setClipToOutline(cut);
     }
 
     /** Puts side margins on {@code card} unless they are already there; whether it moved. */
