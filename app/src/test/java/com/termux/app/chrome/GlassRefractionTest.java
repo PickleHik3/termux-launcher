@@ -1563,6 +1563,24 @@ public class GlassRefractionTest {
     }
 
     @Test
+    public void theFaceFadesOutWithSizeSoLargePanesKeepTheirFrost() {
+        // Full at 200 dp of short side or under, none at 320 or over, smoothstep between.
+        assertEquals(1f, GlassRefraction.faceFade(40f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(200f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.faceFade(260f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0f, GlassRefraction.faceFade(320f * DENSITY, DENSITY), 1e-6f);
+        // The terminal pane, about 396 dp, keeps its frost; a widget does not.
+        assertEquals(0f, GlassRefraction.faceFade(396f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(150f * DENSITY, DENSITY), 0f);
+        float last = 1f;
+        for (float dp = 150f; dp <= 400f; dp += 10f) {
+            float f = GlassRefraction.faceFade(dp * DENSITY, DENSITY);
+            assertTrue("falls with size at " + dp, f <= last + 1e-6f);
+            last = f;
+        }
+    }
+
+    @Test
     public void theFaceToneDimsBrightAndLiftsDarkAndIsNothingAtZero() {
         float[] tone = new float[2];
         GlassRefraction.faceTone(1f, 1f, tone);
@@ -1586,13 +1604,17 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains("uniform float uFaceClarity;"));
         assertTrue(agsl.contains("uniform float uDim;"));
         assertTrue(agsl.contains("uniform float uSizeLens;"));
-        assertTrue(agsl.contains("    if (uFaceClarity > 0.0) {\n"));
-        assertTrue(agsl.contains("    if (uDim > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (faceMix > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (dimK > 0.0) {\n"));
+        assertTrue(agsl.contains("float faceMix = uFaceClarity * faceFade;"));
+        assertTrue(agsl.contains("float dimK = uDim * faceFade;"));
+        assertEquals(GlassRefraction.Look.FACE_FADE_TO_DP + "",
+            agsl.split("const float kFadeToDp = ")[1].split(";")[0]);
         assertTrue(agsl.contains("float sizeK = uSizeLens > 0.0\n"));
         assertTrue(agsl.contains(": 1.0;\n"));
         // The tone comes after the picture is chosen and before the rim's light.
         int mix = agsl.indexOf("col = mix(col, sharp.eval(f), half(clarityK));");
-        int tone = agsl.indexOf("if (uDim > 0.0) {");
+        int tone = agsl.indexOf("if (dimK > 0.0) {");
         int light = agsl.indexOf("if (inside < kGlowReachDp * uDensity) {");
         assertTrue(mix > 0 && tone > mix && light > tone);
         assertEquals(GlassRefraction.Look.DIM_MAX + "",

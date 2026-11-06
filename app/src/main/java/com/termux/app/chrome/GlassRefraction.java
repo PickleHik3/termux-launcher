@@ -60,7 +60,9 @@ import java.util.Arrays;
  * one is handed in, so the face is nearly the backdrop itself and the edge carries the glass. Dim
  * ({@code uDim}) tones the face after that: a bright backdrop is darkened toward black, up to 35%
  * over white, so white content stays legible, and a dark one is lifted a touch toward white, 6%
- * over black; the rim's gathered light comes after the tone and is not toned. The tone is a wallpaper's, so it
+ * over black; both fade out with the surface's size, full at a short side of 200 dp or under and
+ * gone at 320 dp, so a large content surface such as a terminal pane keeps its frost (Apple keeps
+ * Clear for controls, not content). The rim's gathered light comes after the tone and is not toned. The tone is a wallpaper's, so it
  * runs only where a frame is the content ({@link Program#setInput}), never under a {@code RenderEffect},
  * whose content is the view's own icons and text. Size lens
  * ({@code uSizeLens}) scales the band and the bend by the surface's short side against 72 dp, from
@@ -190,6 +192,12 @@ public final class GlassRefraction {
          * {@code kSizeMax}.
          */
         static final float SIZE_REF_DP = 72f;
+        /**
+         * The short side, dp, up to which the face is wholly Clear's and from which it is wholly
+         * the frost's again, smoothstep between ({@code kFadeFromDp}, {@code kFadeToDp}).
+         */
+        static final float FACE_FADE_FROM_DP = 200f;
+        static final float FACE_FADE_TO_DP = 320f;
         static final float SIZE_MIN = 0.75f;
         static final float SIZE_MAX = 1.5f;
 
@@ -804,6 +812,8 @@ public final class GlassRefraction {
         "const float kFaceLift = " + Look.FACE_LIFT + ";\n" +
         "const float kSizeRefDp = " + Look.SIZE_REF_DP + ";\n" +
         "const float kSizeMin = " + Look.SIZE_MIN + ";\n" +
+        "const float kFadeFromDp = " + Look.FACE_FADE_FROM_DP + ";\n" +
+        "const float kFadeToDp = " + Look.FACE_FADE_TO_DP + ";\n" +
         "const float kSizeMax = " + Look.SIZE_MAX + ";\n" +
         // The bold edge past Glint, the outline's light split in two: each fringe's width in dp
         // and the least in px, where they meet and how far past it the split reaches in fringe
@@ -1048,6 +1058,13 @@ public final class GlassRefraction {
         // other Looks multiply by one. The caps at hs below still hold. sizeLensK in Java.
         "    float sizeK = uSizeLens > 0.0\n" +
         "        ? mix(1.0, clamp(2.0 * hs / (kSizeRefDp * uDensity), kSizeMin, kSizeMax), uSizeLens) : 1.0;\n" +
+        // How much of Clear's face the surface's size leaves it, 1 down to kFadeFromDp of short
+        // side and 0 from kFadeToDp: the sharp face and the tone, which a large content surface
+        // does not take. faceFade in Java.
+        "    float faceFade = (uFaceClarity > 0.0 || uDim > 0.0)\n" +
+        "        ? 1.0 - smoothstep(kFadeFromDp * uDensity, kFadeToDp * uDensity, 2.0 * hs) : 1.0;\n" +
+        "    float faceMix = uFaceClarity * faceFade;\n" +
+        "    float dimK = uDim * faceFade;\n" +
         "    float sBand = uBand * sizeK;\n" +
         "    float sStrength = uStrength * sizeK;\n" +
         "    float sSoft = uSoftRim * sizeK;\n" +
@@ -1183,8 +1200,8 @@ public final class GlassRefraction {
         "    }\n" +
         // Clear's face: the clearer picture shows through by uFaceClarity everywhere, the band
         // included, where one is handed in (uFaceClarity is 0 where none is). At 0 nothing runs.
-        "    if (uFaceClarity > 0.0) {\n" +
-        "        clarityK = mix(clarityK, 1.0, uFaceClarity);\n" +
+        "    if (faceMix > 0.0) {\n" +
+        "        clarityK = mix(clarityK, 1.0, faceMix);\n" +
         "    }\n" +
         // The colour split, at the corners only and in step with the pull there: red reads the
         // picture bent a little less, blue a little more, green as bent (three taps, Haze's
@@ -1235,13 +1252,13 @@ public final class GlassRefraction {
         // backdrop is darkened toward black by up to kDimMax, easing in across kDimFrom..kDimTo of
         // luminance, and the rest lifted toward white by kFaceLift of its darkness. All of it
         // scaled by uDim, so at 0 nothing runs. faceTone in Java.
-        "    if (uDim > 0.0) {\n" +
+        "    if (dimK > 0.0) {\n" +
         "        float ca = max(float(col.a), 0.001);\n" +
         "        float3 cc = float3(col.rgb) / ca;\n" +
         "        float cl = dot(cc, kLumaW);\n" +
-        "        float dk = uDim * kDimMax * smoothstep(kDimFrom, kDimTo, cl);\n" +
+        "        float dk = dimK * kDimMax * smoothstep(kDimFrom, kDimTo, cl);\n" +
         "        cc = cc * (1.0 - dk);\n" +
-        "        cc = cc + (float3(1.0) - cc) * (uDim * kFaceLift * (1.0 - cl));\n" +
+        "        cc = cc + (float3(1.0) - cc) * (dimK * kFaceLift * (1.0 - cl));\n" +
         "        col.rgb = half3(cc * ca);\n" +
         "    }\n" +
         // The gathered light: the backdrop's own colour brightened at the outline and fading
@@ -1692,6 +1709,18 @@ public final class GlassRefraction {
         out[0] = Math.min(a, sr * gain + lift);
         out[1] = Math.min(a, sg * gain + lift);
         out[2] = Math.min(a, sb * gain + lift);
+    }
+
+    /**
+     * The program's {@code faceFade}: how much of Clear's sharp face and tone a surface whose short
+     * side is {@code shortSidePx} keeps: 1 at {@link Look#FACE_FADE_FROM_DP} or under, 0 at
+     * {@link Look#FACE_FADE_TO_DP} or over, smoothstep between.
+     */
+    static float faceFade(float shortSidePx, float density) {
+        float d = Math.max(density, 1e-4f);
+        float u = Math.max(0f, Math.min(1f, (shortSidePx / d - Look.FACE_FADE_FROM_DP)
+            / (Look.FACE_FADE_TO_DP - Look.FACE_FADE_FROM_DP)));
+        return 1f - u * u * (3f - 2f * u);
     }
 
     /**
