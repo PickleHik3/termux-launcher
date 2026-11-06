@@ -105,6 +105,23 @@ public final class PeekGlassGeometry {
     public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
                                int hostWidthPx, int hostHeightPx, int screenWidthPx,
                                float screenBottomPx, float density) {
+        return compute(iconBoxes, count, hostLeftPx, hostWidthPx, hostHeightPx, screenWidthPx,
+            screenBottomPx, density, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * {@link #compute} with the reflections' fade ended at {@code reflectionFloorPx} (the host's
+     * coordinates) where the A–Z row stands on the card under the icons: the letters keep the
+     * card's glass to themselves, and the reflection's depth, strength and blur scale over the
+     * shorter band as they do over the longer. Infinity for none; at or above the icons' lower
+     * edges the card has no reflection.
+     *
+     * @param reflectionFloorPx the top of the A–Z row standing on the card, or infinity
+     */
+    @Nullable
+    public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
+                               int hostWidthPx, int hostHeightPx, int screenWidthPx,
+                               float screenBottomPx, float density, float reflectionFloorPx) {
         if (count <= 0 || hostWidthPx <= 0 || hostHeightPx <= 0 || screenWidthPx <= 0
             || iconBoxes.length < count * 4) return null;
         float[] icons = iconLine(iconBoxes, count);
@@ -120,7 +137,9 @@ public final class PeekGlassGeometry {
         float bottom = screenBottom + radius;
         float axis = mirrorAxisY(icons);
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis,
-            axis + reflectionDepth(icons, axis, screenBottom));
+            axis + reflectionDepth(icons, axis,
+                Math.min(screenBottom, Float.isNaN(reflectionFloorPx)
+                    ? Float.POSITIVE_INFINITY : reflectionFloorPx)));
     }
 
     /**
