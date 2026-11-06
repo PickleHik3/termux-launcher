@@ -308,7 +308,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // new effect on the same recording, never a re-record.
             picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
-            if (picture.mRecordedWidth == surface.getWidth()
+            int reach = picture.reachTopPx();
+            if (picture.mRecordedReach == reach && picture.mRecordedWidth == surface.getWidth()
                 && picture.mRecordedHeight == surface.getHeight()
                 && picture.mRecordedMargin == margin
                 && picture.mRecordedMatrix.equals(mMatrix)
@@ -317,14 +318,15 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 continue;
             }
             int width = surface.getWidth() + 2 * margin;
-            int height = surface.getHeight() + 2 * margin;
-            if (!record(picture.recordNode(width, height), width, height, margin)) continue;
+            int height = surface.getHeight() + 2 * margin + reach;
+            if (!record(picture.recordNode(width, height), width, height, margin, reach)) continue;
             picture.mRecordedBeneath.clear();
             picture.mRecordedBeneath.addAll(mBeneath);
             picture.mRecordedMatrix.set(mMatrix);
             picture.mRecordedWidth = surface.getWidth();
             picture.mRecordedHeight = surface.getHeight();
             picture.mRecordedMargin = margin;
+            picture.mRecordedReach = reach;
             picture.mRecordedSceneGen = sceneGeneration();
             // The first whole recording: its holder swaps the stored frame for it in this frame.
             picture.recorded();
@@ -344,7 +346,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         int width = Math.max(1, surface.getWidth() + 2 * marginPx);
         int height = Math.max(1, surface.getHeight() + 2 * marginPx);
         out.setPosition(0, 0, width, height);
-        return record(out, width, height, marginPx);
+        return record(out, width, height, marginPx, 0);
     }
 
     /** The root this recorder records within. */
@@ -385,7 +387,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (!collect(surface) || !mMatrix.invert(mInverse)) return false;
         int save = canvas.save();
         try {
-            drawPath(canvas, marginPx, false);
+            drawPath(canvas, marginPx, 0, false);
         } finally {
             canvas.restoreToCount(save);
         }
@@ -589,11 +591,12 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /** Draws {@link #mBeneath} into {@code out} along {@link #mPath}, as {@link #collect} found them. */
     @RequiresApi(Build.VERSION_CODES.Q)
-    private boolean record(@NonNull RenderNode out, int width, int height, int marginPx) {
+    private boolean record(@NonNull RenderNode out, int width, int height, int marginPx,
+                           int reachTopPx) {
         if (!mMatrix.invert(mInverse)) return false;
         RecordingCanvas canvas = out.beginRecording(width, height);
         try {
-            drawPath(canvas, marginPx, true);
+            drawPath(canvas, marginPx, reachTopPx, true);
         } finally {
             out.endRecording();
         }
@@ -605,8 +608,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * already set. {@code z} for a recording canvas, where the parent's own draw orders by Z with
      * shadows; a software canvas has neither, and {@link #collectLevel} has ordered by Z already.
      */
-    private void drawPath(@NonNull Canvas canvas, int marginPx, boolean z) {
-        canvas.translate(marginPx, marginPx);
+    private void drawPath(@NonNull Canvas canvas, int marginPx, int reachTopPx, boolean z) {
+        canvas.translate(marginPx, marginPx + reachTopPx);
         canvas.concat(mInverse);
         drawGround(canvas);
         int next = 0;

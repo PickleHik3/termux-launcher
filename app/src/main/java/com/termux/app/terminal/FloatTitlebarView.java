@@ -13,6 +13,8 @@ import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 
+import com.termux.app.chrome.LivePicture;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -183,6 +185,20 @@ public final class FloatTitlebarView extends FrameLayout {
             if (getBackground() != fill) setBackground(fill);
         }
         updateInk(glass);
+    }
+
+    /**
+     * Shows the float's one Live picture ({@code picture}, recorded for its slab) through this
+     * strip's glass, or the stored frame for null or while the strip wears no glass. The strip
+     * costs no picture of its own; see {@link LivePicture#aimAt}.
+     */
+    void setLiveGlass(@Nullable LivePicture picture) {
+        mGlass.setLivePicture(mGlass.getVisibility() == VISIBLE ? picture : null, true);
+    }
+
+    /** The strip's glass view, for the float's glass sync and tests. */
+    @NonNull PaneGlassBackdropView glass() {
+        return mGlass;
     }
 
     /** The corner the strip wears for a requested radius, capped against its own size. */

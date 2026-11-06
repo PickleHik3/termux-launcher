@@ -21,11 +21,11 @@ We decided the following.
 
 Every glass surface declares one kind:
 
-- **Wallpaper**: the stored pre-blurred frame. The status bar, window bar, plank, A-Z host and the
-  other bars. Costs nothing while moving.
+- **Wallpaper**: the stored pre-blurred frame. The status bar (with its window chips), plank, A-Z
+  host and the other bars. A floating window's titlebar is not here: it is Live with its float. Costs nothing while moving.
 - **Snapshot**: the drawer, command palette, terminal sheet and menus while Live blur is off. The
   picture is recorded once into a GPU bitmap on open and on settle, and frozen while moving.
-- **Live**: the dock, floating windows and widgets, and the panels too while Live blur is on. The
+- **Live**: the dock, floating windows (their titlebars with them) and widgets, and the panels too while Live blur is on. The
   picture is re-recorded and re-blurred on frames where something beneath it changed.
 
 Panels follow the switch: Snapshot and Live are the same recorded picture, and the switch only
@@ -40,6 +40,12 @@ falls out (a float shows the widgets' glass beneath it). The recording reuses ea
 display list and is blurred on the GPU at a quarter of the scale (`RenderEffect`). Every recording
 draws the window's ground first (`LiveBackdrop.drawGround`), so a flat or self-drawn ground never
 leaves the picture see-through.
+
+A float's titlebar is glass on the same glass and costs no slot: the float's one picture records
+`titlebarHeight` more above its slab (`LivePicture.setReachTop`), which is exactly what lies
+beneath the strip because the strip sits after the body in the float, and the strip's glass draws
+that picture from where it stands (`LivePicture.aimAt`, `aimedDrawable`). Both go with the float:
+the same gate (`FloatLiveGlass.wants`), the same release.
 
 ## 3. One effect builder, one picture seam
 
