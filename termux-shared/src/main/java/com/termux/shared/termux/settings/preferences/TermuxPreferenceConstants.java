@@ -710,7 +710,7 @@ public final class TermuxPreferenceConstants {
         /**
          * Whose box the status row leaves its camera gap for when it shares the camera's band
          * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
-         * {@link #STATUS_BAR_CUTOUT_CUSTOM} the centre and width below, {@link #STATUS_BAR_CUTOUT_OFF}
+         * {@link #STATUS_BAR_CUTOUT_CUSTOM} Android's shape nudged by the values below, {@link #STATUS_BAR_CUTOUT_OFF}
          * leaves none.
          */
         public static final String KEY_STATUS_BAR_CUTOUT_MODE = "status_bar_cutout_mode";
@@ -719,17 +719,39 @@ public final class TermuxPreferenceConstants {
         public static final String STATUS_BAR_CUTOUT_OFF = "off";
         public static final String DEFAULT_STATUS_BAR_CUTOUT_MODE = STATUS_BAR_CUTOUT_AUTO;
 
-        /** A custom camera gap's centre, in dp from the screen's horizontal centre (left negative). */
-        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
-        public static final int DEFAULT_STATUS_BAR_CUTOUT_CENTER = 0;
-        public static final int MIN_STATUS_BAR_CUTOUT_CENTER = -200;
-        public static final int MAX_STATUS_BAR_CUTOUT_CENTER = 200;
+        /**
+         * The camera gap's nudges on Android's shape, Custom only: sideways in dp (left negative),
+         * down in dp, and size in percent. The margin is the air kept from the camera on each side
+         * and below, for Auto and Custom alike.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_X = "status_bar_cutout_offset_x";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_X = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_X = -200;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_X = 200;
 
-        /** A custom camera gap's full width, in dp. */
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_Y = "status_bar_cutout_offset_y";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_Y = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_Y = -24;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_Y = 24;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_SCALE = "status_bar_cutout_scale";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_SCALE = 100;
+        public static final int MIN_STATUS_BAR_CUTOUT_SCALE = 50;
+        public static final int MAX_STATUS_BAR_CUTOUT_SCALE = 200;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_MARGIN = "status_bar_cutout_margin";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_MARGIN = 4;
+        public static final int MIN_STATUS_BAR_CUTOUT_MARGIN = 0;
+        public static final int MAX_STATUS_BAR_CUTOUT_MARGIN = 24;
+
+        /**
+         * The camera gap's first centre and width (dp from the screen's centre; full width). No
+         * longer read: {@link #KEY_STATUS_BAR_CUTOUT_MIGRATED} says they were turned into the
+         * nudges above, once.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
         public static final String KEY_STATUS_BAR_CUTOUT_WIDTH = "status_bar_cutout_width";
-        public static final int DEFAULT_STATUS_BAR_CUTOUT_WIDTH = 32;
-        public static final int MIN_STATUS_BAR_CUTOUT_WIDTH = 0;
-        public static final int MAX_STATUS_BAR_CUTOUT_WIDTH = 160;
+        public static final String KEY_STATUS_BAR_CUTOUT_MIGRATED = "status_bar_cutout_migrated";
 
         /**
          * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched

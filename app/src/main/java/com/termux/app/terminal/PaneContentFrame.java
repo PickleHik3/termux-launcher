@@ -413,11 +413,45 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         return mRetroEffect.style();
     }
 
+    /** The span of the top line left unstroked round the camera ({@link #setTopGap}). */
+    private int mTopGapStartPx;
+    private int mTopGapEndPx;
+    private int mTopGapDepthPx;
+
+    /**
+     * Breaks the rim's top line over {@code [startPx, endPx)} (this frame's own x, from its left),
+     * down {@code depthPx}, where the camera stands over it; {@code endPx <= startPx} restores it.
+     * Only the foreground's stroke is cut: the glass and the outline stay one card. Redraws only
+     * when the span changes.
+     */
+    public void setTopGap(int startPx, int endPx, int depthPx) {
+        if (endPx <= startPx) {
+            startPx = 0;
+            endPx = 0;
+            depthPx = 0;
+        }
+        if (startPx == mTopGapStartPx && endPx == mTopGapEndPx && depthPx == mTopGapDepthPx) return;
+        mTopGapStartPx = startPx;
+        mTopGapEndPx = endPx;
+        mTopGapDepthPx = depthPx;
+        invalidate();
+    }
+
     @Override
     public void onDrawForeground(Canvas canvas) {
         if (mTravelBottomInsetPx > 0)
             fitForegroundToTravelInset();
-        super.onDrawForeground(canvas);
+        if (mTopGapEndPx <= mTopGapStartPx) {
+            super.onDrawForeground(canvas);
+            return;
+        }
+        int save = canvas.save();
+        try {
+            canvas.clipOutRect(mTopGapStartPx, 0, mTopGapEndPx, mTopGapDepthPx);
+            super.onDrawForeground(canvas);
+        } finally {
+            canvas.restoreToCount(save);
+        }
     }
 
     @Override

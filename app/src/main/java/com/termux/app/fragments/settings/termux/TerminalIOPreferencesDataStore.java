@@ -177,22 +177,24 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
     @Override
     public void putInt(String key, int value) {
         if (mPreferences == null || key == null) return;
-        if ("status_bar_cutout_center".equals(key)) {
-            mPreferences.setStatusBarCutoutCenter(value);
-        } else if ("status_bar_cutout_width".equals(key)) {
-            mPreferences.setStatusBarCutoutWidth(value);
+        if ("status_bar_cutout_offset_x".equals(key)) {
+            mPreferences.setStatusBarCutoutOffsetX(value);
+        } else if ("status_bar_cutout_offset_y".equals(key)) {
+            mPreferences.setStatusBarCutoutOffsetY(value);
+        } else if ("status_bar_cutout_scale".equals(key)) {
+            mPreferences.setStatusBarCutoutScale(value);
+        } else if ("status_bar_cutout_margin".equals(key)) {
+            mPreferences.setStatusBarCutoutMargin(value);
         }
     }
 
     @Override
     public int getInt(String key, int defValue) {
         if (mPreferences == null || key == null) return defValue;
-        if ("status_bar_cutout_center".equals(key)) {
-            return mPreferences.getStatusBarCutoutCenter();
-        }
-        if ("status_bar_cutout_width".equals(key)) {
-            return mPreferences.getStatusBarCutoutWidth();
-        }
+        if ("status_bar_cutout_offset_x".equals(key)) return mPreferences.getStatusBarCutoutOffsetX();
+        if ("status_bar_cutout_offset_y".equals(key)) return mPreferences.getStatusBarCutoutOffsetY();
+        if ("status_bar_cutout_scale".equals(key)) return mPreferences.getStatusBarCutoutScale();
+        if ("status_bar_cutout_margin".equals(key)) return mPreferences.getStatusBarCutoutMargin();
         return defValue;
     }
 }

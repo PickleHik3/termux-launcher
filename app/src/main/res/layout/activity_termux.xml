@@ -149,6 +149,22 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
 
+                <!-- The second card when the camera stands mid-bar: the bar splits round the
+                     hole into two cards, this one the narrower. Gone otherwise. -->
+                <ImageView
+                    android:id="@+id/terminal_window_bar_wallpaper_backdrop_side"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_window_bar_background_side"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
                 <!-- The lens edges and the place icons, behind everything the bar shows: the
                      neighbours rest half past the edges and the icon at home sits beside the
                      clock, none of it taking room from the row. Taps on a neighbour still land

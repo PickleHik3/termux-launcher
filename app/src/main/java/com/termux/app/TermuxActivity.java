@@ -3555,9 +3555,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return row == null || !row.isShown();
     }
 
-    /** The top edge's camera box (window px) and its safe top inset; null / 0 with none. */
-    @Nullable private Rect mTopCutoutHole;
-    private int mTopCutoutSafeTopPx;
+    /** How deep the pane rim's top line is cut where the camera stands over it, in dp. */
+    private static final float PANE_TOP_GAP_DEPTH_DP = 3f;
+    private final int[] mPaneTopOrigin = new int[2];
+    private final int[] mPaneTopScratch = new int[2];
+    private final int[] mPaneTopGap = new int[2];
     /** Whether {@link #syncPanesForScreenTop} follows every window layout yet; installed once. */
     private boolean mPanesScreenTopFollowed;
 
@@ -3569,24 +3571,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * outline is the host's own. Compares first: a pane at rest costs a walk up its parents.
      */
     private void syncPanesForScreenTop() {
-        boolean active = panesReachScreenTop() && mTopCutoutHole != null
-            && mTopCutoutSafeTopPx > 0;
+        syncBarSplit();
+        int[] box = panesReachScreenTop() ? mCameraBox : null;
         java.util.List<TerminalView> panes = mPaneController != null
             ? mPaneController.getVisiblePaneViews()
             : (mTerminalView == null ? java.util.Collections.emptyList()
                 : java.util.Collections.singletonList(mTerminalView));
-        int[] origin = new int[2];
-        int[] scratch = new int[2];
+        int[] origin = mPaneTopOrigin;
+        int[] scratch = mPaneTopScratch;
+        int[] gap = mPaneTopGap;
+        int gapDepthPx = Math.round(dpToPx(PANE_TOP_GAP_DEPTH_DP));
         for (TerminalView pane : panes) {
             if (pane == null) continue;
             int inset = 0;
-            if (active && pane.getWidth() > 0) {
+            int gapStart = 0;
+            int gapEnd = 0;
+            if (box != null && pane.getWidth() > 0) {
                 com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(pane, origin, scratch);
                 inset = com.termux.app.chrome.FullScreenCornerPolicy.paneTextTopInsetPx(true,
-                    origin[0], origin[1], origin[0] + pane.getWidth(), mTopCutoutHole.left,
-                    mTopCutoutHole.right, mTopCutoutSafeTopPx);
+                    origin[0], origin[1], origin[0] + pane.getWidth(), box[0], box[2], box[3]);
+                // The rim is the pane frame's: its own x, from the frame's left edge.
+                View frame = pane.getParent() instanceof View ? (View) pane.getParent() : null;
+                if (frame instanceof com.termux.app.terminal.PaneContentFrame && frame.getWidth() > 0) {
+                    com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, origin, scratch);
+                    if (com.termux.app.chrome.CameraHoleGeometry.paneTopGap(box, origin[0],
+                        origin[1], origin[0] + frame.getWidth(), gap)) {
+                        gapStart = gap[0];
+                        gapEnd = gap[1];
+                    }
+                }
             }
             pane.setTextTopInsetPx(inset);
+            if (pane.getParent() instanceof com.termux.app.terminal.PaneContentFrame) {
+                ((com.termux.app.terminal.PaneContentFrame) pane.getParent())
+                    .setTopGap(gapStart, gapEnd, gapDepthPx);
+            }
+        }
+        // The plain border round a lone pane (no glass) breaks over the camera too.
+        View border = findViewById(R.id.terminal_border_overlay);
+        if (border instanceof TerminalGlassFrameView) {
+            int start = 0;
+            int end = 0;
+            if (box != null && border.getVisibility() == View.VISIBLE && border.getWidth() > 0) {
+                com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(border, origin, scratch);
+                if (com.termux.app.chrome.CameraHoleGeometry.paneTopGap(box, origin[0], origin[1],
+                    origin[0] + border.getWidth(), gap)) {
+                    start = gap[0];
+                    end = gap[1];
+                }
+            }
+            ((TerminalGlassFrameView) border).setTopGap(start, end, gapDepthPx);
         }
         if (mPaneHostInnerRadiusPx >= 0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             View paneHost = findViewById(R.id.terminal_pane_host);
@@ -10930,19 +10964,179 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The screen's corner radii, top-left, top-right, bottom-left, bottom-right; 0 unknown. */
     @NonNull private float[] mDisplayCornerRadiiPx = new float[4];
 
-    private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
-        View row = findViewById(R.id.terminal_status_row);
-        // The top edge's box: Android's rects that touch it, joined. A side cutout in landscape
-        // stands off the top edge, so it is never one.
-        Rect hole = null;
-        androidx.core.view.DisplayCutoutCompat cutout = insetsCompat.getDisplayCutout();
-        if (cutout != null) {
-            for (Rect rect : cutout.getBoundingRects()) {
-                if (rect == null || rect.isEmpty() || rect.top > 0) continue;
-                if (hole == null) hole = new Rect(rect);
-                else hole.union(rect);
+    /** The cutout {@link #mTopCutoutShape} was read from, and what it was; see {@link #topCutoutShape}. */
+    @Nullable private androidx.core.view.DisplayCutoutCompat mTopCutoutShapeSource;
+    @Nullable private Rect mTopCutoutShape;
+    private boolean mTopCutoutShapeRead;
+
+    /**
+     * The camera's shape on the top edge in window pixels, or null with none: Android's bounding
+     * rects that touch the edge, joined (a side cutout in landscape stands off the top edge, so
+     * it is never one); on API 31+ narrowed to the bounds of the cutout's own path, which traces
+     * a punch hole's circle inside its rect. Read once per cutout and kept: never per inset
+     * dispatch. The returned rect is the cache's own; callers copy what they keep.
+     */
+    @Nullable
+    private Rect topCutoutShape(@Nullable androidx.core.view.DisplayCutoutCompat cutout,
+                                @NonNull WindowInsetsCompat insetsCompat) {
+        if (mTopCutoutShapeRead && java.util.Objects.equals(cutout, mTopCutoutShapeSource)) {
+            return mTopCutoutShape;
+        }
+        Rect hole = com.termux.app.chrome.CutoutShape.top(cutout, insetsCompat);
+        mTopCutoutShapeSource = cutout;
+        mTopCutoutShape = hole;
+        mTopCutoutShapeRead = true;
+        return hole;
+    }
+
+    /** The camera's keep-out box in window px while Full screen has one; null otherwise. */
+    @Nullable private int[] mCameraBox;
+    /** {@link #syncBarSplit}'s scratch: the margins it wants (main left/right, second left/right), and the host's origin. */
+    private final int[] mBarSplitWant = new int[4];
+    private final int[] mBarSplitOrigin = new int[2];
+    private final int[] mBarSplitScratch = new int[2];
+
+    /**
+     * Splits the Floating status bar round the camera: the host's glass becomes two convex cards
+     * with the hole between them ({@link com.termux.app.chrome.CameraHoleGeometry}). The main card
+     * keeps the host's own glass views and takes the wider side; the second card is the side
+     * views'; with one side too narrow the main card is trimmed to the hole's far edge. The split
+     * is a function of the bar's rest rect and the box, so it needs one answer per layout and is
+     * laid only when it changed (margins and visibility compared before they are set). Docked
+     * bars, bars below the camera's band and bars on a side or bottom edge answer NONE.
+     */
+    private void syncBarSplit() {
+        View host = findViewById(R.id.terminal_window_bar_host);
+        View main = findViewById(R.id.terminal_window_bar_background);
+        View side = findViewById(R.id.terminal_window_bar_background_side);
+        if (host == null || main == null || side == null) return;
+        int[] want = mBarSplitWant;
+        java.util.Arrays.fill(want, 0);
+        boolean sideWanted = false;
+        com.termux.app.chrome.CameraHoleGeometry.Split split =
+            com.termux.app.chrome.CameraHoleGeometry.Split.NONE;
+        int[] box = mCameraBox;
+        if (box != null && host.getVisibility() == View.VISIBLE && host.getWidth() > 0
+            && host.getHeight() > 0 && !isStatusBarVertical() && mChrome != null
+            && isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)
+            && !frameStandsDown()) {
+            int[] origin = mBarSplitOrigin;
+            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, origin, mBarSplitScratch);
+            int left = origin[0];
+            int top = origin[1];
+            int right = left + host.getWidth();
+            float radius = resolveStatusBarCapsuleCornerRadiusPx(host.getHeight());
+            split = com.termux.app.chrome.CameraHoleGeometry.split(box, left, top, right,
+                top + host.getHeight(), com.termux.app.chrome.CameraHoleGeometry.minSidePx(radius,
+                    getResources().getDisplayMetrics().density));
+            switch (split.kind) {
+                case TRIM_LEFT:
+                    want[0] = split.rightCardLeftPx - left;
+                    break;
+                case TRIM_RIGHT:
+                    want[1] = right - split.leftCardRightPx;
+                    break;
+                case TWO: {
+                    sideWanted = true;
+                    boolean mainRight = right - split.rightCardLeftPx
+                        >= split.leftCardRightPx - left;
+                    if (mainRight) {
+                        want[0] = split.rightCardLeftPx - left;
+                        want[3] = right - split.leftCardRightPx;
+                    } else {
+                        want[1] = right - split.leftCardRightPx;
+                        want[2] = split.rightCardLeftPx - left;
+                    }
+                    break;
+                }
+                default:
+                    break;
             }
         }
+        boolean changed = false;
+        changed |= setBarCardMargins(main, want[0], want[1]);
+        changed |= setBarCardMargins(side, want[2], want[3]);
+        if (side.getVisibility() == View.VISIBLE != sideWanted) {
+            side.setVisibility(sideWanted ? View.VISIBLE : View.GONE);
+            changed = true;
+        }
+        // The slot (clock, pinned cards, media) stands in the main card only.
+        View slot = findViewById(R.id.terminal_top_widget_area);
+        if (slot != null) changed |= setBarCardMargins(slot, want[0], want[1]);
+        if (!changed) return;
+        // The cards' dress and frost follow the new rects, once, after this layout.
+        host.post(() -> {
+            View current = findViewById(R.id.terminal_window_bar_host);
+            if (current == null || mChrome == null) return;
+            dressBarSideCard(current);
+            mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        });
+    }
+
+    /** The second card's glass: the main card's own dress, built for the bar as it stands now. */
+    private void dressBarSideCard(@NonNull View host) {
+        View side = findViewById(R.id.terminal_window_bar_background_side);
+        if (side == null || side.getVisibility() != View.VISIBLE) return;
+        side.setBackground(buildTerminalWindowBarBackground(host));
+        applyWindowBarDeckSlab();
+    }
+
+    /** Puts side margins on {@code card} unless they are already there; whether it moved. */
+    private static boolean setBarCardMargins(@NonNull View card, int left, int right) {
+        ViewGroup.LayoutParams params = card.getLayoutParams();
+        if (!(params instanceof ViewGroup.MarginLayoutParams)) return false;
+        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+        if (margins.leftMargin == left && margins.rightMargin == right) return false;
+        margins.leftMargin = left;
+        margins.rightMargin = right;
+        card.setLayoutParams(margins);
+        return true;
+    }
+
+    /** The window's width for the camera box: the decor's, else the display's. */
+    private int windowWidthForCutout() {
+        int width = getWindow().getDecorView().getWidth();
+        return width > 0 ? width : getResources().getDisplayMetrics().widthPixels;
+    }
+
+    /**
+     * Turns the first camera gap's centre and width into the nudges on Android's shape, once
+     * (guarded by a stored flag): the same box within a pixel or two, no margin as before, so a
+     * Custom gap an upgrade finds stays where the user put it. The old keys stay in place and are
+     * never read again. Without a mode of Custom or a stored value there is nothing to turn.
+     */
+    private void migrateCutoutPreferences(@Nullable Rect shape, int windowWidthPx) {
+        if (mPreferences == null || windowWidthPx <= 0 || mPreferences.isStatusBarCutoutMigrated())
+            return;
+        Integer centreDp = mPreferences.getLegacyStatusBarCutoutCenter();
+        Integer widthDp = mPreferences.getLegacyStatusBarCutoutWidth();
+        boolean custom = com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
+            mPreferences.getStatusBarCutoutMode())
+            == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM;
+        if (custom || centreDp != null || widthDp != null) {
+            float density = getResources().getDisplayMetrics().density;
+            int centrePx = Math.round((centreDp == null ? 0 : centreDp) * density);
+            int widthPx = Math.round((widthDp == null ? 32 : widthDp) * density);
+            int baseWidth = shape != null ? shape.width()
+                : Math.round(com.termux.app.chrome.CameraHoleGeometry.CUSTOM_BASE_DP * density);
+            int baseCentre = shape != null ? (shape.left + shape.right) / 2 : windowWidthPx / 2;
+            mPreferences.setStatusBarCutoutMargin(0);
+            mPreferences.setStatusBarCutoutOffsetY(0);
+            mPreferences.setStatusBarCutoutScale(
+                com.termux.app.chrome.CameraHoleGeometry.migrateScalePct(widthPx, baseWidth));
+            mPreferences.setStatusBarCutoutOffsetX(
+                com.termux.app.chrome.CameraHoleGeometry.migrateOffsetXDp(
+                    windowWidthPx / 2 + centrePx, baseCentre, density));
+        }
+        mPreferences.setStatusBarCutoutMigrated(true);
+    }
+
+    private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
+        View row = findViewById(R.id.terminal_status_row);
+        // The top edge's camera shape, kept per cutout: the insets arrive every frame of the IME's
+        // animation, the cutout never changes under them.
+        androidx.core.view.DisplayCutoutCompat cutout = insetsCompat.getDisplayCutout();
+        Rect hole = topCutoutShape(cutout, insetsCompat);
         float[] radii = new float[4];
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             android.view.WindowInsets platform = insetsCompat.toWindowInsets();
@@ -10959,8 +11153,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Kept for the frames Full screen brings to the screen's edges (FullScreenCornerPolicy).
         mDisplayCornerRadiiPx = radii;
-        mTopCutoutHole = hole;
-        mTopCutoutSafeTopPx = cutout == null ? 0 : cutout.getSafeInsetTop();
         if (!mPanesScreenTopFollowed) {
             mPanesScreenTopFollowed = true;
             getWindow().getDecorView().getViewTreeObserver()
@@ -10972,16 +11164,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
             : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
                 mPreferences.getStatusBarCutoutMode());
-        int customCentre = mPreferences == null ? 0
-            : Math.round(dpToPx(mPreferences.getStatusBarCutoutCenter()));
-        int customWidth = mPreferences == null ? 0
-            : Math.round(dpToPx(mPreferences.getStatusBarCutoutWidth()));
+        migrateCutoutPreferences(hole, windowWidthForCutout());
+        int dxPx = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutOffsetX()));
+        int dyPx = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutOffsetY()));
+        int scalePct = mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_SCALE
+            : mPreferences.getStatusBarCutoutScale();
+        int marginPx = Math.round(dpToPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN
+            : mPreferences.getStatusBarCutoutMargin()));
         com.termux.app.statusbar.StatusRowKeepOut.Screen screen =
             new com.termux.app.statusbar.StatusRowKeepOut.Screen(hole != null,
                 hole == null ? 0 : hole.left, hole == null ? 0 : hole.top,
                 hole == null ? 0 : hole.right, hole == null ? 0 : hole.bottom, topBand,
-                radii[0], radii[1], radii[2], radii[3], mode, customCentre, customWidth,
-                Math.round(dpToPx(com.termux.app.statusbar.StatusRowKeepOut.GAP_MARGIN_DP)));
+                radii[0], radii[1], radii[2], radii[3], mode, dxPx, dyPx, scalePct, marginPx,
+                Math.round(dpToPx(com.termux.app.chrome.CameraHoleGeometry.CUSTOM_BASE_DP)));
+        // The one box the bar's split and the panes read, in window pixels; only in Full screen.
+        int windowWidth = windowWidthForCutout();
+        int[] cameraBox = mProperties != null && mProperties.isUsingFullScreen()
+            ? com.termux.app.statusbar.StatusRowKeepOut.keepOutBox(screen, windowWidth) : null;
+        boolean boxMoved = !java.util.Arrays.equals(cameraBox, mCameraBox);
+        mCameraBox = cameraBox;
+        if (boxMoved) syncPanesForScreenTop();
         // The window bar reads the same answer for where it stands, but only in Full screen: with
         // the system bar showing it never reaches the camera's band, and stays as it always was.
         View windowBar = findViewById(R.id.terminal_window_bar);
@@ -24598,6 +24804,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
                 background.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
         }
+        View side = findViewById(R.id.terminal_window_bar_background_side);
+        if (side != null && side.getVisibility() == View.VISIBLE) {
+            android.graphics.drawable.Drawable current = side.getBackground();
+            if (!(current instanceof com.termux.app.terminal.DeckSlabDrawable)
+                    || !((com.termux.app.terminal.DeckSlabDrawable) current).deck().equals(deck))
+                side.setBackground(new com.termux.app.terminal.DeckSlabDrawable(deck));
+        }
     }
 
     /**
@@ -25777,7 +25990,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
     private static final int[] BAR_GLASS_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
-        R.id.terminal_window_bar_background, R.id.terminal_status_lens};
+        R.id.terminal_window_bar_background, R.id.terminal_window_bar_wallpaper_backdrop_side,
+        R.id.terminal_window_bar_background_side, R.id.terminal_status_lens};
 
     /**
      * The bar drawn {@code insetPx} from each side while laid out at the committed page's Margin
@@ -25795,7 +26009,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             insetPx);
         if (host.getScaleX() != 1f) host.setScaleX(1f);
         float centre = host.getWidth() / 2f;
-        for (int id : BAR_GLASS_LAYERS) easeBarGlassLayer(hotView(id), centre, grow);
+        for (int id : BAR_GLASS_LAYERS) easeBarGlassLayer(hotView(id), centre, grow, host.getWidth());
         if (host.getOutlineProvider() == mStatusBarSurfaceOutline
             && mStatusBarSurfaceOutline.setHorizontalGrow(Math.round(grow)))
             host.invalidateOutline();
@@ -25805,11 +26019,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (slot != null) slot.setEdgeGrow(grow);
     }
 
-    /** One glass layer of the bar, stretched about the host's centre by {@code grow} a side. */
-    private static void easeBarGlassLayer(@Nullable View layer, float hostCentre, float grow) {
+    /**
+     * One glass layer of the bar, stretched about the host's centre by {@code grow} a side. A
+     * card of a bar split round the camera stands against one host edge only: it stretches from
+     * its inner edge, so the edge at the hole stays where the camera is and the outer one moves.
+     */
+    private static void easeBarGlassLayer(@Nullable View layer, float hostCentre, float grow,
+                                          int hostWidth) {
         if (layer == null || layer.getWidth() <= 0) return;
-        float pivot = hostCentre - layer.getLeft();
-        float scale = com.termux.app.place.BarMarginEase.layerScale(pivot, grow);
+        boolean atLeft = layer.getLeft() <= 0;
+        boolean atRight = layer.getRight() >= hostWidth;
+        float pivot;
+        float scale;
+        if (atLeft == atRight) {
+            pivot = hostCentre - layer.getLeft();
+            scale = com.termux.app.place.BarMarginEase.layerScale(pivot, grow);
+        } else {
+            float width = layer.getWidth();
+            scale = Math.max(0.01f, (width + grow) / width);
+            pivot = atLeft ? width : 0f;
+        }
         if (layer.getPivotX() != pivot) layer.setPivotX(pivot);
         if (layer.getScaleX() != scale) layer.setScaleX(scale);
     }
@@ -32658,6 +32887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View background = findViewById(R.id.terminal_window_bar_background);
         if (background != null && !topFadeTakesRedress()) {
             background.setBackground(buildTerminalWindowBarBackground(host));
+            dressBarSideCard(host);
         }
         applyWindowBarDeckSlab();
         applyStatusBarStyle(host);

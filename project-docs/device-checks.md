@@ -34,6 +34,36 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
   `logcat --pid` runs.
 - **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
+  Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
+  gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
+  outline is drawn round the camera's box over the page, following the value. It must go on
+  release, on the Home key or recents mid-drag, on Back, and by itself 1.5 s after the last
+  move; after a mid-drag Home, nothing is drawn on the page or on the home when coming back.
+  Check the Settings page does not jump when the outline appears (it lets the window draw
+  under the camera while it shows). Upgrade from a build with a custom centre and width: the
+  gap stands where it did (margin 0, scale and Move sideways derived once); Off hides Margin.
+- **Camera hole, wave 3: the pane top round the camera.** Owed on pong, status bar off and Full
+  screen: one pane, then a 2-way vertical split (the camera over the seam or over one pane):
+  the rim's top line breaks over the camera's box and resumes either side, the glass and the
+  outline are unchanged, the first text row starts just below the box (it used to start at the
+  safe inset, 126 px; now at the traced box's bottom). Floating and Docked; rotate to landscape
+  and back (no break in landscape); status bar on or system bar showing: no break.
+- **Camera hole, wave 2: the Floating bar splits round the camera.** Owed on pong, Full screen,
+  Floating status bar: the bar's glass and rim stop either side of the camera, both cards with
+  the bar's own radius (pong's hole is mid-bar, so two cards; check each end of Move sideways
+  in Custom for the collapse to one card); the chips and readings still clear the gap; compact
+  and expanded keep the split, the expanded bar's second row runs either side; Home and Terminal
+  crossing leaves no flash at the gap and the cards ease with their outer edges; light, dark,
+  black, Material You, scheme chrome; font scale 1.3; Docked and the system bar showing are
+  unchanged; keyboard up and down. The frost and the rim of the second card are not yet seen
+  on a device: look for a seam or a double rim.
+- **Camera hole, wave 1 (feat/camera-hole).** Owed on pong: Full screen with the status bar on,
+  the chips and readings still clear the camera (the gap now follows the cutout path's bounds,
+  which may be narrower than the bounding rect: check the margin looks even each side), Floating
+  and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
+  bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
+  on Custom.
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
