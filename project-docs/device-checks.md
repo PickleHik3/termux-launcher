@@ -21,11 +21,20 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 - **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
   with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
   edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
-  line behind them, the reflections fade out above the letters, and the letters stay legible.
+  line behind them, the reflections run the card's full height behind the letters, and the letters stay legible.
   Check Docked and Floating, Home keyboard up and down (the card stands on the keyboard), the A–Z
   row hidden (as before), the A–Z row ordered over the apps row (falls back to the Tray slab),
   extra keys on the bottom (Tray slab), a Workspace page (Lens beads unchanged), and at the
   largest font scale. Look for a reflection cut off too short by the A–Z row's top padding.
+
+- **Peek glass polish (11-07, fix/peek-with-az).** Not seen on a device; needs Android 13+ with
+  Live glass on. On pong, Peek glass over a light and then a dark wallpaper, A–Z row under the
+  icons: the mirror is clear under each icon and softer and fainter with depth, seen through a
+  faint still ripple (nothing moves at rest), a thin bright line runs along the card's top edge
+  and round its top corners and fades down the sides, and behind the A–Z letters the reflection
+  is dimmed and greyer so the letters read over a bright icon. Check the A–Z row hidden (the
+  specular line only), Docked and Floating, keyboard up, Live glass off (the old still
+  reflection: no ripple, line or band), light/dark/scheme chrome, and the largest font scale.
 
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
