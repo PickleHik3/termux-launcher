@@ -144,4 +144,12 @@ public class GlassControlsTest {
         }
         assertEquals("no blur stays no blur", 0, GlassControls.blurWithGrain(0, 5));
     }
+
+    @Test
+    public void clearWithNoGrainStillReadsBackAsGlass20() {
+        // Clear ships blur 7 with grain 0 since generation 6, off the curve; the slider reads 20.
+        assertEquals(GlassControls.CLEAR, GlassControls.readBack(-1, GlassControls.blurForGlass(GlassControls.CLEAR), 0));
+        assertEquals(GlassControls.CLEAR, GlassControls.readBack(GlassControls.CLEAR,
+            GlassControls.blurForGlass(GlassControls.CLEAR), 0));
+    }
 }

@@ -39,6 +39,48 @@ public final class FullScreenCornerPolicy {
         return Math.max(own, screenTopRadiusPx);
     }
 
+    /** Steps along a card's corner arc when {@link #cornerClearGapPx} checks it against the screen's. */
+    private static final int ARC_STEPS = 32;
+
+    /**
+     * The gap a Floating card keeps from the screen edge it stands on (top or bottom): its own
+     * outside Full screen; in Full screen, where that edge is the glass's own, the larger of its
+     * own, its side gap (so it floats evenly) and what its corners need to clear the screen's
+     * rounded corner ({@link #cornerClearGapPx}).
+     */
+    public static int floatingEdgeGapPx(boolean fullScreen, int ownGapPx, int sideGapPx,
+                                        float cardRadiusPx, float screenRadiusPx) {
+        int own = Math.max(0, ownGapPx);
+        if (!fullScreen) return own;
+        return Math.max(Math.max(own, Math.max(0, sideGapPx)),
+            cornerClearGapPx(sideGapPx, cardRadiusPx, screenRadiusPx));
+    }
+
+    /**
+     * The least gap from the screen's edge at which a card standing {@code sideGapPx} in from the
+     * side, its corners at {@code cardRadiusPx}, keeps its whole corner inside a screen corner of
+     * {@code screenRadiusPx}: the most any point of its corner arc sits outside the screen's
+     * curve, rounded up. 0 with no screen radius.
+     */
+    public static int cornerClearGapPx(int sideGapPx, float cardRadiusPx, float screenRadiusPx) {
+        float big = screenRadiusPx;
+        if (!(big > 0f)) return 0;
+        float side = Math.max(0, sideGapPx);
+        float r = Math.max(0f, cardRadiusPx);
+        double need = 0;
+        for (int i = 0; i <= ARC_STEPS; i++) {
+            double angle = Math.PI / 2 * i / ARC_STEPS;
+            double x = side + r - r * Math.cos(angle);
+            double arcOffset = r - r * Math.sin(angle);
+            // The screen's curve is symmetric: as far down from the edge at x as it is in from
+            // the side at that distance (StatusRowKeepOut owns the curve).
+            double screenEdge = com.termux.app.statusbar.StatusRowKeepOut.cornerInsetPx(big,
+                (float) x);
+            need = Math.max(need, screenEdge - arcOffset);
+        }
+        return (int) Math.ceil(need - 1e-3);
+    }
+
     /**
      * How far a pane's text starts below the pane's top so it clears the camera: what of the
      * camera's box ({@link CameraHoleGeometry#keepOutBox}) still reaches past the pane's top, when

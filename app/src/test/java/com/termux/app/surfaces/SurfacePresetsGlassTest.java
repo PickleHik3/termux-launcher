@@ -82,8 +82,9 @@ public class SurfacePresetsGlassTest {
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
         // Clear, Mist and Tint sit on the Depth curve at 90, 80 and 70, each bend one and a half
         // bands; light 10 is stored for older builds only, the hairline is fixed in the program.
-        // Blur and grain are each Look's point on the Glass curve: Clear 20, Tint 40, Mist 75.
-        assertRecipe(preset("minimal"), 7, 10, 3, 27, 18, 10, 40, 76);
+        // Blur and grain are each Look's point on the Glass curve: Clear 20 (but with no grain since
+        // generation 6, off the curve), Tint 40, Mist 75.
+        assertRecipe(preset("minimal"), 7, 10, 0, 27, 18, 10, 40, 76);
         assertRecipe(preset("stock"), 12, 46, 4, 21, 14, 10, 0, 0);
         assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0, 0, 0);
         assertRecipe(preset("frost"), 25, 60, 7, 24, 16, 10, 0, 0);

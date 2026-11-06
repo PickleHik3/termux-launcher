@@ -13,8 +13,8 @@ import androidx.core.view.WindowInsetsCompat;
 /**
  * Reads the camera's shape on the screen's top edge from a window's insets, for
  * {@link CameraHoleGeometry}: Android's bounding rects that touch the edge, joined (a side
- * cutout in landscape stands off the top edge, so it is never one); on API 31+ narrowed to the
- * bounds of the cutout's own path, which traces a punch hole's circle inside its rect.
+ * cutout in landscape stands off the top edge, so it is never one); on API 31+ the bounds of the
+ * cutout's own path where it meets those rects, which trace the punch hole itself.
  * Allocates, so callers keep the answer per cutout instead of asking per inset dispatch.
  */
 public final class CutoutShape {
@@ -42,7 +42,12 @@ public final class CutoutShape {
                 path.computeBounds(bounds, true);
                 Rect traced = new Rect();
                 bounds.roundOut(traced);
-                if (traced.intersect(hole)) hole = traced;
+                // The traced path is the camera, whole: a rect that stands beside part of it
+                // (pong's rect is 454..540 while its hole runs on past 551) must not cut it.
+                if (CameraHoleGeometry.traceStandsForRect(hole.left, hole.right, traced.left,
+                        traced.right)) {
+                    hole = traced;
+                }
             }
         }
         return hole;

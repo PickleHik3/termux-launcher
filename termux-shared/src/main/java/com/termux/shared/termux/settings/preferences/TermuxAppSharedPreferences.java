@@ -875,6 +875,45 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_FANCIER_GLASS_CLARITY), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_FACE_CLARITY}. Clamped, a percentage. */
+    public int getFancierGlassFaceClarityPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY);
+    }
+
+    public void setFancierGlassFaceClarityPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, value);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DIM}. Clamped, a percentage. */
+    public int getFancierGlassDimPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM);
+    }
+
+    public void setFancierGlassDimPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM, value);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_SIZE_LENS}. Clamped, a percentage. */
+    public int getFancierGlassSizeLensPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS);
+    }
+
+    public void setFancierGlassSizeLensPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, value);
+    }
+
+    private int faceTerm(String key) {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences, key,
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM),
+            TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM, TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM);
+    }
+
+    private void setFaceTerm(String key, int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, key,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM,
+                TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM), false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_MOTION_LIGHT}. */
     public boolean isFancierGlassMotionLightEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -3245,6 +3284,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setFancierGlassEdgeLightPercent(FRESH_INSTALL_GLASS_EDGE_LIGHT);
             setFancierGlassDispersionPercent(FRESH_INSTALL_GLASS_DISPERSION);
             setFancierGlassClarityPercent(FRESH_INSTALL_GLASS_CLARITY);
+            setFancierGlassFaceClarityPercent(100);
+            setFancierGlassDimPercent(0);
+            setFancierGlassSizeLensPercent(100);
             // The Layout margin writes both of these; the pane gap matches it at this size.
             setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);
             setTerminalPaneGap(FRESH_INSTALL_MARGIN);
@@ -3278,7 +3320,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     // Clear's blur and grain are its point on the editor's Glass curve (Glass 20).
     private static final int FRESH_INSTALL_BASE_BLUR = 7;
     private static final int FRESH_INSTALL_BASE_OPACITY = 10;
-    private static final int FRESH_INSTALL_BASE_GRAIN = 3;
+    private static final int FRESH_INSTALL_BASE_GRAIN = 0;
     private static final int FRESH_INSTALL_GLASS_BEND = 27;
     private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 18;
     private static final int FRESH_INSTALL_GLASS_EDGE_LIGHT = 10;
