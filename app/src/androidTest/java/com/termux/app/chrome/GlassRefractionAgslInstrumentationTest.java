@@ -1,5 +1,6 @@
 package com.termux.app.chrome;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -108,6 +109,55 @@ public class GlassRefractionAgslInstrumentationTest {
         float middle = meanDiff(frosted, clear, W / 2 - 20, H / 2 - 20, W / 2 + 20, H / 2 + 20);
         assertTrue("the rim shows the sharp picture, mean diff " + rim, rim > 20f);
         assertTrue("the middle stays, mean diff " + middle, middle < 1f);
+    }
+
+    @Test
+    public void faceClarityShowsTheSharpPictureThroughTheFaceOnlyWhereOneIsHandedIn() {
+        // Clear's face: with a sharp input the middle shows it; with none the middle is the frost.
+        Bitmap content = flat(Color.rgb(60, 90, 160));
+        Bitmap sharp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        sharp.eraseColor(Color.rgb(200, 120, 40));
+        GlassRefraction.Look plain = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        GlassRefraction.Look clear = plain.withFaceTerms(100, 0, 0);
+        Bitmap frosted = draw(plain, content, sharp, null);
+        Bitmap faced = draw(clear, content, sharp, null);
+        Bitmap none = draw(clear, content);
+        int mx = W / 2, my = H / 2;
+        assertTrue("the face shows the sharp picture, mean diff " + meanDiff(frosted, faced, mx - 20, my - 20, mx + 20, my + 20),
+            meanDiff(frosted, faced, mx - 20, my - 20, mx + 20, my + 20) > 40f);
+        assertTrue("with no sharp input the face is the frost, mean diff " + meanDiff(frosted, none, mx - 20, my - 20, mx + 20, my + 20),
+            meanDiff(frosted, none, mx - 20, my - 20, mx + 20, my + 20) < 0.5f);
+    }
+
+    @Test
+    public void dimDarkensABrightFaceAndLiftsADarkOne() {
+        GlassRefraction.Look plain = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        GlassRefraction.Look dimmed = plain.withFaceTerms(0, 100, 0);
+        int mx = W / 2, my = H / 2;
+        Bitmap white = flat(Color.WHITE);
+        float whiteBefore = meanLuma(draw(plain, white), mx - 20, my - 20, mx + 20, my + 20);
+        float whiteAfter = meanLuma(draw(dimmed, white), mx - 20, my - 20, mx + 20, my + 20);
+        assertEquals("a white face is dimmed by about 35%", whiteBefore * 0.65f, whiteAfter, 4f);
+        Bitmap dark = flat(Color.rgb(20, 20, 20));
+        float darkBefore = meanLuma(draw(plain, dark), mx - 20, my - 20, mx + 20, my + 20);
+        float darkAfter = meanLuma(draw(dimmed, dark), mx - 20, my - 20, mx + 20, my + 20);
+        assertTrue("a dark face is lifted a touch, " + darkBefore + " to " + darkAfter,
+            darkAfter > darkBefore + 4f && darkAfter < darkBefore + 25f);
+        Bitmap mid = flat(Color.rgb(100, 100, 100));
+        assertTrue("a mid face is not darkened",
+            meanLuma(draw(dimmed, mid), mx - 20, my - 20, mx + 20, my + 20)
+                >= meanLuma(draw(plain, mid), mx - 20, my - 20, mx + 20, my + 20));
+    }
+
+    @Test
+    public void sizeLensBendsALargerSurfaceMoreThanTheDefault() {
+        Bitmap content = checker();
+        GlassRefraction.Look plain = new GlassRefraction.Look(27, 18, 10, 0, 0, 0);
+        Bitmap off = draw(plain, content);
+        Bitmap on = draw(plain.withFaceTerms(0, 0, 100), content);
+        // The test surface is larger than 72 dp (W/2 dp at density 2), so the lens grows.
+        assertTrue("the rim bends differently", meanDiff(off, on, 2, 2, 40, H - 4) > 1f);
+        assertTrue("the middle stays", meanDiff(off, on, W / 2 - 20, H / 2 - 20, W / 2 + 20, H / 2 + 20) < 1f);
     }
 
     @Test

@@ -71,6 +71,9 @@ final class AppearanceSnapshot {
     private final int mSpecular;
     private final int mDispersion;
     private final int mClarity;
+    private final int mFaceClarity;
+    private final int mDimTerm;
+    private final int mSizeLens;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
     /** Whether the keyboard's key and background opacity move together. */
@@ -158,6 +161,9 @@ final class AppearanceSnapshot {
         mSpecular = prefs.getFancierGlassSpecularPercent();
         mDispersion = prefs.getFancierGlassDispersionPercent();
         mClarity = prefs.getFancierGlassClarityPercent();
+        mFaceClarity = prefs.getFancierGlassFaceClarityPercent();
+        mDimTerm = prefs.getFancierGlassDimPercent();
+        mSizeLens = prefs.getFancierGlassSizeLensPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mOpacityLinked = prefs.isInAppKeyboardOpacityLinked();
@@ -211,6 +217,9 @@ final class AppearanceSnapshot {
         mSpecular = in.getInt("specular");
         mDispersion = in.getInt("dispersion");
         mClarity = in.getInt("clarity");
+        mFaceClarity = in.optInt("faceClarity", 0);
+        mDimTerm = in.optInt("dimTerm", 0);
+        mSizeLens = in.optInt("sizeLens", 0);
         mKeyboardBlurRaw = in.getInt("keyboardBlurRaw");
         mKeyOpacity = in.getInt("keyOpacity");
         mOpacityLinked = in.getBoolean("opacityLinked");
@@ -317,6 +326,9 @@ final class AppearanceSnapshot {
         prefs.setFancierGlassSpecularPercent(mSpecular);
         prefs.setFancierGlassDispersionPercent(mDispersion);
         prefs.setFancierGlassClarityPercent(mClarity);
+        prefs.setFancierGlassFaceClarityPercent(mFaceClarity);
+        prefs.setFancierGlassDimPercent(mDimTerm);
+        prefs.setFancierGlassSizeLensPercent(mSizeLens);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         prefs.setInAppKeyboardOpacityLinked(mOpacityLinked);
@@ -374,6 +386,7 @@ final class AppearanceSnapshot {
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)
             .append('|').append(mClarity)
+            .append('|').append(mFaceClarity).append('|').append(mDimTerm).append('|').append(mSizeLens)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
             .append('|').append(mOpacityLinked)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
@@ -423,6 +436,9 @@ final class AppearanceSnapshot {
         out.put("specular", mSpecular);
         out.put("dispersion", mDispersion);
         out.put("clarity", mClarity);
+        out.put("faceClarity", mFaceClarity);
+        out.put("dimTerm", mDimTerm);
+        out.put("sizeLens", mSizeLens);
         out.put("keyboardBlurRaw", mKeyboardBlurRaw);
         out.put("keyOpacity", mKeyOpacity);
         out.put("opacityLinked", mOpacityLinked);

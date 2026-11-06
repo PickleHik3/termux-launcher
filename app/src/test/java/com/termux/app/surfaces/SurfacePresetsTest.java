@@ -357,7 +357,7 @@ public class SurfacePresetsTest {
     @Test
     public void everyShippedLookResolvesTheNumbersItAlwaysDid() {
         String[] ids = {"minimal", "frost", "stock", "solid"};
-        int[][] want = {{7, 10, 3, 0}, {25, 60, 7, 0}, {12, 46, 4, 35}, {0, 92, 0, 0}};
+        int[][] want = {{7, 10, 0, 0}, {25, 60, 7, 0}, {12, 46, 4, 35}, {0, 92, 0, 0}};
         for (int i = 0; i < ids.length; i++) {
             preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 99);
             preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR, 36);

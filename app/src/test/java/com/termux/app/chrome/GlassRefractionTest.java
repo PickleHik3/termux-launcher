@@ -312,9 +312,9 @@ public class GlassRefractionTest {
             last = pull;
         }
         // The program runs exactly these expressions.
-        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / min(uBand, hs), 0.0, 1.0);"));
+        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / min(sBand, hs), 0.0, 1.0);"));
         assertTrue(GlassRefraction.AGSL.contains(
-            "float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
+            "float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
         // The pull is an offset that vanishes on the face, so a face pixel samples exactly fragCoord.
         assertTrue(GlassRefraction.AGSL.contains("float2 sampleCoord = fragCoord - nb * pull;"));
     }
@@ -1420,7 +1420,7 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains("        if (uShelf > 0.0 && n.y > 0.0) {\n"));
         // The resting narrow ring is still the first word on the pull; the soft band overrides it
         // only behind its gate.
-        int ring = agsl.indexOf("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;");
+        int ring = agsl.indexOf("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;");
         int soft = agsl.indexOf("if (uSoftRim > 0.0) {");
         assertTrue(ring > 0 && soft > ring);
         assertEquals(GlassRefraction.SOFT_RIM_MAX_PULL_SHARE + "",
@@ -1513,5 +1513,116 @@ public class GlassRefractionTest {
         assertEquals(35f, GlassRefraction.rectRadiusPx(rim[0], rim[1], rim[2], rim[3], 56f), 0.001f);
         assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, -5f), 0.001f);
         assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 0f, 0f, 12f), 0.001f);
+    }
+
+    // ---------------------------------------------------------------- Clear's face terms
+
+    @Test
+    public void theFaceTermsAreInTheLooksEqualityAndHashAndDefaultToNone() {
+        GlassRefraction.Look plain = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        assertEquals(0, plain.faceClarityPercent);
+        assertEquals(0, plain.dimPercent);
+        assertEquals(0, plain.sizeLensPercent);
+        assertEquals(0f, plain.faceClarity(), 0f);
+        assertEquals(0f, plain.dim(), 0f);
+        assertEquals(0f, plain.sizeLens(), 0f);
+        assertEquals(plain, plain.withFaceTerms(0, 0, 0));
+        GlassRefraction.Look clear = plain.withFaceTerms(100, 100, 100);
+        assertNotEquals(plain, clear);
+        assertNotEquals(plain.hashCode(), clear.hashCode());
+        assertEquals(clear, new GlassRefraction.Look(27, 18, 10, 0, 40, 76).withFaceTerms(100, 100, 100));
+        assertEquals(clear.hashCode(),
+            new GlassRefraction.Look(27, 18, 10, 0, 40, 76).withFaceTerms(100, 100, 100).hashCode());
+        assertNotEquals(clear, plain.withFaceTerms(0, 100, 100));
+        assertNotEquals(clear, plain.withFaceTerms(100, 0, 100));
+        assertNotEquals(clear, plain.withFaceTerms(100, 100, 0));
+        // Each term alone moves the hash, and a cover keeps them.
+        assertNotEquals(plain.withFaceTerms(0, 100, 0).hashCode(), plain.withFaceTerms(0, 0, 100).hashCode());
+        GlassRefraction.Look covered = clear.withCover(0.5f);
+        assertEquals(100, covered.dimPercent);
+        assertEquals(1f, covered.faceClarity(), 0f);
+        // Clamped to a percentage.
+        assertEquals(100, plain.withFaceTerms(400, -3, 7).faceClarityPercent);
+        assertEquals(0, plain.withFaceTerms(400, -3, 7).dimPercent);
+    }
+
+    @Test
+    public void theSizeLensScalesBySideAndIsHeldToItsRange() {
+        // 72 dp short side scales nothing; a dock is about that.
+        assertEquals(1f, GlassRefraction.sizeLensK(72f * DENSITY, DENSITY, 1f), 1e-6f);
+        // Smaller surfaces take less, to three quarters; larger take more, to one and a half.
+        assertEquals(0.75f, GlassRefraction.sizeLensK(24f * DENSITY, DENSITY, 1f), 1e-6f);
+        assertEquals(0.75f, GlassRefraction.sizeLensK(0f, DENSITY, 1f), 1e-6f);
+        assertEquals(1.5f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 1f), 1e-6f);
+        assertEquals(1.25f, GlassRefraction.sizeLensK(90f * DENSITY, DENSITY, 1f), 1e-6f);
+        // Off it is exactly 1, whatever the size.
+        assertEquals(1f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 0f), 0f);
+        assertEquals(1f, GlassRefraction.sizeLensK(10f, DENSITY, 0f), 0f);
+        // Half on is half way.
+        assertEquals(1.25f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 0.5f), 1e-6f);
+    }
+
+    @Test
+    public void theFaceFadesOutWithSizeSoLargePanesKeepTheirFrost() {
+        // Full at 200 dp of short side or under, none at 320 or over, smoothstep between.
+        assertEquals(1f, GlassRefraction.faceFade(40f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(200f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.faceFade(260f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0f, GlassRefraction.faceFade(320f * DENSITY, DENSITY), 1e-6f);
+        // The terminal pane, about 396 dp, keeps its frost; a widget does not.
+        assertEquals(0f, GlassRefraction.faceFade(396f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(150f * DENSITY, DENSITY), 0f);
+        float last = 1f;
+        for (float dp = 150f; dp <= 400f; dp += 10f) {
+            float f = GlassRefraction.faceFade(dp * DENSITY, DENSITY);
+            assertTrue("falls with size at " + dp, f <= last + 1e-6f);
+            last = f;
+        }
+    }
+
+    @Test
+    public void theFaceToneDimsBrightAndLiftsDarkAndIsNothingAtZero() {
+        float[] tone = new float[2];
+        GlassRefraction.faceTone(1f, 1f, tone);
+        assertEquals(0.35f, tone[0], 1e-6f);
+        assertEquals(0f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0.3f, 1f, tone);
+        assertEquals(0f, tone[0], 0f);
+        assertEquals(0.06f * 0.7f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0f, 1f, tone);
+        assertEquals(0.06f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0.675f, 1f, tone);
+        assertEquals(0.35f * 0.5f, tone[0], 1e-6f);
+        GlassRefraction.faceTone(0.8f, 0f, tone);
+        assertEquals(0f, tone[0], 0f);
+        assertEquals(0f, tone[1], 0f);
+    }
+
+    @Test
+    public void theProgramTakesTheFaceTermsOnlyBehindTheirGates() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("uniform float uFaceClarity;"));
+        assertTrue(agsl.contains("uniform float uDim;"));
+        assertTrue(agsl.contains("uniform float uSizeLens;"));
+        assertTrue(agsl.contains("    if (faceMix > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (dimK > 0.0) {\n"));
+        assertTrue(agsl.contains("float faceMix = uFaceClarity * faceFade;"));
+        assertTrue(agsl.contains("float dimK = uDim * faceFade;"));
+        assertEquals(GlassRefraction.Look.FACE_FADE_TO_DP + "",
+            agsl.split("const float kFadeToDp = ")[1].split(";")[0]);
+        assertTrue(agsl.contains("float sizeK = uSizeLens > 0.0\n"));
+        assertTrue(agsl.contains(": 1.0;\n"));
+        // The tone comes after the picture is chosen and before the rim's light.
+        int mix = agsl.indexOf("col = mix(col, sharp.eval(f), half(clarityK));");
+        int tone = agsl.indexOf("if (dimK > 0.0) {");
+        int light = agsl.indexOf("if (inside < kGlowReachDp * uDensity) {");
+        assertTrue(mix > 0 && tone > mix && light > tone);
+        assertEquals(GlassRefraction.Look.DIM_MAX + "",
+            agsl.split("const float kDimMax = ")[1].split(";")[0]);
+        assertEquals(GlassRefraction.Look.SIZE_MAX + "",
+            agsl.split("const float kSizeMax = ")[1].split(";")[0]);
+        // No raw uBand, uStrength or uSoftRim in the bend's arithmetic: it takes the scaled ones.
+        assertFalse(agsl.contains("min(uBand"));
+        assertFalse(agsl.contains("min(uStrength"));
     }
 }
