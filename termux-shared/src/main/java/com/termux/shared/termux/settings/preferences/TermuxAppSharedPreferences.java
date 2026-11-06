@@ -1048,36 +1048,97 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.STATUS_BAR_CUTOUT_AUTO;
     }
 
-    /** A custom camera gap's centre in dp from the screen's centre, clamped to its range. */
-    public int getStatusBarCutoutCenter() {
-        return clampStatusBarCutoutCenter(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_CENTER));
+    /** The camera gap's sideways nudge in dp, clamped to its range. */
+    public int getStatusBarCutoutOffsetX() {
+        return clampStatusBarCutoutOffsetX(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_X, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_OFFSET_X));
     }
 
-    public void setStatusBarCutoutCenter(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER,
-            clampStatusBarCutoutCenter(value), false);
+    public void setStatusBarCutoutOffsetX(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_X,
+            clampStatusBarCutoutOffsetX(value), false);
     }
 
-    private static int clampStatusBarCutoutCenter(int value) {
-        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_CENTER,
-            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_CENTER, value));
+    private static int clampStatusBarCutoutOffsetX(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_OFFSET_X,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_OFFSET_X, value));
     }
 
-    /** A custom camera gap's width in dp, clamped to its range. */
-    public int getStatusBarCutoutWidth() {
-        return clampStatusBarCutoutWidth(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_WIDTH));
+    /** The camera gap's downward nudge in dp, clamped to its range. */
+    public int getStatusBarCutoutOffsetY() {
+        return clampStatusBarCutoutOffsetY(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_Y, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_OFFSET_Y));
     }
 
-    public void setStatusBarCutoutWidth(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH,
-            clampStatusBarCutoutWidth(value), false);
+    public void setStatusBarCutoutOffsetY(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_Y,
+            clampStatusBarCutoutOffsetY(value), false);
     }
 
-    private static int clampStatusBarCutoutWidth(int value) {
-        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_WIDTH,
-            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_WIDTH, value));
+    private static int clampStatusBarCutoutOffsetY(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_OFFSET_Y,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_OFFSET_Y, value));
+    }
+
+    /** The camera gap's size in percent, clamped to its range. */
+    public int getStatusBarCutoutScale() {
+        return clampStatusBarCutoutScale(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_SCALE, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_SCALE));
+    }
+
+    public void setStatusBarCutoutScale(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_SCALE,
+            clampStatusBarCutoutScale(value), false);
+    }
+
+    private static int clampStatusBarCutoutScale(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_SCALE,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_SCALE, value));
+    }
+
+    /** The air kept from the camera in dp, clamped to its range. */
+    public int getStatusBarCutoutMargin() {
+        return clampStatusBarCutoutMargin(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MARGIN, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN));
+    }
+
+    public void setStatusBarCutoutMargin(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MARGIN,
+            clampStatusBarCutoutMargin(value), false);
+    }
+
+    private static int clampStatusBarCutoutMargin(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_MARGIN,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_MARGIN, value));
+    }
+
+    /** Whether the first centre and width were already turned into nudges (see the constants). */
+    public boolean isStatusBarCutoutMigrated() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MIGRATED, false);
+    }
+
+    public void setStatusBarCutoutMigrated(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MIGRATED, value, false);
+    }
+
+    /** The first centre in dp as it was stored, or null when it never was. For the migration only. */
+    @Nullable
+    public Integer getLegacyStatusBarCutoutCenter() {
+        return mSharedPreferences != null
+            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER)
+            ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, 0)) : null;
+    }
+
+    /** The first width in dp as it was stored, or null when it never was. For the migration only. */
+    @Nullable
+    public Integer getLegacyStatusBarCutoutWidth() {
+        return mSharedPreferences != null
+            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH)
+            ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, 32)) : null;
     }
 
     /** The place the weather is fetched for, trimmed; empty when it follows the device. */

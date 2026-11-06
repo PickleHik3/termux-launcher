@@ -39,19 +39,61 @@ public final class FullScreenCornerPolicy {
         return Math.max(own, screenTopRadiusPx);
     }
 
+    /** Steps along a card's corner arc when {@link #cornerClearGapPx} checks it against the screen's. */
+    private static final int ARC_STEPS = 32;
+
+    /**
+     * The gap a Floating card keeps from the screen edge it stands on (top or bottom): its own
+     * outside Full screen; in Full screen, where that edge is the glass's own, the larger of its
+     * own, its side gap (so it floats evenly) and what its corners need to clear the screen's
+     * rounded corner ({@link #cornerClearGapPx}).
+     */
+    public static int floatingEdgeGapPx(boolean fullScreen, int ownGapPx, int sideGapPx,
+                                        float cardRadiusPx, float screenRadiusPx) {
+        int own = Math.max(0, ownGapPx);
+        if (!fullScreen) return own;
+        return Math.max(Math.max(own, Math.max(0, sideGapPx)),
+            cornerClearGapPx(sideGapPx, cardRadiusPx, screenRadiusPx));
+    }
+
+    /**
+     * The least gap from the screen's edge at which a card standing {@code sideGapPx} in from the
+     * side, its corners at {@code cardRadiusPx}, keeps its whole corner inside a screen corner of
+     * {@code screenRadiusPx}: the most any point of its corner arc sits outside the screen's
+     * curve, rounded up. 0 with no screen radius.
+     */
+    public static int cornerClearGapPx(int sideGapPx, float cardRadiusPx, float screenRadiusPx) {
+        float big = screenRadiusPx;
+        if (!(big > 0f)) return 0;
+        float side = Math.max(0, sideGapPx);
+        float r = Math.max(0f, cardRadiusPx);
+        double need = 0;
+        for (int i = 0; i <= ARC_STEPS; i++) {
+            double angle = Math.PI / 2 * i / ARC_STEPS;
+            double x = side + r - r * Math.cos(angle);
+            double arcOffset = r - r * Math.sin(angle);
+            // The screen's curve is symmetric: as far down from the edge at x as it is in from
+            // the side at that distance (StatusRowKeepOut owns the curve).
+            double screenEdge = com.termux.app.statusbar.StatusRowKeepOut.cornerInsetPx(big,
+                (float) x);
+            need = Math.max(need, screenEdge - arcOffset);
+        }
+        return (int) Math.ceil(need - 1e-3);
+    }
+
     /**
      * How far a pane's text starts below the pane's top so it clears the camera: what of the
-     * cutout's safe top inset ({@code safeTopPx}) still reaches past the pane's top, when Full
-     * screen leaves the pane's top inside the cutout's band and the cutout's box
-     * ({@code holeLeft..holeRight}) overlaps the pane across. Zero otherwise: a pane below the
-     * band, beside the hole, or with the system bar showing keeps its text where it was.
+     * camera's box ({@link CameraHoleGeometry#keepOutBox}) still reaches past the pane's top, when
+     * Full screen leaves the pane's top inside the box's band and the box ({@code boxLeftPx..
+     * boxRightPx}) overlaps the pane across. Zero otherwise: a pane below the box, beside it, or
+     * with the system bar showing keeps its text where it was.
      */
     public static int paneTextTopInsetPx(boolean fullScreen, int paneLeftPx, int paneTopPx,
-                                         int paneRightPx, int holeLeftPx, int holeRightPx,
-                                         int safeTopPx) {
-        if (!fullScreen || safeTopPx <= 0 || holeRightPx <= holeLeftPx) return 0;
-        if (paneTopPx >= safeTopPx) return 0;
-        if (paneRightPx <= holeLeftPx || paneLeftPx >= holeRightPx) return 0;
-        return safeTopPx - Math.max(0, paneTopPx);
+                                         int paneRightPx, int boxLeftPx, int boxRightPx,
+                                         int boxBottomPx) {
+        if (!fullScreen || boxBottomPx <= 0 || boxRightPx <= boxLeftPx) return 0;
+        if (paneTopPx >= boxBottomPx) return 0;
+        if (paneRightPx <= boxLeftPx || paneLeftPx >= boxRightPx) return 0;
+        return boxBottomPx - Math.max(0, paneTopPx);
     }
 }

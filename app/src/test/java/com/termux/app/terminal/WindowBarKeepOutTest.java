@@ -19,7 +19,7 @@ public class WindowBarKeepOutTest {
 
     private static StatusRowKeepOut.Screen pong() {
         return new StatusRowKeepOut.Screen(true, 454, 0, 540, 126, 126, 115f, 115f, 115f, 115f,
-            StatusRowKeepOut.Mode.AUTO, 0, 0, Math.round(4f * 2.625f));
+            StatusRowKeepOut.Mode.AUTO, 0, 0, 100, Math.round(4f * 2.625f), 63);
     }
 
     @Test public void aBarAtTheScreenTopStepsInFromTheCornersAndLeavesTheCameraGap() {
