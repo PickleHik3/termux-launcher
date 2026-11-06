@@ -76,8 +76,10 @@ public final class SceneStill {
         Image image = null;
         HardwareBuffer buffer = null;
         Bitmap wrapped = null;
+        SceneArtwork artwork = null;
         try {
-            SceneProgram program = ScenePrograms.factory(kind, new FilamentSource()).create(1f);
+            artwork = new SceneArtwork(context, SceneArtwork.COASTAL_SUNSET_ASSET);
+            SceneProgram program = ScenePrograms.factory(kind, new FilamentSource(), artwork).create(1f);
             program.setSize(width, height, context.getResources().getDisplayMetrics().density);
             program.setKnobs(choice.speed, choice.density, choice.palette);
             program.restart();
@@ -134,6 +136,7 @@ public final class SceneStill {
             if (renderer != null) renderer.destroy();
             if (node != null) node.discardDisplayList();
             if (reader != null) reader.close();
+            if (artwork != null) artwork.release();
             Trace.endSection();
         }
     }

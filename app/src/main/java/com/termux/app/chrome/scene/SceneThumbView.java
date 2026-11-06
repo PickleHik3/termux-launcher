@@ -31,6 +31,8 @@ public final class SceneThumbView extends View {
     private float mSpeed = 1f, mDensityKnob = 0f;
     private int mPalette = 0;
     @Nullable private SceneProgram mProgram;
+    /** The photo of a photo scene, decoded while this view draws it and let go when it detaches. */
+    @Nullable private SceneArtwork mArtwork;
     @NonNull private final Paint mPaint = new Paint();
     private boolean mRunning;
     private boolean mShowStill = true;
@@ -55,7 +57,10 @@ public final class SceneThumbView extends View {
         mSpeed = LiveWallpaperChoice.clampSpeed(speed);
         mDensityKnob = LiveWallpaperChoice.clampDensity(density);
         mPalette = LiveWallpaperChoice.clampPalette(palette);
-        if (kindChanged) mProgram = null;
+        if (kindChanged) {
+            mProgram = null;
+            releaseArtwork();
+        }
         else if (mProgram != null) mProgram.setKnobs(mSpeed, mDensityKnob, mPalette);
         restart();
     }
@@ -107,6 +112,15 @@ public final class SceneThumbView extends View {
         super.onDetachedFromWindow();
         removeCallbacks(mTick);
         mRunning = false;
+        // A photo scene's program holds the decoded photo: drop both; the next draw rebuilds them.
+        if (mArtwork != null && mArtwork.heldBytes() > 0L) {
+            mProgram = null;
+            releaseArtwork();
+        }
+    }
+
+    private void releaseArtwork() {
+        if (mArtwork != null) mArtwork.release();
     }
 
     @Override
@@ -140,7 +154,8 @@ public final class SceneThumbView extends View {
     private void draw33(@NonNull Canvas canvas, int w, int h) {
         SceneProgram program = mProgram;
         if (program == null) {
-            program = ScenePrograms.factory(mKind, new FilamentSource()).create(1f);
+            if (mArtwork == null) mArtwork = new SceneArtwork(getContext(), SceneArtwork.COASTAL_SUNSET_ASSET);
+            program = ScenePrograms.factory(mKind, new FilamentSource(), mArtwork).create(1f);
             program.setKnobs(mSpeed, mDensityKnob, mPalette);
             mProgram = program;
             mPaint.setShader(program.shader());
