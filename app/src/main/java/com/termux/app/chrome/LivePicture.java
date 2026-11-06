@@ -43,7 +43,17 @@ public final class LivePicture implements GlassPicture {
     public static final int SCALE = 4;
 
     @NonNull final View mSurface;
-    @NonNull private final LiveDrawable mDrawable = new LiveDrawable();
+    @NonNull private final LiveDrawable mDrawable = new LiveDrawable(false);
+    /**
+     * A second holder's drawable ({@link #aimedDrawable}): the same blur node, aimed at another
+     * view's place. A float's titlebar shows the float's one picture through it.
+     */
+    @NonNull private final LiveDrawable mAimed = new LiveDrawable(true);
+    /** Where the second holder's origin stands against the surface's, in px; see {@link #aimAt}. */
+    private int mAimedX;
+    private int mAimedY;
+    /** How far above the surface the recording reaches, in px; see {@link #setReachTop}. */
+    private int mReachTopPx;
     private float mRadiusPx;
     private int mMarginPx;
     /** The radius is a panel's {@code RealtimeBlurView} radius, not the stored frame's. */
@@ -68,6 +78,7 @@ public final class LivePicture implements GlassPicture {
     int mRecordedWidth = -1;
     int mRecordedHeight = -1;
     int mRecordedMargin = -1;
+    int mRecordedReach = -1;
     /** The scene frame generation the recording drew (0: none); a new one re-records. */
     int mRecordedSceneGen;
     /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
@@ -147,6 +158,40 @@ public final class LivePicture implements GlassPicture {
         if (mReady || mReleased) return;
         mReady = true;
         mDrawable.invalidateSelf();
+        mAimed.invalidateSelf();
+    }
+
+    /**
+     * Records {@code px} more of what is beneath, above the surface's top, so a second holder
+     * standing there ({@link #aimAt}) has real pixels. Zero when there is none. Re-records on a
+     * change only.
+     */
+    public void setReachTop(int px) {
+        int reach = Math.max(0, px);
+        if (reach == mReachTopPx) return;
+        mReachTopPx = reach;
+        forgetRecording();
+    }
+
+    int reachTopPx() {
+        return mReachTopPx;
+    }
+
+    /**
+     * The second holder's origin against the surface's, in px: negative above or left of it. Its
+     * drawable draws the same picture where that holder stands, without recording again.
+     */
+    public void aimAt(int originX, int originY) {
+        if (originX == mAimedX && originY == mAimedY) return;
+        mAimedX = originX;
+        mAimedY = originY;
+        mAimed.invalidateSelf();
+    }
+
+    /** The drawable for a second holder: the one picture, aimed by {@link #aimAt}. */
+    @NonNull
+    public Drawable aimedDrawable() {
+        return mAimed;
     }
 
     @NonNull
@@ -225,7 +270,7 @@ public final class LivePicture implements GlassPicture {
 
     /** Whether {@code drawable} is this picture's. */
     boolean owns(@Nullable Drawable drawable) {
-        return drawable == mDrawable;
+        return drawable == mDrawable || drawable == mAimed;
     }
 
     /** The node a recording goes into, sized to {@code width} x {@code height}, made on first use. */
@@ -369,6 +414,7 @@ public final class LivePicture implements GlassPicture {
         mRecordedWidth = -1;
         mRecordedHeight = -1;
         mRecordedMargin = -1;
+        mRecordedReach = -1;
         mRecordedPoseCount = -1;
     }
 
@@ -551,6 +597,8 @@ public final class LivePicture implements GlassPicture {
         mRecord = null;
         mPage = null;
         mCaptureRoot = null;
+        // The second holder is not the surface: it draws its stored frame from its next draw too.
+        mAimed.invalidateSelf();
     }
 
     private void discardRetired() {
@@ -578,12 +626,18 @@ public final class LivePicture implements GlassPicture {
 
     /** Whether a view still draws this picture: a holder clears the callback when it lets go. */
     boolean held() {
-        return mDrawable.getCallback() != null;
+        return mDrawable.getCallback() != null || mAimed.getCallback() != null;
     }
 
     /** Draws the blur node at four times, the recording's origin on the surface's. */
     private final class LiveDrawable extends Drawable {
         private int mAlpha = 255;
+        /** The second holder's: aimed by {@link #aimAt}, and never sets the picture's colour filter. */
+        private final boolean mSecond;
+
+        LiveDrawable(boolean second) {
+            mSecond = second;
+        }
 
         @Override
         public void draw(@NonNull Canvas canvas) {
@@ -593,8 +647,13 @@ public final class LivePicture implements GlassPicture {
             if (blur == null || !blur.hasDisplayList() || !(canvas instanceof RecordingCanvas)) return;
             int save = canvas.save();
             // The holder (an ImageView) has already moved the canvas to its content box.
-            canvas.translate(-mMarginPx - mSurface.getPaddingLeft(),
-                -mMarginPx - mSurface.getPaddingTop());
+            // The recording's origin is the surface's, less the margin and the reach above it.
+            if (mSecond) {
+                canvas.translate(-mMarginPx - mAimedX, -mMarginPx - mReachTopPx - mAimedY);
+            } else {
+                canvas.translate(-mMarginPx - mSurface.getPaddingLeft(),
+                    -mMarginPx - mReachTopPx - mSurface.getPaddingTop());
+            }
             canvas.scale(SCALE, SCALE);
             ((RecordingCanvas) canvas).drawRenderNode(blur);
             canvas.restoreToCount(save);
@@ -612,7 +671,7 @@ public final class LivePicture implements GlassPicture {
 
         @Override
         public void setColorFilter(@Nullable ColorFilter colorFilter) {
-            if (colorFilter == mFilter) return;
+            if (mSecond || colorFilter == mFilter) return;
             mFilter = colorFilter;
             if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
         }

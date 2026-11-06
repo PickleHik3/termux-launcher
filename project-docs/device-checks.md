@@ -54,6 +54,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
   `logcat --pid` runs.
 - **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
+  shows what is beneath the float (the page, the terminal behind, another float's glass), not only
+  the wallpaper; drag it over a second float and the strip shows that float through it; resize
+  and maximise keep it aligned with the body; Clear and another Look; with Live blur off the strip
+  is the stored frame as before; minimise and bring back; with nine or more Live surfaces open the
+  strip still follows its float (it takes no slot of its own).
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent

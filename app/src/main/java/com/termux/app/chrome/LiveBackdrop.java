@@ -376,9 +376,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // new effect on the same recording, never a re-record.
             picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
-            WallSwipeGlassPolicy.Mode mode = pageLayerMode(picture, surface, margin);
+            int reach = picture.reachTopPx();
+            WallSwipeGlassPolicy.Mode mode = pageLayerMode(picture, surface, margin, reach);
             boolean split = mode != WallSwipeGlassPolicy.Mode.LIVE;
             if (picture.mRecordedMode == mode
+                && picture.mRecordedReach == reach
                 && picture.mRecordedWidth == surface.getWidth()
                 && picture.mRecordedHeight == surface.getHeight()
                 && picture.mRecordedMargin == margin
@@ -390,10 +392,10 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 continue;
             }
             int width = surface.getWidth() + 2 * margin;
-            int height = surface.getHeight() + 2 * margin;
+            int height = surface.getHeight() + 2 * margin + reach;
             RenderNode node = picture.recordNode(width, height);
-            if (!(split ? recordSplit(node, width, height, margin, picture)
-                : record(node, width, height, margin))) continue;
+            if (!(split ? recordSplit(node, width, height, margin, reach, picture)
+                : record(node, width, height, margin, reach))) continue;
             picture.mRecordedMode = mode;
             picture.mRecordedBeneath.clear();
             picture.mRecordedBeneath.addAll(mBeneath);
@@ -404,6 +406,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.mRecordedWidth = surface.getWidth();
             picture.mRecordedHeight = surface.getHeight();
             picture.mRecordedMargin = margin;
+            picture.mRecordedReach = reach;
             picture.mRecordedSceneGen = sceneGeneration();
             // The first whole recording: its holder swaps the stored frame for it in this frame.
             picture.recorded();
@@ -423,7 +426,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         int width = Math.max(1, surface.getWidth() + 2 * marginPx);
         int height = Math.max(1, surface.getHeight() + 2 * marginPx);
         out.setPosition(0, 0, width, height);
-        return record(out, width, height, marginPx);
+        return record(out, width, height, marginPx, 0);
     }
 
     /** The root this recorder records within. */
@@ -464,7 +467,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (!collect(surface) || !mMatrix.invert(mInverse)) return false;
         int save = canvas.save();
         try {
-            drawPath(canvas, marginPx, false);
+            drawPath(canvas, marginPx, 0, false);
         } finally {
             canvas.restoreToCount(save);
         }
@@ -668,11 +671,12 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /** Draws {@link #mBeneath} into {@code out} along {@link #mPath}, as {@link #collect} found them. */
     @RequiresApi(Build.VERSION_CODES.Q)
-    private boolean record(@NonNull RenderNode out, int width, int height, int marginPx) {
+    private boolean record(@NonNull RenderNode out, int width, int height, int marginPx,
+                           int reachTopPx) {
         if (!mMatrix.invert(mInverse)) return false;
         RecordingCanvas canvas = out.beginRecording(width, height);
         try {
-            drawPath(canvas, marginPx, true);
+            drawPath(canvas, marginPx, reachTopPx, true);
         } finally {
             out.endRecording();
         }
@@ -684,8 +688,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * already set. {@code z} for a recording canvas, where the parent's own draw orders by Z with
      * shadows; a software canvas has neither, and {@link #collectLevel} has ordered by Z already.
      */
-    private void drawPath(@NonNull Canvas canvas, int marginPx, boolean z) {
-        canvas.translate(marginPx, marginPx);
+    private void drawPath(@NonNull Canvas canvas, int marginPx, int reachTopPx, boolean z) {
+        canvas.translate(marginPx, marginPx + reachTopPx);
         canvas.concat(mInverse);
         drawGround(canvas);
         int next = 0;
@@ -717,7 +721,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      */
     @NonNull
     private WallSwipeGlassPolicy.Mode pageLayerMode(@NonNull LivePicture picture,
-                                                    @NonNull View surface, int margin) {
+                                                    @NonNull View surface, int margin, int reach) {
         mPageChanged = false;
         mExpand.clear();
         mWallMatrix.reset();
@@ -726,7 +730,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
         boolean scene = LiveSceneFrame.current() != null;
         if (wall != null && (moving || scene)) {
-            want = WallSwipeGlassPolicy.mode(splittable(wall, surface, margin), moving, scene);
+            want = WallSwipeGlassPolicy.mode(splittable(wall, surface, margin, reach), moving, scene);
         }
         if (want != WallSwipeGlassPolicy.Mode.FROZEN) picture.mSwipeCaptures = 0;
         if (want == WallSwipeGlassPolicy.Mode.LIVE) {
@@ -746,7 +750,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * what the surface needs ({@link #mNeeded}), the reach a new layer holds ({@link #mReach}) and
      * its rect ({@link #mPageRect}).
      */
-    private boolean splittable(@NonNull ViewGroup wall, @NonNull View surface, int margin) {
+    private boolean splittable(@NonNull ViewGroup wall, @NonNull View surface, int margin,
+                               int reach) {
         mChain.clear();
         mPages.clear();
         mPoseCount = 0;
@@ -804,9 +809,13 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             while (mExpand.size() > from) mExpand.remove(mExpand.size() - 1);
             if (!opaque || mPages.isEmpty()) return false;
         }
-        mNeeded.set(-margin, -margin, surface.getWidth() + margin, surface.getHeight() + margin);
+        // The recording reaches reach px above the surface (a float's titlebar draws it), so
+        // the page layer has to cover that strip too.
+        mNeeded.set(-margin, -margin - reach, surface.getWidth() + margin,
+            surface.getHeight() + margin);
         mPageMatrix.mapRect(mNeeded);
-        long base = layerBytes(surface.getWidth() + 2 * margin, surface.getHeight() + 2 * margin);
+        long base = layerBytes(surface.getWidth() + 2 * margin,
+            surface.getHeight() + 2 * margin + reach);
         // A pixel each way for the layer's rect rounding out.
         int neededWidth = (int) Math.ceil(mNeeded.width()) + 2;
         int neededHeight = (int) Math.ceil(mNeeded.height()) + 2;
@@ -1032,12 +1041,12 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     /** {@link #record} with the page layer in the wall's place. */
     @RequiresApi(Build.VERSION_CODES.Q)
     private boolean recordSplit(@NonNull RenderNode out, int width, int height, int marginPx,
-                                @NonNull LivePicture picture) {
+                                int reachTopPx, @NonNull LivePicture picture) {
         RenderNode page = picture.pageLayer();
         if (page == null || !mMatrix.invert(mInverse)) return false;
         RecordingCanvas canvas = out.beginRecording(width, height);
         try {
-            canvas.translate(marginPx, marginPx);
+            canvas.translate(marginPx, marginPx + reachTopPx);
             canvas.concat(mInverse);
             drawGround(canvas);
             int next = 0;
