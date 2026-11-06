@@ -11054,26 +11054,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The slot (clock, pinned cards, media) stands in the main card only.
         View slot = findViewById(R.id.terminal_top_widget_area);
         if (slot != null) changed |= setBarCardMargins(slot, mainLeft, mainRight);
-        // CAMHOLE-DBG temporary: the split's inputs and answer, once per call.
-        {
-            int[] o = new int[2];
-            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, o, new int[2]);
-            StringBuilder frames = new StringBuilder();
-            StackTraceElement[] trace = new Throwable().getStackTrace();
-            for (int i = 1; i < Math.min(trace.length, 7); i++)
-                frames.append(' ').append(trace[i].getMethodName()).append(':')
-                    .append(trace[i].getLineNumber());
-            android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-                + " syncBarSplit box=" + java.util.Arrays.toString(box)
-                + " hostVis=" + host.getVisibility() + " hostOrigin=" + o[0] + "," + o[1]
-                + " hostW=" + host.getWidth() + " hostH=" + host.getHeight()
-                + " hostTx=" + host.getTranslationX()
-                + " vertical=" + isStatusBarVertical() + " chrome=" + (mChrome != null)
-                + " rounded=" + isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)
-                + " standsDown=" + frameStandsDown() + " split=" + split
-                + " want=" + java.util.Arrays.toString(want) + " side=" + sideWanted
-                + " changed=" + changed + " frames:" + frames);
-        }
         if (!changed) return;
         // The cards' dress and frost follow the new rects, once, after this layout.
         host.post(() -> {
@@ -11081,28 +11061,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (current == null || mChrome == null) return;
             dressBarSideCard(current);
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
-            // CAMHOLE-DBG temporary: where each glass layer stands after the layout it asked for.
-            current.post(() -> {
-                int[] ids = {R.id.terminal_window_bar_wallpaper_backdrop,
-                    R.id.terminal_window_bar_background,
-                    R.id.terminal_window_bar_wallpaper_backdrop_side,
-                    R.id.terminal_window_bar_background_side, R.id.terminal_top_widget_area};
-                int[] at = new int[2];
-                for (int id : ids) {
-                    View v = findViewById(id);
-                    if (v == null) continue;
-                    v.getLocationOnScreen(at);
-                    android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-                        + " glass " + getResources().getResourceEntryName(id)
-                        + " vis=" + v.getVisibility() + " left=" + at[0]
-                        + " right=" + (at[0] + v.getWidth()) + " top=" + at[1]
-                        + " h=" + v.getHeight() + " layLeft=" + v.getLeft()
-                        + " layRight=" + v.getRight() + " scaleX=" + v.getScaleX()
-                        + " pivotX=" + v.getPivotX() + " tx=" + v.getTranslationX()
-                        + " bg=" + (v.getBackground() == null ? "null"
-                            : v.getBackground().getClass().getSimpleName()));
-                }
-            });
         });
     }
 
