@@ -5,6 +5,7 @@ import com.termux.app.statusbar.StatusRowKeepOut;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Full screen on the developer's phone (pong): 1080 × 2412 px, every corner 115px, one camera
@@ -26,6 +27,39 @@ public class FullScreenCornerPolicyTest {
     private static StatusRowKeepOut.Screen pong() {
         return new StatusRowKeepOut.Screen(true, HOLE_LEFT, 0, HOLE_RIGHT, SAFE_TOP, SAFE_TOP,
             R, R, R, R, StatusRowKeepOut.Mode.AUTO, 0, 0, 100, 11, 63);
+    }
+
+    /**
+     * Pong's Floating bar in Full screen: 26px in from each side, 79px tall (radius 39.5). It
+     * stood 5px from the top, where the screen's 115px corners cut its own; it now floats 26px
+     * down, the same as from the sides, and its corner arc stays inside the screen's curve.
+     */
+    @Test public void aFloatingBarInFullScreenFloatsOffTheTopAsFromTheSides() {
+        int gap = FullScreenCornerPolicy.floatingEdgeGapPx(true, 5, 26, 39.5f, R);
+        assertEquals(26, gap);
+        // Outside Full screen the system bar holds the edge: the bar keeps its own gap.
+        assertEquals(5, FullScreenCornerPolicy.floatingEdgeGapPx(false, 5, 26, 39.5f, R));
+        // Every point of the corner arc at that gap is inside the screen's curve.
+        for (int i = 0; i <= 90; i++) {
+            double a = Math.toRadians(i);
+            double x = 26 + 39.5 - 39.5 * Math.cos(a);
+            double y = gap + 39.5 - 39.5 * Math.sin(a);
+            assertTrue("arc at " + i + " deg", y + E
+                >= StatusRowKeepOut.cornerInsetPx(R, (float) x));
+        }
+        // At 5px it was not.
+        assertTrue(FullScreenCornerPolicy.cornerClearGapPx(26, 39.5f, R) > 5);
+    }
+
+    @Test public void aBarHuggingTheSideNeedsTheGapItsCornerAsks() {
+        // Flush to the sides with square corners, the corner itself must clear: 115 down.
+        assertEquals(115, FullScreenCornerPolicy.cornerClearGapPx(0, 0f, R));
+        // A bar whose corner matches the screen's, flush, fits exactly.
+        assertEquals(0, FullScreenCornerPolicy.cornerClearGapPx(0, R, R));
+        // No screen radius: nothing to clear.
+        assertEquals(0, FullScreenCornerPolicy.cornerClearGapPx(0, 0f, 0f));
+        // Side gap 0, own 5: the corner's need wins over both.
+        assertEquals(115, FullScreenCornerPolicy.floatingEdgeGapPx(true, 5, 0, 0f, R));
     }
 
     @Test public void aStatusRowAtTheVeryTopStepsInByTheCornerAtItsTopEdge() {

@@ -7352,6 +7352,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.place.SeamDress.Surface.STACK;
     }
 
+    /** Full screen and the screen's corner radii as {@link #applyStatusBarStyle} last read them. */
+    private boolean mStatusStyleFullScreen;
+    @Nullable private float[] mStatusStyleCornerRadii;
+
     /**
      * Apply the selected status-bar style to the top window-bar host. Default is the edge-to-edge
      * glass pane (no margins, square corners, glass extended behind the system status bar). Rounded
@@ -7385,8 +7389,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // between the top and bottom stacks, so a column reaches exactly as far as the canvas
             // beside it and cancels nothing. It used to be a sibling of the padded content root and
             // pulled itself out to both ends of the screen with negative margins for that.
+            // In Full screen a Floating bar's edge is the screen's own: it floats as far from it
+            // as from the sides, and its corners clear the screen's rounded ones.
+            mStatusStyleFullScreen = mProperties != null && mProperties.isUsingFullScreen();
+            mStatusStyleCornerRadii = mDisplayCornerRadiiPx;
+            boolean floatsOnScreenEdge = capsule && mStatusStyleFullScreen;
+            float barRadius = resolveStatusBarCapsuleCornerRadiusPx(targetThickness);
             int topMargin = vertical ? 0
-                : (mStatusBarEdge == PlaceLayout.Edge.TOP ? outerMargin : 0);
+                : (mStatusBarEdge == PlaceLayout.Edge.TOP
+                    ? com.termux.app.chrome.FullScreenCornerPolicy.floatingEdgeGapPx(
+                        floatsOnScreenEdge, outerMargin, sideMargin, barRadius,
+                        Math.max(mDisplayCornerRadiiPx[0], mDisplayCornerRadiiPx[1]))
+                    : 0);
             int bottomMargin = vertical ? 0
                 : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
             boolean sizeStale = !isStatusBarFoldInteractive()
@@ -11225,6 +11239,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean boxMoved = !java.util.Arrays.equals(cameraBox, mCameraBox);
         mCameraBox = cameraBox;
         if (boxMoved) syncPanesForScreenTop();
+        // The Floating bar's gap from the screen's edge follows Full screen and the screen's
+        // corners (applyStatusBarStyle); restyle once when either changed under it.
+        boolean fullScreen = mProperties != null && mProperties.isUsingFullScreen();
+        if (fullScreen != mStatusStyleFullScreen
+            || !java.util.Arrays.equals(radii, mStatusStyleCornerRadii)) {
+            View barHost = findViewById(R.id.terminal_window_bar_host);
+            if (barHost != null) applyStatusBarStyle(barHost);
+        }
         // The window bar reads the same answer for where it stands, but only in Full screen: with
         // the system bar showing it never reaches the camera's band, and stays as it always was.
         View windowBar = findViewById(R.id.terminal_window_bar);
