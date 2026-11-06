@@ -2578,15 +2578,6 @@ public final class GlassRefraction {
             // The face tone is a wallpaper's: only where a frame is the content, never under a
             // RenderEffect, whose content is the view's own icons and text.
             float dim = look != null && mInputBound ? look.dim() : 0f;
-            if (dim > 0f && dim != mDimWritten) {
-                StackTraceElement[] at = new Throwable().getStackTrace();
-                StringBuilder frames = new StringBuilder();
-                for (int i = 1; i < Math.min(at.length, 7); i++) frames.append(" < ").append(at[i]);
-                android.util.Log.w("GLASSDIM", "uptime=" + android.os.SystemClock.uptimeMillis()
-                    + " dim=" + dim + " inputBound=" + mInputBound + " sharpBound=" + mSharpBound
-                    + " sharpDistinct=" + mSharpDistinct + " rect=" + mLeft + "," + mTop + ","
-                    + mRight + "," + mBottom + " program=" + System.identityHashCode(this) + frames);
-            }
             if (dim != mDimWritten) {
                 mDimWritten = dim;
                 mShader.setFloatUniform("uDim", dim);
