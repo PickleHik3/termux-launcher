@@ -5773,6 +5773,10 @@ public class TerminalPaneController {
             slab.setLivePicture(null);
             mHost.detachLiveGlass(slab);
         }
+        // The titlebar shows the same picture, so glass on glass reaches it too, at no slot of
+        // its own: the recording reaches up over the strip.
+        container.titlebar().setLiveGlass(slab.livePicture());
+        container.aimLiveGlass(slab);
     }
 
     public void applyPaneGlass() {
@@ -7672,6 +7676,29 @@ public class TerminalPaneController {
 
         @NonNull FloatTitlebarView titlebar() {
             return mTitlebar;
+        }
+
+        private final int[] mSlabAt = new int[2];
+
+        /**
+         * Aims the float's one Live picture at its titlebar: the recording reaches up to the
+         * strip's top and the strip's glass draws it from where it stands. Compares before it
+         * sets, so a layout that moved nothing records nothing.
+         */
+        void aimLiveGlass(@NonNull PaneGlassBackdropView slab) {
+            com.termux.app.chrome.LivePicture picture = slab.livePicture();
+            if (picture == null || !FloatLiveGlass.offsetIn(slab, this, mSlabAt)) return;
+            int originX = mTitlebar.getLeft() - mSlabAt[0];
+            int originY = mTitlebar.getTop() - mSlabAt[1];
+            picture.setReachTop(FloatLiveGlass.reachAbove(mSlabAt[1], mTitlebar.getTop()));
+            picture.aimAt(originX, originY);
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            PaneGlassBackdropView slab = mPaneGlassViews.get(mLeaf.session);
+            if (slab != null) aimLiveGlass(slab);
         }
 
         @Override
