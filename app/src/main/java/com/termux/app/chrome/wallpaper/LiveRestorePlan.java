@@ -152,10 +152,15 @@ final class LiveRestorePlan {
         return stillIsOnPhone(memory, homeId, lockId) ? Remember.KEEP : Remember.TAKE;
     }
 
-    /** Whether the phone still shows the still the memory was taken for: both ids are known and unchanged. */
+    /**
+     * Whether the phone still shows the still the memory was taken for: the Home id is known and
+     * unchanged, and Lock is as it was. {@code WallpaperManager.getWallpaperId(FLAG_LOCK)} is -1
+     * while Lock shares Home's picture, which is how a still set on both stands; a shared Lock then
+     * must still be shared, and a Lock of its own must be the same one.
+     */
     static boolean stillIsOnPhone(@Nullable Memory memory, int homeId, int lockId) {
-        return memory != null && memory.stillHomeId > 0 && memory.stillHomeId == homeId
-            && memory.stillLockId > 0 && memory.stillLockId == lockId;
+        if (memory == null || memory.stillHomeId <= 0 || memory.stillHomeId != homeId) return false;
+        return memory.stillLockId <= 0 ? lockId <= 0 : memory.stillLockId == lockId;
     }
 
     /**

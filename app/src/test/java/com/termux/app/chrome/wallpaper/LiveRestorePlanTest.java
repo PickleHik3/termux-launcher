@@ -57,6 +57,26 @@ public class LiveRestorePlanTest {
     }
 
     @Test
+    public void stillIsOnPhone_aLockSharedWithHomeStaysSharedAfterTheStill() {
+        // A still set on both: getWallpaperId(FLAG_LOCK) is -1 while Lock shares Home's picture.
+        LiveRestorePlan.Memory shared = new LiveRestorePlan.Memory(true, false, SAME, false, 1055, -1);
+        assertTrue(LiveRestorePlan.stillIsOnPhone(shared, 1055, -1));
+        assertEquals(LiveRestorePlan.Remember.KEEP, LiveRestorePlan.remember(true, shared, 1055, -1));
+        // Someone gave Lock a picture of its own since: stale.
+        assertFalse(LiveRestorePlan.stillIsOnPhone(shared, 1055, 1060));
+        // Home changed: stale.
+        assertFalse(LiveRestorePlan.stillIsOnPhone(shared, 1056, -1));
+    }
+
+    @Test
+    public void stillIsOnPhone_aLockOfItsOwnMustBeTheSameOne() {
+        LiveRestorePlan.Memory own = new LiveRestorePlan.Memory(true, false, PHOTO, true, 1055, 1057);
+        assertTrue(LiveRestorePlan.stillIsOnPhone(own, 1055, 1057));
+        assertFalse(LiveRestorePlan.stillIsOnPhone(own, 1055, -1));
+        assertFalse(LiveRestorePlan.stillIsOnPhone(own, 1055, 1058));
+    }
+
+    @Test
     public void photoChosen_dropsAMemoryTheNewWallpaperMadeStale() {
         LiveRestorePlan.Memory m = mem(true, false, SAME, false);
         assertTrue(LiveRestorePlan.dropOnPhotoChosen(m, 9, 8));
