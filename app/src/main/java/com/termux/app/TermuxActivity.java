@@ -23973,7 +23973,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean consumeBack() { return liveHost.consumeBack(); }
                     @Override public void holdBusy(boolean held) { picker.holdBusy(held); }
                     @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
-                    @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
+                    // Opened onto Live (a scene in use), the Photo picker is GONE and its centred
+                    // card never sizes: waiting on it left the sheet invisible over the editor.
+                    @Override public void whenReady(@NonNull Runnable ready) {
+                        if (liveHost.showingLive()) ready.run();
+                        else picker.whenReady(ready);
+                    }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
                         picker.commit(done, failed);

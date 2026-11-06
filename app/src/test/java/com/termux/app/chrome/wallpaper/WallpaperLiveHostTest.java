@@ -81,6 +81,7 @@ public class WallpaperLiveHostTest {
     public void opensOnPhotoWithNothingInUse_andLiveShowsTheFiveScenes() {
         WallpaperLiveHost host = open(true);
         assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertFalse(host.showingLive());
         assertNotNull(host.grid());
         assertEquals(View.VISIBLE, host.picker().root().getVisibility());
         assertEquals(5, LiveWallpaperChoice.USER_KINDS.length);
@@ -91,6 +92,8 @@ public class WallpaperLiveHostTest {
         LiveWallpaperChoice.none().withScene("nebula").write(mPrefs);
         WallpaperLiveHost host = open(true);
         assertEquals(LiveSceneLogic.Kind.LIVE, host.kind());
+        // The sheet must not wait on the GONE photo picker's readiness (it never comes).
+        assertTrue(host.showingLive());
         assertEquals(View.GONE, host.picker().root().getVisibility());
         for (int i = 0; i < LiveWallpaperChoice.USER_KINDS.length; i++) {
             boolean inUse = "nebula".equals(LiveWallpaperChoice.USER_KINDS[i]);

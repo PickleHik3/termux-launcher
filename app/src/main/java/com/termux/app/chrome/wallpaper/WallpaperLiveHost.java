@@ -164,6 +164,14 @@ public final class WallpaperLiveHost {
         return row;
     }
 
+    /**
+     * Whether the Live side is up. The Photo picker is then GONE and never sizes its centred
+     * card, so whoever waits on the picker's readiness must not wait while this is true.
+     */
+    public boolean showingLive() {
+        return mKind == LiveSceneLogic.Kind.LIVE;
+    }
+
     private void showKind(@NonNull LiveSceneLogic.Kind kind) {
         mKind = kind;
         boolean live = kind == LiveSceneLogic.Kind.LIVE;
