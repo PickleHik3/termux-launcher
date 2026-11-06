@@ -251,39 +251,19 @@ checks go on `project-docs/device-checks.md` in the same commit.
 | 4 | Settings rows, migration, live outline | Custom: each slider moves/sizes the gap and the outline follows the camera; leave mid-drag (Home key, recents) -> no outline anywhere on return; upgrade from a build with custom centre/width -> same gap |
 | 5 | Docked, per Q1's answer | per answer |
 
-## 6. Open questions
+## 6. Decisions on the open questions (developer, 2026-11-06)
 
-**Q1. Docked split makes a concave notch.** Under Docked the bar is part of one joined frame
-(ADR 0007), and in Wallpaper mode it wears no glass of its own (`frameStandsDown`,
-`TermuxActivity.java:3660`). A gap through the bar's full height opens onto the frame/pane insert
-below it, so the gap's floor has two inside corners: concave, which the project forbids. Its screen
-edges also carry no rim, so nothing visibly runs into the camera today. Recommendation: under
-Docked, contents only (as now); no glass split. Alternative: under Docked + Full screen + hole, the
-bar drops below the box, the band above stays frame glass.
-
-**Q2. A pane cannot be two cards.** Its text spans its width. Convex options: (a, recommended) the
-rim's top line breaks around the box, glass and outline unchanged, text below the box; (b) the
-pane's whole top drops below the box (costs about one row at the box depth, all width); (c) for a
-corner hole only, the pane's near corner radius grows until its arc clears the box (for a 60px hole
-at 60..120 x 30..90 that is about 300px / 115dp, which looks odd beside the other corners).
-
-**Q3. The outline cannot be seen "on the home" from Settings.** The sliders live in
-`SettingsActivity`, which covers the home. Spec draws the outline in the slider's own window at the
-camera's position (§4). Alternative: move the four Custom sliders into the Appearance editor's
-Status bar card, which runs over the home (more footprint; editor commits only on Done).
-
-**Q4. The pane text inset changes a pinned number.** `paneTextTopInsetPx` uses the cutout's safe
-top (`FullScreenCornerPolicyTest:82` pins 126 for pong) and the bounding rect's sides. Reading the
-traced box instead starts text just below the camera (fewer rows lost, and a pane beside a small
-hole no longer insets). One owner says it should read the box; the test changes.
-
-**Q5. Pong's hole numbers disagree.** Brief: top-left punch hole. Fixtures named `pong()` in
-`WindowBarKeepOutTest:21` and `FullScreenCornerPolicyTest:24` use 454..540 x 0..126, near the centre.
-Wave 0 reads the real rect and path before fixtures are written.
-
-**Q6. Expanded bar is split for its whole 91dp height** for a hole about 35dp deep. Convex-only
-leaves no other shape; on pong the left card collapses anyway, so the bar loses roughly the left
-50dp for its whole height. Accept, or drop the bar below the box while expanded?
-
-**Q7. Margin under Auto.** Brief puts Margin under Custom only; Auto keeps today's fixed 4dp. Should
-Auto also read the stored Margin (one knob, both modes)?
+- **Q1 Docked:** contents only, as today. No glass split under Docked; Floating gets the split.
+- **Q2 Pane top:** option (a). The rim's top line breaks around the hole's box; the pane's glass and
+  outline are unchanged; text starts just below the box.
+- **Q3 Outline preview:** drawn over the Settings page at the camera's real position while a slider
+  moves (§4), removed on release, onPause, onDestroyView and by the 1.5 s backstop. Not in the
+  Appearance editor.
+- **Q4 Pane text inset:** reads the traced box (one owner); `FullScreenCornerPolicyTest:82`'s pinned
+  value changes with it.
+- **Q5 Pong's hole:** read from pong 2026-11-06: boundingRect 454..540 x 0..126 px, insets top 126,
+  1080 px wide. Near the centre, not top-left; the existing `pong()` fixtures are right. Both split
+  cards stay wide on pong; the "left card collapses" sketch is the narrow-side case, not pong's.
+  Wave 0 still reads the cutout *path* for the shape.
+- **Q6 Expanded bar:** split for its full height; second-row items flow either side.
+- **Q7 Margin:** one Margin setting read by both Auto and Custom (default 4 dp, today's value).
