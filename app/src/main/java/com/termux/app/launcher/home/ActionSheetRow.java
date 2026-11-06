@@ -15,13 +15,24 @@ public final class ActionSheetRow {
     public final boolean accent;
     /** 0 for the first group, 1 for the second. */
     public final int group;
+    /**
+     * The row opens a surface over the whole screen: the sheet hands it back only once the card
+     * has slid away ({@link HomeActionsSheetPolicy#runsOnceHidden}).
+     */
+    public final boolean afterClose;
 
     public ActionSheetRow(@NonNull Object token, @NonNull CharSequence label,
                           @DrawableRes int icon, boolean accent, int group) {
+        this(token, label, icon, accent, group, false);
+    }
+
+    public ActionSheetRow(@NonNull Object token, @NonNull CharSequence label,
+                          @DrawableRes int icon, boolean accent, int group, boolean afterClose) {
         this.token = token;
         this.label = label;
         this.icon = icon;
         this.accent = accent;
         this.group = group;
+        this.afterClose = afterClose;
     }
 }

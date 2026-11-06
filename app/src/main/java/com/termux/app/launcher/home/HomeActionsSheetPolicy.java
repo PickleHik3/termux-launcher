@@ -133,4 +133,21 @@ public final class HomeActionsSheetPolicy {
         if (lock) out.add(Collections.singletonList(Item.LOCK_LAYOUT));
         return out;
     }
+
+    /**
+     * Whether {@code item} opens the Appearance editor over the whole screen (the Wallpaper door
+     * and the Appearance door): its sheet tells it only once the card has slid away.
+     */
+    public static boolean opensEditor(@NonNull Item item) {
+        return item == Item.WALLPAPER || item == Item.APPEARANCE;
+    }
+
+    /**
+     * Whether a tapped row's action waits for the sheet to settle hidden: a row that opens a
+     * surface over the whole screen ({@code waits}) does, unless the card is already hidden (it
+     * was never laid out, or the slide ended within the tap), when there is no slide to wait for.
+     */
+    public static boolean runsOnceHidden(boolean waits, boolean settledHidden) {
+        return waits && !settledHidden;
+    }
 }

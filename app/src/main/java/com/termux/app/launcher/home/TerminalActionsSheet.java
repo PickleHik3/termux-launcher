@@ -50,6 +50,11 @@ public final class TerminalActionsSheet {
         public EditorDoor door() {
             return this == SET_WALLPAPER ? EditorDoor.TERMINAL_SHEET_WALLPAPER : null;
         }
+
+        /** Whether the row opens the Appearance editor, which waits for the sheet to slide away. */
+        public boolean opensEditor() {
+            return this == APPEARANCE || this == SET_WALLPAPER;
+        }
     }
 
     private TerminalActionsSheet() {}
@@ -74,7 +79,8 @@ public final class TerminalActionsSheet {
             } else {
                 label = context.getString(action.label);
             }
-            rows.add(new ActionSheetRow(action, label, action.icon, false, action.group));
+            rows.add(new ActionSheetRow(action, label, action.icon, false, action.group,
+                action.opensEditor()));
         }
         return rows;
     }
