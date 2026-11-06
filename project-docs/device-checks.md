@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Camera hole, wave 1 (feat/camera-hole).** Owed on pong: Full screen with the status bar on,
+  the chips and readings still clear the camera (the gap now follows the cutout path's bounds,
+  which may be narrower than the bounding rect: check the margin looks even each side), Floating
+  and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
+  bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
+  on Custom.
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,

@@ -10930,12 +10930,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The screen's corner radii, top-left, top-right, bottom-left, bottom-right; 0 unknown. */
     @NonNull private float[] mDisplayCornerRadiiPx = new float[4];
 
-    private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
-        View row = findViewById(R.id.terminal_status_row);
-        // The top edge's box: Android's rects that touch it, joined. A side cutout in landscape
-        // stands off the top edge, so it is never one.
+    /** The cutout {@link #mTopCutoutShape} was read from, and what it was; see {@link #topCutoutShape}. */
+    @Nullable private androidx.core.view.DisplayCutoutCompat mTopCutoutShapeSource;
+    @Nullable private Rect mTopCutoutShape;
+    private boolean mTopCutoutShapeRead;
+
+    /**
+     * The camera's shape on the top edge in window pixels, or null with none: Android's bounding
+     * rects that touch the edge, joined (a side cutout in landscape stands off the top edge, so
+     * it is never one); on API 31+ narrowed to the bounds of the cutout's own path, which traces
+     * a punch hole's circle inside its rect. Read once per cutout and kept: never per inset
+     * dispatch. The returned rect is the cache's own; callers copy what they keep.
+     */
+    @Nullable
+    private Rect topCutoutShape(@Nullable androidx.core.view.DisplayCutoutCompat cutout,
+                                @NonNull WindowInsetsCompat insetsCompat) {
+        if (mTopCutoutShapeRead && java.util.Objects.equals(cutout, mTopCutoutShapeSource)) {
+            return mTopCutoutShape;
+        }
         Rect hole = null;
-        androidx.core.view.DisplayCutoutCompat cutout = insetsCompat.getDisplayCutout();
         if (cutout != null) {
             for (Rect rect : cutout.getBoundingRects()) {
                 if (rect == null || rect.isEmpty() || rect.top > 0) continue;
@@ -10943,6 +10956,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 else hole.union(rect);
             }
         }
+        if (hole != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            android.view.WindowInsets platform = insetsCompat.toWindowInsets();
+            android.view.DisplayCutout real = platform == null ? null : platform.getDisplayCutout();
+            android.graphics.Path path = real == null ? null : real.getCutoutPath();
+            if (path != null) {
+                android.graphics.RectF bounds = new android.graphics.RectF();
+                path.computeBounds(bounds, true);
+                Rect traced = new Rect();
+                bounds.roundOut(traced);
+                if (traced.intersect(hole)) hole = traced;
+            }
+        }
+        mTopCutoutShapeSource = cutout;
+        mTopCutoutShape = hole;
+        mTopCutoutShapeRead = true;
+        return hole;
+    }
+
+    private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
+        View row = findViewById(R.id.terminal_status_row);
+        // The top edge's camera shape, kept per cutout: the insets arrive every frame of the IME's
+        // animation, the cutout never changes under them.
+        androidx.core.view.DisplayCutoutCompat cutout = insetsCompat.getDisplayCutout();
+        Rect hole = topCutoutShape(cutout, insetsCompat);
         float[] radii = new float[4];
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             android.view.WindowInsets platform = insetsCompat.toWindowInsets();
@@ -10972,16 +11009,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
             : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
                 mPreferences.getStatusBarCutoutMode());
-        int customCentre = mPreferences == null ? 0
-            : Math.round(dpToPx(mPreferences.getStatusBarCutoutCenter()));
-        int customWidth = mPreferences == null ? 0
-            : Math.round(dpToPx(mPreferences.getStatusBarCutoutWidth()));
+        int dxPx = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutOffsetX()));
+        int dyPx = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutOffsetY()));
+        int scalePct = mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_SCALE
+            : mPreferences.getStatusBarCutoutScale();
+        int marginPx = Math.round(dpToPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN
+            : mPreferences.getStatusBarCutoutMargin()));
         com.termux.app.statusbar.StatusRowKeepOut.Screen screen =
             new com.termux.app.statusbar.StatusRowKeepOut.Screen(hole != null,
                 hole == null ? 0 : hole.left, hole == null ? 0 : hole.top,
                 hole == null ? 0 : hole.right, hole == null ? 0 : hole.bottom, topBand,
-                radii[0], radii[1], radii[2], radii[3], mode, customCentre, customWidth,
-                Math.round(dpToPx(com.termux.app.statusbar.StatusRowKeepOut.GAP_MARGIN_DP)));
+                radii[0], radii[1], radii[2], radii[3], mode, dxPx, dyPx, scalePct, marginPx,
+                Math.round(dpToPx(com.termux.app.chrome.CameraHoleGeometry.CUSTOM_BASE_DP)));
         // The window bar reads the same answer for where it stands, but only in Full screen: with
         // the system bar showing it never reaches the camera's band, and stays as it always was.
         View windowBar = findViewById(R.id.terminal_window_bar);

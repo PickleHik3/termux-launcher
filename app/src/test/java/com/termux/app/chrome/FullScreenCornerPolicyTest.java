@@ -22,7 +22,7 @@ public class FullScreenCornerPolicyTest {
 
     private static StatusRowKeepOut.Screen pong() {
         return new StatusRowKeepOut.Screen(true, HOLE_LEFT, 0, HOLE_RIGHT, SAFE_TOP, SAFE_TOP,
-            R, R, R, R, StatusRowKeepOut.Mode.AUTO, 0, 0, 11);
+            R, R, R, R, StatusRowKeepOut.Mode.AUTO, 0, 0, 100, 11, 63);
     }
 
     @Test public void aStatusRowAtTheVeryTopStepsInByTheCornerAtItsTopEdge() {
@@ -37,7 +37,7 @@ public class FullScreenCornerPolicyTest {
 
     @Test public void theCornersHoldWhateverTheCameraModeIs() {
         StatusRowKeepOut.Screen off = new StatusRowKeepOut.Screen(false, 0, 0, 0, 0, SAFE_TOP,
-            R, R, R, R, StatusRowKeepOut.Mode.OFF, 0, 0, 11);
+            R, R, R, R, StatusRowKeepOut.Mode.OFF, 0, 0, 100, 11, 63);
         StatusRowKeepOut.Answer answer = StatusRowKeepOut.answer(off, W, H, 0, 0, W, 90);
         assertEquals(new StatusRowKeepOut.Answer(115, 115, 0, 0), answer);
     }

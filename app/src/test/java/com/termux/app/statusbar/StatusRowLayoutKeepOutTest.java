@@ -65,7 +65,7 @@ public class StatusRowLayoutKeepOutTest {
 
     private static StatusRowKeepOut.Screen screen(StatusRowKeepOut.Mode mode) {
         return new StatusRowKeepOut.Screen(true, 500, 0, 580, 90, 80, 100f, 100f, 100f, 100f,
-            mode, 0, 0, MARGIN);
+            mode, 0, 0, 100, MARGIN, 60);
     }
 
     @Test public void withoutAScreenTheRowIsAPlainLinearLayout() {
@@ -124,7 +124,7 @@ public class StatusRowLayoutKeepOutTest {
         mWindow.addView(pane, paneParams);
         pane.addView(mRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 90));
         mRow.setScreenKeepOut(new StatusRowKeepOut.Screen(true, 454, 0, 540, 126, 126,
-            115f, 115f, 115f, 115f, StatusRowKeepOut.Mode.AUTO, 0, 0, 11));
+            115f, 115f, 115f, 115f, StatusRowKeepOut.Mode.AUTO, 0, 0, 100, 11, 63));
         layoutWindow(w, h);
         assertTrue(mRow.keepOut().isNone());
 

@@ -17,14 +17,14 @@ public class StatusRowKeepOutTest {
     private static final int MARGIN = 11;
 
     private static StatusRowKeepOut.Screen screen(StatusRowKeepOut.Mode mode, boolean hole,
-                                                  float radius, int customCentre,
-                                                  int customWidth) {
+                                                  float radius, int offsetX,
+                                                  int scalePct) {
         return new StatusRowKeepOut.Screen(hole, 500, 0, 580, 90, 80, radius, radius, radius,
-            radius, mode, customCentre, customWidth, MARGIN);
+            radius, mode, offsetX, 0, scalePct, MARGIN, 60);
     }
 
     private static StatusRowKeepOut.Screen auto() {
-        return screen(StatusRowKeepOut.Mode.AUTO, true, 100f, 0, 0);
+        return screen(StatusRowKeepOut.Mode.AUTO, true, 100f, 0, 100);
     }
 
     // ------------------------------------------------------------------ corner formula
@@ -95,24 +95,33 @@ public class StatusRowKeepOutTest {
 
     @Test public void offLeavesNoGapButStillClearsTheCorners() {
         StatusRowKeepOut.Answer answer = StatusRowKeepOut.answer(
-            screen(StatusRowKeepOut.Mode.OFF, true, 100f, 0, 0), W, H, 0, 10, W, 76);
+            screen(StatusRowKeepOut.Mode.OFF, true, 100f, 0, 100), W, H, 0, 10, W, 76);
         assertFalse(answer.hasGap());
         assertEquals(57, answer.leftInsetPx);
     }
 
-    @Test public void customPlacesItsOwnBoxEvenWithoutAndroidsHole() {
+    @Test public void customStandsOnABaseWithoutAndroidsShape() {
+        // No shape: a 60px base centred in the window (510..570), moved 100 left, margin each side.
         StatusRowKeepOut.Answer answer = StatusRowKeepOut.answer(
-            screen(StatusRowKeepOut.Mode.CUSTOM, false, 0f, -100, 60), W, H, 0, 10, W, 76);
+            screen(StatusRowKeepOut.Mode.CUSTOM, false, 0f, -100, 100), W, H, 0, 10, W, 76);
         assertTrue(answer.hasGap());
-        assertEquals(410, answer.gapStartPx);
-        assertEquals(470, answer.gapEndPx);
-        // Without Android's hole the box reaches down the system bar's band, and no further.
+        assertEquals(410 - MARGIN, answer.gapStartPx);
+        assertEquals(470 + MARGIN, answer.gapEndPx);
+        // The box reaches down the system bar's band and its margin, and no further.
         assertTrue(StatusRowKeepOut.answer(
-            screen(StatusRowKeepOut.Mode.CUSTOM, false, 0f, -100, 60), W, H, 0, 80, W, 146)
+            screen(StatusRowKeepOut.Mode.CUSTOM, false, 0f, -100, 100), W, H, 0, 100, W, 166)
             .isNone());
     }
 
-    @Test public void customWithNoWidthLeavesNoGap() {
+    @Test public void customNudgesAndroidsShape() {
+        // The shape 500..580 scaled to 200% about its centre 540: 460..620, moved 10 right.
+        StatusRowKeepOut.Answer answer = StatusRowKeepOut.answer(
+            screen(StatusRowKeepOut.Mode.CUSTOM, true, 0f, 10, 200), W, H, 0, 10, W, 76);
+        assertEquals(470 - MARGIN, answer.gapStartPx);
+        assertEquals(630 + MARGIN, answer.gapEndPx);
+    }
+
+    @Test public void customScaledToNothingLeavesNoGap() {
         assertFalse(StatusRowKeepOut.answer(
             screen(StatusRowKeepOut.Mode.CUSTOM, true, 0f, 0, 0), W, H, 0, 10, W, 76).hasGap());
     }

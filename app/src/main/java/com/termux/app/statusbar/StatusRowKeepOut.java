@@ -10,8 +10,8 @@ import androidx.annotation.Nullable;
  *
  * <p>The hole is a gap the row flows around: the place's chips and the readings fill the room on
  * either side of it, and nothing is drawn under it. Its box is Android's (the display cutout's
- * bounding rect on the top edge) plus {@link #GAP_MARGIN_DP} each side, or the user's own when
- * Android's is wrong or missing. It applies only while the row stands in the hole's band: a row
+ * shape on the top edge, see {@link com.termux.app.chrome.CameraHoleGeometry}) plus the margin each
+ * side, or the user's own nudges when Android's is wrong or missing. It applies only while the row stands in the hole's band: a row
  * below the system status bar, in landscape, or on a phone without a top cutout gets none.
  *
  * <p>The corners: a screen corner of radius {@code r} is a circle centred {@code r} in from both
@@ -24,14 +24,14 @@ public final class StatusRowKeepOut {
 
     private StatusRowKeepOut() {}
 
-    /** The air the row keeps from Android's camera box on each side. */
+    /** The margin's default: the air kept from the camera on each side. */
     public static final float GAP_MARGIN_DP = 4f;
 
     /** Whose box the camera gap follows. */
     public enum Mode {
         /** Android's display cutout box (the default). */
         AUTO,
-        /** The user's own centre and width, for a box that is too big or missing. */
+        /** Android's shape nudged by the user (sideways, down, size), or their own box if missing. */
         CUSTOM,
         /** No gap at all. */
         OFF;
@@ -61,16 +61,20 @@ public final class StatusRowKeepOut {
         public final float radiusBottomLeft;
         public final float radiusBottomRight;
         @NonNull public final Mode mode;
-        /** A custom box's centre, from the window's horizontal centre; and its full width. */
-        public final int customCenterOffsetPx;
-        public final int customWidthPx;
-        /** {@link #GAP_MARGIN_DP} in pixels. */
-        public final int gapMarginPx;
+        /** The user's nudges to the shape, Custom only: sideways, down, and size in percent. */
+        public final int offsetXPx;
+        public final int offsetYPx;
+        public final int scalePct;
+        /** The air kept from the camera on each side, in pixels (Auto and Custom). */
+        public final int marginPx;
+        /** A Custom box's width when Android reports no shape. */
+        public final int customBasePx;
 
         public Screen(boolean hasHole, int holeLeft, int holeTop, int holeRight, int holeBottom,
                       int topBandPx, float radiusTopLeft, float radiusTopRight,
                       float radiusBottomLeft, float radiusBottomRight, @NonNull Mode mode,
-                      int customCenterOffsetPx, int customWidthPx, int gapMarginPx) {
+                      int offsetXPx, int offsetYPx, int scalePct, int marginPx,
+                      int customBasePx) {
             this.hasHole = hasHole && holeRight > holeLeft && holeBottom > holeTop;
             this.holeLeft = this.hasHole ? holeLeft : 0;
             this.holeTop = this.hasHole ? holeTop : 0;
@@ -82,9 +86,11 @@ public final class StatusRowKeepOut {
             this.radiusBottomLeft = Math.max(0f, radiusBottomLeft);
             this.radiusBottomRight = Math.max(0f, radiusBottomRight);
             this.mode = mode;
-            this.customCenterOffsetPx = customCenterOffsetPx;
-            this.customWidthPx = Math.max(0, customWidthPx);
-            this.gapMarginPx = Math.max(0, gapMarginPx);
+            this.offsetXPx = offsetXPx;
+            this.offsetYPx = offsetYPx;
+            this.scalePct = Math.max(0, scalePct);
+            this.marginPx = Math.max(0, marginPx);
+            this.customBasePx = Math.max(0, customBasePx);
         }
 
         @Override
@@ -99,8 +105,9 @@ public final class StatusRowKeepOut {
                 && Float.compare(radiusTopRight, s.radiusTopRight) == 0
                 && Float.compare(radiusBottomLeft, s.radiusBottomLeft) == 0
                 && Float.compare(radiusBottomRight, s.radiusBottomRight) == 0
-                && mode == s.mode && customCenterOffsetPx == s.customCenterOffsetPx
-                && customWidthPx == s.customWidthPx && gapMarginPx == s.gapMarginPx;
+                && mode == s.mode && offsetXPx == s.offsetXPx && offsetYPx == s.offsetYPx
+                && scalePct == s.scalePct && marginPx == s.marginPx
+                && customBasePx == s.customBasePx;
         }
 
         @Override
@@ -116,9 +123,11 @@ public final class StatusRowKeepOut {
             h = 31 * h + Float.floatToIntBits(radiusBottomLeft);
             h = 31 * h + Float.floatToIntBits(radiusBottomRight);
             h = 31 * h + mode.hashCode();
-            h = 31 * h + customCenterOffsetPx;
-            h = 31 * h + customWidthPx;
-            h = 31 * h + gapMarginPx;
+            h = 31 * h + offsetXPx;
+            h = 31 * h + offsetYPx;
+            h = 31 * h + scalePct;
+            h = 31 * h + marginPx;
+            h = 31 * h + customBasePx;
             return h;
         }
     }
@@ -218,24 +227,11 @@ public final class StatusRowKeepOut {
      * there is none to keep clear of.
      */
     @Nullable
-    static int[] keepOutBox(@NonNull Screen screen, int windowWidth) {
-        switch (screen.mode) {
-            case OFF:
-                return null;
-            case CUSTOM: {
-                if (screen.customWidthPx <= 0 || windowWidth <= 0) return null;
-                int bottom = screen.hasHole ? screen.holeBottom : screen.topBandPx;
-                if (bottom <= 0) return null;
-                int centre = windowWidth / 2 + screen.customCenterOffsetPx;
-                int left = centre - screen.customWidthPx / 2;
-                return new int[] {left, 0, left + screen.customWidthPx, bottom};
-            }
-            case AUTO:
-            default:
-                if (!screen.hasHole) return null;
-                return new int[] {screen.holeLeft - screen.gapMarginPx, screen.holeTop,
-                    screen.holeRight + screen.gapMarginPx, screen.holeBottom};
-        }
+    public static int[] keepOutBox(@NonNull Screen screen, int windowWidth) {
+        return com.termux.app.chrome.CameraHoleGeometry.keepOutBox(screen.mode, screen.hasHole,
+            screen.holeLeft, screen.holeTop, screen.holeRight, screen.holeBottom,
+            screen.topBandPx, screen.offsetXPx, screen.offsetYPx, screen.scalePct,
+            screen.marginPx, screen.customBasePx, windowWidth);
     }
 
     /**

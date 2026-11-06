@@ -42,7 +42,7 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         bindCutoutMode(findPreference("status_bar_cutout_mode"));
     }
 
-    /** The cutout's two sliders are there only while the gap is the user's own. */
+    /** The cutout's move and size sliders are there only while the gap is the user's own. */
     private void bindCutoutMode(@Nullable SegmentedPillPreference mode) {
         if (mode == null) return;
         applyCutoutSliders(mode.getValue());
@@ -53,12 +53,15 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         });
     }
 
+    private static final String[] CUSTOM_KEYS = {"status_bar_cutout_offset_x",
+        "status_bar_cutout_offset_y", "status_bar_cutout_scale"};
+
     private void applyCutoutSliders(@Nullable String mode) {
         boolean custom = "custom".equals(mode);
-        Preference centre = findPreference("status_bar_cutout_center");
-        if (centre != null) centre.setVisible(custom);
-        Preference width = findPreference("status_bar_cutout_width");
-        if (width != null) width.setVisible(custom);
+        for (String key : CUSTOM_KEYS) {
+            Preference row = findPreference(key);
+            if (row != null && row.isVisible() != custom) row.setVisible(custom);
+        }
     }
 
     /**
