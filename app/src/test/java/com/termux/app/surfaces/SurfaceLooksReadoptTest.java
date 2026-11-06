@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -143,14 +144,14 @@ public class SurfaceLooksReadoptTest {
             assertEquals(ids[look], edge[3], preferences.getFancierGlassSpecularPercent());
             assertEquals(ids[look], edge[4], preferences.getFancierGlassDispersionPercent());
             assertEquals(ids[look], edge[5], preferences.getFancierGlassClarityPercent());
-            assertEquals(5, store.getInt(SurfacePresets.KEY_LOOKS_GENERATION, 0));
+            assertEquals(6, store.getInt(SurfacePresets.KEY_LOOKS_GENERATION, 0));
         }
     }
 
     @Test
     public void everyEarlierEdgeOfEveryMovedLookIsReadopted() {
         int[][][] earlier = {
-            {{26, 26, 50, 0, 35, 100}, {26, 26, 30, 0, 35, 100}, {11, 28, 70, 0, 25, 100}, {6, 14, 40, 0, 0, 70},
+            {{27, 18, 10, 0, 40, 76}, {26, 26, 50, 0, 35, 100}, {26, 26, 30, 0, 35, 100}, {11, 28, 70, 0, 25, 100}, {6, 14, 40, 0, 0, 70},
                 {6, 14, 24, 0, 0, 70}, {4, 10, 18, 0, 0, 0}},
             {{24, 24, 45, 0, 30, 90}, {24, 24, 28, 0, 30, 90}, {24, 30, 28, 0, 30, 90}, {13, 32, 60, 0, 20, 90},
                 {9, 20, 30, 0, 0, 60}, {9, 20, 18, 0, 0, 45}, {9, 20, 18, 20, 0, 0}, {9, 20, 18, 0, 0, 0}},
@@ -168,6 +169,62 @@ public class SurfaceLooksReadoptTest {
                     SurfacePresets.matches(preferences, preset(ids[look])));
             }
         }
+    }
+
+    /** Generation 5's Clear: today's edge, grain 3 and none of the face terms. */
+    private void storeGenerationFiveClear() {
+        store.edit().putInt(SurfacePresets.KEY_LOOKS_GENERATION, 5).commit();
+        SurfacePresets.apply(preferences, SurfacePresets.withEdges(preset("minimal"),
+            new int[] {27, 18, 10, 0, 40, 76}));
+    }
+
+    @Test
+    public void anUntouchedGenerationFiveClearMovesToTheNewClear() {
+        storeGenerationFiveClear();
+        assertEquals(3, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(0, preferences.getFancierGlassFaceClarityPercent());
+        assertFalse(SurfacePresets.matches(preferences, preset("minimal")));
+
+        SurfacePresets.readoptMovedLooks(preferences);
+
+        assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
+        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(100, preferences.getFancierGlassFaceClarityPercent());
+        assertEquals(100, preferences.getFancierGlassDimPercent());
+        assertEquals(100, preferences.getFancierGlassSizeLensPercent());
+        assertEquals(6, store.getInt(SurfacePresets.KEY_LOOKS_GENERATION, 0));
+    }
+
+    @Test
+    public void aGenerationFiveClearTheUserEditedStaysAsTheyLeftIt() {
+        storeGenerationFiveClear();
+        preferences.setFancierGlassBendDp(28);
+        Map<String, ?> before = looks();
+        SurfacePresets.readoptMovedLooks(preferences);
+        assertEquals(before, looks());
+        assertEquals(0, preferences.getFancierGlassFaceClarityPercent());
+
+        // A grain the user changed is an edit too.
+        store.edit().clear().commit();
+        storeGenerationFiveClear();
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 5);
+        before = looks();
+        SurfacePresets.readoptMovedLooks(preferences);
+        assertEquals(before, looks());
+    }
+
+    @Test
+    public void everyOtherLookShipsTheFaceTermsAtZero() {
+        for (String id : new String[] {"frost", "stock", "solid"}) {
+            SurfacePresets.apply(preferences, preset(id));
+            assertEquals(id, 0, preferences.getFancierGlassFaceClarityPercent());
+            assertEquals(id, 0, preferences.getFancierGlassDimPercent());
+            assertEquals(id, 0, preferences.getFancierGlassSizeLensPercent());
+        }
+        SurfacePresets.apply(preferences, preset("minimal"));
+        assertEquals(100, preferences.getFancierGlassFaceClarityPercent());
+        SurfacePresets.apply(preferences, preset("frost"));
+        assertEquals("Mist takes the terms off Clear", 0, preferences.getFancierGlassDimPercent());
     }
 
     @Test

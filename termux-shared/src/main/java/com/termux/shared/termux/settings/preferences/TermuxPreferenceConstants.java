@@ -1461,6 +1461,20 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_FANCIER_GLASS_CLARITY = 100;
 
         /**
+         * Clear's face terms, a Look's own and not a slider (no settings page shows them; each is
+         * a percentage and 0, the default, draws the glass as it always was). Face clarity: how
+         * much of the clearer picture the face shows where one is handed in. Dim: the dark layer
+         * over a bright backdrop and the faint light lift over a dark one. Size lens: larger
+         * surfaces bend and reach more.
+         */
+        public static final String KEY_FANCIER_GLASS_FACE_CLARITY = "fancier_glass_face_clarity";
+        public static final String KEY_FANCIER_GLASS_DIM = "fancier_glass_dim";
+        public static final String KEY_FANCIER_GLASS_SIZE_LENS = "fancier_glass_size_lens";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MIN_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MAX_FANCIER_GLASS_FACE_TERM = 100;
+
+        /**
          * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
          * on a spring as it moves, thicker on the edge that leads and thinner behind, rocks back
          * once as it lands, and a press dents the glass under the finger until it lifts; all of

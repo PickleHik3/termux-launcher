@@ -146,7 +146,8 @@ public final class ElementGlass {
         return new GlassRefraction.Look(depthDp != null ? depthDp : global.bendDp,
             global.edgeWidthDp, global.edgeLightPercent, global.specularPercent,
             edgePercent != null ? edgePercent : global.dispersionPercent,
-            global.clarityPercent);
+            global.clarityPercent).withFaceTerms(global.faceClarityPercent, global.dimPercent,
+            global.sizeLensPercent);
     }
 
     /** {@code base} (the wall's tint colour and rim style) as this element wears it. */

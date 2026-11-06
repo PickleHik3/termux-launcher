@@ -55,6 +55,15 @@ import java.util.Arrays;
  * pressed extra key adds a lens that magnifies toward the key's centre and eases to nothing at its
  * pill rim, and a finger resting on the glass ({@link Program#setTouch}) lights the rim nearest
  * it, scatters a faint glow under it and draws the picture very slightly toward it.</p>
+ * <p>Clear's face terms, each a Look field that is 0, and skipped, for every other Look. Face
+ * clarity ({@code uFaceClarity}) shows the clearer picture through the face by that share, where
+ * one is handed in, so the face is nearly the backdrop itself and the edge carries the glass. Dim
+ * ({@code uDim}) tones the face after that: a bright backdrop is darkened toward black, up to 35%
+ * over white, so white content stays legible, and a dark one is lifted a touch toward white, 6%
+ * over black; the rim's gathered light comes after the tone and is not toned. Size lens
+ * ({@code uSizeLens}) scales the band and the bend by the surface's short side against 72 dp, from
+ * three quarters to one and a half times, so a larger surface reads thicker; the half-short-side
+ * cap still holds over the scaled band.</p>
  * <p>It used to live in the activity as the dock's own effect. It is one program now, with two
  * ways in: as a {@code RenderEffect} over a view's finished pixels, which is what the dock and
  * the under-pill strip still do (the content is the view, so the aim is identity), and as the
@@ -162,6 +171,25 @@ public final class GlassRefraction {
 
         /** How much of the clearer picture the band shows at the rim at 100%: all of it. */
         static final float MAX_CLARITY = 1f;
+
+        /**
+         * Clear's face tone: the darkest share a white backdrop is dimmed by at dim 100 (Apple's
+         * HIG 35% dimming layer), the luminance range it eases in across, and the lift toward
+         * white over black. The program's {@code kDimMax}, {@code kDimFrom}, {@code kDimTo} and
+         * {@code kFaceLift}.
+         */
+        static final float DIM_MAX = 0.35f;
+        static final float DIM_FROM = 0.45f;
+        static final float DIM_TO = 0.9f;
+        static final float FACE_LIFT = 0.06f;
+        /**
+         * Size lens: the short side, dp, that scales nothing, and the least and most the band and
+         * the bend are scaled by. The program's {@code kSizeRefDp}, {@code kSizeMin} and
+         * {@code kSizeMax}.
+         */
+        static final float SIZE_REF_DP = 72f;
+        static final float SIZE_MIN = 0.75f;
+        static final float SIZE_MAX = 1.5f;
 
         /**
          * How far red's and blue's gathered light part at a corner at the full share, per unit
@@ -359,6 +387,15 @@ public final class GlassRefraction {
          * from the preferences) leaves the light at its tuned strength.
          */
         public final int coverPercent;
+        /**
+         * Clear's face terms, percentages, 0 for every other Look (the program skips them): how
+         * much of the clearer picture the face shows, how far the face is dimmed over a bright
+         * backdrop and lifted over a dark one, and how far the lensing scales with the surface's
+         * size.
+         */
+        public final int faceClarityPercent;
+        public final int dimPercent;
+        public final int sizeLensPercent;
 
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, 0, 0, 0);
@@ -377,6 +414,16 @@ public final class GlassRefraction {
 
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
                      int dispersionPercent, int clarityPercent, int coverPercent) {
+            this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
+                clarityPercent, coverPercent, 0, 0, 0);
+        }
+
+        private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
+                     int dispersionPercent, int clarityPercent, int coverPercent,
+                     int faceClarityPercent, int dimPercent, int sizeLensPercent) {
+            this.faceClarityPercent = Math.max(0, Math.min(100, faceClarityPercent));
+            this.dimPercent = Math.max(0, Math.min(100, dimPercent));
+            this.sizeLensPercent = Math.max(0, Math.min(100, sizeLensPercent));
             this.bendDp = bendDp;
             this.edgeWidthDp = edgeWidthDp;
             this.edgeLightPercent = edgeLightPercent;
@@ -396,7 +443,16 @@ public final class GlassRefraction {
             int percent = Math.round(Math.max(0f, Math.min(1f, cover)) * 100f);
             if (percent == coverPercent) return this;
             return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, percent);
+                dispersionPercent, clarityPercent, percent, faceClarityPercent, dimPercent,
+                sizeLensPercent);
+        }
+
+        /** This look with Clear's face terms set (percentages, 0 for none). */
+        @NonNull
+        public Look withFaceTerms(int faceClarity, int dim, int sizeLens) {
+            Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
+                dispersionPercent, clarityPercent, coverPercent, faceClarity, dim, sizeLens);
+            return next.equals(this) ? this : next;
         }
 
         /**
@@ -422,7 +478,10 @@ public final class GlassRefraction {
                 preferences.getFancierGlassEdgeLightPercent(),
                 preferences.getFancierGlassSpecularPercent(),
                 preferences.getFancierGlassDispersionPercent(),
-                preferences.getFancierGlassClarityPercent());
+                preferences.getFancierGlassClarityPercent())
+                .withFaceTerms(preferences.getFancierGlassFaceClarityPercent(),
+                    preferences.getFancierGlassDimPercent(),
+                    preferences.getFancierGlassSizeLensPercent());
         }
 
         /** A percentage as 0..1, clamped. */
@@ -470,6 +529,21 @@ public final class GlassRefraction {
             return share(clarityPercent) * MAX_CLARITY;
         }
 
+        /** {@code uFaceClarity}: how much of the clearer picture the face shows, 0..1. */
+        public float faceClarity() {
+            return share(faceClarityPercent);
+        }
+
+        /** {@code uDim}: the face tone's share, 0..1; 0 leaves the face as it is. */
+        public float dim() {
+            return share(dimPercent);
+        }
+
+        /** {@code uSizeLens}: how far the lensing follows the surface's size, 0..1. */
+        public float sizeLens() {
+            return share(sizeLensPercent);
+        }
+
         /** The eased pull's width in px at {@code density}, as the program computes it; see {@link #RIM_WIDTH_DP}. */
         public static float rimWidthPx(float density) {
             return Math.max(MIN_RIM_WIDTH_PX, RIM_WIDTH_DP * density);
@@ -494,13 +568,17 @@ public final class GlassRefraction {
                 && specularPercent == that.specularPercent
                 && dispersionPercent == that.dispersionPercent
                 && clarityPercent == that.clarityPercent
+                && faceClarityPercent == that.faceClarityPercent
+                && dimPercent == that.dimPercent
+                && sizeLensPercent == that.sizeLensPercent
                 && coverPercent == that.coverPercent;
         }
 
         @Override
         public int hashCode() {
-            return (((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
-                + dispersionPercent) * 31 + clarityPercent) * 31 + coverPercent;
+            return ((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+                + dispersionPercent) * 31 + clarityPercent) * 31 + coverPercent) * 31
+                + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent;
         }
 
         @NonNull
@@ -508,7 +586,8 @@ public final class GlassRefraction {
         public String toString() {
             return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
                 + specularPercent + "%, dispersion=" + dispersionPercent + "%, clarity=" + clarityPercent
-                + "%, cover=" + coverPercent + "%}";
+                + "%, cover=" + coverPercent + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
+                + "%, sizeLens=" + sizeLensPercent + "%}";
         }
     }
 
@@ -609,6 +688,9 @@ public final class GlassRefraction {
         "uniform float uStrength;\n" +
         "uniform float uDisp;\n" +
         "uniform float uClarity;\n" +
+        "uniform float uFaceClarity;\n" +
+        "uniform float uDim;\n" +
+        "uniform float uSizeLens;\n" +
         "uniform float uDensity;\n" +
         // How much the gathered light is raised to read through the tint drawn over it;
         // 1 at Clear's cover. Look.edgeGain in Java.
@@ -712,6 +794,15 @@ public final class GlassRefraction {
         "const float kGlintDisp = " + Look.GLINT_SHARE + ";\n" +
         "const float kRimSplitDp = 2.0;\n" +
         "const float kSharpClarity = 0.76;\n" +
+        // Clear's face terms: Look.DIM_MAX, DIM_FROM, DIM_TO, FACE_LIFT, SIZE_REF_DP, SIZE_MIN and
+        // SIZE_MAX in Java.
+        "const float kDimMax = " + Look.DIM_MAX + ";\n" +
+        "const float kDimFrom = " + Look.DIM_FROM + ";\n" +
+        "const float kDimTo = " + Look.DIM_TO + ";\n" +
+        "const float kFaceLift = " + Look.FACE_LIFT + ";\n" +
+        "const float kSizeRefDp = " + Look.SIZE_REF_DP + ";\n" +
+        "const float kSizeMin = " + Look.SIZE_MIN + ";\n" +
+        "const float kSizeMax = " + Look.SIZE_MAX + ";\n" +
         // The bold edge past Glint, the outline's light split in two: each fringe's width in dp
         // and the least in px, where they meet and how far past it the split reaches in fringe
         // widths, how far a fringe's peak mixes toward its colour per unit of uEdgeGain and at
@@ -950,10 +1041,18 @@ public final class GlassRefraction {
         // pulled the pull turns smoothly; snapped round a small corner, it mitred into a crease
         // that ran in from each corner and met its twin at the centre line as a chevron.
         "    float hs = min(b.x, b.y);\n" +
-        "    float reach = max(uBand, uSoftRim) * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n" +
+        // Size lens (Clear): the band, the bend and the dock's soft band scale with the surface's
+        // short side, a thicker slab bending more and reaching deeper; exactly 1 at 0, so the
+        // other Looks multiply by one. The caps at hs below still hold. sizeLensK in Java.
+        "    float sizeK = uSizeLens > 0.0\n" +
+        "        ? mix(1.0, clamp(2.0 * hs / (kSizeRefDp * uDensity), kSizeMin, kSizeMax), uSizeLens) : 1.0;\n" +
+        "    float sBand = uBand * sizeK;\n" +
+        "    float sStrength = uStrength * sizeK;\n" +
+        "    float sSoft = uSoftRim * sizeK;\n" +
+        "    float reach = max(sBand, sSoft) * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n" +
         "    float2 nb = rectNormal(p, b, min(max(cr * 1.5, reach), hs));\n" +
         // t runs 0 at the rim to 1 at the band's inner edge, and stays 1 across the face.
-        "    float t = clamp(inside / min(uBand, hs), 0.0, 1.0);\n" +
+        "    float t = clamp(inside / min(sBand, hs), 0.0, 1.0);\n" +
         // The eased pull's width, and how far in from the outline this pixel is across it: 0 at
         // the outline, 1 from that width in.
         "    float rimW = max(kMinRimPx, kRimDp * uDensity);\n" +
@@ -964,7 +1063,7 @@ public final class GlassRefraction {
         // edge softness) so the outline's pixel shows the picture just outside it. An offset that
         // vanishes at t 1: a face pixel samples exactly where it is. A seam edge lies past the band
         // (rimRect), so it takes none. pullPx in Java is the same arithmetic.
-        "    float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;\n" +
+        "    float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;\n" +
         // The dock surface's soft rim: the bend spread across a band of at least uSoftRim on the
         // soft profile, its pull held at kSoftPull of the band so the picture never folds back
         // (the profile's steepest slope is 15/8), and with the shelf the lower edge thicker,
@@ -974,16 +1073,16 @@ public final class GlassRefraction {
         "    float softS = 0.0;\n" +
         "    if (uSoftRim > 0.0) {\n" +
         "        float lower = uShelf > 0.0 ? max(nb.y, 0.0) * uShelf : 0.0;\n" +
-        "        softB = max(uBand, uSoftRim) * (1.0 + kShelfThick * lower);\n" +
+        "        softB = max(sBand, sSoft) * (1.0 + kShelfThick * lower);\n" +
         // A bead's band is tight: its own width, or half the look's band when that is wider,
         // never past kBeadBandShare of the bead's radius, so the face keeps its middle. Its
         // pull is the same held share of that narrower band, which reads as the stronger lens.
         // beadSoftBandPx in Java.
         "        if (beads) {\n" +
-        "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * cr) * (1.0 + kShelfThick * lower);\n" +
+        "            softB = min(max(sSoft, 0.5 * sBand), kBeadBandShare * cr) * (1.0 + kShelfThick * lower);\n" +
         "        }\n" +
         "        softB = min(softB, hs);\n" +
-        "        softS = min(uStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
+        "        softS = min(sStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
         "        t = clamp(inside / softB, 0.0, 1.0);\n" +
         "        pull = softProfile(t) * min(softS, min(b.x, b.y)) * edge;\n" +
         "    }\n" +
@@ -1018,8 +1117,8 @@ public final class GlassRefraction {
         "            lean = lean + tiltLean;\n" +
         "        }\n" +
         "        lean = clamp(lean, -1.0, 1.0);\n" +
-        "        float tl = clamp(inside / min(uBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);\n" +
-        "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
+        "        float tl = clamp(inside / min(sBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);\n" +
+        "        float bent = edgeProfile(tl) * min(sStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
         "        if (softB > 0.0) {\n" +
         "            float sl = min(softB * (1.0 + kLagBand * lean), hs);\n" +
         "            tl = clamp(inside / sl, 0.0, 1.0);\n" +
@@ -1080,6 +1179,11 @@ public final class GlassRefraction {
         "        float xl = min(x * (1.0 + kLiveReach * liveK), 1.0);\n" +
         "        clarityK = xl * xl * (3.0 - 2.0 * xl) * mix(uClarity, 1.0, uLiveClarity * liveK);\n" +
         "    }\n" +
+        // Clear's face: the clearer picture shows through by uFaceClarity everywhere, the band
+        // included, where one is handed in (uFaceClarity is 0 where none is). At 0 nothing runs.
+        "    if (uFaceClarity > 0.0) {\n" +
+        "        clarityK = mix(clarityK, 1.0, uFaceClarity);\n" +
+        "    }\n" +
         // The colour split, at the corners only and in step with the pull there: red reads the
         // picture bent a little less, blue a little more, green as bent (three taps, Haze's
         // Simple). Where a clearer picture shows through, it is split the same way, so the fringe
@@ -1124,6 +1228,19 @@ public final class GlassRefraction {
         "        if (clarityK > 0.0) {\n" +
         "            col = mix(col, sharp.eval(f), half(clarityK));\n" +
         "        }\n" +
+        "    }\n" +
+        // Clear's face tone, before the rim's light so that stays the wallpaper's own: a bright
+        // backdrop is darkened toward black by up to kDimMax, easing in across kDimFrom..kDimTo of
+        // luminance, and the rest lifted toward white by kFaceLift of its darkness. All of it
+        // scaled by uDim, so at 0 nothing runs. faceTone in Java.
+        "    if (uDim > 0.0) {\n" +
+        "        float ca = max(float(col.a), 0.001);\n" +
+        "        float3 cc = float3(col.rgb) / ca;\n" +
+        "        float cl = dot(cc, kLumaW);\n" +
+        "        float dk = uDim * kDimMax * smoothstep(kDimFrom, kDimTo, cl);\n" +
+        "        cc = cc * (1.0 - dk);\n" +
+        "        cc = cc + (float3(1.0) - cc) * (uDim * kFaceLift * (1.0 - cl));\n" +
+        "        col.rgb = half3(cc * ca);\n" +
         "    }\n" +
         // The gathered light: the backdrop's own colour brightened at the outline and fading
         // inward over kGlowDp, brightest toward the key light with the ambient share all round, a
@@ -1573,6 +1690,30 @@ public final class GlassRefraction {
         out[0] = Math.min(a, sr * gain + lift);
         out[1] = Math.min(a, sg * gain + lift);
         out[2] = Math.min(a, sb * gain + lift);
+    }
+
+    /**
+     * The program's {@code sizeK}: what the band and the bend are scaled by for a surface whose
+     * short side is {@code shortSidePx}, at {@code sizeLens} (0..1): 1 at 0, otherwise the short
+     * side over {@link Look#SIZE_REF_DP} held to {@link Look#SIZE_MIN}..{@link Look#SIZE_MAX},
+     * mixed in by {@code sizeLens}.
+     */
+    static float sizeLensK(float shortSidePx, float density, float sizeLens) {
+        if (!(sizeLens > 0f)) return 1f;
+        float k = Math.max(Look.SIZE_MIN, Math.min(Look.SIZE_MAX,
+            shortSidePx / (Look.SIZE_REF_DP * Math.max(density, 1e-4f))));
+        return 1f + (k - 1f) * sizeLens;
+    }
+
+    /**
+     * The program's face tone on an opaque sample of luminance {@code luma} (0..1) at {@code dim}
+     * (0..1): the share the sample is darkened by toward black, {@code out[0]}, and the share of
+     * its distance to white it is lifted by after, {@code out[1]}. Both 0 at dim 0.
+     */
+    static void faceTone(float luma, float dim, @NonNull float[] out) {
+        float u = Math.max(0f, Math.min(1f, (luma - Look.DIM_FROM) / (Look.DIM_TO - Look.DIM_FROM)));
+        out[0] = dim * Look.DIM_MAX * (u * u * (3f - 2f * u));
+        out[1] = dim * Look.FACE_LIFT * (1f - luma);
     }
 
     /**
@@ -2110,6 +2251,7 @@ public final class GlassRefraction {
         /** Whether {@code sharp} has a shader bound: only then may the program read it. */
         private boolean mSharpBound;
         private float mClarityWritten = Float.NaN;
+        private float mFaceClarityWritten = Float.NaN;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
         private float mLagX = Float.NaN, mLagY;
@@ -2387,6 +2529,13 @@ public final class GlassRefraction {
                 mClarityWritten = clarity;
                 mShader.setFloatUniform("uClarity", clarity);
             }
+            // The face shows the clearer picture only where one is handed in, a distinct frame:
+            // under a RenderEffect, or with the frost bound in its place, it stays 0.
+            float face = look != null && mSharpBound && mSharpDistinct ? look.faceClarity() : 0f;
+            if (face != mFaceClarityWritten) {
+                mFaceClarityWritten = face;
+                mShader.setFloatUniform("uFaceClarity", face);
+            }
             float live = mSharpBound && mSharpDistinct ? LIVE_CLARITY : 0f;
             if (live != mLiveClarityWritten) {
                 mLiveClarityWritten = live;
@@ -2451,6 +2600,8 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uStrength", look.strengthPx(mDensity));
             mShader.setFloatUniform("uDisp", look.dispersion());
             mShader.setFloatUniform("uEdgeGain", look.edgeGain());
+            mShader.setFloatUniform("uDim", look.dim());
+            mShader.setFloatUniform("uSizeLens", look.sizeLens());
             syncClarity();
         }
 
