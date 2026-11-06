@@ -52,6 +52,21 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
   bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
   on Custom.
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
@@ -553,3 +568,4 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- **Dictation cleanup rows on Voice input.** Settings > Voice input > Dictation cleanup: "Cleanup model" reads "Automatic · <model>" and a tap lists Automatic, each installed chat model and "Remote · <model>" only when a remote is set up, with "Get more models" opening the Model centre; Raw text is never listed (a stored Raw text shows as the summary until another is picked). "Runs on" shows CPU | GPU (hidden with no GPU path and when the pick is Remote), follows the model in use, and agrees with the Tidy dictation sheet afterwards. "Level" is a Light | Polished pill that agrees with the sheet; turning "Clean up dictation" off dims all three rows · pong.

@@ -11,8 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What the Speech accelerator row offers and says (Settings > Keyboard > Voice input > Speech
- * model). Auto (which runs on the CPU) and CPU are always offered. GPU, the only way onto the GPU, is hidden when {@link TaiDeviceCapabilities#supportsAccelerator}
+ * What the Runs on pill offers (Settings > Voice input > Speech model). Auto (which runs on the CPU) and CPU are always offered. GPU, the only way onto the GPU, is hidden when {@link TaiDeviceCapabilities#supportsAccelerator}
  * says this phone cannot run it, or when {@link TaiRuntimeHistory} holds an unexpired
  * {@code crash:} GPU failure ({@link SttGraphChooser#CRASH_REASON_PREFIX}) for the selected speech
  * model on this phone: the chooser refuses an explicit GPU request in that case, so offering it

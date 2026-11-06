@@ -2605,7 +2605,7 @@
     <string name="settings_keyboard_voice_polish_title">Clean up dictation</string>
     <string name="settings_keyboard_voice_polish_summary">Review local corrections before inserting; requires a cleanup model.</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
-    <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
+    <string name="settings_keyboard_voice_polish_level_title">Level</string>
     <string name="settings_keyboard_voice_polish_level_light">Light: what you meant, as one cleaned-up paragraph.</string>
     <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists.</string>
     <string name="settings_keyboard_voice_pause_title">Phrase pause</string>
@@ -2645,9 +2645,13 @@
     <string name="speech_model_window_change_action">Download and switch</string>
     <string name="speech_model_window_changed">%1$s now uses the %2$d-second window</string>
     <string name="speech_model_window_kept">The %1$d-second version could not be downloaded. %2$s keeps its %3$d-second window.</string>
-    <string name="speech_model_idle_unload_title">Unload after idle</string>
+    <string name="speech_model_idle_unload_title">Unload after</string>
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
-    <string name="speech_model_accelerator_title">Speech accelerator</string>
+    <string name="speech_model_accelerator_title">Runs on</string>
+    <string name="speech_model_accelerator_hint">GPU uses less battery, may be slower</string>
+    <string name="speech_model_get_more_models">Get more models</string>
+    <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_summary">The voice and speed for spoken answers</string>
     <string name="speech_model_accelerator_summary">%1$s · which part of the phone runs voice input</string>
     <string name="speech_model_accelerator_auto">Auto</string>
     <string name="speech_model_accelerator_cpu">CPU</string>
@@ -2672,6 +2676,7 @@
     <string name="speech_output_sample_playing">Playing · tap to stop</string>
     <string name="speech_output_sample_text">Hi, I am %1$s. This is how I will sound when I read to you.</string>
     <string name="cleanup_model_automatic_title">Automatic</string>
+    <string name="cleanup_model_automatic_with">Automatic · %1$s</string>
     <string name="voice_input_listening">Listening…</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_cleaning_up">Cleaning up…</string>
