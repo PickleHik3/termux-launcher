@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections fade out above the letters, and the letters stay legible.
+  Check Docked and Floating, Home keyboard up and down (the card stands on the keyboard), the A–Z
+  row hidden (as before), the A–Z row ordered over the apps row (falls back to the Tray slab),
+  extra keys on the bottom (Tray slab), a Workspace page (Lens beads unchanged), and at the
+  largest font scale. Look for a reflection cut off too short by the A–Z row's top padding.
+
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
