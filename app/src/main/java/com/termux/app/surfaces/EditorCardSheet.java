@@ -576,6 +576,16 @@ final class EditorCardSheet {
     }
 
     /**
+     * Unseen ({@code veiled}) while the picker rises over the opening editor: the sheet keeps its
+     * detent, its motion and its place in the frame's pose, and draws nothing.
+     */
+    void setVeiled(boolean veiled) {
+        float alpha = veiled ? 0f : 1f;
+        if (mSheet.getAlpha() != alpha)
+            mSheet.setAlpha(alpha);
+    }
+
+    /**
      * The half and full detents' heights and the navigation inset the rows clear; the peek
      * detent is the header over the inset ({@link #peekHeightPx}). The sheet takes the full
      * height as its own (laid out only when this changes) and the others by translation.

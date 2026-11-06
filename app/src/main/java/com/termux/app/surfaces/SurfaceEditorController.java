@@ -722,6 +722,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private boolean mSession;
     @Nullable private Runnable mOnDone;
+    /** The card sheet and the bar are kept unseen under the picker rising with the entry. */
+    private boolean mChromeVeiled;
     private boolean mWallpaperSettled;
     @Nullable private Runnable mWallpaperWaiter;
     private int mPresentToken;
@@ -729,6 +731,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public void setOnDone(@Nullable Runnable onDone) {
         mOnDone = onDone;
+    }
+
+    @Override
+    public void setChromeVeiled(boolean veiled) {
+        if (mChromeVeiled == veiled)
+            return;
+        mChromeVeiled = veiled;
+        // Before the presentation the views may not exist yet; present applies it once they do.
+        if (!mOpen)
+            return;
+        if (mSheet != null)
+            mSheet.setVeiled(veiled);
+        if (mBar != null)
+            mBar.setUnderOverview(veiled || mHost.isPageOverviewOpen());
     }
 
     /** Opens the session: holds the wall and starts reading the editor's wallpaper now. */
@@ -947,6 +963,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
         mSheet.attach(content);
+        mSheet.setVeiled(mChromeVeiled);
+        if (mChromeVeiled)
+            mBar.setUnderOverview(true);
         mSheet.setLandscape(mBar.isLandscape());
         notifyDirty();
 
@@ -1347,7 +1366,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     public void onPageOverviewChanged() {
         if (mBar != null)
-            mBar.setUnderOverview(mHost.isPageOverviewOpen());
+            mBar.setUnderOverview(mHost.isPageOverviewOpen() || mChromeVeiled);
         restateCard();
         EditorCardSheet sheet = mSheet;
         if (sheet == null || !sheetUp())
@@ -5758,11 +5777,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (outline != null)
             outline.setVisibility(View.GONE);
         clearOutlines();
+        boolean veiled = mChromeVeiled;
+        mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
-        if (sheet != null)
-            sheet.hide(true, sheet::detach);
+        if (sheet != null) {
+            sheet.hide(true, () -> {
+                sheet.detach();
+                sheet.setVeiled(false);
+            });
+        }
         EditorBar bar = mBar;
         if (bar != null) {
+            if (veiled)
+                bar.setUnderOverview(mHost.isPageOverviewOpen());
             bar.setShown(false);
             bar.detach();
         }
