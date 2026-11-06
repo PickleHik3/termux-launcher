@@ -452,19 +452,19 @@ public class TaiBenchResultFragment extends Fragment {
     private static boolean inUse(@NonNull Context context, @NonNull String modelId, @NonNull String accelerator) {
         try {
             TaiSettings settings = new TaiSettings(context);
-            return modelId.equals(TaiSpeechModels.activeModelId(context)) && accelerator.equals(settings.getSttAccelerator());
+            return modelId.equals(TaiSpeechModels.activeModelId(context)) && accelerator.equals(settings.getSttAccelerator(modelId));
         } catch (RuntimeException e) {
             return false;
         }
     }
 
-    /** "Use this": the speech model and the Speech accelerator, in one tap. */
+    /** "Use this": the speech model and its Runs on choice, in one tap. */
     private void useThis(@NonNull String modelId, @NonNull String displayName, @NonNull String accelerator) {
         Context context = getContext();
         if (context == null) return;
         TaiSettings settings = new TaiSettings(context);
         TaiSpeechModels.activate(settings, modelId);
-        settings.setSttAccelerator(accelerator);
+        settings.setSttAccelerator(modelId, accelerator);
         AppNotice.show(context, getString(R.string.tai_bench_voice_use_done, displayName, TaiBenchViews.processorLabel(accelerator)), false);
     }
 

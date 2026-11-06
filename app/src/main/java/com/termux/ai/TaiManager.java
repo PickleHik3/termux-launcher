@@ -3140,7 +3140,7 @@ public final class TaiManager {
         request.put("model", spec.id);
         request.put(INTERNAL_MODEL_SPEC, spec.toJson());
         request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
-        request.put(INTERNAL_STT_ACCELERATOR, sttAcceleratorFor(request, settings.getSttAccelerator()));
+        request.put(INTERNAL_STT_ACCELERATOR, sttAcceleratorFor(request, settings.getSttAccelerator(spec.id)));
         return request.toString();
     }
 
