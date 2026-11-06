@@ -304,6 +304,12 @@ androidComponents {
 // under it — fails the build. Fix it with a -keep in proguard-rules.pro, or, once the stripped
 // code is checked and nothing native reaches it, a waiver below.
 def r8NativeWaivers = [:] // "group:artifact": "why what R8 strips from it is safe"
+// Libraries whose consumer rules do not cover what their native code reaches, so they are checked
+// as if they shipped none. LiteRT's rules keep only @UsedByReflection, while liblitert_jni builds
+// TensorType, TensorType$Layout, TensorBufferRequirements and LiteRtException through
+// constructors no Java code calls; 2.0.0-pre.1 staging dropped them and every speech model
+// aborted tai_runtime with "Failed to get constructor".
+def r8NativeRulesIncomplete = ["com.google.ai.edge.litert:litert-api"]
 def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, its own JNI
 ["release", "staging"].each { variantName ->
     tasks.matching { it.name == "minify${variantName.capitalize()}WithR8" }.configureEach { minify ->
@@ -320,7 +326,9 @@ def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, 
                 def id = artifact.id.componentIdentifier
                 if (!(id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier)) return
                 if (r8NativeWaivers.containsKey("${id.group}:${id.module}".toString())) return
-                nativeClassesWithoutKeepRules(artifact.file).each { owners[it] = id.displayName }
+                def coordinate = "${id.group}:${id.module}".toString()
+                nativeClassesWithoutKeepRules(artifact.file, r8NativeRulesIncomplete.contains(coordinate))
+                    .each { owners[it] = id.displayName }
             }
             def ownerOf = { String cls ->
                 owners[cls] ?: r8NativeAppPackages.find { cls.startsWith(it + ".") }
@@ -353,15 +361,15 @@ def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, 
 
 // The classes of an AAR that carries native libraries and ships no consumer keep rules (none in
 // proguard.txt, none under META-INF/proguard or META-INF/com.android.tools in its jars); empty
-// for every other AAR.
-def nativeClassesWithoutKeepRules(File aar) {
+// for every other AAR. ignoreRules checks an AAR whose shipped rules are known to fall short.
+def nativeClassesWithoutKeepRules(File aar, boolean ignoreRules = false) {
     def hasRule = { String text -> text.readLines().any { def t = it.trim(); t && !t.startsWith("#") } }
     def zip = new java.util.zip.ZipFile(aar)
     try {
         def entries = zip.entries().toList()
         if (!entries.any { it.name ==~ /jni\/.+\.so/ }) return []
         def rules = entries.find { it.name == "proguard.txt" }
-        if (rules && hasRule(zip.getInputStream(rules).getText("UTF-8"))) return []
+        if (!ignoreRules && rules && hasRule(zip.getInputStream(rules).getText("UTF-8"))) return []
         def classes = []
         for (def jar : entries.findAll { it.name == "classes.jar" || it.name ==~ /libs\/[^\/]+\.jar/ }) {
             def input = new java.util.zip.ZipInputStream(zip.getInputStream(jar))
@@ -371,7 +379,7 @@ def nativeClassesWithoutKeepRules(File aar) {
                 if (entry.directory) continue
                 if (name.startsWith("META-INF/proguard/") || name.startsWith("META-INF/com.android.tools/")) {
                     // readAllBytes stops at the end of this entry; the stream moves on to the next.
-                    if (hasRule(new String(input.readAllBytes(), "UTF-8"))) return []
+                    if (!ignoreRules && hasRule(new String(input.readAllBytes(), "UTF-8"))) return []
                 } else if (name.endsWith(".class") && !name.endsWith("module-info.class")) {
                     classes << name[0..-7].replace("/", ".")
                 }

@@ -18,6 +18,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
