@@ -71,10 +71,20 @@ final class AssistantModelSource implements AssistantModelStatus.Source {
         return presence().modelId;
     }
 
+    /**
+     * Whether a cache read at {@code readAt} is older than {@code ttlMs} at {@code now}. A cache never
+     * read ({@code Long.MIN_VALUE}) is stale: {@code now - Long.MIN_VALUE} overflows to a negative
+     * number, which once kept the downloaded set empty for good and every installed model asked to
+     * be downloaded.
+     */
+    static boolean isStale(long now, long readAt, long ttlMs) {
+        return readAt == Long.MIN_VALUE || now - readAt > ttlMs;
+    }
+
     @Override
     public synchronized boolean isDownloaded(@NonNull String modelId) {
         long now = SystemClock.elapsedRealtime();
-        if (now - downloadedReadAt > DOWNLOADED_CACHE_MS) {
+        if (isStale(now, downloadedReadAt, DOWNLOADED_CACHE_MS)) {
             Set<String> ids = new HashSet<>();
             for (java.util.Map.Entry<String, TaiModelSpec> e : store.getDownloadedReadableModels().entrySet()) {
                 ids.add(e.getKey());
