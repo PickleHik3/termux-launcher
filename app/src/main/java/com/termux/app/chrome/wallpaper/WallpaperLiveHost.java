@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.termux.R;
+import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.scene.LiveWallpaperChoice;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -55,6 +56,9 @@ public final class WallpaperLiveHost {
     @Nullable private MaterialButtonToggleGroup mKindGroup;
     private LiveSceneLogic.Kind mKind = LiveSceneLogic.Kind.PHOTO;
     private boolean mDetailShown;
+    private final LivePageSwap mSwap = new LivePageSwap();
+    /** The grid's scroll when a scene's page opened over it; put back when the grid returns. */
+    private int mGridScrollY;
     private boolean mReleased;
     /** Use as wallpaper or Back to photo changed what the Photo page read: it reads again when shown. */
     private boolean mPhotoStale;
@@ -138,6 +142,7 @@ public final class WallpaperLiveHost {
 
     public void release() {
         mReleased = true;
+        mSwap.cancel();
         if (mGrid != null) mLive.setVisibility(View.GONE);
     }
 
@@ -173,6 +178,7 @@ public final class WallpaperLiveHost {
     }
 
     private void showKind(@NonNull LiveSceneLogic.Kind kind) {
+        mSwap.cancel();
         mKind = kind;
         boolean live = kind == LiveSceneLogic.Kind.LIVE;
         MaterialButtonToggleGroup group = mKindGroup;
@@ -194,16 +200,22 @@ public final class WallpaperLiveHost {
     private void showGrid() {
         if (mGrid == null || mDetail == null) return;
         mGrid.bind(readStored());
-        mDetail.root().setVisibility(View.GONE);
-        mGrid.root().setVisibility(View.VISIBLE);
+        if (mDetailShown) {
+            // Back from a scene's page (Back, Use, Back to photo): the grid returns where it was.
+            mGrid.restoreScrollY(mGridScrollY);
+            mSwap.swap(mDetail.root(), mGrid.root(), ReducedMotion.isEnabled(mContext));
+        } else {
+            // From Photo | Live: the grid is the page, nothing to fade from.
+            mSwap.show(mGrid.root(), mDetail.root());
+        }
         mDetailShown = false;
     }
 
     private void openScene(@NonNull String kind) {
         if (mDetail == null || mGrid == null || mReleased) return;
         mDetail.show(kind, readStored(), mPicker.alsoPhone().isChecked());
-        mGrid.root().setVisibility(View.GONE);
-        mDetail.root().setVisibility(View.VISIBLE);
+        mGridScrollY = mGrid.scrollY();
+        mSwap.swap(mGrid.root(), mDetail.root(), ReducedMotion.isEnabled(mContext));
         mDetailShown = true;
     }
 

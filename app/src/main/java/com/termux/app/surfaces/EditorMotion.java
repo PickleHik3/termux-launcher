@@ -101,7 +101,9 @@ public final class EditorMotion {
         /** A row's dot fading out on Reset this row. */
         DOT_OUT(Token.EFFECTS_FAST, Token.EFFECTS_FAST),
         /** A row's dot fading back in, in the new cell's colour. */
-        DOT_IN(Token.EFFECTS_DEFAULT, Token.EFFECTS_DEFAULT);
+        DOT_IN(Token.EFFECTS_DEFAULT, Token.EFFECTS_DEFAULT),
+        /** A sub-page of the Wallpaper picker (the Live grid, a scene's page) cross-fading with its parent. */
+        PICKER_PAGE_FADE(Token.EFFECTS_DEFAULT, Token.EFFECTS_DEFAULT);
 
         @NonNull public final Token token;
         /** What runs under reduced motion: a fade spring, or null for a jump. */

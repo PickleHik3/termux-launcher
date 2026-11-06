@@ -23,6 +23,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import org.robolectric.shadows.ShadowLooper;
 
 /**
  * The Photo | Live host on Android 13: Live opens on the stored state, a scene's page shows the
@@ -120,6 +121,18 @@ public class WallpaperLiveHostTest {
     }
 
     @Test
+    public void theGridComesBackAtItsScroll() {
+        WallpaperLiveHost host = open(true);
+        android.widget.ScrollView scroll = host.grid().root().findViewById(R.id.live_picker_scroll);
+        scroll.scrollTo(0, 0);
+        tap(host.grid().tile(1));
+        // The saved position is what comes back, whatever the view did while hidden.
+        assertTrue(host.consumeBack());
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(0, scroll.getScrollY());
+    }
+
+    @Test
     public void backFromASceneGoesToTheGrid_thenIsNotSpent() {
         WallpaperLiveHost host = open(true);
         assertFalse(host.consumeBack());
@@ -127,6 +140,10 @@ public class WallpaperLiveHostTest {
         assertTrue(host.detailShown());
         assertTrue(host.consumeBack());
         assertFalse(host.detailShown());
+        // The fade has the grid up at alpha 0 at once; it ends with the page gone.
+        assertEquals(View.VISIBLE, host.grid().root().getVisibility());
+        assertEquals(View.VISIBLE, host.detail().root().getVisibility());
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
         assertEquals(View.VISIBLE, host.grid().root().getVisibility());
         assertEquals(View.GONE, host.detail().root().getVisibility());
         assertFalse(host.consumeBack());
