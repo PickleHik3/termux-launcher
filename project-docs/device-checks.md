@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
 - **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
   constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
   in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU

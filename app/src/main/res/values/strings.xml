@@ -2643,9 +2643,12 @@
     <string name="speech_model_window_change_action">Download and switch</string>
     <string name="speech_model_window_changed">%1$s now uses the %2$d-second window</string>
     <string name="speech_model_window_kept">The %1$d-second version could not be downloaded. %2$s keeps its %3$d-second window.</string>
-    <string name="speech_model_idle_unload_title">Unload after idle</string>
+    <string name="speech_model_idle_unload_title">Unload after</string>
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
-    <string name="speech_model_accelerator_title">Speech accelerator</string>
+    <string name="speech_model_accelerator_title">Runs on</string>
+    <string name="speech_model_accelerator_hint">GPU uses less battery, may be slower</string>
+    <string name="speech_model_get_more_models">Get more models</string>
+    <string name="read_aloud_title">Read aloud</string>
     <string name="speech_model_accelerator_summary">%1$s · which part of the phone runs voice input</string>
     <string name="speech_model_accelerator_auto">Auto</string>
     <string name="speech_model_accelerator_cpu">CPU</string>

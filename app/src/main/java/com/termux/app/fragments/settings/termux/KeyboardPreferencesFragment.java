@@ -58,7 +58,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TAP_CORRECTION_STATUS = "in_app_keyboard_tap_correction_status";
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
-    private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
+    /** The Voice input page's Speech model rows; null on every other keyboard page. */
+    @Nullable private VoiceSpeechModelRows voiceSpeechModelRows;
     private static final String KEY_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
 
     private static final String UPSTREAM_GITHUB_URL =
@@ -170,17 +171,17 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                 // back, so the screen that downloads one opens instead and the row stays as it was.
                 if (TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(newValue)
                     && TaiSpeechModels.resolveActive(context) == null) {
-                    openSpeechModelSettings(context);
+                    TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_SPEECH);
                     return false;
                 }
                 return true;
             });
         }
-        Preference voiceModel = findPreference(KEY_VOICE_MODEL);
-        if (voiceModel != null) voiceModel.setOnPreferenceClickListener(preference -> {
-            openSpeechModelSettings(context);
-            return true;
-        });
+        // The Voice input page holds the speech model rows; the other keyboard pages do not.
+        if (findPreference(VoiceSpeechModelRows.KEY_PICK) != null) {
+            voiceSpeechModelRows = new VoiceSpeechModelRows(this);
+            voiceSpeechModelRows.bind(context);
+        }
 
         Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
         if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
@@ -191,20 +192,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         refreshPolishModelSummary(context);
 
         SettingsLayoutUtils.applyScreenLayout(this);
-    }
-
-    /**
-     * The Speech model screen: the installed speech models, which one is in use, and downloads.
-     * Pushed in place via {@link com.termux.app.activities.SettingsActivity#openScreen} rather than
-     * relaunched with {@code startActivity}, so Back returns here instead of closing Settings --
-     * this fragment only ever lives inside SettingsActivity, so the cast is always safe.
-     */
-    private void openSpeechModelSettings(@NonNull Context context) {
-        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
-            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
-                SpeechModelPreferencesFragment.class,
-                R.string.settings_keyboard_voice_model_title, null);
-        }
     }
 
     /** The chosen model's plain name, "Automatic" when the stored id is empty, the remote id for a remote pick, "Raw text" for off. */
@@ -313,6 +300,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
             refreshPolishModelSummary(getContext());
+            if (voiceSpeechModelRows != null) voiceSpeechModelRows.refresh(getContext());
             // The keyboard may have learned more, or paused itself, while the screen was away.
             refreshTapCorrectionRows();
         }
@@ -607,6 +595,11 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "keyboard_voice_mic_sensitivity":
                 mPreferences.setInAppKeyboardVoiceMicSensitivity(value);
                 break;
+            case VoiceSpeechModelRows.KEY_ACCELERATOR:
+                // Remembered for the model in use; another model keeps its own.
+                new com.termux.ai.TaiSettings(mContext).setSttAccelerator(
+                    com.termux.ai.TaiSpeechModels.activeModelId(mContext), value);
+                break;
             default:
                 break;
         }
@@ -642,6 +635,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardVoicePolishLevel();
             case "keyboard_voice_mic_sensitivity":
                 return mPreferences.getInAppKeyboardVoiceMicSensitivity();
+            case VoiceSpeechModelRows.KEY_ACCELERATOR:
+                return new com.termux.ai.TaiSettings(mContext).getSttAccelerator(
+                    com.termux.ai.TaiSpeechModels.activeModelId(mContext));
             default:
                 return defValue;
         }

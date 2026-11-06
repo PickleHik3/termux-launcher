@@ -114,10 +114,16 @@ public class KeyboardPreferencesFragmentTest {
 
         KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
-        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_pick"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_accelerator"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_idle_unload"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_details"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level"));
-        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_mic_sensitivity"));
+        KeyboardPreferencesFragment fineTuning = launch(KeyboardVoiceDetailsPreferencesFragment.class);
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_mic_sensitivity"));
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_pause_ms"));
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_silence_timeout_ms"));
     }
 
     @Test
@@ -234,7 +240,9 @@ public class KeyboardPreferencesFragmentTest {
             try {
                 assertEnabled(launch(KeyboardVoicePreferencesFragment.class), true,
                     "keyboard_voice_engine", "keyboard_voice_polish", "keyboard_voice_sounds",
-                    "keyboard_voice_model", "keyboard_voice_pause_ms");
+                    "speech_model_pick", "keyboard_voice_details");
+                assertEnabled(launch(KeyboardVoiceDetailsPreferencesFragment.class), true,
+                    "keyboard_voice_pause_ms");
                 assertEnabled(launch(KeyboardHardwarePreferencesFragment.class), true,
                     "in_app_keyboard_hide_on_hardware", "pass_ctrl_space_to_android");
             } finally {

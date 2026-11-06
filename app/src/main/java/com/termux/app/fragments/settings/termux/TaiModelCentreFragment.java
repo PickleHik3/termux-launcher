@@ -1478,11 +1478,11 @@ public class TaiModelCentreFragment extends Fragment
         return warning == null || warning.isEmpty() ? plain : plain + "\n\n" + warning;
     }
 
-    /** The voice picker lives with the speech settings (Keyboard > Voice input > Speech model). */
+    /** The voice picker lives with the speech settings (Voice input > Speech model). */
     private void openVoiceSettings() {
         if (getActivity() instanceof SettingsActivity) {
-            ((SettingsActivity) getActivity()).openScreen(SpeechModelPreferencesFragment.class,
-                R.string.settings_keyboard_voice_model_title, null);
+            ((SettingsActivity) getActivity()).openScreen(KeyboardVoicePreferencesFragment.class,
+                R.string.settings_keyboard_sub_voice_title, null);
         }
     }
 

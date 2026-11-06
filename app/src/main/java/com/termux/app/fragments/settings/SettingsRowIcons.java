@@ -190,6 +190,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_developer_board, "speech_model_accelerator");
         key(R.drawable.ic_ms_graphic_eq, "speech_output_voice", "keyboard_voice_mic_sensitivity");
         key(R.drawable.ic_ms_play_arrow, "speech_output_sample");
+        key(R.drawable.ic_ms_record_voice_over, "tai_read_aloud");
 
         // Status bar
         key(R.drawable.ic_ms_music_note, "status_widget_media");
