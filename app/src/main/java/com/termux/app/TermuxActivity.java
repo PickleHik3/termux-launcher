@@ -11061,23 +11061,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The slot (clock, pinned cards, media) stands in the main card only.
         View slot = findViewById(R.id.terminal_top_widget_area);
         if (slot != null) changed |= setBarCardMargins(slot, mainLeft, mainRight);
-        // CAMHOLE-DBG temporary: the split's inputs and answer, once per call.
-        {
-            int[] o = new int[2];
-            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, o, new int[2]);
-            StringBuilder frames = new StringBuilder();
-            StackTraceElement[] trace = new Throwable().getStackTrace();
-            for (int i = 1; i < Math.min(trace.length, 7); i++)
-                frames.append(' ').append(trace[i].getMethodName()).append(':')
-                    .append(trace[i].getLineNumber());
-            android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-                + " syncBarSplit box=" + java.util.Arrays.toString(box)
-                + " hostVis=" + host.getVisibility() + " hostOrigin=" + o[0] + "," + o[1]
-                + " hostW=" + host.getWidth() + " hostH=" + host.getHeight()
-                + " split=" + split + " want=" + java.util.Arrays.toString(want)
-                + " side=" + sideWanted + " cut=" + cut + " changed=" + changed
-                + " frames:" + frames);
-        }
         if (!changed) return;
         // The cards' dress and frost follow the new rects, once, after this layout.
         host.post(() -> {
@@ -11086,62 +11069,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dressBarSideCard(current);
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         });
-        // CAMHOLE-DBG temporary: the cards and whatever stands in the gap, once the bar rests.
-        host.postDelayed(this::camholeDbgDump, 1200);
-    }
-
-    /** CAMHOLE-DBG temporary: the glass layers and every view drawn in the camera gap. */
-    private void camholeDbgDump() {
-        View host = findViewById(R.id.terminal_window_bar_host);
-        int[] box = mCameraBox;
-        if (host == null) return;
-        int[] at = new int[2];
-        host.getLocationOnScreen(at);
-        android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-            + " rest host screen=" + at[0] + "," + at[1] + " w=" + host.getWidth()
-            + " h=" + host.getHeight() + " box=" + java.util.Arrays.toString(box));
-        if (box == null) return;
-        int hostBottom = at[1] + host.getHeight();
-        android.graphics.Rect probe = new android.graphics.Rect(box[0], 0, box[2],
-            Math.max(box[3], hostBottom + 24));
-        camholeDbgWalk(getWindow().getDecorView(), probe, 0);
-    }
-
-    /** CAMHOLE-DBG temporary: logs each shown view whose screen rect meets {@code probe}. */
-    private void camholeDbgWalk(@NonNull View view, @NonNull android.graphics.Rect probe,
-                                int depth) {
-        if (view.getVisibility() != View.VISIBLE || view.getAlpha() == 0f) return;
-        int[] at = new int[2];
-        view.getLocationOnScreen(at);
-        android.graphics.Rect rect = new android.graphics.Rect(at[0], at[1],
-            at[0] + Math.round(view.getWidth() * view.getScaleX()),
-            at[1] + Math.round(view.getHeight() * view.getScaleY()));
-        boolean meets = android.graphics.Rect.intersects(rect, probe);
-        boolean paints = view.getBackground() != null
-            || (view instanceof ImageView && ((ImageView) view).getDrawable() != null)
-            || !view.willNotDraw();
-        if (meets && paints) {
-            String name;
-            try {
-                name = view.getId() == View.NO_ID ? "-"
-                    : getResources().getResourceEntryName(view.getId());
-            } catch (Exception e) {
-                name = "#" + view.getId();
-            }
-            android.util.Log.d("CAMHOLE-DBG", "gap d=" + depth + " " + name + " "
-                + view.getClass().getSimpleName() + " rect=" + rect.toShortString()
-                + " a=" + view.getAlpha() + " z=" + view.getZ()
-                + " clip=" + view.getClipToOutline()
-                + " bg=" + (view.getBackground() == null ? "null"
-                    : view.getBackground().getClass().getSimpleName())
-                + (view instanceof ImageView && ((ImageView) view).getDrawable() != null
-                    ? " img=" + ((ImageView) view).getDrawable().getClass().getSimpleName() : ""));
-        }
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++)
-                camholeDbgWalk(group.getChildAt(i), probe, depth + 1);
-        }
     }
 
     /** The second card's glass: the main card's own dress, built for the bar as it stands now. */

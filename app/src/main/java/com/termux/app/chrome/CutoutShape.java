@@ -42,13 +42,6 @@ public final class CutoutShape {
                 path.computeBounds(bounds, true);
                 Rect traced = new Rect();
                 bounds.roundOut(traced);
-                // CAMHOLE-DBG temporary: the raw path's bounds against the rects.
-                android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-                    + " cutout rects=" + cutout.getBoundingRects() + " joined=" + hole
-                    + " pathRaw=" + bounds + " traced=" + traced + " fits="
-                    + CameraHoleGeometry.pathTraceFits(hole.left, hole.right, traced.left,
-                        traced.right)
-                    + " real.rectTop=" + real.getBoundingRectTop());
                 // Only a trace that stands inside the rect and fills most of its width: a path
                 // in another space than the window's (pong's reads 511..540 against 454..540)
                 // would put the box beside the camera.
