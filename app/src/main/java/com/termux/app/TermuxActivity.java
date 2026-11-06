@@ -10982,26 +10982,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTopCutoutShapeRead && java.util.Objects.equals(cutout, mTopCutoutShapeSource)) {
             return mTopCutoutShape;
         }
-        Rect hole = null;
-        if (cutout != null) {
-            for (Rect rect : cutout.getBoundingRects()) {
-                if (rect == null || rect.isEmpty() || rect.top > 0) continue;
-                if (hole == null) hole = new Rect(rect);
-                else hole.union(rect);
-            }
-        }
-        if (hole != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            android.view.WindowInsets platform = insetsCompat.toWindowInsets();
-            android.view.DisplayCutout real = platform == null ? null : platform.getDisplayCutout();
-            android.graphics.Path path = real == null ? null : real.getCutoutPath();
-            if (path != null) {
-                android.graphics.RectF bounds = new android.graphics.RectF();
-                path.computeBounds(bounds, true);
-                Rect traced = new Rect();
-                bounds.roundOut(traced);
-                if (traced.intersect(hole)) hole = traced;
-            }
-        }
+        Rect hole = com.termux.app.chrome.CutoutShape.top(cutout, insetsCompat);
         mTopCutoutShapeSource = cutout;
         mTopCutoutShape = hole;
         mTopCutoutShapeRead = true;
@@ -11112,6 +11093,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** The window's width for the camera box: the decor's, else the display's. */
+    private int windowWidthForCutout() {
+        int width = getWindow().getDecorView().getWidth();
+        return width > 0 ? width : getResources().getDisplayMetrics().widthPixels;
+    }
+
+    /**
+     * Turns the first camera gap's centre and width into the nudges on Android's shape, once
+     * (guarded by a stored flag): the same box within a pixel or two, no margin as before, so a
+     * Custom gap an upgrade finds stays where the user put it. The old keys stay in place and are
+     * never read again. Without a mode of Custom or a stored value there is nothing to turn.
+     */
+    private void migrateCutoutPreferences(@Nullable Rect shape, int windowWidthPx) {
+        if (mPreferences == null || windowWidthPx <= 0 || mPreferences.isStatusBarCutoutMigrated())
+            return;
+        Integer centreDp = mPreferences.getLegacyStatusBarCutoutCenter();
+        Integer widthDp = mPreferences.getLegacyStatusBarCutoutWidth();
+        boolean custom = com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
+            mPreferences.getStatusBarCutoutMode())
+            == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM;
+        if (custom || centreDp != null || widthDp != null) {
+            float density = getResources().getDisplayMetrics().density;
+            int centrePx = Math.round((centreDp == null ? 0 : centreDp) * density);
+            int widthPx = Math.round((widthDp == null ? 32 : widthDp) * density);
+            int baseWidth = shape != null ? shape.width()
+                : Math.round(com.termux.app.chrome.CameraHoleGeometry.CUSTOM_BASE_DP * density);
+            int baseCentre = shape != null ? (shape.left + shape.right) / 2 : windowWidthPx / 2;
+            mPreferences.setStatusBarCutoutMargin(0);
+            mPreferences.setStatusBarCutoutOffsetY(0);
+            mPreferences.setStatusBarCutoutScale(
+                com.termux.app.chrome.CameraHoleGeometry.migrateScalePct(widthPx, baseWidth));
+            mPreferences.setStatusBarCutoutOffsetX(
+                com.termux.app.chrome.CameraHoleGeometry.migrateOffsetXDp(
+                    windowWidthPx / 2 + centrePx, baseCentre, density));
+        }
+        mPreferences.setStatusBarCutoutMigrated(true);
+    }
+
     private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
         View row = findViewById(R.id.terminal_status_row);
         // The top edge's camera shape, kept per cutout: the insets arrive every frame of the IME's
@@ -11145,6 +11164,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
             : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
                 mPreferences.getStatusBarCutoutMode());
+        migrateCutoutPreferences(hole, windowWidthForCutout());
         int dxPx = mPreferences == null ? 0
             : Math.round(dpToPx(mPreferences.getStatusBarCutoutOffsetX()));
         int dyPx = mPreferences == null ? 0
@@ -11162,8 +11182,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 radii[0], radii[1], radii[2], radii[3], mode, dxPx, dyPx, scalePct, marginPx,
                 Math.round(dpToPx(com.termux.app.chrome.CameraHoleGeometry.CUSTOM_BASE_DP)));
         // The one box the bar's split and the panes read, in window pixels; only in Full screen.
-        int windowWidth = getWindow().getDecorView().getWidth();
-        if (windowWidth <= 0) windowWidth = getResources().getDisplayMetrics().widthPixels;
+        int windowWidth = windowWidthForCutout();
         int[] cameraBox = mProperties != null && mProperties.isUsingFullScreen()
             ? com.termux.app.statusbar.StatusRowKeepOut.keepOutBox(screen, windowWidth) : null;
         boolean boxMoved = !java.util.Arrays.equals(cameraBox, mCameraBox);

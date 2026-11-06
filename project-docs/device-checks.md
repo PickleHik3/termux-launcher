@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
+  Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
+  gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
+  outline is drawn round the camera's box over the page, following the value. It must go on
+  release, on the Home key or recents mid-drag, on Back, and by itself 1.5 s after the last
+  move; after a mid-drag Home, nothing is drawn on the page or on the home when coming back.
+  Check the Settings page does not jump when the outline appears (it lets the window draw
+  under the camera while it shows). Upgrade from a build with a custom centre and width: the
+  gap stands where it did (margin 0, scale and Move sideways derived once); Off hides Margin.
 - **Camera hole, wave 3: the pane top round the camera.** Owed on pong, status bar off and Full
   screen: one pane, then a 2-way vertical split (the camera over the seam or over one pane):
   the rim's top line breaks over the camera's box and resumes either side, the glass and the

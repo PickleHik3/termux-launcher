@@ -13,6 +13,7 @@ import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.SliderPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -40,6 +41,48 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         bindWeatherPlace(findPreference("status_widget_weather_location"));
         bindCutoutMode(findPreference("status_bar_cutout_mode"));
+        bindCutoutOutline(context);
+    }
+
+    @Nullable private CameraCutoutOutline mOutline;
+
+    /** The four camera sliders draw the camera's outline over this page while a finger is on one. */
+    private void bindCutoutOutline(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+        if (preferences == null) return;
+        SliderPreference.Tracking tracking = new SliderPreference.Tracking() {
+            @Override public void onTrackingStart() { showOutline(preferences); }
+            @Override public void onTrackingChange() { showOutline(preferences); }
+            @Override public void onTrackingStop() { hideOutline(); }
+        };
+        for (String key : MARGIN_AND_CUSTOM_KEYS) {
+            Preference row = findPreference(key);
+            if (row instanceof SliderPreference) ((SliderPreference) row).setTracking(tracking);
+        }
+    }
+
+    private void showOutline(@NonNull TermuxAppSharedPreferences preferences) {
+        android.app.Activity activity = getActivity();
+        if (activity == null || !isResumed()) return;
+        if (mOutline == null) mOutline = new CameraCutoutOutline(activity, preferences);
+        mOutline.showOrUpdate();
+    }
+
+    private void hideOutline() {
+        if (mOutline != null) mOutline.hide();
+    }
+
+    @Override
+    public void onPause() {
+        hideOutline();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        hideOutline();
+        mOutline = null;
+        super.onDestroyView();
     }
 
     /** The cutout's move and size sliders are there only while the gap is the user's own. */
@@ -53,11 +96,17 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         });
     }
 
+    private static final String[] MARGIN_AND_CUSTOM_KEYS = {"status_bar_cutout_margin",
+        "status_bar_cutout_offset_x", "status_bar_cutout_offset_y", "status_bar_cutout_scale"};
+
     private static final String[] CUSTOM_KEYS = {"status_bar_cutout_offset_x",
         "status_bar_cutout_offset_y", "status_bar_cutout_scale"};
 
     private void applyCutoutSliders(@Nullable String mode) {
         boolean custom = "custom".equals(mode);
+        Preference margin = findPreference("status_bar_cutout_margin");
+        if (margin != null && margin.isVisible() == "off".equals(mode))
+            margin.setVisible(!"off".equals(mode));
         for (String key : CUSTOM_KEYS) {
             Preference row = findPreference(key);
             if (row != null && row.isVisible() != custom) row.setVisible(custom);
