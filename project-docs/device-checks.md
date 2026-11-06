@@ -33,6 +33,7 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
   model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
   `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,

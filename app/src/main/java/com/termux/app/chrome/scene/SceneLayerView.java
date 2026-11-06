@@ -89,6 +89,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     @NonNull private final String mKind;
     /** What the Filament scene spells and draws with; unused by Contour. */
     @NonNull private final FilamentSource mFilament = new FilamentSource();
+    /** The photo of a photo scene: decoded when its program is made, let go when the loop is torn down. */
+    @NonNull private final SceneArtwork mArtwork;
     @NonNull private final ScenePrograms.Factory mPrograms;
     private boolean mFilamentKind() { return ScenePrograms.FILAMENT.equals(mKind); }
     @Nullable private Loop mLoop;
@@ -141,7 +143,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                           @Nullable PaneSource panes, @NonNull BooleanSupplier lazyMode) {
         super(context);
         mKind = kind;
-        ScenePrograms.Factory base = ScenePrograms.factory(kind, mFilament);
+        mArtwork = new SceneArtwork(context, SceneArtwork.COASTAL_SUNSET_ASSET);
+        ScenePrograms.Factory base = ScenePrograms.factory(kind, mFilament, mArtwork);
         // Every program, full resolution or glass, starts with the knobs as they are now.
         mPrograms = scale -> {
             SceneProgram p = base.create(scale);
@@ -660,6 +663,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 Trace.endSection();
             }
             mNode.discardDisplayList();
+            mProgram = null;
+            mArtwork.release();
         }
     }
 

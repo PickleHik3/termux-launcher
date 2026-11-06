@@ -85,7 +85,7 @@ public class WallpaperLiveHostTest {
         assertFalse(host.showingLive());
         assertNotNull(host.grid());
         assertEquals(View.VISIBLE, host.picker().root().getVisibility());
-        assertEquals(5, LiveWallpaperChoice.USER_KINDS.length);
+        assertEquals(6, LiveWallpaperChoice.USER_KINDS.length);
     }
 
     @Test
