@@ -227,6 +227,8 @@ final class AppearanceEditorFrame {
     }
 
     private void ensureClipped() {
+        // An exit's corner rounding stops with it.
+        mRoot.animate().setUpdateListener(null);
         mCornerRadiusPx = deviceCornerRadiusPx(mRoot);
         if (!mClipped) {
             mSavedProvider = mRoot.getOutlineProvider();
@@ -269,9 +271,34 @@ final class AppearanceEditorFrame {
             finish.run();
             return;
         }
+        // The corners round off to square as the frame grows, and the last animated frame is
+        // exactly the frame at rest (the spring's curve is cut at its settle time, a hair short
+        // of 1): taking the clip off and the snap in finish then change no pixel.
+        final float startScale = mRoot.getScaleX();
+        final float cornerPx = mCornerRadiusPx;
+        final android.animation.TimeInterpolator curve = EditorMotion.Use.EDITOR_EXIT.curve(false);
         mRoot.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
-            .setDuration(EXIT_MS).setInterpolator(EditorMotion.Use.EDITOR_EXIT.curve(false))
-            .withEndAction(finish).start();
+            .setDuration(EXIT_MS).setInterpolator(t -> t >= 1f ? 1f : curve.getInterpolation(t))
+            .setUpdateListener(a -> {
+                mCornerRadiusPx = exitCornerPx(cornerPx, startScale, mRoot.getScaleX());
+                mRoot.invalidateOutline();
+            })
+            .withEndAction(() -> {
+                mRoot.animate().setUpdateListener(null);
+                finish.run();
+            }).start();
+    }
+
+    /**
+     * The clip's corner as the frame grows back from {@code startScale} to 1: the device's corner
+     * at the start, shrinking with the distance left, square at full size.
+     */
+    static float exitCornerPx(float cornerPx, float startScale, float scale) {
+        float span = 1f - startScale;
+        if (span <= 0f)
+            return 0f;
+        float left = Math.max(0f, Math.min(1f, (1f - scale) / span));
+        return cornerPx * left;
     }
 
     // -------------------------------------------------------------------- the editor's wallpaper
