@@ -115,6 +115,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             snapshot = sample(ui.style);
         } else {
             access = LauncherNotificationAccess.isEnabled(getContext());
+            // The last read draws now; the reload on start replaces it only if it differs.
+            snapshot = access ? NotificationsSnapshotCache.get() : null;
         }
         render();
     }
@@ -154,6 +156,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             if (access) {
                 access = false;
                 snapshot = null;
+                NotificationsSnapshotCache.clear();
                 render();
             }
             return;
@@ -180,6 +183,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         boolean changed = !access || !next.sameAs(snapshot);
         access = true;
         snapshot = next;
+        NotificationsSnapshotCache.put(next);
         if (changed) render();
     }
 
@@ -393,8 +397,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
                 res.getString(R.string.bw_signals_notifications_allow_hint));
             groups = new ArrayList<>();
         } else if (data.count() == 0) {
-            notice = new NotificationsLayoutPlanner.Notice(snapshot == null ? ""
-                : res.getString(R.string.bw_signals_notifications_empty), "");
+            notice = new NotificationsLayoutPlanner.Notice(
+                res.getString(R.string.bw_signals_notifications_empty), "");
             groups = new ArrayList<>();
         }
         shownGroups = groups;
