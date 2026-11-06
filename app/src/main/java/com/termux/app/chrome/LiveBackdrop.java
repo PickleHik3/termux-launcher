@@ -3,9 +3,12 @@ package com.termux.app.chrome;
 import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.RecordingCanvas;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.RenderNode;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Trace;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -49,9 +52,22 @@ import java.util.ArrayList;
  * references, without a new recording. Recording never invalidates a view or schedules a frame:
  * at rest nothing draws, so nothing records and nothing blurs.</p>
  *
- * <p><b>Memory.</b> At most {@link #MAX_LIVE_SURFACES} pictures, each one blur layer of at most
- * {@link #MAX_LAYER_BYTES}: {@link #BUDGET_BYTES} in all. Pictures are released when Live goes
- * off, when their surface hides ({@link #detach}) and under memory pressure ({@link #releaseAll}).</p>
+ * <p><b>The page layer.</b> While the wall of pages moves, and at rest under a live scene, a
+ * surface whose beneath holds the wall ({@link #setWall}) is drawn in two layers
+ * ({@link WallSwipeGlassPolicy}): the record node draws the ground and the chrome as always, and
+ * in the wall's place a quarter-scale page layer. Under a scene that layer is the pages as they are
+ * on a layer of their own, so a scene frame no longer re-blurs them. During a swipe it is one
+ * picture of the pages, rendered offscreen as the swipe starts ({@link PageLayerCapture}) and only
+ * moved by the pages' travel each frame, so the swipe re-blurs the ground, the chrome and a
+ * picture, not the pages. Everything that does not move with the pages (the wallpaper's parallax,
+ * the scene, the bars, the dock, the keyboard, the frame line) stays in the record node and is
+ * drawn where it stands. Until the picture lands, and whenever the pages stop moving together, the
+ * surface keeps its one-layer recording.</p>
+ *
+ * <p><b>Memory.</b> At most {@link #MAX_LIVE_SURFACES} pictures, each one blur layer and at most one
+ * page layer, together at most {@link #MAX_LAYER_BYTES}: {@link #BUDGET_BYTES} in all. Pictures
+ * are released when Live goes off, when their surface hides ({@link #detach}) and under memory
+ * pressure ({@link #releaseAll}); a frozen page layer is let go as the wall settles.</p>
  */
 public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
@@ -80,6 +96,24 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child);
     }
 
+    /**
+     * The wall of pages: a container whose children are the pages a swipe moves together, which
+     * a live surface over them holds in a page layer of their own ({@link WallSwipeGlassPolicy}).
+     */
+    public interface Wall extends Container {
+        /** Whether the wall is anywhere but at rest: a finger on it, or a slide under way. */
+        boolean isMovingForBackdrop();
+
+        /**
+         * Draws what the wall draws over its pages (the grabbers, a border's glow) into
+         * {@code canvas}, in its children's coordinates, as its own draw does now.
+         */
+        void drawDecorForBackdrop(@NonNull Canvas canvas);
+    }
+
+    /** Pictures of the page layer one swipe may start before it goes on without one. */
+    static final int MAX_CAPTURES_PER_SWIPE = 3;
+
     @NonNull private final ViewGroup mRoot;
     @NonNull private final ArrayList<LivePicture> mPictures = new ArrayList<>(MAX_LIVE_SURFACES);
     @Nullable private ViewTreeObserver mObserver;
@@ -96,8 +130,42 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private int[] mOrder = new int[16];
     @NonNull private final int[] mRanks = new int[MAX_LIVE_SURFACES];
 
+    // Scratch for the page layer; UI thread only.
+    /** The wall, when it is a view of this root ({@link #setWall}). */
+    @Nullable private ViewGroup mWall;
+    /** Where the wall stands on the surface's path, or -1 when it is beneath it. */
+    private int mWallPathIndex = -1;
+    /** The view beneath the surface that holds the wall, down to the wall; empty with the wall on the path. */
+    @NonNull private final ArrayList<View> mChain = new ArrayList<>();
+    /** For each container in {@link #mChain} but the wall: its children before, null, after, null. */
+    @NonNull private final ArrayList<View> mExpand = new ArrayList<>();
+    /** The pages the page layer holds, bottom first. */
+    @NonNull private final ArrayList<View> mPages = new ArrayList<>();
+    @NonNull private float[] mPoses = new float[WallSwipeGlassPolicy.POSE_STRIDE * 4];
+    private int mPoseCount;
+    /** The wall's children's coordinates to the root's, and back. */
+    @NonNull private final Matrix mWallMatrix = new Matrix();
+    @NonNull private final Matrix mWallInverse = new Matrix();
+    @NonNull private final Matrix mPageMatrix = new Matrix();
+    @NonNull private final RectF mNeeded = new RectF();
+    @NonNull private final RectF mReach = new RectF();
+    @NonNull private final RectF mUnion = new RectF();
+    @NonNull private final RectF mBounds = new RectF();
+    @NonNull private final Rect mPageRect = new Rect();
+    @NonNull private int[] mSaves = new int[8];
+    /** The page layer was recorded or changed this frame: the record node is recorded around it. */
+    private boolean mPageChanged;
+
     public LiveBackdrop(@NonNull ViewGroup root) {
         mRoot = root;
+    }
+
+    /**
+     * The wall of pages inside this root, whose pages a live surface over them holds in a page
+     * layer ({@link WallSwipeGlassPolicy}); null for none, and then every surface keeps one layer.
+     */
+    public void setWall(@Nullable Wall wall) {
+        mWall = wall instanceof ViewGroup ? (ViewGroup) wall : null;
     }
 
     /** Bytes of a quarter-scale RGBA layer over a {@code width} x {@code height} recording. */
@@ -308,19 +376,30 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // new effect on the same recording, never a re-record.
             picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
-            if (picture.mRecordedWidth == surface.getWidth()
+            WallSwipeGlassPolicy.Mode mode = pageLayerMode(picture, surface, margin);
+            boolean split = mode != WallSwipeGlassPolicy.Mode.LIVE;
+            if (picture.mRecordedMode == mode
+                && picture.mRecordedWidth == surface.getWidth()
                 && picture.mRecordedHeight == surface.getHeight()
                 && picture.mRecordedMargin == margin
                 && picture.mRecordedMatrix.equals(mMatrix)
-                && picture.mRecordedBeneath.equals(mBeneath)
-                && picture.mRecordedSceneGen == sceneGeneration()) {
+                && sameViews(picture.mRecordedBeneath, mBeneath)
+                && picture.mRecordedSceneGen == sceneGeneration()
+                && (!split || (!mPageChanged && sameViews(picture.mRecordedExpand, mExpand)
+                    && picture.mRecordedWallMatrix.equals(mWallMatrix)))) {
                 continue;
             }
             int width = surface.getWidth() + 2 * margin;
             int height = surface.getHeight() + 2 * margin;
-            if (!record(picture.recordNode(width, height), width, height, margin)) continue;
+            RenderNode node = picture.recordNode(width, height);
+            if (!(split ? recordSplit(node, width, height, margin, picture)
+                : record(node, width, height, margin))) continue;
+            picture.mRecordedMode = mode;
             picture.mRecordedBeneath.clear();
             picture.mRecordedBeneath.addAll(mBeneath);
+            picture.mRecordedExpand.clear();
+            if (split) picture.mRecordedExpand.addAll(mExpand);
+            picture.mRecordedWallMatrix.set(mWallMatrix);
             picture.mRecordedMatrix.set(mMatrix);
             picture.mRecordedWidth = surface.getWidth();
             picture.mRecordedHeight = surface.getHeight();
@@ -626,5 +705,457 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             Matrix own = child.getMatrix();
             if (!own.isIdentity()) canvas.concat(own);
         }
+    }
+
+    // ---- The page layer --------------------------------------------------------------------
+
+    /**
+     * How {@code picture} is drawn this frame ({@link WallSwipeGlassPolicy}), its page layer
+     * recorded, captured, collected or re-aimed to match. Runs after {@link #collect}. LIVE at
+     * rest without a scene before anything is walked, and LIVE for a frame whose page layer is not
+     * ready (a capture still rendering): the surface keeps its one-layer recording until it is.
+     */
+    @NonNull
+    private WallSwipeGlassPolicy.Mode pageLayerMode(@NonNull LivePicture picture,
+                                                    @NonNull View surface, int margin) {
+        mPageChanged = false;
+        mExpand.clear();
+        mWallMatrix.reset();
+        WallSwipeGlassPolicy.Mode want = WallSwipeGlassPolicy.Mode.LIVE;
+        ViewGroup wall = mWall;
+        boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
+        boolean scene = LiveSceneFrame.current() != null;
+        if (wall != null && (moving || scene)) {
+            want = WallSwipeGlassPolicy.mode(splittable(wall, surface, margin), moving, scene);
+        }
+        if (want != WallSwipeGlassPolicy.Mode.FROZEN) picture.mSwipeCaptures = 0;
+        if (want == WallSwipeGlassPolicy.Mode.LIVE) {
+            if (picture.mPageMode != WallSwipeGlassPolicy.Mode.LIVE || picture.capturing()) {
+                picture.dropPageLayer();
+            }
+            return want;
+        }
+        return preparePageLayer(picture, want) ? want : WallSwipeGlassPolicy.Mode.LIVE;
+    }
+
+    /**
+     * Whether the wall's pages beneath {@code surface} can go in a page layer: they are beneath
+     * it, every page drawn is opaque or gone, the views around the wall can draw their children
+     * one by one, and the two layers fit the picture's budget. Fills the page layer's scratch:
+     * {@link #mPages} and their poses, {@link #mChain} and {@link #mExpand}, the wall's matrix,
+     * what the surface needs ({@link #mNeeded}), the reach a new layer holds ({@link #mReach}) and
+     * its rect ({@link #mPageRect}).
+     */
+    private boolean splittable(@NonNull ViewGroup wall, @NonNull View surface, int margin) {
+        mChain.clear();
+        mPages.clear();
+        mPoseCount = 0;
+        mUnion.setEmpty();
+        if (!wall.isAttachedToWindow() || !wallMatrix(wall)) return false;
+        mWallPathIndex = mPath.indexOf(wall);
+        if (mWallPathIndex == 0) return false;
+        // Where the surface stands in the wall's children's coordinates.
+        mPageMatrix.set(mWallInverse);
+        mPageMatrix.preConcat(mMatrix);
+        if (mWallPathIndex > 0) {
+            // On the wall: the pages drawn before the surface's, and the levels below it, move
+            // with the surface, so the layer moves with it too.
+            int at = levelStart(mWallPathIndex);
+            for (View page = mBeneath.get(at); page != null; page = mBeneath.get(++at)) {
+                if (!addPage(page)) return false;
+            }
+            boolean content = !mPages.isEmpty();
+            for (int i = at + 1; !content && i < mBeneath.size(); i++) content = mBeneath.get(i) != null;
+            if (!content) return false;
+            addPose(mPageMatrix, 0f, 0f, 1f);
+            unionBounds(mPath.get(mWallPathIndex - 1));
+        } else {
+            // Beneath it: the view that holds the wall, opened down to the wall.
+            View top = wall;
+            mChain.add(wall);
+            ViewParent parent = wall.getParent();
+            while (parent instanceof ViewGroup && mPath.indexOf(parent) < 0) {
+                top = (View) parent;
+                mChain.add(top);
+                parent = top.getParent();
+            }
+            if (!(parent instanceof ViewGroup) || mBeneath.indexOf(top) < 0) return false;
+            java.util.Collections.reverse(mChain);
+            int last = mChain.size() - 1;
+            for (int d = 0; d <= last; d++) {
+                View view = mChain.get(d);
+                if (view.getAlpha() != 1f || !(view instanceof Container)) return false;
+                if (d == last) break;
+                int from = mExpand.size();
+                collectLevel((ViewGroup) view, null, mExpand);
+                View next = mChain.get(d + 1);
+                int index = -1;
+                for (int i = from; i < mExpand.size() && index < 0; i++) {
+                    if (mExpand.get(i) == next) index = i;
+                }
+                if (index < 0) return false;
+                mExpand.set(index, null);
+                mExpand.add(null);
+            }
+            int from = mExpand.size();
+            collectLevel(wall, null, mExpand);
+            boolean opaque = true;
+            for (int i = from; i < mExpand.size() && opaque; i++) opaque = addPage(mExpand.get(i));
+            while (mExpand.size() > from) mExpand.remove(mExpand.size() - 1);
+            if (!opaque || mPages.isEmpty()) return false;
+        }
+        mNeeded.set(-margin, -margin, surface.getWidth() + margin, surface.getHeight() + margin);
+        mPageMatrix.mapRect(mNeeded);
+        long base = layerBytes(surface.getWidth() + 2 * margin, surface.getHeight() + 2 * margin);
+        // A pixel each way for the layer's rect rounding out.
+        int neededWidth = (int) Math.ceil(mNeeded.width()) + 2;
+        int neededHeight = (int) Math.ceil(mNeeded.height()) + 2;
+        int padX = 0;
+        int padY = 0;
+        if (mWallPathIndex < 0) {
+            // A swipe carries the pages up to a width either way under a surface that stays.
+            padX = WallSwipeGlassPolicy.pad(base, neededWidth, neededHeight, true, wall.getWidth());
+            if (padX < 0) return false;
+            padY = WallSwipeGlassPolicy.pad(base, neededWidth + 2 * padX, neededHeight, false,
+                neededHeight);
+        } else if (!WallSwipeGlassPolicy.fits(base, neededWidth, neededHeight)) {
+            return false;
+        }
+        mReach.set(mNeeded);
+        mReach.inset(-padX, -padY);
+        mBounds.set(mReach);
+        if (!mBounds.intersect(mUnion)) return false;
+        mBounds.roundOut(mPageRect);
+        return !mPageRect.isEmpty();
+    }
+
+    /** {@code page} into {@link #mPages} with its pose; true for a page gone; false for one fading. */
+    private boolean addPage(@NonNull View page) {
+        float alpha = page.getAlpha();
+        if (alpha <= 0f) return true;
+        if (alpha < 1f) return false;
+        mPages.add(page);
+        mPageMatrix.setTranslate(page.getLeft(), page.getTop());
+        Matrix own = page.getMatrix();
+        if (!own.isIdentity()) mPageMatrix.preConcat(own);
+        addPose(mPageMatrix, page.getLeft(), page.getTop(), alpha);
+        unionBounds(page);
+        // mPageMatrix is the surface's place on the wall again for the caller.
+        mPageMatrix.set(mWallInverse);
+        mPageMatrix.preConcat(mMatrix);
+        return true;
+    }
+
+    /** {@code page}'s bounds in the wall's children's coordinates, into {@link #mUnion}. */
+    private void unionBounds(@NonNull View page) {
+        mBounds.set(0f, 0f, page.getWidth(), page.getHeight());
+        Matrix own = page.getMatrix();
+        if (!own.isIdentity()) own.mapRect(mBounds);
+        mBounds.offset(page.getLeft(), page.getTop());
+        mUnion.union(mBounds);
+    }
+
+    private void addPose(@NonNull Matrix matrix, float left, float top, float alpha) {
+        int at = mPoseCount * WallSwipeGlassPolicy.POSE_STRIDE;
+        if (mPoses.length < at + WallSwipeGlassPolicy.POSE_STRIDE) {
+            mPoses = java.util.Arrays.copyOf(mPoses, 2 * (at + WallSwipeGlassPolicy.POSE_STRIDE));
+        }
+        matrix.getValues(mValues);
+        System.arraycopy(mValues, 0, mPoses, at, 9);
+        mPoses[at + WallSwipeGlassPolicy.POSE_LEFT] = left;
+        mPoses[at + WallSwipeGlassPolicy.POSE_TOP] = top;
+        mPoses[at + WallSwipeGlassPolicy.POSE_ALPHA] = alpha;
+        mPoseCount++;
+    }
+
+    @NonNull private final float[] mValues = new float[9];
+
+    /** The wall's children's coordinates to the root's into {@link #mWallMatrix}; false if not inside. */
+    private boolean wallMatrix(@NonNull ViewGroup wall) {
+        mWallMatrix.setTranslate(-wall.getScrollX(), -wall.getScrollY());
+        View view = wall;
+        while (view != mRoot) {
+            ViewParent parent = view.getParent();
+            if (!(parent instanceof ViewGroup)) return false;
+            ViewGroup group = (ViewGroup) parent;
+            Matrix own = view.getMatrix();
+            if (!own.isIdentity()) mWallMatrix.postConcat(own);
+            mWallMatrix.postTranslate(view.getLeft() - group.getScrollX(),
+                view.getTop() - group.getScrollY());
+            view = group;
+        }
+        return mWallMatrix.invert(mWallInverse);
+    }
+
+    /** Where the level whose parent is {@code mPath.get(pathIndex)} starts in {@link #mBeneath}. */
+    private int levelStart(int pathIndex) {
+        int level = mPath.size() - 1 - pathIndex;
+        int at = 0;
+        while (level > 0) {
+            if (mBeneath.get(at++) == null) level--;
+        }
+        return at;
+    }
+
+    /**
+     * Records, captures, collects or re-aims {@code picture}'s page layer for {@code want}. Whether
+     * it can be drawn this frame. Sets {@link #mPageChanged} when the record node has to be
+     * recorded around a new one.
+     */
+    private boolean preparePageLayer(@NonNull LivePicture picture,
+                                     @NonNull WallSwipeGlassPolicy.Mode want) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false;
+        float shift = WallSwipeGlassPolicy.shift(picture.mRecordedPoses, picture.mRecordedPoseCount,
+            mPoses, mPoseCount);
+        boolean samePages = sameViews(picture.mRecordedPages, mPages);
+        float aim = WallSwipeGlassPolicy.aim(want, shift);
+        RectF reach = picture.mPageReach;
+        boolean covered = WallSwipeGlassPolicy.covers(reach.left, reach.top, reach.right,
+            reach.bottom, mNeeded.left, mNeeded.top, mNeeded.right, mNeeded.bottom, aim);
+        if (picture.capturing()) {
+            // A capture under way pictures the pages as they stood when it started.
+            if (want == WallSwipeGlassPolicy.Mode.FROZEN && !WallSwipeGlassPolicy.needsRecord(want,
+                    want, samePages, shift, covered)) {
+                if (!picture.collectCapture()) return false;
+                mPageChanged = true;
+                picture.aimPage(aim);
+                return true;
+            }
+            picture.dropPageLayer();
+            shift = Float.NaN;
+        }
+        if (picture.hasPageLayer() && !WallSwipeGlassPolicy.needsRecord(want, picture.mPageMode,
+                samePages, shift, covered)) {
+            picture.aimPage(aim);
+            return true;
+        }
+        if (want == WallSwipeGlassPolicy.Mode.FROZEN
+                && picture.mSwipeCaptures >= MAX_CAPTURES_PER_SWIPE) {
+            // The pages keep moving apart this swipe: one layer until it settles.
+            if (picture.mPageMode != WallSwipeGlassPolicy.Mode.LIVE) picture.dropPageLayer();
+            return false;
+        }
+        picture.dropPageLayer();
+        Trace.beginSection("LiveBackdrop.pageLayer");
+        try {
+            picture.mRecordedPages.addAll(mPages);
+            int floats = mPoseCount * WallSwipeGlassPolicy.POSE_STRIDE;
+            if (picture.mRecordedPoses.length < floats) picture.mRecordedPoses = new float[floats];
+            System.arraycopy(mPoses, 0, picture.mRecordedPoses, 0, floats);
+            picture.mRecordedPoseCount = mPoseCount;
+            picture.mPageReach.set(mReach);
+            if (want == WallSwipeGlassPolicy.Mode.REFERENCE) {
+                RenderNode page = picture.pageNode(mPageRect, true);
+                RecordingCanvas canvas = page.beginRecording(LivePicture.quarter(mPageRect.width()),
+                    LivePicture.quarter(mPageRect.height()));
+                try {
+                    drawPages(canvas, mPageRect, false);
+                } finally {
+                    page.endRecording();
+                }
+                picture.mPageMode = want;
+                mPageChanged = true;
+                return true;
+            }
+            RenderNode root = picture.captureRoot(mPageRect);
+            RecordingCanvas canvas = root.beginRecording(LivePicture.quarter(mPageRect.width()),
+                LivePicture.quarter(mPageRect.height()));
+            try {
+                drawPages(canvas, mPageRect, true);
+            } finally {
+                root.endRecording();
+            }
+            picture.mSwipeCaptures++;
+            picture.startCapture(mPageRect);
+            // It lands on a later frame (collectCapture); this one keeps one layer.
+            return false;
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The page layer's content into {@code canvas}, a quarter of {@code rect} (the wall's
+     * children's coordinates): the pages {@link #splittable} found, then the wall's own drawing
+     * over them for a surface beneath the wall, or the levels below the wall for one on it.
+     * {@code frozen} draws each page's own drawing at the pose it has now, so the page's travel
+     * after this is not in the picture; otherwise each page is drawn as its parent draws it.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private void drawPages(@NonNull RecordingCanvas canvas, @NonNull Rect rect, boolean frozen) {
+        ViewGroup wall = mWall;
+        if (wall == null) return;
+        canvas.scale(1f / LivePicture.SCALE, 1f / LivePicture.SCALE);
+        canvas.translate(-rect.left, -rect.top);
+        if (!frozen) canvas.enableZ();
+        for (int i = 0; i < mPages.size(); i++) {
+            View page = mPages.get(i);
+            if (frozen) {
+                int save = canvas.save();
+                canvas.translate(page.getLeft(), page.getTop());
+                Matrix own = page.getMatrix();
+                if (!own.isIdentity()) canvas.concat(own);
+                page.draw(canvas);
+                canvas.restoreToCount(save);
+            } else {
+                ((Container) wall).drawChildForBackdrop(canvas, page);
+            }
+        }
+        if (!frozen) canvas.disableZ();
+        if (mWallPathIndex < 0) {
+            ((Wall) wall).drawDecorForBackdrop(canvas);
+            return;
+        }
+        View pathPage = mPath.get(mWallPathIndex - 1);
+        canvas.translate(pathPage.getLeft(), pathPage.getTop());
+        Matrix own = pathPage.getMatrix();
+        if (!own.isIdentity()) canvas.concat(own);
+        int next = levelStart(mWallPathIndex - 1);
+        for (int i = mWallPathIndex - 1; i >= 1; i--) {
+            ViewGroup parent = (ViewGroup) mPath.get(i);
+            View child = mPath.get(i - 1);
+            int save = canvas.save();
+            canvas.translate(-parent.getScrollX(), -parent.getScrollY());
+            canvas.enableZ();
+            for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
+                drawBeneath((Container) parent, canvas, below);
+            }
+            canvas.disableZ();
+            canvas.restoreToCount(save);
+            canvas.translate(child.getLeft() - parent.getScrollX(),
+                child.getTop() - parent.getScrollY());
+            own = child.getMatrix();
+            if (!own.isIdentity()) canvas.concat(own);
+        }
+    }
+
+    /** {@link #record} with the page layer in the wall's place. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private boolean recordSplit(@NonNull RenderNode out, int width, int height, int marginPx,
+                                @NonNull LivePicture picture) {
+        RenderNode page = picture.pageLayer();
+        if (page == null || !mMatrix.invert(mInverse)) return false;
+        RecordingCanvas canvas = out.beginRecording(width, height);
+        try {
+            canvas.translate(marginPx, marginPx);
+            canvas.concat(mInverse);
+            drawGround(canvas);
+            int next = 0;
+            for (int i = mPath.size() - 1; i >= 1; i--) {
+                ViewGroup parent = (ViewGroup) mPath.get(i);
+                View child = mPath.get(i - 1);
+                int save = canvas.save();
+                canvas.translate(-parent.getScrollX(), -parent.getScrollY());
+                if (i == mWallPathIndex) {
+                    // The page layer stands for this level and every one below it.
+                    drawPageSlot(canvas, page, picture.mPageRect);
+                    canvas.restoreToCount(save);
+                    break;
+                }
+                canvas.enableZ();
+                for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
+                    if (!mChain.isEmpty() && below == mChain.get(0)) {
+                        canvas.disableZ();
+                        drawAroundWall(canvas, page, picture.mPageRect);
+                        canvas.enableZ();
+                    } else {
+                        drawBeneath((Container) parent, canvas, below);
+                    }
+                }
+                canvas.disableZ();
+                canvas.restoreToCount(save);
+                canvas.translate(child.getLeft() - parent.getScrollX(),
+                    child.getTop() - parent.getScrollY());
+                Matrix own = child.getMatrix();
+                if (!own.isIdentity()) canvas.concat(own);
+            }
+        } finally {
+            out.endRecording();
+        }
+        return true;
+    }
+
+    /**
+     * The view beneath the surface that holds the wall ({@link #mChain}), opened down to the wall:
+     * each container as its parent would place, clip and paint it, its children drawn one by one
+     * around the next, and the page layer where the wall's pages are. A container's own drawing
+     * other than its background is not drawn; none of the ones around the wall has any.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private void drawAroundWall(@NonNull RecordingCanvas canvas, @NonNull RenderNode page,
+                                @NonNull Rect rect) {
+        int last = mChain.size() - 1;
+        if (mSaves.length <= last) mSaves = new int[last + 1];
+        int next = 0;
+        for (int d = 0; d <= last; d++) {
+            ViewGroup view = (ViewGroup) mChain.get(d);
+            mSaves[d] = canvas.save();
+            canvas.translate(view.getLeft(), view.getTop());
+            Matrix own = view.getMatrix();
+            if (!own.isIdentity()) canvas.concat(own);
+            if (view.getClipChildren()) canvas.clipRect(0, 0, view.getWidth(), view.getHeight());
+            Drawable background = view.getBackground();
+            if (background != null) background.draw(canvas);
+            canvas.translate(-view.getScrollX(), -view.getScrollY());
+            if (view.getClipToPadding() && (view.getPaddingLeft() != 0 || view.getPaddingTop() != 0
+                    || view.getPaddingRight() != 0 || view.getPaddingBottom() != 0)) {
+                canvas.clipRect(view.getScrollX() + view.getPaddingLeft(),
+                    view.getScrollY() + view.getPaddingTop(),
+                    view.getScrollX() + view.getWidth() - view.getPaddingRight(),
+                    view.getScrollY() + view.getHeight() - view.getPaddingBottom());
+            }
+            if (d == last) {
+                drawPageSlot(canvas, page, rect);
+                break;
+            }
+            canvas.enableZ();
+            for (View child = mExpand.get(next++); child != null; child = mExpand.get(next++)) {
+                ((Container) view).drawChildForBackdrop(canvas, child);
+            }
+            canvas.disableZ();
+            // Skip this level's children after the next container; drawn on the way back up.
+            while (mExpand.get(next++) != null) { }
+        }
+        for (int d = last - 1; d >= 0; d--) {
+            canvas.restoreToCount(mSaves[d + 1]);
+            int at = afterStart(d);
+            canvas.enableZ();
+            for (View child = mExpand.get(at++); child != null; child = mExpand.get(at++)) {
+                ((Container) mChain.get(d)).drawChildForBackdrop(canvas, child);
+            }
+            canvas.disableZ();
+        }
+        canvas.restoreToCount(mSaves[0]);
+    }
+
+    /** Where the children after the next container start, for {@link #mChain}'s level {@code d}. */
+    private int afterStart(int d) {
+        int nulls = 2 * d + 1;
+        int at = 0;
+        while (nulls > 0) {
+            if (mExpand.get(at++) == null) nulls--;
+        }
+        return at;
+    }
+
+    /** The page layer over {@code rect}, in the wall's children's coordinates, drawn back at full scale. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private static void drawPageSlot(@NonNull RecordingCanvas canvas, @NonNull RenderNode page,
+                                     @NonNull Rect rect) {
+        int save = canvas.save();
+        canvas.translate(rect.left, rect.top);
+        canvas.scale(LivePicture.SCALE, LivePicture.SCALE);
+        canvas.drawRenderNode(page);
+        canvas.restoreToCount(save);
+    }
+
+    /** Whether {@code a} and {@code b} hold the same views in the same order; allocates nothing. */
+    private static boolean sameViews(@NonNull ArrayList<View> a, @NonNull ArrayList<View> b) {
+        int count = a.size();
+        if (count != b.size()) return false;
+        for (int i = 0; i < count; i++) {
+            if (a.get(i) != b.get(i)) return false;
+        }
+        return true;
     }
 }

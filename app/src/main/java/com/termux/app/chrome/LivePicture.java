@@ -72,6 +72,39 @@ public final class LivePicture implements GlassPicture {
     int mRecordedSceneGen;
     /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
     int mRank = LiveBackdrop.RANK_CHROME;
+
+    // ---- The page layer ({@link WallSwipeGlassPolicy}) -------------------------------------
+    /**
+     * The wall's pages on their own, at a quarter scale, drawn by the record node in the wall's
+     * place: a layer over the pages as they are ({@code REFERENCE}), or a node drawing
+     * {@link #mFrozen} ({@code FROZEN}). Empty in {@code LIVE}.
+     */
+    @Nullable private RenderNode mPage;
+    /** The pages pictured as the swipe started; held only while the wall moves. */
+    @Nullable private Bitmap mFrozen;
+    @Nullable private Bitmap mRetiredFrozen;
+    /** The capture of {@link #mFrozen} under way ({@link PageLayerCapture}); Android 10+. */
+    @Nullable private Object mCapture;
+    /** The node a capture renders; kept between swipes so a swipe allocates no node. */
+    @Nullable private RenderNode mCaptureRoot;
+    /** What the record node was last recorded as: one layer, or around the page layer. */
+    @NonNull WallSwipeGlassPolicy.Mode mRecordedMode = WallSwipeGlassPolicy.Mode.LIVE;
+    /** What the page layer holds now. */
+    @NonNull WallSwipeGlassPolicy.Mode mPageMode = WallSwipeGlassPolicy.Mode.LIVE;
+    /** The pages the page layer was recorded from, and their poses then. */
+    @NonNull final ArrayList<View> mRecordedPages = new ArrayList<>();
+    @NonNull float[] mRecordedPoses = new float[WallSwipeGlassPolicy.POSE_STRIDE * 4];
+    int mRecordedPoseCount = -1;
+    /** Captures this swipe has started ({@link LiveBackdrop#MAX_CAPTURES_PER_SWIPE}). */
+    int mSwipeCaptures;
+    /** Where the page layer stands in the wall's coordinates, and what it was recorded to hold. */
+    @NonNull final Rect mPageRect = new Rect();
+    @NonNull final android.graphics.RectF mPageReach = new android.graphics.RectF();
+    /** The views drawn around the page layer, and the wall's place, as the record node has them. */
+    @NonNull final ArrayList<View> mRecordedExpand = new ArrayList<>();
+    @NonNull final Matrix mRecordedWallMatrix = new Matrix();
+    /** Recycles {@link #mRetiredFrozen} a frame after the record node stopped drawing it. */
+    @NonNull private final Runnable mRecycleFrozen = this::recycleRetiredFrozen;
     /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
     private boolean mReleased;
     /**
@@ -82,6 +115,7 @@ public final class LivePicture implements GlassPicture {
     /** The nodes {@link #release} let go, emptied a frame later by {@link #mDiscardRetired}. */
     @Nullable private RenderNode mRetiredRecord;
     @Nullable private RenderNode mRetiredBlur;
+    @Nullable private RenderNode mRetiredPage;
     /**
      * Empties the released nodes once the holder has drawn its stored frame in their place: the
      * frame the holder last recorded may still draw them, so they keep their pictures until the
@@ -335,6 +369,139 @@ public final class LivePicture implements GlassPicture {
         mRecordedWidth = -1;
         mRecordedHeight = -1;
         mRecordedMargin = -1;
+        mRecordedPoseCount = -1;
+    }
+
+    // ---- The page layer --------------------------------------------------------------------
+
+    /**
+     * The page layer's node over {@code rect} (wall coordinates, full scale), sized to its quarter
+     * and cut to a layer of its own when {@code layered}; made on first use. Its aim goes back to
+     * none.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    @NonNull
+    RenderNode pageNode(@NonNull Rect rect, boolean layered) {
+        if (mPage == null) mPage = new RenderNode("LiveBackdrop.page");
+        mPage.setPosition(0, 0, quarter(rect.width()), quarter(rect.height()));
+        mPage.setUseCompositingLayer(layered, null);
+        mPage.setTranslationX(0f);
+        mPageRect.set(rect);
+        return mPage;
+    }
+
+    /** The node a capture of the page layer renders, sized to its quarter; kept for the next. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    @NonNull
+    RenderNode captureRoot(@NonNull Rect rect) {
+        if (mCaptureRoot == null) mCaptureRoot = new RenderNode("LiveBackdrop.pageCapture");
+        mCaptureRoot.setPosition(0, 0, quarter(rect.width()), quarter(rect.height()));
+        return mCaptureRoot;
+    }
+
+    /** {@code px} at the page layer's quarter scale, rounded up, at least 1. */
+    static int quarter(int px) {
+        return Math.max(1, (px + SCALE - 1) / SCALE);
+    }
+
+    /**
+     * Starts a capture of {@link #captureRoot}, recorded over {@code rect}: the swipe's frozen
+     * page layer, collected by {@link #collectCapture}. False when it could not start.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    boolean startCapture(@NonNull Rect rect) {
+        if (mCaptureRoot == null) return false;
+        PageLayerCapture capture = mCapture instanceof PageLayerCapture
+            ? (PageLayerCapture) mCapture : new PageLayerCapture();
+        mCapture = capture;
+        mPageRect.set(rect);
+        return capture.start(mCaptureRoot, quarter(rect.width()), quarter(rect.height()));
+    }
+
+    /** Whether a capture of the page layer is under way. */
+    boolean capturing() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCapture instanceof PageLayerCapture
+            && ((PageLayerCapture) mCapture).pending();
+    }
+
+    /**
+     * The capture under way, once it has landed: the page layer then draws it, frozen. False while
+     * it is still rendering or when it failed ({@link #capturing} tells which).
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    boolean collectCapture() {
+        if (!(mCapture instanceof PageLayerCapture)) return false;
+        Bitmap bitmap = ((PageLayerCapture) mCapture).poll();
+        if (bitmap == null) return false;
+        retireFrozen();
+        mFrozen = bitmap;
+        RenderNode page = pageNode(mPageRect, false);
+        RecordingCanvas canvas = page.beginRecording(quarter(mPageRect.width()),
+            quarter(mPageRect.height()));
+        try {
+            canvas.drawBitmap(bitmap, 0f, 0f, null);
+        } finally {
+            page.endRecording();
+        }
+        mPageMode = WallSwipeGlassPolicy.Mode.FROZEN;
+        return true;
+    }
+
+    /** Moves the page layer by {@code dxPx} in the wall's coordinates. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void aimPage(float dxPx) {
+        if (mPage != null) mPage.setTranslationX(dxPx / SCALE);
+    }
+
+    /** Whether the page layer holds a picture the record node can draw. */
+    boolean hasPageLayer() {
+        return mPage != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mPage.hasDisplayList();
+    }
+
+    /** The node the record node draws in the wall's place; null with no page layer. */
+    @Nullable
+    RenderNode pageLayer() {
+        return hasPageLayer() ? mPage : null;
+    }
+
+    /**
+     * Drops the page layer, its frozen picture and any capture under way. The caller records the
+     * record node as one layer again in the same pre-draw, so nothing draws them from this frame
+     * on.
+     */
+    void dropPageLayer() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (mCapture instanceof PageLayerCapture) ((PageLayerCapture) mCapture).cancel();
+            if (mPage != null && mPage.hasDisplayList()) mPage.discardDisplayList();
+        }
+        retireFrozen();
+        mPageMode = WallSwipeGlassPolicy.Mode.LIVE;
+        mRecordedPages.clear();
+        mRecordedPoseCount = -1;
+    }
+
+    /**
+     * Lets the frozen picture go: the frame the record node last drew it in may still be on its
+     * way to the screen, so it is recycled a frame later.
+     */
+    private void retireFrozen() {
+        Bitmap frozen = mFrozen;
+        mFrozen = null;
+        if (frozen == null) return;
+        if (mRetiredFrozen != null) mRetiredFrozen.recycle();
+        mRetiredFrozen = frozen;
+        if (mSurface.isAttachedToWindow()) mSurface.postOnAnimation(mRecycleFrozen);
+        else recycleRetiredFrozen();
+    }
+
+    private void recycleRetiredFrozen() {
+        if (mRetiredFrozen != null) mRetiredFrozen.recycle();
+        mRetiredFrozen = null;
+    }
+
+    /** Whether the page layer holds a frozen picture. */
+    boolean holdsFrozen() {
+        return mFrozen != null;
     }
 
     /**
@@ -345,6 +512,7 @@ public final class LivePicture implements GlassPicture {
      */
     void trim() {
         mReady = false;
+        dropPageLayer();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mBlur != null && mBlur.hasDisplayList()) mBlur.discardDisplayList();
             if (mRecord != null && mRecord.hasDisplayList()) mRecord.discardDisplayList();
@@ -365,6 +533,11 @@ public final class LivePicture implements GlassPicture {
         mReleased = true;
         mReady = false;
         if (mSurface.isAttachedToWindow() && (mBlur != null || mRecord != null)) {
+            // The page layer is drawn by the record node, so it goes with it a frame later; its
+            // frozen picture is recycled on that same frame.
+            mRetiredPage = mPage;
+            mPage = null;
+            dropPageLayer();
             mRetiredBlur = mBlur;
             mRetiredRecord = mRecord;
             mBlurWidth = -1;
@@ -376,6 +549,8 @@ public final class LivePicture implements GlassPicture {
         }
         mBlur = null;
         mRecord = null;
+        mPage = null;
+        mCaptureRoot = null;
     }
 
     private void discardRetired() {
@@ -384,7 +559,9 @@ public final class LivePicture implements GlassPicture {
             if (mRetiredRecord != null && mRetiredRecord.hasDisplayList()) {
                 mRetiredRecord.discardDisplayList();
             }
+            if (mRetiredPage != null && mRetiredPage.hasDisplayList()) mRetiredPage.discardDisplayList();
         }
+        mRetiredPage = null;
         mRetiredBlur = null;
         mRetiredRecord = null;
     }

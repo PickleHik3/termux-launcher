@@ -4390,6 +4390,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View root = findViewById(R.id.terminal_root_container);
             if (!(root instanceof ViewGroup)) return null;
             mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
+            // A swipe holds the wall's pages in a page layer of their own under live glass.
+            View wall = findViewById(R.id.terminal_pane_wall);
+            if (wall instanceof com.termux.app.chrome.LiveBackdrop.Wall) {
+                mLiveBackdrop.setWall((com.termux.app.chrome.LiveBackdrop.Wall) wall);
+            }
         }
         return mLiveBackdrop;
     }

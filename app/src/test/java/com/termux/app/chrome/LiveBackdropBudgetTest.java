@@ -42,6 +42,28 @@ public class LiveBackdropBudgetTest {
         assertEquals(270L * 75L * 4L, LiveBackdrop.layerBytes(1080, 297));
     }
 
+    /**
+     * A swipe's page layer comes out of its picture's own share: the dock's blur layer and its
+     * page layer, padded a width either way, together under {@link LiveBackdrop#MAX_LAYER_BYTES},
+     * so eight pictures stay inside {@link LiveBackdrop#BUDGET_BYTES}. A surface as large as the
+     * screen has no room for one and keeps one layer.
+     */
+    @Test
+    public void aPageLayerFitsInsideItsPicturesShare() {
+        int width = LiveBackdrop.BUDGET_SCREEN_WIDTH;
+        int height = LiveBackdrop.BUDGET_SCREEN_HEIGHT;
+        long dock = LiveBackdrop.layerBytes(width, 400);
+        int padX = WallSwipeGlassPolicy.pad(dock, width, 400, true, width);
+        assertEquals(width, padX);
+        int padY = WallSwipeGlassPolicy.pad(dock, width + 2 * padX, 400, false, 400);
+        assertTrue(padY >= 0);
+        assertTrue(dock + LiveBackdrop.layerBytes(width + 2 * padX, 400 + 2 * padY)
+            <= LiveBackdrop.MAX_LAYER_BYTES);
+        long panel = LiveBackdrop.layerBytes(width, height);
+        assertEquals(-1, WallSwipeGlassPolicy.pad(panel, width, height, true, width));
+        assertFalse(WallSwipeGlassPolicy.fits(panel, 1, 1));
+    }
+
     @Test
     public void aNinthSurfaceKeepsItsStoredFrame() {
         Context context = ApplicationProvider.getApplicationContext();
