@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Wallpaper door, one motion in and out (11-06, fix/wpflow-editor).** Home long-press ›
+  Wallpaper: nothing of the editor (Done pill, page label) draws until the menu has slid away;
+  the Wallpaper sheet rises with the shrinking preview and no Global/Home/Workspace tabs show
+  under it; no hitch at the start of the rise. Done on the Wallpaper sheet: the sheet slides
+  down while the preview grows back, no single-frame drop of the sheet, the card sheet or the
+  Done pill (compare with Back, then Done on the editor bar). Same from the terminal's More ›
+  Wallpaper and Appearance. How: `adb -s <serial> shell screenrecord`, stepped frame by frame.
 - **Assistant page with a real model (11-06, 41019af0b, ADR 0022).** On pong, add the Assistant
   page (Edit pages › Add assistant, or the drawer's Assistant entry), download Gemma E2B from
   the model chip's sheet, ask a question: the answer streams in plain text, Stop turns it into
