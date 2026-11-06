@@ -41,7 +41,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   crossing leaves no flash at the gap and the cards ease with their outer edges; light, dark,
   black, Material You, scheme chrome; font scale 1.3; Docked and the system bar showing are
   unchanged; keyboard up and down. The frost and the rim of the second card are not yet seen
-  on a device: look for a seam or a double rim.
+  on a device: look for a seam or a double rim. Pong's first build of this (11-07) showed the
+  main card's frost still spanning the whole bar under the camera and behind the left card; the
+  frost layers now take the cards' margins too. Check the main card's left end is rounded at the
+  camera's right edge, no glass under the camera, and the left card ends at the camera's left
+  edge (not past it); wallpaper pan and a Home/Terminal crossing move both frosts together.
 - **Camera hole, wave 1 (feat/camera-hole).** Owed on pong: Full screen with the status bar on,
   the chips and readings still clear the camera (the gap now follows the cutout path's bounds,
   which may be narrower than the bounding rect: check the margin looks even each side), Floating
