@@ -42,14 +42,6 @@ public final class CutoutShape {
                 path.computeBounds(bounds, true);
                 Rect traced = new Rect();
                 bounds.roundOut(traced);
-                // CAMHOLE-DBG temporary: the raw cutout values.
-                android.util.Log.d("CAMHOLE-DBG", "t=" + android.os.SystemClock.uptimeMillis()
-                    + " cutout rects=" + cutout.getBoundingRects() + " joined=" + hole
-                    + " rectTop=" + real.getBoundingRectTop() + " safe=" + real.getSafeInsetLeft()
-                    + "," + real.getSafeInsetTop() + "," + real.getSafeInsetRight() + ","
-                    + real.getSafeInsetBottom() + " pathRaw=" + bounds + " traced=" + traced
-                    + " stands=" + CameraHoleGeometry.traceStandsForRect(hole.left, hole.right,
-                        traced.left, traced.right));
                 // The traced path is the camera, whole: a rect that stands beside part of it
                 // (pong's rect is 454..540 while its hole runs on past 551) must not cut it.
                 if (CameraHoleGeometry.traceStandsForRect(hole.left, hole.right, traced.left,
