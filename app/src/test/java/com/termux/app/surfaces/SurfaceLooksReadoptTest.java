@@ -190,7 +190,7 @@ public class SurfaceLooksReadoptTest {
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
         assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         assertEquals(100, preferences.getFancierGlassFaceClarityPercent());
-        assertEquals(100, preferences.getFancierGlassDimPercent());
+        assertEquals("Clear ships its dim at 0", 0, preferences.getFancierGlassDimPercent());
         assertEquals(100, preferences.getFancierGlassSizeLensPercent());
         assertEquals(6, store.getInt(SurfacePresets.KEY_LOOKS_GENERATION, 0));
     }

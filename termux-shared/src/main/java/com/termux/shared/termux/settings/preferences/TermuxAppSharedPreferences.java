@@ -3224,7 +3224,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setFancierGlassDispersionPercent(FRESH_INSTALL_GLASS_DISPERSION);
             setFancierGlassClarityPercent(FRESH_INSTALL_GLASS_CLARITY);
             setFancierGlassFaceClarityPercent(100);
-            setFancierGlassDimPercent(100);
+            setFancierGlassDimPercent(0);
             setFancierGlassSizeLensPercent(100);
             // The Layout margin writes both of these; the pane gap matches it at this size.
             setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);

@@ -112,8 +112,9 @@ public final class SurfacePresets {
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
         // Clear (id minimal): the most transparent glass, wallpaper forward, tuned toward Apple's
         // Clear Liquid Glass (generation 6): the face shows the clearer picture where one is
-        // handed in (face clarity 100), dims a bright backdrop and lifts a dark one a touch
-        // (dim 100), the lensing grows with the surface (size lens 100), and there is no grain.
+        // handed in (face clarity 100), the lensing grows with the surface (size lens 100), and there is no
+        // grain. Its dim term ships at 0: the dim shifts the terminal pane's even-out ink vote (ChromeInk
+        // bandPolarity) and turned its text dark.
         // Glass 20 (blur 7, grain 0), opacity 10 on every surface (the terminal follows Base, no detached
         // override), its own colour (Tint 0). Its face is
         // nearly the wallpaper itself, so the edge has to carry the glass: the deepest bend of the
@@ -126,7 +127,6 @@ public final class SurfacePresets {
             10, 0, 0, 27, 18, 10, 0, 40, 76,
             look -> {
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, 100);
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_DIM, 100);
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, 100);
             }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
