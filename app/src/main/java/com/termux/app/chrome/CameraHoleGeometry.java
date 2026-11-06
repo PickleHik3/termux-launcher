@@ -141,22 +141,17 @@ public final class CameraHoleGeometry {
         return Split.COVERED;
     }
 
-    /** How far a traced path may stand past its bounding rect, in px: the path's round-out. */
-    public static final int TRACE_SLACK_PX = 1;
-
     /**
-     * Whether the cutout path's traced bounds {@code [traceLeft, traceRight)} can stand for the
-     * camera inside Android's bounding rect {@code [rectLeft, rectRight)}: they must lie inside
-     * it (within {@link #TRACE_SLACK_PX}) and fill at least half its width. Android builds the
-     * rect from the same path, so a trace beside it or a sliver of it is in another space than
-     * the window's, and the rect is the answer.
+     * Whether the cutout path's traced bounds {@code [traceLeft, traceRight)} stand for the
+     * camera on the top edge whose bounding rect is {@code [rectLeft, rectRight)}: whenever the
+     * two meet across, so the trace is that cutout's. The trace is then the shape, whole, not
+     * cut to the rect: on pong the rect (454..540) stands left of the hole, which runs on past
+     * 551, and cutting the trace to it put the right card over the camera.
      */
-    public static boolean pathTraceFits(int rectLeft, int rectRight, int traceLeft,
-                                        int traceRight) {
+    public static boolean traceStandsForRect(int rectLeft, int rectRight, int traceLeft,
+                                             int traceRight) {
         if (rectRight <= rectLeft || traceRight <= traceLeft) return false;
-        if (traceLeft < rectLeft - TRACE_SLACK_PX || traceRight > rectRight + TRACE_SLACK_PX)
-            return false;
-        return 2 * (traceRight - traceLeft) >= rectRight - rectLeft;
+        return traceLeft < rectRight && traceRight > rectLeft;
     }
 
     /** {@link #barCardMargins}'s slots in its {@code out} array. */

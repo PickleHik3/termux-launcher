@@ -220,20 +220,23 @@ public class CameraHoleGeometryTest {
     }
 
     /**
-     * Pong's cutout path traced 511..540 (or past the rect's right edge) against a bounding rect
-     * of 454..540: a sliver at one end, so the rect is the shape and the box centres on it.
+     * Pong: Android's rect is 454..540 while the hole runs from about 505 to past 551, and the
+     * path traced it to 540 only because the trace was cut to the rect. A trace meeting the rect
+     * is the shape, whole; one beside it (another cutout) is not.
      */
-    @Test public void aTraceBesideOrInsideASliverOfTheRectFallsBackToTheRect() {
-        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 511, 540));
-        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 511, 569));
-        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 400, 450));
-        // A circle traced inside its rect, round-out included, stands for the camera.
-        assertTrue(CameraHoleGeometry.pathTraceFits(454, 540, 460, 534));
-        assertTrue(CameraHoleGeometry.pathTraceFits(454, 540, 453, 541));
-        assertTrue(CameraHoleGeometry.pathTraceFits(440, 640, 440, 540));
-        assertFalse(CameraHoleGeometry.pathTraceFits(454, 540, 0, 0));
-        // With the rect as the shape pong's box is 443..551, not 500..551.
-        assertArrayEquals(new int[] {443, 0, 551, 126}, auto(454, 0, 540, 126));
+    @Test public void aTraceMeetingTheRectIsTheShapeWholeEvenPastTheRect() {
+        assertTrue(CameraHoleGeometry.traceStandsForRect(454, 540, 511, 569));
+        assertTrue(CameraHoleGeometry.traceStandsForRect(454, 540, 460, 534));
+        assertTrue(CameraHoleGeometry.traceStandsForRect(454, 540, 440, 560));
+        assertFalse(CameraHoleGeometry.traceStandsForRect(454, 540, 540, 600));
+        assertFalse(CameraHoleGeometry.traceStandsForRect(454, 540, 400, 454));
+        assertFalse(CameraHoleGeometry.traceStandsForRect(454, 540, 0, 0));
+        // A trace of 511..569 down to 92 boxes 500..580 at Margin 4dp: both cards clear it.
+        int[] box = auto(511, 0, 569, 92);
+        assertArrayEquals(new int[] {500, 0, 580, 92}, box);
+        int[] margins = new int[4];
+        assertTrue(CameraHoleGeometry.barCardMargins(bar(box), 21, 1059, margins));
+        assertCards(margins, 21, 1059, 580, 1059, 21, 500);
     }
 
     @Test public void aWiderLeftSideMakesTheLeftCardTheMainOne() {
