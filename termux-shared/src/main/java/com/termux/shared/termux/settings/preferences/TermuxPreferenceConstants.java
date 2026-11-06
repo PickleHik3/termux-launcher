@@ -1919,7 +1919,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The live wallpaper scene the launcher draws behind everything: {@code aurora},
-         * {@code contour-waves}, {@code nebula}, {@code bloom} or {@code particles}; empty is none.
+         * {@code contour-waves}, {@code nebula}, {@code bloom}, {@code particles} or {@code coastal-sunset}; empty is none.
          * An unknown value reads as none (see {@code LiveWallpaperChoice}).
          */
         public static final String KEY_LIVE_WALLPAPER_SCENE = "live_wallpaper_scene";

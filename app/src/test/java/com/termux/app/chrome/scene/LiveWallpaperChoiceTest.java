@@ -13,7 +13,7 @@ public class LiveWallpaperChoiceTest {
 
     @Test
     public void parseSceneAcceptsOnlyUserFacingKinds() {
-        for (String kind : new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles"}) {
+        for (String kind : new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles", "coastal-sunset"}) {
             assertEquals(kind, LiveWallpaperChoice.parseScene(kind));
         }
         assertEquals("nebula", LiveWallpaperChoice.parseScene("  nebula "));
@@ -125,7 +125,7 @@ public class LiveWallpaperChoiceTest {
         assertFalse(LiveWallpaperChoice.isChoiceKey("wallpaper_lock_choice"));
         assertFalse(LiveWallpaperChoice.isChoiceKey(null));
         assertNotNull(LiveWallpaperChoice.USER_KINDS);
-        assertArrayEquals(new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles"},
+        assertArrayEquals(new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles", "coastal-sunset"},
             LiveWallpaperChoice.USER_KINDS);
     }
 }

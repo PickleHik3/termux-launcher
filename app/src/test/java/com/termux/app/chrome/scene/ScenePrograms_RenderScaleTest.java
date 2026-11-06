@@ -17,6 +17,7 @@ public class ScenePrograms_RenderScaleTest {
     public void lineAndPointScenesStayFull() {
         assertEquals(1f, ScenePrograms.renderScale(ScenePrograms.CONTOUR_WAVES), 0f);
         assertEquals(1f, ScenePrograms.renderScale(ScenePrograms.PARTICLES), 0f);
+        assertEquals(1f, ScenePrograms.renderScale(ScenePrograms.COASTAL_SUNSET), 0f);
         assertEquals(1f, ScenePrograms.renderScale(ScenePrograms.CONTOUR), 0f);
         assertEquals(1f, ScenePrograms.renderScale(ScenePrograms.FILAMENT), 0f);
     }

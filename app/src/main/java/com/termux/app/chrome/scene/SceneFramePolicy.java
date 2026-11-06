@@ -4,7 +4,7 @@ package com.termux.app.chrome.scene;
  * Pure rules of the wallpaper scene prototype: how the three debug properties read, and the
  * ambient frame-skip gate the layer's Choreographer callback asks on every vsync.
  *
- * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour}, {@code filament}, {@code contour-waves}, {@code nebula}, {@code bloom}, {@code aurora} or
+ * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour}, {@code filament}, {@code contour-waves}, {@code nebula}, {@code bloom}, {@code aurora}, {@code coastal-sunset} or
  * {@code particles} the scene of that name.
  * {@code debug.tl.scene_rate}: ambient frames per second when nothing is happening, {@code 30}
  * (default), {@code 90}, or {@code 0} for no ambient motion. {@code debug.tl.scene_glass}:

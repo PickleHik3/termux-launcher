@@ -21,7 +21,7 @@ public final class LiveWallpaperChoice {
     @NonNull
     public static final String[] USER_KINDS = {
         ScenePrograms.AURORA, ScenePrograms.CONTOUR_WAVES, ScenePrograms.NEBULA,
-        ScenePrograms.BLOOM, ScenePrograms.PARTICLES,
+        ScenePrograms.BLOOM, ScenePrograms.PARTICLES, ScenePrograms.COASTAL_SUNSET,
     };
 
     public static final float MIN_SPEED = TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED;
