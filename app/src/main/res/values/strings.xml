@@ -2649,6 +2649,7 @@
     <string name="speech_model_accelerator_hint">GPU uses less battery, may be slower</string>
     <string name="speech_model_get_more_models">Get more models</string>
     <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_summary">The voice and speed for spoken answers</string>
     <string name="speech_model_accelerator_summary">%1$s · which part of the phone runs voice input</string>
     <string name="speech_model_accelerator_auto">Auto</string>
     <string name="speech_model_accelerator_cpu">CPU</string>
