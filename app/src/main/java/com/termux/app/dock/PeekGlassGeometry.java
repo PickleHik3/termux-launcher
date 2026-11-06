@@ -47,7 +47,7 @@ public final class PeekGlassGeometry {
     /** How strongly the reflection shows at its top edge with the knob at its strongest. */
     public static final float REFLECTION_MAX_ALPHA = 0.7f;
     /** The blur the reflection reaches at its far end, in dp, with the knob anywhere above 0. */
-    public static final float REFLECTION_MAX_BLUR_DP = 6f;
+    public static final float REFLECTION_MAX_BLUR_DP = 8f;
 
     private PeekGlassGeometry() {}
 
@@ -105,6 +105,41 @@ public final class PeekGlassGeometry {
     public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
                                int hostWidthPx, int hostHeightPx, int screenWidthPx,
                                float screenBottomPx, float density) {
+        return compute(iconBoxes, count, hostLeftPx, hostWidthPx, hostHeightPx, screenWidthPx,
+            screenBottomPx, density, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * {@link #compute} with the reflections' fade ended at {@code reflectionFloorPx} (the host's
+     * coordinates) where the A–Z row stands on the card under the icons: the letters keep the
+     * card's glass to themselves, and the reflection's depth, strength and blur scale over the
+     * shorter band as they do over the longer. Infinity for none; at or above the icons' lower
+     * edges the card has no reflection.
+     *
+     * @param reflectionFloorPx the top of the A–Z row standing on the card, or infinity
+     */
+    @Nullable
+    public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
+                               int hostWidthPx, int hostHeightPx, int screenWidthPx,
+                               float screenBottomPx, float density, float reflectionFloorPx) {
+        return compute(iconBoxes, count, hostLeftPx, hostWidthPx, hostHeightPx, screenWidthPx,
+            screenBottomPx, density, reflectionFloorPx, Float.NaN, 0f);
+    }
+
+    /**
+     * {@link #compute} for the card carrying the A-Z row under the icons: the reflection runs
+     * the card's whole height behind the letters ({@code reflectionFloorPx} infinity), and the
+     * card remembers where the letters' band stands ({@link PeekReflectionLook#azBand}) so the
+     * reflection can soften itself there and keep them legible.
+     *
+     * @param azCenterY  the letters' centre line in the host's coordinates, NaN for no A-Z row
+     * @param azLetterPx the letters' height
+     */
+    @Nullable
+    public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
+                               int hostWidthPx, int hostHeightPx, int screenWidthPx,
+                               float screenBottomPx, float density, float reflectionFloorPx,
+                               float azCenterY, float azLetterPx) {
         if (count <= 0 || hostWidthPx <= 0 || hostHeightPx <= 0 || screenWidthPx <= 0
             || iconBoxes.length < count * 4) return null;
         float[] icons = iconLine(iconBoxes, count);
@@ -119,8 +154,15 @@ public final class PeekGlassGeometry {
         // Past the screen's edge by the radius, so the rounded lower corners are off screen.
         float bottom = screenBottom + radius;
         float axis = mirrorAxisY(icons);
+        float[] az = new float[2];
+        if (!PeekReflectionLook.azBand(azCenterY, azLetterPx, density, az)) {
+            az[0] = Float.NaN;
+            az[1] = Float.NaN;
+        }
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis,
-            axis + reflectionDepth(icons, axis, screenBottom));
+            axis + reflectionDepth(icons, axis,
+                Math.min(screenBottom, Float.isNaN(reflectionFloorPx)
+                    ? Float.POSITIVE_INFINITY : reflectionFloorPx)), az[0], az[1]);
     }
 
     /**
@@ -215,9 +257,18 @@ public final class PeekGlassGeometry {
         public final float mirrorAxisY;
         /** Where the reflection has faded out: never past {@link #screenBottom}. */
         public final float reflectionBottom;
+        /**
+         * The band the A-Z letters stand in with its feather ({@link PeekReflectionLook#azBand}),
+         * top and bottom in the host's coordinates; NaN with no A-Z row on the card.
+         */
+        public final float azBandTop;
+        public final float azBandBottom;
 
         Card(float left, float top, float right, float bottom, float radiusPx,
-             float screenBottom, float mirrorAxisY, float reflectionBottom) {
+             float screenBottom, float mirrorAxisY, float reflectionBottom,
+             float azBandTop, float azBandBottom) {
+            this.azBandTop = azBandTop;
+            this.azBandBottom = azBandBottom;
             this.left = left;
             this.top = top;
             this.right = right;
@@ -257,7 +308,8 @@ public final class PeekGlassGeometry {
         @NonNull
         public Card offset(float dx, float dy) {
             return new Card(left + dx, top + dy, right + dx, bottom + dy, radiusPx,
-                screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy);
+                screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy, azBandTop + dy,
+                azBandBottom + dy);
         }
 
         @Override
@@ -270,7 +322,9 @@ public final class PeekGlassGeometry {
                 && Float.compare(radiusPx, c.radiusPx) == 0
                 && Float.compare(screenBottom, c.screenBottom) == 0
                 && Float.compare(mirrorAxisY, c.mirrorAxisY) == 0
-                && Float.compare(reflectionBottom, c.reflectionBottom) == 0;
+                && Float.compare(reflectionBottom, c.reflectionBottom) == 0
+                && Float.compare(azBandTop, c.azBandTop) == 0
+                && Float.compare(azBandBottom, c.azBandBottom) == 0;
         }
 
         @Override
@@ -282,6 +336,8 @@ public final class PeekGlassGeometry {
             h = 31 * h + Float.floatToIntBits(radiusPx);
             h = 31 * h + Float.floatToIntBits(screenBottom);
             h = 31 * h + Float.floatToIntBits(mirrorAxisY);
+            h = 31 * h + Float.floatToIntBits(azBandTop);
+            h = 31 * h + Float.floatToIntBits(azBandBottom);
             return 31 * h + Float.floatToIntBits(reflectionBottom);
         }
 

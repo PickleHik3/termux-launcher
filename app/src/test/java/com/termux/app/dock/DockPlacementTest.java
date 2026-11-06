@@ -3,7 +3,9 @@ package com.termux.app.dock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.Slot;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 
@@ -24,6 +26,62 @@ public class DockPlacementTest {
     private static final PlaceLayout WITH_EXTRA_KEYS = new PlaceLayout(Edge.TOP,
         RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.BOTTOM,
         PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+
+    /** The developer's Home: the apps row with the A–Z row under it on the dock (the default order). */
+    private static final PlaceLayout APPS_OVER_AZ = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+        true, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    /** The A–Z row ordered over the apps row. */
+    private static final PlaceLayout AZ_OVER_APPS = APPS_OVER_AZ
+        .withSlot(Element.AZ, Slot.on(Edge.BOTTOM, 5));
+    private static final PlaceLayout APPS_AZ_AND_KEYS = new PlaceLayout(Edge.TOP,
+        RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.BOTTOM,
+        PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    private static final PlaceLayout RAIL = new PlaceLayout(Edge.TOP, RowPlacement.LEFT,
+        true, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    private static final PlaceLayout AZ_ON_TOP = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+        true, Edge.TOP, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+
+    @Test
+    public void theCardStandsWithTheAzRowOnItUnderTheIcons() {
+        assertTrue(stands(APPS_OVER_AZ));
+        assertTrue(DockPlacement.peekCardCarriesAz(APPS_OVER_AZ, false));
+        assertFalse(DockPlacement.peekCardCarriesAz(APPS_ALONE, false));
+        // Hidden A–Z, or the A–Z row on another edge: as before, the row alone.
+        assertTrue(stands(AZ_ON_TOP));
+        assertFalse(DockPlacement.peekCardCarriesAz(AZ_ON_TOP, false));
+    }
+
+    @Test
+    public void theCardGivesWayToAnAzRowOverTheIconsAndToEveryOtherBand() {
+        assertFalse("the letters would stand outside the card", stands(AZ_OVER_APPS));
+        assertFalse(DockPlacement.peekCardCarriesAz(AZ_OVER_APPS, false));
+        assertFalse("extra keys on the bottom", stands(APPS_AZ_AND_KEYS));
+        assertFalse("a rail", stands(RAIL));
+        assertFalse("a joined frame", DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, true,
+            false, false, false));
+    }
+
+    @Test
+    public void withTheAzRowTheKeyboardIMEAndSearchFieldRuleStandsAsBefore() {
+        assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, true, false,
+            false));
+        assertTrue("Home: the card stands on the keyboard", DockPlacement.peekCardStands(true,
+            true, APPS_OVER_AZ, false, true, false, false, true));
+        assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, false, true,
+            false, true));
+        assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, false, false,
+            true, true));
+    }
+
+    @Test
+    public void lensBeadsStillTakeTheAzRowsGlass() {
+        assertFalse(LensBeadGeometry.rowWearsBeads(APPS_OVER_AZ, false, false));
+        assertFalse(LensBeadGeometry.rowWearsBeads(AZ_OVER_APPS, false, false));
+        assertTrue(LensBeadGeometry.rowWearsBeads(APPS_ALONE, false, false));
+    }
 
     private static boolean stands(PlaceLayout layout) {
         return DockPlacement.peekCardStands(true, true, layout, false, false, false, false);

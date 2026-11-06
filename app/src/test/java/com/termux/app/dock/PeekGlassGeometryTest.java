@@ -366,4 +366,36 @@ public class PeekGlassGeometryTest {
             .slotCount(7)
             .build();
     }
+
+    @Test
+    public void theReflectionFadeEndsWhereTheAzRowBegins() {
+        float[] boxes = rowBoxes(SCREEN_W, 7, 150, DENSITY);
+        PeekGlassGeometry.Card open = card(boxes, 7);
+        float floor = open.mirrorAxisY + open.reflectionDepth() / 2f;
+        PeekGlassGeometry.Card bound = PeekGlassGeometry.compute(boxes, 7, 0f, SCREEN_W, HOST_H,
+            SCREEN_W, HOST_H + STRIP_H, DENSITY, floor);
+        assertEquals(open.top, bound.top, 0f);
+        assertEquals(open.bottom, bound.bottom, 0f);
+        assertEquals(floor, bound.reflectionBottom, 0.01f);
+        assertTrue(bound.reflectionDepth() < open.reflectionDepth());
+        // A floor beyond the natural depth changes nothing; one above the icons' edge, no band.
+        assertEquals(open, PeekGlassGeometry.compute(boxes, 7, 0f, SCREEN_W, HOST_H, SCREEN_W,
+            HOST_H + STRIP_H, DENSITY, HOST_H * 2f));
+        assertEquals(0f, PeekGlassGeometry.compute(boxes, 7, 0f, SCREEN_W, HOST_H, SCREEN_W,
+            HOST_H + STRIP_H, DENSITY, open.mirrorAxisY - 5f).reflectionDepth(), 0f);
+    }
+
+    @Test
+    public void theAzRowKeepsTheFullReflectionAndMarksItsLettersBand() {
+        float[] boxes = rowBoxes(SCREEN_W, 7, 150, DENSITY);
+        PeekGlassGeometry.Card open = card(boxes, 7);
+        float centerY = open.mirrorAxisY + 30f;
+        PeekGlassGeometry.Card az = PeekGlassGeometry.compute(boxes, 7, 0f, SCREEN_W, HOST_H,
+            SCREEN_W, HOST_H + STRIP_H, DENSITY, Float.POSITIVE_INFINITY, centerY, 30f);
+        assertEquals(open.reflectionBottom, az.reflectionBottom, 0f);
+        assertTrue(az.azBandTop < centerY && az.azBandBottom > centerY);
+        assertEquals(centerY, (az.azBandTop + az.azBandBottom) / 2f, 0.01f);
+        assertTrue(Float.isNaN(open.azBandTop));
+        assertEquals(az.azBandTop + 10f, az.offset(0f, 10f).azBandTop, 0.001f);
+    }
 }

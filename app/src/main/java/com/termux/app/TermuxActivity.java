@@ -5958,9 +5958,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The strip under the pill continues the card to the screen's bottom edge, under either
         // Style: the host is placed flush while the card stands (dockFloats).
         float screenBottom = decor.getHeight() - hostInDecor[1];
+        // The A–Z row under the icons rides on the card (DockPlacement#peekCardCarriesAz): the
+        // reflections run on behind its letters, and the card keeps where the letters stand so
+        // the reflection softens there and they stay legible.
+        float azCenter = Float.NaN;
+        float azLetterPx = 0f;
+        View azRow = findViewById(R.id.apps_bar_az_row);
+        if (azRow != null && azRow.isShown()
+            && com.termux.app.dock.DockPlacement.peekCardCarriesAz(arrangement().layout(), false)) {
+            float[] azAt = layoutOffsetIn(azRow, container);
+            if (azAt != null) {
+                azCenter = azAt[1] - hostAt[1] + azRow.getHeight() * 0.5f;
+                azLetterPx = azRow instanceof android.widget.TextView
+                    ? ((android.widget.TextView) azRow).getTextSize() : azRow.getHeight() * 0.5f;
+            }
+        }
         return com.termux.app.dock.PeekGlassGeometry.compute(boxes, count, hostInDecor[0],
             host.getWidth(), host.getHeight(), decor.getWidth(), screenBottom,
-            getResources().getDisplayMetrics().density);
+            getResources().getDisplayMetrics().density, Float.POSITIVE_INFINITY, azCenter,
+            azLetterPx);
     }
 
     /**
