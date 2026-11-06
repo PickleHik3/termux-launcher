@@ -724,6 +724,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private Runnable mOnDone;
     /** The card sheet and the bar are kept unseen under the picker rising with the entry. */
     private boolean mChromeVeiled;
+    /** The next fresh presentation stands in place ({@link #presentInPlace}). */
+    private boolean mNextInPlace;
     private boolean mWallpaperSettled;
     @Nullable private Runnable mWallpaperWaiter;
     private int mPresentToken;
@@ -731,6 +733,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public void setOnDone(@Nullable Runnable onDone) {
         mOnDone = onDone;
+    }
+
+    /**
+     * {@link #present} with the editor already where it stood: the frame at its pose, the card at
+     * its detent, nothing growing or rising, and {@code onSettled} run right after the frame's
+     * first pass. A relaunch reopening the carried session, whose first drawn frame shows it.
+     */
+    @Override
+    public void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                               @Nullable Runnable onSettled) {
+        mNextInPlace = true;
+        try {
+            present(card, place, onSettled);
+        } finally {
+            mNextInPlace = false;
+        }
     }
 
     @Override
@@ -887,6 +905,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         ViewGroup content = mHost.findView(android.R.id.content);
         if (rootContainer == null || content == null)
             return;
+        final boolean animate = !mNextInPlace;
         final int token = ++mPresentToken;
         // A theme preview no carried session owns (its relaunch lost the handover) is kept, as
         // every other write of a session that ended without Discard is.
@@ -979,18 +998,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // With no card named (or one that cannot stand here) the screen's card stands at peek:
         // the sheet is never down while the editor is open.
         if (card != null)
-            raiseOrReport(card);
+            raiseOrReport(card, animate);
         if (mCard == null)
-            raiseScreenCard();
+            raiseScreenCard(animate);
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
             frameSizeChanged();
             mFramed = true;
-            if (!layoutFrame(true))
-                layoutFrameWhenReady(content, token, FRAME_RETRIES);
+            if (!layoutFrame(animate))
+                layoutFrameWhenReady(content, token, FRAME_RETRIES, animate);
             positionTargets();
-            long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
+            long wait = !animate || ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
@@ -1214,9 +1233,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Raises the card {@link #present} was asked for, or logs why it cannot stand there. */
     private void raiseOrReport(@NonNull EditorCard card) {
+        raiseOrReport(card, true);
+    }
+
+    private void raiseOrReport(@NonNull EditorCard card, boolean animate) {
         String refusal = cardRefusal(card);
         if (refusal == null)
-            openCard(card, true);
+            openCard(card, animate);
         else
             Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
     }
@@ -1303,7 +1326,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
     private void raiseScreenCard() {
-        openCard(EditorCard.forScreen(mScreen), true, EditorCardSheet.DETENT_PEEK);
+        raiseScreenCard(true);
+    }
+
+    private void raiseScreenCard(boolean animate) {
+        openCard(EditorCard.forScreen(mScreen), animate, EditorCardSheet.DETENT_PEEK);
     }
 
     /**
@@ -1857,17 +1884,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** The opening pass found no laid-out window: it tries again on the next frames, a few times. */
-    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts) {
+    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts,
+                                      boolean animate) {
         if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
             return;
         content.postOnAnimation(() -> {
             if (!mOpen || token != mPresentToken || mFrameCtxValid)
                 return;
             frameSizeChanged();
-            if (layoutFrame(true))
+            if (layoutFrame(animate))
                 positionTargets();
             else
-                layoutFrameWhenReady(content, token, attempts - 1);
+                layoutFrameWhenReady(content, token, attempts - 1, animate);
         });
     }
 

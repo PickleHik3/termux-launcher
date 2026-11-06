@@ -181,6 +181,16 @@ public final class AppearanceSurfaceController {
         void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
                      @Nullable Runnable onSettled);
 
+        /**
+         * {@link #present} with nothing moving: the frame at its pose and the card at its detent
+         * from the first frame, {@code onSettled} run once the frame's first pass has placed them.
+         * A relaunch reopening its carried session. Animated like {@link #present} by default.
+         */
+        default void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                                    @Nullable Runnable onSettled) {
+            present(card, place, onSettled);
+        }
+
         boolean isPresented();
 
         /** Back spent inside the editor: a card put down, a lift cancelled. False otherwise. */
@@ -333,6 +343,10 @@ public final class AppearanceSurfaceController {
     @Nullable private Runnable mOverviewWaiter;
     /** {@link #showWallpaper} was asked while the picker was being built: it rises once built. */
     private boolean mShowWhenBuilt;
+    /** A relaunch's reopen: the editor and the picker stand where they were, nothing moving. */
+    private boolean mInPlace;
+    /** Told once the reopened surface is on screen as carried, or will not be; null when done. */
+    @Nullable private Runnable mOnReopened;
     private boolean mWallpaperShown;
     @Nullable private View mScrim;
     private final List<Animator> mRunning = new ArrayList<>();
@@ -441,6 +455,7 @@ public final class AppearanceSurfaceController {
         mOverviewReady = false;
         mOverviewWaiter = null;
         mShowWhenBuilt = false;
+        mInPlace = false;
         resetHold();
         mEditor.setOnDone(this::onEditorDone);
         mEditor.setPageListener(new PageListener() {
@@ -508,11 +523,16 @@ public final class AppearanceSurfaceController {
      */
     private void presentNow(@Nullable EditorCard card, @Nullable PaneWallPage place,
                             boolean thenWallpaper, @NonNull Runnable gaveUp) {
-        boolean veil = WallpaperDoorMotion.veilsChrome(thenWallpaper, mOverviewReady,
+        boolean inPlace = mInPlace;
+        boolean veil = !inPlace && WallpaperDoorMotion.veilsChrome(thenWallpaper, mOverviewReady,
             ReducedMotion.isEnabled(mHost.context()));
         if (veil)
             mEditor.setChromeVeiled(true);
-        mEditor.present(card, place, null);
+        if (inPlace)
+            // Posted: the picker over it is placed below, in this same message.
+            mEditor.presentInPlace(card, place, () -> mMain.post(this::reopened));
+        else
+            mEditor.present(card, place, null);
         if (!mEditor.isPresented()) {
             if (veil)
                 mEditor.setChromeVeiled(false);
@@ -521,6 +541,16 @@ public final class AppearanceSurfaceController {
         }
         if (thenWallpaper)
             showWallpaper();
+        // Only the carried state stands in place; the picker raised later rises as usual.
+        mInPlace = false;
+    }
+
+    /** The reopened surface is on screen as carried (or never will be): the activity is told. */
+    private void reopened() {
+        Runnable told = mOnReopened;
+        mOnReopened = null;
+        if (told != null)
+            told.run();
     }
 
     /**
@@ -570,12 +600,24 @@ public final class AppearanceSurfaceController {
      * was relaunched: its card up, its session continued. False when it could not open.
      */
     public boolean reopen(@NonNull Relaunch carried) {
+        return reopen(carried, null);
+    }
+
+    /**
+     * {@link #reopen(Relaunch)}, standing in place: the editor at its pose with its card at its
+     * detent and the picker up, nothing growing or rising. {@code onShown} runs once that is on
+     * screen, or once it will not be (the surface closed or never opened); not when this
+     * returns false.
+     */
+    public boolean reopen(@NonNull Relaunch carried, @Nullable Runnable onShown) {
         if (mOpen)
             return false;
         ViewGroup content = mHost.content();
         if (content == null)
             return false;
         beginOpen(content);
+        mInPlace = true;
+        mOnReopened = onShown;
         mEditor.adoptSessionNext(carried.editor);
         if (carried.where.wallpaper)
             buildOverview();
@@ -603,12 +645,18 @@ public final class AppearanceSurfaceController {
         final View page = overview.root();
         overview.onShown();
         final int token = mToken;
+        final boolean inPlace = mInPlace;
         overview.whenReady(() -> {
             if (!mOpen || token != mToken || !mWallpaperShown)
                 return;
             mOverviewReady = true;
             page.setVisibility(View.VISIBLE);
             page.setAlpha(1f);
+            if (inPlace) {
+                // A relaunch's reopen: up already, as it stood when the activity went down.
+                page.setTranslationY(0f);
+                return;
+            }
             // Up, it covers the card sheet and the bar a door's entry kept unseen.
             rise(page, true, () -> mEditor.setChromeVeiled(false));
         });
@@ -862,6 +910,7 @@ public final class AppearanceSurfaceController {
      * Lock slot may not be set yet), and only then does its page let go.
      */
     public void onHostDestroyed() {
+        mOnReopened = null;
         if (!mOpen)
             return;
         mOpen = false;
@@ -1105,6 +1154,8 @@ public final class AppearanceSurfaceController {
         mCommitting = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
+        mInPlace = false;
+        reopened();
         boolean byUser = mClosingByUser;
         mClosingByUser = false;
         mHost.onClosed();

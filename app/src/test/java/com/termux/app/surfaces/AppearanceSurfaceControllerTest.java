@@ -181,6 +181,79 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void aRelaunchReopensThePickerInPlaceAndSaysWhenItIsOnScreen() {
+        surface.resumeWallpaper();
+        settle();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.where.wallpaper);
+        surface.onHostDestroyed();
+        host.page.root.setTranslationY(500f);
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        editor.inPlace = false;
+        int[] shown = {0};
+        assertTrue(next.reopen(carried, () -> shown[0]++));
+        ShadowLooper.runUiThreadTasks();
+        assertTrue("the editor stands where it stood, nothing growing", editor.inPlace);
+        assertFalse("nothing is veiled: there is no rise", editor.veiledAtPresent);
+        assertTrue(next.isWallpaperShown());
+        assertEquals("the picker is up already, not rising", 0f,
+            host.page.root.getTranslationY(), 0f);
+        assertEquals(View.VISIBLE, host.page.root.getVisibility());
+        assertEquals("told once it is on screen", 1, shown[0]);
+        settle();
+        assertEquals(1, shown[0]);
+    }
+
+    @Test
+    public void aReopenThatClosesStillLetsTheWindowDraw() {
+        surface.open(EditorCard.DOCK, null);
+        settle();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        surface.onHostDestroyed();
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        editor.frameFailures = AppearanceSurfaceController.REOPEN_ATTEMPTS;
+        int[] shown = {0};
+        assertTrue(next.reopen(carried, () -> shown[0]++));
+        settle();
+        assertFalse(next.isOpen());
+        assertEquals(1, shown[0]);
+    }
+
+    @Test
+    public void theFirstFrameIsHeldOnlyForAHandoverAndNeverPastItsBackstops() {
+        assertFalse(RelaunchReveal.holds(false));
+        assertTrue(RelaunchReveal.holds(true));
+        assertTrue(RelaunchReveal.stillHeld(false, 0, 0));
+        assertFalse("shown as carried", RelaunchReveal.stillHeld(true, 0, 0));
+        assertFalse("the time backstop",
+            RelaunchReveal.stillHeld(false, 1, RelaunchReveal.BACKSTOP_MS));
+        assertFalse("the frame backstop",
+            RelaunchReveal.stillHeld(false, RelaunchReveal.MAX_HELD_FRAMES, 1));
+        assertNull("no handover, no hold",
+            RelaunchReveal.holdFirstDraw(activity.getWindow().getDecorView(), false));
+    }
+
+    @Test
+    public void aHeldWindowDrawsOnceReleasedOrPastItsBackstop() {
+        View decor = activity.getWindow().getDecorView();
+        RelaunchReveal.Gate gate = RelaunchReveal.holdFirstDraw(decor, true);
+        assertNotNull(gate);
+        assertFalse("held", gate.onPreDraw());
+        gate.release();
+        assertTrue(gate.onPreDraw());
+
+        RelaunchReveal.Gate late = RelaunchReveal.holdFirstDraw(decor, true);
+        assertNotNull(late);
+        idle(RelaunchReveal.BACKSTOP_MS + 10);
+        assertTrue("released by its backstop", late.onPreDraw());
+    }
+
+    @Test
     public void backPutsTheCardDownBeforeItLeaves() {
         surface.open(EditorCard.DOCK, null);
         settle();
@@ -433,6 +506,14 @@ public class AppearanceSurfaceControllerTest {
 
         boolean veiled;
         boolean veiledAtPresent;
+        boolean inPlace;
+
+        @Override public void presentInPlace(@Nullable EditorCard card,
+                                             @Nullable PaneWallPage place,
+                                             @Nullable Runnable onSettled) {
+            inPlace = true;
+            present(card, place, onSettled);
+        }
         @Nullable List<String> events;
 
         @Override public void setChromeVeiled(boolean veiled) {
