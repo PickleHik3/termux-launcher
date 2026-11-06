@@ -11834,12 +11834,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         final boolean fromSettings = mAppearanceHandover.pendingFromSettings();
         View root = findViewById(R.id.activity_termux_root_view);
+        // The first frame drawn is the editor as it stood, not the plain home with the editor
+        // cut in after: the window waits for it, with a time and a frame backstop.
+        final com.termux.app.surfaces.RelaunchReveal.Gate reveal =
+            com.termux.app.surfaces.RelaunchReveal.holdFirstDraw(getWindow().getDecorView(), true);
         Runnable open = () -> {
             if (isFinishing() || isDestroyed() || mAppearance.isOpen()
-                || !mAppearanceHandover.claim(carried))
+                || !mAppearanceHandover.claim(carried)) {
+                if (reveal != null) reveal.release();
                 return;
-            if (mAppearance.reopen(carried))
+            }
+            if (mAppearance.reopen(carried, reveal == null ? null : reveal::release))
                 mAppearanceFromSettings = fromSettings;
+            else if (reveal != null)
+                reveal.release();
         };
         if (root != null) root.post(open);
         else open.run();
