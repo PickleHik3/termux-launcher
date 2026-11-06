@@ -3555,9 +3555,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return row == null || !row.isShown();
     }
 
-    /** The top edge's camera box (window px) and its safe top inset; null / 0 with none. */
-    @Nullable private Rect mTopCutoutHole;
-    private int mTopCutoutSafeTopPx;
+    /** How deep the pane rim's top line is cut where the camera stands over it, in dp. */
+    private static final float PANE_TOP_GAP_DEPTH_DP = 3f;
+    private final int[] mPaneTopOrigin = new int[2];
+    private final int[] mPaneTopScratch = new int[2];
+    private final int[] mPaneTopGap = new int[2];
     /** Whether {@link #syncPanesForScreenTop} follows every window layout yet; installed once. */
     private boolean mPanesScreenTopFollowed;
 
@@ -3570,24 +3572,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPanesForScreenTop() {
         syncBarSplit();
-        boolean active = panesReachScreenTop() && mTopCutoutHole != null
-            && mTopCutoutSafeTopPx > 0;
+        int[] box = panesReachScreenTop() ? mCameraBox : null;
         java.util.List<TerminalView> panes = mPaneController != null
             ? mPaneController.getVisiblePaneViews()
             : (mTerminalView == null ? java.util.Collections.emptyList()
                 : java.util.Collections.singletonList(mTerminalView));
-        int[] origin = new int[2];
-        int[] scratch = new int[2];
+        int[] origin = mPaneTopOrigin;
+        int[] scratch = mPaneTopScratch;
+        int[] gap = mPaneTopGap;
+        int gapDepthPx = Math.round(dpToPx(PANE_TOP_GAP_DEPTH_DP));
         for (TerminalView pane : panes) {
             if (pane == null) continue;
             int inset = 0;
-            if (active && pane.getWidth() > 0) {
+            int gapStart = 0;
+            int gapEnd = 0;
+            if (box != null && pane.getWidth() > 0) {
                 com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(pane, origin, scratch);
                 inset = com.termux.app.chrome.FullScreenCornerPolicy.paneTextTopInsetPx(true,
-                    origin[0], origin[1], origin[0] + pane.getWidth(), mTopCutoutHole.left,
-                    mTopCutoutHole.right, mTopCutoutSafeTopPx);
+                    origin[0], origin[1], origin[0] + pane.getWidth(), box[0], box[2], box[3]);
+                // The rim is the pane frame's: its own x, from the frame's left edge.
+                View frame = pane.getParent() instanceof View ? (View) pane.getParent() : null;
+                if (frame instanceof com.termux.app.terminal.PaneContentFrame && frame.getWidth() > 0) {
+                    com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, origin, scratch);
+                    if (com.termux.app.chrome.CameraHoleGeometry.paneTopGap(box, origin[0],
+                        origin[1], origin[0] + frame.getWidth(), gap)) {
+                        gapStart = gap[0];
+                        gapEnd = gap[1];
+                    }
+                }
             }
             pane.setTextTopInsetPx(inset);
+            if (pane.getParent() instanceof com.termux.app.terminal.PaneContentFrame) {
+                ((com.termux.app.terminal.PaneContentFrame) pane.getParent())
+                    .setTopGap(gapStart, gapEnd, gapDepthPx);
+            }
+        }
+        // The plain border round a lone pane (no glass) breaks over the camera too.
+        View border = findViewById(R.id.terminal_border_overlay);
+        if (border instanceof TerminalGlassFrameView) {
+            int start = 0;
+            int end = 0;
+            if (box != null && border.getVisibility() == View.VISIBLE && border.getWidth() > 0) {
+                com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(border, origin, scratch);
+                if (com.termux.app.chrome.CameraHoleGeometry.paneTopGap(box, origin[0], origin[1],
+                    origin[0] + border.getWidth(), gap)) {
+                    start = gap[0];
+                    end = gap[1];
+                }
+            }
+            ((TerminalGlassFrameView) border).setTopGap(start, end, gapDepthPx);
         }
         if (mPaneHostInnerRadiusPx >= 0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             View paneHost = findViewById(R.id.terminal_pane_host);
@@ -11101,8 +11134,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Kept for the frames Full screen brings to the screen's edges (FullScreenCornerPolicy).
         mDisplayCornerRadiiPx = radii;
-        mTopCutoutHole = hole;
-        mTopCutoutSafeTopPx = cutout == null ? 0 : cutout.getSafeInsetTop();
         if (!mPanesScreenTopFollowed) {
             mPanesScreenTopFollowed = true;
             getWindow().getDecorView().getViewTreeObserver()
@@ -11137,7 +11168,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.statusbar.StatusRowKeepOut.keepOutBox(screen, windowWidth) : null;
         boolean boxMoved = !java.util.Arrays.equals(cameraBox, mCameraBox);
         mCameraBox = cameraBox;
-        if (boxMoved) syncBarSplit();
+        if (boxMoved) syncPanesForScreenTop();
         // The window bar reads the same answer for where it stands, but only in Full screen: with
         // the system bar showing it never reaches the camera's band, and stays as it always was.
         View windowBar = findViewById(R.id.terminal_window_bar);

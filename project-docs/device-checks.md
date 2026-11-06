@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Camera hole, wave 3: the pane top round the camera.** Owed on pong, status bar off and Full
+  screen: one pane, then a 2-way vertical split (the camera over the seam or over one pane):
+  the rim's top line breaks over the camera's box and resumes either side, the glass and the
+  outline are unchanged, the first text row starts just below the box (it used to start at the
+  safe inset, 126 px; now at the traced box's bottom). Floating and Docked; rotate to landscape
+  and back (no break in landscape); status bar on or system bar showing: no break.
 - **Camera hole, wave 2: the Floating bar splits round the camera.** Owed on pong, Full screen,
   Floating status bar: the bar's glass and rim stop either side of the camera, both cards with
   the bar's own radius (pong's hole is mid-bar, so two cards; check each end of Move sideways

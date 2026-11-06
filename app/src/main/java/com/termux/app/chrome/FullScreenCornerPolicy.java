@@ -41,17 +41,17 @@ public final class FullScreenCornerPolicy {
 
     /**
      * How far a pane's text starts below the pane's top so it clears the camera: what of the
-     * cutout's safe top inset ({@code safeTopPx}) still reaches past the pane's top, when Full
-     * screen leaves the pane's top inside the cutout's band and the cutout's box
-     * ({@code holeLeft..holeRight}) overlaps the pane across. Zero otherwise: a pane below the
-     * band, beside the hole, or with the system bar showing keeps its text where it was.
+     * camera's box ({@link CameraHoleGeometry#keepOutBox}) still reaches past the pane's top, when
+     * Full screen leaves the pane's top inside the box's band and the box ({@code boxLeftPx..
+     * boxRightPx}) overlaps the pane across. Zero otherwise: a pane below the box, beside it, or
+     * with the system bar showing keeps its text where it was.
      */
     public static int paneTextTopInsetPx(boolean fullScreen, int paneLeftPx, int paneTopPx,
-                                         int paneRightPx, int holeLeftPx, int holeRightPx,
-                                         int safeTopPx) {
-        if (!fullScreen || safeTopPx <= 0 || holeRightPx <= holeLeftPx) return 0;
-        if (paneTopPx >= safeTopPx) return 0;
-        if (paneRightPx <= holeLeftPx || paneLeftPx >= holeRightPx) return 0;
-        return safeTopPx - Math.max(0, paneTopPx);
+                                         int paneRightPx, int boxLeftPx, int boxRightPx,
+                                         int boxBottomPx) {
+        if (!fullScreen || boxBottomPx <= 0 || boxRightPx <= boxLeftPx) return 0;
+        if (paneTopPx >= boxBottomPx) return 0;
+        if (paneRightPx <= boxLeftPx || paneLeftPx >= boxRightPx) return 0;
+        return boxBottomPx - Math.max(0, paneTopPx);
     }
 }

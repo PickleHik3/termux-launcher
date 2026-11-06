@@ -18,6 +18,9 @@ public class FullScreenCornerPolicyTest {
     private static final int HOLE_LEFT = 454;
     private static final int HOLE_RIGHT = 540;
     private static final int SAFE_TOP = 126;
+    private static final int BOX_LEFT = HOLE_LEFT - 11;
+    private static final int BOX_RIGHT = HOLE_RIGHT + 11;
+    private static final int BOX_BOTTOM = SAFE_TOP;
     private static final float E = 0.001f;
 
     private static StatusRowKeepOut.Screen pong() {
@@ -78,24 +81,32 @@ public class FullScreenCornerPolicyTest {
         assertEquals(28f, FullScreenCornerPolicy.topCornerRadiusPx(false, 28f, 0, R), E);
     }
 
-    @Test public void aPaneTopUnderTheCutoutStartsItsTextBelowTheLens() {
+    @Test public void aPaneTopUnderTheCutoutStartsItsTextBelowTheBox() {
+        // The box (CameraHoleGeometry) is the one owner: pong's 443..551 x 0..126, margin in.
         assertEquals(126, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 0, W,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
         // A pane whose top already stands 40px down needs only what is left.
         assertEquals(86, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 40, W,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
+    }
+
+    @Test public void theTextStartsAtTheTracedBoxNotTheSafeInset() {
+        // Changed with the camera wrap (2026-11-06, spec section 6 Q4): text used to start at the
+        // cutout's safe top (126 on pong) whatever the hole's shape; it now starts at the traced
+        // box's bottom, so a punch hole whose shape ends at 90 gives the first row 36 px back.
+        assertEquals(90, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 0, W, 443, 551, 90));
     }
 
     @Test public void aPaneBesideTheCutoutOrBelowItsBandKeepsItsText() {
-        // The left half of a split, 0..450: the hole at 454..540 is not over it.
-        assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 0, 450,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
-        assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(true, 545, 0, W,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
+        // The left of a split, 0..440: the box at 443..551 is not over it.
+        assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 0, 440,
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
+        assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(true, 556, 0, W,
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
         assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(true, 0, 126, W,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
         assertEquals(0, FullScreenCornerPolicy.paneTextTopInsetPx(false, 0, 0, W,
-            HOLE_LEFT, HOLE_RIGHT, SAFE_TOP));
+            BOX_LEFT, BOX_RIGHT, BOX_BOTTOM));
     }
 
     @Test public void aWindowBarAtThePanesTopFlowsAroundTheCutoutLikeTheStatusRow() {
