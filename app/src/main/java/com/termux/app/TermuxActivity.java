@@ -4503,6 +4503,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mParallaxFrostViews = new View[] {
                 findViewById(R.id.terminal_status_bar_wallpaper_backdrop),
                 findViewById(R.id.terminal_window_bar_wallpaper_backdrop),
+                findViewById(R.id.terminal_window_bar_wallpaper_backdrop_side),
                 findViewById(R.id.accessory_blur_backdrop),
                 findViewById(R.id.inapp_keyboard_view_host),
                 findViewById(R.id.accessory_under_keyboard_stack),
@@ -10323,6 +10324,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keyboard host's background.
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
+            R.id.terminal_window_bar_wallpaper_backdrop_side,
             R.id.terminal_status_bar_wallpaper_backdrop, R.id.accessory_blur_backdrop,
             R.id.place_off_dock_plank_frost, R.id.place_az_bar_host_frost};
         for (int frostId : frostIds) {
@@ -11029,40 +11031,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             split = com.termux.app.chrome.CameraHoleGeometry.split(box, left, top, right,
                 top + host.getHeight(), com.termux.app.chrome.CameraHoleGeometry.minSidePx(radius,
                     getResources().getDisplayMetrics().density));
-            switch (split.kind) {
-                case TRIM_LEFT:
-                    want[0] = split.rightCardLeftPx - left;
-                    break;
-                case TRIM_RIGHT:
-                    want[1] = right - split.leftCardRightPx;
-                    break;
-                case TWO: {
-                    sideWanted = true;
-                    boolean mainRight = right - split.rightCardLeftPx
-                        >= split.leftCardRightPx - left;
-                    if (mainRight) {
-                        want[0] = split.rightCardLeftPx - left;
-                        want[3] = right - split.leftCardRightPx;
-                    } else {
-                        want[1] = right - split.leftCardRightPx;
-                        want[2] = split.rightCardLeftPx - left;
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
+            sideWanted = com.termux.app.chrome.CameraHoleGeometry.barCardMargins(split, left,
+                right, want);
         }
+        int mainLeft = want[com.termux.app.chrome.CameraHoleGeometry.MAIN_LEFT];
+        int mainRight = want[com.termux.app.chrome.CameraHoleGeometry.MAIN_RIGHT];
+        int sideLeft = want[com.termux.app.chrome.CameraHoleGeometry.SIDE_LEFT];
+        int sideRight = want[com.termux.app.chrome.CameraHoleGeometry.SIDE_RIGHT];
+        // Each card is drawn by two layers, its tint and rim and its wallpaper frost, and both
+        // stand at the card's margins: a frost left at the host's width draws the whole bar.
         boolean changed = false;
-        changed |= setBarCardMargins(main, want[0], want[1]);
-        changed |= setBarCardMargins(side, want[2], want[3]);
+        changed |= setBarCardMargins(main, mainLeft, mainRight);
+        View mainFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
+        if (mainFrost != null) changed |= setBarCardMargins(mainFrost, mainLeft, mainRight);
+        changed |= setBarCardMargins(side, sideLeft, sideRight);
+        View sideFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        if (sideFrost != null) changed |= setBarCardMargins(sideFrost, sideLeft, sideRight);
         if (side.getVisibility() == View.VISIBLE != sideWanted) {
             side.setVisibility(sideWanted ? View.VISIBLE : View.GONE);
             changed = true;
         }
         // The slot (clock, pinned cards, media) stands in the main card only.
         View slot = findViewById(R.id.terminal_top_widget_area);
-        if (slot != null) changed |= setBarCardMargins(slot, want[0], want[1]);
+        if (slot != null) changed |= setBarCardMargins(slot, mainLeft, mainRight);
         if (!changed) return;
         // The cards' dress and frost follow the new rects, once, after this layout.
         host.post(() -> {
@@ -26104,6 +26095,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!moved) return;
         View backdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop);
         if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+        View sideBackdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        if (sideBackdrop != null && sideBackdrop.getVisibility() == View.VISIBLE)
+            sideBackdrop.invalidate();
     }
 
     /**

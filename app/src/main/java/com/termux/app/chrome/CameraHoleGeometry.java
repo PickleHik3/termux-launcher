@@ -141,6 +141,46 @@ public final class CameraHoleGeometry {
         return Split.COVERED;
     }
 
+    /** {@link #barCardMargins}'s slots in its {@code out} array. */
+    public static final int MAIN_LEFT = 0, MAIN_RIGHT = 1, SIDE_LEFT = 2, SIDE_RIGHT = 3;
+
+    /**
+     * Where the status bar's glass stands for {@code split} of a bar laid out at
+     * {@code [left, right)} in window px: each card's margins from the bar's own edges, written to
+     * {@code out} at {@link #MAIN_LEFT}, {@link #MAIN_RIGHT}, {@link #SIDE_LEFT} and
+     * {@link #SIDE_RIGHT}. Every layer that draws a card (its tint and rim, its wallpaper frost)
+     * takes these same margins. The main card takes the wider side (the right one on a tie);
+     * {@code TRIM_*} trims the main card to the box's far edge; NONE and COVERED leave it whole.
+     * A card's inner edge is the box's edge: the margin is already in the box. Returns whether
+     * the side card shows.
+     */
+    public static boolean barCardMargins(@NonNull Split split, int left, int right,
+                                         @NonNull int[] out) {
+        out[MAIN_LEFT] = 0;
+        out[MAIN_RIGHT] = 0;
+        out[SIDE_LEFT] = 0;
+        out[SIDE_RIGHT] = 0;
+        switch (split.kind) {
+            case TRIM_LEFT:
+                out[MAIN_LEFT] = split.rightCardLeftPx - left;
+                return false;
+            case TRIM_RIGHT:
+                out[MAIN_RIGHT] = right - split.leftCardRightPx;
+                return false;
+            case TWO:
+                if (right - split.rightCardLeftPx >= split.leftCardRightPx - left) {
+                    out[MAIN_LEFT] = split.rightCardLeftPx - left;
+                    out[SIDE_RIGHT] = right - split.leftCardRightPx;
+                } else {
+                    out[MAIN_RIGHT] = right - split.leftCardRightPx;
+                    out[SIDE_LEFT] = split.rightCardLeftPx - left;
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /**
      * The span of a pane's top line to leave unstroked, in the pane's own x from its left edge,
      * written to {@code out[0..1]} as {@code [start, end)}. False (and {@code out} zeroed) when the

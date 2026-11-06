@@ -194,4 +194,60 @@ public class CameraHoleGeometryTest {
         assertEquals(50, CameraHoleGeometry.migrateScalePct(10, widthPx));
         assertEquals(200, CameraHoleGeometry.migrateOffsetXDp(W * 5, W / 2, DENSITY));
     }
+
+    /**
+     * Pong in Full screen, Floating, camera Auto at Margin 4dp: the bar's two cards as the views
+     * stand. Every layer of a card (tint and rim, wallpaper frost) takes these margins, so the main
+     * card's glass starts at the box's right edge and the side card's ends at its left edge.
+     */
+    @Test public void pongsBarSplitsIntoTwoCardsEitherSideOfTheBox() {
+        int[] box = auto(454, 0, 540, 126);
+        assertArrayEquals(new int[] {443, 0, 551, 126}, box);
+        CameraHoleGeometry.Split split = bar(box);
+        assertEquals(CameraHoleGeometry.Kind.TWO, split.kind);
+        int[] margins = new int[4];
+        assertTrue(CameraHoleGeometry.barCardMargins(split, 21, 1059, margins));
+        // The right side (508) is wider than the left (422): the main card is the right one.
+        assertCards(margins, 21, 1059, 551, 1059, 21, 443);
+        // Pong's box read with the margin taken as 4px: 450..544.
+        int[] narrow = {450, 0, 544, 126};
+        assertTrue(CameraHoleGeometry.barCardMargins(bar(narrow), 21, 1059, margins));
+        assertCards(margins, 21, 1059, 544, 1059, 21, 450);
+        // A bar at the screen's 30..1050, as pong's crop shows it.
+        assertTrue(CameraHoleGeometry.barCardMargins(
+            CameraHoleGeometry.split(box, 30, 5, 1050, 85, MIN_SIDE), 30, 1050, margins));
+        assertCards(margins, 30, 1050, 551, 1050, 30, 443);
+    }
+
+    @Test public void aWiderLeftSideMakesTheLeftCardTheMainOne() {
+        int[] margins = new int[4];
+        assertTrue(CameraHoleGeometry.barCardMargins(bar(auto(700, 30, 760, 90)), 21, 1059,
+            margins));
+        assertCards(margins, 21, 1059, 21, 689, 771, 1059);
+    }
+
+    @Test public void aTrimMovesOnlyTheMainCardAndNoneMovesNothing() {
+        int[] margins = new int[4];
+        assertFalse(CameraHoleGeometry.barCardMargins(bar(auto(60, 30, 120, 90)), 21, 1059,
+            margins));
+        assertArrayEquals(new int[] {110, 0, 0, 0}, margins);
+        assertFalse(CameraHoleGeometry.barCardMargins(bar(auto(1000, 30, 1040, 90)), 21, 1059,
+            margins));
+        assertArrayEquals(new int[] {0, 70, 0, 0}, margins);
+        assertFalse(CameraHoleGeometry.barCardMargins(CameraHoleGeometry.Split.NONE, 21, 1059,
+            margins));
+        assertArrayEquals(new int[] {0, 0, 0, 0}, margins);
+        assertFalse(CameraHoleGeometry.barCardMargins(CameraHoleGeometry.Split.COVERED, 21, 1059,
+            margins));
+        assertArrayEquals(new int[] {0, 0, 0, 0}, margins);
+    }
+
+    /** The cards' window x ranges from a bar at {@code [left, right)} and its margins. */
+    private static void assertCards(int[] margins, int left, int right, int mainFrom, int mainTo,
+                                    int sideFrom, int sideTo) {
+        assertEquals("main card left", mainFrom, left + margins[CameraHoleGeometry.MAIN_LEFT]);
+        assertEquals("main card right", mainTo, right - margins[CameraHoleGeometry.MAIN_RIGHT]);
+        assertEquals("side card left", sideFrom, left + margins[CameraHoleGeometry.SIDE_LEFT]);
+        assertEquals("side card right", sideTo, right - margins[CameraHoleGeometry.SIDE_RIGHT]);
+    }
 }
