@@ -45,7 +45,7 @@ public class EditorMotionTest {
         assertEquals(Token.SPATIAL_FAST, Use.RING_MOVE.token);
         assertEquals(Token.SPATIAL_FAST, Use.BODY_SETTLE.token);
         assertEquals(Token.SPATIAL_FAST, Use.VALUE_SPRING.token);
-        assertEquals(21, Use.values().length);
+        assertEquals(22, Use.values().length);
     }
 
     @Test
