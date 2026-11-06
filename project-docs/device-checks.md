@@ -18,6 +18,19 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
+  recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
+  sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
+  no duplicate frames at ramp starts, the Notifications card complete mid-swipe, and the
+  recolour relaunch shows no home frame. Still owed: Home long-press › Wallpaper, the editor's
+  first moving frame within two frames of the menu's last frame (the picker now loads while the
+  menu slides; the slide itself must not stutter); after "Use as wallpaper" on a scene of
+  another colour (Aurora from a purple scene), Done exits the whole editor as before the
+  relaunch, the grid comes back at its scroll and tab, and Back instead of Done slides the sheet
+  down onto the card sheet with no one-frame pop; the editor exit's last frame equals the home
+  at rest (no corner drop, no pixel shift); the terminal's More › Wallpaper and Appearance
+  rows wait for their sheet the same way. How: `adb -s <serial> shell screenrecord`, frames
+  stepped (scratchpad `wallpaper-flow/verify`).
 - **Assistant page with a real model (11-06, 41019af0b, ADR 0022).** On pong, add the Assistant
   page (Edit pages › Add assistant, or the drawer's Assistant entry), download Gemma E2B from
   the model chip's sheet, ask a question: the answer streams in plain text, Stop turns it into

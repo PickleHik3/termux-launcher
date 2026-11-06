@@ -722,6 +722,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private boolean mSession;
     @Nullable private Runnable mOnDone;
+    /** The card sheet and the bar are kept unseen under the picker rising with the entry. */
+    private boolean mChromeVeiled;
+    /** The next fresh presentation stands in place ({@link #presentInPlace}). */
+    private boolean mNextInPlace;
     private boolean mWallpaperSettled;
     @Nullable private Runnable mWallpaperWaiter;
     private int mPresentToken;
@@ -729,6 +733,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public void setOnDone(@Nullable Runnable onDone) {
         mOnDone = onDone;
+    }
+
+    /**
+     * {@link #present} with the editor already where it stood: the frame at its pose, the card at
+     * its detent, nothing growing or rising, and {@code onSettled} run right after the frame's
+     * first pass. A relaunch reopening the carried session, whose first drawn frame shows it.
+     */
+    @Override
+    public void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                               @Nullable Runnable onSettled) {
+        mNextInPlace = true;
+        try {
+            present(card, place, onSettled);
+        } finally {
+            mNextInPlace = false;
+        }
+    }
+
+    @Override
+    public void setChromeVeiled(boolean veiled) {
+        if (mChromeVeiled == veiled)
+            return;
+        mChromeVeiled = veiled;
+        // Before the presentation the views may not exist yet; present applies it once they do.
+        if (!mOpen)
+            return;
+        if (mSheet != null)
+            mSheet.setVeiled(veiled);
+        if (mBar != null)
+            mBar.setUnderOverview(veiled || mHost.isPageOverviewOpen());
     }
 
     /** Opens the session: holds the wall and starts reading the editor's wallpaper now. */
@@ -745,10 +779,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
         mWallpaperSettled = false;
-        if (mHost.editorPaintsWallpaper())
-            loadEditorWallpaper(rootContainer);
-        else
+        if (!mHost.editorPaintsWallpaper()) {
+            mPreparedWallpaper = null;
             mWallpaperSettled = true;
+        } else if (!takePreparedWallpaper(rootContainer)) {
+            loadEditorWallpaper(rootContainer);
+        }
     }
 
     @Override
@@ -871,6 +907,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         ViewGroup content = mHost.findView(android.R.id.content);
         if (rootContainer == null || content == null)
             return;
+        final boolean animate = !mNextInPlace;
         final int token = ++mPresentToken;
         // A theme preview no carried session owns (its relaunch lost the handover) is kept, as
         // every other write of a session that ended without Discard is.
@@ -947,6 +984,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
         mSheet.attach(content);
+        mSheet.setVeiled(mChromeVeiled);
+        if (mChromeVeiled)
+            mBar.setUnderOverview(true);
         mSheet.setLandscape(mBar.isLandscape());
         notifyDirty();
 
@@ -960,18 +1000,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // With no card named (or one that cannot stand here) the screen's card stands at peek:
         // the sheet is never down while the editor is open.
         if (card != null)
-            raiseOrReport(card);
+            raiseOrReport(card, animate);
         if (mCard == null)
-            raiseScreenCard();
+            raiseScreenCard(animate);
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
             frameSizeChanged();
             mFramed = true;
-            if (!layoutFrame(true))
-                layoutFrameWhenReady(content, token, FRAME_RETRIES);
+            if (!layoutFrame(animate))
+                layoutFrameWhenReady(content, token, FRAME_RETRIES, animate);
             positionTargets();
-            long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
+            long wait = !animate || ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
@@ -1195,9 +1235,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Raises the card {@link #present} was asked for, or logs why it cannot stand there. */
     private void raiseOrReport(@NonNull EditorCard card) {
+        raiseOrReport(card, true);
+    }
+
+    private void raiseOrReport(@NonNull EditorCard card, boolean animate) {
         String refusal = cardRefusal(card);
         if (refusal == null)
-            openCard(card, true);
+            openCard(card, animate);
         else
             Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
     }
@@ -1284,7 +1328,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
     private void raiseScreenCard() {
-        openCard(EditorCard.forScreen(mScreen), true, EditorCardSheet.DETENT_PEEK);
+        raiseScreenCard(true);
+    }
+
+    private void raiseScreenCard(boolean animate) {
+        openCard(EditorCard.forScreen(mScreen), animate, EditorCardSheet.DETENT_PEEK);
     }
 
     /**
@@ -1347,7 +1395,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     public void onPageOverviewChanged() {
         if (mBar != null)
-            mBar.setUnderOverview(mHost.isPageOverviewOpen());
+            mBar.setUnderOverview(mHost.isPageOverviewOpen() || mChromeVeiled);
         restateCard();
         EditorCardSheet sheet = mSheet;
         if (sheet == null || !sheetUp())
@@ -1838,17 +1886,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** The opening pass found no laid-out window: it tries again on the next frames, a few times. */
-    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts) {
+    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts,
+                                      boolean animate) {
         if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
             return;
         content.postOnAnimation(() -> {
             if (!mOpen || token != mPresentToken || mFrameCtxValid)
                 return;
             frameSizeChanged();
-            if (layoutFrame(true))
+            if (layoutFrame(animate))
                 positionTargets();
             else
-                layoutFrameWhenReady(content, token, attempts - 1);
+                layoutFrameWhenReady(content, token, attempts - 1, animate);
         });
     }
 
@@ -2568,7 +2617,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLabelInk;
 
     /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
-    private void loadEditorWallpaper(@NonNull View rootContainer) {
+    private int loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
         View decor = rootContainer.getRootView();
         final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
@@ -2590,26 +2639,102 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 ? sampleLabelPicture(picture, decorWidth, decorHeight)
                 : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
             final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
-            rootContainer.post(() -> {
-                if (!mSession || token != mWallpaperToken)
-                    return;
-                mLabelPicture = sample;
-                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
-                mLabelPictureHeight = sampleHeight;
-                // The bar may not be up yet (the first open after a theme relaunch); present()
-                // applies the ink again once it is.
-                applyLabelInk();
-                if (picture != null) {
-                    mEditorWallpaper = picture;
-                    showEditorWallpaper(picture);
-                } else if (mPageListener != null) {
-                    mPageListener.onFrameWallpaperMissing();
-                }
-                wallpaperSettled();
-            });
+            rootContainer.post(() -> landWallpaper(token, picture, sample, sampleHeight));
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
+        return token;
+    }
+
+    /**
+     * A read of the editor's wallpaper answered: painted into the session, or, read ahead of it
+     * ({@link #prepareWallpaper}), kept for {@link #beginSession}.
+     */
+    private void landWallpaper(int token, @Nullable Drawable picture, @Nullable int[] sample,
+                               int sampleHeight) {
+        if (token != mWallpaperToken)
+            return;
+        if (!mSession) {
+            PreparedWallpaper prepared = mPreparedWallpaper;
+            if (prepared != null && prepared.token == token)
+                prepared.answer(picture, sample, sampleHeight);
+            return;
+        }
+        mLabelPicture = sample;
+        mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+        mLabelPictureHeight = sampleHeight;
+        // The bar may not be up yet (the first open after a theme relaunch); present()
+        // applies the ink again once it is.
+        applyLabelInk();
+        if (picture != null) {
+            mEditorWallpaper = picture;
+            showEditorWallpaper(picture);
+        } else if (mPageListener != null) {
+            mPageListener.onFrameWallpaperMissing();
+        }
+        wallpaperSettled();
+    }
+
+    /** The editor's wallpaper read ahead of the session; null when none is. */
+    @Nullable private PreparedWallpaper mPreparedWallpaper;
+
+    /** A read begun by {@link #prepareWallpaper}, and what it answered once it has. */
+    private static final class PreparedWallpaper {
+        final int token;
+        boolean answered;
+        @Nullable Drawable picture;
+        @Nullable int[] sample;
+        int sampleHeight;
+
+        PreparedWallpaper(int token) {
+            this.token = token;
+        }
+
+        void answer(@Nullable Drawable picture, @Nullable int[] sample, int sampleHeight) {
+            answered = true;
+            this.picture = picture;
+            this.sample = sample;
+            this.sampleHeight = sampleHeight;
+        }
+    }
+
+    /**
+     * A Wallpaper door's tap: the editor's wallpaper starts reading now, while the door's menu
+     * slides away, and the session it opens takes the read over.
+     */
+    @Override
+    public void prepareWallpaper() {
+        if (mSession || mPreparedWallpaper != null || prefs() == null
+            || !mHost.editorPaintsWallpaper())
+            return;
+        View rootContainer = mHost.findView(R.id.terminal_root_container);
+        if (rootContainer == null)
+            return;
+        mPreparedWallpaper = new PreparedWallpaper(loadEditorWallpaper(rootContainer));
+    }
+
+    @Override
+    public void dropPreparedWallpaper() {
+        if (mPreparedWallpaper == null || mSession)
+            return;
+        mPreparedWallpaper = null;
+        mWallpaperToken++;
+    }
+
+    /**
+     * The session takes over a read {@link #prepareWallpaper} began: posted when it has answered,
+     * as a fresh read's answer is, so the surface's scrim is up first. False when there is none.
+     */
+    private boolean takePreparedWallpaper(@NonNull View rootContainer) {
+        PreparedWallpaper prepared = mPreparedWallpaper;
+        mPreparedWallpaper = null;
+        if (prepared == null || prepared.token != mWallpaperToken)
+            return false;
+        if (prepared.answered)
+            rootContainer.post(() -> landWallpaper(prepared.token, prepared.picture,
+                prepared.sample, prepared.sampleHeight));
+        // Not yet answered: the read lands into the session when it does.
+        return true;
     }
 
     /**
@@ -5758,11 +5883,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (outline != null)
             outline.setVisibility(View.GONE);
         clearOutlines();
+        boolean veiled = mChromeVeiled;
+        mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
-        if (sheet != null)
-            sheet.hide(true, sheet::detach);
+        if (sheet != null) {
+            sheet.hide(true, () -> {
+                sheet.detach();
+                sheet.setVeiled(false);
+            });
+        }
         EditorBar bar = mBar;
         if (bar != null) {
+            if (veiled)
+                bar.setUnderOverview(mHost.isPageOverviewOpen());
             bar.setShown(false);
             bar.detach();
         }

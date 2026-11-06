@@ -11834,12 +11834,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         final boolean fromSettings = mAppearanceHandover.pendingFromSettings();
         View root = findViewById(R.id.activity_termux_root_view);
+        // The first frame drawn is the editor as it stood, not the plain home with the editor
+        // cut in after: the window waits for it, with a time and a frame backstop.
+        final com.termux.app.surfaces.RelaunchReveal.Gate reveal =
+            com.termux.app.surfaces.RelaunchReveal.holdFirstDraw(getWindow().getDecorView(), true);
         Runnable open = () -> {
             if (isFinishing() || isDestroyed() || mAppearance.isOpen()
-                || !mAppearanceHandover.claim(carried))
+                || !mAppearanceHandover.claim(carried)) {
+                if (reveal != null) reveal.release();
                 return;
-            if (mAppearance.reopen(carried))
+            }
+            if (mAppearance.reopen(carried, reveal == null ? null : reveal::release))
                 mAppearanceFromSettings = fromSettings;
+            else if (reveal != null)
+                reveal.release();
         };
         if (root != null) root.post(open);
         else open.run();
@@ -20179,6 +20187,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void onSheetClosed() {
                         if (mTerminalView != null) mTerminalView.onContextMenuClosed(null);
                     }
+                    @Override public void onRowArmed(
+                            @NonNull com.termux.app.launcher.home.ActionSheetRow row) {
+                        if (row.token instanceof com.termux.app.launcher.home.TerminalActionsSheet.Action
+                            && ((com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token)
+                                .preparesWallpaper())
+                            prepareWallpaperDoor();
+                    }
+                    @Override public void onSheetGone() {
+                        releasePreparedWallpaper();
+                    }
                 });
             content.addView(mTerminalActionsSheet, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -23894,6 +23912,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void resumeWallpaper(
             @Nullable com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore) {
         mAppearanceFromSettings = false;
+        // A picker prepared for a fresh door has no pending photo to restore.
+        if (restore != null)
+            mAppearance.releasePrepared();
         mOverviewRestore = restore;
         View root = findViewById(R.id.activity_termux_root_view);
         Runnable open = () -> {
@@ -23902,6 +23923,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         if (root != null) root.post(open);
         else open.run();
+    }
+
+    /** The wallpaper picker's sides, as a relaunch carries them. */
+    private static final String WALLPAPER_SIDE_PHOTO = "PHOTO";
+    private static final String WALLPAPER_SIDE_LIVE = "LIVE";
+
+    /**
+     * A menu's Wallpaper row was tapped: the picker starts loading while the menu slides away,
+     * so the door that follows opens the editor without a wait.
+     */
+    private void prepareWallpaperDoor() {
+        mOverviewRestore = null;
+        mAppearance.prepareWallpaper();
+    }
+
+    /**
+     * A menu has gone: a picker its Wallpaper row prepared and no door took is let go. Posted on
+     * the root like {@link #resumeWallpaper}'s open, so the door the row ran is served first.
+     */
+    private void releasePreparedWallpaper() {
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root != null) root.post(mAppearance::releasePrepared);
+        else mAppearance.releasePrepared();
     }
 
     /** The activity's half of the Appearance surface's seam: its content, its backdrop, its pages. */
@@ -23978,6 +24022,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void whenReady(@NonNull Runnable ready) {
                         if (liveHost.showingLive()) ready.run();
                         else picker.whenReady(ready);
+                    }
+                    // Photo | Live and the scenes' scroll, carried over a recolour relaunch.
+                    @Nullable @Override public String shownSide() {
+                        return liveHost.showingLive() ? WALLPAPER_SIDE_LIVE : WALLPAPER_SIDE_PHOTO;
+                    }
+                    @Override public int sideScrollY() { return liveHost.gridScrollY(); }
+                    @Override public void restoreSide(@NonNull String side, int scrollY) {
+                        liveHost.restoreSide(WALLPAPER_SIDE_LIVE.equals(side), scrollY);
                     }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
@@ -29489,6 +29541,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void onHomeAction(
                             @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
                         runHomeAction(item);
+                    }
+                    @Override public void onActionArmed(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+                        if (com.termux.app.launcher.home.HomeActionsSheetPolicy.preparesWallpaper(item))
+                            prepareWallpaperDoor();
+                    }
+                    @Override public void onSheetGone() {
+                        releasePreparedWallpaper();
                     }
                     // The card runs under the pill; the strip above it fades as the card arrives.
                     @Override public void onNavBandCovered(float covered) {

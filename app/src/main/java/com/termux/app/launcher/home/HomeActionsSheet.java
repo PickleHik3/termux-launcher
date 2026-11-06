@@ -57,6 +57,11 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** Told which row was tapped; the sheet is already on its way down. */
     public interface Listener {
+        /**
+         * A row was tapped. A row that opens a surface over the whole screen (the Appearance
+         * editor's doors, {@link HomeActionsSheetPolicy#opensEditor}) is told once the sheet has
+         * settled hidden, so nothing of that surface draws over the closing card.
+         */
         void onHomeAction(@NonNull Item item);
 
         /**
@@ -70,6 +75,22 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
         /** The sheet has settled away, by a row, the dim, a swipe down or Back. */
         default void onSheetClosed() { }
+
+        /**
+         * Home's row {@code item} was tapped and the sheet starts sliding away: what its action
+         * needs can start loading now ({@link HomeActionsSheetPolicy#preparesWallpaper}). The
+         * action itself follows in {@link #onHomeAction}.
+         */
+        default void onActionArmed(@NonNull Item item) { }
+
+        /** {@link #onActionArmed} for a row a caller other than Home filled the sheet with. */
+        default void onRowArmed(@NonNull ActionSheetRow row) { }
+
+        /**
+         * The sheet has gone and the tapped row's action, if any, has run: whatever an armed row
+         * started loading and no action took is let go now.
+         */
+        default void onSheetGone() { }
     }
 
     /** The card's top corners: the M3 extra-large corner. */
@@ -98,6 +119,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     /** Rows a caller other than Home filled the sheet with, or null while Home's own are up. */
     @Nullable private List<ActionSheetRow> customRows;
     @Nullable private Consumer<ActionSheetRow> onRowPicked;
+    /** A tapped row's action waiting for the card to settle hidden; null when none waits. */
+    @Nullable private Runnable afterHidden;
     @NonNull private final TextView titleView;
     @NonNull private final CharSequence homeTitle;
 
@@ -199,6 +222,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
      * the sheet up. Tapping the Lock layout row asks it again, with the card still open.
      */
     public void open(@NonNull Function<Boolean, List<Item>> rowsFor, boolean layoutLocked) {
+        dropAfterHidden();
         customRows = null;
         onRowPicked = null;
         setTitle(homeTitle);
@@ -221,6 +245,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
      */
     public void openRows(@NonNull CharSequence title, @NonNull List<ActionSheetRow> rows,
                          @NonNull Consumer<ActionSheetRow> onPicked) {
+        dropAfterHidden();
         customRows = rows;
         onRowPicked = onPicked;
         locked = false;
@@ -285,8 +310,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
 
-    /** Drop the sheet with no slide: the activity is leaving, turning, or going home. */
+    /**
+     * Drop the sheet with no slide: the activity is leaving, turning, or going home. A row's
+     * action still waiting for the slide is dropped with it: the person has gone elsewhere.
+     */
     public void closeImmediately() {
+        dropAfterHidden();
         open = false;
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         finishClosing();
@@ -303,6 +332,36 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             listener.onNavBandCovered(0f);
         }
         if (wasShown) listener.onSheetClosed();
+        Runnable action = afterHidden;
+        if (action != null) {
+            dropAfterHidden();
+            action.run();
+        }
+        listener.onSheetGone();
+    }
+
+    /**
+     * Slides the sheet away and runs {@code action}: at once, or, for a row that opens a surface
+     * over the whole screen ({@code waits}), once the card has settled hidden
+     * ({@link HomeActionsSheetPolicy#runsOnceHidden}). The card cannot be dragged back up while
+     * the action waits, so the slide always ends hidden.
+     */
+    private void closeThen(boolean waits, @NonNull Runnable action) {
+        close();
+        boolean settledHidden = behavior.getState() == BottomSheetBehavior.STATE_HIDDEN
+            || getVisibility() != VISIBLE;
+        if (!HomeActionsSheetPolicy.runsOnceHidden(waits, settledHidden)) {
+            action.run();
+            return;
+        }
+        afterHidden = action;
+        behavior.setDraggable(false);
+    }
+
+    private void dropAfterHidden() {
+        if (afterHidden == null) return;
+        afterHidden = null;
+        behavior.setDraggable(true);
     }
 
     @Override
@@ -378,8 +437,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         row.setOnClickListener(view -> {
             if (!open) return;
             Consumer<ActionSheetRow> picked = onRowPicked;
-            close();
-            if (picked != null) picked.accept(item);
+            if (picked == null) {
+                close();
+                return;
+            }
+            listener.onRowArmed(item);
+            closeThen(item.afterClose, () -> picked.accept(item));
         });
         return row;
     }
@@ -415,8 +478,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     private void select(@NonNull Item item) {
         if (!open) return;
-        close();
-        listener.onHomeAction(item);
+        listener.onActionArmed(item);
+        closeThen(HomeActionsSheetPolicy.opensEditor(item), () -> listener.onHomeAction(item));
     }
 
     /** The row for {@code item} while the sheet is up, or null. */

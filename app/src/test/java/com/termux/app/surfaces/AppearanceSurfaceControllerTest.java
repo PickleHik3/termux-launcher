@@ -55,6 +55,7 @@ public class AppearanceSurfaceControllerTest {
         activity.setContentView(content, new ViewGroup.LayoutParams(1080, 2000));
         editor = new FakeEditor();
         host = new FakeHost(activity);
+        editor.events = host.events;
         surface = new AppearanceSurfaceController(host, editor);
     }
 
@@ -112,6 +113,286 @@ public class AppearanceSurfaceControllerTest {
         assertTrue(editor.presented);
         assertEquals(EditorCard.APPEARANCE, editor.card);
         assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void aWallpaperDoorBuildsThePickerBeforeTheEditorOpensAndVeilsTheCardSheetUnderItsRise() {
+        host.page.deferReady = true;
+        surface.resumeWallpaper();
+        ShadowLooper.runUiThreadTasks();
+        assertTrue("the picker is built first", host.events.contains("build"));
+        assertFalse("the editor waits for the picker to draw", editor.presented);
+
+        host.page.becomeReady();
+        ShadowLooper.runUiThreadTasks();
+        assertTrue(editor.presented);
+        assertEquals(java.util.Arrays.asList("build", "present"), host.events);
+        assertTrue("the card sheet and the bar are unseen as the editor opens", editor.veiledAtPresent);
+        assertTrue("the picker rises with the entry", surface.isWallpaperShown());
+
+        // The idle above may already have run the rise to its end here; either way, once up:
+        settle();
+        assertFalse("shown again once the picker covers them", editor.veiled);
+    }
+
+    @Test
+    public void aPickerPreparedWhileTheMenuSlidesIsTakenOverAndTheEntryStartsAtOnce() {
+        surface.prepareWallpaper();
+        assertFalse("nothing opens while the menu slides", surface.isOpen());
+        assertTrue(surface.isPrepared());
+        assertEquals(1, editor.wallpaperPrepares);
+        assertEquals(java.util.Arrays.asList("build"), host.events);
+        assertNotNull("held unseen under the host",
+            activity.findViewById(com.termux.R.id.appearance_surface_host));
+
+        surface.resumeWallpaper();
+        assertTrue("ready first, the entry starts in the door's own call", editor.presented);
+        assertEquals("one build, reused", java.util.Arrays.asList("build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+        assertTrue(editor.veiledAtPresent);
+        assertFalse(surface.isPrepared());
+        assertFalse(host.page.released);
+        assertEquals(0, editor.wallpaperDrops);
+    }
+
+    @Test
+    public void aDoorBeforeThePreparedPickerIsReadyWaitsForIt() {
+        host.page.deferReady = true;
+        surface.prepareWallpaper();
+        surface.resumeWallpaper();
+        ShadowLooper.runUiThreadTasks();
+        assertFalse(editor.presented);
+
+        host.page.becomeReady();
+        ShadowLooper.runUiThreadTasks();
+        assertTrue(editor.presented);
+        assertEquals(java.util.Arrays.asList("build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void aPreparedPickerNoDoorTookIsLetGo() {
+        surface.prepareWallpaper();
+        surface.releasePrepared();
+        assertFalse(surface.isPrepared());
+        assertTrue(host.page.released);
+        assertEquals(1, editor.wallpaperDrops);
+        assertNull(activity.findViewById(com.termux.R.id.appearance_surface_host));
+        assertFalse(surface.isOpen());
+
+        // The next door builds its own.
+        host.page.released = false;
+        surface.resumeWallpaper();
+        settle();
+        assertEquals(java.util.Arrays.asList("build", "build", "present"), host.events);
+        assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void anotherDoorLetsAPreparedPickerGo() {
+        surface.prepareWallpaper();
+        surface.open(EditorCard.DOCK, null);
+        settle();
+        assertTrue(host.page.released);
+        assertTrue(editor.presented);
+        assertNull(surface.overview());
+        // The door's menu closing afterwards finds nothing left to let go.
+        surface.releasePrepared();
+        assertTrue(surface.isOpen());
+    }
+
+    @Test
+    public void aPreparedBuildAnsweringAfterItWasLetGoIsReleased() {
+        host.deferBuild = true;
+        surface.prepareWallpaper();
+        surface.releasePrepared();
+        host.finishBuild();
+        assertTrue(host.page.released);
+        assertNull(surface.overview());
+    }
+
+    @Test
+    public void aPickerThatCannotDrawInTimeOpensTheEditorWithItsCardSheet() {
+        host.page.deferReady = true;
+        surface.resumeWallpaper();
+        idle(WallpaperDoorMotion.PICKER_WAIT_MS + 50);
+        assertTrue(editor.presented);
+        assertFalse("nothing is hidden behind a picker that is not there", editor.veiledAtPresent);
+    }
+
+    @Test
+    public void doneOnTheDoorsPickerRidesItDownWithTheExitBeforeTakingItOff() {
+        surface.resumeWallpaper();
+        settle();
+        assertTrue(surface.isWallpaperShown());
+        View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
+        assertNotNull(hostView);
+
+        host.navigator.done();
+        assertFalse(surface.isOpen());
+        assertEquals("the editor's exit has begun", 1, editor.saves);
+        assertNotNull("the picker is still on its way down", hostView.getParent());
+        assertFalse(host.page.released);
+        boolean[] touched = {false};
+        host.page.root.setOnTouchListener((v, e) -> touched[0] = true);
+        assertTrue(hostView.dispatchTouchEvent(
+            android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0)));
+        assertFalse("nothing on a leaving picker answers a touch", touched[0]);
+
+        settle();
+        assertNull("off screen, it is taken off", hostView.getParent());
+        assertTrue(host.page.released);
+    }
+
+    @Test
+    public void aPickerAlreadyPutDownIsTakenOffAtOnce() {
+        surface.resumeWallpaper();
+        settle();
+        assertTrue(surface.onBack());
+        settle();
+        View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
+        editor.done();
+        assertNull(hostView.getParent());
+        assertTrue(host.page.released);
+    }
+
+    @Test
+    public void aRelaunchReopensThePickerInPlaceAndSaysWhenItIsOnScreen() {
+        surface.resumeWallpaper();
+        settle();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.where.wallpaper);
+        surface.onHostDestroyed();
+        host.page.root.setTranslationY(500f);
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        editor.inPlace = false;
+        int[] shown = {0};
+        assertTrue(next.reopen(carried, () -> shown[0]++));
+        ShadowLooper.runUiThreadTasks();
+        assertTrue("the editor stands where it stood, nothing growing", editor.inPlace);
+        assertFalse("nothing is veiled: there is no rise", editor.veiledAtPresent);
+        assertTrue(next.isWallpaperShown());
+        assertEquals("the picker is up already, not rising", 0f,
+            host.page.root.getTranslationY(), 0f);
+        assertEquals(View.VISIBLE, host.page.root.getVisibility());
+        assertEquals("told once it is on screen", 1, shown[0]);
+        settle();
+        assertEquals(1, shown[0]);
+    }
+
+    @Test
+    public void aRelaunchKeepsTheDoorTheSideAndTheScroll() {
+        surface.resumeWallpaper();
+        settle();
+        host.page.side = "LIVE";
+        host.page.scrollY = 420;
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.where.pickerIsDoor);
+        assertEquals("LIVE", carried.where.wallpaperSide);
+        assertEquals(420, carried.where.wallpaperScrollY);
+        surface.onHostDestroyed();
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        assertTrue(next.reopen(carried, null));
+        ShadowLooper.runUiThreadTasks();
+        assertTrue(next.isWallpaperShown());
+        assertEquals("the side it stood on", "LIVE", host.page.restoredSide);
+        assertEquals("scrolled where it was", 420, host.page.restoredScrollY);
+
+        host.navigator.done();
+        assertFalse("the door's Done still closes the editor with the picker", next.isOpen());
+        assertEquals(1, editor.saves);
+    }
+
+    @Test
+    public void aPickerRaisedFromTheCardIsNoDoorAfterARelaunch() {
+        openPicker();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertFalse(carried.where.pickerIsDoor);
+        surface.onHostDestroyed();
+
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        assertTrue(next.reopen(carried, null));
+        settle();
+        host.navigator.done();
+        settle();
+        assertTrue("Done puts the picker down over the card", next.isOpen());
+        assertFalse(next.isWallpaperShown());
+        assertEquals(0, editor.saves);
+    }
+
+    @Test
+    public void thePickerFallsOverTheCardSheetAndLetsItsTouchesThrough() {
+        ViewGroup content = activity.findViewById(android.R.id.content);
+        View sheet = new View(activity);
+        sheet.setElevation(12f);
+        content.addView(sheet);
+        openPicker();
+        View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
+        assertNotNull(hostView);
+        assertTrue(hostView.getZ() > sheet.getZ());
+
+        surface.onBack();
+        assertFalse(hostView.isClickable());
+        assertTrue("drawn over the sheet while it falls", hostView.getZ() > sheet.getZ());
+        assertFalse("a touch goes on to the sheet", hostView.dispatchTouchEvent(
+            android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0)));
+
+        settle();
+        assertEquals("down, it rests at the sheet's level", 0f, hostView.getTranslationZ(), 0f);
+    }
+
+    @Test
+    public void aReopenThatClosesStillLetsTheWindowDraw() {
+        surface.open(EditorCard.DOCK, null);
+        settle();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        surface.onHostDestroyed();
+        AppearanceSurfaceController next = new AppearanceSurfaceController(host, editor);
+        editor.presented = false;
+        editor.frameFailures = AppearanceSurfaceController.REOPEN_ATTEMPTS;
+        int[] shown = {0};
+        assertTrue(next.reopen(carried, () -> shown[0]++));
+        settle();
+        assertFalse(next.isOpen());
+        assertEquals(1, shown[0]);
+    }
+
+    @Test
+    public void theFirstFrameIsHeldOnlyForAHandoverAndNeverPastItsBackstops() {
+        assertFalse(RelaunchReveal.holds(false));
+        assertTrue(RelaunchReveal.holds(true));
+        assertTrue(RelaunchReveal.stillHeld(false, 0, 0));
+        assertFalse("shown as carried", RelaunchReveal.stillHeld(true, 0, 0));
+        assertFalse("the time backstop",
+            RelaunchReveal.stillHeld(false, 1, RelaunchReveal.BACKSTOP_MS));
+        assertFalse("the frame backstop",
+            RelaunchReveal.stillHeld(false, RelaunchReveal.MAX_HELD_FRAMES, 1));
+        assertNull("no handover, no hold",
+            RelaunchReveal.holdFirstDraw(activity.getWindow().getDecorView(), false));
+    }
+
+    @Test
+    public void aHeldWindowDrawsOnceReleasedOrPastItsBackstop() {
+        View decor = activity.getWindow().getDecorView();
+        RelaunchReveal.Gate gate = RelaunchReveal.holdFirstDraw(decor, true);
+        assertNotNull(gate);
+        assertFalse("held", gate.onPreDraw());
+        gate.release();
+        assertTrue(gate.onPreDraw());
+
+        RelaunchReveal.Gate late = RelaunchReveal.holdFirstDraw(decor, true);
+        assertNotNull(late);
+        idle(RelaunchReveal.BACKSTOP_MS + 10);
+        assertTrue("released by its backstop", late.onPreDraw());
     }
 
     @Test
@@ -349,6 +630,17 @@ public class AppearanceSurfaceControllerTest {
             sessions++;
         }
 
+        int wallpaperPrepares;
+        int wallpaperDrops;
+
+        @Override public void prepareWallpaper() {
+            wallpaperPrepares++;
+        }
+
+        @Override public void dropPreparedWallpaper() {
+            wallpaperDrops++;
+        }
+
         @Override public void awaitWallpaper(@NonNull Runnable ready) {
             ready.run();
         }
@@ -365,8 +657,26 @@ public class AppearanceSurfaceControllerTest {
             }
         }
 
+        boolean veiled;
+        boolean veiledAtPresent;
+        boolean inPlace;
+
+        @Override public void presentInPlace(@Nullable EditorCard card,
+                                             @Nullable PaneWallPage place,
+                                             @Nullable Runnable onSettled) {
+            inPlace = true;
+            present(card, place, onSettled);
+        }
+        @Nullable List<String> events;
+
+        @Override public void setChromeVeiled(boolean veiled) {
+            this.veiled = veiled;
+        }
+
         @Override public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
                                       @Nullable Runnable onSettled) {
+            if (events != null && !presented) events.add("present");
+            veiledAtPresent = veiled;
             presented = true;
             this.card = card;
             if (onSettled != null) onSettled.run();
@@ -395,6 +705,7 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void endSession() {
             presented = false;
+            veiled = false;
         }
 
         @Override public void setOnDone(@Nullable Runnable onDone) {
@@ -438,6 +749,25 @@ public class AppearanceSurfaceControllerTest {
         boolean released;
         /** The apply answers only when {@link #finishCommit} runs. */
         boolean deferCommit;
+        /** {@link #whenReady} answers only when {@link #becomeReady} runs. */
+        boolean deferReady;
+        @Nullable Runnable readyWaiter;
+
+        @Override public void whenReady(@NonNull Runnable ready) {
+            if (deferReady) {
+                readyWaiter = ready;
+                return;
+            }
+            ready.run();
+        }
+
+        void becomeReady() {
+            deferReady = false;
+            Runnable ready = readyWaiter;
+            readyWaiter = null;
+            if (ready != null)
+                ready.run();
+        }
         @Nullable Runnable answer;
 
         FakePage(@NonNull Context context) {
@@ -486,6 +816,24 @@ public class AppearanceSurfaceControllerTest {
         @Override public void holdBusy(boolean held) {
             this.held = held;
         }
+
+        @Nullable String side;
+        int scrollY;
+        @Nullable String restoredSide;
+        int restoredScrollY;
+
+        @Nullable @Override public String shownSide() {
+            return side;
+        }
+
+        @Override public int sideScrollY() {
+            return scrollY;
+        }
+
+        @Override public void restoreSide(@NonNull String side, int scrollY) {
+            restoredSide = side;
+            restoredScrollY = scrollY;
+        }
     }
 
     private static final class FakeHost implements AppearanceSurfaceController.Host {
@@ -495,6 +843,7 @@ public class AppearanceSurfaceControllerTest {
         @Nullable AppearanceSurfaceController.Navigator navigator;
         boolean closedByUser;
         final List<String> closes = new ArrayList<>();
+        final List<String> events = new ArrayList<>();
 
         FakeHost(@NonNull Activity activity) {
             mActivity = activity;
@@ -513,7 +862,23 @@ public class AppearanceSurfaceControllerTest {
                                              @Nullable String centredSlot,
                                              @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
             this.navigator = navigator;
+            events.add("build");
+            if (deferBuild) {
+                built = ready;
+                return;
+            }
             ready.accept(page);
+        }
+
+        /** The build answers only when {@link #finishBuild} runs. */
+        boolean deferBuild;
+        @Nullable Consumer<AppearanceSurfaceController.OverviewPage> built;
+
+        void finishBuild() {
+            Consumer<AppearanceSurfaceController.OverviewPage> ready = built;
+            built = null;
+            if (ready != null)
+                ready.accept(page);
         }
 
         @Nullable @Override public String readReturnState() {

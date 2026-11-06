@@ -25,6 +25,21 @@ public class AppearanceReturnStateTest {
         assertEquals(EditorCard.DOCK, back.editorCard());
         assertEquals("HOME", back.wallpaperSlot);
         assertEquals(NOW, back.leftAtEpochMs);
+        assertFalse(back.pickerIsDoor);
+        assertNull(back.wallpaperSide);
+        assertEquals(0, back.wallpaperScrollY);
+    }
+
+    @Test
+    public void theDoorTheSideAndTheScrollComeBack() {
+        AppearanceReturnState state = new AppearanceReturnState.Builder(true)
+            .card(EditorCard.APPEARANCE).pickerIsDoor(true).wallpaperSide("LIVE", 420).build(NOW);
+        AppearanceReturnState back = AppearanceReturnState.parse(state.serialize());
+        assertNotNull(back);
+        assertTrue(back.wallpaper);
+        assertTrue(back.pickerIsDoor);
+        assertEquals("LIVE", back.wallpaperSide);
+        assertEquals(420, back.wallpaperScrollY);
     }
 
     @Test

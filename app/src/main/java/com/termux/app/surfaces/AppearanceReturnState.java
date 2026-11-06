@@ -30,6 +30,9 @@ public final class AppearanceReturnState {
     private static final String JSON_CARD = "card";
     private static final String JSON_WALLPAPER_SLOT = "wallpaper_slot";
     private static final String JSON_LEFT_AT = "left_at_epoch_ms";
+    private static final String JSON_PICKER_DOOR = "picker_door";
+    private static final String JSON_WALLPAPER_SIDE = "wallpaper_side";
+    private static final String JSON_WALLPAPER_SCROLL = "wallpaper_scroll_y";
 
     /** Whether the wallpaper picker stood over the editor (the Wallpaper row's Change). */
     public final boolean wallpaper;
@@ -39,13 +42,27 @@ public final class AppearanceReturnState {
     @Nullable public final String wallpaperSlot;
     /** When the person left, wall-clock milliseconds; 0 for unknown, which is never fresh. */
     public final long leftAtEpochMs;
+    /**
+     * The surface was opened onto the picker by a Wallpaper door, so the picker's Done is the
+     * editor's Done and closes everything.
+     */
+    public final boolean pickerIsDoor;
+    /** The side the picker showed (its Photo | Live tab, by the page's name), or null. */
+    @Nullable public final String wallpaperSide;
+    /** How far that side was scrolled, px. */
+    public final int wallpaperScrollY;
 
     private AppearanceReturnState(boolean wallpaper, @Nullable String card,
-                                  @Nullable String wallpaperSlot, long leftAtEpochMs) {
+                                  @Nullable String wallpaperSlot, long leftAtEpochMs,
+                                  boolean pickerIsDoor, @Nullable String wallpaperSide,
+                                  int wallpaperScrollY) {
         this.wallpaper = wallpaper;
         this.card = blankToNull(card);
         this.wallpaperSlot = blankToNull(wallpaperSlot);
         this.leftAtEpochMs = leftAtEpochMs;
+        this.pickerIsDoor = pickerIsDoor;
+        this.wallpaperSide = blankToNull(wallpaperSide);
+        this.wallpaperScrollY = Math.max(0, wallpaperScrollY);
     }
 
     /** What the surface and the editor fill in as the person leaves. */
@@ -53,6 +70,9 @@ public final class AppearanceReturnState {
         private final boolean mWallpaper;
         @Nullable private String mCard;
         @Nullable private String mWallpaperSlot;
+        private boolean mPickerIsDoor;
+        @Nullable private String mWallpaperSide;
+        private int mWallpaperScrollY;
 
         /** {@code wallpaper}: the picker stood over the editor. */
         public Builder(boolean wallpaper) {
@@ -73,9 +93,25 @@ public final class AppearanceReturnState {
             return this;
         }
 
+        /** The picker was the door the surface opened through. */
+        @NonNull
+        public Builder pickerIsDoor(boolean door) {
+            mPickerIsDoor = door;
+            return this;
+        }
+
+        /** The side the picker shows and how far it is scrolled. */
+        @NonNull
+        public Builder wallpaperSide(@Nullable String side, int scrollY) {
+            mWallpaperSide = side;
+            mWallpaperScrollY = scrollY;
+            return this;
+        }
+
         @NonNull
         public AppearanceReturnState build(long leftAtEpochMs) {
-            return new AppearanceReturnState(mWallpaper, mCard, mWallpaperSlot, leftAtEpochMs);
+            return new AppearanceReturnState(mWallpaper, mCard, mWallpaperSlot, leftAtEpochMs,
+                mPickerIsDoor, mWallpaperSide, mWallpaperScrollY);
         }
     }
 
@@ -105,6 +141,9 @@ public final class AppearanceReturnState {
             root.put(JSON_LEFT_AT, leftAtEpochMs);
             if (card != null) root.put(JSON_CARD, card);
             if (wallpaperSlot != null) root.put(JSON_WALLPAPER_SLOT, wallpaperSlot);
+            if (pickerIsDoor) root.put(JSON_PICKER_DOOR, true);
+            if (wallpaperSide != null) root.put(JSON_WALLPAPER_SIDE, wallpaperSide);
+            if (wallpaperScrollY > 0) root.put(JSON_WALLPAPER_SCROLL, wallpaperScrollY);
         } catch (JSONException ignored) {
             // Strings and numbers: JSONObject#put never rejects them.
         }
@@ -127,7 +166,10 @@ public final class AppearanceReturnState {
             return new AppearanceReturnState(wallpaper,
                 root.has(JSON_CARD) ? root.optString(JSON_CARD, null) : null,
                 root.has(JSON_WALLPAPER_SLOT) ? root.optString(JSON_WALLPAPER_SLOT, null) : null,
-                root.optLong(JSON_LEFT_AT, 0L));
+                root.optLong(JSON_LEFT_AT, 0L),
+                root.optBoolean(JSON_PICKER_DOOR, false),
+                root.has(JSON_WALLPAPER_SIDE) ? root.optString(JSON_WALLPAPER_SIDE, null) : null,
+                root.optInt(JSON_WALLPAPER_SCROLL, 0));
         } catch (JSONException e) {
             return null;
         }

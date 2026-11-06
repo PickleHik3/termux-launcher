@@ -5,6 +5,7 @@ import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.GridLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -29,6 +30,7 @@ public final class LiveScenePickerPage {
 
     private final Context mContext;
     private final View mRoot;
+    private final ScrollView mScroll;
     private final SceneThumbView[] mThumbs = new SceneThumbView[LiveWallpaperChoice.USER_KINDS.length];
     private final View[] mTiles = new View[LiveWallpaperChoice.USER_KINDS.length];
     private final Chip[] mBadges = new Chip[LiveWallpaperChoice.USER_KINDS.length];
@@ -38,6 +40,7 @@ public final class LiveScenePickerPage {
         mContext = context;
         LayoutInflater inflater = LayoutInflater.from(context);
         mRoot = inflater.inflate(R.layout.live_scene_picker_page, null, false);
+        mScroll = mRoot.findViewById(R.id.live_picker_scroll);
         GridLayout grid = mRoot.findViewById(R.id.live_scene_grid);
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         float ratio = LiveSceneLogic.frameHeight(1000, dm.widthPixels, dm.heightPixels) / 1000f;
@@ -61,6 +64,36 @@ public final class LiveScenePickerPage {
     @NonNull
     public View root() {
         return mRoot;
+    }
+
+    /** How far the grid is scrolled, to put back when it returns from a scene's page. */
+    int scrollY() {
+        return mScroll.getScrollY();
+    }
+
+    /** Scrolls the grid to {@code y}; a no-op when it is already there. */
+    void restoreScrollY(int y) {
+        if (mScroll.getScrollY() != y) mScroll.scrollTo(0, y);
+    }
+
+    /**
+     * {@link #restoreScrollY} once the grid has its size: a relaunch's grid is not laid out yet,
+     * and a scroll before then is clamped to nothing. Applied in the layout pass that sizes it,
+     * so the first frame drawn stands there.
+     */
+    void restoreScrollYWhenLaidOut(int y) {
+        if (mScroll.isLaidOut() && !mScroll.isLayoutRequested()) {
+            restoreScrollY(y);
+            return;
+        }
+        mScroll.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int l, int t, int r, int b,
+                                       int ol, int ot, int or, int ob) {
+                v.removeOnLayoutChangeListener(this);
+                restoreScrollY(y);
+            }
+        });
     }
 
     /** Shows {@code stored}: the scene in use wears its own knobs and the chip, the rest their defaults. */
