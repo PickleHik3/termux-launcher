@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Camera hole, wave 2: the Floating bar splits round the camera.** Owed on pong, Full screen,
+  Floating status bar: the bar's glass and rim stop either side of the camera, both cards with
+  the bar's own radius (pong's hole is mid-bar, so two cards; check each end of Move sideways
+  in Custom for the collapse to one card); the chips and readings still clear the gap; compact
+  and expanded keep the split, the expanded bar's second row runs either side; Home and Terminal
+  crossing leaves no flash at the gap and the cards ease with their outer edges; light, dark,
+  black, Material You, scheme chrome; font scale 1.3; Docked and the system bar showing are
+  unchanged; keyboard up and down. The frost and the rim of the second card are not yet seen
+  on a device: look for a seam or a double rim.
 - **Camera hole, wave 1 (feat/camera-hole).** Owed on pong: Full screen with the status bar on,
   the chips and readings still clear the camera (the gap now follows the cutout path's bounds,
   which may be narrower than the bounding rect: check the margin looks even each side), Floating

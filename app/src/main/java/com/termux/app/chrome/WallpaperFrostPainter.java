@@ -58,6 +58,7 @@ public final class WallpaperFrostPainter {
         mSurfaces.updateTerminalGlassFrost();
         ImageView statusFrost = frostView(R.id.terminal_status_bar_wallpaper_backdrop);
         ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
+        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
         if (statusFrost == null || paneFrost == null) {
             mSurfaces.onWindowBarFrostEdge(false);
             return;
@@ -99,12 +100,26 @@ public final class WallpaperFrostPainter {
         // says faces the opening keeps its rim: a bar joined to the dock under it keeps none. The
         // capsule keeps its rim all round.
         int paneSeams = mSurfaces.statusBarSeamEdges();
+        // A bar split round the camera has its cards' own views: the frost crops to the main
+        // card, the second one to its own. The host still says whether the bar shows at all.
+        View barHost = mSurfaces.findChromeView(R.id.terminal_window_bar_host);
+        View mainCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background);
+        View sideCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background_side);
+        boolean barShown = barHost != null && barHost.getVisibility() == View.VISIBLE;
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
-            mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
+            barShown && mainCard != null ? mainCard : barHost, blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
             paneSeams, statusCover(), status());
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        boolean sideApplied = paneApplied && barShown && sideFrost != null && sideCard != null
+            && sideCard.getVisibility() == View.VISIBLE && applyFrost(sideFrost, sideCard,
+                blurRadiusDp, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE,
+                SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+                capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
+                paneSeams, statusCover(), status());
+        if (!sideApplied && sideFrost != null)
+            hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
         if (statusApplied || paneApplied) {
             mLedger.clearFrostDirty();
             mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, blurRadiusDp);
@@ -118,6 +133,8 @@ public final class WallpaperFrostPainter {
         ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
         if (statusFrost != null) hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         if (paneFrost != null) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        if (sideFrost != null) hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.APP_DRAWER);
