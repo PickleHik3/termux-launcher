@@ -35,6 +35,7 @@
         <Preference
             app:key="tai_read_aloud"
             app:title="@string/read_aloud_title"
+            app:summary="@string/read_aloud_summary"
             app:persistent="false"/>
         <Preference
             app:key="tai_benchmark"
