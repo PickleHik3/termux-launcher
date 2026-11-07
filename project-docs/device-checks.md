@@ -565,3 +565,8 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- **Keyboard glass kept across chrome applies (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace and Fancier Glass on: swipe Home ↔ Workspace 5 times, open
+  and close the keyboard, change the wallpaper, rotate. The keyboard's glass shows the wallpaper
+  under it at every step, its rim and light look as before, and nothing goes blank or freezes on
+  an old wallpaper. Trace: Chrome.kb.glass well under 1 ms after the first build · pong.

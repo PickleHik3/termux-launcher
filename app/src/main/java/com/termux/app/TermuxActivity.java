@@ -9504,11 +9504,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
                 if (frame != null) {
                     // The shared frame, sampled at the host's own position on every draw — through
-                    // the stack's travel, so a rising keyboard shows the wallpaper it is over.
-                    backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                        mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
-                        com.termux.app.chrome.GlassAnchor.layout(surfaceHost,
-                            mAccessoryStackLift));
+                    // the stack's travel, so a rising keyboard shows the wallpaper it is over. The
+                    // one built last time is kept for the same host: a new one compiles its own
+                    // refraction program, which was most of every chrome apply on pong.
+                    com.termux.app.chrome.SharedFrameDrawable held = mInAppKeyboardBackdropDrawable;
+                    if (com.termux.app.chrome.SharedFrameReuse.reuses(held,
+                            mInAppKeyboardBackdropHost, surfaceHost,
+                            mInAppKeyboardBackdropParallax, mWallpaperParallax)) {
+                        backdrop = held;
+                        backdrop.setFrame(frame, mInAppKeyboardBackdropFrameRect, false);
+                    } else {
+                        backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                            mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
+                            com.termux.app.chrome.GlassAnchor.layout(surfaceHost,
+                                mAccessoryStackLift));
+                        mInAppKeyboardBackdropDrawable = backdrop;
+                        mInAppKeyboardBackdropHost = surfaceHost;
+                        mInAppKeyboardBackdropParallax = mWallpaperParallax;
+                    }
                     backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
                 }
             }
@@ -9523,6 +9536,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * The keyboard host's backdrop as last built, the view it was anchored to and the parallax it
+     * samples through; reused while those hold ({@link com.termux.app.chrome.SharedFrameReuse}),
+     * let go with the frame in {@link #clearInAppKeyboardBackdrop}.
+     */
+    @Nullable private com.termux.app.chrome.SharedFrameDrawable mInAppKeyboardBackdropDrawable;
+    @Nullable private View mInAppKeyboardBackdropHost;
+    @Nullable private Object mInAppKeyboardBackdropParallax;
 
     /**
      * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
@@ -9593,6 +9614,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void clearInAppKeyboardBackdrop() {
         mInAppKeyboardBackdropBitmap = null;
+        mInAppKeyboardBackdropDrawable = null;
+        mInAppKeyboardBackdropHost = null;
+        mInAppKeyboardBackdropParallax = null;
         mInAppKeyboardBackdropFrameRect.setEmpty();
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
     }
