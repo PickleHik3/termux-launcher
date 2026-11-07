@@ -10563,14 +10563,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
+            // Each block of the pass is its own trace section (Chrome.<block>), so a trace says
+            // which of them a slow apply spent its time in.
+            Trace.beginSection("Chrome.looks");
             followLooksGlassTheme();
             syncFancierGlassLook();
             syncFrameStandDown();
+            Trace.endSection();
             doApplyChromeSpec(state);
             // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
             // both through one request.
+            Trace.beginSection("Chrome.statusBarInk");
             syncStatusBarInk();
+            Trace.endSection();
         } finally {
             Trace.endSection();
         }
@@ -10579,6 +10585,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void doApplyChromeSpec(@NonNull ChromeSpec state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View extraKeysBackground = findViewById(R.id.extrakeys_background);
+        Trace.beginSection("Chrome.bounds");
         // With bands under the keyboard the column the layers stand above is the keyboard and those
         // bands, so the layers' MATCH_PARENT above it is already exactly the dock's rows.
         Rect toolbarOnlyBounds = state.keyboardShown && !underKeyboardBandsShown()
@@ -10589,14 +10596,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         boolean useDecorSurface = shouldUseDockDecorNavBarSurface(state);
         applyAccessoryAmbientVeil(accessoryContainer, state);
+        Trace.endSection();
 
         // Which of the dock's views show is Dock rows' answer, one for every chrome spec, the dock
         // up or not. Its subscribers (onDockRowsChanged: a drag on the pinned apps, their page
         // ticks, the icon reflection) hear a change before the views move, so a drag is cancelled
         // while its source is still on screen. Under the navigation strip's glass a Docked dock's
         // own sheet stands down.
+        Trace.beginSection("Chrome.dockRows");
         mDockRows.apply(state, mStatusBarEdge == PlaceLayout.Edge.BOTTOM,
             useDecorSurface && !dockFloats());
+        Trace.endSection();
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
             // The letters keep their scrub without the apps row — it just shows its matches on the
@@ -10609,19 +10619,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!state.toolbarShown) {
             clearAccessoryRenderEffectBackdrop();
             // Nothing lands on the dock, but the letters may still be standing on another edge.
+            Trace.beginSection("Chrome.offDock");
             syncAzBarHosts();
             syncOffDockPlank(arrangement().layout());
             refreshOffDockGlass();
+            Trace.endSection();
             // The extra keys or the letters standing on another edge, with nothing left on the
             // dock, still take their ink from the face under them (the plank wears the dock's
             // glass), not from the theme they were built in.
+            Trace.beginSection("Chrome.dockInks");
             syncDockGlassInks(state.barAlpha);
+            Trace.endSection();
             // The keyboard first: the strip under the pill continues its glass, veil and frost
             // included, and reads them as this pass leaves them.
+            Trace.beginSection("Chrome.keyboardSurface");
             applyInAppKeyboardSurfaceState(state);
+            Trace.endSection();
+            Trace.beginSection("Chrome.navStrip");
             applyDecorNavBarSurfaceState(state);
+            Trace.endSection();
+            Trace.beginSection("Chrome.keyboardGeometry");
             mKeyboardGeometry.completePendingOpenReveal(state);
             mKeyboardGeometry.completePendingCloseGeometry(state);
+            Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
@@ -10631,6 +10651,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
+        Trace.beginSection("Chrome.dockSheet");
         if (extraKeysBackground != null) {
             // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
             // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
@@ -10644,24 +10665,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysBackground.setAlpha(1f);
         }
         refreshDockPlankFx(state.barAlpha);
+        Trace.endSection();
         // A bar off the dock is not in this stack and never rides its plank; it wears the same
         // glass, so it is re-glazed on the same pass that re-glazes the dock.
+        Trace.beginSection("Chrome.offDock");
         syncAzBarHosts();
         syncOffDockPlank(arrangement().layout());
         refreshOffDockGlass();
+        Trace.endSection();
+        Trace.beginSection("Chrome.dockInks");
         syncDockGlassInks(state.barAlpha);
+        Trace.endSection();
 
+        Trace.beginSection("Chrome.topEdgeFx");
         configureAccessoryTopEdgeFx(true, state.barAlpha);
+        Trace.endSection();
         // The keyboard first, as above: the strip continues what it was just dressed in.
+        Trace.beginSection("Chrome.keyboardSurface");
         applyInAppKeyboardSurfaceState(state);
+        Trace.endSection();
+        Trace.beginSection("Chrome.navStrip");
         applyDecorNavBarSurfaceState(state);
+        Trace.endSection();
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
         // the live blur views have nothing left to contribute — and each one that keeps capturing
         // redraws the whole window, terminal text included, on the UI thread.
+        Trace.beginSection("Chrome.renderEffectBackdrop");
         updateAccessoryRenderEffectBackdrop(state);
+        Trace.endSection();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        Trace.beginSection("Chrome.keyboardGeometry");
         mKeyboardGeometry.completePendingOpenReveal(state);
         mKeyboardGeometry.completePendingCloseGeometry(state);
+        Trace.endSection();
         updateAzOverflowAffordance();
         // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
         // again, yet it decides whether the Peek card may stand: read it again before the next draw.
