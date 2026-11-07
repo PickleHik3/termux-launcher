@@ -104,6 +104,18 @@ public final class InAppKeyboardColorScheme {
      * Context-free variant used by tests and by callers that already resolved the Material
      * defaults. {@code materialDefaults} seeds every dynamic slot.
      */
+    /**
+     * Whether a scheme parsed from {@code heldJson} over {@code heldDefaults} is the one {@code
+     * json} over {@code defaults} would parse to: the same text and the same Material defaults,
+     * which are everything {@link #fromJson(int[], String)} reads. Pure.
+     */
+    public static boolean sameSource(@Nullable String heldJson, @Nullable int[] heldDefaults,
+                                     @Nullable String json, @Nullable int[] defaults) {
+        return heldDefaults != null && defaults != null
+            && java.util.Objects.equals(heldJson, json)
+            && java.util.Arrays.equals(heldDefaults, defaults);
+    }
+
     @NonNull
     public static InAppKeyboardColorScheme fromJson(@NonNull int[] materialDefaults, String json) {
         InAppKeyboardColorScheme scheme = new InAppKeyboardColorScheme(materialDefaults);

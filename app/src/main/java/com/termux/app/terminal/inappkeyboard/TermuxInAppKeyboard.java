@@ -1654,12 +1654,16 @@ public final class TermuxInAppKeyboard {
     private juloo.keyboard2.Theme.Palette createPalette() {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
+        android.os.Trace.beginSection("Keyboard.palette.glass");
         juloo.keyboard2.Theme.Palette palette =
             InAppKeyboardPaletteFactory.createGlass(context, theme,
                 com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
                 mGlassTone);
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+        android.os.Trace.endSection();
+        android.os.Trace.beginSection("Keyboard.palette.scheme");
+        InAppKeyboardColorScheme scheme = parsedColorScheme(context,
             mPreferences.getInAppKeyboardColorScheme());
+        android.os.Trace.endSection();
         if (scheme.shouldApplyImportedPalette(theme))
             palette = scheme.applyToPalette(palette);
         // After the scheme: while a terminal effect is on, the deck's colours win over its keys'.
@@ -1684,6 +1688,30 @@ public final class TermuxInAppKeyboard {
         int bed = createPalette().keyboardBackground;
         return android.graphics.Color.alpha(bed) == 0 ? base
             : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
+    }
+
+    /** The colour scheme last parsed, the JSON and the Material defaults it was parsed from. */
+    @Nullable private InAppKeyboardColorScheme mParsedScheme;
+    @Nullable private String mParsedSchemeJson;
+    @Nullable private int[] mParsedSchemeDefaults;
+
+    /**
+     * The colour scheme for {@code json}, parsed again only when the JSON or the theme's Material
+     * defaults it seeds from moved ({@link InAppKeyboardColorScheme#sameSource}): every chrome
+     * apply with the keyboard up asks for the palette, and a parse per apply cost the swipe.
+     */
+    @NonNull
+    private InAppKeyboardColorScheme parsedColorScheme(@NonNull Context context,
+                                                      @Nullable String json) {
+        int[] defaults = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
+        InAppKeyboardColorScheme held = mParsedScheme;
+        if (held != null && InAppKeyboardColorScheme.sameSource(mParsedSchemeJson,
+                mParsedSchemeDefaults, json, defaults)) return held;
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(defaults, json);
+        mParsedScheme = scheme;
+        mParsedSchemeJson = json;
+        mParsedSchemeDefaults = defaults;
+        return scheme;
     }
 
     /** The deck look the keyboard wears while a terminal effect is on; null for none. */
