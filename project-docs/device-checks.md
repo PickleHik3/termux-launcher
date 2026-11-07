@@ -659,3 +659,11 @@ longer counted as an error. Owed:
   and close the keyboard, change the wallpaper, rotate. The keyboard's glass shows the wallpaper
   under it at every step, its rim and light look as before, and nothing goes blank or freezes on
   an old wallpaper. Trace: Chrome.kb.glass well under 1 ms after the first build · pong.
+- **Keyboard palette built once per set of inputs (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace: flip light/dark in Android settings, change the wallpaper
+  under Material You, switch the launcher's colour scheme on and off, change the keyboard theme
+  (System, Light, Dark), the Glass Look (Scheme, Obsidian) and the key opacity. After each, the
+  keys and legends re-tint at once to match (no keyboard hide and show needed) and the legends
+  stay readable on light and dark wallpaper. Trace over 5 Home ↔ Workspace round trips:
+  `Keyboard.palette.glass` well under 1 ms where it has no `Keyboard.palette.glass.build`
+  child; `.build` only on the first apply and after a faces, tone or theme change · pong.
