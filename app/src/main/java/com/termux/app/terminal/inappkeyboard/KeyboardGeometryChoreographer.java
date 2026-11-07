@@ -179,6 +179,10 @@ public final class KeyboardGeometryChoreographer {
     // ---- measurement cache
 
     private boolean mHeightDirty = true;
+    /** The bounds the put-away keyboard was last pre-measured against ({@link #prewarmMeasure}). */
+    private boolean mPrewarmed;
+    private int mPrewarmWidthPx;
+    private int mPrewarmHeightPx;
     private int mDesiredHeightPx;
     private int mMeasureWidthPx;
     private int mAvailableHeightPx;
@@ -229,17 +233,8 @@ public final class KeyboardGeometryChoreographer {
         if (mSurface.dressKeyboardHost())
             mHeightDirty = true;
         HostReference floating = mSurface.floatingKeyboardReference();
-        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
-        int width = floating != null ? floating.widthPx
-            : availableRoot != null ? availableRoot.getWidth() : 0;
-        int availableHeight = floating != null ? floating.availableHeightPx
-            : availableRoot != null
-            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
-        DisplayMetrics metrics = mSurface.displayMetrics();
-        if (width <= 0)
-            width = metrics.widthPixels;
-        if (availableHeight <= 0)
-            availableHeight = metrics.heightPixels;
+        int width = boundsWidthPx(floating);
+        int availableHeight = boundsHeightPx(floating);
         mHeightCapReferencePx = availableHeight;
         View attached = mSurface.attachedKeyboardView();
         if (attached instanceof Keyboard2View) {
@@ -273,6 +268,69 @@ public final class KeyboardGeometryChoreographer {
         return mDesiredHeightPx;
     }
 
+    /** The width the keyboard is measured against: the floating frame's, else the content root's. */
+    private int boundsWidthPx(@Nullable HostReference floating) {
+        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
+        int width = floating != null ? floating.widthPx
+            : availableRoot != null ? availableRoot.getWidth() : 0;
+        return width > 0 ? width : mSurface.displayMetrics().widthPixels;
+    }
+
+    /** The height the keyboard is measured against, as {@link #boundsWidthPx}. */
+    private int boundsHeightPx(@Nullable HostReference floating) {
+        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
+        int height = floating != null ? floating.availableHeightPx
+            : availableRoot != null
+            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
+        return height > 0 ? height : mSurface.displayMetrics().heightPixels;
+    }
+
+    /**
+     * Whether a hidden keyboard's measure is worth doing now: the container is put away (GONE),
+     * it is the stack's (not a floating frame's) and the bounds are not the ones last measured.
+     */
+    static boolean needsPrewarm(boolean containerGone, boolean floating, boolean warm,
+                                int warmWidthPx, int warmHeightPx, int widthPx, int heightPx) {
+        return containerGone && !floating && widthPx > 0 && heightPx > 0
+            && !(warm && warmWidthPx == widthPx && warmHeightPx == heightPx);
+    }
+
+    /**
+     * Measures the put-away keyboard against the bounds it will be shown at, so that the show
+     * the swipe's first frame asks for finds the keys' measure cached by Android's same-spec
+     * cache and lays out nothing from scratch. The keyboard stays GONE (the stack, the insets
+     * and the touches never see it) and the height memo is left as it is: this is the same
+     * measure {@link #measureHeightPx} makes, on the same specs, without its answer being kept.
+     *
+     * @return whether a measure ran
+     */
+    public boolean prewarmMeasure() {
+        View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null) return false;
+        HostReference floating = mSurface.floatingKeyboardReference();
+        int width = boundsWidthPx(floating);
+        int availableHeight = boundsHeightPx(floating);
+        if (!needsPrewarm(keyboardContainer.getVisibility() == View.GONE, floating != null,
+                mPrewarmed, mPrewarmWidthPx, mPrewarmHeightPx, width, availableHeight)) {
+            return false;
+        }
+        android.os.Trace.beginSection("Keyboard.prewarmMeasure");
+        try {
+            View attached = mSurface.attachedKeyboardView();
+            if (attached instanceof Keyboard2View)
+                ((Keyboard2View) attached).setHeightCapReferencePx(Math.max(0, availableHeight));
+            keyboardContainer.measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(availableHeight, View.MeasureSpec.AT_MOST));
+        } finally {
+            android.os.Trace.endSection();
+        }
+        mPrewarmed = true;
+        mPrewarmWidthPx = width;
+        mPrewarmHeightPx = availableHeight;
+        return true;
+    }
+
     /** The last measured desired height, without re-measuring. */
     public int desiredHeightPx() {
         return mDesiredHeightPx;
@@ -289,6 +347,7 @@ public final class KeyboardGeometryChoreographer {
 
     /** Marks the height stale and forgets the measured value with it. */
     public void discardMeasuredHeight() {
+        mPrewarmed = false;
         mDesiredHeightPx = 0;
         mHeightDirty = true;
     }
@@ -299,6 +358,7 @@ public final class KeyboardGeometryChoreographer {
      * invalidate the key too.
      */
     public void invalidateMeasurement() {
+        mPrewarmed = false;
         mDesiredHeightPx = 0;
         mMeasureWidthPx = 0;
         mAvailableHeightPx = 0;

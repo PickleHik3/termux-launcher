@@ -70,6 +70,51 @@ public class KeyboardGeometryChoreographerTest {
         assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(true, true, false, false));
     }
 
+    // ------------------------------------------------------------ put-away pre-measure
+
+    @Test
+    public void prewarmMeasuresAPutAwayKeyboardAndLeavesItGoneWithItsMemoUntouched() {
+        mSurface.keyboardContainer.measuredHeight = 600;
+        assertEquals(0, mChoreographer.desiredHeightPx());
+
+        assertTrue(mChoreographer.prewarmMeasure());
+
+        assertEquals("the stack, insets and touches never see it", View.GONE,
+            mSurface.keyboardContainer.getVisibility());
+        assertEquals(1, mSurface.keyboardContainer.measurePasses);
+        assertEquals("the height memo is the show's to fill, as with the keyboard GONE", 0,
+            mChoreographer.desiredHeightPx());
+        assertTrue("no layout request leaves the pre-measure", mSurface.log.isEmpty());
+    }
+
+    @Test
+    public void prewarmMeasuresOncePerBoundsAndAgainAfterTheMeasurementIsDiscarded() {
+        assertTrue(mChoreographer.prewarmMeasure());
+        assertFalse(mChoreographer.prewarmMeasure());
+        mChoreographer.discardMeasuredHeight();
+        assertTrue(mChoreographer.prewarmMeasure());
+    }
+
+    @Test
+    public void prewarmNeverMeasuresAShownOrAFloatingKeyboard() {
+        mSurface.keyboardContainer.setVisibility(View.VISIBLE);
+        assertFalse(mChoreographer.prewarmMeasure());
+        mSurface.keyboardContainer.setVisibility(View.GONE);
+        mSurface.floatingReference = new KeyboardGeometryChoreographer.HostReference(900, 800);
+        assertFalse(mChoreographer.prewarmMeasure());
+        assertEquals(0, mSurface.keyboardContainer.measurePasses);
+    }
+
+    @Test
+    public void prewarmRuleNeedsAGoneStackKeyboardWhoseBoundsMoved() {
+        assertTrue(KeyboardGeometryChoreographer.needsPrewarm(true, false, false, 0, 0, 1080, 1920));
+        assertTrue(KeyboardGeometryChoreographer.needsPrewarm(true, false, true, 1080, 1920, 1080, 1800));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, false, true, 1080, 1920, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(false, false, false, 0, 0, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, true, false, 0, 0, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, false, false, 0, 0, 0, 1920));
+    }
+
     // ------------------------------------------------------------------- open reveal
 
     @Test

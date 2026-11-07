@@ -15939,6 +15939,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void prewarmKeyboardMeasure() {
+            mKeyboardGeometry.prewarmMeasure();
+        }
+
+        @Override
         public void setKeyboardContainerVisible(boolean visible) {
             // Before the choreographer: a floating keyboard is staged in a host that has to be
             // visible for the reveal gate to observe destination layout at all.
@@ -17841,6 +17846,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    private final com.termux.app.place.PlaceLayoutPassGate mPlacePassGate =
+        new com.termux.app.place.PlaceLayoutPassGate();
+
+    /** Folds every number the layout pass reads besides the layout itself into one key. */
+    private long placeLayoutPassSizes() {
+        long key = Float.floatToIntBits(mAppliedDockHeightScale);
+        key = key * 31 + Float.floatToIntBits(mAppliedKeyboardHeightScale);
+        key = key * 31 + mAppliedKeyboardChinDp;
+        key = key * 31 + mAppliedWallStripHeightDp;
+        key = key * 31 + mLastDisplayCutoutInsetLeft;
+        key = key * 31 + mLastDisplayCutoutInsetRight;
+        key = key * 31 + (committedSearchField() ? 1 : 0);
+        key = key * 31 + (arrangementOf(mLastWallPage).drawerTile() ? 1 : 0);
+        key = key * 31 + getResources().getConfiguration().orientation;
+        return key;
+    }
+
+    private boolean placeLayoutPassRedundant() {
+        return mPlacePassGate.redundant(arrangement().layout(), arrangementRevision(),
+            chromeVariant(),
+            mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS, placeLayoutPassSizes());
+    }
+
     private void doSyncPlaceLayout() {
         // The dock's height, the keyboard's height and its chin are the orientation's, so a turn
         // of the screen — or a grip dragged in the Layout editor — has to re-read them. The look
@@ -17924,6 +17952,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
         if (alwaysOnChanged && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
             applyPlaceKeyboard(mLastWallPage);
+        mPlacePassGate.ran(layout, arrangementRevision(), variant, home,
+            placeLayoutPassSizes());
     }
 
     /**
@@ -26886,9 +26916,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
             applyDeckLook();
         } finally {
+            mPlacePassGate.end();
             Trace.endSection();
         }
+        // The keyboard put away is measured once the landed frame is out, so the next swipe's
+        // first frame shows it without laying it out from scratch.
+        getWindow().getDecorView().removeCallbacks(mKeyboardPrewarmRunnable);
+        getWindow().getDecorView().post(mKeyboardPrewarmRunnable);
     }
+
+    private final Runnable mKeyboardPrewarmRunnable = () -> {
+        if (isDestroyed() || mInAppKeyboard == null || mCrossing.crossing()) return;
+        mInAppKeyboard.prewarm();
+    };
 
     private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page,
                                      @Nullable com.termux.app.wall.PageRef landed) {
@@ -26900,6 +26940,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         boolean storeMoved = false;
         GeometryScheduler.Transition gridHold = null;
+        mPlacePassGate.begin();
         mGeometry.beginBatch();
         try {
             // A keyboard swipe still landing lands first: it owns the same travel state.
@@ -27014,7 +27055,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();
             // A pass that finds the arrangement already applied changes nothing.
-            if (seamLanding.laidOut() || storeMoved) syncPlaceLayout();
+            // The landing's commit has laid the place out already; a second pass on the same
+            // inputs finds nothing to do (15 ms of the landed frame on pong, run twice).
+            if ((seamLanding.laidOut() || storeMoved) && !placeLayoutPassRedundant())
+                syncPlaceLayout();
             // A store that moved under the slide (its readers read the held arrangements till
             // now) is applied here, whole: the chrome dressed and the geometry laid out again.
             if (storeMoved) {
