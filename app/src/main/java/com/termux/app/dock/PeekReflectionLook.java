@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 /**
  * The numbers behind the Peek reflection's polished-glass look, held pure so the live program
  * ({@link PeekGlassReflection}'s AGSL) and the tests read the same ones: how the mirror blurs and
- * fades with depth, the static ripple, the thin specular line along the card's top edge, and the
- * band behind the A–Z letters where the reflection softens so they stay readable. Nothing here
+ * fades with depth, the static ripple and the thin specular line along the card's top edge. The
+ * reflection runs through the A–Z row untouched. Nothing here
  * moves with time: the look is drawn again only when the card, the icons or the backdrop change.
  */
 public final class PeekReflectionLook {
@@ -22,12 +22,6 @@ public final class PeekReflectionLook {
     public static final float SPECULAR_STRENGTH = 0.85f;
     /** How far down the card's sides the specular line carries, as a share of the corner radius. */
     public static final float SPECULAR_SIDE_REACH = 1.5f;
-    /** What the A–Z band takes of the reflection at its centre: darkening and desaturation. */
-    public static final float AZ_DARKEN = 0.65f;
-    public static final float AZ_DESATURATE = 0.8f;
-    /** The letters' band: this share of the letters' height each side of the centre, and the feather beyond. */
-    public static final float AZ_HALF_HEIGHT = 0.9f;
-    public static final float AZ_FEATHER = 0.7f;
 
     private PeekReflectionLook() {}
 
@@ -65,33 +59,6 @@ public final class PeekReflectionLook {
         float reach = Math.max(1f, radiusPx * SPECULAR_SIDE_REACH);
         float side = 1f - smoothstep(0f, reach, Math.max(0f, belowTopPx));
         return SPECULAR_STRENGTH * edge * side;
-    }
-
-    /**
-     * The A–Z letters' band, with its feather, in the host's coordinates: {@code out} takes the
-     * top and the bottom of the span the reflection is softened across (full in the middle,
-     * feathering to nothing at the ends). False with no letters ({@code centerY} NaN or no height).
-     */
-    public static boolean azBand(float centerY, float letterPx, float density, @NonNull float[] out) {
-        if (Float.isNaN(centerY) || !(letterPx > 0f)) return false;
-        float half = letterPx * (AZ_HALF_HEIGHT + AZ_FEATHER);
-        out[0] = centerY - half;
-        out[1] = centerY + half;
-        return true;
-    }
-
-    /**
-     * How much of the A–Z softening applies at row {@code y} for a band from {@code top} to
-     * {@code bottom} ({@link #azBand}): 1 across the middle, easing to 0 at the ends. The
-     * program's weight.
-     */
-    public static float azWeight(float y, float top, float bottom) {
-        if (!(bottom > top)) return 0f;
-        float mid = (top + bottom) * 0.5f;
-        float half = (bottom - top) * 0.5f;
-        float feather = half * (AZ_FEATHER / (AZ_HALF_HEIGHT + AZ_FEATHER));
-        float d = Math.abs(y - mid);
-        return 1f - smoothstep(half - feather, half, d);
     }
 
     private static float clamp01(float v) {

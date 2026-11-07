@@ -79,9 +79,7 @@ public final class PeekGlassReflection {
      * at the seam), seen through a fixed ripple: samples pushed sideways by
      * {@code uRipple.x * t * sin(hy * uRipple.z + hx * uRipple.y)}, with (hx, hy) the point in the
      * host's coordinates ({@code uOrigin} moves the view's into them), so nothing in it moves with
-     * time. {@code uAz} (top, bottom; equal for none) is the band behind the A-Z letters, in the
-     * view's pixels, where the reflection is desaturated and darkened (weight
-     * {@link PeekReflectionLook#azWeight}) so the letters stay readable. {@code uCard} (left, top,
+     * time. {@code uCard} (left, top,
      * right, bottom) and {@code uCardR} the card, along whose rounded top a thin specular line
      * ({@code uSpec}: thickness px, strength, reach down the sides in radii;
      * {@link PeekReflectionLook#specular}) is drawn over the reflection. Outside the band and the
@@ -95,7 +93,6 @@ public final class PeekGlassReflection {
         + "uniform float uMaxBlur;\n"
         + "uniform float3 uRipple;\n"
         + "uniform float2 uOrigin;\n"
-        + "uniform float2 uAz;\n"
         + "uniform float4 uCard;\n"
         + "uniform float uCardR;\n"
         + "uniform float3 uSpec;\n"
@@ -117,14 +114,6 @@ public final class PeekGlassReflection {
         + "        }\n"
         + "        float f = 1.0 - t;\n"
         + "        acc *= half(uAlpha * f * sqrt(f));\n"
-        + "        if (uAz.y > uAz.x) {\n"
-        + "            float mid = (uAz.x + uAz.y) * 0.5;\n"
-        + "            float hh = (uAz.y - uAz.x) * 0.5;\n"
-        + "            float w = 1.0 - smoothstep(hh - hh * 0.4375, hh, abs(p.y - mid));\n"
-        + "            half g = dot(acc.rgb, half3(0.299, 0.587, 0.114));\n"
-        + "            acc.rgb = mix(acc.rgb, half3(g), half(" + PeekReflectionLook.AZ_DESATURATE + " * w));\n"
-        + "            acc *= half(1.0 - " + PeekReflectionLook.AZ_DARKEN + " * w);\n"
-        + "        }\n"
         + "    }\n"
         + "    float reach = uCardR * uSpec.z;\n"
         + "    float below = p.y - uCard.y;\n"
@@ -166,7 +155,6 @@ public final class PeekGlassReflection {
     private boolean mShown;
     /** The values the live program is dressed with, filled in place and compared with a view's key. */
     @NonNull private final float[] mLook = new float[PeekReflectionView.LIVE_KEY_SIZE];
-    @NonNull private final float[] mAzBand = new float[2];
     /** The ripple's fixed wave in the host's pixels: amplitude at the far end, x and y wave numbers. */
     private final float mRippleAmplitudePx;
     private final float mRippleKx;
@@ -419,11 +407,8 @@ public final class PeekGlassReflection {
         look[12] = card.right - view.originX();
         look[13] = card.bottom - view.originY();
         look[14] = card.radiusPx;
-        boolean az = !Float.isNaN(card.azBandTop) && !Float.isNaN(card.azBandBottom);
-        look[15] = az ? card.azBandTop - view.originY() : 0f;
-        look[16] = az ? card.azBandBottom - view.originY() : 0f;
-        look[17] = view.originX();
-        look[18] = view.originY();
+        look[15] = view.originX();
+        look[16] = view.originY();
         float[] key = view.liveKey;
         boolean same = view.effectKind == PeekReflectionView.EFFECT_LIVE;
         for (int i = 0; same && i < look.length; i++) same = Float.compare(key[i], look[i]) == 0;
@@ -540,8 +525,7 @@ public final class PeekGlassReflection {
             program.setFloatUniform("uAlpha", Math.max(0f, Math.min(1f, look[8])));
             program.setFloatUniform("uMaxBlur", Math.max(0f, look[9]));
             program.setFloatUniform("uRipple", rippleAmplitudePx, rippleKx, rippleKy);
-            program.setFloatUniform("uOrigin", look[17], look[18]);
-            program.setFloatUniform("uAz", look[15], look[16]);
+            program.setFloatUniform("uOrigin", look[15], look[16]);
             program.setFloatUniform("uCard", look[10], look[11], look[12], look[13]);
             program.setFloatUniform("uCardR", look[14]);
             program.setFloatUniform("uSpec", specularThicknessPx,

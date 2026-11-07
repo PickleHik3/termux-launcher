@@ -18,6 +18,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Peek reflection through the A–Z row (11-07, fix/peek-dock-travel).** Not seen on a device. On
+  pong, Peek dock with the A–Z row: the icon reflections run continuous through the letters, with
+  no darkened patch behind them, and the letters stay readable on a bright wallpaper and on a dark
+  one (they keep their own halo).
+
 - **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
   with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
   edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or

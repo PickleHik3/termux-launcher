@@ -38,7 +38,7 @@ public final class PeekReflectionView extends View {
     /** The band in this view's pixels and what it shows of it ({@link PeekGlassGeometry#reflectionBandIn}). */
     final float[] band = new float[8];
     /** How many values the live program is dressed with ({@link PeekGlassReflection}). */
-    static final int LIVE_KEY_SIZE = 19;
+    static final int LIVE_KEY_SIZE = 17;
     /** The values the live program was last built with: the band, strength, blur, card, A-Z band and origin. */
     final float[] liveKey = new float[LIVE_KEY_SIZE];
 
