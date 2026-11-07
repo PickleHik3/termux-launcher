@@ -687,3 +687,10 @@ longer counted as an error. Owed:
   slider. (5) The same on the Home, Workspace and a surface card (Status bar, Dock, Keyboard): move
   Opacity, tap Solid, then Custom: the card's own values are back, also after Done and reopen;
   Discard leaves the card as it was · pong.
+- **Show wallpaper off reaches every surface (11-07, fix/wallpaper-off-chrome).** Appearance
+  editor > Global > Show wallpaper off, Done: no wallpaper picture, blurred or sharp, on the
+  keyboard, the extra-keys bar, the band under the keyboard, the dock, the status bar, the nav
+  strip or a floating window's bar; each is plain tint like the terminal panes. Check with the
+  keyboard up and down, on Home and on Workspace, in a Docked and a Floating dock, with the
+  keyboard's, extra keys' and status bar's Blur detached to a non-zero value. Then Show wallpaper
+  back on: the blurs return as they were · pong.
