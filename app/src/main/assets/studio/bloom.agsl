@@ -1,0 +1,352 @@
+// Studio family: Bloom. One organic form (flower, anemone, star, spiral shell) that breathes open
+// and closed, its outer rings trailing the inner ones.
+//
+// Read by the app (RuntimeShader) and by tools/studio-lab (CanvasKit) from this one file. Every
+// uniform is a float; recipe.json maps the sentence words to these values.
+//
+// Cost per pixel, worst case (four rings, glass): 4 rings x 2 petals = 8 petal evaluations, each
+// about 90 ALU ops with one sin/cos pair, one sqrt, one normalize and two to four exp/pow; glass
+// adds one background evaluation (about 35 ops, three exp) per petal. Background once (35 ops),
+// core once (40 ops), finish once (30 ops). Roughly 1,100 ops at four rings, 500 at two, against
+// about 500 for the trial Fractal bloom. No nested loops beyond 4 x 2, no noise octaves.
+
+uniform float2 uResolution;
+uniform float uTime;        // seconds
+uniform float uSeed;        // any float; integers are fine
+uniform float uDark;        // 1 dark palette, 0 light
+
+// Palette, six slots, sRGB 0..1.
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;      // petal colour toward the heart and the inner rings
+uniform float3 uOuter;      // petal colour toward the tips and the outer ring
+uniform float3 uCore;       // stamens, heart glow
+uniform float3 uRim;        // edge light, fresnel, halo
+
+uniform float uMaterial;    // 0 glass, 1 frosted, 2 ink, 3 glow, 4 clay
+uniform float uForm;        // 0 flower, 1 anemone, 2 star, 3 spiral shell
+uniform float uPetals;      // 3..12
+uniform float uLayers;      // 1..4
+
+uniform float uSpeed;       // tempo: time multiplier
+uniform float uEnergy;      // mood: breathing depth and highlight strength
+uniform float uSaturation;  // mood
+uniform float uContrast;    // mood
+uniform float uExposure;    // mood
+
+uniform float2 uCenter;     // placement, in screen units (height = 2, y up)
+uniform float uScale;       // placement: radius of the form in screen units
+uniform float uMirror;      // placement: 1 lets the seed mirror the centre to another corner
+uniform float uScatter;     // placement: 1 tiles small forms over the screen
+
+uniform float uGrain;       // texture: grain amplitude
+uniform float uFilm;        // texture: 0..1 film finish (halation tint, lifted blacks, vignette)
+
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+float hash11(float p) {
+    p = fract(p * .1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+float vnoise1(float x) {
+    float i = floor(x);
+    float f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(hash11(i), hash11(i + 1.0), f);
+}
+
+// A breath: phase-modulated so no two cycles are the same length, eased so it lingers at full
+// open and full closed the way a living thing pauses between breaths.
+float breath(float t, float s) {
+    float x = t * .52 + .85 * sin(t * .19 + s * 9.0) + .35 * sin(t * .071 + s * 4.0);
+    float b = .5 + .5 * sin(x);
+    return b * b * (3.0 - 2.0 * b);
+}
+
+// Slow sway of the whole form: two incommensurate drifts, never a clean sine.
+float sway(float t, float s) {
+    return .060 * sin(t * .113 + s * 6.0) + .035 * sin(t * .271 + s * 2.0 + sin(t * .061));
+}
+
+float3 bgAt(float2 p, float2 c, float t, float s) {
+    float g = smoothstep(-1.15, 1.15, p.y + .12 * sin(p.x * 2.3 + s * 6.0));
+    float3 col = mix(uBgBottom, uBgTop, g);
+    float d = length(p - c);
+    float pool = exp(-d * d * 2.4);
+    col += mix(uInner, uRim, .5) * pool * mix(.06, .16, uDark);
+    // Two large out-of-focus lights drifting behind the form: what glass refracts.
+    for (int i = 0; i < 2; i++) {
+        float k = float(i);
+        float2 o = float2(hash11(s * 31.0 + k * 7.0) - .5, hash11(s * 17.0 + k * 3.0) - .5)
+            * float2(.95, 1.7) + .10 * float2(sin(t * .043 + k * 2.0), cos(t * .037 + k));
+        float2 e = p - o;
+        float b = exp(-dot(e, e) * (5.0 + 4.0 * k));
+        col += mix(uOuter, uRim, k) * b * mix(.05, .11, uDark);
+    }
+    return col;
+}
+
+float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, float tb, float s,
+        float px, float mat) {
+    float f0 = 1.0 - step(.5, uForm);                        // flower
+    float f1 = step(.5, uForm) * (1.0 - step(1.5, uForm));   // anemone
+    float f2 = step(1.5, uForm) * (1.0 - step(2.5, uForm));  // star
+    float f3 = step(2.5, uForm);                             // spiral shell
+    float4 fw = float4(f0, f1, f2, f3);
+
+    float isGlass = 1.0 - step(.5, mat);
+    float isFrost = step(.5, mat) * (1.0 - step(1.5, mat));
+    float isInk = step(1.5, mat) * (1.0 - step(2.5, mat));
+    float isGlow = step(2.5, mat) * (1.0 - step(3.5, mat));
+    float isClay = step(3.5, mat);
+
+    float count = floor(uPetals + .5) * (1.0 + f1);
+    float sector = TAU / count;
+    float r = length(q);
+    float a = atan(q.y, q.x);
+    float layers = floor(uLayers + .5);
+    float energy = uEnergy;
+    float light = 1.0 - uDark;
+
+    // Edge softness in form units: frosted and clay are soft-bodied, the rest crisp.
+    float softK = .006 + .05 * isFrost + .012 * isClay + .004 * isInk;
+    float shadowK = .10 * isGlass + .32 * isFrost + .50 * isClay + .10 * isInk * light;
+
+    float2 lg = normalize(float2(-.55, .83));                // light from the upper left
+
+    float opInner = 0.0;
+    for (int k = 0; k < 4; k++) {
+        float kf = float(k);
+        if (kf >= layers) { break; }
+        float depth = layers > 1.5 ? kf / (layers - 1.0) : 1.0;   // 0 outer ring .. 1 innermost
+        float outer = 1.0 - depth;
+        // The outer rings trail the inner ones: same breath, later.
+        float lag = outer * (layers - 1.0) * .55;
+        float op = breath(tb - lag, s);
+        float opPrev = breath(tb - lag - .8, s);
+        float vel = (op - opPrev) * energy;                  // follow-through drives tip bend
+        opInner = op;
+        float open = mix(.5, op, clamp(energy, 0.0, 1.5));
+
+        float size = mix(1.0, .44, depth) * (.80 + .22 * open);
+        size *= 1.0 + .08 * f1;
+        float rot = sway(tb - lag * .6, s) * (1.0 + .7 * outer) + kf * (PI / count) + s * TAU
+            + .22 * open * outer * (1.0 - f3) - .06 * t * f3;
+        float twist = f3 * (1.35 * log(r + .03) - .25 * open) + (1.0 - f3) * .22 * r * (open - .3);
+        float al = a - rot - twist;
+        float fi = al / sector;
+        float id0 = floor(fi + .5);
+        float side = fi - id0 >= 0.0 ? 1.0 : -1.0;
+        // Odd petals sit beneath even ones, so overlaps read as layered.
+        float idA = mod(mod(id0, count), 2.0) > .5 ? id0 : id0 + side;
+        float idB = idA == id0 ? id0 + side : id0;
+
+        for (int j = 0; j < 2; j++) {
+            float id = j == 0 ? idA : idB;
+            float idw = mod(id, count);
+            float h = hash11(idw * 7.13 + kf * 31.7 + s * 101.0);
+            float h2 = hash11(idw * 3.71 + kf * 17.3 + s * 53.0);
+            float d = al - id * sector + (h - .5) * sector * .14;
+            float2 lp = float2(cos(d), sin(d)) * r;
+
+            float len = size * (.88 + .22 * h2);
+            len *= mix(1.0, .45 + .55 * idw / max(count - 1.0, 1.0), f3);   // shell chambers grow
+            len *= mix(1.0, .9 + .45 * h, f1);
+            float base = len * (.02 + .10 * f1 + .03 * f2);
+            float u = (lp.x - base) / len;
+            float uc = clamp(u, 0.0, 1.0);
+
+            // Wind on the single petal, stronger at the tip; anemone arms carry a travelling wave.
+            float wind = .045 * sin(tb * .43 + h * TAU) * (.4 + outer);
+            float wave = f1 * .07 * sin(uc * 6.5 - tb * 1.25 + h * TAU) * (.3 + open);
+            float bend = (wind + vel * .32 * (.35 + outer) + wave) * uc * uc * len;
+            float y = lp.y - bend;
+
+            float W = min(.43 * sector, .55);
+            float wf = pow(max(sin(PI * pow(uc, .66)), 0.0), .80) * W * 1.05;
+            float wa = W * .40 * pow(1.0 - uc * .92, 1.3) * smoothstep(0.0, .06, uc)
+                + .040 * exp(-pow((uc - .91) * 17.0, 2.0));
+            float ws = W * 1.15 * (1.0 - uc) * smoothstep(0.0, .14, uc);
+            float wsh = W * 1.2 * pow(max(sin(PI * uc), 0.0), .38);
+            float w = dot(fw, float4(wf, wa, ws, wsh)) * len * (.86 + .22 * open);
+            w = max(w, 1e-4);
+
+            float cs = y / w;
+            float dist = abs(cs);
+            dist += isInk * (vnoise1(uc * 9.0 + h * 40.0) - .5) * .18;   // a hand-drawn edge
+            float edge = (dist - 1.0) * w;                    // signed distance across the petal
+            float soft = px * 1.2 + softK * len;
+            float ends = smoothstep(-.02, .02, u) * (1.0 - smoothstep(.97, 1.0, u));
+            float fill = (1.0 - smoothstep(-soft, soft, edge)) * ends;
+
+            // Contact shadow on whatever lies beneath this petal.
+            float sh = exp(-max(edge, 0.0) / (.07 * len + soft)) * (1.0 - fill) * ends;
+            col *= 1.0 - shadowK * sh;
+
+            // A cupped petal: the surface rises across its width and tilts along its length.
+            float cup = sqrt(max(1.0 - cs * cs, 0.0));
+            float3 n = normalize(float3((.5 - uc) * .9 * (1.2 - open * .5),
+                -cs / max(cup, .22) * .55, 1.0));
+            float ang = a - d;
+            float ca = cos(ang);
+            float sa = sin(ang);
+            float3 L = normalize(float3(lg.x * ca + lg.y * sa, -lg.x * sa + lg.y * ca, .85));
+            float diff = dot(n, L);
+            float fres = pow(1.0 - n.z, 2.0);
+            float spec = pow(max(dot(n, normalize(L + float3(0.0, 0.0, 1.0))), 0.0), 40.0);
+
+            float tone = clamp(uc * .65 + outer * .45 - .05, 0.0, 1.0);
+            float3 pig = mix(uInner, uOuter, tone) * (.9 + .2 * h);
+            float vein = exp(-cs * cs * 220.0) * smoothstep(0.0, .25, uc) * (1.0 - uc);
+
+            if (mat < .5) {
+                // Glass: tinted transmission, the background bent by the petal's surface, a fresnel
+                // rim, a bright refraction line inside the edge and a dark seam outside it.
+                float2 ng = float2(n.x * ca - n.y * sa, n.x * sa + n.y * ca);
+                float3 behind = col + (bgAt(p + ng * .055, c, t, s) - bg0) * 1.4;
+                float3 tint = mix(float3(1.0), pig * mix(1.5, 1.15, light), mix(.42, .70, light));
+                col = mix(col, behind * tint * mix(.80, 1.0, light), fill * .92);
+                col += fill * pig * (.05 + .30 * max(diff, 0.0) * (.3 + uc)) * uDark;
+                float inner = exp(-uc * 3.2) * .5 + .10;
+                float line = exp(-pow((dist - .86) * 16.0, 2.0));
+                col += fill * (pig * inner * .40 * uDark
+                    + mix(uRim, float3(1.0), .25) * fres * (.55 + .35 * energy)
+                    + float3(1.0) * spec * .55 * energy
+                    + mix(uRim, float3(1.0), .45) * line * .22 * energy
+                    + pig * vein * .10);
+                float seam = exp(-pow(edge / (px * 1.6 + .006 * len), 2.0)) * ends;
+                col *= 1.0 - seam * mix(.18, .38, light);
+            } else if (mat < 1.5) {
+                // Frosted: diffused, milky, soft-edged; light scatters through it.
+                float3 milk = mix(pig, uRim, .22) * (.55 + .45 * diff)
+                    + mix(bg0, float3(1.0), .35) * .18;
+                milk += uRim * exp(-uc * 2.5) * .14 * uDark;
+                milk *= .93 + .07 * hash21(floor(q * 260.0) + h);
+                col = mix(col, milk, fill * .70);
+                // Light scattered inside the frost gathers along the rim, wide and soft.
+                float glowRim = smoothstep(.45, 1.0, dist) * fill;
+                col += glowRim * mix(uRim, float3(1.0), .3) * (.16 + .10 * energy);
+                col += fill * vein * uRim * .08;
+            } else if (mat < 2.5) {
+                // Ink: flat pigment laid with a brush, bristle streaks along the stroke, pigment
+                // pooling at the edge and running dry toward the tip.
+                float streak = vnoise1(cs * 3.2 + h * 20.0) * .6 + vnoise1(cs * 11.0 + h * 7.0) * .4;
+                float dry = smoothstep(.55, 1.05, uc + (streak - .5) * .7);
+                float pool = smoothstep(.70, 1.0, dist) * .55;
+                float dens = clamp((.55 + .45 * streak) * (1.0 - .55 * dry) + pool, 0.0, 1.0);
+                float3 wet = col * mix(float3(1.0), pig, dens);
+                float3 gouache = mix(col, pig * (.70 + .55 * streak), dens * .92);
+                col = mix(col, mix(gouache, wet, light), fill);
+                float stroke = exp(-pow(edge / (px * 1.4 + .004 * len), 2.0)) * ends;
+                col = mix(col, mix(uRim, uInner * .35, light), stroke * .55);
+            } else if (mat < 3.5) {
+                // Glow: emissive outlines, a filament vein and a halo, adding where petals cross.
+                float outline = exp(-abs(edge) / (.010 * len + px * 1.5));
+                float halo = exp(-max(edge, 0.0) / (.10 * len)) * (1.0 - fill);
+                float body = fill * (.06 + .20 * uc * uc);
+                float g = (outline * .85 + vein * .55 * fill + body + halo * .22) * ends * energy;
+                float3 gc = mix(pig, uRim, outline * .45);
+                col = mix(col + gc * g * .85, mix(col, gc * .9, clamp(g, 0.0, 1.0) * .8), light);
+            } else {
+                // Clay: matte, opaque, soft-shaded, with a little light through the thin rim.
+                float wrap = clamp((diff + .35) / 1.35, 0.0, 1.0);
+                float3 shade = pig * (.28 + .80 * wrap) + uRim * fres * .14 + float3(spec * .05);
+                shade *= .62 + .38 * smoothstep(0.0, .30, uc);
+                col = mix(col, shade, fill);
+            }
+        }
+    }
+
+    // The heart: a disc and a ring of stamens, scaled by the form.
+    float discR = dot(fw, float4(.055, .085, .040, .035)) * (.9 + .15 * opInner);
+    float ringR = dot(fw, float4(.095, .115, .060, .0));
+    float dots = dot(fw, float4(13.0, count, 8.0, 1.0));
+    float dotR = dot(fw, float4(.013, .016, .008, .0));
+    float ad = mod(a + tb * .02 + PI / dots, TAU / dots) - PI / dots;
+    float2 dv = float2(r - ringR, ad * r);
+    float dotm = (1.0 - smoothstep(dotR - px, dotR + px, length(dv))) * (1.0 - f3);
+    float disc = 1.0 - smoothstep(discR - px * 1.5, discR + px * 1.5, r);
+    float heart = max(dotm, disc);
+    float3 coreCol = mix(uCore, uInner * .3, f1 * disc);
+    float add = isGlass + isGlow + isFrost * .5;
+    float3 lit = coreCol * (.75 + .25 * (1.0 - r / max(discR, 1e-3)));
+    col = mix(col, mix(col + coreCol * heart * .9, lit, (1.0 - add * uDark) * heart), heart);
+    col += uCore * (exp(-r * r * 500.0) * .9 + exp(-r * r * 45.0) * .14) * (add + .2) * uDark * energy;
+    return col;
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float tb = uTime * uSpeed + s * 300.0;
+    float mat = floor(uMaterial + .5);
+
+    float2 c = uCenter;
+    if (uMirror > .5) {
+        if (hash11(uSeed + 3.1) > .5) { c.x = -c.x; }
+        if (hash11(uSeed + 5.7) > .5) { c.y = -c.y; }
+    }
+    float scale = uScale;
+    float2 q = (p - c) / scale;
+    float inst = s;
+    float tf = tb;
+    float2 bc = c;
+    if (uScatter > .5) {
+        bc = float2(0.0, 0.0);
+        float2 cell = float2(.45, .50);
+        float2 g = p / cell + float2(.0, s * 3.0);
+        float row = floor(g.y);
+        g.x += .5 * mod(row, 2.0);
+        float2 cid = floor(g);
+        float2 f = fract(g) - .5;
+        float hh = hash21(cid + s * 37.0);
+        f -= (float2(hash21(cid + 11.3), hash21(cid + 5.1)) - .5) * .14;
+        float sc = scale * (.78 + .38 * hh);
+        q = f * cell / sc;
+        scale = sc;
+        inst = hh;
+        tf = tb + hh * 40.0;
+    }
+    float px = 2.0 / uResolution.y / scale;
+
+    float3 bg = bgAt(p, bc, tb, s);
+    float isInk = step(1.5, mat) * (1.0 - step(2.5, mat));
+    float isGlow = step(2.5, mat) * (1.0 - step(3.5, mat));
+    // Ink is laid on paper: fibres and soft blotches, no glow pools.
+    float fib = hash21(floor(fragCoord * float2(.5, 1.5))) * .5 + vnoise1(p.x * 9.0 + p.y * 31.0) * .5;
+    float blot = vnoise1(p.y * 3.0 + s * 9.0) * vnoise1(p.x * 4.0 + 7.0);
+    float3 paper = mix(uBgBottom, uBgTop, .5 + .25 * p.y) * (.96 + .05 * fib - .05 * blot);
+    bg = mix(bg, paper, isInk);
+    bg *= 1.0 - isGlow * .45 * uDark;
+
+    float3 col = bloom(bg, bg, q, p, bc, tb, tf, inst, px, mat);
+
+    // Finish: a filmic shoulder in the dark, a soft clip in the light, then mood.
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 lightTone = col / (1.0 + max(col - .80, float3(0.0)) * 1.2);
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+
+    // Texture: film lifts the blacks, warms the highlights and closes the corners.
+    float2 vq = p * float2(1.4, .75);
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(vq));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return half4(half3(clamp(col, 0.0, 1.0)), 1.0);
+}
