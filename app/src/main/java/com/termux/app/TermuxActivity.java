@@ -27072,7 +27072,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first frame shows it without laying it out from scratch.
         getWindow().getDecorView().removeCallbacks(mKeyboardPrewarmRunnable);
         getWindow().getDecorView().post(mKeyboardPrewarmRunnable);
+        // A keyboard the travel brought up hands the phone's keyboard over once the landed frame
+        // is out: the hand-over relayouts the whole window (4-5 ms of a drag frame on pong).
+        getWindow().getDecorView().removeCallbacks(mLandTravelKeyboardRunnable);
+        getWindow().getDecorView().post(mLandTravelKeyboardRunnable);
     }
+
+    private final Runnable mLandTravelKeyboardRunnable = () -> {
+        // A crossing under way again keeps the hold; its own landing posts this again.
+        if (isDestroyed() || mInAppKeyboard == null || mCrossing.crossing()) return;
+        mInAppKeyboard.landTravelShow();
+    };
 
     private final Runnable mKeyboardPrewarmRunnable = () -> {
         if (isDestroyed() || mInAppKeyboard == null || mCrossing.crossing()) return;

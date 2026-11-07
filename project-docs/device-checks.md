@@ -578,3 +578,13 @@ longer counted as an error. Owed:
   stay readable on light and dark wallpaper. Trace over 5 Home ↔ Workspace round trips:
   `Keyboard.palette.glass` well under 1 ms where it has no `Keyboard.palette.glass.build`
   child; `.build` only on the first apply and after a faces, tone or theme change · pong.
+- **Travel keyboard dressed by the frame's apply, IME handed over after the landing (11-07,
+  perf/page-settle-stalls).** Swipe Home → Workspace slowly with the Workspace's keyboard
+  remembered up, in the Glass and Solid Looks, Docked and Floating dock: the keys rise from the
+  bottom already in their glass and legends, with no flash of plain keys in the first frames.
+  Swipe back half way and let go: the keyboard goes down and Home's search field still opens the
+  phone's keyboard. Land on the Workspace and tap the terminal: only the in-app keyboard shows,
+  never the phone's. Land on the Display place with the phone's keyboard in use there: it still
+  takes the phone's keyboard. Trace over 5 round trips: no `Chrome.kb.host` under
+  `Keyboard.setContainerVisible`, no `Keyboard.suppressSystemIme` inside `Wall.preRollKeyboard`
+  or `Wall.settleChrome`, one in a posted message just after the landed frame · pong.
