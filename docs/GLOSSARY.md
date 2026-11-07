@@ -516,6 +516,17 @@ the Appearance editor's card for the Base look (developer, 2026-11-03).
 
 ### Look and motion
 
+**Backdrop layers**:
+While the pages move, a Live glass surface's backdrop as a short stack of pictures that each move
+on their own instead of one recording: the **ground** (the stored pre-blurred wallpaper frame at
+the parallax offset, or a live scene's frame at its glass rate), the **pages** (the pages under the
+dock or a pinned float, captured blurred as the swipe starts and moved by their travel) and the
+**local** layer (what lies beneath the surface on its own page or float, recorded and blurred
+once). The glass composites them in its one draw. The first and the landed frame of a swipe are
+the resting picture; a layer that is not ready falls back to the live recording (ADR 0021 §2b,
+`BackdropLayers`). "See through: One layer" leaves glass beneath glass out of them, at rest too.
+_Avoid_: frozen glass, page snapshot, freeze frame
+
 **Ambient effect**:
 A built-in shader effect that animates continuously rather than in answer to something. It is off
 unless chosen, is labelled as a battery cost, and stops drawing under **Lazy mode**, when its page or
