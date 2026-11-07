@@ -118,7 +118,6 @@ public class PeekGlassGeometryTest {
         PeekGlassGeometry.Card card = card(boxes, 7);
         assertNotNull(card);
         float iconBottom = boxes[3];
-        float iconHeight = boxes[3] - boxes[1];
         assertTrue("it has a band to fade over", card.reflectionDepth() > 0f);
         assertTrue("on the card", card.mirrorAxisY >= card.top);
         assertTrue("never past the screen's edge", card.reflectionBottom <= card.screenBottom);
@@ -126,8 +125,11 @@ public class PeekGlassGeometryTest {
         // Mirrored about the card's top edge (the icons' centres) the picture would land exactly
         // under the icons, so the band hangs from their lower edges instead.
         assertEquals(iconBottom, card.mirrorAxisY, 0.01f);
-        assertTrue(card.reflectionDepth() <= iconHeight * PeekGlassGeometry.REFLECTION_DEPTH_SCALE
-            + 0.01f);
+        assertEquals("the band runs from the icons' lower edge to the card's floor",
+            (card.screenBottom - iconBottom) * PeekGlassGeometry.REFLECTION_DEPTH_SCALE,
+            card.reflectionDepth(), 0.01f);
+        assertEquals("the image reaches the card's bottom edge", card.screenBottom,
+            card.reflectionBottom, 0.01f);
         for (int i = 0; i < 7; i++) {
             assertTrue(boxes[i * 4] >= card.left && boxes[i * 4 + 2] <= card.right);
         }
@@ -283,7 +285,7 @@ public class PeekGlassGeometryTest {
     public void onPongTheBandHangsAcrossTheSeamWithItsStrongestRowsOnTheHost() {
         PeekGlassGeometry.Card card = pongCard();
         assertEquals(PONG_HOST_H - 29, card.mirrorAxisY, 0.01f);
-        assertEquals(77, card.bandHeightPx());
+        assertEquals("down to the card's bottom edge", 29 + PONG_STRIP_H, card.bandHeightPx());
         float[] host = new float[8];
         assertTrue("the host shows the band's top",
             PeekGlassGeometry.reflectionBandIn(card, 0f, 0f, SCREEN_W, PONG_HOST_H, host));
@@ -308,7 +310,7 @@ public class PeekGlassGeometryTest {
         float atSeamOnHost = PeekGlassGeometry.reflectionProgress(host, PONG_HOST_H);
         float atSeamOnStrip = PeekGlassGeometry.reflectionProgress(strip, 0f);
         assertEquals(atSeamOnHost, atSeamOnStrip, 1e-5f);
-        assertEquals(29f / 77f, atSeamOnStrip, 1e-4f);
+        assertEquals(29f / (29f + PONG_STRIP_H), atSeamOnStrip, 1e-4f);
         // The old program measured the fade from each drawing's own top: both read 0 there.
         assertTrue("the seam is part way down the band, not a fresh start",
             atSeamOnStrip > 0.3f);

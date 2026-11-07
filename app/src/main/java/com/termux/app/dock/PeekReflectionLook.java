@@ -19,12 +19,12 @@ public final class PeekReflectionLook {
     /** The specular line's thickness, in dp. */
     public static final float SPECULAR_THICKNESS_DP = 1.5f;
     /** The specular line's strength at the card's top, as white's alpha. */
-    public static final float SPECULAR_STRENGTH = 0.55f;
+    public static final float SPECULAR_STRENGTH = 0.85f;
     /** How far down the card's sides the specular line carries, as a share of the corner radius. */
     public static final float SPECULAR_SIDE_REACH = 1.5f;
     /** What the A–Z band takes of the reflection at its centre: darkening and desaturation. */
-    public static final float AZ_DARKEN = 0.5f;
-    public static final float AZ_DESATURATE = 0.7f;
+    public static final float AZ_DARKEN = 0.65f;
+    public static final float AZ_DESATURATE = 0.8f;
     /** The letters' band: this share of the letters' height each side of the centre, and the feather beyond. */
     public static final float AZ_HALF_HEIGHT = 0.9f;
     public static final float AZ_FEATHER = 0.7f;

@@ -125,9 +125,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 - **Peek glass polish (11-07, fix/peek-with-az).** Not seen on a device; needs Android 13+ with
   Live glass on. On pong, Peek glass over a light and then a dark wallpaper, A–Z row under the
-  icons: the mirror is clear under each icon and softer and fainter with depth, seen through a
-  faint still ripple (nothing moves at rest), a thin bright line runs along the card's top edge
-  and round its top corners and fades down the sides, and behind the A–Z letters the reflection
+  icons: the mirror is clearly readable just under each icon and softens and fades all the way
+  down to the card's bottom edge (past the letters, no early cut-off), seen through a faint still
+  ripple (nothing moves at rest); a fine bright line (1.5 dp, over the glass's own edge) runs
+  along the card's top edge and round its top corners, visible on both wallpapers, and behind the A–Z letters the reflection
   is dimmed and greyer so the letters read over a bright icon. Check the A–Z row hidden (the
   specular line only), Docked and Floating, keyboard up, Live glass off (the old still
   reflection: no ripple, line or band), light/dark/scheme chrome, and the largest font scale.
