@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Drawer category cards stay glass in a dark theme over a bright wallpaper.** Owed on pong:
+  system dark theme, bright wallpaper, open the app drawer's Categories view. Each category
+  container must show the drawer's backdrop through it (a faint lift, not a near-black slab;
+  the old build sampled about #1A1712 inside a card). Press a card: it must still look pressed.
+  Repeat in light theme: the cards must still be findable against the frost. Pinned folder shells
+  in the dock and the drawer's search rows use the same wash; look at them too.
+
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
