@@ -59,6 +59,25 @@ public final class WidgetPaneView extends FrameLayout
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
         /**
+         * A press on the free area while swipe up is the app drawer: the moment to get the drawer's
+         * content ready, so the finger's first move finds it built.
+         */
+        default void onFreeAreaDrawerPressed() { }
+        /**
+         * A swipe up on the free area, set to the drawer, passed the slop: true when the drawer's
+         * live drag took it ({@code downRawY} is where the finger went down), after which the pane
+         * reports {@link #onFreeAreaDrawerDrag}, then {@link #onFreeAreaDrawerDragEnd} or
+         * {@link #onFreeAreaDrawerDragCancel} and sends no palette swipe. False leaves the
+         * gesture to the discrete swipe.
+         */
+        default boolean onFreeAreaDrawerDragBegin(float downRawY) { return false; }
+        /** Every move of the drawer's live drag; {@code rawY} is the finger's screen y. */
+        default void onFreeAreaDrawerDrag(float rawY) { }
+        /** The finger let go; {@code velocityYPxPerSec} is positive downward. */
+        default void onFreeAreaDrawerDragEnd(float velocityYPxPerSec) { }
+        /** The stream was cancelled: the drawer eases back to where it was. */
+        default void onFreeAreaDrawerDragCancel() { }
+        /**
          * Two taps in quick succession on the page's free area; sent only while
          * {@link #setExtraGestures} watches for it.
          */
@@ -227,6 +246,12 @@ public final class WidgetPaneView extends FrameLayout
      */
     private boolean verticalCandidate;
     private boolean verticalDragging;
+    /** Swipe up's action on the free area (Settings › Home › Gestures); the drawer drags live. */
+    @NonNull private com.termux.app.launcher.home.HomeGestures.Action swipeUpAction =
+        com.termux.app.launcher.home.HomeGestures.Action.NONE;
+    /** The free-area stream is the app drawer's live drag. */
+    private boolean drawerDragging;
+    private float pagingDownRawY;
     /**
      * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
      * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
@@ -417,6 +442,11 @@ public final class WidgetPaneView extends FrameLayout
         if (indicator == value) return;
         indicator = value;
         setPageState(pageCount, currentPage);
+    }
+
+    /** What swipe up on the free area is set to; the drawer follows the finger. */
+    public void setSwipeUpAction(@NonNull com.termux.app.launcher.home.HomeGestures.Action action) {
+        swipeUpAction = action;
     }
 
     /** Whether a double tap and a two-finger swipe on the free area are watched for. */
@@ -950,6 +980,7 @@ public final class WidgetPaneView extends FrameLayout
                 pagingDragging = false;
                 seamDragging = false;
                 verticalDragging = false;
+                drawerDragging = false;
                 // A swipe on a Home float is the float's, except a sideways one on its terminal
                 // when the terminal has no use for it: that one pages as it would beside it.
                 boolean onFloat = pinnedLayerHolds(event);
@@ -974,6 +1005,12 @@ public final class WidgetPaneView extends FrameLayout
                 if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
+                pagingDownRawY = event.getRawY();
+                if (verticalCandidate
+                    && swipeUpAction == com.termux.app.launcher.home.HomeGestures.Action.DRAWER
+                    && listener != null) {
+                    listener.onFreeAreaDrawerPressed();
+                }
                 if (pagingTracking || verticalCandidate) {
                     if (pagingVelocity == null) pagingVelocity = VelocityTracker.obtain();
                     pagingVelocity.clear();
@@ -1032,6 +1069,16 @@ public final class WidgetPaneView extends FrameLayout
                 HomeSwipePolicy.Axis axis = HomeSwipePolicy.axis(dx, dy, touchSlop);
                 if (axis == HomeSwipePolicy.Axis.VERTICAL) {
                     pagingTracking = false;
+                    if (verticalCandidate && listener != null
+                        && HomeDrawerDragPolicy.claims(swipeUpAction, dx, dy, touchSlop)
+                        && listener.onFreeAreaDrawerDragBegin(pagingDownRawY)) {
+                        // Swipe up is the drawer: it follows the finger from this move, which
+                        // is not delivered to onTouchEvent.
+                        drawerDragging = true;
+                        verticalCandidate = false;
+                        listener.onFreeAreaDrawerDrag(event.getRawY());
+                        return true;
+                    }
                     if (verticalCandidate) {
                         // The palette gesture: the grid's long press is cancelled by the claim.
                         verticalDragging = true;
@@ -1096,7 +1143,8 @@ public final class WidgetPaneView extends FrameLayout
             default:
                 break;
         }
-        return pagingDragging || verticalDragging || twoFingerDragging || pinchClaimed;
+        return pagingDragging || verticalDragging || drawerDragging || twoFingerDragging
+            || pinchClaimed;
     }
 
     /** How far apart the first two fingers are; 0 with fewer. */
@@ -1171,6 +1219,7 @@ public final class WidgetPaneView extends FrameLayout
             return true;
         }
         if (twoFingerDragging) return onTwoFingerTouch(event);
+        if (drawerDragging) return onDrawerTouch(event);
         if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
         if (seamDragging) return onSeamTouch(event);
@@ -1186,6 +1235,32 @@ public final class WidgetPaneView extends FrameLayout
                 pagingDragging = false;
                 pagingTracking = false;
                 settleContentBack();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** The drawer's live drag after its claim: the plane follows, the lift or the cancel ends it. */
+    private boolean onDrawerTouch(@NonNull MotionEvent event) {
+        if (pagingVelocity != null) pagingVelocity.addMovement(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (listener != null) listener.onFreeAreaDrawerDrag(event.getRawY());
+                return true;
+            case MotionEvent.ACTION_UP: {
+                drawerDragging = false;
+                float velocityY = 0f;
+                if (pagingVelocity != null) {
+                    pagingVelocity.computeCurrentVelocity(1000);
+                    velocityY = pagingVelocity.getYVelocity();
+                }
+                if (listener != null) listener.onFreeAreaDrawerDragEnd(velocityY);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                drawerDragging = false;
+                if (listener != null) listener.onFreeAreaDrawerDragCancel();
                 return true;
             default:
                 return true;

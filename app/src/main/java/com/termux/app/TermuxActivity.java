@@ -29911,6 +29911,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
         mWidgetPaneController.setFolderStyle(
             com.termux.app.launcher.home.HomeSettings.folderDensity(this));
+        mWidgetPaneController.setSwipeUpAction(com.termux.app.launcher.home.HomeSettings
+            .gestureAction(this, com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP));
         mWidgetPaneController.setExtraGestures(
             com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,
@@ -32175,6 +32177,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) runHomeSwipe(up);
+                }
+                // Swipe up set to the drawer: the plane follows the finger like the dock's pull.
+                // The drag runs on a mirrored axis (the pull is measured downward), so up is
+                // positive travel and the release velocity flips with it.
+                @Override public void onHomeDrawerPressed() {
+                    if (isWidgetsPageShowing() && canWarmAppDrawer()) {
+                        getAppDrawerController().warmUp();
+                    }
+                }
+                @Override public boolean onHomeDrawerDragBegin(float downRawY) {
+                    if (!isWidgetsPageShowing() || isAppDrawerEngaged()) return false;
+                    PlaceLayout.Edge edge = arrangement().appsEdge();
+                    com.termux.app.launcher.drawer.AppDrawerController drawer = getAppDrawerController();
+                    drawer.beginDrag(-downRawY, AppDrawerPullGeometry.pullFor(edge),
+                        AppDrawerPullGeometry.seedFor(edge));
+                    return drawer.isDragging();
+                }
+                @Override public void onHomeDrawerDrag(float rawY) {
+                    getAppDrawerController().updateDrag(-rawY);
+                }
+                @Override public void onHomeDrawerDragEnd(float velocityYPxPerSec) {
+                    getAppDrawerController().endDrag(-velocityYPxPerSec);
+                }
+                @Override public void onHomeDrawerDragCancel() {
+                    getAppDrawerController().cancelDrag();
                 }
                 @Override public void onHomeDoubleTap() {
                     if (isWidgetsPageShowing()) runHomeGesture(

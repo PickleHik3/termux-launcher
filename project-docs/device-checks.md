@@ -553,3 +553,9 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- **Home swipe up follows the finger (11-07).** Settings > Home > Gestures, Swipe up set to the
+  app drawer: on a Home page's free area the drawer rises with the finger; let go past about 40%
+  or flick and it opens, a short drag eases back; the first pull after a cold start (no earlier
+  drawer use) is as smooth as the later ones; page swipes, widget touches, long press, double tap,
+  two-finger swipes and pinch behave as before; Swipe up set to anything else (palette, none,
+  lock) works exactly as before; swipe down is unchanged · pong.
