@@ -17,7 +17,9 @@ import androidx.annotation.NonNull;
  *       again.</li>
  *   <li>{@link Layer#PAGES}: the wall's pages beneath a surface that does not ride them (the dock,
  *       a float on the pinned layer), captured and blurred once as the swipe starts and moved by
- *       the pages' travel ({@link Motion#TRAVEL}). A surface on a page has no pages layer: lower
+ *       the pages' travel ({@link Motion#TRAVEL}). Each page is pictured on its own at full
+ *       opacity and composited at its alpha now ({@link #pageAlpha}), so a page that fades as
+ *       the pages slide (Fade) costs nothing. A surface on a page has no pages layer: lower
  *       pages that ride with it are in its local layer.</li>
  *   <li>{@link Layer#LOCAL}: what lies beneath the surface on its own page or float, or the chrome
  *       beneath the dock, recorded and blurred once ({@link Motion#FIXED}). Under a surface on a
@@ -127,12 +129,22 @@ public final class BackdropLayers {
      */
     public static float shift(@NonNull float[] recorded, int recordedPoses,
                               @NonNull float[] now, int nowPoses) {
+        return shift(recorded, recordedPoses, now, nowPoses, false);
+    }
+
+    /**
+     * {@link #shift}, with each pose's alpha left out when {@code alphaFree}: the frozen pages
+     * layer holds every page at full opacity and composites each at its alpha now
+     * ({@link #pageAlpha}), so a page that fades as the pages slide is still one travel.
+     */
+    public static float shift(@NonNull float[] recorded, int recordedPoses,
+                              @NonNull float[] now, int nowPoses, boolean alphaFree) {
         if (recordedPoses != nowPoses || recordedPoses < 0) return Float.NaN;
         float shift = Float.NaN;
         for (int pose = 0; pose < nowPoses; pose++) {
             int base = pose * POSE_STRIDE;
             for (int i = 0; i < POSE_STRIDE; i++) {
-                if (i == POSE_TRANS_X) continue;
+                if (i == POSE_TRANS_X || (alphaFree && i == POSE_ALPHA)) continue;
                 if (Math.abs(now[base + i] - recorded[base + i]) > SAME_EPSILON) return Float.NaN;
             }
             float dx = now[base + POSE_TRANS_X] - recorded[base + POSE_TRANS_X];
@@ -182,17 +194,43 @@ public final class BackdropLayers {
      * ({@link LiveBackdrop#MAX_LAYER_BYTES}); -1 when it does not fit even unpadded.
      */
     public static int pad(long baseBytes, int width, int height, boolean horizontal, int maxPadPx) {
-        if (!fits(baseBytes, width, height)) return -1;
+        return pad(baseBytes, width, height, horizontal, maxPadPx, 1);
+    }
+
+    /**
+     * {@link #pad} for a pages layer held as {@code slots} pictures side by side, each at most
+     * the layer's size: a frozen layer keeps each page, and the wall's decor, on its own
+     * ({@link #frozenSlots}).
+     */
+    public static int pad(long baseBytes, int width, int height, boolean horizontal, int maxPadPx,
+                          int slots) {
+        int n = Math.max(1, slots);
+        if (!fits(baseBytes, n * width, height)) return -1;
         int low = 0;
         int high = Math.max(0, maxPadPx);
         while (low < high) {
             int mid = (low + high + 1) >>> 1;
-            boolean ok = horizontal ? fits(baseBytes, width + 2 * mid, height)
-                : fits(baseBytes, width, height + 2 * mid);
+            boolean ok = horizontal ? fits(baseBytes, n * (width + 2 * mid), height)
+                : fits(baseBytes, n * width, height + 2 * mid);
             if (ok) low = mid;
             else high = mid - 1;
         }
         return low;
+    }
+
+    /** The pictures a frozen pages layer of {@code pages} pages holds: one each, and the decor. */
+    public static int frozenSlots(int pages) {
+        return Math.max(0, pages) + 1;
+    }
+
+    /**
+     * The alpha a frozen page's picture is composited at: the page's alpha now, from
+     * {@code poses}. Each page is pictured at full opacity, so a fade only changes this number;
+     * the first and the landed frame, at the alpha the page rests at, match the one picture.
+     */
+    public static float pageAlpha(@NonNull float[] poses, int page) {
+        float alpha = poses[page * POSE_STRIDE + POSE_ALPHA];
+        return Math.max(0f, Math.min(1f, alpha));
     }
 
     /** Whether a page layer of {@code width} x {@code height} fits beside {@code baseBytes}. */
@@ -218,8 +256,8 @@ public final class BackdropLayers {
      *                      {@link Place#PAGE} surface, against the surface's own page
      * @param pagesReady    the pages layer has landed (its capture is not still rendering)
      * @param localChanged  the views in the local layer are not the ones it was recorded from
-     * @param fixedBeneath  views beneath that neither ride the surface nor are the ground or the
-     *                      pages (chrome under a surface on a page); no layer holds them
+     * @param fixedBeneath  views beneath that no layer holds: chrome under a surface on a page, or
+     *                      a ground strip whose seams cross a surface that stays ({@link #holder})
      */
     public static int plan(@NonNull Place place, boolean wallMoving, boolean displaced,
                            boolean groundReady, boolean sceneLive, boolean sceneNewFrame,
@@ -232,8 +270,10 @@ public final class BackdropLayers {
         if (sceneLive && sceneNewFrame) plan |= STALE_GROUND;
         if (localChanged) plan |= STALE_LOCAL;
         if (pagesBeneath) {
+            // Off a page the frozen layer holds each page on its own at full opacity: a slide
+            // moves it, a fade only changes the alphas it is composited at (pageAlpha).
             boolean stale = place == Place.PAGE ? pagesMove != Move.STILL
-                : pagesMove == Move.TURN || pagesMove == Move.FADE;
+                : pagesMove == Move.TURN;
             // A pages layer recorded again is a capture that lands frames later: the one
             // picture, recorded live, until it has.
             if (stale) return STALE_PAGES;
@@ -285,8 +325,24 @@ public final class BackdropLayers {
     public static Holder holder(@NonNull Place place, @NonNull Tier tier, boolean ground,
                                 boolean holdsWall, boolean ridesWall, boolean inBand,
                                 boolean overlaps) {
+        return holder(place, tier, ground, holdsWall, ridesWall, false, inBand, overlaps);
+    }
+
+    /**
+     * {@link #holder}, where {@code seams} says the strip's grounds differ from page to page. Then
+     * under a surface that stays still (the dock, a bar, a float) a seam travels across it while
+     * the pages move: no layer holds that, so it is {@link Holder#FIXED} and the surface keeps
+     * the one picture, rather than holding the ground it started over and changing at landing.
+     */
+    @NonNull
+    public static Holder holder(@NonNull Place place, @NonNull Tier tier, boolean ground,
+                                boolean holdsWall, boolean ridesWall, boolean seams,
+                                boolean inBand, boolean overlaps) {
         if (ground) return Holder.GROUND;
-        if (place != Place.PAGE) return holdsWall ? Holder.PAGES : Holder.LOCAL;
+        if (place != Place.PAGE) {
+            if (holdsWall) return Holder.PAGES;
+            return ridesWall && seams ? Holder.FIXED : Holder.LOCAL;
+        }
         switch (tier) {
             case ON_PAGE:
                 return Holder.LOCAL;
@@ -315,20 +371,20 @@ public final class BackdropLayers {
 
     /**
      * How the poses in {@code now} moved since {@code recorded} ({@link #POSE_STRIDE} floats each):
-     * {@link Move#FADE} when any alpha moved, {@link Move#TURN} for any change but one shared
-     * horizontal shift (and for counts that differ), {@link Move#SHIFT} for that shift, else
-     * {@link Move#STILL}.
+     * {@link Move#TURN} for any change but one shared horizontal shift and the alphas (and for
+     * counts that differ), else {@link Move#FADE} when any alpha moved, {@link Move#SHIFT} for
+     * the shift alone, else {@link Move#STILL}.
      */
     @NonNull
     public static Move move(@NonNull float[] recorded, int recordedPoses, @NonNull float[] now,
                             int nowPoses) {
         if (recordedPoses != nowPoses || recordedPoses < 0) return Move.TURN;
+        float shift = shift(recorded, recordedPoses, now, nowPoses, true);
+        if (Float.isNaN(shift)) return Move.TURN;
         for (int pose = 0; pose < nowPoses; pose++) {
             int alpha = pose * POSE_STRIDE + POSE_ALPHA;
             if (Math.abs(now[alpha] - recorded[alpha]) > SAME_EPSILON) return Move.FADE;
         }
-        float shift = shift(recorded, recordedPoses, now, nowPoses);
-        if (Float.isNaN(shift)) return Move.TURN;
         return Math.abs(shift) > SHIFT_EPSILON_PX ? Move.SHIFT : Move.STILL;
     }
 

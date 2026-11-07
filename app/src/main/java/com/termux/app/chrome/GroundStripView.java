@@ -88,6 +88,15 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
         invalidate();
     }
 
+    /** Whether any two stops' grounds differ: a seam then travels while the wall moves. */
+    @Override
+    public boolean groundsDiffer() {
+        for (int i = 1; i < mStops; i++) {
+            if (mGrounds[i] != mGrounds[0]) return true;
+        }
+        return false;
+    }
+
     /**
      * The ground under {@code screenRect}: the colour at its centre, as {@link GroundBands}
      * documents. Transparent before the strip has a position.
