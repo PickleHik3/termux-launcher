@@ -6731,6 +6731,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mDockRows.underKeyboardBandsShown() || !state.toolbarShown) {
             if (under.getBackground() != null) under.setBackground(null);
             mUnderKeyboardBackdropBitmap = null;
+            releaseUnderKeyboardBackdrop();
             return;
         }
         DockLayout dock = appliedDockLayout();
@@ -6743,13 +6744,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
             if (frame != null) {
                 mUnderKeyboardBackdropBitmap = frame;
-                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                    new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-                    com.termux.app.chrome.GlassAnchor.layout(under,
-                        () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                // Kept for the same card, as the keyboard host's is (SharedFrameReuse): a new one
+                // compiles its own refraction program on the main thread.
+                com.termux.app.chrome.SharedFrameDrawable held = mUnderKeyboardBackdrop;
+                if (com.termux.app.chrome.SharedFrameReuse.reuses(held, mUnderKeyboardBackdropHost,
+                        under, mUnderKeyboardBackdropParallax, mWallpaperParallax)) {
+                    backdrop = held;
+                    backdrop.setFrame(frame, mChrome.blurCache().frameRectRef(), false);
+                } else {
+                    backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                        com.termux.app.chrome.GlassAnchor.layout(under,
+                            () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                    mUnderKeyboardBackdrop = backdrop;
+                    mUnderKeyboardBackdropHost = under;
+                    mUnderKeyboardBackdropParallax = mWallpaperParallax;
+                }
                 backdrop.setClearFrame(glassClearFrame(state.blurRadiusDp));
             }
         }
+        // No frame to draw this pass: the card wears no backdrop, so none is kept for it.
+        if (backdrop == null) releaseUnderKeyboardBackdrop();
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
                     ? mPreferences.getDockGlassGrain(stackLookPage())
@@ -6769,6 +6784,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The shared frame the under-keyboard card is drawing, for the blur cache's in-use scan. */
     @Nullable private Bitmap mUnderKeyboardBackdropBitmap;
+    /** The card's backdrop as last built, its view and parallax; see {@link #applyUnderKeyboardStackGlass}. */
+    @Nullable private com.termux.app.chrome.SharedFrameDrawable mUnderKeyboardBackdrop;
+    @Nullable private View mUnderKeyboardBackdropHost;
+    @Nullable private Object mUnderKeyboardBackdropParallax;
+
+    private void releaseUnderKeyboardBackdrop() {
+        mUnderKeyboardBackdrop = null;
+        mUnderKeyboardBackdropHost = null;
+        mUnderKeyboardBackdropParallax = null;
+    }
 
     /**
      * Fancier Glass's edge clarity for a surface frosted at {@code blurRadiusDp}: the blur cache's
