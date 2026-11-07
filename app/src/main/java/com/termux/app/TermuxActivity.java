@@ -6768,6 +6768,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mDockRows.underKeyboardBandsShown() || !state.toolbarShown) {
             if (under.getBackground() != null) under.setBackground(null);
             mUnderKeyboardBackdropBitmap = null;
+            releaseUnderKeyboardBackdrop();
             return;
         }
         DockLayout dock = appliedDockLayout();
@@ -6780,13 +6781,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
             if (frame != null) {
                 mUnderKeyboardBackdropBitmap = frame;
-                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                    new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-                    com.termux.app.chrome.GlassAnchor.layout(under,
-                        () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                // Kept for the same card, as the keyboard host's is (SharedFrameReuse): a new one
+                // compiles its own refraction program on the main thread.
+                com.termux.app.chrome.SharedFrameDrawable held = mUnderKeyboardBackdrop;
+                if (com.termux.app.chrome.SharedFrameReuse.reuses(held, mUnderKeyboardBackdropHost,
+                        under, mUnderKeyboardBackdropParallax, mWallpaperParallax)) {
+                    backdrop = held;
+                    backdrop.setFrame(frame, mChrome.blurCache().frameRectRef(), false);
+                } else {
+                    backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                        com.termux.app.chrome.GlassAnchor.layout(under,
+                            () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                    mUnderKeyboardBackdrop = backdrop;
+                    mUnderKeyboardBackdropHost = under;
+                    mUnderKeyboardBackdropParallax = mWallpaperParallax;
+                }
                 backdrop.setClearFrame(glassClearFrame(state.blurRadiusDp));
             }
         }
+        // No frame to draw this pass: the card wears no backdrop, so none is kept for it.
+        if (backdrop == null) releaseUnderKeyboardBackdrop();
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
                     ? mPreferences.getDockGlassGrain(stackLookPage())
@@ -6806,6 +6821,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The shared frame the under-keyboard card is drawing, for the blur cache's in-use scan. */
     @Nullable private Bitmap mUnderKeyboardBackdropBitmap;
+    /** The card's backdrop as last built, its view and parallax; see {@link #applyUnderKeyboardStackGlass}. */
+    @Nullable private com.termux.app.chrome.SharedFrameDrawable mUnderKeyboardBackdrop;
+    @Nullable private View mUnderKeyboardBackdropHost;
+    @Nullable private Object mUnderKeyboardBackdropParallax;
+
+    private void releaseUnderKeyboardBackdrop() {
+        mUnderKeyboardBackdrop = null;
+        mUnderKeyboardBackdropHost = null;
+        mUnderKeyboardBackdropParallax = null;
+    }
 
     /**
      * Fancier Glass's edge clarity for a surface frosted at {@code blurRadiusDp}: the blur cache's
@@ -9180,7 +9205,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
         mKeyboardBandAskedThisPass = false;
+        Trace.beginSection("Chrome.kb.host");
         applyInAppKeyboardHostMaterial(state);
+        Trace.endSection();
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null) return;
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
@@ -9195,10 +9222,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard band's faces and the legend tone chosen on its bare face, to the keyboard. */
     private void pushKeyboardGlassFaces(@NonNull TermuxInAppKeyboard keyboard) {
-        com.termux.app.chrome.ChromeInk ink = mChrome.ink();
-        int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
-        keyboard.setGlassFaces(faces,
-            ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+        Trace.beginSection("Chrome.kb.faces");
+        try {
+            com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+            int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+            keyboard.setGlassFaces(faces,
+                ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /**
@@ -9528,23 +9560,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         // Over a Display page the bed is see-through: what is behind it is the live display, which
         // the frost layer under it blurs, so no wallpaper frame is drawn into it.
-        if (ChromePolicy.dockBlurEnabled(blurRadiusDp) && !inAppKeyboardSeesThroughToDisplay()) {
-            Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
-            if (frame != null) {
-                // The shared frame, sampled at the host's own position on every draw — through
-                // the stack's travel, so a rising keyboard shows the wallpaper it is over.
-                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                    mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
-                    com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
-                backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
+        Trace.beginSection("Chrome.kb.glass");
+        try {
+            if (ChromePolicy.dockBlurEnabled(blurRadiusDp) && !inAppKeyboardSeesThroughToDisplay()) {
+                Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
+                if (frame != null) {
+                    // The shared frame, sampled at the host's own position on every draw — through
+                    // the stack's travel, so a rising keyboard shows the wallpaper it is over. The
+                    // one built last time is kept for the same host: a new one compiles its own
+                    // refraction program, which was most of every chrome apply on pong.
+                    com.termux.app.chrome.SharedFrameDrawable held = mInAppKeyboardBackdropDrawable;
+                    if (com.termux.app.chrome.SharedFrameReuse.reuses(held,
+                            mInAppKeyboardBackdropHost, surfaceHost,
+                            mInAppKeyboardBackdropParallax, mWallpaperParallax)) {
+                        backdrop = held;
+                        backdrop.setFrame(frame, mInAppKeyboardBackdropFrameRect, false);
+                    } else {
+                        backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                            mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
+                            com.termux.app.chrome.GlassAnchor.layout(surfaceHost,
+                                mAccessoryStackLift));
+                        mInAppKeyboardBackdropDrawable = backdrop;
+                        mInAppKeyboardBackdropHost = surfaceHost;
+                        mInAppKeyboardBackdropParallax = mWallpaperParallax;
+                    }
+                    backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
+                }
             }
+            // The drawable reports no intrinsic size. This background is installed on a
+            // wrap-content host, and an intrinsic size would feed itself back into layout as a
+            // blank band below a subsequently shorter keyboard. Decoration must follow content
+            // geometry, never define it.
+            return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(
+                mChrome.glass(), spec, getResources().getDisplayMetrics().density, backdrop));
+        } finally {
+            Trace.endSection();
         }
-        // The drawable reports no intrinsic size. This background is installed on a wrap-content
-        // host, and an intrinsic size would feed itself back into layout as a blank band below a
-        // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
-        return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(mChrome.glass(),
-            spec, getResources().getDisplayMetrics().density, backdrop));
     }
+
+    /**
+     * The keyboard host's backdrop as last built, the view it was anchored to and the parallax it
+     * samples through; reused while those hold ({@link com.termux.app.chrome.SharedFrameReuse}),
+     * let go with the frame in {@link #clearInAppKeyboardBackdrop}.
+     */
+    @Nullable private com.termux.app.chrome.SharedFrameDrawable mInAppKeyboardBackdropDrawable;
+    @Nullable private View mInAppKeyboardBackdropHost;
+    @Nullable private Object mInAppKeyboardBackdropParallax;
 
     /**
      * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
@@ -9569,9 +9630,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.chrome.GlassBackdropCache.Band noteInAppKeyboardBand(
             @NonNull View surfaceHost) {
+        Trace.beginSection("Chrome.kb.legendInks");
         int[] inks = mInAppKeyboard != null ? mInAppKeyboard.letterKeyLegibilityInks() : null;
+        Trace.endSection();
         if (inks == null || surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0)
             return null;
+        Trace.beginSection("Chrome.kb.bandInk");
+        try {
+            return measureInAppKeyboardBand(surfaceHost, inks);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /** {@link #noteInAppKeyboardBand}'s measurement, on a host that is laid out. */
+    @NonNull
+    private com.termux.app.chrome.GlassBackdropCache.Band measureInAppKeyboardBand(
+            @NonNull View surfaceHost, @NonNull int[] inks) {
         int[] origin = new int[2];
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
         Rect host = new Rect(origin[0], origin[1],
@@ -9601,6 +9676,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void clearInAppKeyboardBackdrop() {
         mInAppKeyboardBackdropBitmap = null;
+        mInAppKeyboardBackdropDrawable = null;
+        mInAppKeyboardBackdropHost = null;
+        mInAppKeyboardBackdropParallax = null;
         mInAppKeyboardBackdropFrameRect.setEmpty();
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
     }
