@@ -546,11 +546,13 @@ public final class ChromeRenderer {
         // states, because the apply asks unconditionally (Pong, 2026-09-09).
         long dirtyBefore = mLedger.dirtyGeneration();
         mRenderSyncRunning = true;
+        Trace.beginSection("Chrome.renderSync");
         try {
             mSurfaces.applyChromeSpec(spec);
             mSurfaces.enforceAccessoryFxInvariants();
         } finally {
             mRenderSyncRunning = false;
+            Trace.endSection();
         }
         if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
             requestSync(SCOPE_ACCESSORY_RENDER);
@@ -762,6 +764,10 @@ public final class ChromeRenderer {
             return;
         }
         mCommitPending = true;
+        // An empty marker inside whoever booked the commit, so a trace names the caller of every
+        // whole apply (the booking is once per frame at most, so this costs nothing at rest).
+        Trace.beginSection("Chrome.bookCommit");
+        Trace.endSection();
         View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         if (gate == null || !gate.isAttachedToWindow()) {
             mHandler.post(mCommitRunnable);
@@ -806,7 +812,14 @@ public final class ChromeRenderer {
         }
         View gate = mCommitGateView;
         commit();
-        return gate == null || !gate.isLayoutRequested();
+        boolean draw = gate == null || !gate.isLayoutRequested();
+        if (!draw) {
+            // The apply moved a view: this frame runs its traversal again. Marked so a trace
+            // shows which slow frames paid for two layouts.
+            Trace.beginSection("Chrome.commitCancelsDraw");
+            Trace.endSection();
+        }
+        return draw;
     }
 
     private void unscheduleCommit() {
