@@ -1651,15 +1651,36 @@ public final class TermuxInAppKeyboard {
         return mAppliedPalette;
     }
 
+    /** Glass palettes already built, by everything they were built from. */
+    private final InAppKeyboardPaletteFactory.GlassMemo mGlassMemo =
+        new InAppKeyboardPaletteFactory.GlassMemo(4);
+
     private juloo.keyboard2.Theme.Palette createPalette() {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
+        // Every chrome apply with the keyboard up asks for the palette (the legend inks, the
+        // faces, the glass base), and building it cost several ms an apply: it is built once per
+        // distinct set of inputs. "Keyboard.palette.glass.build" in a trace is a miss.
         android.os.Trace.beginSection("Keyboard.palette.glass");
-        juloo.keyboard2.Theme.Palette palette =
-            InAppKeyboardPaletteFactory.createGlass(context, theme,
-                com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
-                mGlassTone);
-        android.os.Trace.endSection();
+        juloo.keyboard2.Theme.Palette palette;
+        try {
+            InAppKeyboardPaletteFactory.GlassInputs inputs =
+                InAppKeyboardPaletteFactory.glassInputs(context, theme,
+                    com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
+                    mGlassTone);
+            palette = mGlassMemo.get(inputs);
+            if (palette == null) {
+                android.os.Trace.beginSection("Keyboard.palette.glass.build");
+                try {
+                    palette = InAppKeyboardPaletteFactory.createGlass(inputs);
+                } finally {
+                    android.os.Trace.endSection();
+                }
+                mGlassMemo.put(inputs, palette);
+            }
+        } finally {
+            android.os.Trace.endSection();
+        }
         android.os.Trace.beginSection("Keyboard.palette.scheme");
         InAppKeyboardColorScheme scheme = parsedColorScheme(context,
             mPreferences.getInAppKeyboardColorScheme());
