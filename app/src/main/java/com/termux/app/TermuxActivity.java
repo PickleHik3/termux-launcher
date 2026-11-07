@@ -10927,6 +10927,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             }
 
+            @Override public void requestApplyThisFrame() {
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
+
             @Override public void applyAccessoryGeometry(@NonNull String reason) {
                 // Now, not at the end of the dispatch: the reveal gate armed by this show applies
                 // against the very next traversal, which must already have the stack's new height.

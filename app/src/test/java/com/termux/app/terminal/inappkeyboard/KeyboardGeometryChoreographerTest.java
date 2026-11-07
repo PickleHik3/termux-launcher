@@ -207,6 +207,31 @@ public class KeyboardGeometryChoreographerTest {
     }
 
     @Test
+    public void aBelowScreenOpenLeavesTheKeyboardsDressToTheFramesOwnApply() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = true;
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertFalse("the dress is not made inside the request",
+            mSurface.log.contains("applyKeyboardSurfaceState"));
+        assertFalse(mSurface.log.contains("buildChromeSpec"));
+        assertEquals("the frame's apply is booked once", 1,
+            java.util.Collections.frequency(mSurface.log, "requestApplyThisFrame"));
+        assertTrue(KeyboardGeometryChoreographer.dressesOnRequest(false));
+        assertFalse(KeyboardGeometryChoreographer.dressesOnRequest(true));
+    }
+
+    @Test
+    public void anOnScreenOpenStillDressesTheKeyboardAtOnce() {
+        mChoreographer.onVisibilityRequested(true, false);
+
+        assertTrue(mSurface.log.contains("applyKeyboardSurfaceState"));
+        assertFalse(mSurface.log.contains("requestApplyThisFrame"));
+    }
+
+    @Test
     public void aBelowScreenOpenReleasesAGateAnEarlierOpenLeftArmed() {
         mSurface.glassSurface = true;
         mSurface.blurEnabled = true;
@@ -718,6 +743,11 @@ public class KeyboardGeometryChoreographerTest {
         @Override
         public void requestAccessoryRenderSync() {
             log.add("requestAccessoryRenderSync");
+        }
+
+        @Override
+        public void requestApplyThisFrame() {
+            log.add("requestApplyThisFrame");
         }
 
         @Override
