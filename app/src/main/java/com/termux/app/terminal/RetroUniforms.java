@@ -69,6 +69,8 @@ public final class RetroUniforms {
     public float recess;
     /** 0..1: how far the picture loses brightness and colour; 0 for none. */
     public float dim;
+    /** 1 blends neighbouring pixels sideways like a video cable (panes only); 0 for none. */
+    public float composite;
     /** The live screen event's {@link PaneScreenEvent.Kind#id}, 0 for none (always 0 on chrome). */
     public float event;
     /** The live screen event's progress, 0..1. */
@@ -137,6 +139,7 @@ public final class RetroUniforms {
         this.aberrFlat = 0f;
         this.recess = 0f;
         this.dim = 0f;
+        this.composite = 0f;
         this.event = 0f;
         this.eventT = 0f;
         this.seed = 0f;
@@ -185,6 +188,18 @@ public final class RetroUniforms {
         this.aberrFlat = aberrFlat;
         this.recess = recess;
         this.dim = dim;
+        return this;
+    }
+
+    /**
+     * The composite signal, after {@link #set}: 1 blends neighbouring pixels sideways (a pane's
+     * Composite signal setting), 0 leaves the picture as it is (always 0 on chrome and TFT).
+     *
+     * @return this, for chaining
+     */
+    @NonNull
+    public RetroUniforms composite(float composite) {
+        this.composite = composite;
         return this;
     }
 
@@ -248,6 +263,7 @@ public final class RetroUniforms {
         aberrFlat = other.aberrFlat;
         recess = other.recess;
         dim = other.dim;
+        composite = other.composite;
         event = other.event;
         eventT = other.eventT;
         seed = other.seed;
@@ -278,6 +294,7 @@ public final class RetroUniforms {
             && Float.compare(bendBottom, u.bendBottom) == 0
             && Float.compare(aberr, u.aberr) == 0 && Float.compare(aberrFlat, u.aberrFlat) == 0
             && Float.compare(recess, u.recess) == 0 && Float.compare(dim, u.dim) == 0
+            && Float.compare(composite, u.composite) == 0
             && Float.compare(event, u.event) == 0 && Float.compare(eventT, u.eventT) == 0
             && Float.compare(seed, u.seed) == 0
             && Float.compare(flicker, u.flicker) == 0 && Float.compare(time, u.time) == 0;
@@ -310,6 +327,7 @@ public final class RetroUniforms {
         h = 31 * h + Float.floatToIntBits(aberrFlat);
         h = 31 * h + Float.floatToIntBits(recess);
         h = 31 * h + Float.floatToIntBits(dim);
+        h = 31 * h + Float.floatToIntBits(composite);
         h = 31 * h + Float.floatToIntBits(event);
         h = 31 * h + Float.floatToIntBits(eventT);
         h = 31 * h + Float.floatToIntBits(seed);

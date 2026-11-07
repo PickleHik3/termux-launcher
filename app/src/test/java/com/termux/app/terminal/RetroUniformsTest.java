@@ -111,6 +111,13 @@ public class RetroUniformsTest {
         b.copyFrom(a);
         b.dim = 0f;
         assertNotEquals(a, b);
+        a.composite(1f);
+        b.copyFrom(a);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        b.composite = 0f;
+        assertNotEquals(a, b);
+        b.copyFrom(a);
         a.event(PaneScreenEvent.Kind.BELL_TEAR.id, 0.25f, 0.75f);
         assertEquals(1f, a.event, 0f);
         assertEquals(0.25f, a.eventT, 0f);
@@ -143,6 +150,7 @@ public class RetroUniformsTest {
         assertEquals(0f, a.aberrFlat, 0f);
         assertEquals(0f, a.recess, 0f);
         assertEquals(0f, a.dim, 0f);
+        assertEquals(0f, a.composite, 0f);
         assertEquals(0f, a.event, 0f);
         assertEquals(0f, a.eventT, 0f);
         assertEquals(0f, a.seed, 0f);
