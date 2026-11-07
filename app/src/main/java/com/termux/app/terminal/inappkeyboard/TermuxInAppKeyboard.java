@@ -174,6 +174,8 @@ public final class TermuxInAppKeyboard {
     private boolean mPlaceKeepsSystemImeWhileVisible;
     /** Whether the place actually has it right now — what was last applied to the window. */
     private boolean mPlaceHoldsSystemIme;
+    /** Up for the wall's travel, not yet landed: the IME stays where it was till the landing. */
+    private boolean mShownForTravel;
     private float mHeightScale = 1f;
     /**
      * The extra row-height multiplier a floating keyboard carries, from the card's grip and the
@@ -562,6 +564,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            mShownForTravel = false;
             // Shown, this keyboard is the one typing: the place gives the IME back — unless the
             // place keeps it while this keyboard is up, in which case the suppression below is a
             // no-op.
@@ -594,6 +597,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            if (!wasVisible) mShownForTravel = true;
             showInternal();
             if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
         } finally {
@@ -629,6 +633,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastHideReason = Objects.requireNonNull(reason, "reason");
             mVisible = false;
+            mShownForTravel = false;
             resetInputPipeline();
             // The panel stands over the keys, so it goes down with them; the next show is the keys.
             mHost.hideClipboardPanel();
@@ -1284,12 +1289,37 @@ public final class TermuxInAppKeyboard {
      * visibility. Cheap to call on every pass: it acts only when the answer changes.
      */
     private void syncPlaceSystemIme() {
-        boolean holds = mPlaceOwnsSystemIme && !mExternalTextInputActive
-            && (mPlaceKeepsSystemImeWhileVisible || !mVisible);
+        boolean holds = placeHoldsSystemIme(mPlaceHoldsSystemIme, mShownForTravel,
+            mPlaceOwnsSystemIme, mExternalTextInputActive, mPlaceKeepsSystemImeWhileVisible,
+            mVisible);
         if (mPlaceHoldsSystemIme == holds) return;
         mPlaceHoldsSystemIme = holds;
         if (holds) releaseSystemImeToPlace();
         else suppressSystemIme();
+    }
+
+    /**
+     * Whether the place holds the system IME, from what it {@code held}: the place that owns it
+     * holds it while this keyboard is down, or up for something else. A keyboard the travel brought
+     * up ({@code shownForTravel}) changes nothing until the wall has landed
+     * ({@link #landTravelShow}): the hand-over sets the window's IME flags, which relayouts the
+     * whole window, and neither the slide's frames nor the landed frame can afford it.
+     */
+    static boolean placeHoldsSystemIme(boolean held, boolean shownForTravel, boolean owns,
+                                       boolean externalInput, boolean keptWhileVisible,
+                                       boolean visible) {
+        if (shownForTravel) return held;
+        return owns && !externalInput && (keptWhileVisible || !visible);
+    }
+
+    /**
+     * The wall has landed with the keyboard a travel brought up: who holds the IME is settled now,
+     * after the landed frame (TermuxActivity#settlePlaceChrome).
+     */
+    public void landTravelShow() {
+        if (!mShownForTravel) return;
+        mShownForTravel = false;
+        syncPlaceSystemIme();
     }
 
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */

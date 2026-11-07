@@ -4267,6 +4267,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void updateTerminalGlassFrost() {
         // Whether the slabs refract is decided before the style is read: a knob the editor just
         // turned, or the switch flipped in Settings, has to land on this very pass.
+        Trace.beginSection("Frost.terminal.backdrop");
         syncFancierGlassLook();
         // The backdrop shows the very frame the crops below are cut from, so it is dressed in this
         // same pass: a backdrop and a glass that disagreed for even one frame would show as the
@@ -4276,10 +4277,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rotation, a new wallpaper), and a different width puts the resting place at a different
         // offset into it — whether or not the panes' own dress changed below.
         syncWallpaperParallax();
+        Trace.endSection();
         // The Docked gutter's glass samples the same frame, so it follows it as it lands.
+        Trace.beginSection("Frost.terminal.gutter");
         View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
+        Trace.endSection();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -4288,8 +4292,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.PaneStyleKey key = com.termux.app.terminal.PaneStyleKey.of(style);
         if (key.equals(mAppliedPaneStyleKey)) return;
         mAppliedPaneStyleKey = key;
-        mPaneController.setSurfaceStyle(style);
-        if (mPaneWallController != null) mPaneWallController.applyStyle(style);
+        Trace.beginSection("Frost.terminal.paneStyle");
+        try {
+            mPaneController.setSurfaceStyle(style);
+            if (mPaneWallController != null) mPaneWallController.applyStyle(style);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** What {@link #updateTerminalGlassFrost} last dressed the panes with; null forces a pass. */
@@ -10988,6 +10997,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void requestAccessoryRenderSync() {
                 mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            }
+
+            @Override public void requestApplyThisFrame() {
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             }
 
             @Override public void applyAccessoryGeometry(@NonNull String reason) {
@@ -18050,7 +18063,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The dock's height, the keyboard's height and its chin are the orientation's, so a turn
         // of the screen — or a grip dragged in the Layout editor — has to re-read them. The look
         // itself is every place's, so nothing else here depends on where the wall stands.
+        Trace.beginSection("Place.sizes");
         boolean sizesMoved = applyPlaceSizes();
+        Trace.endSection();
         PlaceLayout layout = arrangement().layout();
         PlaceLayout previous = mAppliedPlaceLayout;
         boolean arrangementChanged = !layout.equals(previous);
@@ -18094,6 +18109,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rotation moves it too, and this is the one pass both take.
         // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where
         // it is going to be, not where it was.
+        Trace.beginSection("Place.keyboardForm");
         if (mFloatingKeyboard != null)
             mFloatingKeyboard.onKeyboardFormResolved(layout.keyboardForm);
         if (mInAppKeyboard != null) {
@@ -18103,11 +18119,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (appliedForm != mInAppKeyboard.getForm()) syncDisplayTouchpad();
         }
         applyPlaceSystemImeOwner();
+        Trace.endSection();
+        Trace.beginSection("Place.edgeStacks");
         boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
         // A bar that has just arrived on a side has to meet the terminal frame straight away; the
         // appearance pass owns the same number but does not necessarily run on this one.
         applySideStackFrameInset(hasDockedFrameCard() ? 0 : terminalFrameInsetPx(true));
         applyStatusBarEdge(layout);
+        Trace.endSection();
+        Trace.beginSection("Place.hosts");
         boolean alwaysOnChanged = syncHomeKeyboardAlwaysOn();
         applyWidgetGridPreference();
         boolean columnChanged = syncPinnedAppsHost();
@@ -18118,14 +18138,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keys follow the wall, but their meanings do not: a key with nothing to act on where
         // the wall has landed is drawn dead until the wall moves again.
         applyExtraKeysPlaceEligibility();
+        Trace.endSection();
         if (arrangementChanged || columnChanged || stacksMoved) {
             // Rows collapse or come back with a column or a rail, and the render state that hides
             // them is derived rather than stored, so both are rebuilt here.
+            Trace.beginSection("Place.toolbar");
             setTerminalToolbarHeight();
+            Trace.endSection();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
+        Trace.beginSection("Place.dockDress");
         if (dockStyleChanged || drawerTileChanged) restyleDockSurface();
         if (sizesMoved) applySizedSurfaces();
+        Trace.endSection();
         // Always on brings the keyboard up on Home, or takes it down, once the grid has its rows.
         if (alwaysOnChanged && mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
             applyPlaceKeyboard(mLastWallPage);
@@ -25440,10 +25465,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLandingStackDressed) deferHalfRestyle(left, page);
         else restyleChromeForHalfIfChanged(left, page);
         // The dock wears the arriving page's Dock design; one design on both changes nothing.
+        Trace.beginSection("Settle.dockDesign");
         restyleDockSurfaceForPageIfChanged(left, page);
+        Trace.endSection();
         // The bar's readings are the same on both halves (#91); whether the bar shows decides
         // whether the sampler runs.
+        Trace.beginSection("Settle.stats");
         syncStatsConsumer();
+        Trace.endSection();
         return true;
     }
 
@@ -25497,10 +25526,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         boolean overlayChanged = KeyboardOverlayPolicy.changesBetween(from, page,
             arrangement().layout());
+        Trace.beginSection("Settle.wallKeyboard");
         syncWallKeyboard(page, leavingKeyboardUp, !first);
+        Trace.endSection();
+        Trace.beginSection("Settle.placeOwners");
         syncDisplayTouchpad();
         applyPlaceSystemImeOwner();
         applyExtraKeysPlaceEligibility();
+        Trace.endSection();
         // One chrome pass at rest, for the two pieces of geometry that are the place's by design:
         // the terminal alone pads the dock down to a whole text row, and Home and the display can
         // float an open keyboard over their content where the terminal gives it room. An
@@ -27208,9 +27241,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             doSettlePlaceChrome(page, landed);
             // The terminal effect is the Workspace's: Home's chrome lands plain (ChromeRetroEffect).
+            Trace.beginSection("Settle.deckLook");
             if (mChromeRetroEffect != null)
                 mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
             applyDeckLook();
+            Trace.endSection();
         } finally {
             mPlacePassGate.end();
             Trace.endSection();
@@ -27219,7 +27254,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // first frame shows it without laying it out from scratch.
         getWindow().getDecorView().removeCallbacks(mKeyboardPrewarmRunnable);
         getWindow().getDecorView().post(mKeyboardPrewarmRunnable);
+        // A keyboard the travel brought up hands the phone's keyboard over once the landed frame
+        // is out: the hand-over relayouts the whole window (4-5 ms of a drag frame on pong).
+        getWindow().getDecorView().removeCallbacks(mLandTravelKeyboardRunnable);
+        getWindow().getDecorView().post(mLandTravelKeyboardRunnable);
     }
+
+    private final Runnable mLandTravelKeyboardRunnable = () -> {
+        // A crossing under way again keeps the hold; its own landing posts this again.
+        if (isDestroyed() || mInAppKeyboard == null || mCrossing.crossing()) return;
+        mInAppKeyboard.landTravelShow();
+    };
 
     private final Runnable mKeyboardPrewarmRunnable = () -> {
         if (isDestroyed() || mInAppKeyboard == null || mCrossing.crossing()) return;
@@ -27261,12 +27306,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // translation, sink and alphas, the bar's ride, a fold's and a melt's shares, and the
             // dock's morph, the row laying out the landed rest its last frame already drew. From
             // here the chrome reads the store's arrangements again.
+            Trace.beginSection("Settle.land");
             com.termux.app.place.Crossing.Landing crossingLanding =
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
+            Trace.endSection();
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();
             contentPreRolled = crossingLanding.contentPreRolled();
             held = crossingLanding.held();
@@ -27307,23 +27354,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // The strip's crossing has landed on one end's dress: the commit below dresses it
             // plainly, as that end wears it.
+            Trace.beginSection("Settle.fades");
             endNavStripFade();
             endTopBandFade();
             endStackLookBlend();
+            Trace.endSection();
             // A stack dressed for the landed half on the way, or a look the crossing blended onto
             // it: the landed frame already shows what the half's re-dress would, which follows it.
             mLandingStackDressed = seamLanding.stackDressedFor(page)
                 || seamLanding.lookBlendedOnto(page);
+            Trace.beginSection("Settle.placeState");
             try {
                 syncPlaceState(page, leavingKeyboardUp);
             } finally {
                 mLandingStackDressed = false;
+                Trace.endSection();
             }
+            Trace.beginSection("Settle.away");
             syncTerminalAway(page);
             if (beadsMelted) applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            Trace.endSection();
+            Trace.beginSection("Settle.tail");
             mCrossing.end();
             // What waits for the landed frame (the half's re-dress, the even-out's settle) runs
             // just after it.
@@ -27366,6 +27420,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     GeometryScheduler.ResizePolicy.NOW);
             }
             if (seamLanding.barTravelled()) syncPlaceBar();
+            Trace.endSection();
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
             // gave the room back in its first frame finds it already right, and only the grid's
@@ -27373,11 +27428,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
                 GeometryScheduler.ResizePolicy.NOW);
         } finally {
+            Trace.beginSection("Settle.geometry");
             mGeometry.endBatch();
+            Trace.endSection();
         }
         peekTravelLog("settle-end page=" + page, false);
+        Trace.beginSection("Settle.contentResize");
         if (contentPreRolled) finishTravelContentResizeAfterLayout(gridHold);
         if (held) settleTerminalTravelDisplacement();
+        Trace.endSection();
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);

@@ -115,6 +115,15 @@ public final class KeyboardGeometryChoreographer {
         void requestAccessoryRenderSync();
 
         /**
+         * Books the whole chrome apply for the frame this request lands in, before its draw: the
+         * keyboard's surface is dressed there with the rest of the chrome rather than on its own.
+         * Without a frame to ride, the keyboard is dressed at once.
+         */
+        default void requestApplyThisFrame() {
+            applyKeyboardSurfaceState(buildChromeSpec());
+        }
+
+        /**
          * Re-lays out the accessory stack around the keyboard, for {@code reason}, before the next
          * traversal: the reveal gate applies the chrome against that traversal's layout.
          */
@@ -501,9 +510,21 @@ public final class KeyboardGeometryChoreographer {
             if (openingFromGone)
                 mSurface.invalidateTransitionCrops();
             mPendingCloseGeometry = false;
+            if (!dressesOnRequest(belowScreen)) {
+                // Held below the screen, nothing of it shows before the frame's own chrome apply,
+                // which dresses the keyboard with the rest of the chrome. Dressing it here as well
+                // cost the travel's first frame 7-12 ms on pong (Chrome.kb.host inside
+                // Keyboard.setContainerVisible), for a dress that apply then made again.
+                if (mPendingOpenReveal) removeOpenPreDrawGate();
+                mPendingOpenReveal = false;
+                keyboardContainer.setVisibility(View.VISIBLE);
+                mSurface.requestApplyThisFrame();
+                if (openingFromGone) mSurface.requestAccessoryRenderSync();
+                return;
+            }
             ChromeSpec state = mSurface.buildChromeSpec();
             boolean backdropReady = mSurface.keyboardBackdropReady(state);
-            boolean deferReveal = !belowScreen && (mPendingOpenReveal
+            boolean deferReveal = (mPendingOpenReveal
                 || shouldDeferReveal(openingFromGone, mSurface.keyboardGlassSurface(),
                     state.blurEnabled, backdropReady));
             if (!deferReveal && mPendingOpenReveal) removeOpenPreDrawGate();
@@ -515,8 +536,6 @@ public final class KeyboardGeometryChoreographer {
             mSurface.applyKeyboardSurfaceState(state);
             if (deferReveal) {
                 installOpenPreDrawGate();
-            } else if (belowScreen && openingFromGone) {
-                mSurface.requestAccessoryRenderSync();
             }
         } else {
             boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;
@@ -530,6 +549,14 @@ public final class KeyboardGeometryChoreographer {
             if (closingToGone)
                 installClosePreDrawCorrection();
         }
+    }
+
+    /**
+     * Whether an open dresses the keyboard's surface inside the request. One the travel brings up
+     * {@code belowScreen} does not: no frame shows it before that frame's chrome apply dresses it.
+     */
+    static boolean dressesOnRequest(boolean belowScreen) {
+        return !belowScreen;
     }
 
     /** Reveals keys in the same UI transaction that installs the destination unified backdrop. */
