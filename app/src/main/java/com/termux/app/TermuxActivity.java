@@ -18721,7 +18721,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
             @NonNull com.termux.app.wall.PaneWallPage page) {
-        return com.termux.app.dock.DockSurfaceSpec.forStyle(arrangementOf(page).design());
+        return com.termux.app.dock.DockSurfaceSpec.forStyle(wornDockDesign(page));
+    }
+
+    /**
+     * The Dock design {@code page}'s slab wears (WornDockDesign): its layout's, or none where
+     * that layout shows no apps row. The stored pick stays as it is.
+     */
+    @NonNull
+    private com.termux.app.dock.DockStyle wornDockDesign(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        ResolvedArrangement arranged = arrangementOf(page);
+        return com.termux.app.dock.WornDockDesign.of(arranged.design(), arranged.layout());
     }
 
     /**
@@ -18998,7 +19009,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockStyle committedDockDesign() {
         com.termux.app.dock.DockStyle travelling = mCrossing.seam().stackDesign();
-        return travelling != null ? travelling : arrangementOf(mLastWallPage).design();
+        return travelling != null ? travelling : wornDockDesign(mLastWallPage);
     }
 
     /**
@@ -19242,7 +19253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether {@code page}'s dock wears the Wall strip. */
     private boolean wallStripOn(@NonNull com.termux.app.wall.PaneWallPage page) {
         return mPreferences != null
-            && arrangementOf(page).design() == com.termux.app.dock.DockStyle.WALL_STRIP;
+            && wornDockDesign(page) == com.termux.app.dock.DockStyle.WALL_STRIP;
     }
 
     /** Whether the row is made and fed: a dock wears it, with split panes on. */
