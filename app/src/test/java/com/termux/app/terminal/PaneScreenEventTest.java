@@ -69,12 +69,51 @@ public class PaneScreenEventTest {
         assertNull(slot.live(2002L));
     }
 
-    @Test public void fireNeedsCrtAnimatorsQuietInputAndTheSwitch() {
-        assertTrue(PaneScreenEvent.mayFire(true, true, true, true));
-        assertFalse("not CRT (TFT, none)", PaneScreenEvent.mayFire(false, true, true, true));
-        assertFalse("Remove animations", PaneScreenEvent.mayFire(true, false, true, true));
-        assertFalse("typing or scrolling", PaneScreenEvent.mayFire(true, true, false, true));
-        assertFalse("Screen events off", PaneScreenEvent.mayFire(true, true, true, false));
+    @Test public void fireNeedsCrtAnimatorsAndTheSwitchAndOnlyTheAmbientTearWaitsForQuiet() {
+        for (PaneScreenEvent.Kind k : PaneScreenEvent.Kind.values()) {
+            if (k == PaneScreenEvent.Kind.NONE) continue;
+            assertTrue(k.name(), PaneScreenEvent.mayFire(k, true, true, true, true));
+            assertFalse(k + " not CRT (TFT, none)", PaneScreenEvent.mayFire(k, false, true, true, true));
+            assertFalse(k + " Remove animations", PaneScreenEvent.mayFire(k, true, false, true, true));
+            assertFalse(k + " Screen events off", PaneScreenEvent.mayFire(k, true, true, true, false));
+        }
+        assertFalse("ambient tear while typing or scrolling",
+            PaneScreenEvent.mayFire(PaneScreenEvent.Kind.AMBIENT_TEAR, true, true, false, true));
+        // Events the user or their shell caused play at once, even right after a key.
+        PaneScreenEvent.Kind[] caused = {PaneScreenEvent.Kind.BELL_TEAR,
+            PaneScreenEvent.Kind.POWER_ON, PaneScreenEvent.Kind.POWER_OFF,
+            PaneScreenEvent.Kind.FOCUS_WOBBLE, PaneScreenEvent.Kind.DEATH_SNOW};
+        for (PaneScreenEvent.Kind k : caused) {
+            assertFalse(k.name(), k.waitsForQuiet);
+            assertTrue(k + " while typing", PaneScreenEvent.mayFire(k, true, true, false, true));
+        }
+        assertTrue(PaneScreenEvent.Kind.AMBIENT_TEAR.waitsForQuiet);
+    }
+
+    @Test public void theSameKindWhileLiveIsDroppedSoABellFloodRestartsNothing() {
+        PaneScreenEvent.Slot slot = new PaneScreenEvent.Slot();
+        assertTrue(slot.fire(PaneScreenEvent.Kind.BELL_TEAR, 1000L, 0.2f));
+        assertFalse(slot.fire(PaneScreenEvent.Kind.BELL_TEAR, 1050L, 0.7f));
+        assertFalse(slot.fire(PaneScreenEvent.Kind.BELL_TEAR, 1149L, 0.7f));
+        PaneScreenEvent live = slot.live(1100L);
+        assertNotNull(live);
+        assertEquals(1000L, live.startUptime);
+        assertEquals(0.2f, live.seed, 0f);
+        // Once the first tear has run its 150 ms, the next bell tears again.
+        assertTrue(slot.fire(PaneScreenEvent.Kind.BELL_TEAR, 1150L, 0.5f));
+        assertEquals(1150L, slot.live(1160L).startUptime);
+    }
+
+    @Test public void aDifferentKindReplacesTheLiveOne() {
+        PaneScreenEvent.Slot slot = new PaneScreenEvent.Slot();
+        assertTrue(slot.fire(PaneScreenEvent.Kind.BELL_TEAR, 1000L, 0f));
+        assertTrue(slot.fire(PaneScreenEvent.Kind.DEATH_SNOW, 1050L, 0f));
+        PaneScreenEvent live = slot.live(1060L);
+        assertNotNull(live);
+        assertSame(PaneScreenEvent.Kind.DEATH_SNOW, live.kind);
+        assertEquals(1050L, live.startUptime);
+        assertFalse("NONE starts nothing", slot.fire(PaneScreenEvent.Kind.NONE, 1070L, 0f));
+        assertNull(slot.live(1071L));
     }
 
     @Test public void inputIsQuietOnly1500MsAfterTheLastKeyOrScroll() {

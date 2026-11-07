@@ -2735,10 +2735,14 @@ public class TerminalPaneController {
             e.getValue().setDimmed(dimmed.contains(e.getKey()));
     }
 
-    /** Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}). */
-    public void screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
+    /**
+     * Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}).
+     *
+     * @return whether the event started
+     */
+    public boolean screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
         PaneContentFrame frame = session == null ? null : mPaneFrames.get(session);
-        if (frame != null) frame.screenEvent(kind);
+        return frame != null && frame.screenEvent(kind);
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */

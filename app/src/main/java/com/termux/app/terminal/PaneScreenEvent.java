@@ -7,39 +7,47 @@ import androidx.annotation.Nullable;
  * One short, bounded animation a CRT pane plays when something happens to it: a bell, the pane
  * opening, it taking focus, its process dying. Never on a timer: each runs once, for its own
  * duration, from the moment it was fired, and the pane draws frames only while one is live.
+ * Events the user or their shell caused play at once; only the ambient tear waits out the typing
+ * hold ({@link Kind#waitsForQuiet}).
  * Pure arithmetic; {@link RetroEffectBinder} drives the frames and {@link PaneRetroEffect} draws
  * it from {@link RetroUniforms#event}, {@link RetroUniforms#eventT} and {@link RetroUniforms#seed}.
  */
 public final class PaneScreenEvent {
 
-    /** How long after a key commit or a scroll no event fires (spec decision 3). */
+    /** How long after a key commit or a scroll no ambient event fires (spec decision 3). */
     public static final long INPUT_QUIET_MS = 1500L;
 
     /** What happened; {@link #id} is what the shader reads as {@code uEvent}. */
     public enum Kind {
-        NONE(0, 0L),
+        NONE(0, 0L, false),
         /** A bell: one horizontal tear band plus a red/blue split. */
-        BELL_TEAR(1, 150L),
+        BELL_TEAR(1, 150L, false),
         /** The pane opened: a bright line widening to the screen. */
-        POWER_ON(2, 400L),
+        POWER_ON(2, 400L, false),
         /** The pane closes: the picture squashes into a bright line that fades. */
-        POWER_OFF(3, 250L),
+        POWER_OFF(3, 250L, false),
         /** The pane took focus: a damped sideways shear. */
-        FOCUS_WOBBLE(4, 300L),
+        FOCUS_WOBBLE(4, 300L, false),
         /** The pane's process died: a burst of snow. */
-        DEATH_SNOW(5, 300L),
+        DEATH_SNOW(5, 300L, false),
         /**
          * An ambient glitch under Idle animations ({@link PaneAmbient}): the bell tear at half its
-         * shift, every 2 to 5 minutes.
+         * shift, at the Idle glitch rate.
          */
-        AMBIENT_TEAR(6, 200L);
+        AMBIENT_TEAR(6, 200L, true);
 
         public final int id;
         public final long durationMs;
+        /**
+         * Whether it holds within {@link #INPUT_QUIET_MS} of a key or a scroll: only the ambient
+         * parts do; an event answering something the user or their shell did plays at once.
+         */
+        public final boolean waitsForQuiet;
 
-        Kind(int id, long durationMs) {
+        Kind(int id, long durationMs, boolean waitsForQuiet) {
             this.id = id;
             this.durationMs = durationMs;
+            this.waitsForQuiet = waitsForQuiet;
         }
     }
 
@@ -67,21 +75,33 @@ public final class PaneScreenEvent {
     }
 
     /**
-     * Whether an event may start now: only on a CRT pane, only while Android animates, only when
-     * the user has neither typed nor scrolled within {@link #INPUT_QUIET_MS}, and only while the
-     * Screen events switch is on.
+     * Whether an event of {@code kind} may start now: only on a CRT pane, only while Android
+     * animates, only while the Screen events switch is on, and, for a kind that
+     * {@link Kind#waitsForQuiet}, only when the user has neither typed nor scrolled within
+     * {@link #INPUT_QUIET_MS}.
      */
-    public static boolean mayFire(boolean crt, boolean animatorsEnabled, boolean inputQuiet,
-                                  boolean switchOn) {
-        return crt && animatorsEnabled && inputQuiet && switchOn;
+    public static boolean mayFire(@NonNull Kind kind, boolean crt, boolean animatorsEnabled,
+                                  boolean inputQuiet, boolean switchOn) {
+        return crt && animatorsEnabled && switchOn && (inputQuiet || !kind.waitsForQuiet);
     }
 
-    /** One pane's live event: at most one at a time, a new one replacing the old. */
+    /**
+     * One pane's live event: at most one at a time. A different kind replaces the live one; the
+     * same kind while one is live is dropped, so a flood of bells restarts nothing.
+     */
     public static final class Slot {
         @Nullable private PaneScreenEvent mLive;
 
-        public void fire(@NonNull Kind kind, long nowUptime, float seed) {
-            mLive = kind == Kind.NONE ? null : new PaneScreenEvent(kind, nowUptime, seed);
+        /** @return whether the event started (false for NONE, which empties the slot) */
+        public boolean fire(@NonNull Kind kind, long nowUptime, float seed) {
+            if (kind == Kind.NONE) {
+                mLive = null;
+                return false;
+            }
+            PaneScreenEvent live = mLive;
+            if (live != null && live.kind == kind && !live.done(nowUptime)) return false;
+            mLive = new PaneScreenEvent(kind, nowUptime, seed);
+            return true;
         }
 
         /** The live event at {@code nowUptime}, or null (and the slot cleared) once it is done. */

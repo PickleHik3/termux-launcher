@@ -133,19 +133,21 @@ public final class RetroEffectBinder {
     }
 
     /**
-     * Plays one screen event ({@link PaneScreenEvent}) on this pane, replacing any live one, and
-     * draws frames only until it ends. Nothing on the chrome, on a style that is not CRT, while
-     * Android's animations are off, within {@link PaneScreenEvent#INPUT_QUIET_MS} of a key or a
-     * scroll, or with the Screen events switch ({@code switchOn}) off.
+     * Plays one screen event ({@link PaneScreenEvent}) on this pane, replacing a live one of
+     * another kind (one of the same kind still playing is left alone), and draws frames only until
+     * it ends. Nothing on the chrome, on a style that is not CRT, while Android's animations are
+     * off, or with the Screen events switch ({@code switchOn}) off; a kind that
+     * {@link PaneScreenEvent.Kind#waitsForQuiet} also holds within
+     * {@link PaneScreenEvent#INPUT_QUIET_MS} of a key or a scroll.
      *
      * @return whether the event started
      */
     public boolean fire(@NonNull PaneScreenEvent.Kind kind, boolean switchOn) {
         if (!mScreenEvents || kind == PaneScreenEvent.Kind.NONE) return false;
-        if (!PaneScreenEvent.mayFire(mStyle.usesCrt(), ValueAnimator.areAnimatorsEnabled(),
+        if (!PaneScreenEvent.mayFire(kind, mStyle.usesCrt(), ValueAnimator.areAnimatorsEnabled(),
             InputQuiet.isQuiet(), switchOn))
             return false;
-        mEvent.fire(kind, SystemClock.uptimeMillis(), (float) Math.random());
+        if (!mEvent.fire(kind, SystemClock.uptimeMillis(), (float) Math.random())) return false;
         mView.postInvalidateOnAnimation();
         return true;
     }

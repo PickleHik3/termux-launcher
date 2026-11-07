@@ -212,13 +212,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     /**
      * Plays a screen event on this pane's CRT picture ({@link RetroEffectBinder#fire}): nothing
      * unless the pane is drawn CRT and the Screen events switch is on.
+     *
+     * @return whether the event started
      */
-    public void screenEvent(@NonNull PaneScreenEvent.Kind kind) {
-        if (!mRetroEffect.style().usesCrt()) return;
+    public boolean screenEvent(@NonNull PaneScreenEvent.Kind kind) {
+        if (!mRetroEffect.style().usesCrt()) return false;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
                 .build(getContext(), false);
-        mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
+        return mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
     }
 
     /**
