@@ -160,6 +160,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
   `logcat --pid` runs.
 - **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Peek reflection through the A–Z row (11-07, fix/peek-dock-travel).** Not seen on a device. On
+  pong, Peek dock with the A–Z row: the icon reflections run continuous through the letters, with
+  no darkened patch behind them, and the letters stay readable on a bright wallpaper and on a dark
+  one (they keep their own halo).
+
 - **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
   with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
   edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or

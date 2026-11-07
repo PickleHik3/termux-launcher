@@ -44,20 +44,4 @@ public class PeekReflectionLookTest {
         assertTrue(PeekReflectionLook.specular(0f, 40f, th, 74f) < onEdge);
         assertEquals(0f, PeekReflectionLook.specular(0f, 74f * 1.5f, th, 74f), 1e-5f);
     }
-
-    @Test
-    public void theAzBandIsCentredOnTheLettersAndFeathersOut() {
-        float[] band = new float[2];
-        assertFalse(PeekReflectionLook.azBand(Float.NaN, 30f, 2f, band));
-        assertFalse(PeekReflectionLook.azBand(100f, 0f, 2f, band));
-        assertTrue(PeekReflectionLook.azBand(100f, 30f, 2f, band));
-        assertEquals(100f - 30f * 1.6f, band[0], 1e-4f);
-        assertEquals(100f + 30f * 1.6f, band[1], 1e-4f);
-        assertEquals(1f, PeekReflectionLook.azWeight(100f, band[0], band[1]), 1e-6f);
-        // Full across the letters themselves, nothing at the ends.
-        assertEquals(1f, PeekReflectionLook.azWeight(100f + 30f * 0.9f, band[0], band[1]), 1e-3f);
-        assertEquals(0f, PeekReflectionLook.azWeight(band[0], band[0], band[1]), 1e-6f);
-        assertEquals(0f, PeekReflectionLook.azWeight(band[1] + 5f, band[0], band[1]), 0f);
-        assertEquals(0f, PeekReflectionLook.azWeight(100f, 5f, 5f), 0f);
-    }
 }
