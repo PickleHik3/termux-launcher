@@ -553,3 +553,10 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- **Custom Look is kept (11-07, fix/custom-look-kept).** Appearance editor › Customization: set a
+  Custom look (Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth 90, Rim Bright). (1) Tap Solid,
+  then Custom: every slider is back where you left it. (2) Tap Solid, Done, open the editor again
+  (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
+  "Discard changes": the look is as it was before, and Custom still brings back the same values.
+  (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
+  slider. Home, Workspace and element cards' Custom chips are unchanged · pong.

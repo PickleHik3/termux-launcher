@@ -2,6 +2,8 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -60,6 +62,89 @@ public class EditorScreenLookTest {
         PlaceLayoutStore places = new PlaceLayoutStore(preferences);
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         SurfacePresets.applyLook(preferences, preset("frost"));
+    }
+
+    /** The user's own look: Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth, Rim Bright. */
+    private void setUpCustom() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 12);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 3);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 3);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 0);
+        preferences.setFancierGlassDispersionPercent(40);
+        preferences.setFancierGlassBendDp(30);
+        preferences.setSurfaceGlassRim("gradient");
+    }
+
+    private void assertCustomValues() {
+        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(3, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(1, preferences.lookGrid().value(LookGrid.Property.FROST, null,
+            LookGrid.NO_PAGE));
+        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(40, preferences.getFancierGlassDispersionPercent());
+        assertEquals(30, preferences.getFancierGlassBendDp());
+        assertEquals("gradient", preferences.getSurfaceGlassRim());
+    }
+
+    @Test
+    public void customComesBackAfterALookInTheSameVisit() {
+        setUpCustom();
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+        tapLook(editor, SOLID);
+        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+
+        assertCustomValues();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
+    public void customComesBackAfterALookWasKeptWithDone() {
+        setUpCustom();
+        SurfaceEditorController first = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        tapLook(first, SOLID);
+        first.done();
+
+        // The next visit opens on Solid; its Custom chip is the user's own look again.
+        SurfaceEditorController second = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(SOLID, model(second).value(Row.LOOK));
+        tapLook(second, AppearanceLooks.CUSTOM_STOP);
+        assertCustomValues();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(second).value(Row.LOOK));
+    }
+
+    @Test
+    public void aSliderMovedOffALookIsCustomAndSavedWhenItLeaves() {
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(FROST, model(editor).value(Row.LOOK));
+        model(editor).onValue(Row.OPACITY, 33, false);
+        model(editor).onReleased(Row.OPACITY);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+
+        tapLook(editor, SOLID);
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertNotNull(SurfacePresets.custom(preferences));
+    }
+
+    @Test
+    public void aCustomLookAtOpenIsSavedAndUndoPutsTheSlotBack() {
+        setUpCustom();
+        assertNull(SurfacePresets.custom(preferences));
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertNotNull("saved at open", SurfacePresets.custom(preferences));
+
+        tapLook(editor, SOLID);
+        editor.undo();
+        assertNull("Cancel leaves the slot as it was at open", SurfacePresets.custom(preferences));
+        assertCustomValues();
     }
 
     @Test

@@ -940,6 +940,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         // On disk until the session ends, so a launcher killed before Done starts on this state.
         AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom);
+        // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
+        // tried and kept comes back to it. Undo and a killed session put the slot back as
+        // mEntryCustom has it.
+        if (carried == null && (AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
+                || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL))))
+            SurfacePresets.saveCustom(prefs);
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
         com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
@@ -5745,8 +5751,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Saves the look. A half left at a Custom the user made stores it as the saved Custom; with
-     * both halves on Looks the saved Custom goes, and the next Custom starts from those Looks. A
+     * Saves the look. A half left at a Custom the user made stores it as the saved Custom. Done
+     * on a Look leaves the saved Custom as it is, so Custom is still there to come back to. A
      * visit that changed no look leaves it alone.
      */
     private void commitLook() {
@@ -5759,9 +5765,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         boolean custom = AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
             || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL));
-        if (!custom)
-            prefs.setSurfaceCustomPreset(null);
-        else if (mSessionCustom.isTouched(prefs))
+        if (custom && mSessionCustom.isTouched(prefs))
             SurfacePresets.saveCustom(prefs);
     }
 

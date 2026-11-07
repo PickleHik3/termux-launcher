@@ -594,10 +594,11 @@ public final class SurfacePresets {
     // ------------------------------------------------------------------------ the saved look
     //
     // The built-in presets are looks this build ships; Custom is the one the user tuned. It is
-    // written when the editor's slider leaves a Custom the user touched, and by Done (or Save) at
-    // the Custom stop — never when a Look is applied, which would overwrite the user's own look
-    // with a shipped one — so the Custom stop always brings back the last look the user made for
-    // themselves, across editor visits and restarts.
+    // written when the editor opens on a Custom, when its slider leaves a Custom the user touched,
+    // and by Done at the Custom stop — never when a Look is applied, which would overwrite the
+    // user's own look with a shipped one, and never dropped by Done on a Look — so the Custom stop
+    // always brings back the last look the user made for themselves, across editor visits and
+    // restarts.
 
     /**
      * The user's saved look as a preset, or null when they have not saved one.
