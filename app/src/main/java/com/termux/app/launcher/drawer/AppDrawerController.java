@@ -430,6 +430,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mEngaged;
     }
 
+    /** True while a finger's drag owns the plane ({@link #beginDrag} took it). */
+    public boolean isDragging() {
+        return mDragging;
+    }
+
     public void setDockChoreographyTarget(@Nullable AppDrawerDockChoreographyTarget target) {
         mDockTarget = target;
     }
