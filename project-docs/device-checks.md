@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **libghostty-vt core (exp/ghostty-core, d94281757; experiment, not for drops).** Owed on pong,
+  staging built with `-Pghostty=true`, `setprop debug.tl.terminal_core ghostty`, new panes only
+  (log `Terminal core: ghostty`). Emulator 11-07 passed: library loads, `seq`/`yes` 100k-line
+  flood, SGR bold/underline/reverse/truecolor, CJK + emoji, alt screen in and out, split resize,
+  scrollback swipe, typed input. Owed: flood while scrolled back then resize; vim/htop colours
+  and cursor shape; tmux paste and mouse; closing a pane; `[Process completed]`; then the
+  benchmark (same `cat` transcript timed per core, `dumpsys meminfo` PSS per core, CPU during a
+  long flood).
+
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
   guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and
