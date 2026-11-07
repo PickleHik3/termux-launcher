@@ -5866,10 +5866,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean peekCardStandsWith(boolean dockShown, boolean keyboardShown) {
         if (mPreferences == null) return false;
-        return com.termux.app.dock.DockPlacement.peekCardStands(shownDockSurfaceSpec().peek,
-                dockShown, arrangement().layout(), false, keyboardShown, mImeLiftPx > 0,
-                mAppliedPromptFieldBandPx > 0,
-                mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)
+        // For the page whose rows the stack stands (stackDressPage), as Stack layout places it:
+        // mid-crossing the rows a dip or a pictured dip brings in wear their page's answer from
+        // the frame they stand, out of sight, and the settle commits that same answer.
+        return com.termux.app.dock.DockPlacement.peekCardStandsOn(stackDressPage(),
+                shownDockSurfaceSpec().peek, dockShown, arrangement().layout(), false,
+                keyboardShown, mImeLiftPx > 0, mAppliedPromptFieldBandPx > 0)
             && (arrangement().floating() || !stackStandsDownOnFrame());
     }
 
