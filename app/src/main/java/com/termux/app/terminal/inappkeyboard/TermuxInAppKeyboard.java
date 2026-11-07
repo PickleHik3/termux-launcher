@@ -1463,18 +1463,44 @@ public final class TermuxInAppKeyboard {
         }
         Trace.beginSection("Keyboard.showInternal");
         try {
-            ensureKeyboardView();
+            traced("Keyboard.ensureView", this::ensureKeyboardView);
             // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while
             // the keyboard was off screen is applied on the way back on.
-            refreshMaterialPaletteIfSignatureMoved();
-            setContainerVisible(true);
-            watchClipboard();
-            watchScreenshots();
-            mHost.requestAccessoryGeometrySync();
-            recheckLayout();
+            traced("Keyboard.refreshPalette", this::refreshMaterialPaletteIfSignatureMoved);
+            traced("Keyboard.setContainerVisible", () -> setContainerVisible(true));
+            traced("Keyboard.watch", () -> {
+                watchClipboard();
+                watchScreenshots();
+            });
+            traced("Keyboard.geometrySync", mHost::requestAccessoryGeometrySync);
+            traced("Keyboard.recheckLayout", this::recheckLayout);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** Runs {@code step} inside a trace section, so a trace shows which part of a show is slow. */
+    private static void traced(@NonNull String section, @NonNull Runnable step) {
+        Trace.beginSection(section);
+        try {
+            step.run();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * While the keyboard is put away, measures it for the bounds it will be shown at, so the
+     * show a swipe starts with lays nothing out from scratch. The keyboard stays GONE: it takes
+     * no room, touches, insets or focus, and every other view lays out as without it.
+     */
+    public void prewarm() {
+        if (!mEnabled || mDestroyed || mVisible || mExternalTextInputActive || mHost == null
+            || mHost.getKeyboardContainer() == null) {
+            return;
+        }
+        ensureKeyboardView();
+        mHost.prewarmKeyboardMeasure();
     }
 
     private void ensureKeyboardView() {

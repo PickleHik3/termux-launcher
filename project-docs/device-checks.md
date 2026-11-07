@@ -67,6 +67,18 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Repeat in light theme: the cards must still be findable against the frost. Pinned folder shells
   in the dock and the drawer's search rows use the same wash; look at them too.
 
+- **Page-swipe stalls: landing layout once, frost skip, keyboard pre-measure.** Owed on pong,
+  Perfetto over 5 Home <-> Workspace round trips at 90 Hz: `Wall.settleChrome` under about 15 ms
+  (was ~43); `Place.syncLayout` one call per `Wall.settleChrome` (was two; count its slices
+  under each `Wall.settleChrome`); `Frost.updateTopPane` mostly absent from the landing, running
+  when the pane moves; `Wall.preRollKeyboard` under about 10 ms, with `Keyboard.showInternal`
+  and its children (`Keyboard.ensureView`, `.setContainerVisible`, `.geometrySync`,
+  `.recheckLayout`) showing what is left, and `Keyboard.prewarmMeasure` appearing after a
+  landing. Functional, on the Workspace: keyboard up and down by tap and by swipe; terminal
+  bounds and dock lift as before; Home unchanged; with the keyboard down, taps where it would
+  stand reach the pane below; the status and window bar frost follows keyboard up/down, a pane
+  resize, a split round the camera, a wallpaper change and a scheme change (Light, Dark, Black,
+  Material You).
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
