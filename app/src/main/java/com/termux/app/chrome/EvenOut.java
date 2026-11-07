@@ -77,10 +77,16 @@ public final class EvenOut {
     public static final class Ceiling {
         /** The tone the ground may not pass: a ceiling for pale ink, a floor for dark ink. */
         public final double tone;
+        /**
+         * The most extreme tone the body text (the foreground) may reach on this side: the ink a
+         * side's drawn ground is judged with when the pane band chooses between inks.
+         */
+        public final double inkTone;
         @NonNull public final List<PairLimit> pairs;
 
-        Ceiling(double tone, @NonNull List<PairLimit> pairs) {
+        Ceiling(double tone, double inkTone, @NonNull List<PairLimit> pairs) {
             this.tone = tone;
+            this.inkTone = inkTone;
             this.pairs = pairs;
         }
     }
@@ -108,6 +114,7 @@ public final class EvenOut {
                                   @NonNull TerminalContrastLevel level) {
         boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
         List<PairLimit> limits = new ArrayList<>();
+        double bodyInkTone = pale ? 100d : 0d;
         for (LegibilityPairs.Pair pair : LegibilityPairs.ALL) {
             if (pair.ground != LegibilityPairs.BACKGROUND) continue;
             boolean foreground = pair.ink == LegibilityPairs.FOREGROUND;
@@ -121,6 +128,7 @@ public final class EvenOut {
                 tone = pale
                     ? Math.min(MaterialTerminalColorScheme.TEXT_TONE_MAX, slotTone + level.glassToneReach())
                     : Math.max(MaterialTerminalColorScheme.TEXT_TONE_MIN, slotTone - level.glassToneReach());
+                bodyInkTone = tone;
             } else if (pair.ink == 8) {
                 floor = level.dimRatio;
                 tone = pale ? level.glassDimToneMax
@@ -144,7 +152,7 @@ public final class EvenOut {
             if (!limit.limiting) continue;
             worst = pale ? Math.min(worst, limit.groundTone) : Math.max(worst, limit.groundTone);
         }
-        return new Ceiling(worst, Collections.unmodifiableList(limits));
+        return new Ceiling(worst, bodyInkTone, Collections.unmodifiableList(limits));
     }
 
     /**
@@ -159,7 +167,7 @@ public final class EvenOut {
         boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
         double inkTone = pale ? 100d : 0d;
         double ground = toneAtRatio(inkTone, target, pale);
-        return new Ceiling(ground, Collections.singletonList(
+        return new Ceiling(ground, inkTone, Collections.singletonList(
             new PairLimit("band text", inkTone, target, ground, true)));
     }
 
@@ -280,6 +288,19 @@ public final class EvenOut {
         double limit = ceiling.tone + BAND_MARGIN;
         if (cLo >= limit) return 0d;
         return Math.max(0d, width - (chain.composited(100d) - limit));
+    }
+
+    /**
+     * How far a drawn ground stands past a side's limit, in tone: over the ceiling for pale ink,
+     * under the floor for dark ink; 0 when the ground is on the ink's side of it. Unlike
+     * {@link #shortfall}, which asks whether the band can be placed, this asks whether it was: it
+     * is measured on the ground as drawn, after the matrix at its strength, the dim and the tint.
+     */
+    public static double overshoot(double groundTone, @NonNull Ceiling ceiling,
+                                   @NonNull ChromeInk.Polarity polarity) {
+        return polarity == ChromeInk.Polarity.PALE_INK
+            ? Math.max(0d, groundTone - ceiling.tone)
+            : Math.max(0d, ceiling.tone - groundTone);
     }
 
     /** The pre-frost tone whose composite is {@code target}, clamped to 0..100. */

@@ -18,6 +18,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Terminal ink holds across cold starts (11-07, #228).** Emulator then pong, even-out on,
+  Clear look, light theme, a blue/cream wallpaper: force-stop and relaunch 4 times; the pane's
+  text ink, the even-out band and the dock body come out the same every time, and the chosen
+  ink reads (no SHORTFALL in the pane's ink report). Repeat once with dark, black and Material
+  You, and once at terminal Opacity 10%.
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
