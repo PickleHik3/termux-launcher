@@ -825,9 +825,43 @@ public class TaiModelCentreFragment extends Fragment
      */
     @NonNull
     static String centreName(@NonNull String modelId, @Nullable String displayName, @Nullable String path, boolean speech) {
-        if (!speech) return displayName == null || displayName.isEmpty() ? modelId : displayName;
+        if (!speech) return readableName(modelId, displayName);
         String plain = TaiSpeechModels.plainName(modelId, displayName, path);
         return TaiSpeechActions.isWhisper(modelId) ? "Whisper " + plain : plain;
+    }
+
+    /**
+     * A chat model's name: its display name, or, when that is empty or just the id (an imported
+     * model is named after its id), the id read as words: split on - and _, known acronyms
+     * restored, a trailing backend word in brackets ("mobilemoe-s-sft-mnn" is "MobileMoE S SFT (MNN)").
+     * Other words are title-cased; nothing is hidden or merged.
+     */
+    @NonNull
+    static String readableName(@NonNull String modelId, @Nullable String displayName) {
+        String name = displayName == null ? "" : displayName.trim();
+        if (!name.isEmpty() && !name.equalsIgnoreCase(modelId)) return name;
+        String[] words = modelId.trim().split("[-_\\s]+");
+        StringBuilder out = new StringBuilder();
+        String backend = null;
+        for (int i = 0; i < words.length; i++) {
+            String word = words[i];
+            if (word.isEmpty()) continue;
+            String lower = word.toLowerCase(java.util.Locale.ROOT);
+            if (i == words.length - 1 && i > 0 && (lower.equals("mnn") || lower.equals("gguf") || lower.equals("litert"))) {
+                backend = lower.equals("litert") ? "LiteRT" : lower.toUpperCase(java.util.Locale.ROOT);
+                continue;
+            }
+            if (out.length() > 0) out.append(' ');
+            switch (lower) {
+                case "mobilemoe": out.append("MobileMoE"); break;
+                case "sft": case "llm": case "moe": case "it": case "lm": out.append(lower.toUpperCase(java.util.Locale.ROOT)); break;
+                default:
+                    out.append(word.length() == 1 ? word.toUpperCase(java.util.Locale.ROOT)
+                        : Character.toUpperCase(word.charAt(0)) + word.substring(1));
+            }
+        }
+        if (backend != null) out.append(out.length() > 0 ? " (" + backend + ")" : backend);
+        return out.length() == 0 ? modelId : out.toString();
     }
 
     /** The row's backend pill text ("LiteRT", "MNN"), or "" for a backend this build does not name. */
