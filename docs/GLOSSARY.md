@@ -522,6 +522,22 @@ unless chosen, is labelled as a battery cost, and stops drawing under **Lazy mod
 pane is not visible, and after about ten seconds without input, resuming on the next touch.
 _Avoid_: animated background, live wallpaper (removed), animation
 
+**Studio**:
+The wallpaper maker: the user builds a live AGSL wallpaper by tapping words in a sentence, shuffling
+the words they haven't locked, and setting the result. It replaces the trial Live scenes picker.
+See `project-docs/active/studio-2026-11-07.md`.
+_Avoid_: Live scenes (the trial picker it replaces), wallpaper generator, AI wallpaper
+
+**Recipe**:
+What a **Studio** wallpaper is stored as: a **Family**, one word per slot and a seed. A few bytes;
+the sentence and the shader uniforms are both derived from it.
+_Avoid_: preset, prompt, config
+
+**Family**:
+One hand-written **Studio** shader with its own structure and kind of motion (Bloom, Pebbles, Silk,
+Caustics, Horizon, Cosmos). Its words are the shared slots plus one or two of its own.
+_Avoid_: scene (the trial term), theme, style
+
 **Base**:
 The everywhere-and-all-glass **Cell** of a look property (`look.<property>`): the value every
 page and every element shows until a more specific cell holds one. The Appearance card writes it
