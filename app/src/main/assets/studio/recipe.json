@@ -86,7 +86,7 @@
       "words": [
         { "id": "centre", "label": "in the centre", "uniforms": { "uCenter": [0.0, 0.08], "uScale": 0.62, "uMirror": 0, "uScatter": 0 } },
         { "id": "low", "label": "low", "uniforms": { "uCenter": [0.0, -0.72], "uScale": 0.85, "uMirror": 0, "uScatter": 0 } },
-        { "id": "corner", "label": "in a corner", "uniforms": { "uCenter": [0.42, -0.86], "uScale": 1.0, "uMirror": 1, "uScatter": 0 } },
+        { "id": "corner", "label": "in a corner", "uniforms": { "uCenter": [0.30, -0.70], "uScale": 0.9, "uMirror": 1, "uScatter": 0 } },
         { "id": "scattered", "label": "scattered", "uniforms": { "uCenter": [0.0, 0.0], "uScale": 0.19, "uMirror": 0, "uScatter": 1 } }
       ]
     },

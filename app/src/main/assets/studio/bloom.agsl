@@ -174,8 +174,7 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
 
             float W = min(.43 * sector, .55);
             float wf = pow(max(sin(PI * pow(uc, .66)), 0.0), .80) * W * 1.05;
-            float wa = W * .40 * pow(1.0 - uc * .92, 1.3) * smoothstep(0.0, .06, uc)
-                + .040 * exp(-pow((uc - .91) * 17.0, 2.0));
+            float wa = W * .40 * pow(max(1.0 - uc, 0.0), .55) * smoothstep(0.0, .06, uc);
             float ws = W * 1.15 * (1.0 - uc) * smoothstep(0.0, .14, uc);
             float wsh = W * 1.2 * pow(max(sin(PI * uc), 0.0), .38);
             float w = dot(fw, float4(wf, wa, ws, wsh)) * len * (.86 + .22 * open);
@@ -189,8 +188,10 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
             float ends = smoothstep(-.02, .02, u) * (1.0 - smoothstep(.97, 1.0, u));
             float fill = (1.0 - smoothstep(-soft, soft, edge)) * ends;
 
+            // Distance outside the whole petal, tip and base included, for shadows and halos.
+            float outside = max(max(edge, (u - 1.0) * len), -u * len);
             // Contact shadow on whatever lies beneath this petal.
-            float sh = exp(-max(edge, 0.0) / (.07 * len + soft)) * (1.0 - fill) * ends;
+            float sh = exp(-max(outside, 0.0) / (.045 * len + soft)) * (1.0 - fill);
             col *= 1.0 - shadowK * sh;
 
             // A cupped petal: the surface rises across its width and tilts along its length.
@@ -251,10 +252,11 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
                 col = mix(col, mix(uRim, uInner * .35, light), stroke * .55);
             } else if (mat < 3.5) {
                 // Glow: emissive outlines, a filament vein and a halo, adding where petals cross.
-                float outline = exp(-abs(edge) / (.010 * len + px * 1.5));
-                float halo = exp(-max(edge, 0.0) / (.10 * len)) * (1.0 - fill);
-                float body = fill * (.06 + .20 * uc * uc);
-                float g = (outline * .85 + vein * .55 * fill + body + halo * .22) * ends * energy;
+                float outline = exp(-abs(edge) / (.020 * len + px * 1.5)) * ends;
+                float halo = exp(-max(outside, 0.0) / (.16 * len)) * (1.0 - fill);
+                float body = fill * (.14 + .45 * uc * uc) * (.8 + .4 * max(diff, 0.0));
+                float g = (outline * .60 + vein * .50 * fill + body + halo * .28) * energy
+                    * clamp(9.0 / count, .45, 1.0) * 1.2 / (.8 + .4 * layers);
                 float3 gc = mix(pig, uRim, outline * .45);
                 col = mix(col + gc * g * .85, mix(col, gc * .9, clamp(g, 0.0, 1.0) * .8), light);
             } else {
@@ -335,7 +337,8 @@ half4 main(float2 fragCoord) {
     // Finish: a filmic shoulder in the dark, a soft clip in the light, then mood.
     col = max(col, float3(0.0)) * uExposure;
     float3 darkTone = 1.0 - exp(-col * 1.55);
-    float3 lightTone = col / (1.0 + max(col - .80, float3(0.0)) * 1.2);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
     col = mix(lightTone, darkTone, uDark);
     float lum = dot(col, float3(.2126, .7152, .0722));
     col = mix(float3(lum), col, uSaturation);

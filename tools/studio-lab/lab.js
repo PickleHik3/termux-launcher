@@ -165,6 +165,7 @@ function renderStill(words, seed, dark, time, w, h) {
 
 let varTimer = 0;
 function renderVariations() {
+  if (params.has('single')) return;   // ?single: one frame, no tiles (headless shots)
   clearTimeout(varTimer);
   varTimer = setTimeout(() => {
     const box = $('vars');
