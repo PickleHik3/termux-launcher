@@ -284,10 +284,6 @@ public final class TerminalActionDispatcher {
      */
     public void onSessionFinished(@NonNull TerminalSession session) {
         TerminalHost host = currentHost();
-        // The snow plays first, on the pane as it is; a pane kept after a kill shows its
-        // "[Process completed]" line once the snow ends.
-        TerminalPaneController panes = host == null ? null : host.paneController();
-        if (panes != null) panes.screenEvent(session, PaneScreenEvent.Kind.DEATH_SNOW);
         if (!KeyboardHoldTracker.getInstance().releaseOnSessionFinished(session.mHandle)) return;
         if (host != null) host.showInAppKeyboard(true);
     }

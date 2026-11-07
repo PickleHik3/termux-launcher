@@ -2740,6 +2740,16 @@ public class TerminalPaneController {
     }
 
     /**
+     * Runs {@code r} after {@code delayMs} on the pane host's thread: for a pane held on screen
+     * while its closing event plays. Returns false, posting nothing, when the host is not in a
+     * window, so the caller runs it at once instead of leaving it queued until a re-attach.
+     */
+    public boolean postOnHost(@NonNull Runnable r, long delayMs) {
+        if (!mHostView.isAttachedToWindow()) return false;
+        return mHostView.postDelayed(r, delayMs);
+    }
+
+    /**
      * Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}).
      *
      * @return whether the event started
