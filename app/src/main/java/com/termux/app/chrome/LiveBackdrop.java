@@ -820,17 +820,81 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         ViewGroup wall = mWall;
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
         boolean scene = LiveSceneFrame.current() != null;
+        mDiagWhy = null;
+        mDiagFading = null;
         if (wall != null && (moving || scene)) {
             want = BackdropLayers.mode(splittable(wall, surface, margin, reach), moving, scene);
         }
+        String splitWhy = mDiagWhy;
         if (want != BackdropLayers.Mode.FROZEN) picture.mSwipeCaptures = 0;
         if (want == BackdropLayers.Mode.LIVE) {
             if (picture.mPageMode != BackdropLayers.Mode.LIVE || picture.capturing()) {
                 picture.dropPageLayer();
             }
+            diagMode(picture, surface, moving, want, want, splitWhy);
             return want;
         }
-        return preparePageLayer(picture, want) ? want : BackdropLayers.Mode.LIVE;
+        mDiagWhy = null;
+        BackdropLayers.Mode got = preparePageLayer(picture, want) ? want : BackdropLayers.Mode.LIVE;
+        diagMode(picture, surface, moving, want, got, mDiagWhy);
+        return got;
+    }
+
+    // ---- DIAG(TLGlassLayers): temporary, reverted before merge ------------------------------
+
+    static final String DIAG_TAG = "TLGlassLayers";
+    @Nullable private String mDiagWhy;
+    @Nullable private String mDiagFading;
+
+    private boolean diag(@NonNull String why) {
+        mDiagWhy = why;
+        return false;
+    }
+
+    @NonNull
+    private String name(@Nullable View view) {
+        if (view == null) return "null";
+        String id = "";
+        if (view.getId() != View.NO_ID) {
+            try {
+                id = "#" + view.getResources().getResourceEntryName(view.getId());
+            } catch (RuntimeException e) {
+                id = "#" + view.getId();
+            }
+        }
+        return view.getClass().getSimpleName() + id;
+    }
+
+    private static String frames() {
+        StackTraceElement[] trace = Thread.currentThread().getStackTrace();
+        StringBuilder out = new StringBuilder();
+        for (int i = 4; i < Math.min(trace.length, 10); i++) {
+            out.append(" <").append(trace[i].getMethodName()).append(':')
+                .append(trace[i].getLineNumber());
+        }
+        return out.toString();
+    }
+
+    /** Off the wall while it moves, every frame that is not FROZEN, and why. */
+    private void diagMode(@NonNull LivePicture picture, @NonNull View surface, boolean moving,
+                          @NonNull BackdropLayers.Mode want, @NonNull BackdropLayers.Mode got,
+                          @Nullable String why) {
+        if (!moving || mWallPathIndex >= 0 || got == BackdropLayers.Mode.FROZEN) return;
+        android.util.Log.i(DIAG_TAG, "mode t=" + android.os.SystemClock.uptimeMillis()
+            + " surface=" + name(surface) + " rank=" + picture.mRank + " want=" + want
+            + " got=" + got + " why=" + why + " captures=" + picture.mSwipeCaptures
+            + " capturing=" + picture.capturing() + " pages=" + mPages.size()
+            + " poses=" + mPoseCount + "/" + picture.mRecordedPoseCount + frames());
+    }
+
+    /** A view beneath the wall that sent a surface on a page back to the one picture. */
+    private void diagFixed(@NonNull View surface, @NonNull View below) {
+        below.getGlobalVisibleRect(mTmpRect);
+        android.util.Log.i(DIAG_TAG, "fixed t=" + android.os.SystemClock.uptimeMillis()
+            + " surface=" + name(surface) + " below=" + name(below) + " vis="
+            + below.getVisibility() + " alpha=" + below.getAlpha() + " rect=" + mTmpRect
+            + " band=" + mNeededRoot.top + ".." + mNeededRoot.bottom
+            + " bg=" + (below.getBackground() != null) + frames());
     }
 
     /**
@@ -847,9 +911,9 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         mPages.clear();
         mPoseCount = 0;
         mUnion.setEmpty();
-        if (!wall.isAttachedToWindow() || !wallMatrix(wall)) return false;
+        if (!wall.isAttachedToWindow() || !wallMatrix(wall)) return diag("wall detached or outside the root");
         mWallPathIndex = mPath.indexOf(wall);
-        if (mWallPathIndex == 0) return false;
+        if (mWallPathIndex == 0) return diag("wall is the surface");
         // Where the surface stands in the wall's children's coordinates.
         mPageMatrix.set(mWallInverse);
         mPageMatrix.preConcat(mMatrix);
@@ -858,11 +922,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // with the surface, so the layer moves with it too.
             int at = levelStart(mWallPathIndex);
             for (View page = mBeneath.get(at); page != null; page = mBeneath.get(++at)) {
-                if (!addPage(page)) return false;
+                if (!addPage(page)) return diag("a lower page fades");
             }
             boolean content = !mPages.isEmpty();
             for (int i = at + 1; !content && i < mBeneath.size(); i++) content = mBeneath.get(i) != null;
-            if (!content) return false;
+            if (!content) return diag("nothing beneath on the page");
             addPose(mPageMatrix, 0f, 0f, 1f);
             unionBounds(mPath.get(mWallPathIndex - 1));
         } else {
@@ -875,12 +939,12 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 mChain.add(top);
                 parent = top.getParent();
             }
-            if (!(parent instanceof ViewGroup) || mBeneath.indexOf(top) < 0) return false;
+            if (!(parent instanceof ViewGroup) || mBeneath.indexOf(top) < 0) return diag("wall holder not beneath");
             java.util.Collections.reverse(mChain);
             int last = mChain.size() - 1;
             for (int d = 0; d <= last; d++) {
                 View view = mChain.get(d);
-                if (view.getAlpha() != 1f || !(view instanceof Container)) return false;
+                if (view.getAlpha() != 1f || !(view instanceof Container)) return diag("chain view " + name(view) + " alpha=" + view.getAlpha() + " container=" + (view instanceof Container));
                 if (d == last) break;
                 int from = mExpand.size();
                 collectLevel((ViewGroup) view, null, mExpand);
@@ -889,7 +953,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 for (int i = from; i < mExpand.size() && index < 0; i++) {
                     if (mExpand.get(i) == next) index = i;
                 }
-                if (index < 0) return false;
+                if (index < 0) return diag("chain view not drawn: " + name(mChain.get(d + 1)));
                 mExpand.set(index, null);
                 mExpand.add(null);
             }
@@ -898,7 +962,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             boolean opaque = true;
             for (int i = from; i < mExpand.size() && opaque; i++) opaque = addPage(mExpand.get(i));
             while (mExpand.size() > from) mExpand.remove(mExpand.size() - 1);
-            if (!opaque || mPages.isEmpty()) return false;
+            if (!opaque || mPages.isEmpty()) return diag("pages: opaque=" + opaque + " count=" + mPages.size() + " fading=" + mDiagFading);
         }
         // The recording reaches reach px above the surface (a float's titlebar draws it), so
         // the page layer has to cover that strip too.
@@ -918,16 +982,16 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (mWallPathIndex < 0) {
             // A swipe carries the pages up to a width either way under a surface that stays.
             padX = BackdropLayers.pad(base, neededWidth, neededHeight, true, wall.getWidth());
-            if (padX < 0) return false;
+            if (padX < 0) return diag("budget: padX<0");
             padY = BackdropLayers.pad(base, neededWidth + 2 * padX, neededHeight, false,
                 neededHeight);
         } else if (!BackdropLayers.fits(base, neededWidth, neededHeight)) {
-            return false;
+            return diag("budget: page layer does not fit");
         }
         mReach.set(mNeeded);
         mReach.inset(-padX, -padY);
         mBounds.set(mReach);
-        if (!mBounds.intersect(mUnion)) return false;
+        if (!mBounds.intersect(mUnion)) return diag("reach misses the pages");
         mBounds.roundOut(mPageRect);
         return !mPageRect.isEmpty();
     }
@@ -936,7 +1000,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     private boolean addPage(@NonNull View page) {
         float alpha = page.getAlpha();
         if (alpha <= 0f) return true;
-        if (alpha < 1f) return false;
+        if (alpha < 1f) { mDiagFading = name(page) + "@" + alpha; return false; }
         mPages.add(page);
         mPageMatrix.setTranslate(page.getLeft(), page.getTop());
         Matrix own = page.getMatrix();
@@ -1024,6 +1088,10 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 picture.aimPage(aim);
                 return true;
             }
+            android.util.Log.i(DIAG_TAG, "capture dropped t=" + android.os.SystemClock.uptimeMillis()
+                + " surface=" + name(picture.mSurface) + " want=" + want + " samePages="
+                + samePages + " (" + picture.mRecordedPages.size() + "->" + mPages.size() + ")"
+                + " shift=" + shift + " covered=" + covered);
             picture.dropPageLayer();
             shift = Float.NaN;
         }
@@ -1036,7 +1104,20 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 && picture.mSwipeCaptures >= MAX_CAPTURES_PER_SWIPE) {
             // The pages keep moving apart this swipe: one layer until it settles.
             if (picture.mPageMode != BackdropLayers.Mode.LIVE) picture.dropPageLayer();
-            return false;
+            mDiagWhy = "captures spent this swipe: " + picture.mSwipeCaptures; return false;
+        }
+        mDiagWhy = "capture #" + (picture.mSwipeCaptures + 1) + " starts: hadLayer="
+            + picture.hasPageLayer() + " recordedMode=" + picture.mPageMode + " samePages="
+            + samePages + " (" + picture.mRecordedPages.size() + "->" + mPages.size() + ")"
+            + " shift=" + shift + " covered=" + covered;
+        if (!samePages) {
+            StringBuilder pages = new StringBuilder(" now=");
+            for (int i = 0; i < mPages.size(); i++) pages.append(name(mPages.get(i))).append(',');
+            pages.append(" was=");
+            for (int i = 0; i < picture.mRecordedPages.size(); i++) {
+                pages.append(name(picture.mRecordedPages.get(i))).append(',');
+            }
+            mDiagWhy += pages;
         }
         picture.dropPageLayer();
         Trace.beginSection("LiveBackdrop.pageLayer");
@@ -1309,6 +1390,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                             break;
                         case FIXED:
                             fixed = true;
+                            diagFixed(surface, below);
                             break;
                         default:
                             break;
@@ -1358,6 +1440,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 // The one picture, recorded live: a trace shows how often a swipe falls back.
                 Trace.beginSection("Glass.layers.fallback");
                 Trace.endSection();
+                android.util.Log.i(DIAG_TAG, "fallback t=" + android.os.SystemClock.uptimeMillis()
+                    + " surface=" + name(surface) + " rank=" + picture.mRank + " place=" + place
+                    + " mode=" + mode + " plan=" + plan + " groundReady=" + groundReady
+                    + " sceneLive=" + (scene != null) + " fixed=" + fixed + " pagesBeneath="
+                    + pagesBeneath + " pagesMove=" + pagesMove + " pagesReady=" + pagesReady);
             }
             return plan;
         } finally {
