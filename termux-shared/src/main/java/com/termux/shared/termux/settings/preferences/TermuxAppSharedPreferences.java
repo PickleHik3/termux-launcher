@@ -805,6 +805,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_GLASS_SEE_THROUGH}: "all" or "one". */
+    public String getGlassSeeThrough() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_GLASS_SEE_THROUGH, TERMUX_APP.DEFAULT_VALUE_GLASS_SEE_THROUGH, true);
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+            ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL;
+    }
+
+    /** Whether See through is One layer. */
+    public boolean isGlassSeeThroughOne() {
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(getGlassSeeThrough());
+    }
+
+    public void setGlassSeeThrough(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_GLASS_SEE_THROUGH,
+            TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+                ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL,
+            false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */
     public int getFancierGlassBendDp() {
         return lookGrid().value(LookGrid.Property.DEPTH, null, LookGrid.NO_PAGE);

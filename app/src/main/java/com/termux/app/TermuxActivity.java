@@ -4388,6 +4388,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The picture takes the stored frames' Vibrancy and frame tint, so a hand-off never shows.
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
         recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
+        recorder.setSeeThrough(mPreferences != null && mPreferences.isGlassSeeThroughOne()
+            ? com.termux.app.chrome.BackdropLayers.SeeThrough.ONE
+            : com.termux.app.chrome.BackdropLayers.SeeThrough.ALL);
         return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
@@ -4404,6 +4407,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (wall instanceof com.termux.app.chrome.LiveBackdrop.Wall) {
                 mLiveBackdrop.setWall((com.termux.app.chrome.LiveBackdrop.Wall) wall);
             }
+            // While the wall moves, live glass samples the stored frame as its ground layer.
+            mLiveBackdrop.setGroundSource(new com.termux.app.chrome.LiveBackdrop.GroundSource() {
+                @Nullable @Override
+                public Bitmap storedFrame(float blurRadiusPx, @NonNull Rect outScreenRect) {
+                    com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+                    Bitmap frame = cache.peek(Math.round(
+                        blurRadiusPx / getResources().getDisplayMetrics().density));
+                    if (frame != null) cache.copyFrameRect(outScreenRect);
+                    return frame;
+                }
+
+                @Override
+                public float parallaxOffsetPx() {
+                    return mWallpaperParallax.offsetPx();
+                }
+            });
         }
         return mLiveBackdrop;
     }

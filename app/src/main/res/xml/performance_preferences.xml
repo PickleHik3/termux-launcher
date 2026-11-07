@@ -41,6 +41,14 @@
             app:title="@string/settings_performance_live_blur_title"
             app:summary="@string/settings_performance_live_blur_summary"
             android:defaultValue="false" />
+        <ListPreference
+            app:key="glass_see_through"
+            app:icon="@drawable/ic_ms_live_blur"
+            app:title="@string/settings_performance_see_through_title"
+            app:summary="@string/settings_performance_see_through_summary"
+            app:entries="@array/settings_performance_see_through_entries"
+            app:entryValues="@array/settings_performance_see_through_values"
+            app:defaultValue="all" />
         <SwitchPreferenceCompat
             app:key="live_windows_while_swiping"
             app:icon="@drawable/ic_ms_desktop_windows"

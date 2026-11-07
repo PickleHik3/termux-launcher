@@ -59,7 +59,7 @@ dock style or per surface; a dock style changes only `DockSurfaceSpec` numbers.
 On pong a Home ↔ Workspace swipe under Look Clear cost about 4 ms more RenderThread time a frame
 than under Look Solid: every frame re-blurred both pages' whole content under each live surface.
 While the wall moves (`LiveBackdrop.Wall`, `PaneWallLayout.isMoving`), a surface whose beneath
-holds the wall draws two layers (`WallSwipeGlassPolicy`): the ground and the chrome stay in the
+holds the wall draws two layers (`BackdropLayers`, then `WallSwipeGlassPolicy`): the ground and the chrome stay in the
 recording and are drawn live, so the parallax, the scene, the bars, the dock and the keyboard move
 as they do; in the wall's place is a quarter-scale picture of the pages, rendered once offscreen
 as the swipe starts (`PageLayerCapture`) and only moved by the pages' travel. What animates in
@@ -69,6 +69,51 @@ layer is the pages themselves on a cached layer, so a scene frame no longer re-b
 page layer counts in the picture's own share of the budget (§4). A float's picture that reaches
 above its slab for the titlebar has its page layer cover that strip too, so the titlebar's aimed
 drawable shows the same sliding pages as the body.
+
+### 2b. Backdrop layers (amendment, 2026-11-07)
+
+Spec: [`project-docs/active/glass-swipe-frozen-backdrops-2026-11-07.md`](../../project-docs/active/glass-swipe-frozen-backdrops-2026-11-07.md).
+
+§2a still re-recorded every Live surface that rides a page (a widget, a float on Home) on every
+swipe frame: its stale test compares the surface's place against the window, which a swipe moves
+every frame, and the re-record re-blurred everything beneath it and damaged its page's hardware
+layer. While the wall moves, the one recording is replaced by **backdrop layers**
+(`BackdropLayers`, `LiveBackdrop.layersPlan`), composited in the glass's one draw
+(`LivePicture.showLayers`), and §2a's page layer becomes the pages layer:
+
+- **Ground**: the stored pre-blurred frame the Wallpaper kind samples
+  (`WallpaperBlurCache.peek`), drawn where the surface stands and at the parallax offset, never
+  re-recorded or re-blurred for a move. Over a live scene it is the scene's frame, blurred as the
+  one picture blurs it over the band the surface sweeps, recorded again only for a new scene frame.
+- **Pages**: under the dock or a float on the pinned layer, §2a's capture, now taken blurred
+  (with the stored frame's colours and the frost) and moved by the pages' shift.
+- **Local**: what is beneath the surface on its own page or float, or the chrome under the dock,
+  recorded once into the record node; the blur node blurs only it.
+
+A move is a translation property on an aim node outside the blurred layers; a tilted or sunk page
+re-records a two-operation aim node around its matrix. The glass's own display list does not
+change and no layer is blurred again for a move. A page that is a hardware layer (tilt, sink,
+posed transitions) still re-renders the glass's rect of that layer each frame, because the glass's
+pixels change there; nothing else of the page does.
+
+The first frame of a swipe (nothing displaced yet) and the landed frame are the one resting
+picture, recorded as in §2. A layer that cannot be held falls back to the §2 recording for those
+frames: pages that turn, fade or overlap a surface on a page (plank tilt, sink, Depth, Carousel,
+Stack, Fade under the dock), a capture still rendering, no resident stored frame, or chrome
+beneath the wall in the band a page surface sweeps. Layers blurred apart differ from their
+blurred composite at soft edges of translucent content; the spec accepts that where pong does not
+show it side by side.
+
+**See through** (Battery & performance): All layers, the default, or One layer. Under One layer a
+Live surface with another Live glass above it keeps its content but draws its own glass as the
+Wallpaper kind (the stored frame at its offset, through the ground layer alone) and records
+nothing; the glass above records it like anything beneath. So a front float shows the back float,
+frosted over the wallpaper, but not the widgets or pages through both, at rest and swiping
+(`BackdropLayers.drawsStored`, `LiveBackdrop.markGlassAbove`).
+
+Memory: the ground shares the stored frame; the pages capture is the size §2a's was; the local
+layer is the blur node's. A scene ground adds one quarter-scale layer of the band it covers,
+counted in the picture's share (`LiveBackdrop.MAX_LAYER_BYTES`).
 
 ## 4. Live is opt-in and budgeted
 

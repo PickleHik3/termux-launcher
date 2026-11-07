@@ -16,7 +16,7 @@ import androidx.annotation.RequiresApi;
 
 /**
  * One picture of a live surface's page layer, rendered offscreen on the GPU as the window draws
- * it ({@link LiveBackdrop}, {@link WallSwipeGlassPolicy.Mode#FROZEN}), the way
+ * it ({@link LiveBackdrop}, {@link BackdropLayers.Mode#FROZEN}), the way
  * {@code StackPicture} pictures the dock's stack. Started in a pre-draw and collected by a later
  * one: the render is not waited for, and until it lands the surface keeps its one-layer picture.
  * Once collected only the bitmap is held (its buffer, a quarter-scale layer's bytes); the renderer

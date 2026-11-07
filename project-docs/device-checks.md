@@ -18,6 +18,32 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Backdrop layers, no pop (11-07, perf/glass-slide-on-swipe).** Look Custom (Opacity 12, Blur 20,
+  Edge 40, Depth 90), Live blur on, glass widgets on Home, a float over them. Screenshots at rest,
+  on the first moving frame, mid-swipe and after landing, Home ↔ Workspace both ways. Passes: the
+  first and the landed frame match the resting screenshot in every glass; mid-swipe glass shows
+  the same wallpaper, widgets and pages, moving. Ship gate. How: pong with the developer's
+  go-ahead, `screenrecord` read frame by frame.
+- **Backdrop layers, soft edges and glass on glass (11-07, same branch).** Side by side, resting
+  against mid-swipe: widget edges under the float's glass and text edges under the dock's glass
+  look equally soft; two stacked floats over Home show the float behind and Home through both
+  while swiping. Passes: no difference visible at arm's length. How: pong, screenshots.
+- **Backdrop layers, scene and transitions (11-07, same branch).** A live scene on, then each page
+  transition (Slide, Slide with plank tilt, Depth, Fade, Carousel, Stack) and the sink. Passes:
+  the scene keeps moving under the glass at its glass rate during the swipe; no blank or dark
+  glass in any style; keyboard up and down, Docked and Floating dock. How: pong, `screenrecord`;
+  a perfetto trace counts `Glass.layers.fallback` per style.
+- **See through (11-07, same branch).** Battery & performance → See through: One layer, then All
+  layers. Passes: with One layer the front of two stacked floats shows the back float (titlebar
+  and text) frosted over the wallpaper only, with no widgets or pages through both, at rest and
+  swiping; a single float over widgets still shows the widgets; All layers brings the widgets
+  back through both. How: emulator or pong.
+- **Backdrop layers, the cost (11-07, same branch).** In one session: Custom look on the base
+  5169acb0f and on this branch, then Solid, 10 Home ↔ Workspace round trips each. Passes:
+  RenderThread "flush layers" per swipe frame near Solid's 1.4 ms (was 4.1); swipe p90 within a
+  few ms of Solid's; `Glass.layers.local` about once per swipe per surface, `Glass.layers.fallback`
+  rare. How: pong with the developer's go-ahead, perfetto.
+
 - **Live glass during a page swipe, the look (11-07, perf/glass-slide-on-swipe).** Look Clear,
   Live blur on, a float over Home's glass widgets, the dock showing pages under it. Swipe Home ↔
   Workspace slowly and fast, scene off and on. Passes: the float's glass still shows the widgets'
