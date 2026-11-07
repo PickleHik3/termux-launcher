@@ -996,6 +996,20 @@ public final class SeamCrossing {
 
     // ---- What the chrome reads of a crossing between frames ----
 
+    /** PEEKTRAVEL-DBG: what the crossing read as it began, for the temporary log. */
+    @NonNull
+    public String peekTravelDebug() {
+        Run r = mRun;
+        return "committed=" + r.committed + " other=" + r.other + " plan=" + r.plan
+            + " dressDiffers=" + r.dressDiffers + " shapeDiffers=" + r.shapeDiffers
+            + " lookBlends=" + r.lookBlends + " wholeStack=" + r.wholeStack
+            + " pictured=" + r.pictured + " rides=" + r.rides
+            + " kbCommitted=" + r.committedKeyboard + " kbOther=" + r.otherKeyboard
+            + " designs=" + r.committedDesign + "/" + r.otherDesign
+            + " dockShown=" + r.dockShown + " stackDressPage=" + r.stackDressPage
+            + " landed=" + r.landed;
+    }
+
     /** The other half's page the crossing was begun for; null while none runs. */
     @Nullable
     public PaneWallPage other() {

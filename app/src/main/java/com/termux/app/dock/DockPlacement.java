@@ -7,6 +7,8 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.wall.PaneWallPage;
+import com.termux.app.wall.PaneWallPolicy;
 
 import java.util.List;
 
@@ -58,6 +60,23 @@ public final class DockPlacement {
         if (!peekWorn || !dockShown) return false;
         if ((keyboardShown && !homePage) || imeLifted || searchFieldShown) return false;
         return peekRowStands(layout, sheetStandsDownOnFrame);
+    }
+
+    /**
+     * {@link #peekCardStands} for the dock's rows as they stand on {@code rowsPage}: the page whose
+     * rows the stack stands, which is the committed page at rest and, mid-crossing, the other
+     * half's from the frame the stack stands its rows (SeamDress#stackPage). Home's keyboard does
+     * not refuse the card, so it is read off this page, never off the committed one: the frame a
+     * crossing stands Home's rows (out of sight, at a dip's swap or a pictured dip's first frame)
+     * wears the answer the settle on Home commits, and the dock does not change look as it lands.
+     * The one answer the travel and the settle both read, and the one Stack layout places by.
+     */
+    public static boolean peekCardStandsOn(@NonNull PaneWallPage rowsPage, boolean peekWorn,
+                                           boolean dockShown, @NonNull PlaceLayout layout,
+                                           boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                           boolean imeLifted, boolean searchFieldShown) {
+        return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
+            imeLifted, searchFieldShown, PaneWallPolicy.isHomePlace(rowsPage));
     }
 
     /**
