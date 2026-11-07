@@ -187,6 +187,70 @@ public class EditorScreenLookTest {
         assertEquals("the Workspace follows Base again", FROST, model(editor).value(Row.LOOK));
     }
 
+    private int homeOpacity() {
+        return preferences.lookGrid().value(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME);
+    }
+
+    private void moveHomeOpacity(SurfaceEditorController editor, int value) {
+        model(editor).onValue(Row.OPACITY, value, false);
+        model(editor).onReleased(Row.OPACITY);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+    }
+
+    @Test
+    public void aCardCustomComesBackAfterALookInTheSameVisit() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+        tapLook(editor, SOLID);
+        assertEquals(SOLID, model(editor).value(Row.LOOK));
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, homeOpacity());
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
+    public void aCardCustomComesBackAfterALookWasKeptWithDone() {
+        SurfaceEditorController first = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(first, 33);
+        tapLook(first, SOLID);
+        first.done();
+
+        SurfaceEditorController second = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        assertEquals(SOLID, model(second).value(Row.LOOK));
+        tapLook(second, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, homeOpacity());
+    }
+
+    @Test
+    public void aCardCustomIsKeptPerCard() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        tapLook(editor, SOLID);
+        editor.done();
+
+        // The Workspace card never had a Custom: its chip writes nothing.
+        SurfaceEditorController workspace = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        tapLook(workspace, SOLID);
+        tapLook(workspace, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33 == preferences.lookGrid().value(LookGrid.Property.OPACITY, null,
+            LookGrid.Kind.TERMINAL), false);
+    }
+
+    @Test
+    public void undoPutsACardsSavedCustomBackAsItWasAtOpen() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        assertNull(CardCustoms.raw(preferences.getSharedPreferences()));
+        tapLook(editor, SOLID);
+        assertNotNull(CardCustoms.raw(preferences.getSharedPreferences()));
+        editor.undo();
+        assertNull("the slot is as it was at open",
+            CardCustoms.raw(preferences.getSharedPreferences()));
+        assertEquals(FROST, model(editor).value(Row.LOOK));
+    }
+
     @Test
     public void aLookOnHomeLandsOnHomePagesAlone() {
         SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);

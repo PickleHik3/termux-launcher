@@ -63,6 +63,7 @@ import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -920,6 +921,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mEntryCustom = prefs.getSurfaceCustomPreset();
+        mEntryCardCustoms = CardCustoms.raw(prefs.getSharedPreferences());
         mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
         mSettingsNow = mEntrySettings.signature();
         mEntryMinimal = mHost.isMinimalMode();
@@ -3826,6 +3828,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return hue;
     }
 
+    /** The card whose chips are up, as {@link CardCustoms} names it. */
+    @NonNull
+    private String cardKey() {
+        return (mChips.element == null ? "all" : mChips.element.name()) + ":"
+            + mChips.appliesTo.name();
+    }
+
+    @Nullable private String mEntryCardCustoms;
+
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
 
@@ -3885,21 +3896,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
         if (row == Row.LOOK) {
             int[] look = GlassRows.lookCell(value);
+            String slot = cardKey();
             if (look == null) {
                 mHeldCustomCells.add(mChips);
+                // This card's own Custom comes back; with none saved nothing is written.
+                look = CardCustoms.get(prefs.getSharedPreferences(), slot);
             } else {
                 mHeldCustomCells.remove(mChips);
+                // Leaving a Custom the card wears: its values are the card's saved Custom.
+                int[] worn = {cellValue(grid, LookGrid.Property.FROST),
+                    cellValue(grid, LookGrid.Property.OPACITY),
+                    cellValue(grid, LookGrid.Property.TINT)};
+                if (GlassRows.lookStopFor(worn[0], worn[1], worn[2]) == AppearanceLooks.CUSTOM_STOP)
+                    CardCustoms.put(prefs.getSharedPreferences(), slot, worn);
+            }
+            if (look != null) {
                 // One editor: a page card's Look first clears the element values beneath it on
                 // its kinds (developer, 2026-11-03), then lands in its cells.
                 SharedPreferences store = prefs.getSharedPreferences();
                 SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
-                com.termux.shared.termux.settings.preferences.LookGrid into = batch == null ? grid
+                LookGrid into = batch == null ? grid
                     : SurfacePresets.writingInto(prefs, batch).lookGrid();
                 if (mChips.element == null && mChips.onKind())
                     SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
-                com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties = {com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
+                LookGrid.Property[] properties = {LookGrid.Property.FROST,
+                    LookGrid.Property.OPACITY, LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
-                    for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(properties[i]))
+                    for (LookGrid.Key cell : mChips.cells(properties[i]))
                         into.write(cell, look[i]);
                 if (batch != null)
                     batch.applyToStore();
@@ -5731,6 +5754,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry.restore(prefs);
         if (mEntryCustom != null)
             prefs.setSurfaceCustomPreset(mEntryCustom);
+        CardCustoms.restore(prefs.getSharedPreferences(), mEntryCardCustoms);
         if (mEntrySettings != null) {
             List<String> written = mEntrySettings.restore(settingsStore());
             refreshSettingsSignature();

@@ -559,4 +559,4 @@ longer counted as an error. Owed:
   (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
   "Discard changes": the look is as it was before, and Custom still brings back the same values.
   (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
-  slider. Home, Workspace and element cards' Custom chips are unchanged · pong.
+XX
