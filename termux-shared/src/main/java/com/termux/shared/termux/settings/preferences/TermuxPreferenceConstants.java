@@ -795,6 +795,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IDLE_ANIMATIONS = "idle_animations";
         public static final boolean DEFAULT_VALUE_IDLE_ANIMATIONS = false;
 
+        /**
+         * How often an idle CRT pane plays its ambient tear under Idle animations: "rare" (every
+         * 2 to 5 minutes), "sometimes" (30 to 90 seconds) or "often" (10 to 30 seconds).
+         */
+        public static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
+        public static final String DEFAULT_VALUE_IDLE_TEAR_RATE = "rare";
+
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;

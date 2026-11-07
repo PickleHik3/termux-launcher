@@ -110,6 +110,7 @@
     <string name="settings_terminal_screen_events_summary">Bell tear, power on and off, focus wobble, death static on CRT panes</string>
     <string name="settings_idle_animations_title">Idle animations</string>
     <string name="settings_idle_animations_summary">Ambient glitch and flicker on CRT panes while nothing happens. Uses battery.</string>
+    <string name="settings_idle_tear_rate_title">Idle glitch rate</string>
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>

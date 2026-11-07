@@ -98,6 +98,8 @@ public final class RetroEffectBinder {
     /** The flicker depth written into the uniforms: 0 unless the loop is playing. */
     private float mFlicker;
     @NonNull private final Random mAmbientRandom = new Random();
+    /** The Idle glitch rate, read once each time the loop starts. */
+    @NonNull private PaneAmbient.Rate mAmbientRate = PaneAmbient.Rate.RARE;
     @NonNull private final Runnable mAmbientTick = this::ambientTick;
 
     /**
@@ -229,9 +231,11 @@ public final class RetroEffectBinder {
 
     private void startAmbient() {
         long now = SystemClock.uptimeMillis();
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mView.getContext(), false);
+        mAmbientRate = PaneAmbient.Rate.fromId(prefs == null ? null : prefs.getIdleTearRate());
         mAmbientRunning = true;
         mAmbientOrigin = now;
-        mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+        mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom, mAmbientRate);
         mView.removeCallbacks(mAmbientTick);
         mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);
     }
@@ -270,7 +274,7 @@ public final class RetroEffectBinder {
         // A tear never cuts into an event already playing; it waits for the next tick.
         if (now >= mNextAmbientTear && mEvent.live(now) == null) {
             mEvent.fire(PaneScreenEvent.Kind.AMBIENT_TEAR, now, mAmbientRandom.nextFloat());
-            mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+            mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom, mAmbientRate);
         }
         refresh();
         mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);

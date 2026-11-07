@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -87,5 +88,29 @@ public class PaneAmbientTest {
         float f = PaneAmbient.FLICKER_MAX;
         assertEquals(PaneAmbient.flickerShade(f, 0f),
             PaneAmbient.flickerShade(f, PaneAmbient.TIME_WRAP_S), 1e-4f);
+    }
+
+    @Test public void theIdleGlitchRateSetsTheTearWait() {
+        assertEquals(PaneAmbient.TEAR_MIN_MS, PaneAmbient.Rate.RARE.minMs);
+        assertEquals(PaneAmbient.TEAR_MAX_MS, PaneAmbient.Rate.RARE.maxMs);
+        assertEquals(30_000L, PaneAmbient.Rate.SOMETIMES.minMs);
+        assertEquals(90_000L, PaneAmbient.Rate.SOMETIMES.maxMs);
+        assertEquals(10_000L, PaneAmbient.Rate.OFTEN.minMs);
+        assertEquals(30_000L, PaneAmbient.Rate.OFTEN.maxMs);
+        java.util.Random random = new java.util.Random(7L);
+        for (PaneAmbient.Rate rate : PaneAmbient.Rate.values()) {
+            for (int i = 0; i < 500; i++) {
+                long d = PaneAmbient.nextTearDelayMs(random, rate);
+                assertTrue(rate.name(), d >= rate.minMs && d <= rate.maxMs);
+            }
+        }
+    }
+
+    @Test public void anUnknownOrMissingRateIsRare() {
+        assertSame(PaneAmbient.Rate.RARE, PaneAmbient.Rate.fromId(null));
+        assertSame(PaneAmbient.Rate.RARE, PaneAmbient.Rate.fromId("sometimes-ish"));
+        assertSame(PaneAmbient.Rate.RARE, PaneAmbient.Rate.fromId("rare"));
+        assertSame(PaneAmbient.Rate.SOMETIMES, PaneAmbient.Rate.fromId("sometimes"));
+        assertSame(PaneAmbient.Rate.OFTEN, PaneAmbient.Rate.fromId("often"));
     }
 }

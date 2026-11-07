@@ -407,6 +407,16 @@
         <item>CRT (Material colours)</item>
         <item>TFT grid</item>
     </string-array>
+    <string-array name="settings_idle_tear_rate_entries">
+        <item>Rare (every 2–5 minutes)</item>
+        <item>Sometimes (every 30–90 seconds)</item>
+        <item>Often (every 10–30 seconds)</item>
+    </string-array>
+    <string-array name="settings_idle_tear_rate_values">
+        <item>rare</item>
+        <item>sometimes</item>
+        <item>often</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_values">
         <item>none</item>
         <item>crt</item>

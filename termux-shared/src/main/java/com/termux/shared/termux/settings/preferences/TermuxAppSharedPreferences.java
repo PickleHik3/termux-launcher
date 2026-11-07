@@ -1281,6 +1281,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IDLE_ANIMATIONS, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_TEAR_RATE}. */
+    public String getIdleTearRate() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IDLE_TEAR_RATE, TERMUX_APP.DEFAULT_VALUE_IDLE_TEAR_RATE, true);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_TEAR_RATE}. */
+    public void setIdleTearRate(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_IDLE_TEAR_RATE, value, false);
+    }
+
     public boolean isOsc52ClipboardReadEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, TERMUX_APP.DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED);
