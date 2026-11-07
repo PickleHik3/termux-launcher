@@ -678,3 +678,12 @@ longer counted as an error. Owed:
   drawer use) is as smooth as the later ones; page swipes, widget touches, long press, double tap,
   two-finger swipes and pinch behave as before; Swipe up set to anything else (palette, none,
   lock) works exactly as before; swipe down is unchanged · pong.
+- **Custom Look is kept (11-07, fix/custom-look-kept).** Appearance editor › Customization: set a
+  Custom look (Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth 90, Rim Bright). (1) Tap Solid,
+  then Custom: every slider is back where you left it. (2) Tap Solid, Done, open the editor again
+  (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
+  "Discard changes": the look is as it was before, and Custom still brings back the same values.
+  (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
+  slider. (5) The same on the Home, Workspace and a surface card (Status bar, Dock, Keyboard): move
+  Opacity, tap Solid, then Custom: the card's own values are back, also after Done and reopen;
+  Discard leaves the card as it was · pong.
