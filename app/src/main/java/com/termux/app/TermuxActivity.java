@@ -5939,16 +5939,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.dock.PeekGlassGeometry.Card resolvePeekCard() {
-        if (!peekCardWanted()) return null;
+        if (!peekCardWanted()) { peekDbgResolve("not-wanted"); return null; }
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
         View decor = getWindow() != null ? getWindow().getDecorView() : null;
         if (row == null || host == null || container == null || decor == null
             || !row.isShown() || host.getWidth() <= 0 || host.getHeight() <= 0
-            || decor.getWidth() <= 0 || decor.getHeight() <= 0) return null;
+            || decor.getWidth() <= 0 || decor.getHeight() <= 0) {
+            peekDbgResolve("views row=" + (row != null) + " rowShown=" + (row != null
+                && row.isShown()) + " host=" + (host == null ? "null"
+                : host.getWidth() + "x" + host.getHeight()));
+            return null;
+        }
         int count = row.drawnIconBoxes(mPeekIconBoxes);
-        if (count <= 0 || count > mPeekIconBoxes.length / 4) return null;
+        if (count <= 0 || count > mPeekIconBoxes.length / 4) {
+            peekDbgResolve("icons count=" + count);
+            return null;
+        }
+        peekDbgResolve("card icons=" + count);
         float[] rowAt = layoutOffsetIn(row, container);
         float[] hostAt = layoutOffsetIn(host, container);
         float[] hostInDecor = layoutOffsetIn(host, decor);
@@ -6032,6 +6041,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPeekListeners() {
         boolean peek = mPreferences != null && shownDockSurfaceSpec().peek;
+        if (peek != (mPeekWatchedHost != null))
+            android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
+                + " listeners peek=" + peek + " <- "
+                + new Throwable().getStackTrace()[1].getMethodName());
         View host = peek ? findViewById(R.id.accessory_surface_host) : null;
         View row = peek ? mSuggestionBarView : null;
         if (mPeekWatchedHost != host) {
@@ -19021,7 +19034,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
             @NonNull com.termux.app.wall.PaneWallPage page) {
-        return com.termux.app.dock.DockSurfaceSpec.forStyle(arrangementOf(page).design());
+        return com.termux.app.dock.DockSurfaceSpec.forStyle(wornDockDesign(page));
+    }
+
+    /**
+     * The Dock design {@code page}'s slab wears (WornDockDesign): its layout's, or none where
+     * that layout shows no apps row. The stored pick stays as it is.
+     */
+    @NonNull
+    private com.termux.app.dock.DockStyle wornDockDesign(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        ResolvedArrangement arranged = arrangementOf(page);
+        return com.termux.app.dock.WornDockDesign.of(arranged.design(), arranged.layout());
     }
 
     /**
@@ -19298,7 +19322,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockStyle committedDockDesign() {
         com.termux.app.dock.DockStyle travelling = mCrossing.seam().stackDesign();
-        return travelling != null ? travelling : arrangementOf(mLastWallPage).design();
+        return travelling != null ? travelling : wornDockDesign(mLastWallPage);
     }
 
     /**
@@ -19542,7 +19566,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether {@code page}'s dock wears the Wall strip. */
     private boolean wallStripOn(@NonNull com.termux.app.wall.PaneWallPage page) {
         return mPreferences != null
-            && arrangementOf(page).design() == com.termux.app.dock.DockStyle.WALL_STRIP;
+            && wornDockDesign(page) == com.termux.app.dock.DockStyle.WALL_STRIP;
     }
 
     /** Whether the row is made and fed: a dock wears it, with split panes on. */
@@ -25972,6 +25996,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // In this frame, so the stack's height the translation below reads is the new one.
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
                     GeometryScheduler.ResizePolicy.AT_SETTLE);
+                // The Peek card is cut for the rows this pass stands in this frame's pre-draw,
+                // after the traversal lays them out and before any of them shows. The listeners
+                // are set here, once the pass above has applied the rows' design: until now only
+                // the render pass's re-cut set them, and on pong the card then landed with the
+                // dock already half risen.
+                syncPeekListeners();
+                if (mPeekWatchedHost != null) schedulePeekRefresh();
             } finally {
                 Trace.endSection();
             }
@@ -25988,6 +26019,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 false);
         }
         return seam.dockReveal();
+    }
+
+    /** PEEKTRAVEL-DBG: the last answer resolvePeekCard gave, so it logs only changes. */
+    @Nullable private String mPeekDbgResolve;
+
+    /** PEEKTRAVEL-DBG: why resolvePeekCard answered as it did, when that changes. */
+    private void peekDbgResolve(@NonNull String why) {
+        if (why.equals(mPeekDbgResolve)) return;
+        mPeekDbgResolve = why;
+        android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
+            + " resolve " + why + " watchedHost=" + (mPeekWatchedHost != null)
+            + " rowsPage=" + stackDressPage() + " lastPage=" + mLastWallPage);
     }
 
     /** PEEKTRAVEL-DBG: the last frame's key, so the travel logs only changes. */

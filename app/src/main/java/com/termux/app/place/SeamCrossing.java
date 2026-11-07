@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.Dress;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.LensBeadGeometry;
+import com.termux.app.dock.WornDockDesign;
 import com.termux.app.look.PageLook;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -565,8 +566,10 @@ public final class SeamCrossing {
         mRun.otherLayout = there;
         // Each half's Dock design, read once here so the frames read no store: one layout gives
         // both halves one design, and then no band eases and no bead melts (#93).
-        mRun.committedDesign = committed.dress.dockDesign();
-        mRun.otherDesign = other.dress.dockDesign();
+        // The designs the halves' slabs wear (WornDockDesign): none where a half shows no apps
+        // row, so a dock-off half and the other never differ by a design neither draws.
+        mRun.committedDesign = WornDockDesign.of(committed.dress.dockDesign(), here);
+        mRun.otherDesign = WornDockDesign.of(other.dress.dockDesign(), there);
         mRun.committedSearchField = committed.dress.searchField();
         mRun.otherSearchField = other.dress.searchField();
         mRun.dressDiffers = !committed.stack.equals(other.stack);
