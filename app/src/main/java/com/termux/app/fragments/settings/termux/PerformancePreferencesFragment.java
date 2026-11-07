@@ -49,6 +49,7 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TERMINAL_EFFECT = "terminal_retro_effect";
     private static final String KEY_SCREEN_EVENTS = "terminal_screen_events";
     private static final String KEY_IDLE_ANIMATIONS = "idle_animations";
+    private static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     /** Run after a switch has stored its new value, so the rows read what was written. */
@@ -69,6 +70,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         if (liveBlur != null) liveBlur.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
         Preference idle = findPreference(KEY_IDLE_ANIMATIONS);
         if (idle != null) idle.setVisible(PaneRetroEffect.available());
+        Preference tearRate = findPreference(KEY_IDLE_TEAR_RATE);
+        if (tearRate != null) tearRate.setVisible(PaneRetroEffect.available());
         SwitchPreferenceCompat preset = findPreference(KEY_LOW_MEMORY_PRESET);
         if (preset != null) {
             preset.setOnPreferenceChangeListener((row, newValue) -> {
@@ -248,12 +251,14 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
 
         @Override
         public void putString(@Nullable String key, @Nullable String value) {
-            if (KEY_TERMINAL_EFFECT.equals(key)) view.putString(key, value);
+            if (KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key))
+                view.putString(key, value);
         }
 
         @Override
         public String getString(@Nullable String key, @Nullable String defValue) {
-            return KEY_TERMINAL_EFFECT.equals(key) ? view.getString(key, defValue) : defValue;
+            return KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)
+                ? view.getString(key, defValue) : defValue;
         }
     }
 }

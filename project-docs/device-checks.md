@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **CRT screen events (#225).** Owed on pong, a pane on the CRT effect, Screen events on:
+  backspace at column 0 while typing tears the pane each time (a held backspace tears about every
+  150 ms, never a stutter); a keybinding that moves focus between two panes wobbles the new one;
+  a split (keys and the pane-agent API) plays the bright-line power-on after the divider sweep,
+  not under it; closing a pane (titlebar ✕, `pane.close`) collapses it to a line before it goes,
+  in a split and as the last pane of a window, and on a Home float; `kill -9 $$` in a pane shows
+  snow before it goes (the kept "[Process completed]" pane on an outside kill snows and stays);
+  closing the current session powers off its panes, then the session slides away as before.
+  Battery and performance > Idle glitch rate shows only with Idle animations on and the CRT
+  effect; Often tears an idle pane every 10–30 s, and typing still pauses it.
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent

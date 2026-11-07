@@ -81,6 +81,10 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setTerminalRetroEffect(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
+            case "idle_tear_rate":
+                // Each pane re-reads it when its ambient loop next starts (RetroEffectBinder).
+                mPreferences.setIdleTearRate(value);
+                break;
             default:
                 break;
         }
@@ -94,6 +98,8 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getTerminalCursorTrailStyle();
             case "terminal_retro_effect":
                 return mPreferences.getTerminalRetroEffect();
+            case "idle_tear_rate":
+                return mPreferences.getIdleTearRate();
             default:
                 return defValue;
         }

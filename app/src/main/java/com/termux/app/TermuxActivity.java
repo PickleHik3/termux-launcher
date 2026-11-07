@@ -35230,13 +35230,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         WSession ws = mCurrentWSession;
-        captureTerminalDeparture();
+        // A close already playing its power-off: the second ask is the same close.
+        if (mPoweringOffWSession == ws) return;
+        // The panes on screen power off first and the session goes once that has played; with no
+        // event (not CRT, Screen events off, animations off) it goes at once.
+        boolean played = false;
+        for (TerminalSession s : mPaneController.shellsOf(ws.currentWindow()))
+            played |= mPaneController.screenEvent(s,
+                com.termux.app.terminal.PaneScreenEvent.Kind.POWER_OFF);
+        if (played && mPaneController.postOnHost(() -> {
+                if (mPoweringOffWSession != ws) return;
+                mPoweringOffWSession = null;
+                if (isFinishing() || isDestroyed() || mPaneController == null) return;
+                closeWSessionNow(ws);
+            }, com.termux.app.terminal.PaneScreenEvent.Kind.POWER_OFF.durationMs)) {
+            mPoweringOffWSession = ws;
+            return;
+        }
+        closeWSessionNow(ws);
+    }
+
+    /** The session whose panes are playing their power-off before it closes, or null. */
+    @Nullable private WSession mPoweringOffWSession;
+
+    /**
+     * Closes {@code ws} and kills its shells. The one on screen is carried off and the next shown;
+     * one the user moved away from while it powered off just goes. Nothing for a session already
+     * gone.
+     */
+    private void closeWSessionNow(@NonNull WSession ws) {
+        if (!mWSessions.contains(ws)) return;
+        boolean current = ws == mCurrentWSession;
+        if (current) captureTerminalDeparture();
         for (com.termux.app.terminal.TerminalPaneController.Window w : new java.util.ArrayList<>(ws.windows))
             for (TerminalSession s : mPaneController.removeWindow(w))
                 if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mWSessions.remove(ws);
-        mCurrentWSession = null;
-        showNextSessionAfterClose();
+        if (current) {
+            mCurrentWSession = null;
+            showNextSessionAfterClose();
+        }
         rebuildDrawerSessions();
     }
 

@@ -98,6 +98,8 @@ public final class RetroEffectBinder {
     /** The flicker depth written into the uniforms: 0 unless the loop is playing. */
     private float mFlicker;
     @NonNull private final Random mAmbientRandom = new Random();
+    /** The Idle glitch rate, read once each time the loop starts. */
+    @NonNull private PaneAmbient.Rate mAmbientRate = PaneAmbient.Rate.RARE;
     @NonNull private final Runnable mAmbientTick = this::ambientTick;
 
     /**
@@ -133,19 +135,21 @@ public final class RetroEffectBinder {
     }
 
     /**
-     * Plays one screen event ({@link PaneScreenEvent}) on this pane, replacing any live one, and
-     * draws frames only until it ends. Nothing on the chrome, on a style that is not CRT, while
-     * Android's animations are off, within {@link PaneScreenEvent#INPUT_QUIET_MS} of a key or a
-     * scroll, or with the Screen events switch ({@code switchOn}) off.
+     * Plays one screen event ({@link PaneScreenEvent}) on this pane, replacing a live one of
+     * another kind (one of the same kind still playing is left alone), and draws frames only until
+     * it ends. Nothing on the chrome, on a style that is not CRT, while Android's animations are
+     * off, or with the Screen events switch ({@code switchOn}) off; a kind that
+     * {@link PaneScreenEvent.Kind#waitsForQuiet} also holds within
+     * {@link PaneScreenEvent#INPUT_QUIET_MS} of a key or a scroll.
      *
      * @return whether the event started
      */
     public boolean fire(@NonNull PaneScreenEvent.Kind kind, boolean switchOn) {
         if (!mScreenEvents || kind == PaneScreenEvent.Kind.NONE) return false;
-        if (!PaneScreenEvent.mayFire(mStyle.usesCrt(), ValueAnimator.areAnimatorsEnabled(),
+        if (!PaneScreenEvent.mayFire(kind, mStyle.usesCrt(), ValueAnimator.areAnimatorsEnabled(),
             InputQuiet.isQuiet(), switchOn))
             return false;
-        mEvent.fire(kind, SystemClock.uptimeMillis(), (float) Math.random());
+        if (!mEvent.fire(kind, SystemClock.uptimeMillis(), (float) Math.random())) return false;
         mView.postInvalidateOnAnimation();
         return true;
     }
@@ -227,9 +231,11 @@ public final class RetroEffectBinder {
 
     private void startAmbient() {
         long now = SystemClock.uptimeMillis();
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mView.getContext(), false);
+        mAmbientRate = PaneAmbient.Rate.fromId(prefs == null ? null : prefs.getIdleTearRate());
         mAmbientRunning = true;
         mAmbientOrigin = now;
-        mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+        mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom, mAmbientRate);
         mView.removeCallbacks(mAmbientTick);
         mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);
     }
@@ -268,7 +274,7 @@ public final class RetroEffectBinder {
         // A tear never cuts into an event already playing; it waits for the next tick.
         if (now >= mNextAmbientTear && mEvent.live(now) == null) {
             mEvent.fire(PaneScreenEvent.Kind.AMBIENT_TEAR, now, mAmbientRandom.nextFloat());
-            mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom);
+            mNextAmbientTear = now + PaneAmbient.nextTearDelayMs(mAmbientRandom, mAmbientRate);
         }
         refresh();
         mView.postDelayed(mAmbientTick, PaneAmbient.TICK_MS);

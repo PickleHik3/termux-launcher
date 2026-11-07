@@ -5,8 +5,10 @@ import android.os.SystemClock;
 import com.termux.view.TerminalView;
 
 /**
- * When the user last typed or scrolled, so a screen event never plays over either (spec decision
- * 3: a key commit or a scroll within {@link PaneScreenEvent#INPUT_QUIET_MS} holds them). The key
+ * When the user last typed or scrolled, so the ambient parts of a CRT pane (its flicker and the
+ * ambient tear) never play over either (spec decision 3: a key commit or a scroll within
+ * {@link PaneScreenEvent#INPUT_QUIET_MS} holds them). Events the user caused, such as a bell or a
+ * focus change, play at once ({@link PaneScreenEvent.Kind#waitsForQuiet}). The key
  * stamp is fed from the same place every key commit reports to the latency probe; the scroll
  * stamp is the terminal view's own.
  */
