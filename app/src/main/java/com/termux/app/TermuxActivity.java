@@ -9184,7 +9184,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keyboard == null || mChrome == null) return;
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
         // the band's rows and rebuilt the palette. The release's full pass chooses them once.
-        if (mGlassDragPreview) return;
+        // A crossing's frames likewise: the faces are mid-way between two pages' dresses, and the
+        // landing's apply re-judges them once at rest (KeyboardFaceJudging).
+        if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
+            mCrossing.crossing())) return;
         if (!mKeyboardBandAskedThisPass) {
             keyboard.setGlassFaces(new int[0]);
             return;
@@ -9215,7 +9218,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void rejudgeKeyboardGlassFaces() {
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
-        if (mGlassDragPreview) return;
+        if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
+            mCrossing.crossing())) return;
         pushKeyboardGlassFaces(keyboard);
     }
 
