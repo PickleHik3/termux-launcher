@@ -60,6 +60,10 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 // Read by each pane when an event fires; nothing to restyle.
                 mPreferences.setTerminalScreenEventsEnabled(value);
                 break;
+            case "terminal_retro_composite":
+                // Each pane re-reads it when its window shows again (PaneContentFrame#refreshAmbient).
+                mPreferences.setTerminalRetroCompositeEnabled(value);
+                break;
             case "idle_animations":
                 // Each pane re-reads it when its window shows again (PaneContentFrame#refreshAmbient).
                 mPreferences.setIdleAnimationsEnabled(value);
@@ -113,6 +117,8 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
             case "terminal_screen_events":
                 return mPreferences.isTerminalScreenEventsEnabled();
+            case "terminal_retro_composite":
+                return mPreferences.isTerminalRetroCompositeEnabled();
             case "idle_animations":
                 return mPreferences.isIdleAnimationsEnabled();
             default:

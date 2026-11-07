@@ -80,6 +80,12 @@
             app:summary="@string/settings_terminal_screen_events_summary"
             app:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="terminal_retro_composite"
+            app:icon="@drawable/ic_ms_tv_gen"
+            app:title="@string/settings_terminal_retro_composite_title"
+            app:summary="@string/settings_terminal_retro_composite_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="idle_animations"
             app:icon="@drawable/ic_ms_animation"
             app:title="@string/settings_idle_animations_title"

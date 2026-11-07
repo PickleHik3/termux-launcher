@@ -230,13 +230,16 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         // Null while the super constructor runs: FrameLayout may report visibility that early.
         if (mRetroEffect == null) return;
         boolean on = false;
+        boolean composite = false;
         if (mRetroEffect.style().usesCrt()) {
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
                 com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
                     .build(getContext(), false);
             on = prefs != null && prefs.isIdleAnimationsEnabled();
+            composite = prefs != null && prefs.isTerminalRetroCompositeEnabled();
         }
         mRetroEffect.setAmbient(on);
+        mRetroEffect.setComposite(composite);
     }
 
     /**
