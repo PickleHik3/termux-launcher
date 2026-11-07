@@ -152,6 +152,12 @@ Each wave is one worker, merged and shot before the next starts.
 6. **Deck look** (wave 8): three workers on disjoint seams: `DeckLook` + strip (dock/statusbar),
    keyboard (inapp-keyboard module + TermuxInAppKeyboard), extra keys (termux-shared
    ExtraKeysView); then the TermuxActivity wiring.
+7. **Wave 9: signal** (`PaneRetroEffect` constants): (a) chroma bleed: luma stays sharp, chroma is
+   the mean of three horizontal taps, the glow taps at 2.0 dp sideways and 1.0 dp up and down;
+   (b) beam-width scanlines: the row floor goes 0.70 to 0.92 with luma (smoothstep 0.15 to 0.85);
+   (c) highlights: bloom weight 0.35 plus 0.10 above 0.7 to 0.95 luma; (d) opt-in Composite signal
+   (`terminal_retro_composite`, panes only): luma `[0.25 0.5 0.25]` over the row, chroma over five
+   taps, sharpen off. No new samples anywhere.
 
 ## Wave 8: the deck look (decided 2026-11-03)
 

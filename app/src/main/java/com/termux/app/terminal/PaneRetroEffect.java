@@ -118,6 +118,35 @@ public final class PaneRetroEffect {
      */
     static final float BLOOM_FLOOR = 0.45f;
 
+    /** How much of the glow a lit pixel adds back to itself. */
+    static final float BLOOM_WEIGHT = 0.35f;
+
+    /**
+     * Extra bloom weight a pixel gets as it nears white (smoothstep over {@link #BLOOM_PEAK_FROM}
+     * to {@link #BLOOM_PEAK_TO} of its luma), so a lone bright pixel glints and ordinary text
+     * keeps {@link #BLOOM_WEIGHT}.
+     */
+    static final float BLOOM_PEAK_EXTRA = 0.10f;
+    static final float BLOOM_PEAK_FROM = 0.70f;
+    static final float BLOOM_PEAK_TO = 0.95f;
+
+    /**
+     * The colour signal's reach in dp: the glow taps sideways (a beam smears along the row) and
+     * up and down; their mean carries the picture's chroma, the luma stays at full bandwidth.
+     */
+    static final float CHROMA_SIDE_DP = 2.0f;
+    static final float CHROMA_UP_DP = 1.0f;
+
+    /**
+     * The scanline gap's floor: a dark pixel's rows dip to the first, a bright one's beam spills
+     * into the gap and dips only to the second (smoothstep over {@link #SCAN_BRIGHT_FROM} to
+     * {@link #SCAN_BRIGHT_TO} of its luma).
+     */
+    static final float SCAN_FLOOR_DARK = 0.70f;
+    static final float SCAN_FLOOR_BRIGHT = 0.92f;
+    static final float SCAN_BRIGHT_FROM = 0.15f;
+    static final float SCAN_BRIGHT_TO = 0.85f;
+
     /** The period every shader takes its rows and cells from, in px: {@link RetroUniforms#PERIOD_DP}. */
     private static final String PERIOD = "(" + RetroUniforms.PERIOD_DP + " * uDensity)";
 
@@ -152,6 +181,9 @@ public final class PaneRetroEffect {
         + "uniform float uRecess;\n"
         // 0..1: how far the picture loses brightness and colour (an unfocused pane).
         + "uniform float uDim;\n"
+        // 1 blends neighbouring pixels sideways like a video cable (Composite signal setting):
+        // luma over three taps, chroma over five, no sharpen. Always 0 on the chrome and on TFT.
+        + "uniform float uComposite;\n"
         // The live screen event (PaneScreenEvent): its kind id (0 none, 1 bell tear, 2 power on,
         // 3 power off, 4 focus wobble, 5 death snow, 6 ambient tear), its progress 0..1 and a
         // random 0..1.
@@ -228,7 +260,8 @@ public final class PaneRetroEffect {
         + "        evShift = 4.0 * uDensity * sin(2.0 * PI * 3.0 * uEventT) * (1.0 - uEventT) * d;\n"
         + "    }\n"
         + "    at = clamp(at + float2(evShift, 0.0), inMin, inMax);\n"
-        + "    float g = 1.5 * uDensity;\n"
+        + "    float gx = " + CHROMA_SIDE_DP + " * uDensity;\n"
+        + "    float gy = " + CHROMA_UP_DP + " * uDensity;\n"
         + "    half4 col = content.eval(at);\n"
         // Chromatic aberration: red and blue read a little outward and inward along the bent
         // radius, 0 at the centre and uAberr px at the edge; a constant sideways split when flat.
@@ -236,24 +269,39 @@ public final class PaneRetroEffect {
         + "    float2 split = mix(w, float2(1.0, 0.0), uAberrFlat) * uAberr + float2(evSplit, 0.0);\n"
         + "    col.r = content.eval(clamp(at + split, inMin, inMax)).r;\n"
         + "    col.b = content.eval(clamp(at - split, inMin, inMax)).b;\n"
-        + "    half4 glow = (content.eval(clamp(at + float2(g, 0.0), inMin, inMax))\n"
-        + "                + content.eval(clamp(at - float2(g, 0.0), inMin, inMax))\n"
-        + "                + content.eval(clamp(at + float2(0.0, g), inMin, inMax))\n"
-        + "                + content.eval(clamp(at - float2(0.0, g), inMin, inMax))) * 0.25;\n"
+        + "    float3 gl = float3(content.eval(clamp(at + float2(gx, 0.0), inMin, inMax)).rgb);\n"
+        + "    float3 gr = float3(content.eval(clamp(at - float2(gx, 0.0), inMin, inMax)).rgb);\n"
+        + "    float3 glow = (gl + gr\n"
+        + "                + float3(content.eval(clamp(at + float2(0.0, gy), inMin, inMax)).rgb)\n"
+        + "                + float3(content.eval(clamp(at - float2(0.0, gy), inMin, inMax)).rgb)) * 0.25;\n"
         + "    float a = float(col.a);\n"
         // Sharpen (SHARPEN): a 1 px unsharp mask on the bent screen only, where every sample
-        // lands between two of kitty's pixels; the chrome's samples are exact and get none.
-        + "    float k = " + SHARPEN + " * step(0.001, uBend);\n"
-        + "    float3 nb = float3(content.eval(clamp(at + float2(1.0, 0.0), inMin, inMax)).rgb)\n"
-        + "              + float3(content.eval(clamp(at - float2(1.0, 0.0), inMin, inMax)).rgb)\n"
+        // lands between two of kitty's pixels; the chrome's samples are exact and get none. Off
+        // under the composite signal, which blends the same neighbours instead.
+        + "    float k = " + SHARPEN + " * step(0.001, uBend) * (1.0 - uComposite);\n"
+        + "    float3 nl = float3(content.eval(clamp(at - float2(1.0, 0.0), inMin, inMax)).rgb);\n"
+        + "    float3 nr = float3(content.eval(clamp(at + float2(1.0, 0.0), inMin, inMax)).rgb);\n"
+        + "    float3 nb = nl + nr\n"
         + "              + float3(content.eval(clamp(at + float2(0.0, 1.0), inMin, inMax)).rgb)\n"
         + "              + float3(content.eval(clamp(at - float2(0.0, 1.0), inMin, inMax)).rgb);\n"
-        + "    float3 rgb = clamp(float3(col.rgb) * (1.0 + 4.0 * k) - k * nb, 0.0, a);\n"
+        + "    float3 c0 = float3(col.rgb);\n"
+        + "    float3 rgb = clamp(c0 * (1.0 + 4.0 * k) - k * nb, 0.0, a);\n"
+        // The composite cable: luma keeps its bandwidth (or, under uComposite, a [1 2 1] blend
+        // over the row) and the chroma is the mean of the taps along the row, so colour smears
+        // sideways and a dither fuses into its shade. Before the tint, which sees the blend.
+        + "    float3 lw = float3(0.299, 0.587, 0.114);\n"
+        + "    float3 avg3 = (c0 + gl + gr) * (1.0 / 3.0);\n"
+        + "    float3 avg5 = (c0 + gl + gr + nl + nr) * 0.2;\n"
+        + "    float3 avg = mix(avg3, avg5, uComposite);\n"
+        + "    float yPic = mix(dot(rgb, lw), dot(0.25 * nl + 0.5 * c0 + 0.25 * nr, lw), uComposite);\n"
+        + "    rgb = clamp(float3(yPic) + avg - float3(dot(avg, lw)), 0.0, a);\n"
         // The glow blooms from bright pixels only (BLOOM_FLOOR), so it haloes the glyphs
-        // without lifting their anti-aliased edges into the gaps between them.
-        + "    float3 bloom = max(float3(glow.rgb) - " + BLOOM_FLOOR + ", 0.0) / (1.0 - " + BLOOM_FLOOR + ");\n"
-        + "    rgb = rgb + 0.35 * bloom;\n"
-        + "    float lum = dot(rgb, float3(0.299, 0.587, 0.114));\n"
+        // without lifting their anti-aliased edges into the gaps between them; a pixel near white
+        // blooms a little harder (BLOOM_PEAK_EXTRA).
+        + "    float3 bloom = max(glow - " + BLOOM_FLOOR + ", 0.0) / (1.0 - " + BLOOM_FLOOR + ");\n"
+        + "    float peak = smoothstep(" + BLOOM_PEAK_FROM + ", " + BLOOM_PEAK_TO + ", dot(rgb, lw));\n"
+        + "    rgb = rgb + (" + BLOOM_WEIGHT + " + " + BLOOM_PEAK_EXTRA + " * peak) * bloom;\n"
+        + "    float lum = dot(rgb, lw);\n"
         // The phosphor tint. With uTintKeep, a pixel keeps its own colour in proportion to how
         // much it has (its HSV saturation), so the greys and whites glow in the phosphor while
         // a prompt or an error keeps the colour that tells it apart.
@@ -263,7 +311,10 @@ public final class PaneRetroEffect {
         + "    rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, tw);\n"
         // The screen's own rows, straight, as kitty draws them: the bend moves the picture, never
         // the scanlines, so they run on into the surface beside this one.
-        + "    float scan = mix(0.70, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
+        // A bright pixel's beam spills into the gap, so its rows dip less (SCAN_FLOOR_*).
+        + "    float scanFloor = mix(" + SCAN_FLOOR_DARK + ", " + SCAN_FLOOR_BRIGHT + ", smoothstep("
+        + SCAN_BRIGHT_FROM + ", " + SCAN_BRIGHT_TO + ", lum));\n"
+        + "    float scan = mix(scanFloor, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
         // Vignette over the picture's own space: full across its middle third, uVignette lost at
         // its edge, steep on the way (after sam1am/termux_crt's uv(1-uv) curve).
         + "    float2 uv = w * 0.5 + 0.5;\n"
@@ -405,6 +456,7 @@ public final class PaneRetroEffect {
             shader.setFloatUniform("uAberrFlat", u.aberrFlat);
             shader.setFloatUniform("uRecess", u.recess);
             shader.setFloatUniform("uDim", u.dim);
+            shader.setFloatUniform("uComposite", u.composite);
             shader.setFloatUniform("uEvent", u.event);
             shader.setFloatUniform("uEventT", u.eventT);
             shader.setFloatUniform("uSeed", u.seed);

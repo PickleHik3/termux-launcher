@@ -146,6 +146,8 @@ Both are on the Terminal card under More, and under **Settings → Terminal → 
   **Comet**.
 - **Terminal effect**: **None**, **CRT**, **CRT (green)**, **CRT (amber)**, **TFT grid**. It covers
   the status bar, dock and keyboard too, with scanlines fixed to the screen.
+- **Composite signal** (CRT panes only, off by default): blends neighbouring pixels sideways so
+  dithering and pixel art read as shades; text gets a little softer.
 
 ## Pane borders
 

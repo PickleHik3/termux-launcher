@@ -789,6 +789,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERMINAL_SCREEN_EVENTS = true;
 
         /**
+         * Whether CRT panes blend neighbouring pixels sideways like a composite video cable, so
+         * dithering and pixel art read as shades. Default false.
+         */
+        public static final String KEY_TERMINAL_RETRO_COMPOSITE = "terminal_retro_composite";
+        public static final boolean DEFAULT_VALUE_TERMINAL_RETRO_COMPOSITE = false;
+
+        /**
          * Whether CRT panes play their ambient parts (a gentle flicker, a tear every few
          * minutes) while nothing happens. Costs battery. Default false.
          */

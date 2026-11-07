@@ -32,5 +32,10 @@
             app:title="@string/settings_terminal_screen_events_title"
             app:summary="@string/settings_terminal_screen_events_summary"
             app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_retro_composite"
+            app:title="@string/settings_terminal_retro_composite_title"
+            app:summary="@string/settings_terminal_retro_composite_summary"
+            app:defaultValue="false" />
     </PreferenceCategory>
 </PreferenceScreen>

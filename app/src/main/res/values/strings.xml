@@ -108,6 +108,8 @@
     <string name="settings_terminal_retro_effect_title">Terminal effect</string>
     <string name="settings_terminal_screen_events_title">Screen events</string>
     <string name="settings_terminal_screen_events_summary">Bell tear, power on and off, focus wobble, death static on CRT panes</string>
+    <string name="settings_terminal_retro_composite_title">Composite signal</string>
+    <string name="settings_terminal_retro_composite_summary">Blend neighbouring pixels sideways like a video cable, so dithering and pixel art read as shades. Text gets a little softer.</string>
     <string name="settings_idle_animations_title">Idle animations</string>
     <string name="settings_idle_animations_summary">Ambient glitch and flicker on CRT panes while nothing happens. Uses battery.</string>
     <string name="settings_idle_tear_rate_title">Idle glitch rate</string>

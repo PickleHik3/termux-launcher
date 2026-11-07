@@ -48,6 +48,7 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_CURSOR_TRAIL = "terminal_cursor_trail";
     private static final String KEY_TERMINAL_EFFECT = "terminal_retro_effect";
     private static final String KEY_SCREEN_EVENTS = "terminal_screen_events";
+    private static final String KEY_COMPOSITE = "terminal_retro_composite";
     private static final String KEY_IDLE_ANIMATIONS = "idle_animations";
     private static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
 
@@ -66,6 +67,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         if (effect != null) effect.setVisible(PaneRetroEffect.available());
         Preference events = findPreference(KEY_SCREEN_EVENTS);
         if (events != null) events.setVisible(PaneRetroEffect.available());
+        Preference composite = findPreference(KEY_COMPOSITE);
+        if (composite != null) composite.setVisible(PaneRetroEffect.available());
         Preference liveBlur = findPreference(KEY_LIVE_BLUR);
         if (liveBlur != null) liveBlur.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
         Preference idle = findPreference(KEY_IDLE_ANIMATIONS);
@@ -208,7 +211,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         @Override
         public void putBoolean(@Nullable String key, boolean value) {
             if (isIoKey(key)) io.putBoolean(key, value);
-            else if (KEY_SCREEN_EVENTS.equals(key) || KEY_IDLE_ANIMATIONS.equals(key))
+            else if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
+                || KEY_IDLE_ANIMATIONS.equals(key))
                 view.putBoolean(key, value);
             else if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 // turnOn and turnOff, run by the switch's change listener, have set it already.
@@ -232,7 +236,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         @Override
         public boolean getBoolean(@Nullable String key, boolean defValue) {
             if (isIoKey(key)) return io.getBoolean(key, defValue);
-            if (KEY_SCREEN_EVENTS.equals(key) || KEY_IDLE_ANIMATIONS.equals(key))
+            if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
+                || KEY_IDLE_ANIMATIONS.equals(key))
                 return view.getBoolean(key, defValue);
             if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);

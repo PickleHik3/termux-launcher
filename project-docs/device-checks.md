@@ -563,3 +563,8 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- CRT signal (wave 9), on pong: (1) default CRT text is no softer than before; (2) colour
+  boundaries (a coloured prompt on dark, an icat image's edges) blend sideways; (3) Composite
+  signal on turns a dithered icat image's checker into flat shades, and off restores it; the
+  switch appears only with a CRT style, on Terminal and Performance pages; (4) status bar, dock
+  and keyboard chrome look unchanged.

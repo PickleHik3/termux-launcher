@@ -88,6 +88,8 @@ public final class RetroEffectBinder {
     @NonNull private final PaneScreenEvent.Slot mEvent = new PaneScreenEvent.Slot();
     /** 0..1: how far the picture is dimmed ({@link #setDim}); a pane out of focus is 1. */
     private float mDim;
+    /** Whether a pane blends pixels sideways ({@link #setComposite}); never on the chrome. */
+    private boolean mComposite;
     /** The Idle animations switch as last told ({@link #setAmbient}). */
     private boolean mAmbientSwitch;
     /** Whether the ambient loop is scheduled; false means nothing of it is posted. */
@@ -189,6 +191,16 @@ public final class RetroEffectBinder {
         float next = Math.max(0f, Math.min(1f, dim));
         if (next == mDim) return;
         mDim = next;
+        refresh();
+    }
+
+    /**
+     * The Composite signal switch: on blends neighbouring pixels sideways on a CRT pane. One
+     * uniform, wrapped again only when it changes; the chrome and TFT ignore it.
+     */
+    public void setComposite(boolean on) {
+        if (on == mComposite) return;
+        mComposite = on;
         refresh();
     }
 
@@ -326,7 +338,8 @@ public final class RetroEffectBinder {
         mScratch.set(width, height, mLocation[0], mLocation[1], scaleX, scaleY,
             mView.getResources().getDisplayMetrics().density,
             mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette)
-            .surface(mAberr, mAberrFlat, mRecess, mStyle.usesCrt() ? mDim : 0f);
+            .surface(mAberr, mAberrFlat, mRecess, mStyle.usesCrt() ? mDim : 0f)
+            .composite(mScreenEvents && mComposite && mStyle.usesCrt() ? 1f : 0f);
         long now = SystemClock.uptimeMillis();
         if (mScreenEvents && mFlicker > 0f && mStyle.usesCrt())
             mScratch.ambient(mFlicker, PaneAmbient.clockSeconds(now - mAmbientOrigin));
