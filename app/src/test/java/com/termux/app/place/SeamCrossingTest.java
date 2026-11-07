@@ -1486,6 +1486,104 @@ public class SeamCrossingTest {
         }
     }
 
+    // ---- The dock's foot under the gesture pill ----
+
+    /**
+     * The developer's crossing: the Workspace with its keyboard up and the extra keys alone, Home
+     * with the pinned apps and the index, keyboard down. {@code liveKeyboard} is what the activity
+     * reads each pass: the Workspace's keyboard until the settle one way, the one pre-rolled for
+     * the Workspace from the first frame the other.
+     */
+    private static Drive footDrive(@NonNull PaneWallPage from) {
+        Stored stored = homeLayoutOn();
+        stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
+        return from == PaneWallPage.WIDGETS
+            ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                keysOnlyWindow(), true, false)
+            : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true, PaneWallPage.WIDGETS,
+                home(), false, false);
+    }
+
+    /** The foot's keyboard over a drive's frames, the live keyboard up throughout. */
+    private static List<Boolean> footKeyboards(@NonNull Drive drive, float... fractions) {
+        List<Boolean> out = new ArrayList<>();
+        Boolean previous = null;
+        for (float fraction : fractions) {
+            Step step = drive.step(fraction);
+            boolean keyboard = drive.crossing.footKeyboardUp(true);
+            // The foot is laid out by the geometry pass, which runs on the seam's relayout
+            // frames: it changes only there, never on a frame of its own.
+            if (previous != null && previous != keyboard)
+                assertTrue("the foot changes on a relayout frame, " + fraction, step.relayout);
+            if (previous != null && previous != keyboard)
+                assertTrue("out of sight, " + fraction, step.dockReveal
+                    <= 2f * SLOW / (1f - 2f * PlaceChromeTravel.LANDING) + EPSILON);
+            previous = keyboard;
+            out.add(keyboard);
+        }
+        return out;
+    }
+
+    private static float[] slowWay(float from, float to) {
+        int n = Math.round(Math.abs(to - from) / SLOW);
+        float[] out = new float[n + 1];
+        for (int i = 0; i <= n; i++) out[i] = from + (to - from) * i / n;
+        return out;
+    }
+
+    @Test
+    public void workspaceToHomeTheRowsArriveWithTheirFootAtTheSwap() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        assertSame(SeamTravel.DockPlan.DIP,
+            SeamTravel.dockPlan(drive.here.layout, drive.there.layout));
+        assertTrue("the Workspace's keyboard holds it first", keyboards.get(1));
+        assertFalse("Home's rows own the foot by the end", keyboards.get(keyboards.size() - 1));
+        // Parity: the settle on Home reads the live keyboard, down there, and finds the same.
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        drive.crossing.land();
+        boolean settled = drive.crossing.footKeyboardUp(drive.there.keyboardUp);
+        assertEquals(travelled, settled);
+        drive.crossing.end();
+    }
+
+    @Test
+    public void homeToWorkspaceTheArrivingKeyboardTakesTheFootAsItIsPreRolled() {
+        Drive drive = footDrive(PaneWallPage.WIDGETS);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        // The keyboard brought up for the Workspace rises in the stack under Home's rows before
+        // the swap, so no foot runs on behind it: the live keyboard answers, as at the settle.
+        for (int i = 1; i < keyboards.size(); i++) assertTrue("at " + i, keyboards.get(i));
+        drive.crossing.land();
+        assertEquals(keyboards.get(keyboards.size() - 1),
+            drive.crossing.footKeyboardUp(drive.there.keyboardUp));
+        drive.crossing.end();
+    }
+
+    @Test
+    public void aSlideThatFallsBackPutsTheFootBackWithTheWorkspacesRows() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        float[] out = slowWay(0f, 0.7f);
+        float[] back = slowWay(0.7f, 0f);
+        float[] way = new float[out.length + back.length];
+        System.arraycopy(out, 0, way, 0, out.length);
+        System.arraycopy(back, 0, way, out.length, back.length);
+        List<Boolean> keyboards = footKeyboards(drive, way);
+        assertTrue("Home's rows had it past the swap", keyboards.contains(false));
+        assertTrue("the Workspace's keyboard again", keyboards.get(keyboards.size() - 1));
+        drive.crossing.land();
+        assertEquals(keyboards.get(keyboards.size() - 1),
+            drive.crossing.footKeyboardUp(drive.here.keyboardUp));
+        drive.crossing.end();
+    }
+
+    @Test
+    public void atRestTheLiveKeyboardAnswers() {
+        SeamCrossing crossing = new SeamCrossing();
+        assertTrue(crossing.footKeyboardUp(true));
+        assertFalse(crossing.footKeyboardUp(false));
+    }
+
     @Test
     public void oneLayoutsRowsKeepTheOneDesign() {
         for (PaneWallPage from : BOTH) {
