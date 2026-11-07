@@ -54,7 +54,7 @@ import java.util.ArrayList;
  *
  * <p><b>The page layer.</b> While the wall of pages moves, and at rest under a live scene, a
  * surface whose beneath holds the wall ({@link #setWall}) is drawn in two layers
- * ({@link WallSwipeGlassPolicy}): the record node draws the ground and the chrome as always, and
+ * ({@link BackdropLayers}): the record node draws the ground and the chrome as always, and
  * in the wall's place a quarter-scale page layer. Under a scene that layer is the pages as they are
  * on a layer of their own, so a scene frame no longer re-blurs them. During a swipe it is one
  * picture of the pages, rendered offscreen as the swipe starts ({@link PageLayerCapture}) and only
@@ -98,7 +98,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /**
      * The wall of pages: a container whose children are the pages a swipe moves together, which
-     * a live surface over them holds in a page layer of their own ({@link WallSwipeGlassPolicy}).
+     * a live surface over them holds in a page layer of their own ({@link BackdropLayers}).
      */
     public interface Wall extends Container {
         /** Whether the wall is anywhere but at rest: a finger on it, or a slide under way. */
@@ -141,7 +141,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private final ArrayList<View> mExpand = new ArrayList<>();
     /** The pages the page layer holds, bottom first. */
     @NonNull private final ArrayList<View> mPages = new ArrayList<>();
-    @NonNull private float[] mPoses = new float[WallSwipeGlassPolicy.POSE_STRIDE * 4];
+    @NonNull private float[] mPoses = new float[BackdropLayers.POSE_STRIDE * 4];
     private int mPoseCount;
     /** The wall's children's coordinates to the root's, and back. */
     @NonNull private final Matrix mWallMatrix = new Matrix();
@@ -162,7 +162,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /**
      * The wall of pages inside this root, whose pages a live surface over them holds in a page
-     * layer ({@link WallSwipeGlassPolicy}); null for none, and then every surface keeps one layer.
+     * layer ({@link BackdropLayers}); null for none, and then every surface keeps one layer.
      */
     public void setWall(@Nullable Wall wall) {
         mWall = wall instanceof ViewGroup ? (ViewGroup) wall : null;
@@ -377,8 +377,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
             int reach = picture.reachTopPx();
-            WallSwipeGlassPolicy.Mode mode = pageLayerMode(picture, surface, margin, reach);
-            boolean split = mode != WallSwipeGlassPolicy.Mode.LIVE;
+            BackdropLayers.Mode mode = pageLayerMode(picture, surface, margin, reach);
+            boolean split = mode != BackdropLayers.Mode.LIVE;
             if (picture.mRecordedMode == mode
                 && picture.mRecordedReach == reach
                 && picture.mRecordedWidth == surface.getWidth()
@@ -714,32 +714,32 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     // ---- The page layer --------------------------------------------------------------------
 
     /**
-     * How {@code picture} is drawn this frame ({@link WallSwipeGlassPolicy}), its page layer
+     * How {@code picture} is drawn this frame ({@link BackdropLayers}), its page layer
      * recorded, captured, collected or re-aimed to match. Runs after {@link #collect}. LIVE at
      * rest without a scene before anything is walked, and LIVE for a frame whose page layer is not
      * ready (a capture still rendering): the surface keeps its one-layer recording until it is.
      */
     @NonNull
-    private WallSwipeGlassPolicy.Mode pageLayerMode(@NonNull LivePicture picture,
+    private BackdropLayers.Mode pageLayerMode(@NonNull LivePicture picture,
                                                     @NonNull View surface, int margin, int reach) {
         mPageChanged = false;
         mExpand.clear();
         mWallMatrix.reset();
-        WallSwipeGlassPolicy.Mode want = WallSwipeGlassPolicy.Mode.LIVE;
+        BackdropLayers.Mode want = BackdropLayers.Mode.LIVE;
         ViewGroup wall = mWall;
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
         boolean scene = LiveSceneFrame.current() != null;
         if (wall != null && (moving || scene)) {
-            want = WallSwipeGlassPolicy.mode(splittable(wall, surface, margin, reach), moving, scene);
+            want = BackdropLayers.mode(splittable(wall, surface, margin, reach), moving, scene);
         }
-        if (want != WallSwipeGlassPolicy.Mode.FROZEN) picture.mSwipeCaptures = 0;
-        if (want == WallSwipeGlassPolicy.Mode.LIVE) {
-            if (picture.mPageMode != WallSwipeGlassPolicy.Mode.LIVE || picture.capturing()) {
+        if (want != BackdropLayers.Mode.FROZEN) picture.mSwipeCaptures = 0;
+        if (want == BackdropLayers.Mode.LIVE) {
+            if (picture.mPageMode != BackdropLayers.Mode.LIVE || picture.capturing()) {
                 picture.dropPageLayer();
             }
             return want;
         }
-        return preparePageLayer(picture, want) ? want : WallSwipeGlassPolicy.Mode.LIVE;
+        return preparePageLayer(picture, want) ? want : BackdropLayers.Mode.LIVE;
     }
 
     /**
@@ -823,11 +823,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         int padY = 0;
         if (mWallPathIndex < 0) {
             // A swipe carries the pages up to a width either way under a surface that stays.
-            padX = WallSwipeGlassPolicy.pad(base, neededWidth, neededHeight, true, wall.getWidth());
+            padX = BackdropLayers.pad(base, neededWidth, neededHeight, true, wall.getWidth());
             if (padX < 0) return false;
-            padY = WallSwipeGlassPolicy.pad(base, neededWidth + 2 * padX, neededHeight, false,
+            padY = BackdropLayers.pad(base, neededWidth + 2 * padX, neededHeight, false,
                 neededHeight);
-        } else if (!WallSwipeGlassPolicy.fits(base, neededWidth, neededHeight)) {
+        } else if (!BackdropLayers.fits(base, neededWidth, neededHeight)) {
             return false;
         }
         mReach.set(mNeeded);
@@ -865,15 +865,15 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     }
 
     private void addPose(@NonNull Matrix matrix, float left, float top, float alpha) {
-        int at = mPoseCount * WallSwipeGlassPolicy.POSE_STRIDE;
-        if (mPoses.length < at + WallSwipeGlassPolicy.POSE_STRIDE) {
-            mPoses = java.util.Arrays.copyOf(mPoses, 2 * (at + WallSwipeGlassPolicy.POSE_STRIDE));
+        int at = mPoseCount * BackdropLayers.POSE_STRIDE;
+        if (mPoses.length < at + BackdropLayers.POSE_STRIDE) {
+            mPoses = java.util.Arrays.copyOf(mPoses, 2 * (at + BackdropLayers.POSE_STRIDE));
         }
         matrix.getValues(mValues);
         System.arraycopy(mValues, 0, mPoses, at, 9);
-        mPoses[at + WallSwipeGlassPolicy.POSE_LEFT] = left;
-        mPoses[at + WallSwipeGlassPolicy.POSE_TOP] = top;
-        mPoses[at + WallSwipeGlassPolicy.POSE_ALPHA] = alpha;
+        mPoses[at + BackdropLayers.POSE_LEFT] = left;
+        mPoses[at + BackdropLayers.POSE_TOP] = top;
+        mPoses[at + BackdropLayers.POSE_ALPHA] = alpha;
         mPoseCount++;
     }
 
@@ -912,18 +912,18 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * recorded around a new one.
      */
     private boolean preparePageLayer(@NonNull LivePicture picture,
-                                     @NonNull WallSwipeGlassPolicy.Mode want) {
+                                     @NonNull BackdropLayers.Mode want) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false;
-        float shift = WallSwipeGlassPolicy.shift(picture.mRecordedPoses, picture.mRecordedPoseCount,
+        float shift = BackdropLayers.shift(picture.mRecordedPoses, picture.mRecordedPoseCount,
             mPoses, mPoseCount);
         boolean samePages = sameViews(picture.mRecordedPages, mPages);
-        float aim = WallSwipeGlassPolicy.aim(want, shift);
+        float aim = BackdropLayers.aim(want, shift);
         RectF reach = picture.mPageReach;
-        boolean covered = WallSwipeGlassPolicy.covers(reach.left, reach.top, reach.right,
+        boolean covered = BackdropLayers.covers(reach.left, reach.top, reach.right,
             reach.bottom, mNeeded.left, mNeeded.top, mNeeded.right, mNeeded.bottom, aim);
         if (picture.capturing()) {
             // A capture under way pictures the pages as they stood when it started.
-            if (want == WallSwipeGlassPolicy.Mode.FROZEN && !WallSwipeGlassPolicy.needsRecord(want,
+            if (want == BackdropLayers.Mode.FROZEN && !BackdropLayers.needsRecord(want,
                     want, samePages, shift, covered)) {
                 if (!picture.collectCapture()) return false;
                 mPageChanged = true;
@@ -933,27 +933,27 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.dropPageLayer();
             shift = Float.NaN;
         }
-        if (picture.hasPageLayer() && !WallSwipeGlassPolicy.needsRecord(want, picture.mPageMode,
+        if (picture.hasPageLayer() && !BackdropLayers.needsRecord(want, picture.mPageMode,
                 samePages, shift, covered)) {
             picture.aimPage(aim);
             return true;
         }
-        if (want == WallSwipeGlassPolicy.Mode.FROZEN
+        if (want == BackdropLayers.Mode.FROZEN
                 && picture.mSwipeCaptures >= MAX_CAPTURES_PER_SWIPE) {
             // The pages keep moving apart this swipe: one layer until it settles.
-            if (picture.mPageMode != WallSwipeGlassPolicy.Mode.LIVE) picture.dropPageLayer();
+            if (picture.mPageMode != BackdropLayers.Mode.LIVE) picture.dropPageLayer();
             return false;
         }
         picture.dropPageLayer();
         Trace.beginSection("LiveBackdrop.pageLayer");
         try {
             picture.mRecordedPages.addAll(mPages);
-            int floats = mPoseCount * WallSwipeGlassPolicy.POSE_STRIDE;
+            int floats = mPoseCount * BackdropLayers.POSE_STRIDE;
             if (picture.mRecordedPoses.length < floats) picture.mRecordedPoses = new float[floats];
             System.arraycopy(mPoses, 0, picture.mRecordedPoses, 0, floats);
             picture.mRecordedPoseCount = mPoseCount;
             picture.mPageReach.set(mReach);
-            if (want == WallSwipeGlassPolicy.Mode.REFERENCE) {
+            if (want == BackdropLayers.Mode.REFERENCE) {
                 RenderNode page = picture.pageNode(mPageRect, true);
                 RecordingCanvas canvas = page.beginRecording(LivePicture.quarter(mPageRect.width()),
                     LivePicture.quarter(mPageRect.height()));

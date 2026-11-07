@@ -53,15 +53,15 @@ public class LiveBackdropBudgetTest {
         int width = LiveBackdrop.BUDGET_SCREEN_WIDTH;
         int height = LiveBackdrop.BUDGET_SCREEN_HEIGHT;
         long dock = LiveBackdrop.layerBytes(width, 400);
-        int padX = WallSwipeGlassPolicy.pad(dock, width, 400, true, width);
+        int padX = BackdropLayers.pad(dock, width, 400, true, width);
         assertEquals(width, padX);
-        int padY = WallSwipeGlassPolicy.pad(dock, width + 2 * padX, 400, false, 400);
+        int padY = BackdropLayers.pad(dock, width + 2 * padX, 400, false, 400);
         assertTrue(padY >= 0);
         assertTrue(dock + LiveBackdrop.layerBytes(width + 2 * padX, 400 + 2 * padY)
             <= LiveBackdrop.MAX_LAYER_BYTES);
         long panel = LiveBackdrop.layerBytes(width, height);
-        assertEquals(-1, WallSwipeGlassPolicy.pad(panel, width, height, true, width));
-        assertFalse(WallSwipeGlassPolicy.fits(panel, 1, 1));
+        assertEquals(-1, BackdropLayers.pad(panel, width, height, true, width));
+        assertFalse(BackdropLayers.fits(panel, 1, 1));
     }
 
     @Test

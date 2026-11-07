@@ -84,7 +84,7 @@ public final class LivePicture implements GlassPicture {
     /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
     int mRank = LiveBackdrop.RANK_CHROME;
 
-    // ---- The page layer ({@link WallSwipeGlassPolicy}) -------------------------------------
+    // ---- The page layer ({@link BackdropLayers}) -------------------------------------
     /**
      * The wall's pages on their own, at a quarter scale, drawn by the record node in the wall's
      * place: a layer over the pages as they are ({@code REFERENCE}), or a node drawing
@@ -99,12 +99,12 @@ public final class LivePicture implements GlassPicture {
     /** The node a capture renders; kept between swipes so a swipe allocates no node. */
     @Nullable private RenderNode mCaptureRoot;
     /** What the record node was last recorded as: one layer, or around the page layer. */
-    @NonNull WallSwipeGlassPolicy.Mode mRecordedMode = WallSwipeGlassPolicy.Mode.LIVE;
+    @NonNull BackdropLayers.Mode mRecordedMode = BackdropLayers.Mode.LIVE;
     /** What the page layer holds now. */
-    @NonNull WallSwipeGlassPolicy.Mode mPageMode = WallSwipeGlassPolicy.Mode.LIVE;
+    @NonNull BackdropLayers.Mode mPageMode = BackdropLayers.Mode.LIVE;
     /** The pages the page layer was recorded from, and their poses then. */
     @NonNull final ArrayList<View> mRecordedPages = new ArrayList<>();
-    @NonNull float[] mRecordedPoses = new float[WallSwipeGlassPolicy.POSE_STRIDE * 4];
+    @NonNull float[] mRecordedPoses = new float[BackdropLayers.POSE_STRIDE * 4];
     int mRecordedPoseCount = -1;
     /** Captures this swipe has started ({@link LiveBackdrop#MAX_CAPTURES_PER_SWIPE}). */
     int mSwipeCaptures;
@@ -489,7 +489,7 @@ public final class LivePicture implements GlassPicture {
         } finally {
             page.endRecording();
         }
-        mPageMode = WallSwipeGlassPolicy.Mode.FROZEN;
+        mPageMode = BackdropLayers.Mode.FROZEN;
         return true;
     }
 
@@ -521,7 +521,7 @@ public final class LivePicture implements GlassPicture {
             if (mPage != null && mPage.hasDisplayList()) mPage.discardDisplayList();
         }
         retireFrozen();
-        mPageMode = WallSwipeGlassPolicy.Mode.LIVE;
+        mPageMode = BackdropLayers.Mode.LIVE;
         mRecordedPages.clear();
         mRecordedPoseCount = -1;
     }
