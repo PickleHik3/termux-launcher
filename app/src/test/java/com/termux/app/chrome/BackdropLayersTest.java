@@ -143,12 +143,13 @@ public class BackdropLayersTest {
     }
 
     @Test
-    public void oneLayerLeavesTheLowerGlassOut() {
-        assertFalse(BackdropLayers.keep(SeeThrough.ONE, true, false));
-        assertTrue(BackdropLayers.keep(SeeThrough.ONE, false, false));
-        // The pages beneath the dock hold widgets' glass, but they are what is directly beneath.
-        assertTrue(BackdropLayers.keep(SeeThrough.ONE, true, true));
-        assertTrue(BackdropLayers.keep(SeeThrough.ALL, true, false));
+    public void oneLayerTurnsTheLowerGlassToTheStoredFrame() {
+        // The back float under the front one: the stored frame, so the front float sees the back
+        // one, frosted over the wallpaper, but not the widgets through both.
+        assertTrue(BackdropLayers.drawsStored(SeeThrough.ONE, true));
+        // The topmost glass records as always.
+        assertFalse(BackdropLayers.drawsStored(SeeThrough.ONE, false));
+        assertFalse(BackdropLayers.drawsStored(SeeThrough.ALL, true));
     }
 
     @Test

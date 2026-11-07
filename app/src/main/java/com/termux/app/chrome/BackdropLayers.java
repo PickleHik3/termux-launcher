@@ -34,8 +34,9 @@ import androidx.annotation.NonNull;
  * alpha) is the same as when it was recorded but for one shared horizontal shift. At rest under a
  * live scene the one picture draws the pages on a cached layer ({@link Mode#REFERENCE}).</p>
  *
- * <p>{@link #keep} is the "See through" rule, at rest too: with {@link SeeThrough#ONE} a glass
- * leaves the other live glass beneath it out of what it records.</p>
+ * <p>{@link #drawsStored} is the "See through" rule, at rest too: with {@link SeeThrough#ONE} a
+ * glass with another glass above it draws the stored frame, so the one above sees it but not
+ * through it.</p>
  */
 public final class BackdropLayers {
 
@@ -274,12 +275,12 @@ public final class BackdropLayers {
     }
 
     /**
-     * Whether a view beneath a surface goes in what the surface records. With
-     * {@link SeeThrough#ONE} a view that is or holds another live glass is left out, unless it
-     * holds the wall: the pages are what is directly beneath, not glass on glass.
+     * Whether a Live surface draws as the Wallpaper kind (the stored frame at its offset) instead
+     * of recording what is beneath it. With {@link SeeThrough#ONE} a surface another Live glass
+     * stands over does: the one above records it, content and all, like anything beneath, but no
+     * longer sees through it to what lies under both.
      */
-    public static boolean keep(@NonNull SeeThrough seeThrough, boolean holdsLiveGlass,
-                               boolean holdsWall) {
-        return seeThrough == SeeThrough.ALL || !holdsLiveGlass || holdsWall;
+    public static boolean drawsStored(@NonNull SeeThrough seeThrough, boolean glassAbove) {
+        return seeThrough == SeeThrough.ONE && glassAbove;
     }
 }

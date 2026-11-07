@@ -104,9 +104,12 @@ beneath the wall in the band a page surface sweeps. Layers blurred apart differ 
 blurred composite at soft edges of translucent content; the spec accepts that where pong does not
 show it side by side.
 
-**See through** (Battery & performance): All layers, the default, or One layer, where a glass
-leaves every other Live glass beneath it out of what it records, at rest too
-(`BackdropLayers.keep`). The pages beneath the dock count as directly beneath it, glass and all.
+**See through** (Battery & performance): All layers, the default, or One layer. Under One layer a
+Live surface with another Live glass above it keeps its content but draws its own glass as the
+Wallpaper kind (the stored frame at its offset, through the ground layer alone) and records
+nothing; the glass above records it like anything beneath. So a front float shows the back float,
+frosted over the wallpaper, but not the widgets or pages through both, at rest and swiping
+(`BackdropLayers.drawsStored`, `LiveBackdrop.markGlassAbove`).
 
 Memory: the ground shares the stored frame; the pages capture is the size §2a's was; the local
 layer is the blur node's. A scene ground adds one quarter-scale layer of the band it covers,

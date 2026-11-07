@@ -524,7 +524,8 @@ dock or a pinned float, captured blurred as the swipe starts and moved by their 
 **local** layer (what lies beneath the surface on its own page or float, recorded and blurred
 once). The glass composites them in its one draw. The first and the landed frame of a swipe are
 the resting picture; a layer that is not ready falls back to the live recording (ADR 0021 §2b,
-`BackdropLayers`). "See through: One layer" leaves glass beneath glass out of them, at rest too.
+`BackdropLayers`). Under "See through: One layer" a glass with glass above it shows the stored frame, so the glass
+above sees it but not through it, at rest too.
 _Avoid_: frozen glass, page snapshot, freeze frame
 
 **Ambient effect**:

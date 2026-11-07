@@ -34,8 +34,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   glass in any style; keyboard up and down, Docked and Floating dock. How: pong, `screenrecord`;
   a perfetto trace counts `Glass.layers.fallback` per style.
 - **See through (11-07, same branch).** Battery & performance → See through: One layer, then All
-  layers. Passes: with One layer a float over another float shows Home only, not the float
-  behind, at rest and swiping; All layers brings it back. How: emulator or pong.
+  layers. Passes: with One layer the front of two stacked floats shows the back float (titlebar
+  and text) frosted over the wallpaper only, with no widgets or pages through both, at rest and
+  swiping; a single float over widgets still shows the widgets; All layers brings the widgets
+  back through both. How: emulator or pong.
 - **Backdrop layers, the cost (11-07, same branch).** In one session: Custom look on the base
   5169acb0f and on this branch, then Solid, 10 Home ↔ Workspace round trips each. Passes:
   RenderThread "flush layers" per swipe frame near Solid's 1.4 ms (was 4.1); swipe p90 within a
