@@ -2679,13 +2679,17 @@ public class TerminalPaneController {
         // insertion just produced. This is what makes the layout a policy rather than a one-shot.
         reapplyLayoutPolicy(window);
         render();
-        animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
-        // A pane the user (or an agent) opened powers on once it is laid out. Panes restored at
-        // launch are built by the workspace restore, never through here, so they stay still.
+        // A pane the user (or an agent) opened powers on once its picture is visible: after the
+        // divider reveal, whose snapshot covers it while it runs, or on its first draw when there
+        // is no reveal. Panes restored at launch are built by the workspace restore, never
+        // through here, so they stay still.
         PaneContentFrame opened = mPaneFrames.get(newSession);
-        if (opened != null)
-            OneShotPreDrawListener.add(opened,
-                () -> opened.screenEvent(PaneScreenEvent.Kind.POWER_ON));
+        Runnable powerOn = opened == null ? null : () -> {
+            if (opened.isAttachedToWindow()) opened.screenEvent(PaneScreenEvent.Kind.POWER_ON);
+        };
+        boolean revealing = animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session,
+            newSession, powerOn);
+        if (!revealing && opened != null) OneShotPreDrawListener.add(opened, powerOn);
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -5310,13 +5314,20 @@ public class TerminalPaneController {
      * region the old pane held, and its clip eases toward the old pane's final bounds, revealing
      * the new pane from the shared edge outward. Falls back to the plain entry pop whenever the
      * layout policy re-tiled the old pane somewhere the sweep cannot explain.
+     *
+     * @param shown run once the new pane's picture is no longer covered: when the reveal ends
+     *              (or is cancelled), or on the first draw when it falls back to the entry pop
+     *              there; never run when this returns false
+     * @return false when it fell back to the entry pop at once (no snapshot or origin), so the
+     *         caller shows the pane on its own first draw
      */
-    private void animateSplitReveal(@Nullable PaneSnapshot snapshot, @Nullable Rect origin,
-                                    @NonNull TerminalSession oldSession,
-                                    @Nullable TerminalSession newSession) {
+    private boolean animateSplitReveal(@Nullable PaneSnapshot snapshot, @Nullable Rect origin,
+                                       @NonNull TerminalSession oldSession,
+                                       @Nullable TerminalSession newSession,
+                                       @Nullable Runnable shown) {
         if (snapshot == null || origin == null) {
             animatePaneEntry(newSession);
-            return;
+            return false;
         }
         OneShotPreDrawListener.add(mHostView, () -> {
             Rect settled = boundsInHost(mPaneFrames.get(oldSession));
@@ -5324,6 +5335,7 @@ public class TerminalPaneController {
             if (settled == null || movedEdge == 0) {
                 snapshot.release();
                 animatePaneEntry(newSession);
+                if (shown != null) shown.run();
                 return;
             }
             SplitRevealDrawable reveal = new SplitRevealDrawable(snapshot);
@@ -5353,11 +5365,13 @@ public class TerminalPaneController {
                     mHostView.getOverlay().remove(reveal);
                     snapshot.release();
                     if (mSplitRevealAnimator == a) mSplitRevealAnimator = null;
+                    if (shown != null) shown.run();
                 }
             });
             mSplitRevealAnimator = animator;
             animator.start();
         });
+        return true;
     }
 
     /**
