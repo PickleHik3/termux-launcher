@@ -558,6 +558,7 @@ public final class SeamCrossing {
      */
     public void begin(@NonNull Endpoint committed, @NonNull Endpoint other,
                       @NonNull Stage stage) {
+        mLandedFootKeyboard = null;
         PlaceLayout here = committed.layout;
         PlaceLayout there = other.layout;
         mRun.committed = committed.page.kind;
@@ -973,6 +974,25 @@ public final class SeamCrossing {
      */
     @NonNull
     public Landing land() {
+        return land(null);
+    }
+
+    /**
+     * The same, for a wall that landed on {@code landed}'s half: landed where the stack stood the
+     * other half's rows, the keyboard the dock's foot answered to is held past the landing
+     * ({@link #footKeyboardUp}) until the live keyboard comes to agree with it.
+     */
+    @NonNull
+    public Landing land(@Nullable PaneWallPage landed) {
+        Run run = mRun;
+        mLandedFootKeyboard = landed != null && run.other == landed && !run.landed
+            && rowsHoldFoot(run) ? run.otherKeyboardUp : null;
+        mLandedFootReads = 0;
+        return landDress();
+    }
+
+    @NonNull
+    private Landing landDress() {
         Landing landing = mLanding;
         landing.bandsMoved = !Float.isNaN(mRun.bandProgress);
         landing.laidOut = mRun.layout != null;
@@ -1032,14 +1052,42 @@ public final class SeamCrossing {
      */
     public boolean footKeyboardUp(boolean liveKeyboardUp) {
         Run run = mRun;
-        if (run.other == null || run.landed || !run.dockShown) return liveKeyboardUp;
-        if (run.committedKeyboardUp && !leavingKeyboardAwayAtSwap()) return liveKeyboardUp;
-        return run.otherKeyboardUp;
+        if (run.other != null && !run.landed && rowsHoldFoot(run)) return run.otherKeyboardUp;
+        // Landed where the other half's rows stood: the settle's first passes run before the
+        // live keyboard has caught up with the landed page (the Workspace's still reads up for a
+        // pass on Home), so the travelled answer holds until it agrees, for a few passes at most.
+        Boolean held = mLandedFootKeyboard;
+        if (held == null) return liveKeyboardUp;
+        if (held == liveKeyboardUp || ++mLandedFootReads > LANDED_FOOT_READS) {
+            mLandedFootKeyboard = null;
+            return liveKeyboardUp;
+        }
+        return held;
+    }
+
+    /**
+     * The most geometry passes after a landing the travelled foot keyboard holds against a live
+     * keyboard that has not come round to it: the fail-safe, so a keyboard whose change never
+     * lands cannot keep a foot under it.
+     */
+    static final int LANDED_FOOT_READS = 4;
+
+    /** The keyboard the foot held through the landing, until the live one agrees; null none. */
+    @Nullable private Boolean mLandedFootKeyboard;
+    private int mLandedFootReads;
+
+    /**
+     * Whether the foot answers to the other half's keyboard on this run's frame: the stack stands
+     * that half's rows, and the leaving keyboard is below the screen by then.
+     */
+    private static boolean rowsHoldFoot(@NonNull Run run) {
+        if (!run.dockShown) return false;
+        return !run.committedKeyboardUp || leavingKeyboardAwayAtSwap(run);
     }
 
     /** Whether the committed half's keyboard is below the screen once the stack changes rows. */
-    private boolean leavingKeyboardAwayAtSwap() {
-        return pictured() || (mRun.plan == DockPlan.DIP
+    private static boolean leavingKeyboardAwayAtSwap(@NonNull Run run) {
+        return (run.pictured && run.wholeStack) || (run.plan == DockPlan.DIP
             && PlaceChromeTravel.KEYBOARD_HIDE_END <= SeamTravel.DIP_SWAP);
     }
 

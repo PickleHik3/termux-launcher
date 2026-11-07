@@ -635,7 +635,7 @@ public final class Crossing {
             ? appliedTerminalInsetPx() : 0);
         landing.beadsMelted = !Float.isNaN(mBeadShare);
         landing.storeMoved = mCommitted != null && revision != mRevision;
-        landing.seam = mSeam.land();
+        landing.seam = mSeam.land(landed.kind);
         mBeadShare = Float.NaN;
         mFoldShare = Float.NaN;
         mBar.rideX(0f);

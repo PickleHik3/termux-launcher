@@ -1577,6 +1577,53 @@ public class SeamCrossingTest {
         drive.crossing.end();
     }
 
+    /**
+     * Pong round 12: the crossing landed on Home and ended, and the settle's first geometry pass
+     * still read the Workspace's keyboard up, so the foot dropped for a pass before the keyboard's
+     * state caught up. The travelled answer holds through the landing until the live keyboard
+     * agrees, for a few passes at most.
+     */
+    @Test
+    public void theFootHoldsThroughTheLandingUntilTheKeyboardStateLands() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        assertFalse(travelled);
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        // Landed, then ended: the page's commit has run, the keyboard has not yet gone.
+        assertEquals("through the commit", travelled, drive.crossing.footKeyboardUp(true));
+        drive.crossing.end();
+        assertEquals("crossing just ended, keyboard state not yet committed", travelled,
+            drive.crossing.footKeyboardUp(true));
+        // The keyboard's state lands: the live answer, the same, and the hold is gone.
+        assertEquals(travelled, drive.crossing.footKeyboardUp(false));
+        assertTrue("nothing held after", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aKeyboardThatNeverLandsGivesTheFootBackAfterAFewPasses() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        footKeyboards(drive, slowWay(0f, 1f));
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        drive.crossing.end();
+        for (int i = 0; i < SeamCrossing.LANDED_FOOT_READS; i++)
+            assertFalse("held, pass " + i, drive.crossing.footKeyboardUp(true));
+        assertTrue("the fail-safe lets go", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aSlideThatFallsBackHoldsNothingAtItsLanding() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        float[] out = slowWay(0f, 0.7f);
+        float[] back = slowWay(0.7f, 0.6f);
+        footKeyboards(drive, out);
+        footKeyboards(drive, back);
+        // The wall went back to the Workspace without a frame under the swap to undo it.
+        drive.crossing.land(PaneWallPage.TERMINAL);
+        drive.crossing.end();
+        assertTrue(drive.crossing.footKeyboardUp(true));
+    }
+
     @Test
     public void atRestTheLiveKeyboardAnswers() {
         SeamCrossing crossing = new SeamCrossing();
