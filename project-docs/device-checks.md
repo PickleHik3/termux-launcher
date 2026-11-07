@@ -559,4 +559,6 @@ longer counted as an error. Owed:
   (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
   "Discard changes": the look is as it was before, and Custom still brings back the same values.
   (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
-XX
+  slider. (5) The same on the Home, Workspace and a surface card (Status bar, Dock, Keyboard): move
+  Opacity, tap Solid, then Custom: the card's own values are back, also after Done and reopen;
+  Discard leaves the card as it was · pong.
