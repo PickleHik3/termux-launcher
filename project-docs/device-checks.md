@@ -553,3 +553,10 @@ longer counted as an error. Owed:
   as it did on emu2; (6) put the
   developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
   audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- **Show wallpaper off reaches every surface (11-07, fix/wallpaper-off-chrome).** Appearance
+  editor > Global > Show wallpaper off, Done: no wallpaper picture, blurred or sharp, on the
+  keyboard, the extra-keys bar, the band under the keyboard, the dock, the status bar, the nav
+  strip or a floating window's bar; each is plain tint like the terminal panes. Check with the
+  keyboard up and down, on Home and on Workspace, in a Docked and a Floating dock, with the
+  keyboard's, extra keys' and status bar's Blur detached to a non-zero value. Then Show wallpaper
+  back on: the blurs return as they were · pong.

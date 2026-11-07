@@ -3788,7 +3788,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap frame = null;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (ChromePolicy.dockBlurEnabled(blurRadiusDp) && wallpaperFrame != null
-                && wallpaperPicture().blurs()) {
+                && wallpaperSampleable()) {
             frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
             if (frame != null && frame.isRecycled()) frame = null;
         }
@@ -4188,7 +4188,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public View wallpaperFrame() {
                         return findViewById(R.id.activity_termux_root_view);
                     }
-                    @Override public boolean wallpaperBlurs() { return wallpaperPicture().blurs(); }
+                    @Override public boolean wallpaperBlurs() { return wallpaperSampleable(); }
                     @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
                     @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
                         // The Widgets element's own Depth and Edge where it holds them (ADR 0017).
@@ -4220,7 +4220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (radiusDp <= 0 || wallpaperFrame == null || !isTerminalPaneGlassActive()
-                || !wallpaperPicture().blurs()) {
+                || !wallpaperSampleable()) {
             mPaneGlassFrame = null;
             return null;
         }
@@ -4242,7 +4242,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Nullable com.termux.app.chrome.GlassRefraction.Look look) {
         int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (wallpaperFrame == null || !isTerminalPaneGlassActive() || !wallpaperPicture().blurs()
+        if (wallpaperFrame == null || !isTerminalPaneGlassActive() || !wallpaperSampleable()
                 || !com.termux.app.chrome.WallpaperFrostPainter.wantsClearFrame(look, radiusDp)) {
             mPaneGlassClearFrame = null;
             return null;
@@ -7990,7 +7990,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * every band to its plain tint. Downstream, a radius of 0 already means "no blur".
      */
     private int getEffectiveExtraKeysBlurRadius() {
-        if (mPreferences == null || !wallpaperPicture().blurs()) {
+        if (mPreferences == null || !wallpaperSampleable()) {
             return 0;
         }
         return Math.max(0, mPreferences.getExtraKeysBlurRadius(stackLookPage()));
@@ -7998,7 +7998,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** @see #getEffectiveExtraKeysBlurRadius() */
     private int getEffectiveStatusBarBlurRadius() {
-        if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
+        if (mPreferences == null || !wallpaperSampleable()) return 0;
         return Math.max(0, mPreferences.getStatusBarBlurRadius(statusLookPage()));
     }
 
@@ -8009,7 +8009,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * blur gate this mirrors.
      */
     private int getEffectiveInAppKeyboardBlurRadius() {
-        if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
+        if (mPreferences == null || !wallpaperSampleable()) return 0;
         return Math.max(0, mPreferences.getInAppKeyboardBlurRadius(stackLookPage()));
     }
 
@@ -8022,6 +8022,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     WallpaperPicture wallpaperPicture() {
         return mWallpaperPicture;
+    }
+
+    /**
+     * The one answer to "is there a wallpaper image any surface may sample": Show wallpaper is on
+     * and the readable picture is one worth blurring. Every glass gate asks this, so with the
+     * switch off no chrome surface holds a wallpaper frame, blurred or sharp.
+     */
+    boolean wallpaperSampleable() {
+        return com.termux.app.chrome.WallpaperPicturePolicy.sampleable(
+            mPreferences == null || mPreferences.isUseSystemWallpaperEnabled(), mWallpaperPicture);
     }
 
     /**
@@ -13706,7 +13716,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity(stackLookPage()));
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         // Whether the wallpaper blurs here; the menus' own radius is the Sheets element's.
-        mSuggestionBarView.setBlurConfig(wallpaperPicture().blurs(), blurRadiusDp);
+        mSuggestionBarView.setBlurConfig(wallpaperSampleable(), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         int maxButtons = dockSlotCount(getResources().getDisplayMetrics());
         if (mLastStyledDockButtonCount != Integer.MIN_VALUE
@@ -23065,7 +23075,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (extraKeysView != null) {
             extraKeysView.setKeyPressFeedbackColor(resolveDockAccentColor());
             // Soft feathered wash when the dock blur is doing the work; a more present fill otherwise.
-            boolean blurActive = mPreferences != null && mPreferences.getExtraKeysBlurRadius(stackLookPage()) > 0;
+            boolean blurActive = getEffectiveExtraKeysBlurRadius() > 0;
             extraKeysView.setKeyPressFeedbackBlurAvailable(blurActive);
             // Floating capsule dock -> vertical liquid popup pill; edge-to-edge dock -> rounded-rect.
             extraKeysView.setPopupCapsuleStyle(arrangement().floating());

@@ -38,4 +38,13 @@ public final class WallpaperPicturePolicy {
         }
         return stillFileExists ? WallpaperPicture.BEST_EFFORT : WallpaperPicture.NO_STILL;
     }
+
+    /**
+     * Whether any surface may sample the wallpaper image: Show wallpaper is on and the picture is
+     * one the glass can blur. With the switch off the answer is no for every surface, whatever
+     * radius a detached slot still stores.
+     */
+    public static boolean sampleable(boolean wallpaperShown, @NonNull WallpaperPicture picture) {
+        return wallpaperShown && picture.blurs();
+    }
 }
