@@ -83,6 +83,41 @@ public final class LivePicture implements GlassPicture {
     int mRecordedSceneGen;
     /** Its place in the budget's order ({@link LiveBackdrop#RANK_CHROME}); set by the recorder. */
     int mRank = LiveBackdrop.RANK_CHROME;
+    /** The parallax offset the one picture was recorded at. */
+    float mRecordedParallax;
+
+    // ---- Backdrop layers ({@link BackdropLayers}) ------------------------------------------
+    /**
+     * While the wall moves: the layers composited in one draw, bottom first: {@link #mGround},
+     * {@link #mPagesAt} and the blur node, which then holds only the local layer. Drawn by both
+     * holders in the blur node's place while {@link #mLayered}.
+     */
+    @Nullable private RenderNode mShown;
+    /** The ground in the root's coordinates, aimed at the surface by its animation matrix. */
+    @Nullable private RenderNode mGround;
+    /** Over a live scene: the scene's frame over {@link #mSceneRegion}, blurred as the blur node is. */
+    @Nullable private RenderNode mSceneGround;
+    /** Draws the page node at full scale, aimed by its animation matrix. */
+    @Nullable private RenderNode mPagesAt;
+    /** The holders draw {@link #mShown}. */
+    private boolean mLayered;
+    /** {@link #mShown} draws a pages layer. */
+    private boolean mShownPages;
+    /** The record node holds the local layer only, not the one picture. */
+    boolean mRecordHoldsLocal;
+    /** The views the local layer was recorded from, and where the surface stood then. */
+    @NonNull final ArrayList<View> mRecordedLocal = new ArrayList<>();
+    @NonNull final Matrix mLocalMatrix = new Matrix();
+    /** What {@link #mGround} draws now: the frame, its rect in the root, the scene's publish. */
+    @Nullable private Bitmap mGroundFrame;
+    @NonNull private final Rect mGroundRect = new Rect();
+    @NonNull final Rect mSceneRegion = new Rect();
+    private int mGroundGen = -1;
+    @Nullable private ColorFilter mGroundFilter;
+    @NonNull private final android.graphics.Paint mGroundPaint =
+        new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+    /** The page layer's aim now, in px; pages that have not moved leave the one picture up. */
+    float mPageAimPx;
 
     // ---- The page layer ({@link BackdropLayers}) -------------------------------------
     /**
@@ -308,6 +343,14 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
+        mBlur.setRenderEffect(layerEffect());
+        if (mSceneGround != null) mSceneGround.setRenderEffect(layerEffect());
+    }
+
+    /** The blur node's effect: the blur, then the stored frame's colours, then the frost. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    @Nullable
+    private RenderEffect layerEffect() {
         float r = mPanelRadius ? panelQuarterRadius(mRadiusPx) : renderEffectRadius(mRadiusPx) / SCALE;
         RenderEffect effect = r > 0f
             ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
@@ -320,7 +363,7 @@ public final class LivePicture implements GlassPicture {
             RenderEffect tint = RenderEffect.createColorFilterEffect(mFilter);
             effect = effect == null ? tint : RenderEffect.createChainEffect(tint, effect);
         }
-        mBlur.setRenderEffect(effect);
+        return effect;
     }
 
     /**
@@ -441,9 +484,25 @@ public final class LivePicture implements GlassPicture {
     @NonNull
     RenderNode captureRoot(@NonNull Rect rect) {
         if (mCaptureRoot == null) mCaptureRoot = new RenderNode("LiveBackdrop.pageCapture");
-        mCaptureRoot.setPosition(0, 0, quarter(rect.width()), quarter(rect.height()));
-        return mCaptureRoot;
+        if (mCaptureContent == null) mCaptureContent = new RenderNode("LiveBackdrop.pageCaptureBlur");
+        int w = quarter(rect.width());
+        int h = quarter(rect.height());
+        mCaptureRoot.setPosition(0, 0, w, h);
+        mCaptureContent.setPosition(0, 0, w, h);
+        // The pages layer is drawn beside the ground, not under the blur node: it is captured
+        // blurred, with the stored frame's colours and the frost, as the blur node draws.
+        mCaptureContent.setRenderEffect(layerEffect());
+        RecordingCanvas canvas = mCaptureRoot.beginRecording(w, h);
+        try {
+            canvas.drawRenderNode(mCaptureContent);
+        } finally {
+            mCaptureRoot.endRecording();
+        }
+        return mCaptureContent;
     }
+
+    /** What a capture records into, under the blur ({@link #captureRoot}). */
+    @Nullable private RenderNode mCaptureContent;
 
     /** {@code px} at the page layer's quarter scale, rounded up, at least 1. */
     static int quarter(int px) {
@@ -490,13 +549,265 @@ public final class LivePicture implements GlassPicture {
             page.endRecording();
         }
         mPageMode = BackdropLayers.Mode.FROZEN;
+        // The capture's recording is done with; the bitmap is all that is held.
+        if (mCaptureContent != null && mCaptureContent.hasDisplayList()) {
+            mCaptureContent.discardDisplayList();
+        }
         return true;
     }
 
     /** Moves the page layer by {@code dxPx} in the wall's coordinates. */
     @RequiresApi(Build.VERSION_CODES.S)
     void aimPage(float dxPx) {
+        mPageAimPx = dxPx;
         if (mPage != null) mPage.setTranslationX(dxPx / SCALE);
+    }
+
+    // ---- Backdrop layers -------------------------------------------------------------------
+
+    /** The scene publish the ground holds, -1 for the stored frame or none. */
+    int groundGeneration() {
+        return mGroundGen;
+    }
+
+    /** Whether the holders draw the layers now, not the one picture. */
+    boolean layered() {
+        return mLayered;
+    }
+
+    /** Whether this is a panel's picture: panels never take backdrop layers. */
+    boolean panelRadius() {
+        return mPanelRadius;
+    }
+
+    /** The blur radius at full scale, in px. */
+    float radiusPx() {
+        return mRadiusPx;
+    }
+
+    /**
+     * The ground as the stored frame: {@code frame} over {@code rectInRoot}, drawn with the frost
+     * as the stored route draws it (the frame already carries its blur and colours). Recorded
+     * again only when the frame, its rect or the frost moved.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void groundStored(@NonNull Bitmap frame, @NonNull Rect rectInRoot) {
+        RenderNode ground = groundNode();
+        if (frame == mGroundFrame && mGroundGen == -1 && rectInRoot.equals(mGroundRect)
+            && mGroundFilter == mFilter && ground.hasDisplayList()) return;
+        mGroundFrame = frame;
+        mGroundGen = -1;
+        mGroundRect.set(rectInRoot);
+        mGroundFilter = mFilter;
+        mGroundPaint.setColorFilter(mFilter);
+        ground.setPosition(rectInRoot);
+        RecordingCanvas canvas = ground.beginRecording(rectInRoot.width(), rectInRoot.height());
+        try {
+            mGroundDest.set(0, 0, rectInRoot.width(), rectInRoot.height());
+            canvas.drawBitmap(frame, null, mGroundDest, mGroundPaint);
+        } finally {
+            ground.endRecording();
+        }
+    }
+
+    @NonNull private final Rect mGroundDest = new Rect();
+
+    /**
+     * The ground over a live scene: its frame of {@code generation} over {@code sceneInRoot},
+     * blurred over {@code region} (root coordinates) as the one picture blurs it, so the hand-off
+     * keeps the look. Recorded again for a new frame or a region it does not hold.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void groundScene(@NonNull Bitmap frame, int generation, @NonNull Rect sceneInRoot,
+                     @NonNull Rect region) {
+        RenderNode ground = groundNode();
+        if (frame == mGroundFrame && generation == mGroundGen && sceneInRoot.equals(mGroundRect)
+            && mSceneRegion.contains(region) && ground.hasDisplayList()) return;
+        if (!mSceneRegion.contains(region)) mSceneRegion.set(region);
+        mGroundFrame = frame;
+        mGroundGen = generation;
+        mGroundRect.set(sceneInRoot);
+        if (mSceneGround == null) {
+            mSceneGround = new RenderNode("LiveBackdrop.sceneGround");
+            mSceneGround.setRenderEffect(layerEffect());
+        }
+        int w = quarter(mSceneRegion.width());
+        int h = quarter(mSceneRegion.height());
+        mSceneGround.setPosition(0, 0, w, h);
+        RecordingCanvas scene = mSceneGround.beginRecording(w, h);
+        try {
+            scene.scale(1f / SCALE, 1f / SCALE);
+            scene.translate(-mSceneRegion.left, -mSceneRegion.top);
+            scene.drawBitmap(frame, null, sceneInRoot, mScenePaint);
+        } finally {
+            mSceneGround.endRecording();
+        }
+        ground.setPosition(mSceneRegion);
+        RecordingCanvas canvas = ground.beginRecording(mSceneRegion.width(), mSceneRegion.height());
+        try {
+            canvas.scale(SCALE, SCALE);
+            canvas.drawRenderNode(mSceneGround);
+        } finally {
+            ground.endRecording();
+        }
+    }
+
+    @NonNull private final android.graphics.Paint mScenePaint =
+        new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    @NonNull
+    private RenderNode groundNode() {
+        if (mGroundContent == null) mGroundContent = new RenderNode("LiveBackdrop.groundContent");
+        return mGroundContent;
+    }
+
+    /** What the ground draws, in the root's coordinates (the node stands at its rect there). */
+    @Nullable private RenderNode mGroundContent;
+
+    /** Where the ground stands: the root's coordinates to the recording's, this frame. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void aimGround(@NonNull Matrix rootToRecording) {
+        if (mGroundContent == null) return;
+        if (mGround == null) {
+            mGround = new RenderNode("LiveBackdrop.ground");
+            mGround.setClipToBounds(false);
+        }
+        mGroundByMatrix = aim(mGround, mGroundContent, rootToRecording, mGroundByMatrix);
+    }
+
+    /** Where the pages layer stands: its quarter-scale coordinates to the recording's. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void aimPagesLayer(@NonNull Matrix pageToRecording) {
+        if (mPage == null) return;
+        if (mPagesAt == null) {
+            mPagesAt = new RenderNode("LiveBackdrop.pagesAt");
+            mPagesAt.setClipToBounds(false);
+        }
+        mPagesByMatrix = aim(mPagesAt, mPage, pageToRecording, mPagesByMatrix);
+    }
+
+    /** An aim holder's recording size: larger than any screen, and it costs nothing. */
+    private static final int AIM_EXTENT_PX = 8192;
+
+    /** The aim holders are recorded around a matrix (true) or moved by their translation alone. */
+    private boolean mGroundByMatrix;
+    private boolean mPagesByMatrix;
+    @NonNull private final float[] mAimValues = new float[9];
+
+    /**
+     * Puts {@code content} at {@code matrix} through {@code holder}. A move (a slide, the
+     * parallax) is the holder's translation, a property: nothing is recorded. Any other matrix
+     * (a tilted or sunk page carrying the surface) records the holder around it, two operations.
+     * Either way the glass's own display list and the blurred layers stay as they are. Returns
+     * whether the holder is now recorded around a matrix.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private boolean aim(@NonNull RenderNode holder, @NonNull RenderNode content,
+                        @NonNull Matrix matrix, boolean byMatrix) {
+        float[] v = mAimValues;
+        matrix.getValues(v);
+        boolean move = v[Matrix.MSCALE_X] == 1f && v[Matrix.MSKEW_X] == 0f
+            && v[Matrix.MSKEW_Y] == 0f && v[Matrix.MSCALE_Y] == 1f && v[Matrix.MPERSP_0] == 0f
+            && v[Matrix.MPERSP_1] == 0f && v[Matrix.MPERSP_2] == 1f;
+        // The holder never clips (its damage reaches the composite, which does); its recording
+        // only has to hold the content wherever the matrix puts it.
+        int w = AIM_EXTENT_PX;
+        int h = AIM_EXTENT_PX;
+        if (move) {
+            if (byMatrix || !holder.hasDisplayList()) {
+                holder.setPosition(0, 0, w, h);
+                RecordingCanvas canvas = holder.beginRecording(w, h);
+                try {
+                    canvas.drawRenderNode(content);
+                } finally {
+                    holder.endRecording();
+                }
+            }
+            holder.setTranslationX(v[Matrix.MTRANS_X]);
+            holder.setTranslationY(v[Matrix.MTRANS_Y]);
+            return false;
+        }
+        holder.setTranslationX(0f);
+        holder.setTranslationY(0f);
+        holder.setPosition(0, 0, w, h);
+        RecordingCanvas canvas = holder.beginRecording(w, h);
+        try {
+            canvas.concat(matrix);
+            canvas.drawRenderNode(content);
+        } finally {
+            holder.endRecording();
+        }
+        return true;
+    }
+
+    /**
+     * The holders draw the layers from this frame on: the ground, the pages when {@code pages},
+     * and the blur node over the local layer, composited in the one draw the glass's effect then
+     * bends. Records the composite only when what it holds changed; asks the holders to draw it
+     * in this same frame when they drew the one picture.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void showLayers(boolean pages, int width, int height) {
+        if (mRecord == null || mBlur == null || mGround == null) return;
+        if (pages && (mPagesAt == null || !mPagesAt.hasDisplayList())) return;
+        if (mShown == null) mShown = new RenderNode("LiveBackdrop.layers");
+        boolean resized = mShown.getWidth() != width || mShown.getHeight() != height;
+        if (!mLayered || pages != mShownPages || resized || !mShown.hasDisplayList()) {
+            mShown.setPosition(0, 0, width, height);
+            RecordingCanvas canvas = mShown.beginRecording(width, height);
+            try {
+                canvas.drawRenderNode(mGround);
+                if (pages) canvas.drawRenderNode(mPagesAt);
+                canvas.scale(SCALE, SCALE);
+                canvas.drawRenderNode(mBlur);
+            } finally {
+                mShown.endRecording();
+            }
+            mShownPages = pages;
+        }
+        if (!mLayered) {
+            mLayered = true;
+            mDrawable.invalidateSelf();
+            mAimed.invalidateSelf();
+        }
+    }
+
+    /**
+     * The holders draw the one picture again, from this frame on. The caller records it in the
+     * same pre-draw, so the landed frame is the resting glass.
+     */
+    void showOne() {
+        if (!mLayered) return;
+        mLayered = false;
+        mDrawable.invalidateSelf();
+        mAimed.invalidateSelf();
+    }
+
+    /** Lets the layers' nodes go; the composite and the ground draw nothing until recorded again. */
+    private void dropLayers() {
+        mLayered = false;
+        mShownPages = false;
+        mRecordHoldsLocal = false;
+        mRecordedLocal.clear();
+        mGroundFrame = null;
+        mGroundGen = -1;
+        mSceneRegion.setEmpty();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (mShown != null && mShown.hasDisplayList()) mShown.discardDisplayList();
+            if (mGround != null && mGround.hasDisplayList()) mGround.discardDisplayList();
+            if (mGroundContent != null && mGroundContent.hasDisplayList()) {
+                mGroundContent.discardDisplayList();
+            }
+            if (mSceneGround != null && mSceneGround.hasDisplayList()) mSceneGround.discardDisplayList();
+            if (mPagesAt != null && mPagesAt.hasDisplayList()) mPagesAt.discardDisplayList();
+        }
+    }
+
+    /** Bytes the scene ground's blur layer holds now, 0 with none: it counts in this picture's share. */
+    long sceneGroundBytes() {
+        return mSceneGround == null || mSceneRegion.isEmpty() ? 0L
+            : LiveBackdrop.layerBytes(mSceneRegion.width(), mSceneRegion.height());
     }
 
     /** Whether the page layer holds a picture the record node can draw. */
@@ -558,6 +869,7 @@ public final class LivePicture implements GlassPicture {
      */
     void trim() {
         mReady = false;
+        dropLayers();
         dropPageLayer();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mBlur != null && mBlur.hasDisplayList()) mBlur.discardDisplayList();
@@ -602,6 +914,7 @@ public final class LivePicture implements GlassPicture {
     }
 
     private void discardRetired() {
+        dropLayers();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mRetiredBlur != null && mRetiredBlur.hasDisplayList()) mRetiredBlur.discardDisplayList();
             if (mRetiredRecord != null && mRetiredRecord.hasDisplayList()) {
@@ -645,6 +958,9 @@ public final class LivePicture implements GlassPicture {
             RenderNode blur = mBlur;
             // A software canvas (a screenshot of the view) cannot draw a node: nothing, not a crash.
             if (blur == null || !blur.hasDisplayList() || !(canvas instanceof RecordingCanvas)) return;
+            // While the wall moves: the backdrop layers, composited at the recording's scale.
+            RenderNode shown = mLayered ? mShown : null;
+            boolean layers = shown != null && shown.hasDisplayList();
             int save = canvas.save();
             // The holder (an ImageView) has already moved the canvas to its content box.
             // The recording's origin is the surface's, less the margin and the reach above it.
@@ -654,8 +970,12 @@ public final class LivePicture implements GlassPicture {
                 canvas.translate(-mMarginPx - mSurface.getPaddingLeft(),
                     -mMarginPx - mReachTopPx - mSurface.getPaddingTop());
             }
-            canvas.scale(SCALE, SCALE);
-            ((RecordingCanvas) canvas).drawRenderNode(blur);
+            if (layers) {
+                ((RecordingCanvas) canvas).drawRenderNode(shown);
+            } else {
+                canvas.scale(SCALE, SCALE);
+                ((RecordingCanvas) canvas).drawRenderNode(blur);
+            }
             canvas.restoreToCount(save);
         }
 
