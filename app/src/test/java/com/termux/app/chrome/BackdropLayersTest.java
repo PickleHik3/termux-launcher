@@ -4,11 +4,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.chrome.BackdropLayers.Holder;
 import com.termux.app.chrome.BackdropLayers.Layer;
 import com.termux.app.chrome.BackdropLayers.Motion;
 import com.termux.app.chrome.BackdropLayers.Move;
 import com.termux.app.chrome.BackdropLayers.Place;
 import com.termux.app.chrome.BackdropLayers.SeeThrough;
+import com.termux.app.chrome.BackdropLayers.Tier;
 
 import org.junit.Test;
 
@@ -169,5 +171,62 @@ public class BackdropLayersTest {
             Move.STILL, true, false, false));
         assertEquals(0, BackdropLayers.plan(Place.PAGE, true, true, true, false, false, false,
             Move.STILL, true, false, true));
+    }
+
+    @Test
+    public void theGroundStripRidesWithASurfaceOnAPage() {
+        // Measured on pong (Home2 <-> Workspace, a live scene): the terminal pane's glass found the
+        // ground strip beneath the wall in its band and fell back to the one picture. The strip's
+        // band under a page is that page's own ground and moves as the page does.
+        assertEquals(Holder.LOCAL, BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, false,
+            false, true, true, false));
+        // Chrome that stands still where the surface sweeps has no layer of its own.
+        assertEquals(Holder.FIXED, BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, false,
+            false, false, true, false));
+        assertEquals(Holder.NONE, BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, false,
+            false, false, false, false));
+        // The wallpaper and the scene are the ground, wherever they stand.
+        assertEquals(Holder.GROUND, BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, true,
+            false, false, true, false));
+        assertEquals(Holder.GROUND, BackdropLayers.holder(Place.CHROME, Tier.BENEATH_WALL, true,
+            false, false, false, false));
+    }
+
+    @Test
+    public void viewsBeneathFindTheirLayer() {
+        // On a page: its own views ride with it; a lower page under it is a pages layer.
+        assertEquals(Holder.LOCAL, BackdropLayers.holder(Place.PAGE, Tier.ON_PAGE, false, false,
+            false, false, false));
+        assertEquals(Holder.PAGES, BackdropLayers.holder(Place.PAGE, Tier.PAGE, false, false,
+            false, false, true));
+        assertEquals(Holder.NONE, BackdropLayers.holder(Place.PAGE, Tier.PAGE, false, false,
+            false, false, false));
+        // Off the wall: the view holding the wall is the pages; everything else, the strip too,
+        // is the local layer, as before.
+        assertEquals(Holder.PAGES, BackdropLayers.holder(Place.CHROME, Tier.BENEATH_WALL, false,
+            true, false, false, false));
+        assertEquals(Holder.LOCAL, BackdropLayers.holder(Place.CHROME, Tier.BENEATH_WALL, false,
+            false, true, false, false));
+        assertEquals(Holder.LOCAL, BackdropLayers.holder(Place.FLOAT, Tier.BENEATH_WALL, false,
+            false, false, false, false));
+    }
+
+    @Test
+    public void thePaneOverALiveSceneDrawsItsLayersOnceTheStripRides() {
+        // The pong fallback: place=PAGE, groundReady, sceneLive, pagesBeneath=false,
+        // pagesMove=TURN, pagesReady=false. With fixedBeneath it was the one picture.
+        assertEquals(0, BackdropLayers.plan(Place.PAGE, true, true, true, true, false, false,
+            Move.TURN, false, false, true));
+        // The strip sorted into the local layer leaves nothing fixed: the layers draw.
+        boolean fixed = BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, false, false, true,
+            true, false) == Holder.FIXED;
+        assertEquals(BackdropLayers.LAYERS | BackdropLayers.GROUND | BackdropLayers.LOCAL,
+            BackdropLayers.plan(Place.PAGE, true, true, true, true, false, false, Move.TURN, false,
+                false, fixed));
+        // Its first layered frame records the local layer, and a new scene frame the ground.
+        assertEquals(BackdropLayers.LAYERS | BackdropLayers.GROUND | BackdropLayers.LOCAL
+            | BackdropLayers.STALE_GROUND | BackdropLayers.STALE_LOCAL,
+            BackdropLayers.plan(Place.PAGE, true, true, true, true, true, false, Move.TURN, false,
+                true, fixed));
     }
 }

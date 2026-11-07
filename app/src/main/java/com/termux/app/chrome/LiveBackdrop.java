@@ -111,6 +111,14 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         void drawDecorForBackdrop(@NonNull Canvas canvas);
     }
 
+    /**
+     * A view drawn beneath the wall that paints each page's own ground where that page stands
+     * (the ground strip), so its drawing travels with the pages: a surface riding a page carries
+     * it in its local layer instead of falling back to the one picture
+     * ({@link BackdropLayers#holder}).
+     */
+    public interface WallGround {}
+
     /** Pictures of the page layer one swipe may start before it goes on without one. */
     static final int MAX_CAPTURES_PER_SWIPE = 3;
 
@@ -1280,20 +1288,30 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             mLocal.clear();
             int next = 0;
             for (int i = mPath.size() - 1; i >= 1; i--) {
+                BackdropLayers.Tier tier = i > wallAt ? BackdropLayers.Tier.BENEATH_WALL
+                    : i == wallAt ? BackdropLayers.Tier.PAGE : BackdropLayers.Tier.ON_PAGE;
                 for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
-                    if (below instanceof WallpaperBackdropView || below instanceof SceneLayerView) {
-                        continue;
-                    }
-                    if (!onPage) {
-                        if (below == holder) pagesBeneath = true;
-                        else mLocal.add(below);
-                    } else if (i > wallAt) {
-                        // Chrome beneath the wall stands still while the surface rides its page.
-                        if (inBand(below)) fixed = true;
-                    } else if (i == wallAt) {
-                        if (overlapsNeeded(below)) pagesBeneath = true;
-                    } else {
-                        mLocal.add(below);
+                    boolean ground = below instanceof WallpaperBackdropView
+                        || below instanceof SceneLayerView;
+                    boolean rides = below instanceof WallGround;
+                    // Measured only where the answer turns on it.
+                    boolean beneathWall = onPage && tier == BackdropLayers.Tier.BENEATH_WALL;
+                    boolean band = beneathWall && !ground && !rides && inBand(below);
+                    boolean overlaps = onPage && tier == BackdropLayers.Tier.PAGE && !ground
+                        && overlapsNeeded(below);
+                    switch (BackdropLayers.holder(place, tier, ground, below == holder, rides,
+                            band, overlaps)) {
+                        case PAGES:
+                            pagesBeneath = true;
+                            break;
+                        case LOCAL:
+                            mLocal.add(below);
+                            break;
+                        case FIXED:
+                            fixed = true;
+                            break;
+                        default:
+                            break;
                     }
                 }
             }

@@ -20,7 +20,9 @@ import androidx.annotation.NonNull;
  *       the pages' travel ({@link Motion#TRAVEL}). A surface on a page has no pages layer: lower
  *       pages that ride with it are in its local layer.</li>
  *   <li>{@link Layer#LOCAL}: what lies beneath the surface on its own page or float, or the chrome
- *       beneath the dock, recorded and blurred once ({@link Motion#FIXED}).</li>
+ *       beneath the dock, recorded and blurred once ({@link Motion#FIXED}). Under a surface on a
+ *       page it also holds the wall's ground strip, whose band there is the page's own ground
+ *       and travels with it ({@link #holder}).</li>
  * </ul>
  *
  * <p>{@link #plan} says, for one frame, whether the surface draws its layers or the one picture
@@ -240,6 +242,62 @@ public final class BackdropLayers {
             if (place != Place.PAGE) plan |= PAGES;
         }
         return plan;
+    }
+
+    /** Where a view drawn beneath a Live surface stands against the wall ({@link #holder}). */
+    public enum Tier {
+        /** Drawn by one of the wall's ancestors, beneath the wall: chrome, the ground strip. */
+        BENEATH_WALL,
+        /** One of the wall's pages, drawn before the surface's own. */
+        PAGE,
+        /** Inside the surface's own page, beneath the surface. */
+        ON_PAGE
+    }
+
+    /** Which layer holds a view drawn beneath a Live surface while the wall moves. */
+    public enum Holder {
+        /** The ground layer draws it: the wallpaper or the scene. */
+        GROUND,
+        /** The pages layer: the view that holds the wall, beneath a surface that does not ride it. */
+        PAGES,
+        /** The local layer, recorded once and moved with the surface. */
+        LOCAL,
+        /** Stands still where a surface on a page sweeps: no layer holds it. */
+        FIXED,
+        /** Draws nothing the surface sweeps: no layer needs it. */
+        NONE
+    }
+
+    /**
+     * Which layer holds a view drawn beneath a surface at {@code place} while the wall moves.
+     * {@link Holder#FIXED} sends the surface back to the one picture ({@link #plan}'s
+     * {@code fixedBeneath}); {@link Holder#PAGES} on a page sets its {@code pagesBeneath}.
+     *
+     * @param tier      where the view stands against the wall; ignored off a page
+     * @param ground    the view is the wallpaper or the scene
+     * @param holdsWall the view is the wall, or holds it, beneath a surface off the wall
+     * @param ridesWall the view paints each page's ground where that page stands (the ground
+     *                  strip), so its drawing travels with the pages
+     * @param inBand    the view crosses the band a surface on a page sweeps
+     * @param overlaps  the lower page lies under the surface
+     */
+    @NonNull
+    public static Holder holder(@NonNull Place place, @NonNull Tier tier, boolean ground,
+                                boolean holdsWall, boolean ridesWall, boolean inBand,
+                                boolean overlaps) {
+        if (ground) return Holder.GROUND;
+        if (place != Place.PAGE) return holdsWall ? Holder.PAGES : Holder.LOCAL;
+        switch (tier) {
+            case ON_PAGE:
+                return Holder.LOCAL;
+            case PAGE:
+                return overlaps ? Holder.PAGES : Holder.NONE;
+            default:
+                // The ground strip's band under a surface on a page is that page's own ground, and
+                // it moves as the page does: it rides with the surface. Anything else stands still.
+                if (ridesWall) return Holder.LOCAL;
+                return inBand ? Holder.FIXED : Holder.NONE;
+        }
     }
 
     /** How {@code layer} moves against a surface at {@code place}. */

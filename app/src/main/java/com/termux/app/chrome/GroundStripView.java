@@ -19,8 +19,12 @@ import androidx.annotation.Nullable;
  *
  * <p>The strip is painted over the window's whole rect ({@link #setCover}), as the root's
  * background used to be, and the first and last band run out to its sides.
+ *
+ * <p>Its band under any point of a page is that page's ground and moves as the page does, so live
+ * glass riding a page carries the strip in its local layer while the wall moves
+ * ({@link LiveBackdrop.WallGround}).
  */
-public final class GroundStripView extends View {
+public final class GroundStripView extends View implements LiveBackdrop.WallGround {
 
     /** The seam's width, 24 dp. */
     private static final float FEATHER_DP = 24f;
