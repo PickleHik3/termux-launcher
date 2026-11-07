@@ -18083,9 +18083,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         dockMoved |= applyUnderKeyboardBandAir(stack.underKeyboardTopMarginPx,
             stack.underKeyboardBottomMarginPx);
         // The dock's surface reaches the screen's bottom edge while it owns the foot (DockSpec,
-        // D8); the rows and the keyboard stand where they did (BottomInsets).
+        // D8); the rows and the keyboard stand where they did (BottomInsets). Mid-crossing the
+        // keyboard it answers to is the one of the half whose rows the stack stands
+        // (SeamCrossing#footKeyboardUp), so Home's rows arrive with their foot.
         boolean dockFoot = com.termux.app.dock.DockSpec.footExists(mDockRows.surfaceShown(),
-            dockFloats(), state.keyboardShown, isImeVisible(), mBottomKeptPx);
+            dockFloats(), mCrossing.seam().footKeyboardUp(state.keyboardShown), isImeVisible(),
+            mBottomKeptPx);
         com.termux.app.place.BottomInsets bottomInsets = com.termux.app.place.BottomInsets.forKept(
             0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx);
         mDockFootPx = bottomInsets.dockFootPx;

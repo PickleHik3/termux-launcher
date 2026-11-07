@@ -467,6 +467,8 @@ public final class SeamCrossing {
          */
         boolean dressDiffers, shapeDiffers, wholeStack;
         boolean committedKeyboard, otherKeyboard;
+        /** Whether each half keeps the in-app keyboard up at rest, in the stack or not. */
+        boolean committedKeyboardUp, otherKeyboardUp;
         /**
          * Whether the committed half's stack is drawn from a picture taken as the crossing began,
          * so the stack itself stands and wears the other half's rows from the first frame and the
@@ -605,6 +607,8 @@ public final class SeamCrossing {
             mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
         }
         // A keyboard in the stack, not one floating in a frame of its own.
+        mRun.committedKeyboardUp = committed.keyboardUp;
+        mRun.otherKeyboardUp = other.keyboardUp;
         mRun.committedKeyboard = committed.keyboardUp
             && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
         mRun.otherKeyboard = other.keyboardUp
@@ -1011,6 +1015,32 @@ public final class SeamCrossing {
             + " designs=" + r.committedDesign + "/" + r.otherDesign
             + " dockShown=" + r.dockShown + " stackDressPage=" + r.stackDressPage
             + " landed=" + r.landed;
+    }
+
+    /**
+     * The in-app keyboard the dock's foot under the gesture pill answers to on this frame
+     * ({@code DockSpec#footExists}), given the keyboard as it is now ({@code liveKeyboardUp}):
+     * the keyboard of the half whose rows the stack stands, as that half rests, from the frame
+     * the stack stands them; the live one otherwise. So a crossing from the Workspace's keyboard
+     * to Home's keyboard-down dock gives Home's rows their foot on the frame they stand, out of
+     * sight at the dip's swap, and the settle on Home, whose live keyboard is down, finds it
+     * there. Only where the leaving keyboard is below the screen by then (a dip, whose swap is
+     * no earlier than the keyboard's retreat ends, or a pictured dip, which puts it away with its
+     * picture): elsewhere a foot would run on behind a keyboard still in sight. Before the rows
+     * change halves the live keyboard answers, so a keyboard brought up for the arriving half
+     * takes the foot from the frame it is pre-rolled, as it rises in the stack under the rows.
+     */
+    public boolean footKeyboardUp(boolean liveKeyboardUp) {
+        Run run = mRun;
+        if (run.other == null || run.landed || !run.dockShown) return liveKeyboardUp;
+        if (run.committedKeyboardUp && !leavingKeyboardAwayAtSwap()) return liveKeyboardUp;
+        return run.otherKeyboardUp;
+    }
+
+    /** Whether the committed half's keyboard is below the screen once the stack changes rows. */
+    private boolean leavingKeyboardAwayAtSwap() {
+        return pictured() || (mRun.plan == DockPlan.DIP
+            && PlaceChromeTravel.KEYBOARD_HIDE_END <= SeamTravel.DIP_SWAP);
     }
 
     /** The other half's page the crossing was begun for; null while none runs. */
