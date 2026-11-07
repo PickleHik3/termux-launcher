@@ -18133,20 +18133,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
         // A bar that has just arrived on a side has to meet the terminal frame straight away; the
         // appearance pass owns the same number but does not necessarily run on this one.
+        Trace.beginSection("Place.edgeStacks.frameInset");
         applySideStackFrameInset(hasDockedFrameCard() ? 0 : terminalFrameInsetPx(true));
+        Trace.endSection();
+        Trace.beginSection("Place.edgeStacks.statusEdge");
         applyStatusBarEdge(layout);
         Trace.endSection();
+        Trace.endSection();
         Trace.beginSection("Place.hosts");
+        Trace.beginSection("Place.hosts.widgetGrid");
         boolean alwaysOnChanged = syncHomeKeyboardAlwaysOn();
         applyWidgetGridPreference();
+        Trace.endSection();
+        Trace.beginSection("Place.hosts.pinnedApps");
         boolean columnChanged = syncPinnedAppsHost();
+        Trace.endSection();
+        Trace.beginSection("Place.hosts.extraKeys");
         columnChanged |= syncExtraKeysHost();
+        Trace.endSection();
+        Trace.beginSection("Place.hosts.azBar");
         columnChanged |= syncAzBarHosts();
+        Trace.endSection();
         // After the index, which is what decides whether the plank holds one bar or two.
+        Trace.beginSection("Place.hosts.offDockPlank");
         columnChanged |= syncOffDockPlank(layout);
+        Trace.endSection();
         // The keys follow the wall, but their meanings do not: a key with nothing to act on where
         // the wall has landed is drawn dead until the wall moves again.
+        Trace.beginSection("Place.hosts.keyEligibility");
         applyExtraKeysPlaceEligibility();
+        Trace.endSection();
         Trace.endSection();
         if (arrangementChanged || columnChanged || stacksMoved) {
             // Rows collapse or come back with a column or a rail, and the render state that hides
@@ -25448,7 +25464,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A first settle on the seeded page commits nothing new; the arrangement is still checked
         // (it only acts on a change), as the settle from the Workspace's window always did.
         if (!commitWallPage(page) && !remember) syncChromeArrangement();
+        Trace.beginSection("Settle.placeKeyboard");
         applyPlaceKeyboard(page);
+        Trace.endSection();
         // Wherever the wall came to rest, a restored float's landing has been had.
         mKeyboardForRestoredFloat = false;
     }
@@ -25466,13 +25484,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastWallPage = page;
         // The arrangement before the keyboard, so the keyboard's geometry pass sees the
         // chrome it will stand in.
+        Trace.beginSection("Settle.arrangement");
         syncChromeArrangement();
+        Trace.endSection();
         // Home wears its own Style, Corners and Margin: a crossing between halves that differ
         // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
         // whose stack already changed into that dress on the way leaves the landed frame nothing
         // to show from it, so the whole re-dress (58-88 ms on pong) follows that frame instead.
+        Trace.beginSection("Settle.halfDress");
         if (mLandingStackDressed) deferHalfRestyle(left, page);
         else restyleChromeForHalfIfChanged(left, page);
+        Trace.endSection();
         // The dock wears the arriving page's Dock design; one design on both changes nothing.
         Trace.beginSection("Settle.dockDesign");
         restyleDockSurfaceForPageIfChanged(left, page);
@@ -25624,6 +25646,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage place = currentWallPlace();
         com.termux.app.place.PlaceChromeTravel.InnerPages inner =
             mPaneWallController::showsInnerPage;
+        // Each step of the frame is its own section (Travel.<step>), so a trace names what a slow
+        // drag frame spent its time in.
+        Trace.beginSection("Travel.frame");
         float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, chromeOffsetPx,
@@ -25633,15 +25658,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
             ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, offsetPx,
                 wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
+        Trace.endSection();
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
+        Trace.beginSection("Travel.readSeam");
         readSeamTravel(frame);
+        Trace.endSection();
         // Every answer the seam has for this frame, from what the crossing read as it began, and
         // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
         // the wall's own way (SeamCrossing#pictured).
+        Trace.beginSection("Travel.answers");
         com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
             mPreferences != null && mChrome != null, mPromptFieldEase != null,
             mPromptFieldUnderPalette);
+        Trace.endSection();
+        Trace.beginSection("Travel.blends");
         // The strip under the pill crosses from the one dress to the other with the finger.
         syncNavStripFade(wallFrame);
         // A stack whose halves differ only in look blends its glass with the wall.
@@ -25652,6 +25683,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
         syncSeamBeadMelt(seam);
+        Trace.endSection();
+        Trace.beginSection("Travel.preRolls");
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         // A keyboard a pictured dip put away travels in the picture, never in the stack again.
@@ -25681,9 +25714,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (taken > 0) mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
         }
+        Trace.endSection();
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
         float dockReveal = syncSeamTravel(seam);
+        Trace.beginSection("Travel.stack");
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
         // The stack as the crossing answers it (Crossing#stack): with a keyboard in the stack the
@@ -25695,19 +25730,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
             travelDockRowsPx(keyboardPx));
         if (translation != 0f || wasMoved) mChromeTravelMoved = true;
+        Trace.endSection();
         // A keyboard up on both places crosses from one material to the other with the wall.
+        Trace.beginSection("Travel.material");
         syncKeyboardMaterialTravel(frame);
+        Trace.endSection();
         // The terminal's rows are drawn where the settle's resize is going to put them, and the
         // pane's own edge ends where the chrome's live edge begins rather than under it.
+        Trace.beginSection("Travel.content");
         if (mCrossing.holdsContent()) {
             syncTerminalTravelDisplacement(frame, arriving);
             // The cover the pane controller holds for the window in front, under whichever edge
             // stands higher: the stack's, or the picture of the committed half's stack.
             mCrossing.coverAt(translation, stackPictureCoverPx());
         }
+        Trace.endSection();
         // The status bar travels with the Workspace's page wherever the frame reaches Home while
         // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
         // edge, or pages that turn).
+        Trace.beginSection("Travel.status");
         boolean barRides = syncStatusTravel(wallFrame, seam);
         // A bar that stands still eases from one page's Margin to the other's with the wall.
         syncStatusMarginEase(seam);
@@ -25719,6 +25760,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
         mCrossing.fade(statusAlpha, frame.dockReveal);
+        Trace.endSection();
     }
 
     // ---- The chrome between two Home pages (#173 slice E) -------------------------------------
@@ -27484,7 +27526,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedChromeVariant = variant;
         mAppliedChromeHome = home;
         syncPlaceLayout();
+        Trace.beginSection("Place.statusChrome");
         applyMinimalStatusChrome();
+        Trace.endSection();
     }
 
     // ---- Minimal mode ------------------------------------------------------------------------
@@ -28306,8 +28350,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // a trace shows whether the chrome lands with the wall or after it.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
+                    Trace.beginSection("Wall.barOffset");
                     syncPlaceBarOffset(offsetPx);
                     syncGroundStrip(offsetPx);
+                    Trace.endSection();
                     // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
                     // page stands at its own top from this frame on (PageTopInsets).
                     syncCanvasTopReach();
@@ -28320,15 +28366,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
                     // on moved over a wallpaper that did not go with it. Aimed once: the wall's
                     // controller has re-aimed the other pages already, and the slabs are here.
+                    Trace.beginSection("Wall.parallax");
                     syncWallpaperParallax(true);
                     if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    Trace.endSection();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the
                     // first frame of the slide, rather than one stale frame later. The panes'
                     // borders are re-dressed when the page comes on screen
                     // (onTerminalOffScreenChanged), not per frame; per frame only the
                     // acknowledgement is taken, which repaints them itself when it lands.
+                    Trace.beginSection("Wall.terminalVisible");
                     noteTerminalPlaceMayBeVisibleWhileMoving();
+                    Trace.endSection();
                 }
                 @Override public void onTerminalOffScreenChanged(boolean offScreen) {
                     // Every pane the terminal place holds, tiled and floating alike, has to hear

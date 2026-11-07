@@ -735,3 +735,11 @@ longer counted as an error. Owed:
   takes the phone's keyboard. Trace over 5 round trips: no `Chrome.kb.host` under
   `Keyboard.setContainerVisible`, no `Keyboard.suppressSystemIme` inside `Wall.preRollKeyboard`
   or `Wall.settleChrome`, one in a posted message just after the landed frame · pong.
+- **Top-pane frost cut with the frame's commit (11-08, perf/swipe-main-thread).** Swipe Home2 ↔
+  Workspace 5 times slowly and 5 times fast, keyboard remembered up and down on the Workspace,
+  Docked and Floating dock, status bar at the top: the status bar's glass and the strip behind
+  the system bar show the wallpaper under them on every frame of the slide and at the landing,
+  with no frame of stale or blank frost as the bar changes dress at the seam. Change the
+  wallpaper and open the Appearance editor once: the bar's frost follows. Trace: no drag frame
+  holds two `Frost.updateTopPane` passes; under `Wall.chromeTravel`, the new `Travel.*`,
+  `Place.hosts.*` and `Settle.*` sections name the rest of each slow frame · pong.
