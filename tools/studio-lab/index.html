@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio lab</title>
+<style>
+  :root {
+    --bg: #0c0c0f;
+    --panel: #15151a;
+    --line: #26262e;
+    --fg: #e8e6ef;
+    --dim: #8b8996;
+    --accent: #c9b8ff;
+    --lock: #ffcf6e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { display: flex; gap: 48px; min-height: 100%; padding: 32px 40px; align-items: flex-start;
+    justify-content: center; flex-wrap: wrap; }
+  .stage { position: relative; display: flex; gap: 28px; align-items: flex-end; }
+  .phone { position: relative; border-radius: 44px; padding: 10px; background: #050506;
+    box-shadow: 0 0 0 1px #2a2a31, 0 30px 80px rgba(0,0,0,.6); }
+  .phone canvas { display: block; border-radius: 35px; }
+  .phone.small { border-radius: 26px; padding: 6px; }
+  .phone.small canvas { border-radius: 21px; }
+  .punch { position: absolute; top: 24px; left: 50%; width: 14px; height: 14px; margin-left: -7px;
+    border-radius: 50%; background: #000; box-shadow: 0 0 0 1px #111; pointer-events: none; }
+  .chrome { position: absolute; inset: 10px; border-radius: 35px; pointer-events: none; overflow: hidden; }
+  .chrome .clock { position: absolute; top: 15%; width: 100%; text-align: center; font-size: 58px;
+    font-weight: 300; letter-spacing: -1px; color: rgba(255,255,255,.92); text-shadow: 0 1px 12px rgba(0,0,0,.25); }
+  .chrome .dock { position: absolute; left: 7%; right: 7%; bottom: 3.5%; height: 64px; border-radius: 26px;
+    background: rgba(255,255,255,.12); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; justify-content: space-around; align-items: center; }
+  .chrome .dock i { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.55); }
+  .light .chrome .clock { color: rgba(20,18,28,.88); text-shadow: none; }
+  .light .chrome .dock { background: rgba(255,255,255,.4); }
+  .light .chrome .dock i { background: rgba(30,28,40,.35); }
+
+  aside { width: 520px; max-width: 100%; display: flex; flex-direction: column; gap: 22px; padding-top: 8px; }
+  h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  h1 b { color: var(--fg); }
+  .sentence { font-size: 27px; line-height: 1.55; font-weight: 300; letter-spacing: -.2px; color: #d6d3df; }
+  .word { position: relative; color: var(--fg); font-weight: 500; cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid rgba(201,184,255,.45); padding: 0 1px; user-select: none; transition: border-color .15s; }
+  .word:hover { border-bottom-color: var(--accent); }
+  .word.locked { border-bottom: 2px dashed var(--lock); }
+  .word.locked::after { content: ""; position: absolute; top: -6px; right: -9px; width: 11px; height: 11px;
+    background: var(--lock); border-radius: 2px;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z'/%3E%3C/svg%3E") center/contain no-repeat; }
+  .hint { color: var(--dim); font-size: 12.5px; margin-top: -12px; }
+  .menu { position: fixed; z-index: 20; min-width: 170px; max-height: 60vh; overflow: auto; padding: 6px;
+    background: #1c1c23; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+  .menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0;
+    border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+  .menu button:hover { background: #2a2a34; }
+  .menu button.on { color: var(--accent); }
+  .menu button:disabled { color: #55535e; cursor: default; background: none; }
+  .menu .sw { display: inline-flex; gap: 2px; }
+  .menu .sw span { width: 10px; height: 16px; border-radius: 2px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; }
+  .btn:hover { border-color: #3a3a46; }
+  .btn.primary { background: var(--accent); color: #17121f; border-color: var(--accent); font-weight: 600; }
+  .readout { font: 12.5px ui-monospace, "JetBrains Mono", Menlo, monospace; color: var(--dim); }
+  .readout b { color: var(--fg); font-weight: 500; }
+  .seed.locked b { color: var(--lock); }
+  .seed { cursor: pointer; }
+  .vars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .vars img { width: 100%; aspect-ratio: 1080 / 2412; border-radius: 12px; cursor: pointer; display: block;
+    background: #111; outline: 1px solid var(--line); }
+  .vars img:hover { outline-color: var(--accent); }
+  .label { font-size: 12px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+  .err { white-space: pre-wrap; color: #ff9c9c; font: 12px ui-monospace, monospace; background: #241416;
+    border-radius: 10px; padding: 10px 12px; }
+  .recipe { font: 12px ui-monospace, monospace; color: var(--dim); word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <div class="stage" id="stage">
+    <div class="phone" id="phoneMain">
+      <canvas id="view"></canvas>
+      <div class="chrome" id="chrome" hidden><div class="clock">09:41</div><div class="dock"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="punch"></div>
+    </div>
+  </div>
+  <aside>
+    <h1><b>Studio</b> lab · <span id="familyName">Bloom</span></h1>
+    <div class="sentence" id="sentence"></div>
+    <div class="hint">Tap a word to change it. Shift-click or long-press to lock it. Space shuffles.</div>
+    <div class="row">
+      <button class="btn primary" id="shuffle">Shuffle</button>
+      <button class="btn" id="theme">Light</button>
+      <button class="btn" id="chromeBtn">Home chrome</button>
+      <button class="btn" id="pause">Pause</button>
+    </div>
+    <div class="row readout">
+      <span class="seed" id="seedBox" title="Click to lock the seed">seed <b id="seed">1</b></span>
+      <span>·</span><span><b id="fps">–</b> fps</span>
+      <span>·</span><span id="res"></span>
+    </div>
+    <div>
+      <div class="label">Variations</div>
+      <div class="vars" id="vars"></div>
+    </div>
+    <div class="recipe" id="recipe"></div>
+    <div class="err" id="err" hidden></div>
+  </aside>
+</main>
+<div class="menu" id="menu" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.39.1/bin/canvaskit.js"></script>
+<script src="lab.js"></script>
+</body>
+</html>
