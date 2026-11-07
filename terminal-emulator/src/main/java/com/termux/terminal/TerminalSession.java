@@ -193,6 +193,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void initializeEmulator(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         mEmulator = new TerminalEmulator(this, mBoldWithBright, columns, rows, cellWidthPixels, cellHeightPixels, mTranscriptRows, mClient);
+        if (GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES)) useGhosttyCoreOrLog();
 
         int[] processId = new int[1];
         mTerminalFileDescriptor = JNI.createSubprocess(mShellPath, mCwd, mArgs, mEnv, processId, rows, columns, cellWidthPixels, cellHeightPixels);
@@ -426,6 +427,23 @@ public final class TerminalSession extends TerminalOutput {
         // closed pane keeps its images alive, and keeps decoding them, for the life of the process.
         // The emulator is only safe to touch from the main thread, which is where this runs.
         if (mEmulator != null) mEmulator.shutdownKittyGraphics();
+        if (mEmulator != null) mEmulator.releaseGhosttyCore();
+    }
+
+    /** Experimental: parse with libghostty-vt (debug.tl.terminal_core=ghostty), or say why not. */
+    private void useGhosttyCoreOrLog() {
+        try {
+            if (mEmulator.useGhosttyCore()) {
+                Logger.logInfo(mClient, LOG_TAG, "Terminal core: ghostty");
+                return;
+            }
+            Throwable why = GhosttyNative.loadError();
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty unavailable, using the Java core"
+                + (why == null ? "" : " (" + why + ")"));
+        } catch (Throwable t) {
+            mEmulator.releaseGhosttyCore();
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core (" + t + ")");
+        }
     }
 
     @Override

@@ -757,6 +757,7 @@ public final class TerminalEmulator {
      * set of the {@code KittyKeyEncoder.FLAG_*} values. Zero means legacy key encoding.
      */
     public int getKeyboardFlags() {
+        if (mGhostty != null) return mGhosttyKeyboardFlags;
         return keyboardModes().flags;
     }
 
@@ -1058,6 +1059,7 @@ public final class TerminalEmulator {
             if (cellSizeChanged) {
                 endSynchronizedUpdateForResize();
                 sendInBandResizeReport();
+                resizeGhostty();
             }
             return;
         } else if (columns < 2 || rows < 2) {
@@ -1082,6 +1084,21 @@ public final class TerminalEmulator {
         endSynchronizedUpdateForResize();
         resizeScreen();
         sendInBandResizeReport();
+        resizeGhostty();
+    }
+
+    /**
+     * The Ghostty core reflows on its own, and its screen then replaces the one the Java buffer
+     * reflowed; the transcript keeps the Java reflow. Ghostty sends its own size report (mode 2048).
+     */
+    private void resizeGhostty() {
+        if (mGhostty == null) return;
+        try {
+            mGhostty.resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels);
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+        }
     }
 
     /**
@@ -1422,7 +1439,10 @@ public final class TerminalEmulator {
      */
     public void append(byte[] buffer, int length) {
         int startRow = mCursorRow, startCol = mCursorCol;
-        appendInternal(buffer, length);
+        if (mGhostty != null)
+            appendGhostty(buffer, length);
+        else
+            appendInternal(buffer, length);
         if (mCursorRow != startRow || mCursorCol != startCol)
             mCursorPositionChangedAtMillis = mClock.nowMillis();
     }
@@ -1447,6 +1467,167 @@ public final class TerminalEmulator {
             }
             processByte(buffer[i++]);
         }
+    }
+
+    // Experimental libghostty-vt core, chosen per session with debug.tl.terminal_core=ghostty.
+    // Ghostty parses; this emulator's buffers, cursor and mode bits mirror it, so every reader of
+    // the emulator works unchanged. Kitty graphics, sixel, iTerm2 images, text sizing, kitty
+    // notifications and the fork's own modes (7727, 5523) are not handled in this mode.
+
+    /** The Ghostty core parsing this session's output, or null for the Java parser. */
+    private GhosttyCore mGhostty;
+    /** Colours read back from the Ghostty core, reused. */
+    private final int[] mGhosttyColors = new int[TextStyle.NUM_INDEXED_COLORS];
+    /** The cursor shape Ghostty reported last; only a change made by the program moves ours. */
+    private int mGhosttyCursorShape = -1;
+    /** The kitty keyboard flags Ghostty holds for the current screen. */
+    private int mGhosttyKeyboardFlags;
+    /** Whether Ghostty had synchronized output (mode 2026) on at the last sync. */
+    private boolean mGhosttySyncHeld;
+
+    /** The DEC private mode bits Ghostty answers for, as {Ghostty bit, our bit} pairs. */
+    private static final int[][] GHOSTTY_MODE_BITS = {
+        {GhosttyNative.MODE_APPLICATION_CURSOR_KEYS, DECSET_BIT_APPLICATION_CURSOR_KEYS},
+        {GhosttyNative.MODE_REVERSE_VIDEO, DECSET_BIT_REVERSE_VIDEO},
+        {GhosttyNative.MODE_ORIGIN, DECSET_BIT_ORIGIN_MODE},
+        {GhosttyNative.MODE_AUTOWRAP, DECSET_BIT_AUTOWRAP},
+        {GhosttyNative.MODE_CURSOR_VISIBLE, DECSET_BIT_CURSOR_ENABLED},
+        {GhosttyNative.MODE_APPLICATION_KEYPAD, DECSET_BIT_APPLICATION_KEYPAD},
+        {GhosttyNative.MODE_MOUSE_PRESS_RELEASE, DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE},
+        {GhosttyNative.MODE_MOUSE_BUTTON_EVENT, DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT},
+        {GhosttyNative.MODE_MOUSE_ANY_EVENT, DECSET_BIT_MOUSE_TRACKING_ANY_EVENT},
+        {GhosttyNative.MODE_FOCUS_EVENTS, DECSET_BIT_SEND_FOCUS_EVENTS},
+        {GhosttyNative.MODE_MOUSE_SGR, DECSET_BIT_MOUSE_PROTOCOL_SGR},
+        {GhosttyNative.MODE_MOUSE_SGR_PIXELS, DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS},
+        {GhosttyNative.MODE_BRACKETED_PASTE, DECSET_BIT_BRACKETED_PASTE_MODE},
+        {GhosttyNative.MODE_SYNCHRONIZED_OUTPUT, DECSET_BIT_SYNCHRONIZED_UPDATE},
+        {GhosttyNative.MODE_PASTE_EVENTS, DECSET_BIT_PASTE_EVENTS},
+    };
+
+    /**
+     * Parse this session's output with libghostty-vt from now on. False, with the Java parser kept,
+     * when the library is not in this build or will not start.
+     */
+    public boolean useGhosttyCore() {
+        if (mGhostty != null) return true;
+        int[] colors = new int[TextStyle.NUM_INDEXED_COLORS];
+        for (int i = 0; i < colors.length; i++) colors[i] = mColors.mCurrentColors[i] & 0xffffff;
+        GhosttyCore core = GhosttyCore.create(mColumns, mRows, mCellWidthPixels, mCellHeightPixels, colors);
+        if (core == null) return false;
+        mGhostty = core;
+        mGhosttyCursorShape = -1;
+        mGhosttySyncHeld = false;
+        try {
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+            return false;
+        }
+        return true;
+    }
+
+    /** Whether the Ghostty core is parsing this session's output. */
+    public boolean isGhosttyCoreActive() {
+        return mGhostty != null;
+    }
+
+    /**
+     * Free the Ghostty core. The screen it left stays in this emulator's buffers, and any later
+     * output (the "[Process completed]" line) goes through the Java parser.
+     */
+    public void releaseGhosttyCore() {
+        GhosttyCore core = mGhostty;
+        mGhostty = null;
+        if (core != null) core.release();
+    }
+
+    /** Resident, virtual and compressed bytes of the Ghostty core's primary screen, or null. */
+    public long[] getGhosttyMemoryUsage() {
+        return mGhostty == null ? null : mGhostty.memoryUsage();
+    }
+
+    private void appendGhostty(byte[] buffer, int length) {
+        // In slices, so the rows one write scrolls off never outrun the library's short history.
+        int offset = 0;
+        try {
+            for (; offset < length && mGhostty != null; offset += GhosttyCore.WRITE_SLICE_BYTES) {
+                mGhostty.write(buffer, offset, Math.min(GhosttyCore.WRITE_SLICE_BYTES, length - offset));
+                applyGhosttyState();
+            }
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+            // The slice that failed went to Ghostty; the rest goes to the Java parser.
+            offset += GhosttyCore.WRITE_SLICE_BYTES;
+            if (offset < length) {
+                byte[] rest = Arrays.copyOfRange(buffer, offset, length);
+                appendInternal(rest, rest.length);
+            }
+        }
+    }
+
+    /** The mirror failed: drop the Ghostty core for this session and carry on with the Java parser. */
+    private void ghosttyFailed(RuntimeException e) {
+        Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core", e);
+        releaseGhosttyCore();
+    }
+
+    /** Copy what the last Ghostty writes changed into this emulator, then deliver their effects. */
+    private void applyGhosttyState() {
+        GhosttyCore core = mGhostty;
+        if (core == null || !core.sync()) return;
+        int[] state = core.state();
+        int flags = state[GhosttyNative.STATE_FLAGS];
+        TerminalBuffer screen = (flags & GhosttyNative.FLAG_ALT_SCREEN) != 0 ? mAltBuffer : mMainBuffer;
+        if (screen != mScreen) {
+            mScreen = screen;
+            clearExtraCursors();
+            resetGraphemeTracking();
+        }
+        if (state[GhosttyNative.STATE_COLS] == mColumns && state[GhosttyNative.STATE_ROWS] == mRows
+            && mScreen.mColumns == mColumns && mScreen.mScreenRows == mRows) {
+            if (mScreen == mMainBuffer)
+                GhosttyMirror.scrollIntoTranscript(mMainBuffer, mColumns, mRows, state[GhosttyNative.STATE_SCROLLED],
+                    state[GhosttyNative.STATE_HISTORY], core, core.historyCells(), core.historyExtra());
+            GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra());
+        }
+        mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
+        mCursorRow = Math.max(0, Math.min(mRows - 1, state[GhosttyNative.STATE_CURSOR_Y]));
+        applyGhosttyModes(state[GhosttyNative.STATE_MODES]);
+        mGhosttyKeyboardFlags = state[GhosttyNative.STATE_KITTY_FLAGS];
+        int shape = state[GhosttyNative.STATE_CURSOR_STYLE];
+        if (mGhosttyCursorShape >= 0 && shape != mGhosttyCursorShape) {
+            mCursorStyle = shape == GhosttyNative.CURSOR_BAR ? TERMINAL_CURSOR_STYLE_BAR
+                : shape == GhosttyNative.CURSOR_UNDERLINE ? TERMINAL_CURSOR_STYLE_UNDERLINE
+                : TERMINAL_CURSOR_STYLE_BLOCK;
+        }
+        mGhosttyCursorShape = shape;
+
+        if ((flags & GhosttyNative.FLAG_TITLE_CHANGED) != 0) setTitle(core.title());
+        if ((flags & GhosttyNative.FLAG_PWD_CHANGED) != 0) setReportedWorkingDirectory(core.workingDirectory());
+        if ((flags & GhosttyNative.FLAG_PALETTE_CHANGED) != 0 && core.colors(mGhosttyColors)) {
+            System.arraycopy(mGhosttyColors, 0, mColors.mCurrentColors, 0, mGhosttyColors.length);
+            mSession.onColorsChanged();
+        }
+        core.flushReplies(mSession);
+        core.flushClipboard(mSession);
+        if ((flags & GhosttyNative.FLAG_BELL) != 0) mSession.onBell();
+    }
+
+    private void applyGhosttyModes(int modes) {
+        int mirrored = 0, set = 0;
+        for (int[] pair : GHOSTTY_MODE_BITS) {
+            mirrored |= pair[1];
+            if ((modes & pair[0]) != 0) set |= pair[1];
+        }
+        mCurrentDecSetFlags = (mCurrentDecSetFlags & ~mirrored) | set;
+        boolean held = (modes & GhosttyNative.MODE_SYNCHRONIZED_OUTPUT) != 0;
+        if (held && !mGhosttySyncHeld) {
+            mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+        } else if (!held && mGhosttySyncHeld) {
+            mSynchronizedUpdateDeadline = 0;
+            mSession.onScreenChanged();
+        }
+        mGhosttySyncHeld = held;
     }
 
     /** A clock the cursor-trail timestamp reads, injectable so a JVM test can control time. */
@@ -5032,6 +5213,14 @@ public final class TerminalEmulator {
         clearExtraCursors();
         mExtraCursorColor.type = mExtraCursorColor.value = 0;
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;
+        if (mGhostty != null) {
+            try {
+                mGhostty.reset();
+                applyGhosttyState();
+            } catch (RuntimeException e) {
+                ghosttyFailed(e);
+            }
+        }
     }
 
     /**
