@@ -25676,6 +25676,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // In this frame, so the stack's height the translation below reads is the new one.
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
                     GeometryScheduler.ResizePolicy.AT_SETTLE);
+                // The Peek card is cut for the rows this pass stands in this frame's pre-draw,
+                // after the traversal lays them out and before any of them shows. The listeners
+                // are set here, once the pass above has applied the rows' design: until now only
+                // the render pass's re-cut set them, and on pong the card then landed with the
+                // dock already half risen.
+                syncPeekListeners();
+                if (mPeekWatchedHost != null) schedulePeekRefresh();
             } finally {
                 Trace.endSection();
             }
