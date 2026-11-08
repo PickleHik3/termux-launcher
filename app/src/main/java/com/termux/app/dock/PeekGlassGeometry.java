@@ -101,9 +101,11 @@ public final class PeekGlassGeometry {
      * @param hostWidthPx      the host's width
      * @param hostHeightPx     the host's height
      * @param screenWidthPx    the screen's width, the one the card is inset from
-     * @param screenBottomPx   where the screen's bottom edge stands in the host's coordinates:
-     *                         the host's height where nothing stands under it, more where the
-     *                         strip under the gesture pill continues it
+     * @param screenBottomPx   where the screen's bottom edge stands in the host's coordinates, as
+     *                         the host is drawn ({@link #screenBottomInHost}): the host's height
+     *                         where nothing stands under it, more where the strip under the
+     *                         gesture pill continues it, less while a crossing has the host slid
+     *                         down past the screen's edge
      */
     @Nullable
     public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
@@ -136,14 +138,28 @@ public final class PeekGlassGeometry {
         float right = Math.min(hostWidthPx, screenWidthPx - inset - hostLeftPx);
         if (!(right > left)) return null;
         float radius = cornerRadiusPx(right - left, density);
-        float screenBottom = Math.max(hostHeightPx, screenBottomPx);
+        float axis = mirrorAxisY(icons);
+        // The screen's edge as the host is drawn, never above the icons' lower edges. A host laid
+        // out taller than the screen shows of it (a crossing's tail: the Workspace's keyboard room
+        // still laid out, the stack slid down by the travel) ends at the screen's edge too, so the
+        // reflection fades over what shows rather than over room below the screen.
+        float screenBottom = Math.max(axis, screenBottomPx);
         // Past the screen's edge by the radius, so the rounded lower corners are off screen.
         float bottom = screenBottom + radius;
-        float axis = mirrorAxisY(icons);
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis,
             axis + reflectionDepth(axis,
                 Math.min(screenBottom, Float.isNaN(reflectionFloorPx)
                     ? Float.POSITIVE_INFINITY : reflectionFloorPx)));
+    }
+
+    /**
+     * Where the screen's bottom edge stands in the host's coordinates as the host is drawn: the
+     * screen's height, less the host's laid-out top in the window and the translation its
+     * ancestors and it are drawn with (a crossing slides the stack down past where it is laid out).
+     */
+    public static float screenBottomInHost(int screenHeightPx, float hostLayoutTopPx,
+                                           float drawnShiftYPx) {
+        return screenHeightPx - (hostLayoutTopPx + drawnShiftYPx);
     }
 
     /**

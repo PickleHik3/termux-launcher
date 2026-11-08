@@ -5807,6 +5807,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * flight, such as the dock's press dip, is not baked in), or null when it is not under it.
      */
     @Nullable
+    /**
+     * The translation {@code view} and its ancestors below {@code ancestor} are drawn with, down
+     * the screen: what {@link #layoutOffsetIn} leaves out.
+     */
+    private static float drawnShiftYIn(@NonNull View view, @NonNull View ancestor) {
+        float shift = 0f;
+        for (View v = view; v != null && v != ancestor; ) {
+            shift += v.getTranslationY();
+            android.view.ViewParent parent = v.getParent();
+            v = parent instanceof View ? (View) parent : null;
+        }
+        return shift;
+    }
+
     private static float[] layoutOffsetIn(@NonNull View view, @NonNull View ancestor) {
         float left = 0f;
         float top = 0f;
@@ -6010,8 +6024,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boxes[i * 4 + 3] = mPeekIconBoxes[i * 4 + 3] + dy;
         }
         // The strip under the pill continues the card to the screen's bottom edge, under either
-        // Style: the host is placed flush while the card stands (dockFloats).
-        float screenBottom = decor.getHeight() - hostInDecor[1];
+        // Style: the host is placed flush while the card stands (dockFloats). Measured where the
+        // host is drawn: a crossing's tail keeps the Workspace's keyboard room laid out and slides
+        // the stack down past the screen (applyAccessoryStackTranslation), and the reflection's
+        // fade measured to the laid-out bottom ran on 650 px below the screen, sharp and bright.
+        float screenBottom = com.termux.app.dock.PeekGlassGeometry.screenBottomInHost(
+            decor.getHeight(), hostInDecor[1], drawnShiftYIn(host, decor));
         // The A–Z row under the icons rides on the card (DockPlacement#peekCardCarriesAz): the
         // reflections run on behind its letters untouched, to the card's whole height.
         return com.termux.app.dock.PeekGlassGeometry.compute(boxes, count, hostInDecor[0],

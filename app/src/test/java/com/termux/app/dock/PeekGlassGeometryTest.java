@@ -148,6 +148,33 @@ public class PeekGlassGeometryTest {
     }
 
     @Test
+    public void aHostSlidDownPastTheScreenFadesTheReflectionOverWhatShows() {
+        // Pong, the tail of a Workspace -> Home2 crossing (PEEKBAND-DBG): the host still laid out
+        // 967 px tall with the Workspace's keyboard room, its bottom on the screen's edge as laid
+        // out, the stack slid 654 px down so the row stands where it rests. At rest the host is
+        // 313 px tall, flush with the screen's edge.
+        int screenH = 2412;
+        int restHostH = 313;
+        int tailHostH = 967;
+        float slide = tailHostH - restHostH;
+        float[] boxes = rowBoxes(SCREEN_W, 5, 150, DENSITY);
+        float restBottom = PeekGlassGeometry.screenBottomInHost(screenH, screenH - restHostH, 0f);
+        float tailBottom = PeekGlassGeometry.screenBottomInHost(screenH, screenH - tailHostH, slide);
+        assertEquals(restHostH, restBottom, 0.01f);
+        assertEquals(restHostH, tailBottom, 0.01f);
+        PeekGlassGeometry.Card rest = PeekGlassGeometry.compute(boxes, 5, 0f, SCREEN_W, restHostH,
+            SCREEN_W, restBottom, DENSITY);
+        PeekGlassGeometry.Card tail = PeekGlassGeometry.compute(boxes, 5, 0f, SCREEN_W, tailHostH,
+            SCREEN_W, tailBottom, DENSITY);
+        assertNotNull(rest);
+        assertNotNull(tail);
+        // The same fade on the landing's frames as at rest, not one run on below the screen.
+        assertEquals(rest.reflectionDepth(), tail.reflectionDepth(), 0.01f);
+        assertEquals(rest.bottom, tail.bottom, 0.01f);
+        assertEquals(restHostH, tail.reflectionBottom, 0.01f);
+    }
+
+    @Test
     public void noIconsOrNoHostIsNoCard() {
         assertNull(PeekGlassGeometry.compute(new float[0], 0, 0f, SCREEN_W, HOST_H, SCREEN_W,
             HOST_H, DENSITY));
