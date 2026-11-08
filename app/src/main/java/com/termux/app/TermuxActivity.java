@@ -5803,11 +5803,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A view's laid-out offset inside {@code ancestor}, from layout values only (a transform in
-     * flight, such as the dock's press dip, is not baked in), or null when it is not under it.
-     */
-    @Nullable
-    /**
      * The translation {@code view} and its ancestors below {@code ancestor} are drawn with, down
      * the screen: what {@link #layoutOffsetIn} leaves out.
      */
@@ -5821,6 +5816,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return shift;
     }
 
+    /**
+     * A view's laid-out offset inside {@code ancestor}, from layout values only (a transform in
+     * flight, such as the dock's press dip, is not baked in), or null when it is not under it.
+     */
+    @Nullable
     private static float[] layoutOffsetIn(@NonNull View view, @NonNull View ancestor) {
         float left = 0f;
         float top = 0f;
