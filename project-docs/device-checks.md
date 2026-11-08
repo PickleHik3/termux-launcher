@@ -93,6 +93,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Repeat in light theme: the cards must still be findable against the frost. Pinned folder shells
   in the dock and the drawer's search rows use the same wash; look at them too.
 
+- **Landing dresses the dock once (11-08, perf/landing-settle).** Owed on pong, with Home's
+  layout on a different Dock design or Drawer tile from the Workspace's: Perfetto over 5
+  Home <-> Workspace round trips shows one `Dock.restyle` per `Wall.settleChrome` (was two, one
+  under `Place.dockDress` and one under `Settle.dockDesign`); note the `Place.hosts.*`,
+  `Place.edgeStacks.walk/.metrics` and `Bar.refresh` slices for the next round. Functional, Docked
+  and Floating, keyboard up and down on the Workspace: the landed dock wears the arriving page's
+  design, tile and height, with no jump a frame later; a design with the Search field or Wall
+  strip on one half only lands at full height; after changing a Dock design or a look setting in
+  the editor, the next landing still re-dresses; a slide that comes back is unchanged.
 - **Page-swipe stalls: landing layout once, frost skip, keyboard pre-measure.** Owed on pong,
   Perfetto over 5 Home <-> Workspace round trips at 90 Hz: `Wall.settleChrome` under about 15 ms
   (was ~43); `Place.syncLayout` one call per `Wall.settleChrome` (was two; count its slices
