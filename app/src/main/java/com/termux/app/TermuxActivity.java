@@ -5991,25 +5991,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.dock.PeekGlassGeometry.Card resolvePeekCard() {
-        if (!peekCardWanted()) { peekDbgResolve("not-wanted"); return null; }
+        if (!peekCardWanted()) return null;
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
         View decor = getWindow() != null ? getWindow().getDecorView() : null;
         if (row == null || host == null || container == null || decor == null
             || !row.isShown() || host.getWidth() <= 0 || host.getHeight() <= 0
-            || decor.getWidth() <= 0 || decor.getHeight() <= 0) {
-            peekDbgResolve("views row=" + (row != null) + " rowShown=" + (row != null
-                && row.isShown()) + " host=" + (host == null ? "null"
-                : host.getWidth() + "x" + host.getHeight()));
-            return null;
-        }
+            || decor.getWidth() <= 0 || decor.getHeight() <= 0) return null;
         int count = row.drawnIconBoxes(mPeekIconBoxes);
-        if (count <= 0 || count > mPeekIconBoxes.length / 4) {
-            peekDbgResolve("icons count=" + count);
-            return null;
-        }
-        peekDbgResolve("card icons=" + count);
+        if (count <= 0 || count > mPeekIconBoxes.length / 4) return null;
         float[] rowAt = layoutOffsetIn(row, container);
         float[] hostAt = layoutOffsetIn(host, container);
         float[] hostInDecor = layoutOffsetIn(host, decor);
@@ -6083,10 +6074,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPeekListeners() {
         boolean peek = mPreferences != null && shownDockSurfaceSpec().peek;
-        if (peek != (mPeekWatchedHost != null))
-            android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
-                + " listeners peek=" + peek + " <- "
-                + new Throwable().getStackTrace()[1].getMethodName());
         View host = peek ? findViewById(R.id.accessory_surface_host) : null;
         View row = peek ? mSuggestionBarView : null;
         if (mPeekWatchedHost != host) {
@@ -26323,18 +26310,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 false);
         }
         return seam.dockReveal();
-    }
-
-    /** PEEKTRAVEL-DBG: the last answer resolvePeekCard gave, so it logs only changes. */
-    @Nullable private String mPeekDbgResolve;
-
-    /** PEEKTRAVEL-DBG: why resolvePeekCard answered as it did, when that changes. */
-    private void peekDbgResolve(@NonNull String why) {
-        if (why.equals(mPeekDbgResolve)) return;
-        mPeekDbgResolve = why;
-        android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
-            + " resolve " + why + " watchedHost=" + (mPeekWatchedHost != null)
-            + " rowsPage=" + stackDressPage() + " lastPage=" + mLastWallPage);
     }
 
     /** PEEKTRAVEL-DBG: the last frame's key, so the travel logs only changes. */
