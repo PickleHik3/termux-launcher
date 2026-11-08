@@ -117,9 +117,16 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
         if (rest.indexOf('.') >= 0) return null;
         if (orientation == null) {
+            // The dock's design, search field and drawer tile are one value for every page (ADR
+            // 0023 §1): held by Home, whatever scope asks.
+            if (LayoutsJson.SHARED_WIDE_FIELDS.contains(rest))
+                return new Route(LayoutKind.HOME, null, rest);
             return LayoutsJson.WIDE_FIELDS.contains(rest)
                 && !LayoutsJson.KEYBOARD_OPEN.equals(rest) ? new Route(kind, null, rest) : null;
         }
+        // The status bar's edge and compact rest likewise (ADR 0023 §1).
+        if (LayoutsJson.SHARED_ORIENTATION_FIELDS.contains(rest))
+            return new Route(LayoutKind.HOME, orientation, rest);
         if (LayoutsJson.SIZE_FIELDS.contains(rest)) return new Route(null, orientation, rest);
         if (LayoutsJson.GRID_FIELDS.contains(rest))
             return new Route(LayoutKind.HOME, orientation, rest);
@@ -219,6 +226,9 @@ final class LayoutDocumentPrefs implements SharedPreferences {
                                 : com.termux.app.wall.PaneWallPage.DISPLAY, field),
                             layout.wide().get(field));
                 } else if (LayoutsJson.WIDE_FIELDS.contains(field)) {
+                    // Shared fields read from Home alone: another kind's stale copy is not shown.
+                    if (kind != LayoutKind.HOME && LayoutsJson.SHARED_WIDE_FIELDS.contains(field))
+                        continue;
                     all.put(scope + field, layout.wide().get(field));
                 }
             }
@@ -233,7 +243,10 @@ final class LayoutDocumentPrefs implements SharedPreferences {
                     } else if (LayoutsJson.GRID_FIELDS.contains(field)) {
                         if (kind == LayoutKind.HOME)
                             all.put(scope + o.storageValue() + "." + field, value);
-                    } else if (LayoutsJson.ORIENTATION_FIELDS.contains(field)) {
+                    } else if (LayoutsJson.ORIENTATION_FIELDS.contains(field)
+                        || LayoutsJson.STATUS_EDGE.equals(field)) {
+                        if (kind != LayoutKind.HOME
+                            && LayoutsJson.SHARED_ORIENTATION_FIELDS.contains(field)) continue;
                         all.put(scope + o.storageValue() + "." + field, value);
                     }
                 }

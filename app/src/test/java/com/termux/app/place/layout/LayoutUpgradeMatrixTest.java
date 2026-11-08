@@ -223,7 +223,13 @@ public class LayoutUpgradeMatrixTest {
         editor.commit();
     }
 
+    /**
+     * Step 17 alone: the shared-chrome fold (ADR 0023 §1) has its own test, so it is marked done
+     * here and the fixtures keep showing what step 17 wrote.
+     */
     private void migrate() {
+        prefs.edit().putBoolean(com.termux.app.place.layout.SharedChromeFold.KEY_MIGRATED, true)
+            .commit();
         new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
     }
 

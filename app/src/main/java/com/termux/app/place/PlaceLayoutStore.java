@@ -17,6 +17,8 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.layout.LayoutsJson;
+import com.termux.app.place.layout.SharedChromeFold;
 import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallPages.PageKind;
@@ -175,6 +177,13 @@ public final class PlaceLayoutStore {
     private static final String KEY_WALL_STRIP_HEIGHT = "wall_strip_height";
 
     private static final String KEY_STATUS_COMPACT = "status_compact";
+
+    /**
+     * The edge the status bar stands on, one value for every page and held by Home's document
+     * ({@link LayoutsJson#STATUS_EDGE}, ADR 0023 §1). Before the documents exist the bar's edge is
+     * still its own kind's {@code status_bar} key, which the migration steps compare.
+     */
+    private static final String KEY_STATUS_EDGE = LayoutsJson.STATUS_EDGE;
 
     /**
      * Where the bar has never been rested in landscape, it rests compact: it is the orientation
@@ -424,6 +433,7 @@ public final class PlaceLayoutStore {
         resetPortraitKeyboardResizeOnce();
         foldIntoLayoutsIfNeeded();
         useLayoutDocumentsIfFolded();
+        foldSharedChromeIfNeeded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
         // A document written outside this store (launcherctl layout set, another view) retires
         // every cached read too: the documents live in their own file, which the listener above
@@ -1341,11 +1351,13 @@ public final class PlaceLayoutStore {
                         @NonNull Slot slot) {
         // A bar put away keeps the edge it came from, so the tray brings it back there. The
         // index's edge has a key of its own.
-        if (slot.hidden && element != Element.AZ)
+        boolean sharedEdge = element == Element.STATUS && documentsInUse();
+        if (slot.hidden && element != Element.AZ && !sharedEdge)
             writeString(orientation, restoreEdgeKeyName(element), slot.edge.storageValue());
         switch (element) {
             case STATUS:
-                writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
+                if (sharedEdge) setSharedStatusEdge(orientation, slot);
+                else writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
                 break;
             case AZ:
                 setAzRowShown(orientation, !slot.hidden);
@@ -1419,6 +1431,10 @@ public final class PlaceLayoutStore {
         Edge fallback = element == Element.STATUS ? Edge.TOP
             : element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
                 ? Edge.LEFT : Edge.BOTTOM;
+        if (element == Element.STATUS && documentsInUse()) {
+            // One edge for every page (ADR 0023 §1); a put-away mark sits in the kind's own key.
+            return Edge.parse(readString(orientation, KEY_STATUS_EDGE), Edge.TOP);
+        }
         String raw = readString(orientation, key);
         if (!VALUE_HIDDEN.equals(raw)) return Edge.parse(raw, fallback);
         Edge hiddenFallback = element == Element.STATUS ? Edge.TOP : Edge.BOTTOM;
@@ -1443,13 +1459,42 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public Edge statusBarEdge(@NonNull PlaceOrientation orientation) {
-        return Edge.parse(readString(orientation, KEY_STATUS_BAR), Edge.TOP);
+        if (VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR))) return Edge.TOP;
+        return elementEdge(orientation, Element.STATUS);
     }
 
     /** Stands the status bar on an edge, which also brings a hidden one back. */
     public void setStatusBarEdge(@NonNull PlaceOrientation orientation, @NonNull Edge edge) {
-        writeString(orientation, KEY_STATUS_BAR, edge.storageValue());
+        if (documentsInUse()) setSharedStatusEdge(orientation, Slot.on(edge, Element.STATUS));
+        else writeString(orientation, KEY_STATUS_BAR, edge.storageValue());
         syncKind(orientation, Element.STATUS, true);
+    }
+
+    /**
+     * The status bar's slot written the shared way (ADR 0023 §1): its edge into the one value
+     * every page reads, and in this kind's own key only whether it is put away. Writes only what
+     * changed, so a pass that re-stores the slot touches nothing.
+     */
+    private void setSharedStatusEdge(@NonNull PlaceOrientation orientation, @NonNull Slot slot) {
+        if (mStore == null) return;
+        String edge = slot.edge == Edge.TOP ? null : slot.edge.storageValue();
+        String sharedKey = variantKey(orientation, KEY_STATUS_EDGE);
+        String ownKey = variantKey(orientation, KEY_STATUS_BAR);
+        String storedEdge = mStore.getString(sharedKey, null);
+        String storedBar = mStore.getString(ownKey, null);
+        String bar = slot.hidden ? VALUE_HIDDEN : null;
+        boolean edgeSame = java.util.Objects.equals(edge, storedEdge);
+        boolean barSame = java.util.Objects.equals(bar, storedBar);
+        if (edgeSame && barSame) return;
+        SharedPreferences.Editor editor = mStore.edit();
+        if (!edgeSame) {
+            if (edge == null) editor.remove(sharedKey); else editor.putString(sharedKey, edge);
+        }
+        if (!barSame) {
+            if (bar == null) editor.remove(ownKey); else editor.putString(ownKey, bar);
+        }
+        editor.apply();
+        mRevision.incrementAndGet();
     }
 
     /** The kind this view dresses shows or hides {@code element}, as its writers say. */
@@ -1698,6 +1743,8 @@ public final class PlaceLayoutStore {
         LayoutVariant variant = activeVariant();
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(variant, orientation, key));
+        // The status bar's edge is every page's (ADR 0023 §1): a reset puts it back to the top.
+        if (documentsInUse()) editor.remove(layoutKey(variant, orientation, KEY_STATUS_EDGE));
         editor.apply();
         mSeeded.remove(seededKey(variant, orientation));
         mRevision.incrementAndGet();
@@ -2090,6 +2137,22 @@ public final class PlaceLayoutStore {
 
     private boolean documentsInUse() {
         return layouts() != null;
+    }
+
+    /**
+     * Once per install: the dock's design, search field and drawer tile and the status bar's edge
+     * and compact rest become one value for every page, Home's ({@link SharedChromeFold}, ADR 0023
+     * §1). Waits for the documents; a store that has none yet runs it on a later start.
+     */
+    private void foldSharedChromeIfNeeded() {
+        com.termux.app.place.layout.LayoutStore documents = layouts();
+        if (mStore == null || documents == null
+            || mStore.getBoolean(SharedChromeFold.KEY_MIGRATED, false)) return;
+        com.termux.app.place.layout.Layouts before = documents.current();
+        com.termux.app.place.layout.Layouts after = SharedChromeFold.fold(before);
+        if (!after.equals(before)) documents.replaceAll(after);
+        mStore.edit().putBoolean(SharedChromeFold.KEY_MIGRATED, true).apply();
+        mRevision.incrementAndGet();
     }
 
     private void foldIntoLayoutsIfNeeded() {

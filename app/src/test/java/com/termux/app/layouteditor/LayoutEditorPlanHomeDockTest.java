@@ -69,16 +69,16 @@ public class LayoutEditorPlanHomeDockTest {
         assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
         assertTrue(prefs.getBoolean("layout.home.search_field", false));
         assertTrue(prefs.getBoolean("layout.home.drawer_tile", false));
-        assertNull("the shared layout is the Terminal's", prefs.getString("layout.dock_design", null));
-        assertFalse(prefs.contains("layout.search_field"));
+        assertFalse("no page layout of its own", prefs.contains("layout.page1.dock_design"));
         assertEquals(DockStyle.PEEK_GLASS, plan.dockStyle());
         assertEquals(DockStyle.PEEK_GLASS, dresses().dressOf(PaneWallPage.WIDGETS).dockDesign());
         assertTrue(dresses().dressOf(PaneWallPage.WIDGETS).searchField());
         assertTrue(dresses().dressOf(PaneWallPage.WIDGETS).drawerTile());
         assertTrue(dresses().searchFieldOf(PaneWallPage.WIDGETS));
         assertTrue(dresses().drawerTileOf(PaneWallPage.WIDGETS));
-        assertFalse("the Terminal does not follow", dresses().searchFieldOf(PaneWallPage.TERMINAL));
-        assertEquals("the Terminal does not follow", DockStyle.GLASS_TRAY,
+        assertTrue("the Terminal wears the same dock (ADR 0023 §1)",
+            dresses().searchFieldOf(PaneWallPage.TERMINAL));
+        assertEquals("the Terminal wears the same dock (ADR 0023 §1)", DockStyle.PEEK_GLASS,
             dresses().dockDesignOf(PaneWallPage.TERMINAL));
     }
 
@@ -99,15 +99,14 @@ public class LayoutEditorPlanHomeDockTest {
     }
 
     @Test
-    public void aTerminalPageEditorStillWritesTheSharedLayout() {
+    public void aTerminalPageEditorWritesTheOneDockHomeHolds() {
         LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
         plan.setDockStyle(DockStyle.PEEK_GLASS);
         plan.setSearchField(true);
 
-        assertEquals("peek_glass", prefs.getString("layout.dock_design", null));
-        assertTrue(prefs.getBoolean("layout.search_field", false));
-        assertFalse(prefs.contains("layout.home.dock_design"));
-        assertFalse(prefs.contains("layout.home.search_field"));
+        // Whatever page the editor opened on, the dock is Home's one (ADR 0023 §1).
+        assertEquals("peek_glass", prefs.getString("layout.home.dock_design", null));
+        assertTrue(prefs.getBoolean("layout.home.search_field", false));
     }
 
     @Test

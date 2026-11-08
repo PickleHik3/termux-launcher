@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **One status bar and dock look for every page (11-08, perf/shared-chrome, wave 2a).** Owed on
+  pong, on an install whose Home and Workspace differed in status bar edge, compact or expanded
+  state, dock design, Search field or Drawer icon: after the update every page (Home, Workspace,
+  Assistant, Display) wears what Home wore, portrait and landscape, keyboard up and down,
+  Docked and Floating. Change the status bar's edge, its compact rest, the dock design, the
+  Search field or the Drawer icon from the Workspace, then from Home: the other page shows the
+  same at once, and Discard puts it back. The dock's height is the same on every page.
+  Landscape Home keeps its side-bar dock. Swipe Home2 <-> Workspace 5 times: the status bar and
+  dock do not re-dress or move at the landing. Trace: no `Settle.dockDesign` and no
+  `Bar.refresh` at landing where only these values differed before · pong.
 - **One Margin for every page (11-08, perf/bar-travel).** Owed on pong, on an install whose
   Home Margin differed from the Workspace's: after the update every page (Home, Workspace,
   Assistant, Display) wears the Margin Home wore, on the status bar, the dock and the panes,
