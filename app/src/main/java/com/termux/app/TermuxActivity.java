@@ -8591,9 +8591,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             + " bdDrawable=" + (backdrop == null ? "none" : crossLookName(backdrop.getDrawable()));
         boolean changed = !key.equals(mCrossLookStripLast);
         mCrossLookStripLast = key;
+        if (!changed) return;
         crossLookDbg(key + " share=" + mNavFadeShare + " ovAlpha="
             + (overlay == null ? -1f : overlay.getAlpha()) + " bdAlpha="
-            + (backdrop == null ? -1f : backdrop.getAlpha()), changed);
+            + (backdrop == null ? -1f : backdrop.getAlpha()), false);
     }
 
     // ---- The under-pill strip across the seam ----------------------------------------------
@@ -9315,11 +9316,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             + " hostAlpha=" + (host == null ? -1f : host.getAlpha())
             + " contVis=" + (container == null ? -1 : container.getVisibility())
             + " contH=" + (container == null ? -1 : container.getHeight())
-            + " blur=" + state.blurEnabled;
+            + " blur=" + state.blurEnabled
+            + " gate[toolbar=" + state.toolbarShown + " floatingArr=" + arrangement().floating()
+            + " kbGlass=" + isInAppKeyboardGlassSurface()
+            + " underBands=" + underKeyboardBandsShown()
+            + " bgOverride=" + hasInAppKeyboardBackgroundOverride()
+            + " seesDisplay=" + inAppKeyboardSeesThroughToDisplay() + "]"
+            + " arrPage=" + arrangement().layout();
         boolean changed = !key.equals(mCrossLookKbLast);
         mCrossLookKbLast = key;
+        boolean crossing = mCrossing != null && mCrossing.crossing();
+        if (crossing != mCrossLookWasCrossing) {
+            mCrossLookWasCrossing = crossing;
+            mCrossLookCrossingApplies = 0;
+            crossLookUnderNav(crossing ? "crossing-begin" : "crossing-end");
+        }
+        if (crossing && ++mCrossLookCrossingApplies == 3) crossLookUnderNav("crossing-mid");
+        if (!changed) return;
         crossLookDbg(key + " contTy=" + (container == null ? 0f : container.getTranslationY()),
-            changed);
+            true);
+    }
+
+    private boolean mCrossLookWasCrossing;
+    private int mCrossLookCrossingApplies;
+
+    /** Every drawing view whose screen rect reaches into the navigation bar's band. */
+    private void crossLookUnderNav(@NonNull String why) {
+        View decor = getWindow().getDecorView();
+        int h = decor.getHeight();
+        int nav = 0;
+        android.view.WindowInsets insets = decor.getRootWindowInsets();
+        if (insets != null) nav = Math.max(insets.getStableInsetBottom(),
+            insets.getSystemWindowInsetBottom());
+        crossLookDbg("under-nav[" + why + "] decorH=" + h + " navInset=" + nav, false);
+        int[] at = new int[2];
+        java.util.ArrayDeque<View> queue = new java.util.ArrayDeque<>();
+        queue.add(decor);
+        int logged = 0;
+        while (!queue.isEmpty() && logged < 40) {
+            View v = queue.poll();
+            if (v.getVisibility() != View.VISIBLE) continue;
+            v.getLocationOnScreen(at);
+            int bottom = at[1] + v.getHeight();
+            boolean reaches = bottom > h - Math.max(nav, 1) && at[1] < h && v.getHeight() > 0;
+            if (reaches) {
+                Drawable bg = v.getBackground();
+                Drawable img = v instanceof ImageView ? ((ImageView) v).getDrawable() : null;
+                if (bg != null || img != null || v.getClass().getName().contains("Glass")
+                    || v.getClass().getName().contains("Backdrop")) {
+                    String id;
+                    try {
+                        id = v.getId() == View.NO_ID ? "-" : getResources().getResourceEntryName(v.getId());
+                    } catch (RuntimeException e) {
+                        id = "?";
+                    }
+                    crossLookDbg("  nav-view " + id + " " + v.getClass().getSimpleName()
+                        + " y=" + at[1] + ".." + bottom + " ty=" + v.getTranslationY()
+                        + " alpha=" + v.getAlpha() + " bg=" + crossLookName(bg)
+                        + " img=" + crossLookName(img), false);
+                    logged++;
+                }
+            }
+            if (v instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) v;
+                for (int i = 0; i < g.getChildCount(); i++) queue.add(g.getChildAt(i));
+            }
+        }
     }
 
     /**
@@ -9336,9 +9398,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         crossLookKb(state, "apply");
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null) return;
-        crossLookDbg("kb faces due=" + com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging
-            .due(mGlassDragPreview, mCrossing.crossing()) + " bandAsked="
-            + mKeyboardBandAskedThisPass, false);
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
         // the band's rows and rebuilt the palette. The release's full pass chooses them once.
         // A crossing's frames likewise: the faces are mid-way between two pages' dresses, and the
