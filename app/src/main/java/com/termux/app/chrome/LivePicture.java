@@ -153,6 +153,8 @@ public final class LivePicture implements GlassPicture {
     /** The views drawn around the page layer, and the wall's place, as the record node has them. */
     @NonNull final ArrayList<View> mRecordedExpand = new ArrayList<>();
     @NonNull final Matrix mRecordedWallMatrix = new Matrix();
+    /** What the recorder's walks found for this picture, kept while the wall moves. */
+    @NonNull final LiveBackdrop.MotionPlan mMotionPlan = new LiveBackdrop.MotionPlan();
     /** Recycles {@link #mRetiredFrozen} a frame after the record node stopped drawing it. */
     @NonNull private final Runnable mRecycleFrozen = this::recycleRetiredFrozen;
     /** Set once {@link #release} has dropped the nodes: the picture draws nothing ever again. */
@@ -1032,6 +1034,7 @@ public final class LivePicture implements GlassPicture {
         if (mReleased) return;
         mReleased = true;
         mReady = false;
+        mMotionPlan.forget();
         if (mSurface.isAttachedToWindow() && (mBlur != null || mRecord != null)) {
             // The page layer is drawn by the record node, so it goes with it a frame later; its
             // frozen picture is recycled on that same frame.

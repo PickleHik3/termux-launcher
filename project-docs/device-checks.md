@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Live blur plans once per swipe (11-08, perf/glass-translate).** Live blur and Glass Look on,
+  a terminal printing (`yes | pv -qL 20` in a pane), a Home float and a built-in widget on Home2,
+  the in-app keyboard up once and down once. Swipe slowly Home2 ↔ Workspace ↔ AI. Passes: the
+  glass under the status bar, the dock, the panes, the float, the widgets and the keyboard
+  tracks the wallpaper and the pages under it on every frame (no stale strip, no frozen picture);
+  the terminal keeps scrolling under the glass mid-swipe; the landed look is the same as before
+  this change. Also: open the drawer mid-rest, then swipe; show a Home float, then swipe at once.
+  How: pong with the developer's go-ahead, `screenrecord` read frame by frame; a perfetto trace
+  shows `LiveBackdrop.plan` only on a swipe's first frame and after a layout pass.
 - **CRT screen events (#225).** Owed on pong, a pane on the CRT effect, Screen events on:
   backspace at column 0 while typing tears the pane each time (a held backspace tears about every
   150 ms, never a stutter); a keybinding that moves focus between two panes wobbles the new one;

@@ -220,6 +220,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     public void setSeeThrough(@NonNull BackdropLayers.SeeThrough seeThrough) {
         if (seeThrough == mSeeThrough) return;
         mSeeThrough = seeThrough;
+        mPlanStamp++;
         for (int i = 0; i < mPictures.size(); i++) {
             LivePicture picture = mPictures.get(i);
             picture.mRecordedBeneath.clear();
@@ -301,6 +302,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture = new LivePicture(surface, blurRadiusPx, panelRadius);
             picture.setStoredParity(recordedDim(surface), mBakeVibrancy, mBakeFrameTint);
             mPictures.add(picture);
+            mPlanStamp++;
             listen(true);
         } else {
             picture.setBlurRadiusPx(blurRadiusPx);
@@ -380,6 +382,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (picture == null) return;
         picture.release();
         mPictures.remove(picture);
+        mPlanStamp++;
         if (mPictures.isEmpty()) listen(false);
     }
 
@@ -387,6 +390,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     public void releaseAll() {
         for (int i = 0; i < mPictures.size(); i++) mPictures.get(i).release();
         mPictures.clear();
+        mPlanStamp++;
         listen(false);
     }
 
@@ -417,11 +421,20 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             if (mObserver != null && mObserver.isAlive()) return;
             mObserver = mRoot.getViewTreeObserver();
             mObserver.addOnPreDrawListener(this);
+            mObserver.addOnGlobalLayoutListener(mLayoutListener);
+            // Whatever moved while nobody listened: plan whole.
+            mPlanStamp++;
         } else {
-            if (mObserver != null && mObserver.isAlive()) mObserver.removeOnPreDrawListener(this);
+            if (mObserver != null && mObserver.isAlive()) {
+                mObserver.removeOnPreDrawListener(this);
+                mObserver.removeOnGlobalLayoutListener(mLayoutListener);
+            }
             // A dead observer was merged into the live one when the root attached.
             ViewTreeObserver current = mRoot.getViewTreeObserver();
-            if (current != mObserver && current.isAlive()) current.removeOnPreDrawListener(this);
+            if (current != mObserver && current.isAlive()) {
+                current.removeOnPreDrawListener(this);
+                current.removeOnGlobalLayoutListener(mLayoutListener);
+            }
             mObserver = null;
         }
     }
@@ -434,10 +447,28 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @Override
     public boolean onPreDraw() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
-        markGlassAbove();
+        ViewGroup wall = mWall;
+        boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
+        if (moving != mPlanMoving) {
+            // A motion starts with a whole plan, and the landed frame plans whole again.
+            mPlanMoving = moving;
+            mPlanStamp++;
+        }
+        markGlassAbove(moving);
+        try {
+            preDrawPictures(moving);
+        } finally {
+            mPlanning = null;
+        }
+        if (mPictures.isEmpty()) listen(false);
+        return true;
+    }
+
+    private void preDrawPictures(boolean moving) {
         for (int i = 0; i < mPictures.size(); i++) {
             LivePicture picture = mPictures.get(i);
             View surface = picture.mSurface;
+            mPlanning = null;
             if (!picture.held()) {
                 // Its view put up another picture: nothing draws this one any more.
                 picture.release();
@@ -449,7 +480,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 picture.trim();
                 continue;
             }
-            if (!collect(surface)) continue;
+            if (!collectPlanned(picture.mMotionPlan, surface, moving)) continue;
             // The dim the recording carries is taken back out after the blur; a dim moved is a
             // new effect on the same recording, never a re-record.
             picture.setRecordedDim(dimBeneath());
@@ -512,8 +543,140 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             // The first whole recording: its holder swaps the stored frame for it in this frame.
             picture.recorded();
         }
-        if (mPictures.isEmpty()) listen(false);
+    }
+
+    // ---- The motion plan -------------------------------------------------------------------
+
+    /**
+     * What one picture's walks of the tree found while the wall moves, kept for the rest of the
+     * motion: the views on its path and beneath it ({@link #collect}), the views around the wall
+     * and its pages ({@link #splittable}), and which views beneath the wall cross its band
+     * ({@link #layersPlan}). A swipe moves the pages by their transforms and changes none of
+     * these, so a moving frame reads the kept lists and only works out where things stand now:
+     * the surface's matrix, the pages' poses, the aims. Only the planning is kept: every
+     * recording still draws the views' live display lists, so the terminal and the clock keep
+     * drawing under the glass.
+     *
+     * <p>Kept while {@link #mPlanStamp} holds, which moves on a layout pass, on the wall starting
+     * or stopping, on a picture coming or going and on a See through change; a view beneath
+     * that stops drawing, or a path view that changes parent, also plans whole again. A view
+     * shown again without a layout (INVISIBLE to VISIBLE) or a change of elevation mid-swipe is
+     * picked up at the landing frame, which always plans whole.</p>
+     */
+    static final class MotionPlan {
+        static final int NONE = Integer.MIN_VALUE;
+
+        int stamp = NONE;
+        @NonNull final ArrayList<View> path = new ArrayList<>();
+        @NonNull final ArrayList<View> beneath = new ArrayList<>();
+
+        int chainStamp = NONE;
+        @NonNull final ArrayList<View> chain = new ArrayList<>();
+        @NonNull final ArrayList<View> expand = new ArrayList<>();
+        @NonNull final ArrayList<View> wallChildren = new ArrayList<>();
+
+        int bandStamp = NONE;
+        int bandTop;
+        int bandBottom;
+        @NonNull boolean[] bandKnown = new boolean[16];
+        @NonNull boolean[] band = new boolean[16];
+
+        /** Nothing kept: the next frame plans whole, and no view is held. */
+        void forget() {
+            stamp = NONE;
+            chainStamp = NONE;
+            bandStamp = NONE;
+            path.clear();
+            beneath.clear();
+            chain.clear();
+            expand.clear();
+            wallChildren.clear();
+        }
+    }
+
+    /**
+     * Whether a plan made at {@code planStamp} still holds at {@code stampNow}: only while the
+     * wall moves, and only for the stamp it was made at. Pure.
+     */
+    @VisibleForTesting
+    static boolean planHolds(int planStamp, int stampNow, boolean moving) {
+        return moving && planStamp != MotionPlan.NONE && planStamp == stampNow;
+    }
+
+    /** Moves on anything that may change what a picture's walks find; see {@link MotionPlan}. */
+    private int mPlanStamp;
+    /** Whether the last pre-draw found the wall moving. */
+    private boolean mPlanMoving;
+    /** The plan of the picture being drawn while the wall moves; null otherwise. */
+    @Nullable private MotionPlan mPlanning;
+    /** The stamp {@link #markGlassAbove} last marked at, and over how many pictures. */
+    private int mGlassAboveStamp = MotionPlan.NONE;
+    private int mGlassAboveCount = -1;
+    /** A layout pass may have moved, shown, hidden or re-ordered any view: plan whole again. */
+    @NonNull private final ViewTreeObserver.OnGlobalLayoutListener mLayoutListener =
+        () -> mPlanStamp++;
+    /** The wall's children, as {@link #collectLevel} orders them; a pages layer's candidates. */
+    @NonNull private final ArrayList<View> mWallChildren = new ArrayList<>();
+
+    /**
+     * {@link #collect} for {@code plan}'s picture: while the wall moves and the plan holds, the
+     * kept path and views beneath with the surface's matrix worked out afresh; otherwise a whole
+     * walk, kept for the next frame while the wall moves. Sets {@link #mPlanning}.
+     */
+    @VisibleForTesting
+    boolean collectPlanned(@NonNull MotionPlan plan, @NonNull View surface, boolean moving) {
+        mPlanning = moving ? plan : null;
+        if (planHolds(plan.stamp, mPlanStamp, moving) && plan.path.size() > 0
+                && plan.path.get(0) == surface && restorePlan(plan)) {
+            return true;
+        }
+        if (!moving) {
+            if (plan.stamp != MotionPlan.NONE || !plan.path.isEmpty()) plan.forget();
+            return collect(surface);
+        }
+        Trace.beginSection("LiveBackdrop.plan");
+        try {
+            plan.forget();
+            if (!collect(surface)) return false;
+            copyViews(mPath, plan.path);
+            copyViews(mBeneath, plan.beneath);
+            plan.stamp = mPlanStamp;
+            return true;
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * {@link #mPath} and {@link #mBeneath} from {@code plan}, and {@link #mMatrix} worked out
+     * along the path now. False when the kept lists no longer describe the tree: a path view
+     * moved to another parent, or a view beneath stopped drawing.
+     */
+    private boolean restorePlan(@NonNull MotionPlan plan) {
+        ArrayList<View> path = plan.path;
+        int last = path.size() - 1;
+        if (path.get(last) != mRoot) return false;
+        for (int i = 0; i < last; i++) {
+            if (path.get(i).getParent() != path.get(i + 1)) return false;
+        }
+        ArrayList<View> beneath = plan.beneath;
+        for (int i = 0; i < beneath.size(); i++) {
+            View below = beneath.get(i);
+            if (below != null && below.getVisibility() != View.VISIBLE
+                && below.getAnimation() == null) {
+                return false;
+            }
+        }
+        copyViews(path, mPath);
+        copyViews(beneath, mBeneath);
+        pathMatrix();
         return true;
+    }
+
+    /** {@code from} into {@code to}, nulls too; allocates nothing once {@code to} has grown. */
+    private static void copyViews(@NonNull ArrayList<View> from, @NonNull ArrayList<View> to) {
+        to.clear();
+        for (int i = 0; i < from.size(); i++) to.add(from.get(i));
     }
 
     /**
@@ -692,18 +855,47 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             view = (View) parent;
         }
         mPath.add(mRoot);
-        mMatrix.reset();
         for (int i = mPath.size() - 1; i >= 1; i--) {
             ViewGroup parent = (ViewGroup) mPath.get(i);
             View child = mPath.get(i - 1);
             if (parent instanceof Container) collectLevel(parent, child, mBeneath);
             mBeneath.add(null);
+        }
+        pathMatrix();
+        return true;
+    }
+
+    /** {@link #mMatrix}, the surface's coordinates to the root's, along {@link #mPath} now. */
+    private void pathMatrix() {
+        mMatrix.reset();
+        for (int i = mPath.size() - 1; i >= 1; i--) {
+            ViewGroup parent = (ViewGroup) mPath.get(i);
+            View child = mPath.get(i - 1);
             mMatrix.preTranslate(child.getLeft() - parent.getScrollX(),
                 child.getTop() - parent.getScrollY());
             Matrix own = child.getMatrix();
             if (!own.isIdentity()) mMatrix.preConcat(own);
         }
-        return true;
+    }
+
+    /** The surface's matrix {@link #collect} or {@link #collectPlanned} last found. */
+    @VisibleForTesting
+    @NonNull
+    Matrix collectedMatrix() {
+        return mMatrix;
+    }
+
+    /** The views beneath {@link #collect} or {@link #collectPlanned} last found. */
+    @VisibleForTesting
+    @NonNull
+    ArrayList<View> collectedBeneath() {
+        return mBeneath;
+    }
+
+    /** Moves the plan stamp, as a layout pass does. */
+    @VisibleForTesting
+    void forgetPlansForTest() {
+        mPlanStamp++;
     }
 
     /**
@@ -878,39 +1070,30 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             addPose(mPageMatrix, 0f, 0f, 1f);
             unionBounds(mPath.get(mWallPathIndex - 1));
         } else {
-            // Beneath it: the view that holds the wall, opened down to the wall.
-            View top = wall;
-            mChain.add(wall);
-            ViewParent parent = wall.getParent();
-            while (parent instanceof ViewGroup && mPath.indexOf(parent) < 0) {
-                top = (View) parent;
-                mChain.add(top);
-                parent = top.getParent();
-            }
-            if (!(parent instanceof ViewGroup) || mBeneath.indexOf(top) < 0) return false;
-            mFadingPages = moving;
-            java.util.Collections.reverse(mChain);
-            int last = mChain.size() - 1;
-            for (int d = 0; d <= last; d++) {
-                View view = mChain.get(d);
-                if (view.getAlpha() != 1f || !(view instanceof Container)) return false;
-                if (d == last) break;
-                int from = mExpand.size();
-                collectLevel((ViewGroup) view, null, mExpand);
-                View next = mChain.get(d + 1);
-                int index = -1;
-                for (int i = from; i < mExpand.size() && index < 0; i++) {
-                    if (mExpand.get(i) == next) index = i;
+            // Beneath it: the view that holds the wall, opened down to the wall. The walks are
+            // kept for the motion ({@link MotionPlan}); the alphas are read on every frame.
+            MotionPlan plan = mPlanning;
+            if (plan != null && planHolds(plan.chainStamp, mPlanStamp, moving)) {
+                copyViews(plan.chain, mChain);
+                copyViews(plan.expand, mExpand);
+                copyViews(plan.wallChildren, mWallChildren);
+            } else {
+                if (!openWall(wall)) return false;
+                if (plan != null && moving) {
+                    copyViews(mChain, plan.chain);
+                    copyViews(mExpand, plan.expand);
+                    copyViews(mWallChildren, plan.wallChildren);
+                    plan.chainStamp = mPlanStamp;
                 }
-                if (index < 0) return false;
-                mExpand.set(index, null);
-                mExpand.add(null);
             }
-            int from = mExpand.size();
-            collectLevel(wall, null, mExpand);
+            mFadingPages = moving;
+            for (int d = 0; d < mChain.size(); d++) {
+                if (mChain.get(d).getAlpha() != 1f) return false;
+            }
             boolean opaque = true;
-            for (int i = from; i < mExpand.size() && opaque; i++) opaque = addPage(mExpand.get(i));
-            while (mExpand.size() > from) mExpand.remove(mExpand.size() - 1);
+            for (int i = 0; i < mWallChildren.size() && opaque; i++) {
+                opaque = addPage(mWallChildren.get(i));
+            }
             if (!opaque || mPages.isEmpty()) return false;
         }
         // The recording reaches reach px above the surface (a float's titlebar draws it), so
@@ -947,6 +1130,45 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (!mBounds.intersect(mUnion)) return false;
         mBounds.roundOut(mPageRect);
         return !mPageRect.isEmpty();
+    }
+
+    /**
+     * The walks of {@link #splittable} for a surface beneath the wall: {@link #mChain}, the view
+     * beneath the surface that holds the wall down to the wall; {@link #mExpand}, each chain
+     * container's children around the next; {@link #mWallChildren}, the wall's children. False
+     * when the wall is not beneath the surface or a container on the way cannot draw its
+     * children one by one. Reads no alpha: those change as the pages slide.
+     */
+    private boolean openWall(@NonNull ViewGroup wall) {
+        mWallChildren.clear();
+        View top = wall;
+        mChain.add(wall);
+        ViewParent parent = wall.getParent();
+        while (parent instanceof ViewGroup && mPath.indexOf(parent) < 0) {
+            top = (View) parent;
+            mChain.add(top);
+            parent = top.getParent();
+        }
+        if (!(parent instanceof ViewGroup) || mBeneath.indexOf(top) < 0) return false;
+        java.util.Collections.reverse(mChain);
+        int last = mChain.size() - 1;
+        for (int d = 0; d <= last; d++) {
+            View view = mChain.get(d);
+            if (!(view instanceof Container)) return false;
+            if (d == last) break;
+            int from = mExpand.size();
+            collectLevel((ViewGroup) view, null, mExpand);
+            View next = mChain.get(d + 1);
+            int index = -1;
+            for (int i = from; i < mExpand.size() && index < 0; i++) {
+                if (mExpand.get(i) == next) index = i;
+            }
+            if (index < 0) return false;
+            mExpand.set(index, null);
+            mExpand.add(null);
+        }
+        collectLevel(wall, null, mWallChildren);
+        return true;
     }
 
     /**
@@ -1382,7 +1604,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                     boolean rides = below instanceof WallGround;
                     // Measured only where the answer turns on it.
                     boolean beneathWall = onPage && tier == BackdropLayers.Tier.BENEATH_WALL;
-                    boolean band = beneathWall && !ground && !rides && inBand(below);
+                    boolean band = beneathWall && !ground && !rides && bandOf(next - 1, below);
                     boolean overlaps = onPage && tier == BackdropLayers.Tier.PAGE && !ground
                         && overlapsNeeded(below);
                     boolean seams = rides && ((WallGround) below).groundsDiffer();
@@ -1570,6 +1792,36 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         return bytes <= MAX_LAYER_BYTES;
     }
 
+    /**
+     * {@link #inBand} for the view at {@code index} in {@link #mBeneath}, kept for the motion
+     * while the band stays where it is ({@link MotionPlan}): a page sliding sideways sweeps the
+     * same band on every frame, and the chrome beneath the wall does not move with it.
+     */
+    private boolean bandOf(int index, @NonNull View view) {
+        MotionPlan plan = mPlanning;
+        if (plan == null) return inBand(view);
+        int top = (int) Math.floor(mNeededRoot.top);
+        int bottom = (int) Math.ceil(mNeededRoot.bottom);
+        int size = mBeneath.size();
+        if (plan.bandKnown.length < size) {
+            plan.bandKnown = new boolean[Math.max(size, 2 * plan.bandKnown.length)];
+            plan.band = new boolean[plan.bandKnown.length];
+            plan.bandStamp = MotionPlan.NONE;
+        }
+        if (plan.bandStamp != mPlanStamp || plan.stamp != mPlanStamp || plan.bandTop != top
+                || plan.bandBottom != bottom) {
+            java.util.Arrays.fill(plan.bandKnown, false);
+            plan.bandStamp = mPlanStamp;
+            plan.bandTop = top;
+            plan.bandBottom = bottom;
+        }
+        if (!plan.bandKnown[index]) {
+            plan.band[index] = inBand(view);
+            plan.bandKnown[index] = true;
+        }
+        return plan.band[index];
+    }
+
     /** Whether {@code view}, beneath the wall, crosses the band a surface on a page sweeps. */
     private boolean inBand(@NonNull View view) {
         if (!view.getGlobalVisibleRect(mTmpRect)) return false;
@@ -1601,10 +1853,15 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     /**
      * "See through" for this frame: marks each picture another live surface stands over
      * ({@link LivePicture#mGlassAbove}), found among that surface's views beneath. Only with
-     * {@link BackdropLayers.SeeThrough#ONE}; allocates nothing.
+     * {@link BackdropLayers.SeeThrough#ONE}; allocates nothing. While the wall moves, marked
+     * once per plan ({@link MotionPlan}): which glass stands over which does not change as the
+     * pages slide.
      */
-    private void markGlassAbove() {
+    private void markGlassAbove(boolean moving) {
         int count = mPictures.size();
+        if (planHolds(mGlassAboveStamp, mPlanStamp, moving) && mGlassAboveCount == count) return;
+        mGlassAboveStamp = moving ? mPlanStamp : MotionPlan.NONE;
+        mGlassAboveCount = count;
         for (int i = 0; i < count; i++) mPictures.get(i).mGlassAbove = false;
         if (mSeeThrough == BackdropLayers.SeeThrough.ALL || count < 2) return;
         for (int i = 0; i < count; i++) {
