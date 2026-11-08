@@ -5,6 +5,9 @@ Base: `perf/swipe-model` (rounds 17–22: glass slots, keyboard palette, frost, 
 global Margin, toolbar warm-up, pane-tap bar refresh). Nothing here reaches `v2-redesign` until
 the developer says so.
 
+Measured breakdown and what to do next: [swipe-perf-ablation-2026-11-08.md](swipe-perf-ablation-2026-11-08.md)
+(glass is about half of each swipe frame; drag-start and landing stalls remain without glass).
+
 ## Where we start (pong, round 22, Home2 ↔ Workspace, 10 swipes)
 
 | Stall | When | Cost | Made of |
