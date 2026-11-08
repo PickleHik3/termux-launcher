@@ -9250,6 +9250,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mGlassDragPreview;
 
     /**
+     * Whether the crossing under way has judged the keyboard's legends (KeyboardFaceJudging): once
+     * per crossing, on its first frame that measured the keyboard's band. Cleared by any apply at
+     * rest, the landing's included.
+     */
+    private boolean mKeyboardFacesJudgedThisCrossing;
+
+    /**
      * The keyboard host's material for {@code state}, then the keys' legends re-chosen against the
      * faces that material draws, row by row (ChromeInk#bandFaces): measured where the host wears
      * the keyboard band's glass this pass, the theme's glass base where it does not (Solid, the
@@ -9264,15 +9271,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keyboard == null || mChrome == null) return;
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
         // the band's rows and rebuilt the palette. The release's full pass chooses them once.
-        // A crossing's frames likewise: the faces are mid-way between two pages' dresses, and the
-        // landing's apply re-judges them once at rest (KeyboardFaceJudging).
+        // A crossing judges them once, on its first frame that measured the band, so a keyboard it
+        // brings up rises in the inks it lands in; the landing's apply re-judges at rest
+        // (KeyboardFaceJudging).
+        boolean crossing = mCrossing.crossing();
+        if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
-            mCrossing.crossing())) return;
+            crossing, mKeyboardFacesJudgedThisCrossing)) return;
         if (!mKeyboardBandAskedThisPass) {
-            keyboard.setGlassFaces(new int[0]);
+            if (com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.clearsWithoutBand(crossing))
+                keyboard.setGlassFaces(new int[0]);
             return;
         }
         pushKeyboardGlassFaces(keyboard);
+        if (crossing) mKeyboardFacesJudgedThisCrossing = true;
     }
 
     /** The keyboard band's faces and the legend tone chosen on its bare face, to the keyboard. */
@@ -9298,9 +9310,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void rejudgeKeyboardGlassFaces() {
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
+        boolean crossing = mCrossing.crossing();
+        if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
-            mCrossing.crossing())) return;
+            crossing, mKeyboardFacesJudgedThisCrossing)) return;
         pushKeyboardGlassFaces(keyboard);
+        if (crossing) mKeyboardFacesJudgedThisCrossing = true;
     }
 
     private void applyInAppKeyboardHostMaterial(@NonNull ChromeSpec state) {

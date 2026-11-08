@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Keyboard rises in its landing inks (11-08, fix/crossing-look).** Home2 → Workspace with the
+  in-app keyboard rising, then Workspace → Home2; keyboard up and down at the start; Docked and
+  Floating dock. Passes: the rising keyboard's function chips and legends are already the
+  Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
+  same mid-swipe as at rest at either end (regression 2, not yet pinned: report what shows there).
+  How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
 - **Backdrop layers, no pop (11-07, perf/glass-slide-on-swipe).** Look Custom (Opacity 12, Blur 20,
   Edge 40, Depth 90), Live blur on, glass widgets on Home, a float over them. Screenshots at rest,
   on the first moving frame, mid-swipe and after landing, Home ↔ Workspace both ways. Passes: the
