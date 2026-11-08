@@ -28,6 +28,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   the landing, and the window chips and the Wall strip are the landed page's. Trace: no
   `Bar.refresh` under `Touch.dispatch` on a drag, no `Wall.halfRedress` where only the Margins
   differed before · pong.
+- **Toolbar text input built when idle (11-08, perf/bar-travel).** Owed on pong: force-stop,
+  let the launcher come back on Home, wait 3 s, then swipe Home2 -> Workspace with the extra
+  keys on the dock. Trace: one `Toolbar.prepareTextInput` slice about 1-2 s after the first frame,
+  outside any frame's traversal; the first swipe has no `inflate` of `TextInputEditText` under
+  `measure` and no frame near the 74 ms one. Functional: swipe the extra keys left to the text
+  input, type and send; the paste button pastes and a long press returns to the keys; rotate
+  with text typed and it is still there; with the extra keys placed on another edge, they still
+  show there after a cold start · pong.
 - **Landing dresses the dock once (11-08, perf/landing-settle).** Owed on pong, with Home's
   layout on a different Dock design or Drawer tile from the Workspace's: Perfetto over 5
   Home <-> Workspace round trips shows one `Dock.restyle` per `Wall.settleChrome` (was two, one
