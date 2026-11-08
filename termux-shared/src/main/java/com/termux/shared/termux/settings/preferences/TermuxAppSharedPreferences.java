@@ -311,12 +311,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * The Margin the surfaces of Home pages ({@code home}) or of the Workspace's pages wear, in dp
-     * as stored: that kind's own once the Home or Workspace card set it, else Base's.
+     * The Margin the surfaces wear, in dp as stored: Base's on every page, Home's and the
+     * Workspace's alike (one Margin since 2026-11-08, {@link LookGridMarginMigration}). The half
+     * is still named so callers that ask for one keep compiling against one answer.
      */
     public int getLayoutMarginDp(boolean home) {
-        return fromGrid(SurfaceProperty.SIDE_GAP, lookGrid().value(LookGrid.Property.MARGIN, null,
-            home ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL));
+        return getBaseMarginDp();
     }
 
     /** Base's Margin, in dp as stored: what every kind of page wears until it holds its own. */
@@ -803,6 +803,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setLiveBlurEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_GLASS_SEE_THROUGH}: "all" or "one". */
+    public String getGlassSeeThrough() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_GLASS_SEE_THROUGH, TERMUX_APP.DEFAULT_VALUE_GLASS_SEE_THROUGH, true);
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+            ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL;
+    }
+
+    /** Whether See through is One layer. */
+    public boolean isGlassSeeThroughOne() {
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(getGlassSeeThrough());
+    }
+
+    public void setGlassSeeThrough(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_GLASS_SEE_THROUGH,
+            TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+                ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL,
+            false);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */

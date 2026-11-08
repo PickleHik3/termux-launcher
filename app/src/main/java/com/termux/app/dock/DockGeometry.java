@@ -81,7 +81,8 @@ public final class DockGeometry {
             dockHeightScale = b.dockHeightScale;
             marginDp = b.marginDp;
             cornersDp = b.cornersDp;
-            design = arrangement.design();
+            // The design its slab wears: none to wear where its layout shows no apps row.
+            design = WornDockDesign.of(arrangement.design(), layout);
             searchField = arrangement.searchField();
             wallStripHeightDp = b.wallStripHeightDp;
             iconDp = b.iconDp;

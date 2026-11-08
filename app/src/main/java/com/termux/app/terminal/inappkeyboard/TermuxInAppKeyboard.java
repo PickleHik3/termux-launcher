@@ -174,6 +174,8 @@ public final class TermuxInAppKeyboard {
     private boolean mPlaceKeepsSystemImeWhileVisible;
     /** Whether the place actually has it right now — what was last applied to the window. */
     private boolean mPlaceHoldsSystemIme;
+    /** Up for the wall's travel, not yet landed: the IME stays where it was till the landing. */
+    private boolean mShownForTravel;
     private float mHeightScale = 1f;
     /**
      * The extra row-height multiplier a floating keyboard carries, from the card's grip and the
@@ -562,6 +564,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            mShownForTravel = false;
             // Shown, this keyboard is the one typing: the place gives the IME back — unless the
             // place keeps it while this keyboard is up, in which case the suppression below is a
             // no-op.
@@ -594,6 +597,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            if (!wasVisible) mShownForTravel = true;
             showInternal();
             if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
         } finally {
@@ -629,6 +633,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastHideReason = Objects.requireNonNull(reason, "reason");
             mVisible = false;
+            mShownForTravel = false;
             resetInputPipeline();
             // The panel stands over the keys, so it goes down with them; the next show is the keys.
             mHost.hideClipboardPanel();
@@ -1284,12 +1289,37 @@ public final class TermuxInAppKeyboard {
      * visibility. Cheap to call on every pass: it acts only when the answer changes.
      */
     private void syncPlaceSystemIme() {
-        boolean holds = mPlaceOwnsSystemIme && !mExternalTextInputActive
-            && (mPlaceKeepsSystemImeWhileVisible || !mVisible);
+        boolean holds = placeHoldsSystemIme(mPlaceHoldsSystemIme, mShownForTravel,
+            mPlaceOwnsSystemIme, mExternalTextInputActive, mPlaceKeepsSystemImeWhileVisible,
+            mVisible);
         if (mPlaceHoldsSystemIme == holds) return;
         mPlaceHoldsSystemIme = holds;
         if (holds) releaseSystemImeToPlace();
         else suppressSystemIme();
+    }
+
+    /**
+     * Whether the place holds the system IME, from what it {@code held}: the place that owns it
+     * holds it while this keyboard is down, or up for something else. A keyboard the travel brought
+     * up ({@code shownForTravel}) changes nothing until the wall has landed
+     * ({@link #landTravelShow}): the hand-over sets the window's IME flags, which relayouts the
+     * whole window, and neither the slide's frames nor the landed frame can afford it.
+     */
+    static boolean placeHoldsSystemIme(boolean held, boolean shownForTravel, boolean owns,
+                                       boolean externalInput, boolean keptWhileVisible,
+                                       boolean visible) {
+        if (shownForTravel) return held;
+        return owns && !externalInput && (keptWhileVisible || !visible);
+    }
+
+    /**
+     * The wall has landed with the keyboard a travel brought up: who holds the IME is settled now,
+     * after the landed frame (TermuxActivity#settlePlaceChrome).
+     */
+    public void landTravelShow() {
+        if (!mShownForTravel) return;
+        mShownForTravel = false;
+        syncPlaceSystemIme();
     }
 
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
@@ -1463,18 +1493,44 @@ public final class TermuxInAppKeyboard {
         }
         Trace.beginSection("Keyboard.showInternal");
         try {
-            ensureKeyboardView();
+            traced("Keyboard.ensureView", this::ensureKeyboardView);
             // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while
             // the keyboard was off screen is applied on the way back on.
-            refreshMaterialPaletteIfSignatureMoved();
-            setContainerVisible(true);
-            watchClipboard();
-            watchScreenshots();
-            mHost.requestAccessoryGeometrySync();
-            recheckLayout();
+            traced("Keyboard.refreshPalette", this::refreshMaterialPaletteIfSignatureMoved);
+            traced("Keyboard.setContainerVisible", () -> setContainerVisible(true));
+            traced("Keyboard.watch", () -> {
+                watchClipboard();
+                watchScreenshots();
+            });
+            traced("Keyboard.geometrySync", mHost::requestAccessoryGeometrySync);
+            traced("Keyboard.recheckLayout", this::recheckLayout);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** Runs {@code step} inside a trace section, so a trace shows which part of a show is slow. */
+    private static void traced(@NonNull String section, @NonNull Runnable step) {
+        Trace.beginSection(section);
+        try {
+            step.run();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * While the keyboard is put away, measures it for the bounds it will be shown at, so the
+     * show a swipe starts with lays nothing out from scratch. The keyboard stays GONE: it takes
+     * no room, touches, insets or focus, and every other view lays out as without it.
+     */
+    public void prewarm() {
+        if (!mEnabled || mDestroyed || mVisible || mExternalTextInputActive || mHost == null
+            || mHost.getKeyboardContainer() == null) {
+            return;
+        }
+        ensureKeyboardView();
+        mHost.prewarmKeyboardMeasure();
     }
 
     private void ensureKeyboardView() {
@@ -1625,15 +1681,40 @@ public final class TermuxInAppKeyboard {
         return mAppliedPalette;
     }
 
+    /** Glass palettes already built, by everything they were built from. */
+    private final InAppKeyboardPaletteFactory.GlassMemo mGlassMemo =
+        new InAppKeyboardPaletteFactory.GlassMemo(4);
+
     private juloo.keyboard2.Theme.Palette createPalette() {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
-        juloo.keyboard2.Theme.Palette palette =
-            InAppKeyboardPaletteFactory.createGlass(context, theme,
-                com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
-                mGlassTone);
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+        // Every chrome apply with the keyboard up asks for the palette (the legend inks, the
+        // faces, the glass base), and building it cost several ms an apply: it is built once per
+        // distinct set of inputs. "Keyboard.palette.glass.build" in a trace is a miss.
+        android.os.Trace.beginSection("Keyboard.palette.glass");
+        juloo.keyboard2.Theme.Palette palette;
+        try {
+            InAppKeyboardPaletteFactory.GlassInputs inputs =
+                InAppKeyboardPaletteFactory.glassInputs(context, theme,
+                    com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
+                    mGlassTone);
+            palette = mGlassMemo.get(inputs);
+            if (palette == null) {
+                android.os.Trace.beginSection("Keyboard.palette.glass.build");
+                try {
+                    palette = InAppKeyboardPaletteFactory.createGlass(inputs);
+                } finally {
+                    android.os.Trace.endSection();
+                }
+                mGlassMemo.put(inputs, palette);
+            }
+        } finally {
+            android.os.Trace.endSection();
+        }
+        android.os.Trace.beginSection("Keyboard.palette.scheme");
+        InAppKeyboardColorScheme scheme = parsedColorScheme(context,
             mPreferences.getInAppKeyboardColorScheme());
+        android.os.Trace.endSection();
         if (scheme.shouldApplyImportedPalette(theme))
             palette = scheme.applyToPalette(palette);
         // After the scheme: while a terminal effect is on, the deck's colours win over its keys'.
@@ -1658,6 +1739,30 @@ public final class TermuxInAppKeyboard {
         int bed = createPalette().keyboardBackground;
         return android.graphics.Color.alpha(bed) == 0 ? base
             : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
+    }
+
+    /** The colour scheme last parsed, the JSON and the Material defaults it was parsed from. */
+    @Nullable private InAppKeyboardColorScheme mParsedScheme;
+    @Nullable private String mParsedSchemeJson;
+    @Nullable private int[] mParsedSchemeDefaults;
+
+    /**
+     * The colour scheme for {@code json}, parsed again only when the JSON or the theme's Material
+     * defaults it seeds from moved ({@link InAppKeyboardColorScheme#sameSource}): every chrome
+     * apply with the keyboard up asks for the palette, and a parse per apply cost the swipe.
+     */
+    @NonNull
+    private InAppKeyboardColorScheme parsedColorScheme(@NonNull Context context,
+                                                      @Nullable String json) {
+        int[] defaults = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
+        InAppKeyboardColorScheme held = mParsedScheme;
+        if (held != null && InAppKeyboardColorScheme.sameSource(mParsedSchemeJson,
+                mParsedSchemeDefaults, json, defaults)) return held;
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(defaults, json);
+        mParsedScheme = scheme;
+        mParsedSchemeJson = json;
+        mParsedSchemeDefaults = defaults;
+        return scheme;
     }
 
     /** The deck look the keyboard wears while a terminal effect is on; null for none. */

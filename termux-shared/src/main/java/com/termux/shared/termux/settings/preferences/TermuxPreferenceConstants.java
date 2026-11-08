@@ -1435,6 +1435,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_LIVE_BLUR = false;
 
         /**
+         * See through: whether a Live glass shows the other Live glass beneath it ("all") or only
+         * what is directly beneath it ("one"), at rest and while swiping. Default "all".
+         */
+        public static final String KEY_GLASS_SEE_THROUGH = "glass_see_through";
+        public static final String VALUE_GLASS_SEE_THROUGH_ALL = "all";
+        public static final String VALUE_GLASS_SEE_THROUGH_ONE = "one";
+        public static final String DEFAULT_VALUE_GLASS_SEE_THROUGH = VALUE_GLASS_SEE_THROUGH_ALL;
+
+        /**
          * Live windows while swiping: the windows beside the one in front are kept ready and
          * slide in live as the wall is dragged between windows. Off, a swipe shows them only
          * once it lands.
@@ -1933,7 +1942,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The live wallpaper scene the launcher draws behind everything: {@code aurora},
-         * {@code contour-waves}, {@code nebula}, {@code bloom} or {@code particles}; empty is none.
+         * {@code contour-waves}, {@code nebula}, {@code bloom}, {@code particles} or {@code coastal-sunset}; empty is none.
          * An unknown value reads as none (see {@code LiveWallpaperChoice}).
          */
         public static final String KEY_LIVE_WALLPAPER_SCENE = "live_wallpaper_scene";

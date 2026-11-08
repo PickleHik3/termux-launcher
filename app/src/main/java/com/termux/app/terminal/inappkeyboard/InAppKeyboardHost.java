@@ -30,6 +30,10 @@ public interface InAppKeyboardHost extends HostActions {
 
     void requestAccessoryGeometrySync();
 
+    /** Measures the put-away keyboard for the bounds it will be shown at; it stays out of layout. */
+    default void prewarmKeyboardMeasure() {
+    }
+
     /**
      * Coalesces high-frequency geometry previews such as slider and drag updates. Activity hosts
      * can defer this to the next display frame; simple hosts retain the synchronous behavior.

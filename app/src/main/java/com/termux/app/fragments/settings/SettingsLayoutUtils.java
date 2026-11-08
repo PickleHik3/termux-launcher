@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
-import com.termux.app.fragments.settings.termux.SpeechModelCardPreference;
 import com.termux.app.fragments.settings.termux.TaiCatalogFilterPreference;
 import com.termux.app.fragments.settings.termux.TaiModelCentreRowPreference;
 import com.termux.app.fragments.settings.termux.TaiModelPreference;
@@ -104,7 +103,6 @@ public final class SettingsLayoutUtils {
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference
             || preference instanceof TaiModelCentreRowPreference
-            || preference instanceof SpeechModelCardPreference
             || preference instanceof TaiModelPreference) {
             return;
         }

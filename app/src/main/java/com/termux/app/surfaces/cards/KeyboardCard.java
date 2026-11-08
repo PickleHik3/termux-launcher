@@ -24,7 +24,7 @@ public final class KeyboardCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         // The opacity link stands between the two opacities it moves together.
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN, Row.KEY_CORNERS,
+            .tier(1, Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.KEY_CORNERS,
                 Row.BOTTOM_PADDING)
             .tier(3, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
                 Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,

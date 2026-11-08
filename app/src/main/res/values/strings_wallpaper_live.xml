@@ -15,11 +15,13 @@
     <string name="live_scene_nebula">Nebula Drift</string>
     <string name="live_scene_bloom">Fractal Bloom</string>
     <string name="live_scene_particles">Particles</string>
+    <string name="live_scene_coastal_sunset">Coastal Sunset</string>
     <string name="live_scene_aurora_desc">Curtains of light hang over a night sky.</string>
     <string name="live_scene_contour_waves_desc">Thin contour lines curve around a hidden hill.</string>
     <string name="live_scene_nebula_desc">Gas clouds drift slowly past fixed stars.</string>
     <string name="live_scene_bloom_desc">Layered petals turn around a bright centre.</string>
     <string name="live_scene_particles_desc">Points flow in three layers along one current.</string>
+    <string name="live_scene_coastal_sunset_desc">Sea, sun and birds over a cliffside pavilion.</string>
     <string name="live_scene_open">%1$s scene</string>
 
     <string name="live_detail_over">Live</string>

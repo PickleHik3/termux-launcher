@@ -453,6 +453,16 @@ public final class WallpaperBlurCache {
         return -1;
     }
 
+    /**
+     * The resident frame for {@code blurRadiusDp}, or null; never captures or blurs. Live glass's
+     * ground layer samples it during a swipe ({@link LiveBackdrop.GroundSource}).
+     */
+    @Nullable
+    public Bitmap peek(int blurRadiusDp) {
+        Bitmap frame = mByRadius.get(blurRadiusDp);
+        return frame == null || frame.isRecycled() ? null : frame;
+    }
+
     /** Visible for tests: how many radii are resident right now. */
     public int residentRadiiCount() {
         return mByRadius.size();

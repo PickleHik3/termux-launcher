@@ -93,4 +93,53 @@ public class FloatLiveGlassTest {
         // Live feeds the refraction: without a look the slab keeps the stored frame's route.
         assertFalse(slab.drawsLive());
     }
+
+    @Test
+    public void theRecordingReachesUpOverTheStripOnly() {
+        assertEquals(96, FloatLiveGlass.reachAbove(96, 0));
+        assertEquals(0, FloatLiveGlass.reachAbove(0, 0));
+        assertEquals(0, FloatLiveGlass.reachAbove(0, 40));
+    }
+
+    @Test
+    public void offsetInSumsTheParentsToTheFloat() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout floatContainer = new FrameLayout(activity);
+        FrameLayout content = new FrameLayout(activity);
+        PaneGlassBackdropView slab = new PaneGlassBackdropView(activity);
+        floatContainer.addView(content);
+        content.addView(slab);
+        content.layout(0, 90, 500, 600);
+        slab.layout(6, 4, 494, 500);
+        int[] out = new int[2];
+        assertTrue(FloatLiveGlass.offsetIn(slab, floatContainer, out));
+        assertEquals(6, out[0]);
+        assertEquals(94, out[1]);
+        assertFalse(FloatLiveGlass.offsetIn(slab, new FrameLayout(activity), out));
+    }
+
+    @Test
+    public void oneRecordingServesTheSlabAndTheStripWithOneSlot() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new LiveBackdropFrameLayout(activity);
+        PaneGlassBackdropView slab = new PaneGlassBackdropView(activity);
+        PaneGlassBackdropView strip = new PaneGlassBackdropView(activity);
+        root.addView(slab);
+        root.addView(strip);
+        activity.setContentView(root);
+        LiveBackdrop recorder = new LiveBackdrop(root);
+        LivePicture picture = recorder.attach(slab, 20f);
+        assertNotNull(picture);
+        slab.setLivePicture(picture);
+        strip.setLivePicture(picture, true);
+        picture.setReachTop(90);
+        picture.aimAt(0, -90);
+        assertEquals("the strip takes no slot", 1, recorder.size());
+        assertTrue(recorder.shows(picture.aimedDrawable()));
+        // Either holder letting go leaves the other holding it.
+        slab.setLivePicture(null);
+        assertEquals(strip.livePicture(), picture);
+        recorder.releaseAll();
+        assertTrue(picture.released());
+    }
 }

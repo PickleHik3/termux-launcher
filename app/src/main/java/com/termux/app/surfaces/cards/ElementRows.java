@@ -122,7 +122,7 @@ public final class ElementRows {
     /** The rows both screens list, top to bottom. */
     private static final List<Item> SHARED = Collections.unmodifiableList(java.util.Arrays.asList(
         Item.STATUS_BAR, Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD,
-        Item.SEARCH_FIELD, Item.DRAWER_ICON, Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL));
+        Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL));
 
     /**
      * The rows {@code screen}'s card lists, top to bottom: the shared ones, then the screen's own
@@ -142,6 +142,9 @@ public final class ElementRows {
     @NonNull
     public static List<Item> wholeApp() {
         List<Item> out = new ArrayList<>(SHARED);
+        // The Search field and the Drawer icon are every page's (ADR 0023 §1): only here.
+        out.add(out.indexOf(Item.COMMAND_PALETTE), Item.SEARCH_FIELD);
+        out.add(out.indexOf(Item.COMMAND_PALETTE), Item.DRAWER_ICON);
         out.add(Item.TERMINAL);
         out.add(Item.WIDGETS);
         return Collections.unmodifiableList(out);

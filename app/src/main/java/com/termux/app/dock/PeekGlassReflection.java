@@ -72,11 +72,18 @@ public final class PeekGlassReflection {
     /**
      * The live path's program, worn by each view. {@code content} is what the view draws (the
      * flipped row, in the view's pixels); {@code uBand} the band (left, top, right, bottom) in
-     * them and {@code uShown} the part of it the view shows. Nothing outside the band costs more
-     * than the test. The blur grows from nothing at the mirror line to {@code uMaxBlur} at the
-     * band's far end, sampled on two rings of eight held inside {@code uShown} (so the host and the
-     * strip each read only their own pixels and meet without a dark line at the seam), and the
-     * reflection fades as (1 - t)^2 from {@code uAlpha}, t measured down the whole band.
+     * them and {@code uShown} the part of it the view shows. The mirror is clearest at the icon
+     * and gets blurrier and fainter with depth t ({@link PeekReflectionLook#blurFraction},
+     * {@link PeekReflectionLook#fadeFactor}: the blur grows to {@code uMaxBlur}, sampled on two
+     * rings of eight held inside {@code uShown} so the host and the strip meet without a dark line
+     * at the seam), seen through a fixed ripple: samples pushed sideways by
+     * {@code uRipple.x * t * sin(hy * uRipple.z + hx * uRipple.y)}, with (hx, hy) the point in the
+     * host's coordinates ({@code uOrigin} moves the view's into them), so nothing in it moves with
+     * time. {@code uCard} (left, top,
+     * right, bottom) and {@code uCardR} the card, along whose rounded top a thin specular line
+     * ({@code uSpec}: thickness px, strength, reach down the sides in radii;
+     * {@link PeekReflectionLook#specular}) is drawn over the reflection. Outside the band and the
+     * line nothing costs more than the tests.
      */
     private static final String SHADER = ""
         + "uniform shader content;\n"
@@ -84,23 +91,44 @@ public final class PeekGlassReflection {
         + "uniform float4 uShown;\n"
         + "uniform float uAlpha;\n"
         + "uniform float uMaxBlur;\n"
+        + "uniform float3 uRipple;\n"
+        + "uniform float2 uOrigin;\n"
+        + "uniform float4 uCard;\n"
+        + "uniform float uCardR;\n"
+        + "uniform float3 uSpec;\n"
         + "half4 main(float2 p) {\n"
-        + "    if (p.x < uShown.x || p.x > uShown.z || p.y < uShown.y || p.y > uShown.w) {\n"
-        + "        return half4(0.0);\n"
+        + "    half4 acc = half4(0.0);\n"
+        + "    if (p.x >= uShown.x && p.x <= uShown.z && p.y >= uShown.y && p.y <= uShown.w) {\n"
+        + "        float t = clamp((p.y - uBand.y) / max(uBand.w - uBand.y, 1.0), 0.0, 1.0);\n"
+        + "        float r = uMaxBlur * (0.6 * t + 0.4 * t * t);\n"
+        + "        float2 h = p + uOrigin;\n"
+        + "        float2 q = p + float2(uRipple.x * t * sin(h.y * uRipple.z + h.x * uRipple.y), 0.0);\n"
+        + "        float2 lo = uShown.xy + float2(0.5, 0.5);\n"
+        + "        float2 hi = max(lo, uShown.zw - float2(0.5, 0.5));\n"
+        + "        acc = content.eval(clamp(q, lo, hi)) * 0.2;\n"
+        + "        for (int i = 0; i < 8; i++) {\n"
+        + "            float a = float(i) * 0.7853982;\n"
+        + "            float2 d = float2(cos(a), sin(a));\n"
+        + "            acc += content.eval(clamp(q + d * r, lo, hi)) * 0.05;\n"
+        + "            acc += content.eval(clamp(q + d * (r * 0.5), lo, hi)) * 0.05;\n"
+        + "        }\n"
+        + "        float f = 1.0 - t;\n"
+        + "        acc *= half(uAlpha * f * sqrt(f));\n"
         + "    }\n"
-        + "    float t = clamp((p.y - uBand.y) / max(uBand.w - uBand.y, 1.0), 0.0, 1.0);\n"
-        + "    float r = uMaxBlur * t;\n"
-        + "    float2 lo = uShown.xy + float2(0.5, 0.5);\n"
-        + "    float2 hi = max(lo, uShown.zw - float2(0.5, 0.5));\n"
-        + "    half4 acc = content.eval(clamp(p, lo, hi)) * 0.2;\n"
-        + "    for (int i = 0; i < 8; i++) {\n"
-        + "        float a = float(i) * 0.7853982;\n"
-        + "        float2 d = float2(cos(a), sin(a));\n"
-        + "        acc += content.eval(clamp(p + d * r, lo, hi)) * 0.05;\n"
-        + "        acc += content.eval(clamp(p + d * (r * 0.5), lo, hi)) * 0.05;\n"
+        + "    float reach = uCardR * uSpec.z;\n"
+        + "    float below = p.y - uCard.y;\n"
+        + "    if (uCard.z > uCard.x && below >= 0.0 && below < reach) {\n"
+        + "        float2 c = float2(uCard.x + uCard.z, uCard.y + uCard.w) * 0.5;\n"
+        + "        float2 e = abs(p - c) - (float2(uCard.z - uCard.x, uCard.w - uCard.y) * 0.5 - uCardR);\n"
+        + "        float inside = -(length(max(e, 0.0)) + min(max(e.x, e.y), 0.0) - uCardR);\n"
+        + "        if (inside >= 0.0) {\n"
+        + "            float edge = 1.0 - smoothstep(0.0, max(uSpec.x, 0.5), inside);\n"
+        + "            float side = 1.0 - smoothstep(0.0, max(reach, 1.0), below);\n"
+        + "            half w = half(uSpec.y * edge * side);\n"
+        + "            acc = half4(w) + acc * (1.0 - w);\n"
+        + "        }\n"
         + "    }\n"
-        + "    float fade = 1.0 - t;\n"
-        + "    return acc * half(uAlpha * fade * fade);\n"
+        + "    return acc;\n"
         + "}\n";
 
     /** The dock's apps row as the reflection reads it. */
@@ -125,6 +153,13 @@ public final class PeekGlassReflection {
     /** The live path failed once (its program would not build): the still path from then on. */
     private boolean mLiveFailed;
     private boolean mShown;
+    /** The values the live program is dressed with, filled in place and compared with a view's key. */
+    @NonNull private final float[] mLook = new float[PeekReflectionView.LIVE_KEY_SIZE];
+    /** The ripple's fixed wave in the host's pixels: amplitude at the far end, x and y wave numbers. */
+    private final float mRippleAmplitudePx;
+    private final float mRippleKx;
+    private final float mRippleKy;
+    private final float mSpecularThicknessPx;
 
     @Nullable private PeekReflectionView mHostView;
     @Nullable private PeekReflectionView mStripView;
@@ -145,6 +180,10 @@ public final class PeekGlassReflection {
 
     public PeekGlassReflection(float density) {
         mDensity = Math.max(0.1f, density);
+        mRippleAmplitudePx = PeekReflectionLook.rippleAmplitudePx(1f, mDensity);
+        mRippleKx = (float) (2.0 * Math.PI / (PeekReflectionLook.RIPPLE_WAVELENGTH_X_DP * mDensity));
+        mRippleKy = (float) (2.0 * Math.PI / (PeekReflectionLook.RIPPLE_WAVELENGTH_Y_DP * mDensity));
+        mSpecularThicknessPx = PeekReflectionLook.specularThicknessPx(mDensity);
     }
 
     // ------------------------------------------------------------------ the surfaces
@@ -359,21 +398,30 @@ public final class PeekGlassReflection {
             return;
         }
         float maxBlur = PeekGlassGeometry.REFLECTION_MAX_BLUR_DP * mDensity;
+        float[] look = mLook;
+        System.arraycopy(band, 0, look, 0, 8);
+        look[8] = mAlpha;
+        look[9] = maxBlur;
+        look[10] = card.left - view.originX();
+        look[11] = card.top - view.originY();
+        look[12] = card.right - view.originX();
+        look[13] = card.bottom - view.originY();
+        look[14] = card.radiusPx;
+        look[15] = view.originX();
+        look[16] = view.originY();
         float[] key = view.liveKey;
-        boolean same = view.effectKind == PeekReflectionView.EFFECT_LIVE
-            && Float.compare(key[8], mAlpha) == 0 && Float.compare(key[9], maxBlur) == 0;
-        for (int i = 0; same && i < 8; i++) same = Float.compare(key[i], band[i]) == 0;
+        boolean same = view.effectKind == PeekReflectionView.EFFECT_LIVE;
+        for (int i = 0; same && i < look.length; i++) same = Float.compare(key[i], look[i]) == 0;
         if (same) return;
         try {
             if (view.liveShader == null) view.liveShader = Live.shader();
-            Live.effect(view, view.liveShader, band, mAlpha, maxBlur);
+            Live.effect(view, view.liveShader, look, mRippleAmplitudePx, mRippleKx, mRippleKy,
+                mSpecularThicknessPx);
         } catch (Throwable t) {
             failLive(t);
             return;
         }
-        System.arraycopy(band, 0, key, 0, 8);
-        key[8] = mAlpha;
-        key[9] = maxBlur;
+        System.arraycopy(look, 0, key, 0, look.length);
         view.effectKind = PeekReflectionView.EFFECT_LIVE;
         Logger.logDebug(LOG_TAG, "Peek glass reflection on " + describe(view) + ": band "
             + band[0] + "," + band[1] + ".." + band[2] + "," + band[3] + " shown "
@@ -468,13 +516,20 @@ public final class PeekGlassReflection {
          * The fade and blur on {@code view}, aimed at the band as {@link
          * PeekGlassGeometry#reflectionBandIn} placed it in the view's pixels.
          */
-        static void effect(@NonNull View view, @NonNull Object shader, @NonNull float[] band,
-                           float alpha, float maxBlurPx) {
+        static void effect(@NonNull View view, @NonNull Object shader, @NonNull float[] look,
+                           float rippleAmplitudePx, float rippleKx, float rippleKy,
+                           float specularThicknessPx) {
             RuntimeShader program = (RuntimeShader) shader;
-            program.setFloatUniform("uBand", band[0], band[1], band[2], band[3]);
-            program.setFloatUniform("uShown", band[4], band[5], band[6], band[7]);
-            program.setFloatUniform("uAlpha", Math.max(0f, Math.min(1f, alpha)));
-            program.setFloatUniform("uMaxBlur", Math.max(0f, maxBlurPx));
+            program.setFloatUniform("uBand", look[0], look[1], look[2], look[3]);
+            program.setFloatUniform("uShown", look[4], look[5], look[6], look[7]);
+            program.setFloatUniform("uAlpha", Math.max(0f, Math.min(1f, look[8])));
+            program.setFloatUniform("uMaxBlur", Math.max(0f, look[9]));
+            program.setFloatUniform("uRipple", rippleAmplitudePx, rippleKx, rippleKy);
+            program.setFloatUniform("uOrigin", look[15], look[16]);
+            program.setFloatUniform("uCard", look[10], look[11], look[12], look[13]);
+            program.setFloatUniform("uCardR", look[14]);
+            program.setFloatUniform("uSpec", specularThicknessPx,
+                PeekReflectionLook.SPECULAR_STRENGTH, PeekReflectionLook.SPECULAR_SIDE_REACH);
             // A RenderEffect copies the uniforms as they are: built again for each change.
             view.setRenderEffect(RenderEffect.createRuntimeShaderEffect(program, "content"));
         }

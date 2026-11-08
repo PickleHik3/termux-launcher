@@ -38,7 +38,7 @@ public final class TaiSpeechGpuAdvice {
         }
         if (!gpu) return Advice.NO_GPU;
         TaiModelSpec current = TaiSpeechModels.resolveActive(app);
-        boolean currentOnGpu = "gpu".equals(new TaiSettings(app).getSttAccelerator());
+        boolean currentOnGpu = current != null && "gpu".equals(new TaiSettings(app).getSttAccelerator(current.id));
         JSONArray records = TaiBenchStore.in(app.getFilesDir()).records();
         return judge(true, records, modelId, current == null ? null : current.id, currentOnGpu);
     }

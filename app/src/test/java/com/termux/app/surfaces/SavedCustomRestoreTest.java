@@ -2,7 +2,6 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -27,7 +26,7 @@ import org.robolectric.annotation.Config;
  * The saved Custom across editor visits: Custom set up with keyboard and terminal overrides and
  * left with Done comes back whole on a later visit's move to Custom, after a Look was picked and
  * saved in between; picking the Look again resets everything to it and leaves the saved Custom
- * alone. Each visit is a fresh {@link SurfaceEditorController.SessionCustom} over a fresh
+ * alone, and so does Done on that Look. Each visit is a fresh {@link SurfaceEditorController.SessionCustom} over a fresh
  * preferences object on the same store, as after a restart.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -85,7 +84,7 @@ public class SavedCustomRestoreTest {
     }
 
     @Test
-    public void aLookSavedIsCustomsNextStartingPoint() {
+    public void aLookSavedLeavesTheSavedCustomForTheNextVisit() {
         // Visit 1: a Custom setup saved.
         TermuxAppSharedPreferences first = freshPreferences();
         SurfacePresets.applyLook(first, mist);
@@ -93,22 +92,23 @@ public class SavedCustomRestoreTest {
         visit1.enter(first);
         tuneTheKeyboardAndTheTerminal(first);
         doneAtCustom(visit1, first);
+        String custom = AppearanceSnapshot.signatureOf(first);
 
-        // Visit 2: Clear picked and saved: the saved Custom goes.
+        // Visit 2: Clear picked and saved: the saved Custom stays.
         TermuxAppSharedPreferences second = freshPreferences();
         SurfaceEditorController.SessionCustom visit2 = new SurfaceEditorController.SessionCustom();
         visit2.leave(second);
         SurfacePresets.applyLook(second, clear);
         doneAtLook(second);
         assertOnClear(second);
-        assertNull(SurfacePresets.custom(second));
+        assertNotNull(SurfacePresets.custom(second));
 
-        // Visit 3: opens on Clear; Custom starts from Clear's values, not the old setup.
+        // Visit 3: opens on Clear; Custom is the user's own setup again.
         TermuxAppSharedPreferences third = freshPreferences();
         SurfaceEditorController.SessionCustom visit3 = new SurfaceEditorController.SessionCustom();
         visit3.enter(third);
-        assertOnClear(third);
-        assertFalse("seeded from Clear, untouched", visit3.isTouched(third));
+        assertEquals(custom, AppearanceSnapshot.signatureOf(third));
+        assertTuned(third);
     }
 
     @Test
@@ -213,9 +213,8 @@ public class SavedCustomRestoreTest {
             new TermuxAppSharedPreferences(context, store, null));
     }
 
-    /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook). */
+    /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook): writes nothing. */
     private static void doneAtLook(TermuxAppSharedPreferences prefs) {
-        prefs.setSurfaceCustomPreset(null);
     }
 
     /** The editor's Done at the Custom stop. */

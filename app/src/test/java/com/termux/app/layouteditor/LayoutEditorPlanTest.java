@@ -93,9 +93,9 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_edge", null));
         assertNull("landscape untouched",
-            prefs.getString("layout.landscape.status_bar", null));
+            prefs.getString("layout.landscape.status_edge", null));
 
         plan.showOrientation(LANDSCAPE);
         assertEquals("the phone is still in portrait, so only the layout canvas moves",
@@ -184,7 +184,8 @@ public class LayoutEditorPlanTest {
         assertEquals(LANDSCAPE, plan.shownOrientation());
         assertTrue(plan.liveFollows());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.LEFT));
-        assertEquals("left", prefs.getString("layout.landscape.status_bar", null));
+        assertEquals("the bar's edge is one value for every page (ADR 0023 §1)", "left",
+            prefs.getString("layout.landscape.status_edge", null));
     }
 
     @Test
@@ -235,7 +236,7 @@ public class LayoutEditorPlanTest {
         plan.showPlace(PaneWallPage.WIDGETS);
         assertEquals(PaneWallPage.WIDGETS, plan.place());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_edge", null));
 
         plan.revert();
         assertFalse(plan.isDirty());

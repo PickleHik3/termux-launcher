@@ -84,6 +84,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
+        /** A press on the free area with swipe up set to the drawer: ready its content. */
+        default void onHomeDrawerPressed() { }
+        /** Swipe up on the free area, set to the drawer, took off: true when the drag took it. */
+        default boolean onHomeDrawerDragBegin(float downRawY) { return false; }
+        default void onHomeDrawerDrag(float rawY) { }
+        /** The drawer's drag was let go; velocity is positive downward. */
+        default void onHomeDrawerDragEnd(float velocityYPxPerSec) { }
+        default void onHomeDrawerDragCancel() { }
         /** A double tap on the page's free area (Settings › Home › Gestures). */
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
@@ -258,6 +266,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onFreeAreaVerticalSwipe(boolean up) {
                 host.onHomePaletteSwipe(up);
             }
+            @Override public void onFreeAreaDrawerPressed() { host.onHomeDrawerPressed(); }
+            @Override public boolean onFreeAreaDrawerDragBegin(float downRawY) {
+                return host.onHomeDrawerDragBegin(downRawY);
+            }
+            @Override public void onFreeAreaDrawerDrag(float rawY) { host.onHomeDrawerDrag(rawY); }
+            @Override public void onFreeAreaDrawerDragEnd(float velocityYPxPerSec) {
+                host.onHomeDrawerDragEnd(velocityYPxPerSec);
+            }
+            @Override public void onFreeAreaDrawerDragCancel() { host.onHomeDrawerDragCancel(); }
             @Override public void onFreeAreaDoubleTap() { host.onHomeDoubleTap(); }
             @Override public void onFreeAreaTwoFingerSwipe(boolean up) {
                 host.onHomeTwoFingerSwipe(up);
@@ -610,6 +627,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
     public void setIconStyle(@NonNull HomeIconStyle style) {
         appIcons.setStyle(style);
+    }
+
+    /** What swipe up on the free area runs; the drawer follows the finger as it goes. */
+    public void setSwipeUpAction(@NonNull com.termux.app.launcher.home.HomeGestures.Action action) {
+        pane.setSwipeUpAction(action);
     }
 
     /** Whether the page watches for a double tap and a two-finger swipe (each set to something). */

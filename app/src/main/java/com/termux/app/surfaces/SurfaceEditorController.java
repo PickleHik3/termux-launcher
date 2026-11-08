@@ -63,6 +63,7 @@ import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -920,6 +921,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mEntryCustom = prefs.getSurfaceCustomPreset();
+        mEntryCardCustoms = CardCustoms.raw(prefs.getSharedPreferences());
         mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
         mSettingsNow = mEntrySettings.signature();
         mEntryMinimal = mHost.isMinimalMode();
@@ -940,6 +942,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         // On disk until the session ends, so a launcher killed before Done starts on this state.
         AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom);
+        // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
+        // tried and kept comes back to it. Undo and a killed session put the slot back as
+        // mEntryCustom has it.
+        if (carried == null && (AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
+                || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL))))
+            SurfacePresets.saveCustom(prefs);
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
         com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
@@ -1749,15 +1757,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.HOME)
             resetHome();
         if (card == EditorCard.DOCK) {
-            // The dock's height, type and the Search field and Drawer icon live in the layout
-            // session, so its Undo covers them.
+            // The dock's height lives in the layout session, so its Undo covers it. Type, Search
+            // field and Drawer icon are every page's (Global card): a card reset leaves them.
             float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
                 .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
             if (layout != null) {
                 layout.setDockHeightScale(scale);
-                layout.setDockStyle(DockStyle.GLASS_TRAY);
-                layout.setSearchField(false);
-                layout.setDrawerTile(false);
                 layout.setWallStripHeightDp(
                     com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
             } else {
@@ -3648,6 +3653,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (screen != null)
                     return elementsView(screen);
             }
+            // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
+            // Global card holds them, drawn by the cards they came from.
+            if (row == Row.DOCK_TYPE)
+                return dockCard().view(row, widthPx);
+            if (row == Row.STATUS_POSITION) {
+                com.termux.app.surfaces.cards.CardRowView position =
+                    com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
+                        widthPx, mStatusCardHost);
+                if (position == null) return null;
+                mOwnRows.put(row, position);
+                return position.view;
+            }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
             if (card != null && CardBody.redesigned(card))
@@ -3677,8 +3694,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (card == EditorCard.DOCK)
+            if (row == Row.DOCK_TYPE || card == EditorCard.DOCK)
                 dockCard().restate(row);
+            else if (row == Row.STATUS_POSITION)
+                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);
@@ -3820,6 +3839,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return hue;
     }
 
+    /** The card whose chips are up, as {@link CardCustoms} names it. */
+    @NonNull
+    private String cardKey() {
+        return (mChips.element == null ? "all" : mChips.element.name()) + ":"
+            + mChips.appliesTo.name();
+    }
+
+    @Nullable private String mEntryCardCustoms;
+
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
 
@@ -3835,10 +3863,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
-        // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
-        // keeps its own writer (the same cell, Base).
+        // Margin is one number for every page, Base's alone: whatever Where says, it keeps its
+        // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
-            return onPageSide();
+            return false;
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;
@@ -3879,21 +3907,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
         if (row == Row.LOOK) {
             int[] look = GlassRows.lookCell(value);
+            String slot = cardKey();
             if (look == null) {
                 mHeldCustomCells.add(mChips);
+                // This card's own Custom comes back; with none saved nothing is written.
+                look = CardCustoms.get(prefs.getSharedPreferences(), slot);
             } else {
                 mHeldCustomCells.remove(mChips);
+                // Leaving a Custom the card wears: its values are the card's saved Custom.
+                int[] worn = {cellValue(grid, LookGrid.Property.FROST),
+                    cellValue(grid, LookGrid.Property.OPACITY),
+                    cellValue(grid, LookGrid.Property.TINT)};
+                if (GlassRows.lookStopFor(worn[0], worn[1], worn[2]) == AppearanceLooks.CUSTOM_STOP)
+                    CardCustoms.put(prefs.getSharedPreferences(), slot, worn);
+            }
+            if (look != null) {
                 // One editor: a page card's Look first clears the element values beneath it on
                 // its kinds (developer, 2026-11-03), then lands in its cells.
                 SharedPreferences store = prefs.getSharedPreferences();
                 SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
-                com.termux.shared.termux.settings.preferences.LookGrid into = batch == null ? grid
+                LookGrid into = batch == null ? grid
                     : SurfacePresets.writingInto(prefs, batch).lookGrid();
                 if (mChips.element == null && mChips.onKind())
                     SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
-                com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties = {com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
+                LookGrid.Property[] properties = {LookGrid.Property.FROST,
+                    LookGrid.Property.OPACITY, LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
-                    for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(properties[i]))
+                    for (LookGrid.Key cell : mChips.cells(properties[i]))
                         into.write(cell, look[i]);
                 if (batch != null)
                     batch.applyToStore();
@@ -3904,11 +3944,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return false;
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
                 grid.write(cell, GlassRows.toCell(row, value));
-            // A kind's Margin moves the shapes as Base's does (writeMargin).
-            if (row == Row.MARGIN) {
-                requestGeometryPreview();
-                syncLayoutSession();
-            }
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -5725,6 +5760,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry.restore(prefs);
         if (mEntryCustom != null)
             prefs.setSurfaceCustomPreset(mEntryCustom);
+        CardCustoms.restore(prefs.getSharedPreferences(), mEntryCardCustoms);
         if (mEntrySettings != null) {
             List<String> written = mEntrySettings.restore(settingsStore());
             refreshSettingsSignature();
@@ -5745,8 +5781,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Saves the look. A half left at a Custom the user made stores it as the saved Custom; with
-     * both halves on Looks the saved Custom goes, and the next Custom starts from those Looks. A
+     * Saves the look. A half left at a Custom the user made stores it as the saved Custom. Done
+     * on a Look leaves the saved Custom as it is, so Custom is still there to come back to. A
      * visit that changed no look leaves it alone.
      */
     private void commitLook() {
@@ -5759,9 +5795,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         boolean custom = AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
             || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL));
-        if (!custom)
-            prefs.setSurfaceCustomPreset(null);
-        else if (mSessionCustom.isTouched(prefs))
+        if (custom && mSessionCustom.isTouched(prefs))
             SurfacePresets.saveCustom(prefs);
     }
 
@@ -7010,8 +7044,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The name a redesigned card gives a row where it is not the row's own. */
     @Nullable
     private CharSequence cardRowName(@NonNull Row row) {
-        if (row == Row.MARGIN && (mCard == EditorCard.TERMINAL || mCard == EditorCard.KEYBOARD))
-            return getString(R.string.editor_row_outer_margin);
         if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
             return getString(R.string.editor_row_background_opacity);
         if (row == Row.KEYBOARD_THEME)

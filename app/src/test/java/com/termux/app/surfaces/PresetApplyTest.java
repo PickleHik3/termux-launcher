@@ -266,62 +266,32 @@ public class PresetApplyTest {
     }
 
     @Test
-    public void marginsLastChangeWinsAcrossGlobalWorkspaceAndAnElement() {
+    public void marginIsOneNumberForEveryPage() {
         TermuxAppSharedPreferences prefs = install();
         slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 10);
-        assertMargins(prefs, 10, 10, "Global");
+        assertMargins(prefs, 10, "Customization on Home");
 
-        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+        // Where standing on a page still writes Base: no page holds a Margin of its own.
+        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
             Row.MARGIN, 20);
-        assertMargins(prefs, 10, 20, "then Workspace");
-
-        // The Terminal card stands on the Workspace: its Margin edits that level.
-        slide(open(prefs, EditorCard.TERMINAL, PaneWallPage.TERMINAL, TERMINAL_PAGE),
-            Row.MARGIN, 30);
-        assertMargins(prefs, 10, 30, "then the Terminal card");
-
-        slide(open(prefs, EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 14);
-        assertMargins(prefs, 14, 30, "then Home");
-
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 6);
-        assertMargins(prefs, 6, 6, "Global again resets both kinds");
+        assertMargins(prefs, 20, "Customization on the Workspace");
+        LookGrid grid = prefs.lookGrid();
+        for (LookGrid.Kind kind : LookGrid.Kind.values())
+            org.junit.Assert.assertFalse(kind + " holds no Margin",
+                grid.has(LookGrid.Property.MARGIN, null, kind));
     }
 
     @Test
-    public void aDocksMarginEditsTheLevelItAppliesTo() {
+    public void discardPutsTheMarginBack() {
         TermuxAppSharedPreferences prefs = install();
-        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
-            Row.MARGIN, 20);
-        SurfaceEditorController dock = open(prefs, EditorCard.DOCK, PaneWallPage.WIDGETS,
-            HOME_PAGE);
-        EditorCardSheet.Model model = ReflectionHelpers.getField(dock, "mModel");
-        ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
-            ReflectionHelpers.ClassParameter.from(int.class,
-                EditorChips.appliesToOptions(EditorCard.DOCK).indexOf(
-                    EditorChips.AppliesTo.HOME)));
-        slide(dock, Row.MARGIN, 16);
-        assertMargins(prefs, 16, 20, "Dock on Home");
-        ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
-            ReflectionHelpers.ClassParameter.from(int.class,
-                EditorChips.appliesToOptions(EditorCard.DOCK).indexOf(
-                    EditorChips.AppliesTo.GLOBAL)));
-        slide(dock, Row.MARGIN, 9);
-        assertMargins(prefs, 9, 9, "Dock on Global is Base, and resets the kinds");
-    }
-
-    @Test
-    public void discardPutsAKindsMarginBack() {
-        TermuxAppSharedPreferences prefs = install();
-        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
-            Row.MARGIN, 20);
         SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
             HOME_PAGE);
         int base = prefs.getBaseMarginDp();
         slide(global, Row.MARGIN, 6);
-        assertMargins(prefs, 6, 6, "Global");
+        assertMargins(prefs, 6, "Customization");
         ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertMargins(prefs, base, 20, "after Discard");
+        assertMargins(prefs, base, "after Discard");
     }
 
     @Test
@@ -345,16 +315,13 @@ public class PresetApplyTest {
         assertTrue("and it is the seed's again", grid.isSeeded(seeded));
     }
 
-    private static void assertMargins(TermuxAppSharedPreferences prefs, int home, int workspace,
-                                      String what) {
-        assertEquals(what + ": Home pages", home, prefs.getLayoutMarginDp(true));
-        assertEquals(what + ": Workspace pages", workspace, prefs.getLayoutMarginDp(false));
-        assertEquals(what + ": a Display page", workspace,
-            prefs.lookGrid().value(LookGrid.Property.MARGIN, null, DISPLAY_PAGE));
+    private static void assertMargins(TermuxAppSharedPreferences prefs, int margin, String what) {
+        assertEquals(what + ": Home pages", margin, prefs.getLayoutMarginDp(true));
+        assertEquals(what + ": Workspace pages", margin, prefs.getLayoutMarginDp(false));
         // What the dress shapes each kind's pages by.
-        assertEquals(what + ": Home's shape", home,
+        assertEquals(what + ": Home's shape", margin,
             com.termux.app.place.WallShape.read(prefs, true).marginDp);
-        assertEquals(what + ": the Workspace's shape", workspace,
+        assertEquals(what + ": the Workspace's shape", margin,
             com.termux.app.place.WallShape.read(prefs, false).marginDp);
     }
 

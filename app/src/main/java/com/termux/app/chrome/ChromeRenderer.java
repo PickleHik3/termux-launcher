@@ -445,6 +445,12 @@ public final class ChromeRenderer {
     private boolean mCommitRunning;
 
     /**
+     * A top-pane frost was asked for while the frame's commit was booked: the commit runs it after
+     * its apply, unless the apply ran one itself, so the frame cuts the frost once.
+     */
+    private boolean mFrostOwedToCommit;
+
+    /**
      * Whether an apply asked for now is folded into the post-layout render pass instead of booking
      * another commit: only from inside a commit, and only while the even-out is held for a
      * crossing ({@link #holdEvenOut}), so nothing at rest changes.
@@ -546,11 +552,13 @@ public final class ChromeRenderer {
         // states, because the apply asks unconditionally (Pong, 2026-09-09).
         long dirtyBefore = mLedger.dirtyGeneration();
         mRenderSyncRunning = true;
+        Trace.beginSection("Chrome.renderSync");
         try {
             mSurfaces.applyChromeSpec(spec);
             mSurfaces.enforceAccessoryFxInvariants();
         } finally {
             mRenderSyncRunning = false;
+            Trace.endSection();
         }
         if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
             requestSync(SCOPE_ACCESSORY_RENDER);
@@ -593,8 +601,15 @@ public final class ChromeRenderer {
                 scheduleCommit();
             }
         }
-        if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
-            runTopPaneFrost();
+        if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
+            if (mCommitPending) {
+                // The frame's commit is booked and runs before this frame draws: the frost goes
+                // with it, cut once against what its apply leaves, rather than now and again
+                // after the apply moved the bands (5.5 ms of a drag frame on pong, twice).
+                mFrostOwedToCommit = true;
+            } else if (!holdFrostForFirstFrame()) {
+                runTopPaneFrost();
+            }
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
             if (mRenderSyncRunning) {
@@ -641,6 +656,8 @@ public final class ChromeRenderer {
 
     private void runTopPaneFrost() {
         mFrostRanOnce = true;
+        // Whatever pass was owed is this one: it cuts against the state as it is now.
+        mFrostOwedToCommit = false;
         Trace.beginSection("Frost.updateTopPane");
         try {
             mFrost.updateTopPane();
@@ -762,6 +779,10 @@ public final class ChromeRenderer {
             return;
         }
         mCommitPending = true;
+        // An empty marker inside whoever booked the commit, so a trace names the caller of every
+        // whole apply (the booking is once per frame at most, so this costs nothing at rest).
+        Trace.beginSection("Chrome.bookCommit");
+        Trace.endSection();
         View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         if (gate == null || !gate.isAttachedToWindow()) {
             mHandler.post(mCommitRunnable);
@@ -783,6 +804,7 @@ public final class ChromeRenderer {
         if (mDestroyed) {
             // Booked before onDestroy, delivered after it: applying the spec now would cut fresh
             // backdrops from a blur cache whose worker has been shut down.
+            mFrostOwedToCommit = false;
             return;
         }
         Trace.beginSection("Chrome.commit");
@@ -792,6 +814,11 @@ public final class ChromeRenderer {
         } finally {
             mCommitRunning = false;
             Trace.endSection();
+        }
+        // A frost asked for while this commit was booked, which its apply did not run itself.
+        if (mFrostOwedToCommit) {
+            mFrostOwedToCommit = false;
+            if (!holdFrostForFirstFrame()) runTopPaneFrost();
         }
     }
 
@@ -806,7 +833,14 @@ public final class ChromeRenderer {
         }
         View gate = mCommitGateView;
         commit();
-        return gate == null || !gate.isLayoutRequested();
+        boolean draw = gate == null || !gate.isLayoutRequested();
+        if (!draw) {
+            // The apply moved a view: this frame runs its traversal again. Marked so a trace
+            // shows which slow frames paid for two layouts.
+            Trace.beginSection("Chrome.commitCancelsDraw");
+            Trace.endSection();
+        }
+        return draw;
     }
 
     private void unscheduleCommit() {
@@ -875,6 +909,7 @@ public final class ChromeRenderer {
      */
     public void cancelPendingWork() {
         unscheduleCommit();
+        mFrostOwedToCommit = false;
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);

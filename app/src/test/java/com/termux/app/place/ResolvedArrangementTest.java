@@ -120,7 +120,7 @@ public class ResolvedArrangementTest {
     }
 
     @Test
-    public void aHomeLayoutGivesHomeItsOwnDesignAndLeavesTheWorkspacesAlone() {
+    public void aDesignPickedOnHomeIsTheWorkspacesToo() {
         PlaceLayoutStore store = dressed(LayoutStyle.DOCKED, DockStyle.GLASS_TRAY);
         store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(DockStyle.LENS_BEADS);
         ResolvedArrangement home =
@@ -132,8 +132,8 @@ public class ResolvedArrangementTest {
         assertFalse(home.frameRunsToBottom());
         assertFalse("the Home layout has no extra keys", home.extraKeysShown());
         assertEquals(LayoutVariant.NORMAL, workspace.variant());
-        assertEquals(DockStyle.GLASS_TRAY, workspace.design());
-        assertTrue(workspace.frameRunsToBottom());
+        assertEquals("one dock design for every page (ADR 0023 §1)", DockStyle.LENS_BEADS,
+            workspace.design());
         assertTrue(workspace.extraKeysShown());
         // One Style across the wall (#84).
         assertEquals(home.floating(), workspace.floating());

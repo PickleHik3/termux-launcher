@@ -57,6 +57,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         configureHuggingFaceToken();
         openOnClick("tai_runtime_controls", TaiRuntimePreferencesFragment.class, R.string.termux_ai_runtime_screen_title);
         openOnClick("tai_voice_input", KeyboardVoicePreferencesFragment.class, R.string.settings_keyboard_sub_voice_title);
+        openOnClick("tai_read_aloud", ReadAloudPreferencesFragment.class, R.string.read_aloud_title);
         // A bring-your-own-key server; its own screen, pushed in place so Back returns here.
         openOnClick("tai_remote_provider", TaiRemotePreferencesFragment.class, R.string.tai_remote_screen_title);
         openOnClick("tai_local_api", TaiApiPreferencesFragment.class, R.string.termux_ai_local_api_title);

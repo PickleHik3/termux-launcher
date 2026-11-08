@@ -193,7 +193,7 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals("Home's layout holds it", DockStyle.WALL_STRIP,
             places.forVariant(LayoutVariant.HOME).dockStyle());
         assertEquals(DockStyle.WALL_STRIP, places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
-        assertEquals("the shared layout keeps its own", DockStyle.GLASS_TRAY,
+        assertEquals("every page wears it (ADR 0023 §1)", DockStyle.WALL_STRIP,
             places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.WALL_STRIP));
     }
@@ -209,8 +209,8 @@ public class LayoutEditorHomeLayoutTest {
             places.forVariant(LayoutVariant.HOME).drawerTilePosition());
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
             home.drawerTilePosition());
-        assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.START,
-            places.drawerTilePosition());
+        assertEquals("the Workspace's dock has it there too (ADR 0023 §1)",
+            com.termux.app.dock.DrawerTilePolicy.Position.END, places.drawerTilePosition());
     }
 
     /**
@@ -223,7 +223,8 @@ public class LayoutEditorHomeLayoutTest {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle);
-            assertEquals("the Workspace's layout keeps its own design", DockStyle.GLASS_TRAY,
+            assertEquals("the Workspace's layout wears the same design (ADR 0023 §1)",
+                DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
         }
     }
@@ -233,7 +234,7 @@ public class LayoutEditorHomeLayoutTest {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals("the Home layout keeps its own", DockStyle.GLASS_TRAY,
+        assertEquals("Home's dock is the same one (ADR 0023 §1)", DockStyle.LENS_BEADS,
             places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle());
         assertTrue(plan.isDirty());
     }

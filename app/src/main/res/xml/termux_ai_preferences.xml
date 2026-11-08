@@ -33,6 +33,11 @@
             app:summary="@string/settings_keyboard_sub_voice_summary"
             app:persistent="false"/>
         <Preference
+            app:key="tai_read_aloud"
+            app:title="@string/read_aloud_title"
+            app:summary="@string/read_aloud_summary"
+            app:persistent="false"/>
+        <Preference
             app:key="tai_benchmark"
             app:title="@string/tai_bench_title"
             app:summary="@string/tai_bench_pref_summary"

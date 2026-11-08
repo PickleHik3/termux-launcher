@@ -360,7 +360,7 @@ public class EditorCardSheetFitTest {
                 assertTrue(which + ": no word is cut",
                     layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
             }
-            assertEquals("six Show/hide tiles, New float terminal among them (Monochrome is a switch row)", 6, tiles);
+            assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
         }
     }
 
@@ -387,7 +387,7 @@ public class EditorCardSheetFitTest {
             assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
             assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
         }
-        assertEquals("six Show/hide tiles, New float terminal among them (Monochrome is a switch row)", 6, tiles);
+        assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
     }
 
     @Test

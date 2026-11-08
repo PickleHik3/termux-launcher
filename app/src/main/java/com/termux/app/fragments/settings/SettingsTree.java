@@ -189,8 +189,6 @@ public final class SettingsTree {
         page(keyboard, voice, R.string.settings_keyboard_sub_voice_title, R.xml.termux_keyboard_voice_preferences);
         page(voice, PAGES + "KeyboardVoiceDetailsPreferencesFragment", R.string.settings_voice_details_title,
             R.xml.termux_keyboard_voice_details_preferences);
-        page(voice, PAGES + "SpeechModelPreferencesFragment", R.string.settings_keyboard_voice_model_title,
-            R.xml.speech_model_preferences);
         page(keyboard, PAGES + "KeyboardHardwarePreferencesFragment",
             R.string.settings_keyboard_sub_hardware_title, R.xml.termux_keyboard_hardware_preferences);
         editor(keyboard, PAGES + "KeyboardColorSchemeFragment", R.string.keyboard_theme_title);
@@ -212,6 +210,7 @@ public final class SettingsTree {
             R.xml.tai_advanced_preferences);
         page(ai, PAGES + "TaiRemotePreferencesFragment", R.string.tai_remote_screen_title,
             R.xml.tai_remote_preferences);
+        page(ai, PAGES + "ReadAloudPreferencesFragment", R.string.read_aloud_title, R.xml.read_aloud_preferences);
         page(ai, PAGES + "TaiModelCentreFragment", R.string.tai_model_centre_title, 0);
 
         // System
@@ -233,6 +232,8 @@ public final class SettingsTree {
         page(general, SETTINGS + "AboutSupportPreferencesFragment", R.string.settings_destination_about_support,
             R.xml.about_support_preferences);
 
+        // The Speech model screen folded into Voice input; its Voice output rows became Read aloud.
+        ALIASES.put(PAGES + "SpeechModelPreferencesFragment", voice);
         ALIASES.put(PAGES + "AppBehaviorPreferencesFragment", general);
         ALIASES.put(PAGES + "LauncherDockPreferencesFragment", dock);
         ALIASES.put(PAGES + "X11DisplayLinuxAppsPreferencesFragment", linuxApps);
@@ -313,11 +314,17 @@ public final class SettingsTree {
     /** The Appearance door: a row the editor holds lands here, and the editor opens. */
     private static final String APPEARANCE = "TermuxStylePreferencesFragment";
 
+    /** The Voice input rows that moved onto its Fine-tuning page. */
+    private static final java.util.Set<String> VOICE_FINE_TUNING_KEYS = new java.util.HashSet<>(
+        java.util.Arrays.asList("keyboard_voice_pause_ms", "keyboard_voice_mic_sensitivity",
+            "keyboard_voice_silence_timeout_ms"));
+
     @Nullable
     private static String pageForMovedRow(@NonNull String className, @NonNull String key) {
         String name = className.startsWith(PAGES) ? className.substring(PAGES.length()) : className;
         switch (name) {
             case "KeyboardPreferencesFragment":
+                if (VOICE_FINE_TUNING_KEYS.contains(key)) return "KeyboardVoiceDetailsPreferencesFragment";
                 if (key.startsWith("keyboard_voice") || key.equals("keyboard_docs_voice"))
                     return "KeyboardVoicePreferencesFragment";
                 if (key.equals("in_app_keyboard_hide_on_hardware") || key.equals("pass_ctrl_space_to_android"))
@@ -423,6 +430,10 @@ public final class SettingsTree {
                         // The Linux apps rows sit on this page itself now.
                         return null;
                 }
+            case "KeyboardVoicePreferencesFragment":
+                return VOICE_FINE_TUNING_KEYS.contains(key) ? "KeyboardVoiceDetailsPreferencesFragment" : null;
+            case "SpeechModelPreferencesFragment":
+                return key.startsWith("speech_output_") ? "ReadAloudPreferencesFragment" : null;
             case "TaiPreferencesFragment":
                 switch (key) {
                     case "tai_runtime_actions": case "tai_runtime_stop": case "tai_runtime_unload":

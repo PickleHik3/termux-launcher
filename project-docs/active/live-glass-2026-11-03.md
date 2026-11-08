@@ -389,3 +389,19 @@ p50 18 / p90 24 / p99 46 ms. At rest on Home for 10 s: 10 frames off and 10 on (
 7–10 after a swipe. One burst of ~330 frames in the 10 s right after switching Live blur on in Settings,
 then back to 10: the switch's first recordings settling, not a steady cost. The one-frame dark flash and
 the stored/live look jump on widgets are gone (developer, pong).
+
+**Page layer during a swipe (2026-11-07, perf/glass-slide-on-swipe; pong owed).** Pong, 90 Hz, 10
+Home ↔ Workspace round trips, swipe frames from framestats: Look Clear 23 / p90 43 ms total and
+16.4 ms from issue to completed, Look Solid 16.7 / 22 and 12.1; parallax off changed nothing.
+Approved behaviour (developer): at rest nothing changes; during the swipe only page content that
+animates in place holds still under the glass; the scene keeps moving under it; glass on glass
+still shows. Built as [ADR 0021 §2a](../../docs/adr/0021-glass-records-what-is-beneath-it.md):
+`WallSwipeGlassPolicy` (LIVE, REFERENCE under a scene at rest, FROZEN while the wall moves),
+`PageLayerCapture` for the frozen picture, the wall's slot opened in `LiveBackdrop.recordSplit`.
+What does not move with the pages stays live in the recording: the wallpaper and its parallax, the
+scene, the status band and bars, the frame line over the wall, the dock and keyboard. The wall's
+pages are frozen only while every one drawn shares one horizontal shift; a turn, a sink, a fade,
+a page shown or hidden, or the surface reaching past the picture records it again (at most three
+pictures a swipe, then one layer until the wall settles). Built-in widgets have nothing but the
+ground beneath them and keep one layer. Target: Clear within about 1–2 ms of Solid during the
+swipe; the checks are in `device-checks.md`.

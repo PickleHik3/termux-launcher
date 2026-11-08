@@ -32,7 +32,8 @@ public final class GlobalCard {
         return rows
             .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS)
-            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
+            // The status bar's position and the dock's type are one value for every page.
+            .tier(3, Row.SECTION_LAYOUT, Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER)
             .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.TOOL_COLOURS)
             .build();

@@ -28,6 +28,148 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   closing the current session powers off its panes, then the session slides away as before.
   Battery and performance > Idle glitch rate shows only with Idle animations on and the CRT
   effect; Often tears an idle pane every 10–30 s, and typing still pauses it.
+- **Keyboard rises in its landing inks (11-08, fix/crossing-look).** Home2 → Workspace with the
+  in-app keyboard rising, then Workspace → Home2; keyboard up and down at the start; Docked and
+  Floating dock. Passes: the rising keyboard's function chips and legends are already the
+  Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
+  same mid-swipe as at rest at either end.
+  How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
+- **Peek reflection never sharp (11-08, fix/peek-band).** Dock design Peek glass, Reflection
+  on, Fancier glass on; Workspace (keyboard up) → Home2 and back, Docked and Floating. Passes: from
+  the landing on, the icons' reflection under the A–Z letters is soft and faint on every frame,
+  with no sharp, bright copies in the ~0.5 s before the wall settles, and nothing changes in the
+  band at the settle. Also look at the dock's glass edge over that half second: the card's rim
+  should already be where it rests. How: pong with the developer's go-ahead, `screenrecord` read
+  frame by frame around the landing.
+- **Backdrop layers, no pop (11-07, perf/glass-slide-on-swipe).** Look Custom (Opacity 12, Blur 20,
+  Edge 40, Depth 90), Live blur on, glass widgets on Home, a float over them. Screenshots at rest,
+  on the first moving frame, mid-swipe and after landing, Home ↔ Workspace both ways. Passes: the
+  first and the landed frame match the resting screenshot in every glass; mid-swipe glass shows
+  the same wallpaper, widgets and pages, moving. Ship gate. How: pong with the developer's
+  go-ahead, `screenrecord` read frame by frame.
+- **Backdrop layers, soft edges and glass on glass (11-07, same branch).** Side by side, resting
+  against mid-swipe: widget edges under the float's glass and text edges under the dock's glass
+  look equally soft; two stacked floats over Home show the float behind and Home through both
+  while swiping. Passes: no difference visible at arm's length. How: pong, screenshots.
+- **Backdrop layers, scene and transitions (11-07, same branch).** A live scene on, then each page
+  transition (Slide, Slide with plank tilt, Depth, Fade, Carousel, Stack) and the sink. Passes:
+  the scene keeps moving under the glass at its glass rate during the swipe; no blank or dark
+  glass in any style; keyboard up and down, Docked and Floating dock. How: pong, `screenrecord`;
+  a perfetto trace counts `Glass.layers.fallback` per style.
+- **See through (11-07, same branch).** Battery & performance → See through: One layer, then All
+  layers. Passes: with One layer the front of two stacked floats shows the back float (titlebar
+  and text) frosted over the wallpaper only, with no widgets or pages through both, at rest and
+  swiping; a single float over widgets still shows the widgets; All layers brings the widgets
+  back through both. How: emulator or pong.
+- **Backdrop layers, the cost (11-07, same branch).** In one session: Custom look on the base
+  5169acb0f and on this branch, then Solid, 10 Home ↔ Workspace round trips each. Passes:
+  RenderThread "flush layers" per swipe frame near Solid's 1.4 ms (was 4.1); swipe p90 within a
+  few ms of Solid's; `Glass.layers.local` about once per swipe per surface, `Glass.layers.fallback`
+  rare. How: pong with the developer's go-ahead, perfetto.
+
+- **Live glass during a page swipe, the look (11-07, perf/glass-slide-on-swipe).** Look Clear,
+  Live blur on, a float over Home's glass widgets, the dock showing pages under it. Swipe Home ↔
+  Workspace slowly and fast, scene off and on. Passes: the float's glass still shows the widgets'
+  glass under it all the way across; the dock's glass shows both pages sliding under it, blurred,
+  with the scene still moving under it; nothing pops or jumps in the glass on the first frame of
+  the swipe or as the wall settles (a terminal printing or the clock ticking under the glass may
+  hold still for the quarter second and catch up at settle); a slow drag that reverses past rest
+  shows the other neighbour, not an empty strip; keyboard up on the Workspace (the dock lifts as
+  it crosses). How: pong with the developer's go-ahead, `screenrecord` of five swipes each way.
+- **Live glass during a page swipe, the cost (11-07, perf/glass-slide-on-swipe).** Look Clear
+  against Look Solid, 10 Home ↔ Workspace round trips each, swipe frames from `gfxinfo
+  framestats`, scene off and on. Passes: Clear within about 1–2 ms of Solid at the median of
+  total and of ISSUE_DRAW_COMMANDS_START → FRAME_COMPLETED (before this change Clear 23 / p90
+  43 ms total, 16.4 ms issue → completed; Solid 16.7 / 22, 12.1); no frame at the swipe's start
+  worse than before (the page layer's capture runs there); at rest on Home with a scene, the
+  frame count per 30 s no worse than before; PSS within noise. How: pong with the developer's
+  go-ahead, the same scripted round trips as the measurement that motivated it, a perfetto trace
+  for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
+  swipe and usually one).
+
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
+  shows what is beneath the float (the page, the terminal behind, another float's glass), not only
+  the wallpaper; drag it over a second float and the strip shows that float through it; resize
+  and maximise keep it aligned with the body; Clear and another Look; with Live blur off the strip
+  is the stored frame as before; minimise and bring back; with nine or more Live surfaces open the
+  strip still follows its float (it takes no slot of its own).
+- **Drawer category cards stay glass in a dark theme over a bright wallpaper.** Owed on pong:
+  system dark theme, bright wallpaper, open the app drawer's Categories view. Each category
+  container must show the drawer's backdrop through it (a faint lift, not a near-black slab;
+  the old build sampled about #1A1712 inside a card). Press a card: it must still look pressed.
+  Repeat in light theme: the cards must still be findable against the frost. Pinned folder shells
+  in the dock and the drawer's search rows use the same wash; look at them too.
+
+- **One status bar and dock look for every page (11-08, perf/shared-chrome, wave 2a).** Owed on
+  pong, on an install whose Home and Workspace differed in status bar edge, compact or expanded
+  state, dock design, Search field or Drawer icon: after the update every page (Home, Workspace,
+  Assistant, Display) wears what Home wore, portrait and landscape, keyboard up and down,
+  Docked and Floating. Change the status bar's edge, its compact rest, the dock design, the
+  Search field or the Drawer icon from the Workspace, then from Home: the other page shows the
+  same at once, and Discard puts it back. The dock's height is the same on every page.
+  Landscape Home keeps its side-bar dock. Swipe Home2 <-> Workspace 5 times: the status bar and
+  dock do not re-dress or move at the landing. Trace: no `Settle.dockDesign` and no
+  `Bar.refresh` at landing where only these values differed before · pong.
+- **One Margin for every page (11-08, perf/bar-travel).** Owed on pong, on an install whose
+  Home Margin differed from the Workspace's: after the update every page (Home, Workspace,
+  Assistant, Display) wears the Margin Home wore, on the status bar, the dock and the panes,
+  Docked and Floating, keyboard up and down, one pane and split. The Appearance editor shows
+  Margin only on Customization (not on Home, Workspace, Dock, Status bar, Terminal or Keyboard);
+  moving it, with Where on Everywhere or on a page, moves every page alike, and Discard puts it
+  back. Swipe Home2 <-> Workspace 5 times: the status bar keeps its inset through the slide and
+  the landing, and the window chips and the Wall strip are the landed page's. Trace: no
+  `Bar.refresh` under `Touch.dispatch` on a drag, no `Wall.halfRedress` where only the Margins
+  differed before · pong.
+- **Toolbar text input built when idle (11-08, perf/bar-travel).** Owed on pong: force-stop,
+  let the launcher come back on Home, wait 3 s, then swipe Home2 -> Workspace with the extra
+  keys on the dock. Trace: one `Toolbar.prepareTextInput` slice about 1-2 s after the first frame,
+  outside any frame's traversal; the first swipe has no `inflate` of `TextInputEditText` under
+  `measure` and no frame near the 74 ms one. Functional: swipe the extra keys left to the text
+  input, type and send; the paste button pastes and a long press returns to the keys; rotate
+  with text typed and it is still there; with the extra keys placed on another edge, they still
+  show there after a cold start · pong.
+- **Landing dresses the dock once (11-08, perf/landing-settle).** Owed on pong, with Home's
+  layout on a different Dock design or Drawer tile from the Workspace's: Perfetto over 5
+  Home <-> Workspace round trips shows one `Dock.restyle` per `Wall.settleChrome` (was two, one
+  under `Place.dockDress` and one under `Settle.dockDesign`); note the `Place.hosts.*`,
+  `Place.edgeStacks.walk/.metrics` and `Bar.refresh` slices for the next round. Functional, Docked
+  and Floating, keyboard up and down on the Workspace: the landed dock wears the arriving page's
+  design, tile and height, with no jump a frame later; a design with the Search field or Wall
+  strip on one half only lands at full height; after changing a Dock design or a look setting in
+  the editor, the next landing still re-dresses; a slide that comes back is unchanged.
+- **Page-swipe stalls: landing layout once, frost skip, keyboard pre-measure.** Owed on pong,
+  Perfetto over 5 Home <-> Workspace round trips at 90 Hz: `Wall.settleChrome` under about 15 ms
+  (was ~43); `Place.syncLayout` one call per `Wall.settleChrome` (was two; count its slices
+  under each `Wall.settleChrome`); `Frost.updateTopPane` mostly absent from the landing, running
+  when the pane moves; `Wall.preRollKeyboard` under about 10 ms, with `Keyboard.showInternal`
+  and its children (`Keyboard.ensureView`, `.setContainerVisible`, `.geometrySync`,
+  `.recheckLayout`) showing what is left, and `Keyboard.prewarmMeasure` appearing after a
+  landing. Functional, on the Workspace: keyboard up and down by tap and by swipe; terminal
+  bounds and dock lift as before; Home unchanged; with the keyboard down, taps where it would
+  stand reach the pane below; the status and window bar frost follows keyboard up/down, a pane
+  resize, a split round the camera, a wallpaper change and a scheme change (Light, Dark, Black,
+  Material You).
+- **Terminal ink holds across cold starts (11-07, #228).** Emulator then pong, even-out on,
+  Clear look, light theme, a blue/cream wallpaper: force-stop and relaunch 4 times; the pane's
+  text ink, the even-out band and the dock body come out the same every time, and the chosen
+  ink reads (no SHORTFALL in the pane's ink report). Repeat once with dark, black and Material
+  You, and once at terminal Opacity 10%.
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
@@ -62,6 +204,50 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
   bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
   on Custom.
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Peek reflection through the A–Z row (11-07, fix/peek-dock-travel).** Not seen on a device. On
+  pong, Peek dock with the A–Z row: the icon reflections run continuous through the letters, with
+  no darkened patch behind them, and the letters stay readable on a bright wallpaper and on a dark
+  one (they keep their own halo).
+
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections run the card's full height behind the letters, and the letters stay legible.
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections fade out above the letters, and the letters stay legible.
+  Check Docked and Floating, Home keyboard up and down (the card stands on the keyboard), the A–Z
+  row hidden (as before), the A–Z row ordered over the apps row (falls back to the Tray slab),
+  extra keys on the bottom (Tray slab), a Workspace page (Lens beads unchanged), and at the
+  largest font scale. Look for a reflection cut off too short by the A–Z row's top padding.
+
+- **Peek glass polish (11-07, fix/peek-with-az).** Not seen on a device; needs Android 13+ with
+  Live glass on. On pong, Peek glass over a light and then a dark wallpaper, A–Z row under the
+  icons: the mirror is clearly readable just under each icon and softens and fades all the way
+  down to the card's bottom edge (past the letters, no early cut-off), seen through a faint still
+  ripple (nothing moves at rest); a fine bright line (1.5 dp, over the glass's own edge) runs
+  along the card's top edge and round its top corners, visible on both wallpapers, and behind the A–Z letters the reflection
+  is dimmed and greyer so the letters read over a bright icon. Check the A–Z row hidden (the
+  specular line only), Docked and Floating, keyboard up, Live glass off (the old still
+  reflection: no ripple, line or band), light/dark/scheme chrome, and the largest font scale.
+
 - **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
   recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
   sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
@@ -568,3 +754,66 @@ longer counted as an error. Owed:
   signal on turns a dithered icat image's checker into flat shades, and off restores it; the
   switch appears only with a CRT style, on Terminal and Performance pages; (4) status bar, dock
   and keyboard chrome look unchanged.
+- **Dictation cleanup rows on Voice input.** Settings > Voice input > Dictation cleanup: "Cleanup model" reads "Automatic · <model>" and a tap lists Automatic, each installed chat model and "Remote · <model>" only when a remote is set up, with "Get more models" opening the Model centre; Raw text is never listed (a stored Raw text shows as the summary until another is picked). "Runs on" shows CPU | GPU (hidden with no GPU path and when the pick is Remote), follows the model in use, and agrees with the Tidy dictation sheet afterwards. "Level" is a Light | Polished pill that agrees with the sheet; turning "Clean up dictation" off dims all three rows · pong.
+- **Keyboard glass kept across chrome applies (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace and Fancier Glass on: swipe Home ↔ Workspace 5 times, open
+  and close the keyboard, change the wallpaper, rotate. The keyboard's glass shows the wallpaper
+  under it at every step, its rim and light look as before, and nothing goes blank or freezes on
+  an old wallpaper. Trace: Chrome.kb.glass well under 1 ms after the first build · pong.
+- **Keyboard palette built once per set of inputs (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace: flip light/dark in Android settings, change the wallpaper
+  under Material You, switch the launcher's colour scheme on and off, change the keyboard theme
+  (System, Light, Dark), the Glass Look (Scheme, Obsidian) and the key opacity. After each, the
+  keys and legends re-tint at once to match (no keyboard hide and show needed) and the legends
+  stay readable on light and dark wallpaper. Trace over 5 Home ↔ Workspace round trips:
+  `Keyboard.palette.glass` well under 1 ms where it has no `Keyboard.palette.glass.build`
+  child; `.build` only on the first apply and after a faces, tone or theme change · pong.
+- **Home swipe up follows the finger (11-07).** Settings > Home > Gestures, Swipe up set to the
+  app drawer: on a Home page's free area the drawer rises with the finger; let go past about 40%
+  or flick and it opens, a short drag eases back; the first pull after a cold start (no earlier
+  drawer use) is as smooth as the later ones; page swipes, widget touches, long press, double tap,
+  two-finger swipes and pinch behave as before; Swipe up set to anything else (palette, none,
+  lock) works exactly as before; swipe down is unchanged · pong.
+- **Custom Look is kept (11-07, fix/custom-look-kept).** Appearance editor › Customization: set a
+  Custom look (Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth 90, Rim Bright). (1) Tap Solid,
+  then Custom: every slider is back where you left it. (2) Tap Solid, Done, open the editor again
+  (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
+  "Discard changes": the look is as it was before, and Custom still brings back the same values.
+  (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
+  slider. (5) The same on the Home, Workspace and a surface card (Status bar, Dock, Keyboard): move
+  Opacity, tap Solid, then Custom: the card's own values are back, also after Done and reopen;
+  Discard leaves the card as it was · pong.
+- **Show wallpaper off reaches every surface (11-07, fix/wallpaper-off-chrome).** Appearance
+  editor > Global > Show wallpaper off, Done: no wallpaper picture, blurred or sharp, on the
+  keyboard, the extra-keys bar, the band under the keyboard, the dock, the status bar, the nav
+  strip or a floating window's bar; each is plain tint like the terminal panes. Check with the
+  keyboard up and down, on Home and on Workspace, in a Docked and a Floating dock, with the
+  keyboard's, extra keys' and status bar's Blur detached to a non-zero value. Then Show wallpaper
+  back on: the blurs return as they were · pong.
+- **Travel keyboard dressed by the frame's apply, IME handed over after the landing (11-07,
+  perf/page-settle-stalls).** Swipe Home → Workspace slowly with the Workspace's keyboard
+  remembered up, in the Glass and Solid Looks, Docked and Floating dock: the keys rise from the
+  bottom already in their glass and legends, with no flash of plain keys in the first frames.
+  Swipe back half way and let go: the keyboard goes down and Home's search field still opens the
+  phone's keyboard. Land on the Workspace and tap the terminal: only the in-app keyboard shows,
+  never the phone's. Land on the Display place with the phone's keyboard in use there: it still
+  takes the phone's keyboard. Trace over 5 round trips: no `Chrome.kb.host` under
+  `Keyboard.setContainerVisible`, no `Keyboard.suppressSystemIme` inside `Wall.preRollKeyboard`
+  or `Wall.settleChrome`, one in a posted message just after the landed frame · pong.
+- **Top-pane frost cut with the frame's commit (11-08, perf/swipe-main-thread).** Swipe Home2 ↔
+  Workspace 5 times slowly and 5 times fast, keyboard remembered up and down on the Workspace,
+  Docked and Floating dock, status bar at the top: the status bar's glass and the strip behind
+  the system bar show the wallpaper under them on every frame of the slide and at the landing,
+  with no frame of stale or blank frost as the bar changes dress at the seam. Change the
+  wallpaper and open the Appearance editor once: the bar's frost follows. Trace: no drag frame
+  holds two `Frost.updateTopPane` passes; under `Wall.chromeTravel`, the new `Travel.*`,
+  `Place.hosts.*` and `Settle.*` sections name the rest of each slow frame · pong.
+- **A finger on the focused pane leaves the bar alone (11-08, perf/swipe-ends).** On the
+  Workspace with one pane and with a split, keyboard up and down, Docked and Floating: start 5
+  Home2 <-> Workspace swipes on the terminal; the terminal keeps drawing through each slide. Tap
+  the pane that has focus: nothing in the bar changes. In a split, tap the other pane: it takes
+  focus (cursor, border, dim) and the window chip's label follows it. With a Home float focused,
+  go to the Workspace and tap a pane: the float lets go of the keyboard and the bar selects the
+  window. Switch windows from a chip: the bar refreshes in full. Trace: no `Bar.refresh` under
+  `View.onTouchListener#onTouch - TerminalView`; a tap on the other pane shows only
+  `Bar.chipsOnly` · pong.

@@ -2,6 +2,7 @@
 status: proposed
 date: 2026-11-01
 supersedes: 0015 §3's page layouts ("any page may opt into a layout of its own") and the shared NORMAL layout
+amended-by: 0023 (status bar state, dock design, search field and drawer tile are global; Home-only and Workspace-only elements travel with their page)
 amends: 0018 §4 (the Home kind's layout is one document, so "a Home page's own layout never carries a dock" becomes a fact of the store, not a rule), 0017 (per-page looks `@<page>` fold into the kind's look)
 ---
 

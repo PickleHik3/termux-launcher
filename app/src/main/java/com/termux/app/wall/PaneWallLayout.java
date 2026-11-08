@@ -70,7 +70,7 @@ import java.util.WeakHashMap;
  * ignored.
  */
 public final class PaneWallLayout extends ViewGroup
-        implements com.termux.app.chrome.LiveBackdrop.Container {
+        implements com.termux.app.chrome.LiveBackdrop.Wall {
 
     // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
     // starts where the finger let go and at the finger's own speed, so the release has no seam,
@@ -2781,9 +2781,26 @@ public final class PaneWallLayout extends ViewGroup
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
-        drawBorderGlow(canvas);
         mGrabberDrawnOffsetPx = mOffsetPx;
         mGrabberDrawnSink = mSink;
+        drawDecor(canvas);
+    }
+
+    /** Live blur's page layer: the glow and the grabbers, as {@link #dispatchDraw} draws them now. */
+    @Override
+    public void drawDecorForBackdrop(@NonNull android.graphics.Canvas canvas) {
+        drawDecor(canvas);
+    }
+
+    /** Live blur holds the pages in a layer of their own while the wall is anywhere but at rest. */
+    @Override
+    public boolean isMovingForBackdrop() {
+        return isMoving();
+    }
+
+    /** Everything the wall draws over its pages: the border glow, then the grabbers. */
+    private void drawDecor(@NonNull android.graphics.Canvas canvas) {
+        drawBorderGlow(canvas);
         boolean bottom = isGrabberShown();
         boolean top = isStatusGrabberShown();
         if (!bottom && !top) return;

@@ -122,6 +122,7 @@ public final class LiveSceneLogic {
         if ("contour-waves".equals(kind)) return R.string.live_scene_contour_waves;
         if ("nebula".equals(kind)) return R.string.live_scene_nebula;
         if ("bloom".equals(kind)) return R.string.live_scene_bloom;
+        if ("coastal-sunset".equals(kind)) return R.string.live_scene_coastal_sunset;
         return R.string.live_scene_particles;
     }
 
@@ -132,6 +133,7 @@ public final class LiveSceneLogic {
         if ("contour-waves".equals(kind)) return R.string.live_scene_contour_waves_desc;
         if ("nebula".equals(kind)) return R.string.live_scene_nebula_desc;
         if ("bloom".equals(kind)) return R.string.live_scene_bloom_desc;
+        if ("coastal-sunset".equals(kind)) return R.string.live_scene_coastal_sunset_desc;
         return R.string.live_scene_particles_desc;
     }
 }
