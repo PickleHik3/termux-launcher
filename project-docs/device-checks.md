@@ -36,7 +36,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   blur on, light wallpaper: the toolbar row above the keys (keyboard, mouse, home, >_, display,
   grid, list) rises with its icons already crisp and the >_ / display glyphs already saturated,
   no brightening at landing; the special keys (shift, backspace, Ctrl/123+, Fn/Alt, Enter's well)
-  do not darken at landing.
+  do not darken at landing. 11-08 (fix/rising-fn-keys): the crossing's first frame judged the
+  keyboard on the page it left (band below the screen, a stand-in read, chips at 0xCA, 0xE1 at
+  landing); it now judges again when a layout moves the band. Same swipe in a 30 fps recording:
+  the special keys' fill is the landed one on every frame they show, with no step at landing
+  and none mid-rise.
   How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
 - **No keyboard under the pill after landing (11-08, fix/keyboard-under-dock).** Dock design
   Peek glass, Live blur and Fancier glass on, gesture navigation; in-app keyboard up on the
