@@ -908,6 +908,7 @@ public final class TermuxInAppKeyboard {
             return;
         mKeyboardView.setPalette(next);
         mAppliedPalette = next;
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setPalette L909 " + dbgPaletteSummary());
         applyCustomColorScheme();
         if (mKeyPopup != null) mKeyPopup.refresh();
     }
@@ -1637,6 +1638,9 @@ public final class TermuxInAppKeyboard {
      * ({@code ChromeInk#bandTone}): the letters and function legends are held to it.
      */
     public void setGlassFaces(@NonNull int[] faces, int tone) {
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setGlassFaces faces="
+            + com.termux.app.chrome.RiseInkDbg.hex(faces) + " tone=" + tone + " was="
+            + com.termux.app.chrome.RiseInkDbg.hex(mGlassFaces) + " wasTone=" + mGlassTone);
         if (java.util.Arrays.equals(faces, mGlassFaces) && tone == mGlassTone)
             return;
         mGlassFaces = faces.clone();
@@ -1648,8 +1652,25 @@ public final class TermuxInAppKeyboard {
             return;
         mKeyboardView.setPalette(next);
         mAppliedPalette = next;
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setPalette L1649 " + dbgPaletteSummary());
         applyCustomColorScheme();
         if (mKeyPopup != null) mKeyPopup.refresh();
+    }
+
+    /** TEMPORARY (RISEINK-DBG): the palette on the view, its identity and what it was built on. */
+    public String dbgPaletteSummary() {
+        juloo.keyboard2.Theme.Palette p = mAppliedPalette;
+        if (p == null) return "palette=null";
+        return "palette@" + Integer.toHexString(System.identityHashCode(p))
+            + " fnBg=" + com.termux.app.chrome.RiseInkDbg.hex(p.functionKeyBackground)
+            + " keyBg=" + com.termux.app.chrome.RiseInkDbg.hex(p.keyBackground)
+            + " fnLabel=" + com.termux.app.chrome.RiseInkDbg.hex(p.functionLabelColor)
+            + " label=" + com.termux.app.chrome.RiseInkDbg.hex(p.labelColor)
+            + " faces=" + com.termux.app.chrome.RiseInkDbg.hex(mGlassFaces) + " tone=" + mGlassTone
+            + " keyOpacity=" + mKeyOpacity + " deck=" + (mDeckLook != null)
+            + " viewFill%=" + (mKeyboardView != null
+                ? mKeyboardView.getEffectiveKeyFillOpacityPercent() : -1)
+            + " viewAlpha=" + (mKeyboardView != null ? mKeyboardView.getAlpha() : -1f);
     }
 
     /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
@@ -1779,6 +1800,7 @@ public final class TermuxInAppKeyboard {
         if (mDestroyed || mKeyboardView == null)
             return;
         mKeyboardView.setPalette(recordedPalette());
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setPalette L1781 " + dbgPaletteSummary());
         if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
@@ -1848,6 +1870,7 @@ public final class TermuxInAppKeyboard {
         }
         mAppliedPaletteInputs = paletteInputs;
         mKeyboardView.setPalette(recordedPalette());
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setPalette L1850 " + dbgPaletteSummary());
         if (mKeyPopup != null) mKeyPopup.refresh();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1899,6 +1922,7 @@ public final class TermuxInAppKeyboard {
         // Both of these reload the stored scheme, so dynamic slots re-resolve against the new
         // Material roles while pinned and imported swatches keep their persisted colors.
         mKeyboardView.setPalette(recordedPalette());
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("kb.setPalette L1901 " + dbgPaletteSummary());
         applyCustomColorScheme();
         if (mKeyPopup != null) mKeyPopup.refresh();
         return true;
