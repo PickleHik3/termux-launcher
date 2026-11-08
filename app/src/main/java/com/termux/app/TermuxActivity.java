@@ -9263,6 +9263,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // brings up rises in the inks it lands in; the landing's apply re-judges at rest
         // (KeyboardFaceJudging).
         boolean crossing = mCrossing.crossing();
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("act.kbSurface crossing=" + crossing
+            + " judged=" + mKeyboardFacesJudgedThisCrossing + " bandAsked="
+            + mKeyboardBandAskedThisPass + " drag=" + mGlassDragPreview + " kbShown="
+            + state.keyboardShown + " barAlpha=" + state.barAlpha + " " + keyboard.dbgPaletteSummary());
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
             crossing, mKeyboardFacesJudgedThisCrossing)) return;
@@ -9297,6 +9301,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void rejudgeKeyboardGlassFaces() {
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        com.termux.app.chrome.RiseInkDbg.logWithCallers("act.rejudge kb=" + (keyboard != null)
+            + " bandAsked=" + mKeyboardBandAskedThisPass + " crossing=" + mCrossing.crossing()
+            + " judged=" + mKeyboardFacesJudgedThisCrossing);
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
         boolean crossing = mCrossing.crossing();
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
@@ -9706,10 +9713,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.chrome.GlassBackdropCache.Band measureInAppKeyboardBand(
             @NonNull View surfaceHost, @NonNull int[] inks) {
-        int[] origin = new int[2];
-        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
-        Rect host = new Rect(origin[0], origin[1],
-            origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
+        Rect host = new Rect();
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(surfaceHost, host, new int[2],
+            new int[2]);
         // The letter legend on its cap and the function legend (Ctrl, Alt, Fn) on its thinner
         // chip, each over the row of the host where it reads worst. Asked as either tone (each
         // side's extreme, the function legend as drawn secondary), never as the legends drawn
@@ -11707,6 +11713,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
+        if (mCrossing.crossing() || accessoryContainer.getTranslationY() != translationY) {
+            ExtraKeysView keysDbg = mExtraKeysView;
+            View kbHostDbg = hotView(R.id.inapp_keyboard_view_host);
+            com.termux.app.chrome.RiseInkDbg.log("frame.stack crossing=" + mCrossing.crossing()
+                + " ty=" + translationY + " keysInk=" + (keysDbg != null
+                    ? com.termux.app.chrome.RiseInkDbg.hex(keysDbg.getButtonTextColor()) : "null")
+                + " keysAlpha=" + (keysDbg != null ? keysDbg.getAlpha() : -1f)
+                + " kbHostAlpha=" + (kbHostDbg != null ? kbHostDbg.getAlpha() : -1f)
+                + " kbHostBg=" + (kbHostDbg != null && kbHostDbg.getBackground() != null
+                    ? Integer.toHexString(System.identityHashCode(kbHostDbg.getBackground())) : "null")
+                + " " + (mInAppKeyboard != null ? mInAppKeyboard.dbgPaletteSummary() : "kb=null"));
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             Trace.setCounter("Wall.stackTranslationPx", Math.round(mDockTravelTranslationPx));
         if (accessoryContainer.getTranslationY() != translationY) {
@@ -14890,6 +14908,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.ColorInt private int mExtraKeysInk = Color.TRANSPARENT;
     @NonNull private final Rect mExtraKeysInkRect = new Rect();
     @NonNull private final int[] mExtraKeysInkLocation = new int[2];
+    /** The root's screen position, read by every dock row's ink measure in turn. */
+    @NonNull private final int[] mDockInkRootScratch = new int[2];
 
     /**
      * On the pass that re-glazes the dock: the A&ndash;Z strip and the extra keys are told the
@@ -14925,10 +14945,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (field == null || field.getVisibility() != View.VISIBLE || field.getWidth() <= 0
             || field.getHeight() <= 0) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        field.getLocationOnScreen(mPromptLineInkLocation);
-        mPromptLineInkRect.set(mPromptLineInkLocation[0], mPromptLineInkLocation[1],
-            mPromptLineInkLocation[0] + field.getWidth(),
-            mPromptLineInkLocation[1] + field.getHeight());
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(field, mPromptLineInkRect,
+            mPromptLineInkLocation, mDockInkRootScratch);
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
@@ -14942,9 +14960,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView row = mSuggestionBarView;
         if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        row.getLocationOnScreen(mDockTilesInkLocation);
-        mDockTilesInkRect.set(mDockTilesInkLocation[0], mDockTilesInkLocation[1],
-            mDockTilesInkLocation[0] + row.getWidth(), mDockTilesInkLocation[1] + row.getHeight());
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(row, mDockTilesInkRect,
+            mDockTilesInkLocation, mDockInkRootScratch);
         row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
             mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
     }
@@ -14964,14 +14981,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ExtraKeysView keys = mExtraKeysView;
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        keys.getLocationOnScreen(mExtraKeysInkLocation);
-        mExtraKeysInkRect.set(mExtraKeysInkLocation[0], mExtraKeysInkLocation[1],
-            mExtraKeysInkLocation[0] + keys.getWidth(), mExtraKeysInkLocation[1] + keys.getHeight());
+        // Where the row rests, not where a crossing's travel has it: the keys rise in the ink
+        // they land in (GlassAnchor#layoutRectOnScreen).
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(keys, mExtraKeysInkRect,
+            mExtraKeysInkLocation, mDockInkRootScratch);
         int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
         int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
             ExtraKeysView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR);
         int ink = GlassInk.faceInk(face, theme,
             mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
+        {
+            int[] scr = new int[2];
+            keys.getLocationOnScreen(scr);
+            View stackDbg = hotView(R.id.accessory_stack_container);
+            com.termux.app.chrome.RiseInkDbg.logWithCallers("act.extraKeysInk crossing="
+                + mCrossing.crossing() + " dockOpacity=" + dockOpacity + " rect="
+                + mExtraKeysInkRect.toShortString() + " screenTop=" + scr[1] + " stackTy="
+                + (stackDbg != null ? stackDbg.getTranslationY() : Float.NaN) + " face="
+                + com.termux.app.chrome.RiseInkDbg.hex(face) + " theme="
+                + com.termux.app.chrome.RiseInkDbg.hex(theme) + " ink="
+                + com.termux.app.chrome.RiseInkDbg.hex(ink) + " was="
+                + com.termux.app.chrome.RiseInkDbg.hex(mExtraKeysInk) + " keysAlpha="
+                + keys.getAlpha());
+        }
         mExtraKeysInk = ink;
         // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
         for (ExtraKeysView view : mExtraKeysViews) {
@@ -23457,14 +23489,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallPage mAppliedExtraKeysPlace;
 
     private void applyExtraKeysPlaceEligibility() {
-        if (currentWallPlace() == mAppliedExtraKeysPlace) return;
-        mAppliedExtraKeysPlace = currentWallPlace();
+        com.termux.app.wall.PaneWallPage place = extraKeysPlace();
+        if (place == mAppliedExtraKeysPlace) return;
+        mAppliedExtraKeysPlace = place;
         for (ExtraKeysView view : mExtraKeysViews) applyExtraKeysPlaceEligibility(view);
+    }
+
+    /**
+     * The place the key rows are dressed for: across the seam, the half whose rows the stack
+     * stands, from the crossing's frame that stands them; else where the wall rests
+     * (ExtraKeyEligibility#rowPlace).
+     */
+    @NonNull
+    private com.termux.app.wall.PaneWallPage extraKeysPlace() {
+        com.termux.app.wall.PaneWallPage dress = mCrossing.seam().stackDressPage();
+        return com.termux.app.terminal.io.ExtraKeyEligibility.rowPlace(currentWallPlace(),
+            dress != null ? placeOf(dress) : null);
     }
 
     private void applyExtraKeysPlaceEligibility(@Nullable ExtraKeysView extraKeysView) {
         if (extraKeysView == null) return;
-        final com.termux.app.wall.PaneWallPage place = currentWallPlace();
+        final com.termux.app.wall.PaneWallPage place = extraKeysPlace();
         // A switch to a place the wall does not have — the display under a home-screen mode, both
         // side places under terminal mode — is drawn dead too; a row the user wrote keeps it.
         final java.util.List<com.termux.app.wall.PaneWallPage> pages = availableWallPages();
@@ -25806,6 +25851,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
         float dockReveal = syncSeamTravel(seam);
+        // The key rows the stack stands are drawn for the half it wears, from the frame it stands
+        // them: a toolbar brought up rises live, not dead until the settle. A comparison per frame;
+        // the rows are restated only on the frame the dress changes.
+        applyExtraKeysPlaceEligibility();
         Trace.beginSection("Travel.stack");
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
@@ -28312,7 +28361,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
                     mSettledWallPage = page;
+                    com.termux.app.chrome.RiseInkDbg.log("settle.begin page=" + page);
                     settlePlaceChrome(page);
+                    com.termux.app.chrome.RiseInkDbg.log("settle.placeChromeDone page=" + page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(

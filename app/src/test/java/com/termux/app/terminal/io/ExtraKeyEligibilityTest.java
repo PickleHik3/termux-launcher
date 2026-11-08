@@ -34,6 +34,24 @@ public class ExtraKeyEligibilityTest {
         assertBand(Band.LAUNCHER, true, true, true);
     }
 
+    /**
+     * A crossing from Home to the Workspace that stands the Workspace's rows draws them for the
+     * Workspace from that frame: every key is as live, and every place switch as far in front, as
+     * at the settle on the Workspace, so the toolbar rises in the look it lands in. At rest, and
+     * before the stack stands the other half's rows, it is the resting place's.
+     */
+    @Test
+    public void aRisingRowIsDressedForThePlaceItLandsOn() throws Exception {
+        PaneWallPage rising = ExtraKeyEligibility.rowPlace(PaneWallPage.WIDGETS,
+            PaneWallPage.TERMINAL);
+        PaneWallPage landed = ExtraKeyEligibility.rowPlace(PaneWallPage.TERMINAL, null);
+        assertSame(landed, rising);
+        for (String key : everyKeyValue())
+            assertEquals(key, ExtraKeyEligibility.isUsable(key, landed),
+                ExtraKeyEligibility.isUsable(key, rising));
+        assertSame(PaneWallPage.WIDGETS, ExtraKeyEligibility.rowPlace(PaneWallPage.WIDGETS, null));
+    }
+
     @Test
     public void everythingIsUsableOnTheTerminal() throws Exception {
         for (String key : everyKeyValue())

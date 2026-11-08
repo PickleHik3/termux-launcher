@@ -103,6 +103,22 @@ public final class GlassAnchor {
     }
 
     /**
+     * {@code view}'s rect on screen as laid out ({@link #layoutOriginOnScreen}): where an ink
+     * chosen on the glass under a dock row is measured. A crossing carries the accessory stack
+     * through its travel (its translationY, the rows' sink), and a row measured where the travel
+     * has it is judged on wallpaper it will not rest on, so it rises in one ink and changes at
+     * landing; measured here, the crossing and the landing judge the same rect. Never allocates.
+     *
+     * @param origin two ints the laid-out origin is read into
+     * @param rootScratch two ints the root's own screen position is read into
+     */
+    public static void layoutRectOnScreen(@NonNull View view, @NonNull Rect out,
+                                          @NonNull int[] origin, @NonNull int[] rootScratch) {
+        layoutOriginOnScreen(view, origin, rootScratch);
+        out.set(origin[0], origin[1], origin[0] + view.getWidth(), origin[1] + view.getHeight());
+    }
+
+    /**
      * Where a view on the wall stands over the wallpaper right now; filled by {@link #place},
      * reused across draws so a draw never allocates.
      */

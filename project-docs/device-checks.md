@@ -32,7 +32,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   in-app keyboard rising, then Workspace → Home2; keyboard up and down at the start; Docked and
   Floating dock. Passes: the rising keyboard's function chips and legends are already the
   Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
-  same mid-swipe as at rest at either end.
+  same mid-swipe as at rest at either end. 11-08 (fix/rising-keyboard-inks): Glass Look and Live
+  blur on, light wallpaper: the toolbar row above the keys (keyboard, mouse, home, >_, display,
+  grid, list) rises with its icons already crisp and the >_ / display glyphs already saturated,
+  no brightening at landing; the special keys (shift, backspace, Ctrl/123+, Fn/Alt, Enter's well)
+  do not darken at landing.
   How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
 - **No keyboard under the pill after landing (11-08, fix/keyboard-under-dock).** Dock design
   Peek glass, Live blur and Fancier glass on, gesture navigation; in-app keyboard up on the
