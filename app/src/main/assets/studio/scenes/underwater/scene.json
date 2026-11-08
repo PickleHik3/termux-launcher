@@ -1,0 +1,22 @@
+{
+  "name": "Underwater",
+  "art": "art.webp",
+  "regions": "regions.png",
+  "size": [
+    1024,
+    1536
+  ],
+  "horizon": 600,
+  "atmospheres": {
+    "sunlit": 0,
+    "deep": 4
+  },
+  "effects": {
+    "caustics": 1,
+    "bubbles": 1,
+    "anchor": 1250
+  },
+  "motionGain": {
+    "sway": 2.5
+  }
+}

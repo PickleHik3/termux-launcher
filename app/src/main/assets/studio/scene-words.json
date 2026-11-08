@@ -1,39 +1,55 @@
 {
   "atmospheres": {
     "golden-hour": {
-      "label": "Golden Hour",
-      "atm": 0
+      "label": "Golden Hour"
+    },
+    "morning": {
+      "label": "Morning"
+    },
+    "midday": {
+      "label": "Midday"
     },
     "misty-dawn": {
-      "label": "Misty Dawn",
-      "atm": 1
+      "label": "Misty Dawn"
     },
     "night": {
-      "label": "Night",
-      "atm": 2
+      "label": "Night"
+    },
+    "misty-night": {
+      "label": "Misty Night"
+    },
+    "sunlit": {
+      "label": "Sunlit"
+    },
+    "deep": {
+      "label": "Deep"
     }
   },
+  "_atmosphere_codes": "each scene maps its atmospheres to a shader grade: 0 as painted, 1 misty dawn, 2 night, 3 fog only, 4 deep water",
   "motions": {
     "almost-still": {
       "label": "Almost Still",
       "sway": 1.5,
       "water": 0.6,
       "cloud": 2.5,
-      "gust": 0.0
+      "gust": 0.0,
+      "life": 0.4
     },
     "gentle-breeze": {
       "label": "Gentle Breeze",
       "sway": 3.5,
       "water": 1.3,
       "cloud": 7,
-      "gust": 0.35
+      "gust": 0.35,
+      "life": 1.0
     },
-    "sea-wind": {
-      "label": "Sea Wind",
+    "strong-wind": {
+      "label": "Strong Wind",
       "sway": 6.5,
       "water": 2.2,
       "cloud": 16,
-      "gust": 1.0
+      "gust": 1.0,
+      "life": 1.6
     }
   }
 }

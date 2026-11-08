@@ -1,0 +1,22 @@
+{
+  "places": {
+    "coastal-meadow": {
+      "label": "Coastal Meadow"
+    },
+    "forest": {
+      "label": "Forest"
+    },
+    "city-night": {
+      "label": "City Night"
+    },
+    "mountains": {
+      "label": "Mountains"
+    },
+    "desert": {
+      "label": "Desert"
+    },
+    "underwater": {
+      "label": "Underwater"
+    }
+  }
+}

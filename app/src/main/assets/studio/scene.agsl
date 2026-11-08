@@ -1,24 +1,37 @@
 // Studio scene effect: one shader for every scene pack.
 // The art is a finished flat-poster painting; the region map says where things move:
-//   R = sky, G = water, B = sway (grass/plants, spilled a few px past each blade).
-// The clouds are lifted into their own layer and drift across a clear sky, wrapping off-screen.
-// Place = which art + region map. Atmosphere = the grade and sky (uAtm). Motion = the amounts.
-// Everything below is AGSL-safe: no textures beyond child shaders, no loops, no preprocessor.
+//   R = sky (open water underwater), G = water surface, B = sway (spilled past each shape).
+// The lights map (sampled nearest) holds an id per lit shape (0 = none) so they flicker one by one.
+// Clouds are lifted into their own layer and drift across a clear sky, wrapping off-screen.
+// Place = art + region map + the scene's effect amounts. Atmosphere = the grade (uAtm).
+// Motion = the movement amounts. AGSL-safe: child shaders only, no loops, no preprocessor.
 
 uniform shader art;
 uniform shader regions;
-uniform shader clouds;     // the art's clouds alone (premultiplied), clear sky removed
+uniform shader clouds;     // the art's clouds alone (premultiplied); empty for scenes without
+uniform shader lights;     // id per lit shape, nearest-sampled; black for scenes without
 
 uniform float2 uOut;       // output size in px
 uniform float2 uArt;       // art size in px
 uniform float  uTime;      // seconds
 uniform float  uHorizon;   // horizon row in art px
-uniform float  uCloudTop;  // rows above this are free sky (clouds live here)
-uniform float  uAtm;       // 0 golden hour, 1 misty dawn, 2 night
-uniform float  uSway;      // grass sway, art px
+uniform float  uCloudTop;  // rows above this are free sky (0 = no drifting clouds)
+uniform float  uAtm;       // 0 as painted, 1 misty dawn, 2 night, 3 fog only, 4 deep water
+// Motion
+uniform float  uSway;      // sway, art px
 uniform float  uWater;     // water ripple, art px
 uniform float  uCloud;     // cloud drift speed, art px per second (left to right)
-uniform float  uGust;      // 0..1 travelling gusts across the meadow
+uniform float  uGust;      // 0..1 travelling gusts
+// Scene effects (0 = off)
+uniform float  uAnchor;    // > 0: sway grows upward from this row (kelp), else grows downward
+uniform float  uFlicker;   // lit windows switching on and off
+uniform float  uPlume;     // snow or sand streaming off ridges into the sky
+uniform float  uPlumeY;    // plumes only above this row (the high ridges)
+uniform float  uShimmer;   // heat haze along the horizon
+uniform float  uCaustics;  // light web on the sea floor
+uniform float  uBubbles;   // bubbles rising through open water
+uniform float  uShafts;    // light shafts breathing
+uniform float  uMist;      // ground mist drifting along the horizon
 
 float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 
@@ -33,7 +46,7 @@ float noise(float2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-float luma(half3 c) { return dot(float3(c), float3(0.299, 0.587, 0.114)); }
+float luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
 
 half4 main(float2 fc) {
     // Fill the height, centre-crop the sides (phones are taller than the 2:3 art).
@@ -46,90 +59,156 @@ half4 main(float2 fc) {
     float water = float(reg.g);
     float sway = float(reg.b);
     float2 q = p;
+    float depth = clamp((p.y - uHorizon) / 300.0, 0.15, 1.0);
 
-    // Grass: a slow sway plus gusts that travel left to right. The offset varies with height,
-    // so blades shear (bend) instead of the whole meadow sliding.
+    // Sway: a slow wave plus gusts that travel left to right. The offset varies with height,
+    // so shapes bend instead of sliding.
     if (sway > 0.004) {
         float base = sin(uTime * 1.1 + p.x * 0.006 + p.y * 0.011) * 0.6
                    + sin(uTime * 1.9 + p.x * 0.013 - p.y * 0.007) * 0.4;
         float front = fract((p.x * 0.0009) - uTime * 0.09 + noise(float2(p.y * 0.004, 3.0)) * 0.3);
         float gust = smoothstep(0.0, 0.18, front) * smoothstep(0.42, 0.18, front);
-        float tall = clamp((p.y - uHorizon) / 500.0, 0.2, 1.0);
+        float tall = uAnchor > 0.0
+            ? clamp((uAnchor - p.y) / 700.0, 0.05, 1.0)
+            : mix(0.45, 1.0, clamp((p.y - uHorizon) / 500.0, 0.0, 1.0));
+        if (uAnchor > 0.0) base = sin(uTime * 0.55 + p.x * 0.004 - p.y * 0.006);   // slow current
         q.x += sway * uSway * tall * (base + uGust * gust * 2.2);
         q.y += sway * uSway * 0.25 * tall * uGust * gust;
     }
 
-    // Water: horizontal ripple bands, smaller toward the horizon (perspective).
-    float depth = clamp((p.y - uHorizon) / 300.0, 0.15, 1.0);
+    // Water surface: horizontal ripple bands, smaller toward the horizon (perspective).
     if (water > 0.004) {
         float rip = sin(p.y * 0.21 / depth + uTime * 1.4) * 0.6
                   + sin(p.y * 0.07 / depth - uTime * 0.8 + p.x * 0.004) * 0.4;
         q.x += water * uWater * depth * rip;
     }
 
-    q.x = clamp(q.x, 0.0, uArt.x - 1.0);
-    half3 c = art.eval(q).rgb;
-    half3 clear = art.eval(float2(uArt.x - 6.0, q.y)).rgb;   // the row's clear-sky colour
+    // Heat haze: a fast, small wobble in a band around the horizon.
+    if (uShimmer > 0.0) {
+        float band = exp(-abs(p.y - uHorizon) / 50.0);
+        q += uShimmer * band * float2(noise(float2(p.y * 0.25, uTime * 6.0)) - 0.5,
+                                      noise(float2(p.x * 0.05, uTime * 5.0 + 9.0)) - 0.5) * 3.0;
+    }
+
+    q = clamp(q, float2(0.0), uArt - 1.0);
+    float3 c = float3(art.eval(q).rgb);
+    float3 clear = float3(art.eval(float2(uArt.x - 6.0, q.y)).rgb);   // the row's clear sky
 
     // Clouds: in the free sky, repaint the clear sky and lay the drifting cloud layer on top.
-    // The layer repeats every (art width + gap), so clouds leave one side and come back on
-    // the other after a stretch of open sky.
-    float freeSky = sky * step(p.y, uCloudTop);
     float cloud = 0.0;
-    if (freeSky > 0.5) {
+    if (sky * step(p.y, uCloudTop) > 0.5) {
         float span = uArt.x + 420.0;
         float cx = mod(p.x - uTime * uCloud, span);
         half4 cl = cx < uArt.x ? clouds.eval(float2(cx, p.y)) : half4(0.0);
-        c = clear * (1.0 - cl.a) + cl.rgb;
+        c = clear * (1.0 - float(cl.a)) + float3(cl.rgb);
         cloud = float(cl.a);
-    } else {
-        cloud = clamp(length(float3(c - clear)) * 2.2, 0.0, 1.0) * sky;
+    } else if (uCloudTop > 0.0) {
+        cloud = clamp(length(c - clear) * 2.2, 0.0, 1.0) * sky;
     }
-    float t = clamp(p.y / uHorizon, 0.0, 1.0);   // 0 top of sky, 1 horizon
 
-    if (uAtm > 1.5) {
+    // Lit windows and lamps: each shape has an id; now and then one switches off for a while.
+    float lit = float(lights.eval(p).r);
+    if (uFlicker > 0.0 && lit > 0.02) {
+        float id = floor(lit * 255.0 + 0.5);
+        float slot = floor(uTime * 0.2 + hash(float2(id, 1.7)) * 5.0);
+        float off = step(1.0 - 0.12 * uFlicker, hash(float2(id * 1.31, slot)));
+        float buzz = 0.93 + 0.07 * sin(uTime * (3.0 + hash(float2(id, 4.0)) * 4.0));
+        c *= mix(buzz, 0.28, off);
+    }
+
+    // Ridge plume: snow or sand streaming off the crest into the sky, blown to the right.
+    if (uPlume > 0.0 && sky > 0.5 && p.y < uPlumeY) {
+        float below = float(regions.eval(p + float2(-26.0, 22.0)).r);   // land just below-left?
+        if (below < 0.5) {
+            float n = noise(float2(p.x * 0.02 - uTime * 1.6, p.y * 0.09))
+                    * noise(float2(p.x * 0.006 - uTime * 0.5, p.y * 0.03 + 4.0));
+            float3 crest = float3(art.eval(p + float2(-26.0, 30.0)).rgb);
+            c = mix(c, mix(crest, float3(1.0), 0.35), clamp(n * 2.2 * uPlume, 0.0, 0.85));
+        }
+    }
+
+    // Light shafts: soft diagonal bands that slowly breathe, on everything but open sky.
+    if (uShafts > 0.0) {
+        float band = sin((p.x + p.y * 0.62) * 0.018 + noise(float2(p.x * 0.003, uTime * 0.05)) * 3.0);
+        float breathe = 0.6 + 0.4 * sin(uTime * 0.35);
+        float shaft = smoothstep(0.55, 1.0, band) * breathe * smoothstep(uHorizon + 450.0, uHorizon - 200.0, p.y);
+        c += (1.0 - sky) * shaft * uShafts * float3(1.0, 0.95, 0.75) * 0.16;
+    }
+
+    // Caustics: a moving light web on the floor (anything that is not open water or surface).
+    if (uCaustics > 0.0 && sky < 0.5 && water < 0.5) {
+        float v = abs(noise(p * float2(0.05, 0.08) + float2(uTime * 0.22, uTime * 0.09))
+                    - noise(p * float2(0.063, 0.1) + float2(-uTime * 0.17, uTime * 0.13) + 5.0));
+        float web = smoothstep(0.045, 0.0, v) * smoothstep(uHorizon, uHorizon + 300.0, p.y)
+                  * (0.5 + 0.5 * noise(p * 0.006 + uTime * 0.05));   // patchy, not an even grid
+        c += web * uCaustics * float3(1.0, 1.0, 0.9) * 0.2;
+    }
+
+    // Bubbles: sparse rings rising through open water, drifting slightly side to side.
+    if (uBubbles > 0.0 && sky > 0.5) {
+        float2 g = float2(p.x / 46.0, (p.y + uTime * 55.0) / 46.0);
+        float2 cell = floor(g);
+        float2 at = float2(0.5 + 0.3 * sin(uTime * 0.9 + hash(cell) * 6.0), 0.5);
+        float r = 0.06 + 0.07 * hash(cell + 2.0);
+        float d = length(fract(g) - at);
+        float ring = step(0.88, hash(cell + 9.0)) * smoothstep(r + 0.03, r, d) * (0.45 + 0.55 * smoothstep(r - 0.04, r, d));
+        c = mix(c, float3(0.92, 0.98, 1.0), ring * uBubbles * 0.7);
+    }
+
+    // Ground mist: drifting banks along the horizon.
+    float mistAmt = uMist + (uAtm > 0.5 && uAtm < 1.5 ? 1.0 : 0.0) + (uAtm > 2.5 && uAtm < 3.5 ? 0.8 : 0.0);
+    float mist = 0.0;
+    if (mistAmt > 0.0) {
+        float m = noise(float2(p.x * 0.004 + uTime * 0.02, p.y * 0.018)) * 0.7
+                + noise(float2(p.x * 0.011 - uTime * 0.03, p.y * 0.04)) * 0.3;
+        float band = smoothstep(uHorizon - 140.0, uHorizon + 10.0, p.y) * smoothstep(uHorizon + 520.0, uHorizon + 120.0, p.y);
+        mist = clamp(m * band * 1.1 * min(mistAmt, 1.0), 0.0, 0.75);
+    }
+
+    float t = clamp(p.y / max(uHorizon, 1.0), 0.0, 1.0);   // 0 top of sky, 1 horizon
+    float3 col = c;
+
+    if (uAtm > 3.5) {
+        // Deep water: darker, bluer, the light fades with depth.
+        float l = luma(c);
+        col = mix(c, float3(0.05, 0.22, 0.38) + l * float3(0.2, 0.45, 0.55), 0.55) * mix(1.0, 0.7, p.y / uArt.y);
+    } else if (uAtm > 2.5) {
+        // Fog only: the art as painted under drifting fog.
+        col = mix(c, float3(0.40, 0.45, 0.56), clamp(mist * 1.3, 0.0, 0.8));
+    } else if (uAtm > 1.5) {
         // Night: everything goes to moonlit blue by brightness, the sky is repainted.
         float l = luma(c);
         float3 land = mix(float3(0.035, 0.05, 0.10), float3(0.30, 0.38, 0.58), l);
         float3 skyc = mix(float3(0.03, 0.05, 0.13), float3(0.16, 0.20, 0.36), pow(t, 2.2));
         skyc = mix(skyc, float3(0.22, 0.26, 0.40), cloud * 0.8);
-        // stars: a sparse grid, twinkling, fading toward the horizon
         float2 cell = floor(p / 16.0);
         float2 at = (float2(hash(cell + 3.0), hash(cell + 5.0)) * 0.7 + 0.15) * 16.0;
         float sd = length(p - cell * 16.0 - at);
         float star = step(0.93, hash(cell)) * smoothstep(1.9, 0.7, sd)
                    * (0.55 + 0.45 * sin(uTime * 1.6 + hash(cell + 7.0) * 40.0));
         skyc += star * (1.0 - t) * (1.0 - cloud) * 0.8;
-        // moon
         float2 moon = float2(uArt.x * 0.7, uHorizon * 0.38);
         float md = length(p - moon);
         skyc += float3(0.95, 0.93, 0.85) * smoothstep(34.0, 30.0, md) + float3(0.25, 0.28, 0.4) * exp(-md / 120.0) * 0.6;
-        float3 col = mix(land, skyc, sky);
-        // moon path on the water
+        col = mix(land, skyc, sky);
         float path = exp(-abs(p.x - moon.x) / (40.0 + 160.0 * depth));
         float glint = smoothstep(0.62, 0.8, noise(float2(p.x * 0.012 + uTime * 0.05, p.y * 0.32 / depth + uTime * 0.5)));
         col += water * path * glint * float3(0.55, 0.58, 0.7) * 0.45;
-        return half4(half3(col), 1.0);
-    }
-
-    float3 col = float3(c);
-    if (uAtm > 0.5) {
-        // Misty dawn: cool, lifted, softer; pale rose sky; mist banks over the sea and meadow.
+        col = mix(col, float3(0.25, 0.3, 0.42), mist * 0.6);
+    } else if (uAtm > 0.5) {
+        // Misty dawn: cool, lifted, softer; pale rose sky; mist banks.
         float l = luma(c);
-        col = mix(col, float3(l) * float3(0.86, 0.92, 1.04) + 0.08, 0.5);
+        col = mix(c, float3(l) * float3(0.86, 0.92, 1.04) + 0.08, 0.5);
         float3 skyc = mix(float3(0.62, 0.70, 0.82), float3(0.96, 0.84, 0.82), pow(t, 1.6));
         skyc = mix(skyc, float3(1.0, 0.93, 0.92), cloud * 0.7);
         col = mix(col, skyc, sky);
-        float m = noise(float2(p.x * 0.004 + uTime * 0.02, p.y * 0.018))
-                * 0.7 + noise(float2(p.x * 0.011 - uTime * 0.03, p.y * 0.04)) * 0.3;
-        float band = smoothstep(uHorizon - 140.0, uHorizon + 10.0, p.y) * smoothstep(uHorizon + 520.0, uHorizon + 120.0, p.y);
-        col = mix(col, float3(0.93, 0.92, 0.95), clamp(m * band * 1.1, 0.0, 0.75));
+        col = mix(col, float3(0.93, 0.92, 0.95), mist);
     } else {
-        // Golden hour: the art as painted, plus a warm glint on the water toward the sun.
-        float sunX = uArt.x * 0.55;
-        float path = exp(-abs(p.x - sunX) / (60.0 + 220.0 * depth));
+        // As painted, plus a warm glint on open water toward the light and any scene mist.
+        float path = exp(-abs(p.x - uArt.x * 0.55) / (60.0 + 220.0 * depth));
         float glint = smoothstep(0.64, 0.82, noise(float2(p.x * 0.012 + uTime * 0.05, p.y * 0.32 / depth + uTime * 0.6)));
         col += water * path * glint * float3(1.0, 0.86, 0.6) * 0.22;
+        col = mix(col, float3(0.95, 0.95, 0.92), mist * 0.8);
     }
     return half4(half3(col), 1.0);
 }

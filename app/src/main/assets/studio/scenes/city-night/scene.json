@@ -1,0 +1,21 @@
+{
+  "name": "City Night",
+  "art": "art.webp",
+  "regions": "regions.png",
+  "size": [
+    1024,
+    1536
+  ],
+  "horizon": 973,
+  "lights": "lights.png",
+  "atmospheres": {
+    "night": 0,
+    "misty-night": 3
+  },
+  "effects": {
+    "flicker": 1
+  },
+  "motionGain": {
+    "sway": 0.5
+  }
+}

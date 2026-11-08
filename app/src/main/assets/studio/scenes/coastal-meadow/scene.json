@@ -8,15 +8,11 @@
   ],
   "horizon": 774,
   "cloudTop": 680,
-  "atmospheres": [
-    "golden-hour",
-    "misty-dawn",
-    "night"
-  ],
-  "motions": [
-    "almost-still",
-    "gentle-breeze",
-    "sea-wind"
-  ],
-  "clouds": "clouds.webp"
+  "atmospheres": {
+    "golden-hour": 0,
+    "misty-dawn": 1,
+    "night": 2
+  },
+  "clouds": "clouds.webp",
+  "effects": {}
 }

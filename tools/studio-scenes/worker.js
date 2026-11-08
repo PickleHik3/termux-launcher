@@ -1,26 +1,43 @@
-// Software renderer for the Studio scene lab. Renders are requested one at a time, never self-scheduled.
+// Software/WebGL renderer for the Studio scene lab. Renders are requested one at a time, never self-scheduled.
 importScripts('https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/canvaskit.js');
 const V = self.location.search;            // cache stamp passed through from the page
-let kit, paint, effect, surface, sw = 0, sh = 0, scene, words, artShader, regShader, cloudShader, gl = null;
+let kit, paint, effect, surface, sw = 0, sh = 0, words, places, gl = null, none;
+const packs = {};                          // place key -> { scene, shaders: [art, regions, clouds, lights] }
 const ready = (async () => {
   kit = await CanvasKitInit({ locateFile: f => 'https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/' + f });
   paint = new kit.Paint();
-  const [src, w, sc] = await Promise.all([
+  none = kit.Shader.MakeColor(kit.Color(0, 0, 0, 0), kit.ColorSpace.SRGB);
+  const [src, w, idx] = await Promise.all([
     fetch('studio/scene.agsl' + V).then(r => r.text()),
     fetch('studio/scene-words.json' + V).then(r => r.json()),
-    fetch('studio/scenes/coastal-meadow/scene.json' + V).then(r => r.json()),
+    fetch('studio/scenes/index.json' + V).then(r => r.json()),
   ]);
-  words = w; scene = sc;
+  words = w; places = idx.places;
   let err = ''; effect = kit.RuntimeEffect.Make(src, e => err += e);
   if (!effect) throw Error(err || 'shader failed to compile');
-  const load = async f => kit.MakeImageFromEncoded(new Uint8Array(await (await fetch('studio/scenes/coastal-meadow/' + f + V)).arrayBuffer()));
-  const [art, reg, cl] = await Promise.all([load(sc.art), load(sc.regions), load(sc.clouds)]);
-  const C = kit.TileMode.Clamp;
-  artShader = art.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
-  regShader = reg.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
-  cloudShader = cl.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
-  return { scene: sc, words: w };
+  return { words, places };
 })();
+async function pack(key) {
+  if (packs[key]) return packs[key];
+  const base = 'studio/scenes/' + key + '/';
+  const scene = await fetch(base + 'scene.json' + V).then(r => r.json());
+  const load = async (f, filter) => {
+    if (!f) return none;
+    const img = kit.MakeImageFromEncoded(new Uint8Array(await (await fetch(base + f + V)).arrayBuffer()));
+    return img.makeShaderOptions(kit.TileMode.Clamp, kit.TileMode.Clamp, filter, kit.MipmapMode.None);
+  };
+  const L = kit.FilterMode.Linear, N = kit.FilterMode.Nearest;
+  const shaders = await Promise.all([load(scene.art, L), load(scene.regions, L), load(scene.clouds, L), load(scene.lights, N)]);
+  return packs[key] = { scene, shaders };
+}
+function uniforms(scene, atm, motion, time, width, height) {
+  const m = words.motions[motion], e = scene.effects || {}, g = scene.motionGain || {};
+  return [width, height, scene.size[0], scene.size[1], time, scene.horizon, scene.cloudTop || 0,
+    scene.atmospheres[atm] ?? 0,
+    m.sway * (g.sway ?? 1), m.water * (g.water ?? 1), m.cloud, m.gust,
+    e.anchor || 0, (e.flicker || 0) * m.life, (e.plume || 0) * m.life, e.plumeY || 0, (e.shimmer || 0) * m.life,
+    e.caustics || 0, (e.bubbles || 0) * m.life, e.shafts || 0, e.mist || 0];
+}
 self.onmessage = async ({ data }) => {
   try {
     const info = await ready;
@@ -29,18 +46,18 @@ self.onmessage = async ({ data }) => {
       if (data.glCanvas && !data.forceSoftware) gl = kit.MakeWebGLCanvasSurface(data.glCanvas);
       self.postMessage({ hello: true, gl: !!gl, ...info }); return;
     }
-    const { id, atm, motion, time, width, height } = data;
-    const a = words.atmospheres[atm], m = words.motions[motion];
-    const u = [width, height, scene.size[0], scene.size[1], time, scene.horizon, scene.cloudTop, a.atm, m.sway, m.water, m.cloud, m.gust];
+    const { id, place, atm, motion, time, width, height } = data;
+    const { scene, shaders } = await pack(place);
+    if (data.scene) { self.postMessage({ id, scene }); return; }
+    const u = uniforms(scene, atm, motion, time, width, height);
+    const t0 = performance.now();
+    const shader = effect.makeShaderWithChildren(u, shaders);
+    paint.setShader(shader);
     if (data.live && gl) {
-      const t0 = performance.now(); const shader = effect.makeShaderWithChildren(u, [artShader, regShader, cloudShader]);
-      paint.setShader(shader); gl.getCanvas().drawRect(kit.LTRBRect(0, 0, width, height), paint); gl.flush();
+      gl.getCanvas().drawRect(kit.LTRBRect(0, 0, width, height), paint); gl.flush();
       paint.setShader(null); shader.delete(); self.postMessage({ id, gl: true, ms: performance.now() - t0 }); return;
     }
     if (!surface || sw !== width || sh !== height) { surface && surface.delete(); surface = kit.MakeSurface(width, height); sw = width; sh = height; }
-    const t0 = performance.now();
-    const shader = effect.makeShaderWithChildren(u, [artShader, regShader, cloudShader]);
-    paint.setShader(shader);
     surface.getCanvas().drawRect(kit.LTRBRect(0, 0, width, height), paint); surface.flush();
     const img = surface.makeImageSnapshot();
     const px = img.readPixels(0, 0, { width, height, colorType: kit.ColorType.RGBA_8888, alphaType: kit.AlphaType.Unpremul, colorSpace: kit.ColorSpace.SRGB });
