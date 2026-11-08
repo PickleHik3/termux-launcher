@@ -794,8 +794,11 @@ longer counted as an error. Owed:
   `Keyboard.palette.glass` well under 1 ms where it has no `Keyboard.palette.glass.build`
   child; `.build` only on the first apply and after a faces, tone or theme change · pong.
 - **Home swipe up follows the finger (11-07).** Settings > Home > Gestures, Swipe up set to the
-  app drawer: on a Home page's free area the drawer rises with the finger; let go past about 40%
-  or flick and it opens, a short drag eases back; the first pull after a cold start (no earlier
+  app drawer: on a Home page's free area the drawer rises with the finger, its top edge staying
+  level with the fingertip the whole way (no running ahead, no dock hop; 11-08, fix/drawer-pull-1to1),
+  and comes back down with it when the finger reverses; let go after about 100 dp of travel
+  (roughly 2 cm), or flick after a short drag, and it opens, a short drag eases back (the same finger
+  distances as before the fix); the first pull after a cold start (no earlier
   drawer use) is as smooth as the later ones; page swipes, widget touches, long press, double tap,
   two-finger swipes and pinch behave as before; Swipe up set to anything else (palette, none,
   lock) works exactly as before; swipe down is unchanged · pong.

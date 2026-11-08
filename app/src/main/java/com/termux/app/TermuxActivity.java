@@ -32746,11 +32746,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         getAppDrawerController().warmUp();
                     }
                 }
-                @Override public boolean onHomeDrawerDragBegin(float downRawY) {
+                @Override public boolean onHomeDrawerDragBegin(float claimRawY) {
                     if (!isWidgetsPageShowing() || isAppDrawerEngaged()) return false;
                     PlaceLayout.Edge edge = arrangement().appsEdge();
                     com.termux.app.launcher.drawer.AppDrawerController drawer = getAppDrawerController();
-                    drawer.beginDrag(-downRawY, AppDrawerPullGeometry.pullFor(edge),
+                    drawer.beginFollowDrag(-claimRawY, AppDrawerPullGeometry.pullFor(edge),
                         AppDrawerPullGeometry.seedFor(edge));
                     return drawer.isDragging();
                 }
