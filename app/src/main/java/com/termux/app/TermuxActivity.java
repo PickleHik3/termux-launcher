@@ -9706,10 +9706,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.chrome.GlassBackdropCache.Band measureInAppKeyboardBand(
             @NonNull View surfaceHost, @NonNull int[] inks) {
-        int[] origin = new int[2];
-        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
-        Rect host = new Rect(origin[0], origin[1],
-            origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
+        Rect host = new Rect();
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(surfaceHost, host, new int[2],
+            new int[2]);
         // The letter legend on its cap and the function legend (Ctrl, Alt, Fn) on its thinner
         // chip, each over the row of the host where it reads worst. Asked as either tone (each
         // side's extreme, the function legend as drawn secondary), never as the legends drawn
@@ -14859,6 +14858,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @androidx.annotation.ColorInt private int mExtraKeysInk = Color.TRANSPARENT;
     @NonNull private final Rect mExtraKeysInkRect = new Rect();
     @NonNull private final int[] mExtraKeysInkLocation = new int[2];
+    /** The root's screen position, read by every dock row's ink measure in turn. */
+    @NonNull private final int[] mDockInkRootScratch = new int[2];
 
     /**
      * On the pass that re-glazes the dock: the A&ndash;Z strip and the extra keys are told the
@@ -14894,10 +14895,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (field == null || field.getVisibility() != View.VISIBLE || field.getWidth() <= 0
             || field.getHeight() <= 0) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        field.getLocationOnScreen(mPromptLineInkLocation);
-        mPromptLineInkRect.set(mPromptLineInkLocation[0], mPromptLineInkLocation[1],
-            mPromptLineInkLocation[0] + field.getWidth(),
-            mPromptLineInkLocation[1] + field.getHeight());
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(field, mPromptLineInkRect,
+            mPromptLineInkLocation, mDockInkRootScratch);
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
@@ -14911,9 +14910,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView row = mSuggestionBarView;
         if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        row.getLocationOnScreen(mDockTilesInkLocation);
-        mDockTilesInkRect.set(mDockTilesInkLocation[0], mDockTilesInkLocation[1],
-            mDockTilesInkLocation[0] + row.getWidth(), mDockTilesInkLocation[1] + row.getHeight());
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(row, mDockTilesInkRect,
+            mDockTilesInkLocation, mDockInkRootScratch);
         row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
             mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
     }
@@ -14933,9 +14931,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ExtraKeysView keys = mExtraKeysView;
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        keys.getLocationOnScreen(mExtraKeysInkLocation);
-        mExtraKeysInkRect.set(mExtraKeysInkLocation[0], mExtraKeysInkLocation[1],
-            mExtraKeysInkLocation[0] + keys.getWidth(), mExtraKeysInkLocation[1] + keys.getHeight());
+        // Where the row rests, not where a crossing's travel has it: the keys rise in the ink
+        // they land in (GlassAnchor#layoutRectOnScreen).
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(keys, mExtraKeysInkRect,
+            mExtraKeysInkLocation, mDockInkRootScratch);
         int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
         int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
             ExtraKeysView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR);
