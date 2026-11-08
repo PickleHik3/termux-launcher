@@ -829,3 +829,12 @@ longer counted as an error. Owed:
   window. Switch windows from a chip: the bar refreshes in full. Trace: no `Bar.refresh` under
   `View.onTouchListener#onTouch - TerminalView`; a tap on the other pane shows only
   `Bar.chipsOnly` · pong.
+- **Swipe landing and Peek travel (perf/swipe-stalls).** 2026-11-08 · 96f3c94ae, 30270fe41 ·
+  The place settle now runs just after the landed frame. Home2 → Workspace (keyboard remembered
+  up): the keyboard is up, the extra keys live, the terminal at its keyboard-up size, the window
+  chips on the bar; Workspace → Home2: the keyboard away, the A–Z bar and apps row on Home, the
+  grid at its full height. Swipe back the instant a page lands, ten times each way: never a
+  half-landed chrome (keyboard over Home, dock at the wrong height). A drag that springs back
+  changes nothing. Reduced motion on: every swipe lands as before. Docked and Floating, keyboard
+  up and down, one pane and a split. Peek glass dock: the card's reflection fades to the screen's
+  edge at rest after each landing, and the strip under the pill matches it · emulator or pong.
