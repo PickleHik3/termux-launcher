@@ -2295,17 +2295,6 @@ public final class ChromeInk {
                 mAccentColor, top, mid, foot);
             faces[i] = OnGlass.opaque(OnGlass.composite(veil, surface));
         }
-        if (band == GlassBackdropCache.Band.KEYBOARD) {
-            RowSamples dbgRows = mRows.get(band);
-            RiseInkDbg.log("ink.bandFaces rect=" + contract.rect.toShortString() + " veil="
-                + RiseInkDbg.hex(veil) + " opacity=" + glass.opacity + " blurDp="
-                + glass.blurRadiusDp + " baseAlpha=" + baseAlpha + " base="
-                + RiseInkDbg.hex(baseColor) + " standIn=" + (dbgRows != null && dbgRows.standIn)
-                + " sampled=" + (dbgRows != null && dbgRows.sampled) + " gen=" + mCache.generation()
-                + " rows=" + RiseInkDbg.hex(rows) + " faces=" + RiseInkDbg.hex(faces) + " tone="
-                + contract.tone + " cap=" + RiseInkDbg.hex(contract.cap) + " secondCap="
-                + RiseInkDbg.hex(contract.secondCap));
-        }
         return faces;
     }
 

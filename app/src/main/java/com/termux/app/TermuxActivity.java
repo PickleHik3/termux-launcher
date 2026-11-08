@@ -9263,10 +9263,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // brings up rises in the inks it lands in; the landing's apply re-judges at rest
         // (KeyboardFaceJudging).
         boolean crossing = mCrossing.crossing();
-        com.termux.app.chrome.RiseInkDbg.logWithCallers("act.kbSurface crossing=" + crossing
-            + " judged=" + mKeyboardFacesJudgedThisCrossing + " bandAsked="
-            + mKeyboardBandAskedThisPass + " drag=" + mGlassDragPreview + " kbShown="
-            + state.keyboardShown + " barAlpha=" + state.barAlpha + " " + keyboard.dbgPaletteSummary());
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
             crossing, mKeyboardFacesJudgedThisCrossing)) return;
@@ -9301,9 +9297,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void rejudgeKeyboardGlassFaces() {
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
-        com.termux.app.chrome.RiseInkDbg.logWithCallers("act.rejudge kb=" + (keyboard != null)
-            + " bandAsked=" + mKeyboardBandAskedThisPass + " crossing=" + mCrossing.crossing()
-            + " judged=" + mKeyboardFacesJudgedThisCrossing);
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
         boolean crossing = mCrossing.crossing();
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
@@ -11713,18 +11706,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
-        if (mCrossing.crossing() || accessoryContainer.getTranslationY() != translationY) {
-            ExtraKeysView keysDbg = mExtraKeysView;
-            View kbHostDbg = hotView(R.id.inapp_keyboard_view_host);
-            com.termux.app.chrome.RiseInkDbg.log("frame.stack crossing=" + mCrossing.crossing()
-                + " ty=" + translationY + " keysInk=" + (keysDbg != null
-                    ? com.termux.app.chrome.RiseInkDbg.hex(keysDbg.getButtonTextColor()) : "null")
-                + " keysAlpha=" + (keysDbg != null ? keysDbg.getAlpha() : -1f)
-                + " kbHostAlpha=" + (kbHostDbg != null ? kbHostDbg.getAlpha() : -1f)
-                + " kbHostBg=" + (kbHostDbg != null && kbHostDbg.getBackground() != null
-                    ? Integer.toHexString(System.identityHashCode(kbHostDbg.getBackground())) : "null")
-                + " " + (mInAppKeyboard != null ? mInAppKeyboard.dbgPaletteSummary() : "kb=null"));
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             Trace.setCounter("Wall.stackTranslationPx", Math.round(mDockTravelTranslationPx));
         if (accessoryContainer.getTranslationY() != translationY) {
@@ -14990,20 +14971,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ExtraKeysView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR);
         int ink = GlassInk.faceInk(face, theme,
             mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
-        {
-            int[] scr = new int[2];
-            keys.getLocationOnScreen(scr);
-            View stackDbg = hotView(R.id.accessory_stack_container);
-            com.termux.app.chrome.RiseInkDbg.logWithCallers("act.extraKeysInk crossing="
-                + mCrossing.crossing() + " dockOpacity=" + dockOpacity + " rect="
-                + mExtraKeysInkRect.toShortString() + " screenTop=" + scr[1] + " stackTy="
-                + (stackDbg != null ? stackDbg.getTranslationY() : Float.NaN) + " face="
-                + com.termux.app.chrome.RiseInkDbg.hex(face) + " theme="
-                + com.termux.app.chrome.RiseInkDbg.hex(theme) + " ink="
-                + com.termux.app.chrome.RiseInkDbg.hex(ink) + " was="
-                + com.termux.app.chrome.RiseInkDbg.hex(mExtraKeysInk) + " keysAlpha="
-                + keys.getAlpha());
-        }
         mExtraKeysInk = ink;
         // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
         for (ExtraKeysView view : mExtraKeysViews) {
@@ -28361,9 +28328,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
                     mSettledWallPage = page;
-                    com.termux.app.chrome.RiseInkDbg.log("settle.begin page=" + page);
                     settlePlaceChrome(page);
-                    com.termux.app.chrome.RiseInkDbg.log("settle.placeChromeDone page=" + page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
