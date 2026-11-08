@@ -37,7 +37,39 @@ public final class LiftDropPolicy {
         UNINSTALL
     }
 
+    /** What letting go does, from where the finger is when it lets go. */
+    public enum Release {
+        /** Over a target (Remove, Uninstall): the target acts. */
+        TARGET,
+        /** Over the dock's row: the row takes it, or it goes back. */
+        DOCK,
+        /** Home followed the finger: Home puts it in the cell it offered, or it goes back. */
+        HOME,
+        /** Anywhere else, or the stream was cancelled: it goes back. */
+        BACK
+    }
+
     private LiftDropPolicy() {}
+
+    /**
+     * What a release does. A target under the finger wins, then the dock's row under it, then
+     * Home when Home has been following the finger. Anywhere else (the screen's edge beside the
+     * row or the grid, the status chrome without a target) it goes back, as does a cancel. Whatever
+     * this answers, the place the icon left shows again once the release is done (an icon that
+     * moved has already left it).
+     *
+     * @param overTarget   a drop target was under the finger
+     * @param overDock     the dock's row was under the finger and takes this item
+     * @param homeFollows  Home took the drag over and follows the finger
+     */
+    @NonNull
+    public static Release release(boolean canceled, boolean overTarget, boolean overDock,
+                                  boolean homeFollows) {
+        if (canceled) return Release.BACK;
+        if (overTarget) return Release.TARGET;
+        if (overDock) return Release.DOCK;
+        return homeFollows ? Release.HOME : Release.BACK;
+    }
 
     /** Whether letting {@code item} go over {@code place} does anything; otherwise it goes back. */
     public static boolean accepts(@NonNull Item item, @NonNull Place place) {

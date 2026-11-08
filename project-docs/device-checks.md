@@ -854,3 +854,10 @@ longer counted as an error. Owed:
   changes nothing. Reduced motion on: every swipe lands as before. Docked and Floating, keyboard
   up and down, one pane and a split. Peek glass dock: the card's reflection fades to the screen's
   edge at rest after each landing, and the strip under the pill matches it · emulator or pong.
+- **A dock icon let go at the screen's edge goes back (11-08, fix/dock-drop-left-edge).** Docked
+  and Floating, keyboard down, on Home2 and Home1, with two dock pages: lift a dock icon
+  (long-press, slide sideways) and let go at the screen's leftmost edge, at dock height and up
+  over Home; rest there first so Home's page (and the dock's, on its second page) turns, then let
+  go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
+  hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
+  Undo brings it back) and back on its own slot (nothing moves) · pong.
