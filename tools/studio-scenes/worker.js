@@ -1,7 +1,7 @@
 // Software renderer for the Studio scene lab. Renders are requested one at a time, never self-scheduled.
 importScripts('https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/canvaskit.js');
 const V = self.location.search;            // cache stamp passed through from the page
-let kit, paint, effect, surface, sw = 0, sh = 0, scene, words, artShader, regShader, gl = null;
+let kit, paint, effect, surface, sw = 0, sh = 0, scene, words, artShader, regShader, cloudShader, gl = null;
 const ready = (async () => {
   kit = await CanvasKitInit({ locateFile: f => 'https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/' + f });
   paint = new kit.Paint();
@@ -14,10 +14,11 @@ const ready = (async () => {
   let err = ''; effect = kit.RuntimeEffect.Make(src, e => err += e);
   if (!effect) throw Error(err || 'shader failed to compile');
   const load = async f => kit.MakeImageFromEncoded(new Uint8Array(await (await fetch('studio/scenes/coastal-meadow/' + f + V)).arrayBuffer()));
-  const [art, reg] = await Promise.all([load(sc.art), load(sc.regions)]);
+  const [art, reg, cl] = await Promise.all([load(sc.art), load(sc.regions), load(sc.clouds)]);
   const C = kit.TileMode.Clamp;
   artShader = art.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
   regShader = reg.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
+  cloudShader = cl.makeShaderOptions(C, C, kit.FilterMode.Linear, kit.MipmapMode.None);
   return { scene: sc, words: w };
 })();
 self.onmessage = async ({ data }) => {
@@ -32,13 +33,13 @@ self.onmessage = async ({ data }) => {
     const a = words.atmospheres[atm], m = words.motions[motion];
     const u = [width, height, scene.size[0], scene.size[1], time, scene.horizon, scene.cloudTop, a.atm, m.sway, m.water, m.cloud, m.gust];
     if (data.live && gl) {
-      const t0 = performance.now(); const shader = effect.makeShaderWithChildren(u, [artShader, regShader]);
+      const t0 = performance.now(); const shader = effect.makeShaderWithChildren(u, [artShader, regShader, cloudShader]);
       paint.setShader(shader); gl.getCanvas().drawRect(kit.LTRBRect(0, 0, width, height), paint); gl.flush();
       paint.setShader(null); shader.delete(); self.postMessage({ id, gl: true, ms: performance.now() - t0 }); return;
     }
     if (!surface || sw !== width || sh !== height) { surface && surface.delete(); surface = kit.MakeSurface(width, height); sw = width; sh = height; }
     const t0 = performance.now();
-    const shader = effect.makeShaderWithChildren(u, [artShader, regShader]);
+    const shader = effect.makeShaderWithChildren(u, [artShader, regShader, cloudShader]);
     paint.setShader(shader);
     surface.getCanvas().drawRect(kit.LTRBRect(0, 0, width, height), paint); surface.flush();
     const img = surface.makeImageSnapshot();

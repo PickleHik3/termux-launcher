@@ -1,11 +1,13 @@
 // Studio scene effect: one shader for every scene pack.
 // The art is a finished flat-poster painting; the region map says where things move:
 //   R = sky, G = water, B = sway (grass/plants, spilled a few px past each blade).
+// The clouds are lifted into their own layer and drift across a clear sky, wrapping off-screen.
 // Place = which art + region map. Atmosphere = the grade and sky (uAtm). Motion = the amounts.
 // Everything below is AGSL-safe: no textures beyond child shaders, no loops, no preprocessor.
 
 uniform shader art;
 uniform shader regions;
+uniform shader clouds;     // the art's clouds alone (premultiplied), clear sky removed
 
 uniform float2 uOut;       // output size in px
 uniform float2 uArt;       // art size in px
@@ -15,7 +17,7 @@ uniform float  uCloudTop;  // rows above this are free sky (clouds live here)
 uniform float  uAtm;       // 0 golden hour, 1 misty dawn, 2 night
 uniform float  uSway;      // grass sway, art px
 uniform float  uWater;     // water ripple, art px
-uniform float  uCloud;     // cloud drift, art px
+uniform float  uCloud;     // cloud drift speed, art px per second (left to right)
 uniform float  uGust;      // 0..1 travelling gusts across the meadow
 
 float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
@@ -65,18 +67,24 @@ half4 main(float2 fc) {
         q.x += water * uWater * depth * rip;
     }
 
-    // Clouds: a slow back-and-forth drift, only in the free sky above uCloudTop.
-    float freeSky = sky * smoothstep(uCloudTop + 40.0, uCloudTop - 40.0, p.y);
-    if (freeSky > 0.004) {
-        q.x += freeSky * uCloud * sin(uTime * 0.045 + p.y * 0.006);
-    }
-
     q.x = clamp(q.x, 0.0, uArt.x - 1.0);
     half3 c = art.eval(q).rgb;
+    half3 clear = art.eval(float2(uArt.x - 6.0, q.y)).rgb;   // the row's clear-sky colour
 
-    // Cloudiness: how far a sky pixel is from the clear sky colour of its row (right edge).
-    half3 clear = art.eval(float2(uArt.x - 6.0, q.y)).rgb;
-    float cloud = clamp(length(float3(c - clear)) * 2.2, 0.0, 1.0) * sky;
+    // Clouds: in the free sky, repaint the clear sky and lay the drifting cloud layer on top.
+    // The layer repeats every (art width + gap), so clouds leave one side and come back on
+    // the other after a stretch of open sky.
+    float freeSky = sky * step(p.y, uCloudTop);
+    float cloud = 0.0;
+    if (freeSky > 0.5) {
+        float span = uArt.x + 420.0;
+        float cx = mod(p.x - uTime * uCloud, span);
+        half4 cl = cx < uArt.x ? clouds.eval(float2(cx, p.y)) : half4(0.0);
+        c = clear * (1.0 - cl.a) + cl.rgb;
+        cloud = float(cl.a);
+    } else {
+        cloud = clamp(length(float3(c - clear)) * 2.2, 0.0, 1.0) * sky;
+    }
     float t = clamp(p.y / uHorizon, 0.0, 1.0);   // 0 top of sky, 1 horizon
 
     if (uAtm > 1.5) {
