@@ -6125,11 +6125,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         View host = findViewById(R.id.accessory_surface_host);
+        // While the chrome travels, a card whose floor alone moved with the stack is re-cut on
+        // its own; the landing's pass dresses the rest (PeekGlassGeometry#travelRecutsOnly).
+        boolean recutOnly = com.termux.app.dock.PeekGlassGeometry.travelRecutsOnly(mPeekCard,
+            card, peekChromeTravelling());
         if (host != null && mDockShapeCut) {
             // Cuts the card afresh, re-aims the glass program and the reflection, or puts the
             // slab back, in the shape the dock is placed in now: a card that gave way under
             // Floating hands the host back its capsule (dockFloats).
             applyDockSurfaceShape(host, dockFloats(), mDockShapeHeightPx, true, true);
+            if (recutOnly) {
+                // The strip under the pill continues the card: its crop is cut again with the
+                // next pass that runs anyway.
+                if (mChrome != null) mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
+                return;
+            }
         } else {
             mPeekCard = card;
             syncPeekReflection();
@@ -6138,6 +6148,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
+    }
+
+    /** Whether the chrome is travelling with the wall: a crossing, a slide, or its transforms. */
+    private boolean peekChromeTravelling() {
+        if (mCrossing.crossing() || mChromeTravelMoved) return true;
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController != null ? mPaneWallController.wall() : null;
+        return wall != null && wall.isMoving();
     }
 
     /** One of the row's icons asked to be drawn again: the reflection shows it as the icon does. */

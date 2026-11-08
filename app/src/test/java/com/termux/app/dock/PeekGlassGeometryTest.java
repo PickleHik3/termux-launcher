@@ -413,4 +413,32 @@ public class PeekGlassGeometryTest {
         assertEquals(0f, PeekGlassGeometry.compute(boxes, 7, 0f, SCREEN_W, HOST_H, SCREEN_W,
             HOST_H + STRIP_H, DENSITY, open.mirrorAxisY - 5f).reflectionDepth(), 0f);
     }
+    @Test
+    public void aCardWhoseFloorAloneMovedWithTheTravelIsReCutWithoutAWholePass() {
+        float[] boxes = rowBoxes(SCREEN_W, 5, 150, DENSITY);
+        PeekGlassGeometry.Card rest = card(boxes, 5);
+        // The stack slid 40 px down by the travel: the screen's edge stands 40 px higher in it.
+        PeekGlassGeometry.Card slid = PeekGlassGeometry.compute(boxes, 5, 0f, SCREEN_W, HOST_H,
+            SCREEN_W, HOST_H + STRIP_H - 40f, DENSITY);
+        assertNotNull(rest);
+        assertNotNull(slid);
+        assertFalse(rest.equals(slid));
+        assertTrue(rest.sameAboveFloor(slid));
+        assertTrue(PeekGlassGeometry.travelRecutsOnly(rest, slid, true));
+        // At rest the same change still takes the whole pass.
+        assertFalse(PeekGlassGeometry.travelRecutsOnly(rest, slid, false));
+    }
+
+    @Test
+    public void aCardThatAppearsGoesOrChangesShapeStillTakesTheWholePass() {
+        float[] boxes = rowBoxes(SCREEN_W, 5, 150, DENSITY);
+        PeekGlassGeometry.Card five = card(boxes, 5);
+        PeekGlassGeometry.Card wider = PeekGlassGeometry.compute(boxes, 5, 0f, SCREEN_W, HOST_H,
+            SCREEN_W - 200, HOST_H + STRIP_H, DENSITY);
+        assertNotNull(wider);
+        assertFalse(five.sameAboveFloor(wider));
+        assertFalse(PeekGlassGeometry.travelRecutsOnly(five, wider, true));
+        assertFalse(PeekGlassGeometry.travelRecutsOnly(null, five, true));
+        assertFalse(PeekGlassGeometry.travelRecutsOnly(five, null, true));
+    }
 }

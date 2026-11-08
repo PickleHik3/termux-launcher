@@ -153,6 +153,20 @@ public final class PeekGlassGeometry {
     }
 
     /**
+     * Whether a card cut again while the chrome travels needs only its own re-cut (the host's
+     * outline, rim and reflection), not a whole chrome pass: it is the card it was above its
+     * floor, the floor alone having moved with the stack's travel. Every travel frame moves it
+     * (the reflection fades to the screen's edge as the host is drawn), and a whole pass for each
+     * cost two 10 ms applies every few frames of a swipe on pong; the landing's pass dresses
+     * the rest once the stack is at rest. A new card, a card gone, or one whose shape changed
+     * still asks for the whole pass.
+     */
+    public static boolean travelRecutsOnly(@Nullable Card was, @Nullable Card now,
+                                           boolean travelling) {
+        return travelling && was != null && was.sameAboveFloor(now);
+    }
+
+    /**
      * Where the screen's bottom edge stands in the host's coordinates as the host is drawn: the
      * screen's height, less the host's laid-out top in the window and the translation its
      * ancestors and it are drawn with (a crossing slides the stack down past where it is laid out).
@@ -297,6 +311,18 @@ public final class PeekGlassGeometry {
         public Card offset(float dx, float dy) {
             return new Card(left + dx, top + dy, right + dx, bottom + dy, radiusPx,
                 screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy);
+        }
+
+        /**
+         * Whether {@code other} is this card above its floor: the same sides, top, corners and
+         * mirror line, only the screen's edge (and with it the bottom and the reflection's fade)
+         * standing elsewhere, which is what the stack's travel moves.
+         */
+        public boolean sameAboveFloor(@Nullable Card other) {
+            return other != null && Float.compare(left, other.left) == 0
+                && Float.compare(top, other.top) == 0 && Float.compare(right, other.right) == 0
+                && Float.compare(radiusPx, other.radiusPx) == 0
+                && Float.compare(mirrorAxisY, other.mirrorAxisY) == 0;
         }
 
         @Override
