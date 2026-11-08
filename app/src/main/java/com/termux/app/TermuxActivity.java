@@ -33257,15 +33257,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setOnClickListener(v -> openSystemClockApp());
             }
         }
-        refreshPlaceBar();
+        Trace.beginSection("Bar.placeBar");
+        try {
+            refreshPlaceBar();
+        } finally {
+            Trace.endSection();
+        }
 
-        applyTerminalWindowBarGlass(host);
+        Trace.beginSection("Bar.glass");
+        try {
+            applyTerminalWindowBarGlass(host);
+        } finally {
+            Trace.endSection();
+        }
 
         bindPlaceBadge(findViewById(R.id.terminal_sessions_indicator));
 
-        java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
-        scheduleWindowLabelPoll(foregroundPids);
-        updateStatusWidgets();
+        Trace.beginSection("Bar.chips");
+        java.util.List<Integer> foregroundPids;
+        try {
+            foregroundPids = syncWindowBarItems(bar);
+            scheduleWindowLabelPoll(foregroundPids);
+        } finally {
+            Trace.endSection();
+        }
+        Trace.beginSection("Bar.widgets");
+        try {
+            updateStatusWidgets();
+        } finally {
+            Trace.endSection();
+        }
         // The tab a chip hangs from can move when the row re-lays out (a window opened, a label
         // widened), so a live chip follows it instead of drifting off its anchor.
         if (mRenameCoordinator != null && mRenameCoordinator.isActive())
