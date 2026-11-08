@@ -184,7 +184,7 @@ public final class DockCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
+            .tier(1, Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
                 Row.DOCK_APP_ICONS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME)

@@ -48,7 +48,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.MARGIN, Row.STATUS_INDICATORS)
+            .tier(1, Row.STATUS_POSITION, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT);
         return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)

@@ -1202,6 +1202,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Runnable mAppDrawerWarmRunnable = this::scheduleAppDrawerWarmupWhenIdle;
     /** One idle handler at a time: the drawer's warm-up is a once-per-process build. */
     @Nullable private MessageQueue.IdleHandler mAppDrawerWarmIdleHandler;
+    private final Runnable mToolbarTextInputWarmRunnable = this::scheduleToolbarTextInputWarmupWhenIdle;
+    /** One idle handler at a time for the toolbar's text input page (prepareTextInputPage). */
+    @Nullable private MessageQueue.IdleHandler mToolbarTextInputWarmIdleHandler;
+    /** After start-up's own frames, like the drawer's warm-up, and before it. */
+    private static final long TOOLBAR_TEXT_INPUT_WARM_DELAY_MS = 1200L;
 
 
     /** Which shells have produced output recently; drives the "working" indication. */
@@ -2332,6 +2337,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.setHostVisible(true);
             scheduleLauncherCatalogWarmup();
         }
+        // The toolbar's text input page, built while the launcher is idle rather than inside the
+        // first page change that shows the toolbar.
+        View toolbarWarmRoot = getWindow().getDecorView();
+        toolbarWarmRoot.removeCallbacks(mToolbarTextInputWarmRunnable);
+        toolbarWarmRoot.postDelayed(mToolbarTextInputWarmRunnable, TOOLBAR_TEXT_INPUT_WARM_DELAY_MS);
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
             mPendingBootstrapOnStart = false;
             Intent pendingIntent = mPendingLaunchIntent;
@@ -33468,15 +33478,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setOnClickListener(v -> openSystemClockApp());
             }
         }
-        refreshPlaceBar();
+        Trace.beginSection("Bar.placeBar");
+        try {
+            refreshPlaceBar();
+        } finally {
+            Trace.endSection();
+        }
 
-        applyTerminalWindowBarGlass(host);
+        Trace.beginSection("Bar.glass");
+        try {
+            applyTerminalWindowBarGlass(host);
+        } finally {
+            Trace.endSection();
+        }
 
         bindPlaceBadge(findViewById(R.id.terminal_sessions_indicator));
 
-        java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
-        scheduleWindowLabelPoll(foregroundPids);
-        updateStatusWidgets();
+        Trace.beginSection("Bar.chips");
+        java.util.List<Integer> foregroundPids;
+        try {
+            foregroundPids = syncWindowBarItems(bar);
+            scheduleWindowLabelPoll(foregroundPids);
+        } finally {
+            Trace.endSection();
+        }
+        Trace.beginSection("Bar.widgets");
+        try {
+            updateStatusWidgets();
+        } finally {
+            Trace.endSection();
+        }
         // The tab a chip hangs from can move when the row re-lays out (a window opened, a label
         // widened), so a live chip follows it instead of drifting off its anchor.
         if (mRenameCoordinator != null && mRenameCoordinator.isActive())
@@ -38042,6 +38073,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         };
         Looper.myQueue().addIdleHandler(mAppDrawerWarmIdleHandler);
+    }
+
+    /**
+     * The toolbar's text input page built and measured on a quiet main thread, once: a page change
+     * that shows the toolbar for the first time then lays out a page that already exists. Waits for
+     * the queue to go idle, as the drawer's warm-up does; if it never does, the first page change
+     * pays what it always paid.
+     */
+    private void scheduleToolbarTextInputWarmupWhenIdle() {
+        if (mToolbarTextInputWarmIdleHandler != null || !mIsVisible) return;
+        mToolbarTextInputWarmIdleHandler = () -> {
+            mToolbarTextInputWarmIdleHandler = null;
+            if (!mIsVisible || isFinishing()) return false;
+            ViewPager pager = getTerminalToolbarViewPager();
+            if (pager == null || !(pager.getAdapter()
+                    instanceof TerminalToolbarViewPager.PageAdapter)) return false;
+            // The size the pager gives its pages: its own once laid out, else the window's width
+            // at the toolbar's height.
+            int width = pager.getWidth() > 0 ? pager.getWidth()
+                : getWindow().getDecorView().getWidth();
+            int height = pager.getHeight() > 0 ? pager.getHeight()
+                : pager.getLayoutParams() != null ? pager.getLayoutParams().height : 0;
+            ((TerminalToolbarViewPager.PageAdapter) pager.getAdapter())
+                .prepareTextInputPage(pager, width, height);
+            return false;
+        };
+        Looper.myQueue().addIdleHandler(mToolbarTextInputWarmIdleHandler);
     }
 
     /**
