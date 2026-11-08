@@ -7128,6 +7128,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         // Traced: 58-88 ms on pong, so it must never run inside a landing's frame.
         Trace.beginSection("Wall.halfRedress");
+        // A dock dress a landing's commit made before this one is no longer what it wears.
+        mHalfRedressCount++;
         try {
             redressChromeFromState(false);
             updateAppLauncherBarHeight();
@@ -19169,20 +19171,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
         // A pictured dip dressed the slab for this page on its first frame: it already wears it.
-        if (mDockDesignTravelledTo == to) {
-            mDockDesignTravelledTo = null;
-            return;
-        }
-        if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
+        boolean travelled = mDockDesignTravelledTo == to;
+        if (travelled) mDockDesignTravelledTo = null;
+        boolean sameDress = !travelled && dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
             && arrangementOf(from).searchField() == arrangementOf(to).searchField()
-            && arrangementOf(from).drawerTile() == arrangementOf(to).drawerTile()) {
-            // One dress on both, but a Home layout keeps its own Drawer tile's place.
-            syncDrawerTile();
-            return;
+            && arrangementOf(from).drawerTile() == arrangementOf(to).drawerTile();
+        // The commit's place pass dressed the dock for these very inputs already, with no ease
+        // under way beside it: the landed frame wears it, and a second dress changes nothing.
+        boolean worn = !travelled && !sameDress && mCommitDockDress.worn(commitDockDressInputs());
+        switch (com.termux.app.dock.CommitDockDress.decide(travelled, sameDress, worn,
+                mPromptFieldEase != null)) {
+            case NONE:
+            case ALREADY_WORN:
+                return;
+            case SYNC_DRAWER_TILE:
+                // One dress on both, but a Home layout keeps its own Drawer tile's place.
+                syncDrawerTile();
+                return;
+            case CANCEL_EASE_AND_RESTYLE:
+            default:
+                // A settle lands the place's geometry at once (ADR 0003): an ease under way gives
+                // way.
+                cancelDockBandEase();
+                restyleDockSurface();
         }
-        // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
-        cancelDockBandEase();
-        restyleDockSurface();
+    }
+
+    /** Notes the dresses a landing's commit makes, so its Dock design step dresses only once. */
+    private final com.termux.app.dock.CommitDockDress mCommitDockDress =
+        new com.termux.app.dock.CommitDockDress();
+
+    /** Counts the half re-dresses that ran; a commit's dock dress made before one is not worn. */
+    private int mHalfRedressCount;
+
+    /** What a dock dress reads that a commit can move, as it stands now (CommitDockDress). */
+    @NonNull
+    private com.termux.app.dock.CommitDockDress.Inputs commitDockDressInputs() {
+        com.termux.app.wall.PaneWallPage rowsPage = stackDressPage();
+        boolean drawerTile = mPreferences != null && arrangementOf(rowsPage).drawerTile();
+        return new com.termux.app.dock.CommitDockDress.Inputs(mLastWallPage, rowsPage,
+            committedDockDesign(), committedSearchField(), drawerTile, arrangementRevision(),
+            isStatusBarCompact(), mStatusBarEdge,
+            mInAppKeyboard != null && mInAppKeyboard.isVisible(), mHalfRedressCount);
     }
 
     /**
@@ -19215,17 +19245,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDressedSearchField = committedSearchField();
         }
         if (mPreferences == null || mChrome == null) return;
-        syncDockBeadsListeners();
-        // The Drawer tile comes and goes with the page's toggle.
-        syncDrawerTile();
-        // The glass is re-cut even where the geometry did not move: its features are the spec's.
-        mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        // The Wall strip's row, laid out by the pass above, takes the Workspace's windows.
-        syncWallStripFeed();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-            | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        Trace.beginSection("Dock.restyle");
+        try {
+            syncDockBeadsListeners();
+            // The Drawer tile comes and goes with the page's toggle.
+            syncDrawerTile();
+            // The glass is re-cut even where the geometry did not move: its features are the
+            // spec's.
+            mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            // The Wall strip's row, laid out by the pass above, takes the Workspace's windows.
+            syncWallStripFeed();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            // Inside a landing's commit, what it was dressed for, read once it is dressed.
+            if (mCommitDockDress.open()) mCommitDockDress.dressed(commitDockDressInputs());
+        } finally {
+            Trace.endSection();
+        }
     }
 
     // ------------------------------------------------------------------ Drawer tile
@@ -25388,23 +25426,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         com.termux.app.wall.PaneWallPage left = mLastWallPage;
         mLastWallPage = page;
-        // The arrangement before the keyboard, so the keyboard's geometry pass sees the
-        // chrome it will stand in.
-        Trace.beginSection("Settle.arrangement");
-        syncChromeArrangement();
-        Trace.endSection();
-        // Home wears its own Style, Corners and Margin: a crossing between halves that differ
-        // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
-        // whose stack already changed into that dress on the way leaves the landed frame nothing
-        // to show from it, so the whole re-dress (58-88 ms on pong) follows that frame instead.
-        Trace.beginSection("Settle.halfDress");
-        if (mLandingStackDressed) deferHalfRestyle(left, page);
-        else restyleChromeForHalfIfChanged(left, page);
-        Trace.endSection();
-        // The dock wears the arriving page's Dock design; one design on both changes nothing.
-        Trace.beginSection("Settle.dockDesign");
-        restyleDockSurfaceForPageIfChanged(left, page);
-        Trace.endSection();
+        // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
+        // Dock design step below finds it worn (CommitDockDress).
+        mCommitDockDress.begin();
+        try {
+            // The arrangement before the keyboard, so the keyboard's geometry pass sees the
+            // chrome it will stand in.
+            Trace.beginSection("Settle.arrangement");
+            syncChromeArrangement();
+            Trace.endSection();
+            // Home wears its own Style, Corners and Margin: a crossing between halves that differ
+            // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
+            // whose stack already changed into that dress on the way leaves the landed frame
+            // nothing to show from it, so the whole re-dress (58-88 ms on pong) follows that frame
+            // instead.
+            Trace.beginSection("Settle.halfDress");
+            if (mLandingStackDressed) deferHalfRestyle(left, page);
+            else restyleChromeForHalfIfChanged(left, page);
+            Trace.endSection();
+            // The dock wears the arriving page's Dock design; one design on both changes nothing.
+            Trace.beginSection("Settle.dockDesign");
+            restyleDockSurfaceForPageIfChanged(left, page);
+            Trace.endSection();
+        } finally {
+            mCommitDockDress.end();
+        }
         // The bar's readings are the same on both halves (#91); whether the bar shows decides
         // whether the sampler runs.
         Trace.beginSection("Settle.stats");
