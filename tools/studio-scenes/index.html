@@ -1,0 +1,78 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Studio scenes</title><style>
+:root{--bg:#14161b;--card:#1d2027;--ink:#ecedf0;--dim:#9ca1ab;--line:#2c3039;--acc:#e9b872}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 2px}.sub{color:var(--dim);margin:0 0 20px}
+.wrap{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:28px;align-items:start}
+@media(max-width:760px){.wrap{grid-template-columns:1fr}}
+.phone{background:#000;border-radius:28px;padding:8px;box-shadow:0 10px 40px #0008}
+.phone canvas{width:100%;display:block;border-radius:22px;aspect-ratio:9/19.5;background:#222}
+.field{margin:0 0 18px}.field b{display:block;font-size:13px;color:var(--dim);font-weight:500;margin-bottom:6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}.seg button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--acc);color:#1b1408;border-color:var(--acc)}
+.sentence{font-size:20px;margin:6px 0 18px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.play{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
+#status{color:var(--dim);font-size:13px}
+h2{font-size:15px;margin:28px 0 10px;color:var(--dim);font-weight:500}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.strip figure{margin:0}.strip canvas{width:100%;border-radius:14px;aspect-ratio:9/19.5;display:block;background:#222;cursor:pointer}
+.strip figcaption{font-size:13px;color:var(--dim);margin-top:4px}
+</style></head><body><main>
+<h1>Studio scenes</h1><p class="sub">One painted scene, brought to life. Pick the three words.</p>
+<div class="wrap">
+ <div class="phone"><canvas id="view" width="324" height="702"></canvas></div>
+ <div>
+  <div class="field"><b>Place</b><div class="seg" id="place"><button aria-pressed="true">Coastal Meadow</button></div></div>
+  <div class="field"><b>Atmosphere</b><div class="seg" id="atm"></div></div>
+  <div class="field"><b>Motion</b><div class="seg" id="motion"></div></div>
+  <p class="sentence" id="sentence"></p>
+  <div class="row"><button class="play" id="play">Pause</button><span id="status">Loading…</span></div>
+  <h2>All atmospheres (stills)</h2>
+  <div class="strip" id="strip"></div>
+ </div>
+</div></main>
+<script>
+const V = '?v=' + (document.currentScript.dataset.v || Date.now());
+const w = new Worker('worker.js' + V);
+let state = { atm: 'golden-hour', motion: 'gentle-breeze' }, playing = true, words, nextId = 0;
+const pending = new Map();
+w.onmessage = ({ data }) => {
+  if (data.hello) return boot(data);
+  const cb = pending.get(data.id); pending.delete(data.id); cb && cb(data);
+};
+const render = (o) => new Promise(res => { const id = ++nextId; pending.set(id, res); w.postMessage({ id, ...o }); });
+const paint = (cv, d) => { if (d.error) { status(d.error); return; } if (d.gl) return; cv.getContext('2d').putImageData(new ImageData(d.pixels, d.width, d.height), 0, 0); };
+const status = s => document.getElementById('status').textContent = s;
+function seg(el, map, key) {
+  el.innerHTML = '';
+  for (const [k, v] of Object.entries(map)) {
+    const b = document.createElement('button'); b.textContent = v.label; b.setAttribute('aria-pressed', state[key] === k);
+    b.onclick = () => { state[key] = k; seg(el, map, key); sentence(); strip(); if (!playing) frame(); };
+    el.appendChild(b);
+  }
+}
+function sentence() { document.getElementById('sentence').textContent = `Coastal Meadow · ${words.atmospheres[state.atm].label} · ${words.motions[state.motion].label}`; }
+async function strip() {
+  const box = document.getElementById('strip'); if (!box.children.length) for (const [k, v] of Object.entries(words.atmospheres)) {
+    const f = document.createElement('figure'); f.innerHTML = `<canvas width="162" height="351"></canvas><figcaption>${v.label}</figcaption>`;
+    f.querySelector('canvas').onclick = () => { state.atm = k; seg(document.getElementById('atm'), words.atmospheres, 'atm'); sentence(); if (!playing) frame(); };
+    box.appendChild(f);
+  }
+  const keys = Object.keys(words.atmospheres);
+  for (let i = 0; i < keys.length; i++) paint(box.children[i].querySelector('canvas'), await render({ atm: keys[i], motion: state.motion, time: 3, width: 162, height: 351 }));
+}
+const view = document.getElementById('view'); const t0 = performance.now(); let busy = false, avg = 0, mode = 'Software', last = 0;
+async function frame() {
+  if (busy) return; busy = true; const start = performance.now();
+  const d = await render({ ...state, live: true, time: (performance.now() - t0) / 1000, width: view.width, height: view.height });
+  paint(view, d); busy = false;
+  const ms = performance.now() - start;   // round trip, so WebGL's async work is counted too
+  if (!d.error) { avg = avg ? avg * 0.9 + ms * 0.1 : ms; status(`${mode} · ${avg.toFixed(0)} ms a frame (${Math.min(60, 1000 / avg).toFixed(0)} fps max here)`); }
+}
+function loop() { if (playing && !document.hidden) frame(); setTimeout(loop, 66); }   // ~15 fps target
+document.getElementById('play').onclick = e => { playing = !playing; e.target.textContent = playing ? 'Pause' : 'Play'; };
+function boot(info) { words = info.words; mode = info.gl ? 'WebGL' : 'Software'; seg(document.getElementById('atm'), words.atmospheres, 'atm'); seg(document.getElementById('motion'), words.motions, 'motion'); sentence(); strip(); loop(); }
+const soft = new URLSearchParams(location.search).has('software');
+const off = soft ? null : view.transferControlToOffscreen();
+w.postMessage({ hello: true, glCanvas: off, forceSoftware: soft }, off ? [off] : []);
+</script></body></html>

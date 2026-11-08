@@ -1,0 +1,12 @@
+{
+  "atmospheres": {
+    "golden-hour": { "label": "Golden Hour", "atm": 0 },
+    "misty-dawn":  { "label": "Misty Dawn",  "atm": 1 },
+    "night":       { "label": "Night",       "atm": 2 }
+  },
+  "motions": {
+    "almost-still":  { "label": "Almost Still",  "sway": 1.5, "water": 0.6, "cloud": 8,  "gust": 0.0 },
+    "gentle-breeze": { "label": "Gentle Breeze", "sway": 3.5, "water": 1.3, "cloud": 22, "gust": 0.35 },
+    "sea-wind":      { "label": "Sea Wind",      "sway": 6.5, "water": 2.2, "cloud": 40, "gust": 1.0 }
+  }
+}

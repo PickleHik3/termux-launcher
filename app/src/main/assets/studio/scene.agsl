@@ -1,0 +1,127 @@
+// Studio scene effect: one shader for every scene pack.
+// The art is a finished flat-poster painting; the region map says where things move:
+//   R = sky, G = water, B = sway (grass/plants, spilled a few px past each blade).
+// Place = which art + region map. Atmosphere = the grade and sky (uAtm). Motion = the amounts.
+// Everything below is AGSL-safe: no textures beyond child shaders, no loops, no preprocessor.
+
+uniform shader art;
+uniform shader regions;
+
+uniform float2 uOut;       // output size in px
+uniform float2 uArt;       // art size in px
+uniform float  uTime;      // seconds
+uniform float  uHorizon;   // horizon row in art px
+uniform float  uCloudTop;  // rows above this are free sky (clouds live here)
+uniform float  uAtm;       // 0 golden hour, 1 misty dawn, 2 night
+uniform float  uSway;      // grass sway, art px
+uniform float  uWater;     // water ripple, art px
+uniform float  uCloud;     // cloud drift, art px
+uniform float  uGust;      // 0..1 travelling gusts across the meadow
+
+float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+
+float noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float luma(half3 c) { return dot(float3(c), float3(0.299, 0.587, 0.114)); }
+
+half4 main(float2 fc) {
+    // Fill the height, centre-crop the sides (phones are taller than the 2:3 art).
+    float s = uOut.y / uArt.y;
+    float2 p = (fc - float2((uOut.x - uArt.x * s) * 0.5, 0.0)) / s;
+    p.x = clamp(p.x, 0.0, uArt.x - 1.0);
+
+    half4 reg = regions.eval(p);
+    float sky = float(reg.r);
+    float water = float(reg.g);
+    float sway = float(reg.b);
+    float2 q = p;
+
+    // Grass: a slow sway plus gusts that travel left to right. The offset varies with height,
+    // so blades shear (bend) instead of the whole meadow sliding.
+    if (sway > 0.004) {
+        float base = sin(uTime * 1.1 + p.x * 0.006 + p.y * 0.011) * 0.6
+                   + sin(uTime * 1.9 + p.x * 0.013 - p.y * 0.007) * 0.4;
+        float front = fract((p.x * 0.0009) - uTime * 0.09 + noise(float2(p.y * 0.004, 3.0)) * 0.3);
+        float gust = smoothstep(0.0, 0.18, front) * smoothstep(0.42, 0.18, front);
+        float tall = clamp((p.y - uHorizon) / 500.0, 0.2, 1.0);
+        q.x += sway * uSway * tall * (base + uGust * gust * 2.2);
+        q.y += sway * uSway * 0.25 * tall * uGust * gust;
+    }
+
+    // Water: horizontal ripple bands, smaller toward the horizon (perspective).
+    float depth = clamp((p.y - uHorizon) / 300.0, 0.15, 1.0);
+    if (water > 0.004) {
+        float rip = sin(p.y * 0.21 / depth + uTime * 1.4) * 0.6
+                  + sin(p.y * 0.07 / depth - uTime * 0.8 + p.x * 0.004) * 0.4;
+        q.x += water * uWater * depth * rip;
+    }
+
+    // Clouds: a slow back-and-forth drift, only in the free sky above uCloudTop.
+    float freeSky = sky * smoothstep(uCloudTop + 40.0, uCloudTop - 40.0, p.y);
+    if (freeSky > 0.004) {
+        q.x += freeSky * uCloud * sin(uTime * 0.045 + p.y * 0.006);
+    }
+
+    q.x = clamp(q.x, 0.0, uArt.x - 1.0);
+    half3 c = art.eval(q).rgb;
+
+    // Cloudiness: how far a sky pixel is from the clear sky colour of its row (right edge).
+    half3 clear = art.eval(float2(uArt.x - 6.0, q.y)).rgb;
+    float cloud = clamp(length(float3(c - clear)) * 2.2, 0.0, 1.0) * sky;
+    float t = clamp(p.y / uHorizon, 0.0, 1.0);   // 0 top of sky, 1 horizon
+
+    if (uAtm > 1.5) {
+        // Night: everything goes to moonlit blue by brightness, the sky is repainted.
+        float l = luma(c);
+        float3 land = mix(float3(0.035, 0.05, 0.10), float3(0.30, 0.38, 0.58), l);
+        float3 skyc = mix(float3(0.03, 0.05, 0.13), float3(0.16, 0.20, 0.36), pow(t, 2.2));
+        skyc = mix(skyc, float3(0.22, 0.26, 0.40), cloud * 0.8);
+        // stars: a sparse grid, twinkling, fading toward the horizon
+        float2 cell = floor(p / 16.0);
+        float2 at = (float2(hash(cell + 3.0), hash(cell + 5.0)) * 0.7 + 0.15) * 16.0;
+        float sd = length(p - cell * 16.0 - at);
+        float star = step(0.93, hash(cell)) * smoothstep(1.9, 0.7, sd)
+                   * (0.55 + 0.45 * sin(uTime * 1.6 + hash(cell + 7.0) * 40.0));
+        skyc += star * (1.0 - t) * (1.0 - cloud) * 0.8;
+        // moon
+        float2 moon = float2(uArt.x * 0.7, uHorizon * 0.38);
+        float md = length(p - moon);
+        skyc += float3(0.95, 0.93, 0.85) * smoothstep(34.0, 30.0, md) + float3(0.25, 0.28, 0.4) * exp(-md / 120.0) * 0.6;
+        float3 col = mix(land, skyc, sky);
+        // moon path on the water
+        float path = exp(-abs(p.x - moon.x) / (40.0 + 160.0 * depth));
+        float glint = smoothstep(0.62, 0.8, noise(float2(p.x * 0.012 + uTime * 0.05, p.y * 0.32 / depth + uTime * 0.5)));
+        col += water * path * glint * float3(0.55, 0.58, 0.7) * 0.45;
+        return half4(half3(col), 1.0);
+    }
+
+    float3 col = float3(c);
+    if (uAtm > 0.5) {
+        // Misty dawn: cool, lifted, softer; pale rose sky; mist banks over the sea and meadow.
+        float l = luma(c);
+        col = mix(col, float3(l) * float3(0.86, 0.92, 1.04) + 0.08, 0.5);
+        float3 skyc = mix(float3(0.62, 0.70, 0.82), float3(0.96, 0.84, 0.82), pow(t, 1.6));
+        skyc = mix(skyc, float3(1.0, 0.93, 0.92), cloud * 0.7);
+        col = mix(col, skyc, sky);
+        float m = noise(float2(p.x * 0.004 + uTime * 0.02, p.y * 0.018))
+                * 0.7 + noise(float2(p.x * 0.011 - uTime * 0.03, p.y * 0.04)) * 0.3;
+        float band = smoothstep(uHorizon - 140.0, uHorizon + 10.0, p.y) * smoothstep(uHorizon + 520.0, uHorizon + 120.0, p.y);
+        col = mix(col, float3(0.93, 0.92, 0.95), clamp(m * band * 1.1, 0.0, 0.75));
+    } else {
+        // Golden hour: the art as painted, plus a warm glint on the water toward the sun.
+        float sunX = uArt.x * 0.55;
+        float path = exp(-abs(p.x - sunX) / (60.0 + 220.0 * depth));
+        float glint = smoothstep(0.64, 0.82, noise(float2(p.x * 0.012 + uTime * 0.05, p.y * 0.32 / depth + uTime * 0.6)));
+        col += water * path * glint * float3(1.0, 0.86, 0.6) * 0.22;
+    }
+    return half4(half3(col), 1.0);
+}
