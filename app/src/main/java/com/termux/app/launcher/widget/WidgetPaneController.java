@@ -86,8 +86,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void onHomePaletteSwipe(boolean up) { }
         /** A press on the free area with swipe up set to the drawer: ready its content. */
         default void onHomeDrawerPressed() { }
-        /** Swipe up on the free area, set to the drawer, took off: true when the drag took it. */
-        default boolean onHomeDrawerDragBegin(float downRawY) { return false; }
+        /**
+         * Swipe up on the free area, set to the drawer, took off at {@code claimRawY}: true when
+         * the drag took it.
+         */
+        default boolean onHomeDrawerDragBegin(float claimRawY) { return false; }
         default void onHomeDrawerDrag(float rawY) { }
         /** The drawer's drag was let go; velocity is positive downward. */
         default void onHomeDrawerDragEnd(float velocityYPxPerSec) { }
@@ -267,8 +270,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 host.onHomePaletteSwipe(up);
             }
             @Override public void onFreeAreaDrawerPressed() { host.onHomeDrawerPressed(); }
-            @Override public boolean onFreeAreaDrawerDragBegin(float downRawY) {
-                return host.onHomeDrawerDragBegin(downRawY);
+            @Override public boolean onFreeAreaDrawerDragBegin(float claimRawY) {
+                return host.onHomeDrawerDragBegin(claimRawY);
             }
             @Override public void onFreeAreaDrawerDrag(float rawY) { host.onHomeDrawerDrag(rawY); }
             @Override public void onFreeAreaDrawerDragEnd(float velocityYPxPerSec) {

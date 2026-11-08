@@ -65,12 +65,13 @@ public final class WidgetPaneView extends FrameLayout
         default void onFreeAreaDrawerPressed() { }
         /**
          * A swipe up on the free area, set to the drawer, passed the slop: true when the drawer's
-         * live drag took it ({@code downRawY} is where the finger went down), after which the pane
+         * live drag took it ({@code claimRawY} is the finger's screen y at the claim, where the
+         * drawer's top edge starts following it 1:1), after which the pane
          * reports {@link #onFreeAreaDrawerDrag}, then {@link #onFreeAreaDrawerDragEnd} or
          * {@link #onFreeAreaDrawerDragCancel} and sends no palette swipe. False leaves the
          * gesture to the discrete swipe.
          */
-        default boolean onFreeAreaDrawerDragBegin(float downRawY) { return false; }
+        default boolean onFreeAreaDrawerDragBegin(float claimRawY) { return false; }
         /** Every move of the drawer's live drag; {@code rawY} is the finger's screen y. */
         default void onFreeAreaDrawerDrag(float rawY) { }
         /** The finger let go; {@code velocityYPxPerSec} is positive downward. */
@@ -251,7 +252,6 @@ public final class WidgetPaneView extends FrameLayout
         com.termux.app.launcher.home.HomeGestures.Action.NONE;
     /** The free-area stream is the app drawer's live drag. */
     private boolean drawerDragging;
-    private float pagingDownRawY;
     /**
      * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
      * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
@@ -1005,7 +1005,6 @@ public final class WidgetPaneView extends FrameLayout
                 if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
-                pagingDownRawY = event.getRawY();
                 if (verticalCandidate
                     && swipeUpAction == com.termux.app.launcher.home.HomeGestures.Action.DRAWER
                     && listener != null) {
@@ -1071,7 +1070,7 @@ public final class WidgetPaneView extends FrameLayout
                     pagingTracking = false;
                     if (verticalCandidate && listener != null
                         && HomeDrawerDragPolicy.claims(swipeUpAction, dx, dy, touchSlop)
-                        && listener.onFreeAreaDrawerDragBegin(pagingDownRawY)) {
+                        && listener.onFreeAreaDrawerDragBegin(event.getRawY())) {
                         // Swipe up is the drawer: it follows the finger from this move, which
                         // is not delivered to onTouchEvent.
                         drawerDragging = true;
