@@ -3835,10 +3835,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
-        // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
-        // keeps its own writer (the same cell, Base).
+        // Margin is one number for every page, Base's alone: whatever Where says, it keeps its
+        // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
-            return onPageSide();
+            return false;
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;
@@ -3904,11 +3904,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return false;
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
                 grid.write(cell, GlassRows.toCell(row, value));
-            // A kind's Margin moves the shapes as Base's does (writeMargin).
-            if (row == Row.MARGIN) {
-                requestGeometryPreview();
-                syncLayoutSession();
-            }
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -7010,8 +7005,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The name a redesigned card gives a row where it is not the row's own. */
     @Nullable
     private CharSequence cardRowName(@NonNull Row row) {
-        if (row == Row.MARGIN && (mCard == EditorCard.TERMINAL || mCard == EditorCard.KEYBOARD))
-            return getString(R.string.editor_row_outer_margin);
         if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
             return getString(R.string.editor_row_background_opacity);
         if (row == Row.KEYBOARD_THEME)

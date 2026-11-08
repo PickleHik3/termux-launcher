@@ -18,6 +18,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **One Margin for every page (11-08, perf/bar-travel).** Owed on pong, on an install whose
+  Home Margin differed from the Workspace's: after the update every page (Home, Workspace,
+  Assistant, Display) wears the Margin Home wore, on the status bar, the dock and the panes,
+  Docked and Floating, keyboard up and down, one pane and split. The Appearance editor shows
+  Margin only on Customization (not on Home, Workspace, Dock, Status bar, Terminal or Keyboard);
+  moving it, with Where on Everywhere or on a page, moves every page alike, and Discard puts it
+  back. Swipe Home2 <-> Workspace 5 times: the status bar keeps its inset through the slide and
+  the landing, and the window chips and the Wall strip are the landed page's. Trace: no
+  `Bar.refresh` under `Touch.dispatch` on a drag, no `Wall.halfRedress` where only the Margins
+  differed before · pong.
 - **Landing dresses the dock once (11-08, perf/landing-settle).** Owed on pong, with Home's
   layout on a different Dock design or Drawer tile from the Workspace's: Perfetto over 5
   Home <-> Workspace round trips shows one `Dock.restyle` per `Wall.settleChrome` (was two, one

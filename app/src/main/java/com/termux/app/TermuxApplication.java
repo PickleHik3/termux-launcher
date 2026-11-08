@@ -163,6 +163,10 @@ public class TermuxApplication extends Application {
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()),
                 com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+            com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()));
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);

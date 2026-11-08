@@ -37,17 +37,13 @@ public class EditorCardSectionsTest {
         return out;
     }
 
-    /** {@link #block} with the page card's own Margin among the sliders, after Depth. */
-    private static List<Row> blockWithMargin(Row... toggles) {
-        List<Row> out = block(toggles);
-        out.add(out.indexOf(Row.DEPTH) + 1, Row.MARGIN);
-        return out;
-    }
-
-    /** {@link #blockWithMargin}, with the Home card's Wallpaper dim between Depth and Margin. */
+    /**
+     * {@link #block} with the Home card's Wallpaper dim after Depth. Margin is Customization's
+     * alone: one number for every page, so no page or element card shows it.
+     */
     private static List<Row> blockWithDim() {
-        List<Row> out = blockWithMargin();
-        out.add(out.indexOf(Row.MARGIN), Row.WALLPAPER_DIM);
+        List<Row> out = block();
+        out.add(out.indexOf(Row.DEPTH) + 1, Row.WALLPAPER_DIM);
         return out;
     }
 
@@ -124,14 +120,14 @@ public class EditorCardSectionsTest {
     @Test
     public void workspace() {
         check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", blockWithMargin(Row.CONTRAST, Row.MINIMAL),
+            "SECTION_APPEARANCE", block(Row.CONTRAST, Row.MINIMAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
     }
 
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_POSITION, Row.MARGIN, Row.STATUS_INDICATORS),
+            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
             "SECTION_APPEARANCE", block(),
@@ -141,7 +137,7 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.MARGIN, Row.HOME_ICON_SIZE,
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
                 Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
@@ -155,7 +151,7 @@ public class EditorCardSectionsTest {
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            CARD, Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.MARGIN, Row.CONTRAST,
+            CARD, Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST,
                 Row.CURSOR_TRAIL, Row.EFFECT, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
                 Row.PANE_BORDERS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
@@ -166,7 +162,7 @@ public class EditorCardSectionsTest {
     @Test
     public void keyboard() {
         check(EditorCard.KEYBOARD, expect(
-            CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING, Row.MARGIN,
+            CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING),
             "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
                 Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,

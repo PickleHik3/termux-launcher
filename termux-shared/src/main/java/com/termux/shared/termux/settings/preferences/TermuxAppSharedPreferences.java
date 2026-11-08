@@ -311,12 +311,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * The Margin the surfaces of Home pages ({@code home}) or of the Workspace's pages wear, in dp
-     * as stored: that kind's own once the Home or Workspace card set it, else Base's.
+     * The Margin the surfaces wear, in dp as stored: Base's on every page, Home's and the
+     * Workspace's alike (one Margin since 2026-11-08, {@link LookGridMarginMigration}). The half
+     * is still named so callers that ask for one keep compiling against one answer.
      */
     public int getLayoutMarginDp(boolean home) {
-        return fromGrid(SurfaceProperty.SIDE_GAP, lookGrid().value(LookGrid.Property.MARGIN, null,
-            home ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL));
+        return getBaseMarginDp();
     }
 
     /** Base's Margin, in dp as stored: what every kind of page wears until it holds its own. */
