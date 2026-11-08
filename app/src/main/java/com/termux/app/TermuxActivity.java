@@ -8555,7 +8555,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyDecorNavBarSurfaceState(@NonNull ChromeSpec state) {
         boolean visible = shouldShowDecorNavBarSurface(state);
-        peekDbgStrip("strip-pass", state, visible);
         if (mNavFadeActive && !mCrossing.crossing()) endNavStripFade();
         if (mNavFadeActive && applyDecorNavBarSurfaceFade(state, visible)) return;
         if (!visible) {
@@ -8788,7 +8787,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         FrameLayout overlay = mDecorNavBarSurfaceOverlay;
         if (overlay != null) overlay.setAlpha(navStripFadeAlpha());
-        peekDbgStrip("strip-fade", state, visible);
         return true;
     }
 
@@ -8816,21 +8814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (tint instanceof com.termux.app.chrome.CrossfadeDrawable)
             ((com.termux.app.chrome.CrossfadeDrawable) tint).setShare(share);
         overlay.setAlpha(navStripFadeAlpha());
-        // PEEKTRAVEL-DBG: the strip's drawn opacity, in tenths, when it changes.
-        int tenth = Math.round(overlay.getAlpha() * 10f)
-            | (overlay.getVisibility() == View.VISIBLE ? 16 : 0);
-        if (tenth != mPeekDbgFadeKey) {
-            mPeekDbgFadeKey = tenth;
-            android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
-                + " strip-frame share=" + share + " alpha=" + overlay.getAlpha()
-                + " vis=" + (overlay.getVisibility() == View.VISIBLE)
-                + " hereShown=" + mNavFadeHereShown + " thereShown=" + mNavFadeThereShown
-                + " crossfade=" + (tint instanceof com.termux.app.chrome.CrossfadeDrawable));
-        }
     }
-
-    /** PEEKTRAVEL-DBG: the strip's last logged opacity. */
-    private int mPeekDbgFadeKey = -1;
 
     /**
      * The blur radius of the glass the under-pill strip continues: the keyboard's own while it is
@@ -18615,18 +18599,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.BottomInsets bottomInsets = com.termux.app.place.BottomInsets.forKept(
             0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx);
         mDockFootPx = bottomInsets.dockFootPx;
-        int footDbgKey = (dockFoot ? 1 : 0) | (state.keyboardShown ? 2 : 0)
-            | (dockFloats() ? 4 : 0) | (mDockRows.surfaceShown() ? 8 : 0)
-            | (Math.min(bottomInsets.dockFootPx, 4095) << 4);
-        if (footDbgKey != mPeekDbgFootKey) {
-            mPeekDbgFootKey = footDbgKey;
-            android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
-                + " foot dockFoot=" + dockFoot + " footPx=" + bottomInsets.dockFootPx
-                + " kbState=" + state.keyboardShown + " floats=" + dockFloats()
-                + " dockShown=" + mDockRows.surfaceShown() + " ime=" + isImeVisible()
-                + " kept=" + mBottomKeptPx + " crossing=" + mCrossing.crossing()
-                + " rowsPage=" + stackDressPage() + " lastPage=" + mLastWallPage);
-        }
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
         int combinedHeight = stack.stackHeightPx + bottomInsets.stackExtraHeightPx;
@@ -26351,35 +26323,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 false);
         }
         return seam.dockReveal();
-    }
-
-    /** PEEKTRAVEL-DBG: the last foot and strip states logged, so each logs only changes. */
-    private int mPeekDbgFootKey = -1;
-    private int mPeekDbgStripKey = -1;
-
-    /** PEEKTRAVEL-DBG: the strip under the pill's decision and its fade, when they change. */
-    private void peekDbgStrip(@NonNull String where, @NonNull ChromeSpec state, boolean visible) {
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        float alpha = overlay == null ? -1f : overlay.getAlpha();
-        int key = (visible ? 1 : 0) | (state.keyboardShown ? 2 : 0) | (mNavFadeActive ? 4 : 0)
-            | (mNavFadeHereShown ? 8 : 0) | (mNavFadeThereKnown ? 16 : 0)
-            | (mNavFadeThereShown ? 32 : 0)
-            | (overlay != null && overlay.getVisibility() == View.VISIBLE ? 64 : 0)
-            | (where.equals("strip-fade") ? 128 : 0)
-            | (Math.round(alpha * 20f) + 1) << 8;
-        if (key == mPeekDbgStripKey) return;
-        mPeekDbgStripKey = key;
-        android.util.Log.i("PEEKTRAVEL-DBG", "PEEKTRAVEL-DBG t=" + SystemClock.uptimeMillis()
-            + " " + where + " visible=" + visible + " kbState=" + state.keyboardShown
-            + " toolbar=" + state.toolbarShown + " fade=" + mNavFadeActive
-            + " hereShown=" + mNavFadeHereShown + " thereKnown=" + mNavFadeThereKnown
-            + " thereShown=" + mNavFadeThereShown + " share=" + mNavFadeShare
-            + " overlayVis=" + (overlay != null && overlay.getVisibility() == View.VISIBLE)
-            + " alpha=" + alpha + " stripAlpha=" + decorNavStripAlpha()
-            + " navBar=" + mNavBarHeight + " capsule=" + isInAppKeyboardCapsule()
-            + " underKbBands=" + underKeyboardBandsShown() + " floatingStyle="
-            + arrangement().floating() + " floats=" + dockFloats() + " footPx=" + mDockFootPx
-            + " rowsPage=" + stackDressPage() + " lastPage=" + mLastWallPage);
     }
 
     /** PEEKTRAVEL-DBG: the last answer resolvePeekCard gave, so it logs only changes. */
