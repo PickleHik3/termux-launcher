@@ -11,11 +11,14 @@ public class LandedFrameSettleTest {
 
     @Test
     public void onlyASlidesLastFrameIntoADrawingWindowDefers() {
-        assertTrue(LandedFrameSettle.defers(true, true));
+        assertTrue(LandedFrameSettle.defers(true, true, PaneWallPage.TERMINAL));
+        assertTrue(LandedFrameSettle.defers(true, true, PaneWallPage.WIDGETS));
         // A jump, reduced motion or a page taken away at rest settles at once.
-        assertFalse(LandedFrameSettle.defers(false, true));
+        assertFalse(LandedFrameSettle.defers(false, true, PaneWallPage.TERMINAL));
         // No window drawing frames: nothing would run the post.
-        assertFalse(LandedFrameSettle.defers(true, false));
+        assertFalse(LandedFrameSettle.defers(true, false, PaneWallPage.TERMINAL));
+        // The display's landing reads the settle's attachment straight after it.
+        assertFalse(LandedFrameSettle.defers(true, true, PaneWallPage.DISPLAY));
     }
 
     @Test

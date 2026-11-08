@@ -26,10 +26,13 @@ public final class LandedFrameSettle {
      * ({@link PaneWallLayout#settleEndsSlide}), into a window that draws frames, outside a
      * test of the activity that has no looper to post to. A settle with no slide behind it (a
      * jump, reduced motion, a page taken away at rest) has no motion to keep smooth and runs at
-     * once, as it always did.
+     * once, as it always did. Neither does a landing on the display window: its landing
+     * (PaneWallController#onWallCellSettled) hands the display over right after the settle and
+     * reads the attachment the settle makes.
      */
-    public static boolean defers(boolean endsSlide, boolean windowDraws) {
-        return endsSlide && windowDraws;
+    public static boolean defers(boolean endsSlide, boolean windowDraws,
+                                 @NonNull PaneWallPage page) {
+        return endsSlide && windowDraws && page != PaneWallPage.DISPLAY;
     }
 
     /**

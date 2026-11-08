@@ -28339,7 +28339,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     boolean windowDraws = !isDestroyed() && decor != null
                         && decor.isAttachedToWindow();
                     if (com.termux.app.wall.LandedFrameSettle.defers(
-                            wall != null && wall.settleEndsSlide(), windowDraws)) {
+                            wall != null && wall.settleEndsSlide(), windowDraws, page)) {
                         Trace.beginSection("Wall.landed");
                         Trace.endSection();
                         com.termux.app.wall.PaneWallPage earlier = mLandedFrameSettle.hold(page);
