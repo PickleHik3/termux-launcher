@@ -9238,11 +9238,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mGlassDragPreview;
 
     /**
-     * Whether the crossing under way has judged the keyboard's legends (KeyboardFaceJudging): once
-     * per crossing, on its first frame that measured the keyboard's band. Cleared by any apply at
-     * rest, the landing's included.
+     * Whether the crossing under way has judged the keyboard's legends (KeyboardFaceJudging): on
+     * its first frame that measured the keyboard's band, and again when a layout moves the band.
+     * Cleared by any apply at rest, the landing's included.
      */
     private boolean mKeyboardFacesJudgedThisCrossing;
+
+    /** The keyboard band's laid-out rect as this pass measured it ({@link #measureInAppKeyboardBand}). */
+    private final Rect mKeyboardBandRect = new Rect();
+
+    /** {@link #mKeyboardBandRect} when the keyboard's legends were last judged. */
+    private final Rect mKeyboardFacesJudgedRect = new Rect();
 
     /**
      * The keyboard host's material for {@code state}, then the keys' legends re-chosen against the
@@ -9259,13 +9265,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keyboard == null || mChrome == null) return;
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
         // the band's rows and rebuilt the palette. The release's full pass chooses them once.
-        // A crossing judges them once, on its first frame that measured the band, so a keyboard it
-        // brings up rises in the inks it lands in; the landing's apply re-judges at rest
-        // (KeyboardFaceJudging).
+        // A crossing judges them once, on its first frame that measured the band, and again only
+        // when a layout moves the band (its first frame can stand on the page it left), so a
+        // keyboard it brings up rises in the inks it lands in; the landing's apply re-judges at
+        // rest (KeyboardFaceJudging).
         boolean crossing = mCrossing.crossing();
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
+        boolean bandMoved = mKeyboardBandAskedThisPass
+            && !mKeyboardBandRect.equals(mKeyboardFacesJudgedRect);
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
-            crossing, mKeyboardFacesJudgedThisCrossing)) return;
+            crossing, mKeyboardFacesJudgedThisCrossing, bandMoved)) return;
         if (!mKeyboardBandAskedThisPass) {
             if (com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.clearsWithoutBand(crossing))
                 keyboard.setGlassFaces(new int[0]);
@@ -9283,6 +9292,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
             keyboard.setGlassFaces(faces,
                 ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+            mKeyboardFacesJudgedRect.set(mKeyboardBandRect);
         } finally {
             Trace.endSection();
         }
@@ -9300,8 +9310,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
         boolean crossing = mCrossing.crossing();
         if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
-        if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
-            crossing, mKeyboardFacesJudgedThisCrossing)) return;
+        // Mid-crossing too: the ink names each stand-in reading once, so this is one judgment.
+        if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.rejudgeDue(
+            mGlassDragPreview)) return;
         pushKeyboardGlassFaces(keyboard);
         if (crossing) mKeyboardFacesJudgedThisCrossing = true;
     }
@@ -9723,6 +9734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(dark),
             com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(pale),
             inks[3], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        mKeyboardBandRect.set(host);
         mKeyboardBandAskedThisPass = true;
         return com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD;
     }
