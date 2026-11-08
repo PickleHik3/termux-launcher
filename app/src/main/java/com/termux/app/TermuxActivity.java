@@ -33586,6 +33586,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * {@link #refreshTerminalWindowBar} for focus moved to another pane of the window on screen
+     * ({@code PaneFocusNotice.Kind.PANE}): the window chips and their label poll only. A bar put
+     * away takes the full pass, which also feeds the Wall strip's tiles.
+     */
+    private void refreshTerminalWindowBarChips() {
+        if (mWindowBarRefreshBatchDepth > 0) {
+            mWindowBarRefreshPending = true;
+            return;
+        }
+        View host = findViewById(R.id.terminal_window_bar_host);
+        com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (host == null || bar == null) return;
+        if (host.getVisibility() != View.VISIBLE) {
+            refreshTerminalWindowBar();
+            return;
+        }
+        Trace.beginSection("Bar.chipsOnly");
+        try {
+            scheduleWindowLabelPoll(syncWindowBarItems(bar));
+            if (mRenameCoordinator != null && mRenameCoordinator.isActive())
+                mRenameCoordinator.reposition();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
      * Push the current window list — labels, selection and working state — into {@code bar}, and
      * return the pane pids for the foreground resolver. Split out of
      * {@link #refreshTerminalWindowBar()} so the shell-activity refresh can update the pills without
@@ -36359,6 +36386,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onActivePaneChanged() {
+            adoptActivePane();
+            refreshTerminalWindowBar();
+        }
+
+        @Override public void onActivePaneMoved() {
+            adoptActivePane();
+            // Another pane of the same window: the bar's glass, clock, widgets and place row read
+            // nothing the active pane moves, only its window chips do.
+            refreshTerminalWindowBarChips();
+        }
+
+        private void adoptActivePane() {
             TerminalView v = mPaneController.getActivePaneView();
             if (v != null) {
                 mActivePane = v;
@@ -36367,7 +36406,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxTerminalExtraKeys.setTerminalView(v);
             }
             mCurrentTabPrimary = mPaneController.getActiveSession();
-            refreshTerminalWindowBar();
         }
 
         @Override public void onTreesChanged() {

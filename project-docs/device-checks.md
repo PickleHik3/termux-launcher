@@ -770,3 +770,12 @@ longer counted as an error. Owed:
   wallpaper and open the Appearance editor once: the bar's frost follows. Trace: no drag frame
   holds two `Frost.updateTopPane` passes; under `Wall.chromeTravel`, the new `Travel.*`,
   `Place.hosts.*` and `Settle.*` sections name the rest of each slow frame · pong.
+- **A finger on the focused pane leaves the bar alone (11-08, perf/swipe-ends).** On the
+  Workspace with one pane and with a split, keyboard up and down, Docked and Floating: start 5
+  Home2 <-> Workspace swipes on the terminal; the terminal keeps drawing through each slide. Tap
+  the pane that has focus: nothing in the bar changes. In a split, tap the other pane: it takes
+  focus (cursor, border, dim) and the window chip's label follows it. With a Home float focused,
+  go to the Workspace and tap a pane: the float lets go of the keyboard and the bar selects the
+  window. Switch windows from a chip: the bar refreshes in full. Trace: no `Bar.refresh` under
+  `View.onTouchListener#onTouch - TerminalView`; a tap on the other pane shows only
+  `Bar.chipsOnly` · pong.

@@ -207,6 +207,11 @@ public class TerminalPaneController {
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
         void onActivePaneChanged();
+        /**
+         * A touch moved focus to another pane of the window already shown ({@link
+         * PaneFocusNotice.Kind#PANE}): what is keyed off the active view, and the window chips.
+         */
+        default void onActivePaneMoved() { onActivePaneChanged(); }
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /**
@@ -2275,7 +2280,8 @@ public class TerminalPaneController {
         Leaf leaf = findLeafInWindow(mActiveWindow, session);
         if (leaf != null) {
             // A pane of the window taken: Home's floats give the keyboard back.
-            if (mFocusedHomeFloat != null) {
+            boolean floatReleased = mFocusedHomeFloat != null;
+            if (floatReleased) {
                 mFocusedHomeFloat = null;
                 applyHomeFloatLift();
             }
@@ -2288,7 +2294,11 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            activePaneChanged();
+            // Every finger that lands on the terminal comes through here, the start of a page
+            // swipe included: the host hears only what its bar does not already show.
+            activePaneChanged(PaneFocusNotice.of(mFocusEventSession, mFocusEventWindow,
+                mFocusEventView, getActiveSession(), mActiveWindow, getActivePaneView(),
+                floatReleased));
         }
     }
 
@@ -2701,12 +2711,23 @@ public class TerminalPaneController {
     /** The pane the last focus wobble looked at, and its window: a wobble needs a change. */
     @Nullable private TerminalSession mFocusEventSession;
     @Nullable private Window mFocusEventWindow;
+    /** The active pane view the host was last told of, beside the session and window above. */
+    @Nullable private TerminalView mFocusEventView;
 
     /**
      * Tells the host the active pane may have changed, and plays the focus wobble on the newly
      * focused pane when focus moved between panes of one window that holds more than one.
      */
     private void activePaneChanged() {
+        activePaneChanged(PaneFocusNotice.Kind.FULL);
+    }
+
+    /**
+     * {@link #activePaneChanged()} told only as much as {@code notice} says changed: nothing for
+     * a finger on the pane the host already shows, the chips alone for another pane of its window.
+     */
+    private void activePaneChanged(@NonNull PaneFocusNotice.Kind notice) {
+        if (notice == PaneFocusNotice.Kind.NONE) return;
         TerminalSession now = getActiveSession();
         Window window = mActiveWindow;
         if (now != null && mFocusEventSession != null && now != mFocusEventSession
@@ -2714,8 +2735,10 @@ public class TerminalPaneController {
             screenEvent(now, PaneScreenEvent.Kind.FOCUS_WOBBLE);
         mFocusEventSession = now;
         mFocusEventWindow = window;
+        mFocusEventView = getActivePaneView();
         refreshPaneDims();
-        mHost.onActivePaneChanged();
+        if (notice == PaneFocusNotice.Kind.PANE) mHost.onActivePaneMoved();
+        else mHost.onActivePaneChanged();
     }
 
     /**
