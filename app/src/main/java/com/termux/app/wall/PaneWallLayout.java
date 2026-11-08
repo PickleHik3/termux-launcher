@@ -3267,7 +3267,13 @@ public final class PaneWallLayout extends ViewGroup
             @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
             @Override public void onAnimationEnd(Animator animation) {
                 if (mSlide == animation) mSlide = null;
-                if (!mCancelled) settleImmediately();
+                if (mCancelled) return;
+                mSettleEndsSlide = true;
+                try {
+                    settleImmediately();
+                } finally {
+                    mSettleEndsSlide = false;
+                }
             }
         });
         mSlide = slide;
@@ -3282,6 +3288,18 @@ public final class PaneWallLayout extends ViewGroup
         ValueAnimator slide = mSlide;
         mSlide = null;
         if (slide != null) slide.cancel();
+    }
+
+    /** Set while a slide's own last frame settles the wall (its animator ended, not cancelled). */
+    private boolean mSettleEndsSlide;
+
+    /**
+     * Whether the settle being reported is the last frame of a slide: the frame the page lands
+     * in, drawn as the slide's last step. A listener may leave what does not show in it for just
+     * after that frame (LandedFrameSettle). False for a settle with no slide behind it.
+     */
+    public boolean settleEndsSlide() {
+        return mSettleEndsSlide;
     }
 
     private void settleImmediately() {

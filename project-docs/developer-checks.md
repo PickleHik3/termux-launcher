@@ -10,6 +10,15 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Swipe stalls (2026-11-08)
+- 2026-11-08 · 96f3c94ae, 30270fe41 · Bench `set.sh` x3, H2 ↔ WS and WS ↔ AI, against
+  9dae2f26e: the landed frame (`Wall.landed`) under 16.7 ms; `Wall.pageSettled` now runs in the
+  frame after, at rest (its cost is unchanged; check that frame shows nothing changing); on
+  Home2 → Workspace with Peek glass, `Chrome.applyChromeSpec` drops from 10-15 to about 3-5 per
+  swipe and `Chrome.requestSync 161` no longer repeats mid-drag. By eye: no flash of the
+  pre-landing chrome after a swipe lands; the Peek card's reflection never lags the dock while
+  the keyboard rises · pong.
+
 ## Live glass hand-off (2026-11-04)
 - 2026-11-04 · 98eec710c
   · Live blur on, Carousel, a Home page of built-in widgets: a screen recording of page swipes
