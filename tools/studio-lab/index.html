@@ -41,7 +41,7 @@
   aside { width: 520px; max-width: 100%; display: flex; flex-direction: column; gap: 22px; padding-top: 8px; }
   h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
   h1 b { color: var(--fg); }
-  .sentence { font-size: 27px; line-height: 1.55; font-weight: 300; letter-spacing: -.2px; color: #d6d3df; }
+  .sentence { font-size: 34px; line-height: 1.45; font-weight: 300; letter-spacing: -.2px; color: #d6d3df; }
   .word { position: relative; color: var(--fg); font-weight: 500; cursor: pointer; white-space: nowrap;
     border-bottom: 2px solid rgba(201,184,255,.45); padding: 0 1px; user-select: none; transition: border-color .15s; }
   .word:hover { border-bottom-color: var(--accent); }
@@ -89,7 +89,7 @@
     </div>
   </div>
   <aside>
-    <h1><b>Studio</b> lab · <span id="familyName">Bloom</span></h1>
+    <h1><b>Studio</b> lab</h1>
     <div class="sentence" id="sentence"></div>
     <div class="hint">Tap a word to change it. Shift-click or long-press to lock it. Space shuffles.</div>
     <div class="row">
@@ -102,6 +102,11 @@
       <span class="seed" id="seedBox" title="Click to lock the seed">seed <b id="seed">1</b></span>
       <span>·</span><span><b id="fps">–</b> fps</span>
       <span>·</span><span id="res"></span>
+    </div>
+    <div class="row readout" id="hourRow" hidden>
+      <label for="hour">Time of day, for review only</label>
+      <input type="range" id="hour" min="0" max="24" step="0.25" style="flex:1; accent-color: var(--accent)">
+      <b id="hourVal"></b>
     </div>
     <div>
       <div class="label">Variations</div>
