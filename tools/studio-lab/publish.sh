@@ -9,7 +9,9 @@ repo="$(cd "$here/../.." && pwd)"
 out="${STUDIO_LAB_OUT:-$HOME/reports/studio-lab}"
 
 mkdir -p "$out/shaders"
-cp "$here/index.html" "$here/lab.js" "$out/"
+cp "$here/lab.js" "$out/"
+# Stamp the script link so browsers fetch the new lab.js after every publish.
+sed "s|src=\"lab.js\"|src=\"lab.js?v=$(date +%s)\"|" "$here/index.html" > "$out/index.html"
 rm -f "$out/shaders/"*
 cp "$repo/app/src/main/assets/studio/"* "$out/shaders/"
 echo "Published to $out"

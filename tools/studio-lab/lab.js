@@ -9,12 +9,26 @@ const PHONE = { w: 1080, h: 2412 };
 const TILE = { w: 180, h: 402 };
 
 const $ = (id) => document.getElementById(id);
+
+// No GPU (software WebGL such as SwiftShader or llvmpipe): render at a fraction of the size and
+// start paused, or the heavy shader holds the main thread and clicks never land.
+function softwareGl() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) return true;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const r = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+    return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(r);
+  } catch (e) { return true; }
+}
+const SOFTWARE = new URLSearchParams(location.search).has('lowres') || softwareGl();
+const RENDER_SCALE = SOFTWARE ? 0.5 : 1;
 const params = new URLSearchParams(location.search);
 
 const lab = {
   ck: null, recipe: null, family: null, familyId: 'bloom', effect: null,
   words: {}, seed: 1, dark: true, locks: new Set(), seedLocked: false,
-  paused: params.has('t'), time: params.has('t') ? parseFloat(params.get('t')) : 0,
+  paused: params.has('t') || SOFTWARE, time: params.has('t') ? parseFloat(params.get('t')) : 0,
   views: [], ready: null, errors: [],
 };
 window.lab = lab;
@@ -122,7 +136,7 @@ function packUniforms(effect, values, into) {
 }
 
 function makeView(canvas, cssW, cssH, darkOverride) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * RENDER_SCALE;
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   canvas.width = Math.round(cssW * dpr);
@@ -150,17 +164,20 @@ function drawView(view, time) {
   shader.delete();
 }
 
-function renderStill(words, seed, dark, time, w, h) {
+// Variations tiles are WebGL canvases drawn once per change. A CPU surface
+// (ck.MakeSurface) runs the shader in software and froze the page on every click.
+const tileViews = [];
+function tileView(k) {
+  if (tileViews[k]) return tileViews[k];
   const ck = lab.ck;
-  const surface = ck.MakeSurface(w, h);
-  const paint = new ck.Paint();
-  const shader = lab.effect.makeShader(packUniforms(lab.effect, uniformValues(words, seed, dark, time, w, h)));
-  paint.setShader(shader);
-  surface.getCanvas().drawPaint(paint);
-  const img = surface.makeImageSnapshot();
-  const bytes = img.encodeToBytes();
-  img.delete(); shader.delete(); paint.delete(); surface.delete();
-  return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(TILE.w * (SOFTWARE ? 0.5 : 1));
+  canvas.height = Math.round(TILE.h * (SOFTWARE ? 0.5 : 1));
+  canvas.onclick = () => { lab.seed = Number(canvas.dataset.seed); changed(); };
+  $('vars').appendChild(canvas);
+  let surface = ck.MakeWebGLCanvasSurface(canvas);
+  if (!surface) surface = ck.MakeSWCanvasSurface(canvas);
+  return (tileViews[k] = { canvas, surface, paint: new ck.Paint(), uniforms: null });
 }
 
 let varTimer = 0;
@@ -168,17 +185,18 @@ function renderVariations() {
   if (params.has('single')) return;   // ?single: one frame, no tiles (headless shots)
   clearTimeout(varTimer);
   varTimer = setTimeout(() => {
-    const box = $('vars');
-    for (const img of box.querySelectorAll('img')) URL.revokeObjectURL(img.src);
-    box.textContent = '';
     for (let k = 1; k <= 4; k++) {
       const seed = (lab.seed * 7919 + k * 104729) % 99991 + 1;
-      const img = document.createElement('img');
-      img.src = renderStill(lab.words, seed, lab.dark, 6.0, TILE.w, TILE.h);
-      img.title = 'seed ' + seed;
-      img.dataset.seed = seed;
-      img.onclick = () => { lab.seed = seed; changed(); };
-      box.appendChild(img);
+      const v = tileView(k - 1);
+      v.canvas.title = 'seed ' + seed;
+      v.canvas.dataset.seed = seed;
+      const values = uniformValues(lab.words, seed, lab.dark, 6.0, v.canvas.width, v.canvas.height);
+      v.uniforms = packUniforms(lab.effect, values, v.uniforms);
+      const shader = lab.effect.makeShader(v.uniforms);
+      v.paint.setShader(shader);
+      v.surface.getCanvas().drawPaint(v.paint);
+      v.surface.flush();
+      shader.delete();
     }
   }, 120);
 }
@@ -362,7 +380,7 @@ async function boot() {
   let frames = 0;
   let fpsAt = last;
   const loop = (now) => {
-    requestAnimationFrame(loop);
+    if (SOFTWARE) setTimeout(() => loop(performance.now()), 100); else requestAnimationFrame(loop);
     const dt = Math.min(now - last, 100) / 1000;
     last = now;
     if (lab.paused) { fpsAt = now; frames = 0; return; }   // paused: draw only on change
@@ -375,7 +393,10 @@ async function boot() {
       fpsAt = now;
     }
   };
-  requestAnimationFrame(loop);
+  if (SOFTWARE) {
+    $('res').textContent += ' · no GPU: low resolution, paused';
+    setTimeout(() => loop(performance.now()), 100);
+  } else requestAnimationFrame(loop);
 }
 
 lab.ready = boot().catch((e) => { showError(String(e && e.stack || e)); throw e; });
