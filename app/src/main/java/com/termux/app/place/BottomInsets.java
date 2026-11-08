@@ -87,6 +87,25 @@ public final class BottomInsets {
         return Math.max(0, systemImeTakePx) - Math.max(0, keptPx);
     }
 
+    /**
+     * How much of the in-app keyboard's bottom is cut while the wall's travel has the accessory
+     * stack {@code travelPx} below where it is laid out: whatever has slid past the keyboard
+     * column's laid-out bottom, which stands {@code belowKeyboardPx} under the keyboard (the bands
+     * under it, their air, the column's padding) and {@link #stackPaddingPx} above the stack's
+     * own laid-out bottom. The stack's clip cuts at its own bottom, which with the dock's foot
+     * reaches the screen's edge; the column stands the foot's band higher
+     * ({@link #keyboardColumnMarginPx}), so a keyboard slid down off a crossing to a keyboard-down
+     * page would show its top row in that band under the gesture pill. Without a foot the column
+     * margin is 0 and this cuts exactly where the stack's clip does. {@code keyboardSharePx} is
+     * the keyboard's own share, which hides it behind bands held up under it; the larger cut wins.
+     */
+    public static int keyboardTravelHiddenPx(float travelPx, float keyboardSharePx,
+                                             int belowKeyboardPx, int stackPaddingPx) {
+        float slidPast = Math.max(0f, travelPx) - Math.max(0, belowKeyboardPx)
+            - Math.max(0, stackPaddingPx);
+        return Math.round(Math.max(Math.max(0f, keyboardSharePx), slidPast));
+    }
+
     /** Where the rows' bottom stands above the screen's bottom edge: the parity number. */
     public int rowsBottomFromScreenBottomPx() {
         return rootPaddingPx + stackMarginPx + stackPaddingPx + keyboardColumnMarginPx;

@@ -34,6 +34,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
   same mid-swipe as at rest at either end.
   How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
+- **No keyboard under the pill after landing (11-08, fix/keyboard-under-dock).** Dock design
+  Peek glass, Live blur and Fancier glass on, gesture navigation; in-app keyboard up on the
+  Workspace, down on Home2. Workspace → Home2, Docked and Floating, and back. Passes: once the
+  keyboard has slid down, no keycap (the number row) shows at the screen's bottom under the
+  gesture pill on any frame, during the dock's rise or in the ~0.5 s before the wall settles; the
+  band under the pill shows the dock's glass. Back to the Workspace, the keyboard rises in above
+  the pill band, not out of it. How: pong with the developer's go-ahead, `screenrecord` at 30 fps
+  read frame by frame around the landing.
 - **Peek reflection never sharp (11-08, fix/peek-band).** Dock design Peek glass, Reflection
   on, Fancier glass on; Workspace (keyboard up) → Home2 and back, Docked and Floating. Passes: from
   the landing on, the icons' reflection under the A–Z letters is soft and faint on every frame,

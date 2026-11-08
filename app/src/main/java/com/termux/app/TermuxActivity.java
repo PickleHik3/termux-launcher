@@ -11739,6 +11739,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         accessoryContainer.setClipBounds(mTmpTravelClip);
     }
 
+    /**
+     * How far the keyboard column's bottom stands under the keyboard: the bands under it with
+     * their air, and the column's own padding.
+     */
+    private static int belowKeyboardInColumnPx(@NonNull View column, @Nullable View under) {
+        int below = column.getPaddingBottom();
+        if (under == null || under.getVisibility() == View.GONE || under.getParent() != column)
+            return below;
+        below += under.getHeight();
+        ViewGroup.LayoutParams params = under.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams) {
+            below += ((ViewGroup.MarginLayoutParams) params).topMargin
+                + ((ViewGroup.MarginLayoutParams) params).bottomMargin;
+        }
+        return below;
+    }
+
+    /** The accessory stack's bottom padding: what stands between its column and its bottom. */
+    private int accessoryStackPaddingBottomPx() {
+        View container = hotView(R.id.accessory_stack_container);
+        return container == null ? 0 : container.getPaddingBottom();
+    }
+
     /** Scratch for the travel clip; setClipBounds copies it. */
     private final Rect mTmpTravelClip = new Rect();
     /** Scratch for the keyboard's own clip while it rises from behind the bands under it. */
@@ -11755,9 +11778,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyUnderKeyboardTravel() {
         View under = hotView(R.id.accessory_under_keyboard_stack);
         View keyboard = hotView(R.id.inapp_keyboard_container);
-        boolean holds = under != null && mDockRows.underKeyboardBandsShown()
-            && keyboard != null && keyboard.getVisibility() != View.GONE
-            && keyboard.getParent() == hotView(R.id.accessory_keyboard_column);
+        View column = hotView(R.id.accessory_keyboard_column);
+        boolean inColumn = keyboard != null && keyboard.getVisibility() != View.GONE
+            && column != null && keyboard.getParent() == column;
+        boolean holds = under != null && mDockRows.underKeyboardBandsShown() && inColumn;
         float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
         if (under != null && under.getTranslationY() != -share) {
             under.setTranslationY(-share);
@@ -11765,7 +11789,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (under.getBackground() != null) under.invalidate();
         }
         if (keyboard == null) return;
-        int hidden = Math.round(share);
+        // The keyboard is also cut where it slides past its column's laid-out bottom, not only the
+        // stack's: with the dock's foot the stack reaches the screen's edge and the column stands
+        // the foot's band above it, so the tail of a crossing to a keyboard-down page would show
+        // the slid keyboard's top row under the gesture pill (BottomInsets#keyboardTravelHiddenPx).
+        int hidden = inColumn ? com.termux.app.place.BottomInsets.keyboardTravelHiddenPx(
+                mDockTravelTranslationPx, share, belowKeyboardInColumnPx(column, under),
+                accessoryStackPaddingBottomPx())
+            : Math.round(share);
         if (hidden <= 0) {
             if (keyboard.getClipBounds() != null) keyboard.setClipBounds(null);
             return;
@@ -18606,6 +18637,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        // A pass that moves the stack's bottom (the foot coming or going, its height, its padding)
+        // while the travel holds it below its layout re-cuts the travel's clips for that bottom.
+        if ((flushInsetChanged || accessoryHeightChanged || accessoryMarginChanged)
+            && mDockTravelTranslationPx > 0f) {
+            applyAccessoryStackTranslation();
+        }
         // Home floats are laid out between the status bar and the dock, and lifted over the
         // keyboard: they hear the stack's rows from this pass.
         mHomeFloatDockPx = stack.homeFloatDockPx;

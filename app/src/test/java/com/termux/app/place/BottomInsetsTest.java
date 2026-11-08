@@ -101,4 +101,43 @@ public class BottomInsetsTest {
                                 }
                             }
     }
+
+    /**
+     * The tail of a Workspace -> Home crossing on pong: Home's rows stand, so the stack takes the
+     * foot (margin 0, the column one inset up) while the Workspace's 654 px keyboard is still laid
+     * out in the column and the travel holds the stack 654 px down. The stack's clip cuts at its
+     * own bottom, the screen's edge, which left the keyboard's top 63 px (its number row) showing
+     * under the gesture pill; the keyboard's own cut hides all of it.
+     */
+    @Test
+    public void keyboardSlidOutUnderTheFootIsCutWhole() {
+        int keyboard = 654;
+        BottomInsets foot = BottomInsets.forKept(0, NAV, true, 0, 0);
+        int travel = keyboard;
+        // The stack's clip alone hides what slid past the stack's bottom, which stands the
+        // column's margin (the foot's band) below the keyboard: the band's worth stays in sight.
+        int hiddenByStackClip = travel - foot.keyboardColumnMarginPx - foot.stackPaddingPx;
+        assertEquals(keyboard - NAV, hiddenByStackClip);
+        assertEquals(keyboard,
+            BottomInsets.keyboardTravelHiddenPx(travel, 0f, 0, foot.stackPaddingPx));
+    }
+
+    /** Without a foot the column stands on the stack's bottom: the cut is the stack's own. */
+    @Test
+    public void keyboardCutWithoutAFootIsTheStacksOwn() {
+        int flush = 24;
+        BottomInsets noFoot = BottomInsets.forKept(0, NAV, false, 0, flush);
+        assertEquals(0, noFoot.keyboardColumnMarginPx);
+        // The stack clips at its bottom minus the travel; the keyboard ends the padding above it.
+        assertEquals(300 - flush,
+            BottomInsets.keyboardTravelHiddenPx(300f, 0f, 0, noFoot.stackPaddingPx));
+        // Bands under the keyboard take the slide first.
+        assertEquals(300 - flush - 120,
+            BottomInsets.keyboardTravelHiddenPx(300f, 0f, 120, noFoot.stackPaddingPx));
+        // At rest, or slid up, nothing is cut.
+        assertEquals(0, BottomInsets.keyboardTravelHiddenPx(0f, 0f, 0, 0));
+        assertEquals(0, BottomInsets.keyboardTravelHiddenPx(-80f, 0f, 0, 0));
+        // The keyboard's own share behind held bands wins when it is the larger cut.
+        assertEquals(200, BottomInsets.keyboardTravelHiddenPx(300f, 200f, 120, 0));
+    }
 }
