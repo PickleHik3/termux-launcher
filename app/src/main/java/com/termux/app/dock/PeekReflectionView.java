@@ -82,7 +82,7 @@ public final class PeekReflectionView extends View {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        mSource.drawOn(canvas, mOriginX, mOriginY);
+        mSource.drawOn(this, canvas, mOriginX, mOriginY);
     }
 
     @Override

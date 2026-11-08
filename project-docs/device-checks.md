@@ -22,8 +22,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   in-app keyboard rising, then Workspace → Home2; keyboard up and down at the start; Docked and
   Floating dock. Passes: the rising keyboard's function chips and legends are already the
   Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
-  same mid-swipe as at rest at either end (regression 2, not yet pinned: report what shows there).
+  same mid-swipe as at rest at either end.
   How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
+- **Peek reflection never sharp (11-08, fix/crossing-look).** Dock design Peek glass, Reflection
+  on, Fancier glass on; Workspace (keyboard up) → Home2 and back, Docked and Floating. Passes: from
+  the landing on, the icons' reflection under the A–Z letters is soft and faint on every frame,
+  never sharp or bright; at worst it is absent for a moment, then appears soft. How: pong with
+  the developer's go-ahead, `screenrecord` read frame by frame around the landing.
 - **Backdrop layers, no pop (11-07, perf/glass-slide-on-swipe).** Look Custom (Opacity 12, Blur 20,
   Edge 40, Depth 90), Live blur on, glass widgets on Home, a float over them. Screenshots at rest,
   on the first moving frame, mid-swipe and after landing, Home ↔ Workspace both ways. Passes: the

@@ -334,10 +334,16 @@ public final class PeekGlassReflection {
 
     // ------------------------------------------------------------------ drawing
 
-    /** Draws the reflection on a view whose origin stands at {@code originX}, {@code originY}. */
-    void drawOn(@NonNull Canvas canvas, float originX, float originY) {
+    /**
+     * Draws the reflection on {@code view}, whose origin stands at {@code originX},
+     * {@code originY}. The live recording is the row flipped, plain: it is drawn only on a view
+     * that wears the live fade over it ({@link #drawsLiveRecording}).
+     */
+    void drawOn(@NonNull PeekReflectionView view, @NonNull Canvas canvas, float originX,
+                float originY) {
         PeekGlassGeometry.Card card = mCard;
         if (!mShown || card == null) return;
+        if (mLive && !drawsLiveRecording(view.effectKind)) return;
         int save = canvas.save();
         canvas.translate(-originX, -originY);
         if (mLive) {
@@ -349,6 +355,17 @@ public final class PeekGlassReflection {
             }
         }
         canvas.restoreToCount(save);
+    }
+
+    /**
+     * Whether a view wearing {@code effectKind} draws the live recording. Only under the live fade:
+     * without it the recording shows the dock's icons sharp and at full strength below the card
+     * (pong, after a Workspace -> Home2 landing: about 400 ms of sharp, bright icons under the A-Z
+     * letters, until the next re-aim put the fade back on). A view whose band is not placed yet
+     * shows no reflection until it is.
+     */
+    static boolean drawsLiveRecording(int effectKind) {
+        return effectKind == PeekReflectionView.EFFECT_LIVE;
     }
 
     /**
@@ -364,6 +381,10 @@ public final class PeekGlassReflection {
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
             if (show) dress(view);
         }
+    }
+
+    private void redressShown(@Nullable PeekReflectionView view) {
+        if (view != null && view.getVisibility() == View.VISIBLE) dress(view);
     }
 
     /** A view took a new size: the live fade's band in it is aimed again. */
@@ -494,6 +515,11 @@ public final class PeekGlassReflection {
             failLive(t);
             return;
         }
+        // A view left without its fade (its band not placed when it was last dressed) takes it
+        // now, where the band falls on it; the same band rebuilds nothing. Called per swipe
+        // frame, so each view is dressed in turn, nothing allocated.
+        redressShown(mHostView);
+        redressShown(mStripView);
         invalidateViews();
     }
 
