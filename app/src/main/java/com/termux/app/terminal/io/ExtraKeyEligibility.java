@@ -245,6 +245,20 @@ public final class ExtraKeyEligibility {
         return target == null || pages.contains(target);
     }
 
+    /**
+     * The place a key row is dressed for: the half the stack wears ({@code stackDressPage}, the
+     * other half's while a crossing stands its rows) or else where the wall rests
+     * ({@code restingPlace}). Asked on every crossing frame and at the settle alike, so a toolbar a
+     * crossing brings up rises already drawn live where it lands (and its place switch for the
+     * place it lands on already in front) rather than dead in the leaving place's terms until the
+     * settle restates it.
+     */
+    @NonNull
+    public static PaneWallPage rowPlace(@NonNull PaneWallPage restingPlace,
+                                        @Nullable PaneWallPage stackDressPage) {
+        return stackDressPage != null ? stackDressPage : restingPlace;
+    }
+
     /** Whether the key sending {@code keyValue} can act on {@code place}. */
     public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place) {
         if (keyValue == null || keyValue.isEmpty())

@@ -23452,14 +23452,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallPage mAppliedExtraKeysPlace;
 
     private void applyExtraKeysPlaceEligibility() {
-        if (currentWallPlace() == mAppliedExtraKeysPlace) return;
-        mAppliedExtraKeysPlace = currentWallPlace();
+        com.termux.app.wall.PaneWallPage place = extraKeysPlace();
+        if (place == mAppliedExtraKeysPlace) return;
+        mAppliedExtraKeysPlace = place;
         for (ExtraKeysView view : mExtraKeysViews) applyExtraKeysPlaceEligibility(view);
+    }
+
+    /**
+     * The place the key rows are dressed for: across the seam, the half whose rows the stack
+     * stands, from the crossing's frame that stands them; else where the wall rests
+     * (ExtraKeyEligibility#rowPlace).
+     */
+    @NonNull
+    private com.termux.app.wall.PaneWallPage extraKeysPlace() {
+        com.termux.app.wall.PaneWallPage dress = mCrossing.seam().stackDressPage();
+        return com.termux.app.terminal.io.ExtraKeyEligibility.rowPlace(currentWallPlace(),
+            dress != null ? placeOf(dress) : null);
     }
 
     private void applyExtraKeysPlaceEligibility(@Nullable ExtraKeysView extraKeysView) {
         if (extraKeysView == null) return;
-        final com.termux.app.wall.PaneWallPage place = currentWallPlace();
+        final com.termux.app.wall.PaneWallPage place = extraKeysPlace();
         // A switch to a place the wall does not have — the display under a home-screen mode, both
         // side places under terminal mode — is drawn dead too; a row the user wrote keeps it.
         final java.util.List<com.termux.app.wall.PaneWallPage> pages = availableWallPages();
@@ -25801,6 +25814,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
         float dockReveal = syncSeamTravel(seam);
+        // The key rows the stack stands are drawn for the half it wears, from the frame it stands
+        // them: a toolbar brought up rises live, not dead until the settle. A comparison per frame;
+        // the rows are restated only on the frame the dress changes.
+        applyExtraKeysPlaceEligibility();
         Trace.beginSection("Travel.stack");
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
