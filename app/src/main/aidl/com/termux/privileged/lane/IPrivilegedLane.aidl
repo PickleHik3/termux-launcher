@@ -3,6 +3,7 @@
 package com.termux.privileged.lane;
 
 import android.os.ParcelFileDescriptor;
+import android.view.MotionEvent;
 
 interface IPrivilegedLane {
     // Shizuku calls this before it kills the service process; the transaction code is fixed by
@@ -28,4 +29,10 @@ interface IPrivilegedLane {
 
     // The uid the service runs as, for the settings screen's status row.
     int uid() = 5;
+
+    // Injects one touch event as the shell uid (it holds INJECT_EVENTS) on displayId, waiting
+    // until the dispatcher has placed it; true when it reached a window. The Home pull-down
+    // drives the system shade with these (ShadePullInjector). The input system gives injected
+    // events a virtual device of their own, so they never join the launcher's own touch stream.
+    boolean injectMotion(in MotionEvent event, int displayId) = 6;
 }

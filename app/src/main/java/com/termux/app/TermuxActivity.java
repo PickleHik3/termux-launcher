@@ -779,6 +779,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Boolean mAppliedChromeHome;
     /** A Home page's re-arrangement is waiting for Home's page settle to land (#173). */
     private boolean mChromeArrangementAfterSettle;
+    /** Swipe down on Home pulling the system shade live; made on the first such swipe. */
+    @Nullable private com.termux.app.launcher.home.ShadePullInjector mShadePull;
     /** The variant the arrangement pass last laid out, so a keyboard element is compared within one. */
     @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
     /** Whether that pass laid it out for a Home page, whose keyboard element is always on. */
@@ -27843,17 +27845,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN;
         com.termux.app.launcher.home.HomeGestures.Action action =
             com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture);
-        boolean keyboardSwipe = up
+        if (isHomeKeyboardSwipe(up, action)) {
+            applyBorderKeyboardSwipe(up);
+            return;
+        }
+        runHomeGesture(gesture);
+    }
+
+    /** Whether a vertical Home swipe set to {@code action} takes the keyboard swipe's path. */
+    private boolean isHomeKeyboardSwipe(boolean up,
+            @NonNull com.termux.app.launcher.home.HomeGestures.Action action) {
+        return up
             ? action == com.termux.app.launcher.home.HomeGestures.Action.PALETTE
                 || action == com.termux.app.launcher.home.HomeGestures.Action.NONE
             : action == com.termux.app.launcher.home.HomeGestures.Action.NONE
                 || isCommandPaletteOpen()
                 || (committedKeyboardVisible() && !isHomeKeyboardAlwaysOn());
-        if (keyboardSwipe) {
-            applyBorderKeyboardSwipe(up);
-            return;
+    }
+
+    /**
+     * Swipe down on Home set to the notifications, claimed past the slop: the shade follows the
+     * finger through the privileged lane when {@link
+     * com.termux.app.launcher.home.ShadePullPolicy#pullsLive} allows; false leaves the swipe to
+     * open the shade when let go.
+     */
+    private boolean beginHomeShadePull(float rawX, float rawY, long time) {
+        if (!isWidgetsPageShowing()) return false;
+        if (Build.VERSION.SDK_INT < com.termux.app.launcher.home.ShadePullPolicy.MIN_SDK) return false;
+        com.termux.app.launcher.home.HomeGestures.Action action =
+            com.termux.app.launcher.home.HomeSettings.gestureAction(this,
+                com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN);
+        com.termux.privileged.lane.IPrivilegedLane lane =
+            com.termux.privileged.lane.PrivilegedLaneBinding.getInstance().boundLane();
+        int statusBarPx = visibleStatusBarPx();
+        if (!com.termux.app.launcher.home.ShadePullPolicy.pullsLive(Build.VERSION.SDK_INT, action,
+                isHomeKeyboardSwipe(false, action), lane != null, statusBarPx)) {
+            return false;
         }
-        runHomeGesture(gesture);
+        if (mShadePull == null) {
+            mShadePull = new com.termux.app.launcher.home.ShadePullInjector(() -> {
+                if (isWidgetsPageShowing()) {
+                    runHomeGesture(com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN);
+                }
+            });
+        }
+        android.view.Display display = getDisplay();
+        mShadePull.begin(lane, rawX, rawY, time,
+            display == null ? android.view.Display.DEFAULT_DISPLAY : display.getDisplayId(),
+            statusBarPx);
+        return true;
+    }
+
+    /** The system status bar's height while it shows on this window; 0 while it is hidden. */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.R)
+    private int visibleStatusBarPx() {
+        android.view.WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+        if (insets == null || !insets.isVisible(android.view.WindowInsets.Type.statusBars())) return 0;
+        return insets.getInsets(android.view.WindowInsets.Type.statusBars()).top;
     }
 
     /** Runs what {@code gesture} on a Home page is set to. */
@@ -32678,6 +32726,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onHomeDrawerDragCancel() {
                     getAppDrawerController().cancelDrag();
+                }
+                // Swipe down set to the notifications: the shade follows the finger when it can.
+                @Override public boolean onHomePullDownBegin(float rawX, float rawY, long time) {
+                    return beginHomeShadePull(rawX, rawY, time);
+                }
+                @Override public void onHomePullDown(float rawX, float rawY, long time) {
+                    if (mShadePull != null) mShadePull.move(rawX, rawY, time);
+                }
+                @Override public void onHomePullDownEnd(float rawX, float rawY, long time,
+                                                        int releaseWay) {
+                    if (mShadePull != null) mShadePull.end(rawX, rawY, time, releaseWay);
+                }
+                @Override public void onHomePullDownCancel() {
+                    if (mShadePull != null) mShadePull.cancel();
                 }
                 @Override public void onHomeDoubleTap() {
                     if (isWidgetsPageShowing()) runHomeGesture(
