@@ -1,0 +1,195 @@
+// Studio subject: Horizon. Layered silhouettes (dunes, peaks, sea or hills) under a sky that
+// follows the clock; the layers drift with slow parallax and haze.
+//
+// Rough cost per pixel: up to 5 layers, each a ridge of 3 value-noise octaves (about 25 ops per
+// octave) plus 20 ops of shading: about 450 ops at 5 layers. Sky, sun or moon and stars: 80 ops.
+// Finish 30. Roughly 300-550 ops.
+
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uSeed;
+uniform float uDark;
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;
+uniform float3 uOuter;
+uniform float3 uCore;
+uniform float3 uRim;
+uniform float uMaterial;
+uniform float uSpeed;
+uniform float uEnergy;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uExposure;
+uniform float uGrain;
+uniform float uFilm;
+
+uniform float uDayTime;     // hours 0..24 (the app passes the clock; the lab has a review slider)
+uniform float uLand;        // 0 dunes, 1 peaks, 2 sea, 3 hills
+uniform float uLayersH;     // 2..5
+uniform float uSky;         // 0 sun, 1 moon, 2 none
+uniform float uHorizonY;    // height of the farthest ridge
+
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+float sq(float x) { return x * x; }
+
+float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float vnoise1(float x) {
+    float i = floor(x); float f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(hash11(i), hash11(i + 1.0), f);
+}
+
+float3 finish(float3 col, float2 p, float2 fragCoord) {
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(p * float2(1.4, .75)));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return clamp(col, 0.0, 1.0);
+}
+
+float ridge(float x, float land, float k, float t) {
+    float o = k * 37.0;
+    if (land < .5) {
+        // Dunes: long smooth swells with a sharper crest on one side.
+        float a = sin(x * 1.3 + o) * .5 + .5;
+        float b = sin(x * 2.9 + o * 1.7) * .5 + .5;
+        return .11 * pow(a, 1.6) + .05 * b + .02 * vnoise1(x * 6.0 + o);
+    } else if (land < 1.5) {
+        // Peaks: ridged noise.
+        float h = 0.0;
+        float amp = .26;
+        float f = 1.4;
+        for (int i = 0; i < 3; i++) {
+            h += amp * (1.0 - abs(vnoise1(x * f + o + float(i) * 11.0) * 2.0 - 1.0));
+            amp *= .45;
+            f *= 2.3;
+        }
+        return h - .12;
+    } else if (land < 2.5) {
+        // Sea: flat far water, nearer swells.
+        return .012 * sin(x * 9.0 + t * 1.3 + o) + .008 * sin(x * 17.0 - t * 1.7 + o) + .01 * k;
+    }
+    // Hills: rounded and gentle.
+    return .10 * vnoise1(x * 1.1 + o) + .05 * vnoise1(x * 2.6 + o) - .02;
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float t = uTime * uSpeed + s * 200.0;
+    float mat = floor(uMaterial + .5);
+    float light = 1.0 - uDark;
+    float px = 2.0 / uResolution.y;
+
+    // The sky follows the hour: night, dawn, day, dusk.
+    float hour = mod(uDayTime, 24.0);
+    float elev = sin((hour - 6.0) / 12.0 * PI);               // -1 midnight .. 1 noon
+    float day = smoothstep(-.15, .35, elev);
+    float glowH = exp(-elev * elev * 14.0);                    // dawn and dusk
+    float3 skyTop = mix(uBgTop * .35 + float3(.0, .01, .04) * uDark, mix(uBgTop, mix(uRim, uBgTop, .6), .5 * light + .3), day);
+    float3 skyLow = mix(uBgBottom * .5, mix(uBgBottom, uRim, .35), day);
+    skyLow = mix(skyLow, mix(uCore, uOuter, .4), glowH * .7);
+    float hy = uHorizonY;
+    float3 col = mix(skyLow, skyTop, smoothstep(hy - .1, 1.0, p.y));
+    if (mat > 1.5 && mat < 2.5) {
+        col = mix(uBgBottom, uBgTop, .5) * (.96 + .05 * hash21(floor(fragCoord * float2(.5, 1.5))));
+        col = mix(col, col * mix(float3(1.0), uOuter, .35), glowH * smoothstep(1.0, hy, p.y));
+    }
+    if (mat > 2.5 && mat < 3.5) { col *= mix(.45, 1.0, light); }
+
+    // Stars at night.
+    float2 sg = p * 60.0;
+    float2 sc = floor(sg);
+    float sh = hash21(sc + s * 13.0);
+    float star = step(.985, sh) * exp(-dot(fract(sg) - .5, fract(sg) - .5) * 40.0)
+        * (.6 + .4 * sin(t * 1.3 + sh * 50.0));
+    col += float3(star) * (1.0 - day) * uDark * smoothstep(hy, hy + .3, p.y) * (1.0 - step(1.5, mat) * step(mat, 2.5));
+
+    // Sun or moon.
+    if (uSky < 1.5) {
+        float isMoon = step(.5, uSky);
+        float lift = isMoon > .5 ? -elev : elev;
+        float2 bc = float2(.25 * cos(hour / 24.0 * TAU + s * 3.0), hy + .15 + .65 * lift);
+        float br = isMoon > .5 ? .07 : .10;
+        float bd = length(p - bc);
+        float disc = 1.0 - smoothstep(br - px * 2.0, br + px * 2.0, bd);
+        float3 bcol = isMoon > .5 ? mix(uRim, float3(1.0), .5) : mix(uCore, float3(1.0), .25 * day);
+        if (isMoon > .5) {
+            disc *= smoothstep(br * .7, br * 1.1, length(p - bc - float2(br * .45, br * .2)));
+        }
+        if (mat > 2.5 && mat < 3.5) {
+            float stripes = step(.0, sin((p.y - bc.y) * 90.0)) + step(bc.y, p.y);
+            disc *= clamp(stripes, 0.0, 1.0);
+        }
+        col = mix(col, bcol, disc);
+        col += bcol * exp(-bd * 7.0) * .25 * uEnergy * mix(1.0, .5, light);
+    }
+
+    float layers = floor(uLayersH + .5);
+    for (int k = 0; k < 5; k++) {
+        float kf = float(k);
+        if (kf >= layers) { break; }
+        float z = layers > 1.5 ? kf / (layers - 1.0) : 1.0;  // 0 far .. 1 near
+        float x = p.x * (1.0 + z * .6) + t * .012 * (.2 + z * 1.4) + s * 50.0 + kf * 3.1;
+        float yk = hy - z * (.55 + .25 * step(1.5, uLand) * step(uLand, 2.5) * -1.0 + .0) + ridge(x, uLand, kf + s, t) * (.6 + .8 * z);
+        float dy = p.y - yk;                                   // negative inside the layer
+        float soft = px * 1.5 + .025 * step(.5, mat) * step(mat, 1.5) * (1.0 - z);
+        float inside = 1.0 - smoothstep(-soft, soft, dy);
+        float3 skyAtH = mix(skyLow, skyTop, .15);
+        float3 pig = mix(mix(uOuter, uInner, z), uInner * .25 + uBgBottom * .2, z * z * uDark * .8);
+        pig *= mix(.35 + .65 * day, 1.0, light);
+        pig = mix(pig, skyAtH, (1.0 - z) * .55);              // haze on the far layers
+        float below = clamp(-dy, 0.0, 2.0);
+
+        if (mat < .5) {
+            float3 tint = mix(float3(1.0), pig * 1.4, .6);
+            col = mix(col, col * tint * .8 + pig * .2, inside);
+            float rim = exp(-sq(dy / (px * 2.0 + .004)));
+            col += mix(uRim, float3(1.0), .4) * rim * (.5 + .4 * z) * uEnergy;
+            col += pig * exp(-below * 6.0) * inside * .25;
+        } else if (mat < 1.5) {
+            float3 milk = mix(pig, mix(skyAtH, float3(1.0), .2), .35 * exp(-below * 3.0));
+            col = mix(col, milk, inside * .9);
+        } else if (mat < 2.5) {
+            float wash = .35 + .65 * exp(-below * (5.0 - 3.0 * z));
+            float3 inkC = mix(pig, uInner * .35, .5 * z);
+            float3 wet = col * mix(float3(1.0), inkC, wash * (.55 + .45 * z));
+            float3 gouache = mix(col, mix(uRim, pig, .6), wash * .8);
+            col = mix(col, mix(gouache, wet, light), inside);
+        } else if (mat < 3.5) {
+            float line = exp(-abs(dy) / (.004 + px));
+            float halo = exp(-abs(dy) / .05) * .3;
+            float3 gc = mix(uOuter, uRim, .3 + .4 * z);
+            col = mix(col, col * .25 + pig * .08, inside);
+            if (uLand > 1.5 && uLand < 2.5) {
+                float grid = exp(-abs(fract(below * (8.0 + 30.0 * below)) - .5) * 20.0) * inside * .4;
+                col += gc * grid * z;
+            }
+            col += gc * (line + halo) * uEnergy;
+        } else {
+            // Paper cut: each layer throws a soft shadow up onto the one behind it.
+            float shadow = exp(-max(dy, 0.0) * 30.0) * (1.0 - inside);
+            col *= 1.0 - .35 * shadow;
+            float topLight = exp(-below * 40.0) * .12;
+            col = mix(col, pig * (.85 + .15 * z) + topLight, inside);
+        }
+    }
+    return half4(half3(finish(col, p, fragCoord)), 1.0);
+}

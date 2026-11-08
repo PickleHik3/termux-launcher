@@ -1,0 +1,161 @@
+// Studio subject: Cosmos. Gas clouds (a wisp, a spiral or a ring) and stars; the clouds drift,
+// the stars twinkle.
+//
+// Rough cost per pixel: one 4-octave value-noise fbm (about 100 ops) plus a 2-noise warp (50), the
+// cloud shape (20), two star grids (60), shading 30, finish 30. About 300 ops.
+
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uSeed;
+uniform float uDark;
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;
+uniform float3 uOuter;
+uniform float3 uCore;
+uniform float3 uRim;
+uniform float uMaterial;
+uniform float uSpeed;
+uniform float uEnergy;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uExposure;
+uniform float uGrain;
+uniform float uFilm;
+
+uniform float uCloud;        // 0 wisp, 1 spiral, 2 ring
+uniform float uStars;        // 0..1 star density
+uniform float uCloudScale;
+uniform float2 uCloudCenter;
+
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+float sq(float x) { return x * x; }
+
+float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float vnoise(float2 p) {
+    float2 i = floor(p); float2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + float2(1.0, 0.0)), f.x),
+               mix(hash21(i + float2(0.0, 1.0)), hash21(i + 1.0), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0;
+    float a = .5;
+    for (int i = 0; i < 4; i++) {
+        v += a * vnoise(p);
+        p = float2(p.x * 1.6 - p.y * 1.2, p.x * 1.2 + p.y * 1.6) + 7.3;
+        a *= .5;
+    }
+    return v;
+}
+
+float3 finish(float3 col, float2 p, float2 fragCoord) {
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(p * float2(1.4, .75)));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return clamp(col, 0.0, 1.0);
+}
+
+float stars(float2 p, float scale, float density, float t, float s) {
+    float2 g = p * scale;
+    float2 c = floor(g);
+    float h = hash21(c + s * 31.0);
+    float2 o = float2(hash21(c + 7.1), hash21(c + 3.3)) - .5;
+    float2 d = fract(g) - .5 - o * .6;
+    float present = step(1.0 - .06 * density, h);
+    float tw = .55 + .45 * sin(t * (1.0 + 2.0 * h) + h * 60.0);
+    return present * exp(-dot(d, d) * 90.0) * tw * (.4 + .6 * hash21(c + 9.9));
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float t = uTime * uSpeed + s * 200.0;
+    float mat = floor(uMaterial + .5);
+    float light = 1.0 - uDark;
+
+    float2 c = uCloudCenter;
+    float2 q = (p - c) / uCloudScale;
+    float ca = cos(s * TAU); float sa = sin(s * TAU);
+    q = float2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
+    float2 w = float2(vnoise(q * 1.7 + t * .03 + s * 9.0), vnoise(q * 1.7 - t * .025 + 4.0)) - .5;
+    float2 qw = q + w * .7;
+    float n = fbm(qw * 2.2 + float2(t * .015, -t * .01) + s * 20.0);
+
+    float r = length(qw);
+    float a = atan(qw.y, qw.x);
+    float shape;
+    if (uCloud < .5) {
+        float band = qw.y + .25 * sin(qw.x * 1.7 + s * 6.0) + .3 * (n - .5);
+        shape = exp(-band * band * 6.0) * smoothstep(1.6, .2, abs(qw.x));
+    } else if (uCloud < 1.5) {
+        float arms = sin(2.0 * a - log(r + .05) * 3.2 + t * .03) * .5 + .5;
+        shape = (sq(arms) * .85 + .15) * exp(-r * 1.6) + exp(-r * r * 30.0) * .8;
+    } else {
+        float R = .55;
+        shape = exp(-sq((r - R) / .16)) * (.7 + .3 * sin(a * 3.0 + s * 9.0)) + exp(-r * r * 6.0) * .15;
+    }
+    float dens = clamp(shape * (.35 + 1.1 * n), 0.0, 1.4);
+    float dust = smoothstep(.55, .72, vnoise(qw * 5.0 + 3.0)) * shape;
+
+    float3 emit = mix(uInner, uOuter, smoothstep(.2, .9, n + shape * .3));
+    emit = mix(emit, uCore, smoothstep(.85, 1.3, dens));
+    float st = stars(p, 70.0, uStars, t, s) + stars(p + 3.1, 32.0, uStars * .6, t * .7, s + 1.0) * 1.4;
+
+    float3 bg = mix(uBgBottom, uBgTop, smoothstep(-1.1, 1.1, p.y));
+    float3 col;
+    if (mat < .5) {
+        // Glass: the cloud as nested glassy shells with bright contour edges.
+        float lv = dens * 5.0;
+        float edge = exp(-sq((fract(lv) - .02) * 9.0)) * smoothstep(.05, .2, dens);
+        col = bg * mix(float3(1.0), emit * 1.5, clamp(dens * .8, 0.0, .85));
+        col += mix(uRim, float3(1.0), .4) * edge * .5 * uEnergy + emit * dens * .25 * uDark;
+        col += float3(st) * .9 * uDark + float3(st) * .3 * light * uRim;
+    } else if (mat < 1.5) {
+        // Frosted: pastel, diffused, soft.
+        float3 milk = mix(emit, float3(1.0), .35);
+        col = mix(bg, milk, clamp(dens * .75, 0.0, .9));
+        col += float3(st) * mix(.5, .0, light);
+    } else if (mat < 2.5) {
+        // Ink: the cloud as washes on paper, stars as dots.
+        float3 paper = mix(uBgBottom, uBgTop, .5) * (.96 + .05 * hash21(floor(fragCoord * float2(.5, 1.5))));
+        float wash = smoothstep(.1, .9, dens);
+        float3 inkC = mix(emit, uInner * .35, .4);
+        float3 wet = paper * mix(float3(1.0), inkC, wash);
+        float3 gouache = mix(paper, mix(emit, uRim, .3), wash * .85);
+        col = mix(gouache, wet, light);
+        col = mix(col, mix(uRim, uInner * .25, light), clamp(st * 1.5, 0.0, 1.0) * .8);
+    } else if (mat < 3.5) {
+        // Glow: emission over darkness, the natural look.
+        float3 base = bg * mix(.5, 1.0, light);
+        float3 g = emit * dens * 1.2 * uEnergy - float3(.3) * dust * uDark;
+        col = mix(base + g + float3(st) * 1.2, mix(base, emit, clamp(dens, 0.0, 1.0) * .8), light);
+    } else {
+        // Clay: terraced, matte layers like cut paper, each step shaded.
+        float lv = dens * 4.5;
+        float step0 = floor(lv);
+        float f = fract(lv);
+        float3 layer = mix(bg, mix(uInner, uOuter, clamp(step0 / 4.0, 0.0, 1.0)), clamp(step0 / 1.5, 0.0, 1.0));
+        float lip = smoothstep(.0, .12, f) * (1.0 - smoothstep(.12, .5, f));
+        col = layer * (.85 + .2 * lip) * (1.0 - .25 * exp(-f * 25.0) * step(.5, step0));
+        col += float3(st) * .6 * uDark;
+    }
+    return half4(half3(finish(col, p, fragCoord)), 1.0);
+}

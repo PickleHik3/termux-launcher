@@ -1,0 +1,145 @@
+// Studio subject: Silk. One draped sheet lit from the side; the folds move slowly as if in a
+// breeze and the sheen slides across them.
+//
+// Rough cost per pixel: a height field of 5 directional folds (sin + cos each, analytic gradient)
+// after one domain warp (2 sin): about 110 ops; shading 40; finish 30. About 200 ops.
+
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uSeed;
+uniform float uDark;
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;
+uniform float3 uOuter;
+uniform float3 uCore;
+uniform float3 uRim;
+uniform float uMaterial;    // 0 glass, 1 frosted, 2 ink, 4 clay (no glow)
+uniform float uSpeed;
+uniform float uEnergy;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uExposure;
+uniform float uGrain;
+uniform float uFilm;
+
+uniform float uFold;        // 0 soft .. 1 deep .. 2 crumpled
+uniform float uLightAng;    // radians, direction the light comes from
+uniform float uFoldScale;   // fold frequency
+uniform float uDrape;       // 0 fills the screen, 1 a sheet with a hem, 2 a diagonal drape
+
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+float sq(float x) { return x * x; }
+
+float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+float3 finish(float3 col, float2 p, float2 fragCoord) {
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(p * float2(1.4, .75)));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return clamp(col, 0.0, 1.0);
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float t = uTime * uSpeed * .6 + s * 200.0;
+    float mat = floor(uMaterial + .5);
+    float light = 1.0 - uDark;
+    float px = 2.0 / uResolution.y;
+
+    float3 bg = mix(uBgBottom, uBgTop, smoothstep(-1.1, 1.1, p.y));
+
+    // Height field: a dominant fold direction plus four lesser ones, after a slow warp.
+    float2 q = p * uFoldScale * 2.4;
+    q += .45 * float2(sin(q.y * 1.1 + t * .23 + s * 6.0), sin(q.x * 1.3 - t * .19 + s * 3.0));
+    float main0 = s * TAU;
+    float h = 0.0;
+    float2 g = float2(0.0);
+    float crumple = clamp(uFold - 1.0, 0.0, 1.0);
+    for (int i = 0; i < 5; i++) {
+        float fi = float(i);
+        float a = main0 + (fi == 0.0 ? 0.0 : (hash11(fi * 3.7 + s * 17.0) - .5) * (1.2 + 2.5 * crumple));
+        float2 dir = float2(cos(a), sin(a));
+        float f = 1.0 + fi * (.55 + .5 * crumple);
+        float amp = 1.0 / (1.0 + fi * (1.4 - .5 * crumple));
+        float ph = dot(q, dir) * f + t * (.25 + .12 * fi) * (fi - 1.5 > 0.0 ? -1.0 : 1.0) + fi * 1.7;
+        float sv = sin(ph);
+        h += amp * sv;
+        g += amp * f * cos(ph) * dir;
+    }
+    float depth = .35 + .45 * clamp(uFold, 0.0, 1.0) + .4 * crumple;
+    float3 n = normalize(float3(-g * depth * .55, 1.0));
+
+    float la = uLightAng + .35 * sin(t * .07);
+    float3 L = normalize(float3(cos(la), sin(la), .55));
+    float diff = dot(n, L);
+    float3 V = float3(0.0, 0.0, 1.0);
+    float3 R = reflect(-L, n);
+    float spec = pow(max(dot(R, V), 0.0), 14.0);
+    float sheen = pow(max(dot(normalize(L + V), n), 0.0), 60.0);
+    float fres = sq(1.0 - n.z);
+    float hn = h * .32 + .5;                                   // 0 valley .. 1 ridge
+
+    // Where the sheet is: everywhere, above a hem, or a diagonal fall.
+    float edge = 10.0;
+    if (uDrape > .5 && uDrape < 1.5) {
+        edge = (p.y - (-.15 + .12 * sin(p.x * 3.0 + t * .2 + s * 5.0) + .05 * h)) ;
+        edge = -edge;
+    } else if (uDrape > 1.5) {
+        edge = dot(p, normalize(float2(1.0, .55))) - .05 + .06 * h;
+    }
+    float sheet = smoothstep(-px * 2.0, px * 2.0, edge);
+    float hemShadow = exp(-max(-edge, 0.0) * 18.0) * (1.0 - sheet);
+
+    float3 pigA = uInner;
+    float3 pigB = uOuter;
+    float3 col = bg;
+    float3 cloth;
+    if (mat < .5) {
+        // Glass sheet: tinted, bent background, bright creases and a fresnel sheen.
+        float3 behind = mix(uBgBottom, uBgTop, smoothstep(-1.1, 1.1, p.y + n.y * .4));
+        cloth = behind * mix(float3(1.0), mix(pigA, pigB, hn) * 1.4, .55) * mix(.75, 1.0, light);
+        cloth += mix(uRim, float3(1.0), .4) * (spec * .9 + fres * .5) * uEnergy;
+        cloth += mix(pigA, pigB, hn) * max(diff, 0.0) * .18 * uDark;
+    } else if (mat < 1.5) {
+        // Frosted satin: soft, milky, low sheen.
+        cloth = mix(pigA, pigB, hn) * (.30 + .75 * clamp(diff, 0.0, 1.0)) * (.6 + .4 * hn);
+        cloth = mix(cloth, mix(bg, float3(1.0), .4), .12) + uRim * (sheen * .45 + spec * .15) * uEnergy;
+    } else if (mat < 2.5) {
+        // Ink: contour lines of the folds and hatching in the shade, on paper.
+        float lines = exp(-sq(abs(fract(h * 2.2) - .5) / (px * 30.0 + .04)));
+        float hatch = step(fract((p.x * .7 + p.y * .7) * 70.0), (1.0 - clamp(diff, 0.0, 1.0)) * .7);
+        float paperT = .96 + .05 * hash21(floor(fragCoord * float2(.5, 1.5)));
+        float3 paper = mix(uBgBottom, uBgTop, .5) * paperT;
+        float ink = clamp(lines * .9 + hatch * .45, 0.0, 1.0);
+        float3 inkCol = mix(uRim, uInner * .45, light);
+        cloth = mix(paper, mix(pigB, inkCol, .5), ink);
+        col = paper;
+    } else {
+        // Clay: matte plaster folds, darker in the valleys.
+        float wrap = clamp((diff + .3) / 1.3, 0.0, 1.0);
+        cloth = mix(pigA, pigB, hn) * (.15 + .95 * wrap * wrap) * (.55 + .45 * hn);
+    }
+    col *= 1.0 - .45 * hemShadow;
+    col = mix(col, cloth, sheet);
+    return half4(half3(finish(col, p, fragCoord)), 1.0);
+}

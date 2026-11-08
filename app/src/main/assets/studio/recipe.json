@@ -1,6 +1,9 @@
 {
-  "version": 1,
-  "comment": "Studio recipe words. Data only: the lab and the app read this one file. A recipe is a family, one word id per slot and a seed. Each word sets the uniforms it lists; the palette sets paletteUniforms from its light or dark version; themeUniform is 1 in dark, 0 in light.",
+  "version": 2,
+  "comment": "Studio recipe words. Data only: the lab and the app read this one file. A recipe is subject + material + palette + seed. The three words set uniforms directly; the seed sets everything else through commonSeeded and then the subject's own seeded list.",
+  "sentence": "{A} {material} {subject} in {palette}.",
+  "sentenceArticle": "{A} is 'An' when the next word starts with a vowel letter, else 'A'.",
+  "slots": ["material", "subject", "palette"],
   "paletteUniforms": {
     "bgTop": "uBgTop",
     "bgBottom": "uBgBottom",
@@ -13,142 +16,139 @@
   "seedUniform": "uSeed",
   "timeUniform": "uTime",
   "resolutionUniform": "uResolution",
-  "slots": {
-    "palette": {
-      "label": "palette",
-      "words": [
-        {
-          "id": "dusk", "label": "Dusk", "seed": "#FF6F91",
-          "dark":  { "bgTop": "#0B0618", "bgBottom": "#1C0A26", "inner": "#5A1FB8", "outer": "#FF4F7A", "core": "#FFB35C", "rim": "#FFC6D9" },
-          "light": { "bgTop": "#F4E9F2", "bgBottom": "#F7D9CF", "inner": "#7B4FD6", "outer": "#E8577E", "core": "#F29A3A", "rim": "#FFFFFF" }
-        },
-        {
-          "id": "ember", "label": "Ember", "seed": "#E8622A",
-          "dark":  { "bgTop": "#120604", "bgBottom": "#260A05", "inner": "#9E1B0F", "outer": "#FF7A1A", "core": "#FFD36B", "rim": "#FFB36B" },
-          "light": { "bgTop": "#FBEFE4", "bgBottom": "#F6D9C2", "inner": "#C2341F", "outer": "#F08A2E", "core": "#E0A82A", "rim": "#FFF4E6" }
-        },
-        {
-          "id": "glacier", "label": "Glacier", "seed": "#4FB8D8",
-          "dark":  { "bgTop": "#03101C", "bgBottom": "#071D2E", "inner": "#1B4FA8", "outer": "#5FE0F0", "core": "#E8FBFF", "rim": "#BDF3FF" },
-          "light": { "bgTop": "#EAF4F8", "bgBottom": "#D4E8F0", "inner": "#2F6FC4", "outer": "#4CC3D9", "core": "#9AD8FF", "rim": "#FFFFFF" }
-        },
-        {
-          "id": "moss", "label": "Moss", "seed": "#8FB84A",
-          "dark":  { "bgTop": "#050C07", "bgBottom": "#0D1A0F", "inner": "#2E6B2A", "outer": "#B8D65A", "core": "#F2E27A", "rim": "#D8F0A0" },
-          "light": { "bgTop": "#EEF1E2", "bgBottom": "#DFE6CB", "inner": "#4A7A3A", "outer": "#9CBF4A", "core": "#D9A63A", "rim": "#FBFFF0" }
-        },
-        {
-          "id": "coral", "label": "Coral", "seed": "#FF7A63",
-          "dark":  { "bgTop": "#021416", "bgBottom": "#06262A", "inner": "#FF6B5A", "outer": "#FFB38A", "core": "#FFE0A0", "rim": "#7FF0E0" },
-          "light": { "bgTop": "#E6F4F1", "bgBottom": "#CFE9E4", "inner": "#F0604F", "outer": "#FFA47A", "core": "#F5C042", "rim": "#FFFFFF" }
-        },
-        {
-          "id": "orchid", "label": "Orchid", "seed": "#D04AD8",
-          "dark":  { "bgTop": "#0E0514", "bgBottom": "#1F0A26", "inner": "#A02AD8", "outer": "#FF6AD5", "core": "#FFF0A8", "rim": "#F0B0FF" },
-          "light": { "bgTop": "#F6ECF6", "bgBottom": "#ECD6EE", "inner": "#9B3CC8", "outer": "#E05AB8", "core": "#F0B84A", "rim": "#FFFFFF" }
-        },
-        {
-          "id": "graphite", "label": "Graphite", "seed": "#8A8F99",
-          "dark":  { "bgTop": "#0A0A0B", "bgBottom": "#151517", "inner": "#6B6F78", "outer": "#D8DCE4", "core": "#FFFFFF", "rim": "#FFFFFF" },
-          "light": { "bgTop": "#F2F1EE", "bgBottom": "#E2E0DB", "inner": "#3A3D44", "outer": "#8A8F99", "core": "#1A1A1A", "rim": "#FFFFFF" }
-        }
-      ],
-      "todo": ["Saffron", "Tide", "Rose", "Slate", "Meadow"]
-    },
-    "material": {
-      "label": "material",
-      "words": [
-        { "id": "glass", "label": "glass", "uniforms": { "uMaterial": 0 } },
-        { "id": "frosted", "label": "frosted", "uniforms": { "uMaterial": 1 } },
-        { "id": "ink", "label": "ink", "uniforms": { "uMaterial": 2 } },
-        { "id": "glow", "label": "glowing", "uniforms": { "uMaterial": 3 } },
-        { "id": "clay", "label": "clay", "uniforms": { "uMaterial": 4 } }
-      ]
-    },
-    "mood": {
-      "label": "mood",
-      "words": [
-        { "id": "quiet", "label": "quiet", "uniforms": { "uEnergy": 0.55, "uSaturation": 0.72, "uContrast": 0.88, "uExposure": 0.85 } },
-        { "id": "balanced", "label": "balanced", "uniforms": { "uEnergy": 1.0, "uSaturation": 1.0, "uContrast": 1.0, "uExposure": 1.0 } },
-        { "id": "vivid", "label": "vivid", "uniforms": { "uEnergy": 1.35, "uSaturation": 1.28, "uContrast": 1.12, "uExposure": 1.15 } }
-      ]
-    },
-    "tempo": {
-      "label": "tempo",
-      "words": [
-        { "id": "barely", "label": "barely moving", "uniforms": { "uSpeed": 0.3 } },
-        { "id": "slow", "label": "moving slowly", "uniforms": { "uSpeed": 1.0 } },
-        { "id": "lively", "label": "moving lively", "uniforms": { "uSpeed": 2.2 } }
-      ]
-    },
-    "placement": {
-      "label": "placement",
-      "words": [
-        { "id": "centre", "label": "in the centre", "uniforms": { "uCenter": [0.0, 0.08], "uScale": 0.62, "uMirror": 0, "uScatter": 0 } },
-        { "id": "low", "label": "low", "uniforms": { "uCenter": [0.0, -0.72], "uScale": 0.85, "uMirror": 0, "uScatter": 0 } },
-        { "id": "corner", "label": "in a corner", "uniforms": { "uCenter": [0.30, -0.70], "uScale": 0.9, "uMirror": 1, "uScatter": 0 } },
-        { "id": "scattered", "label": "scattered", "uniforms": { "uCenter": [0.0, 0.0], "uScale": 0.19, "uMirror": 0, "uScatter": 1 } }
-      ]
-    },
-    "texture": {
-      "label": "texture",
-      "words": [
-        { "id": "clean", "label": "clean", "uniforms": { "uGrain": 0.0, "uFilm": 0.0 } },
-        { "id": "fine-grain", "label": "with fine grain", "uniforms": { "uGrain": 0.035, "uFilm": 0.0 } },
-        { "id": "film", "label": "on film", "uniforms": { "uGrain": 0.07, "uFilm": 1.0 } }
-      ]
-    }
+  "timeOfDayUniform": "uDayTime",
+  "seedHash": {
+    "comment": "For each seeded entry: k = fnv1a32(entry id, UTF-8). h = imul(seed, 0x9E3779B1) xor imul(k, 0x85EBCA77); h ^= h>>>16; h = imul(h, 0x7FEB352D); h ^= h>>>15; h = imul(h, 0x846CA68B); h ^= h>>>16; u = (h as unsigned) / 2^32. range: a + u*(b-a). int: floor(a + u*(b-a+1)). choices or presets: item floor(u*n). All arithmetic is 32-bit integer.",
+    "seedRange": [1, 99999]
   },
-  "families": {
-    "bloom": {
-      "label": "Bloom",
-      "shader": "bloom.agsl",
-      "sentence": "A {mood} {material} {form}, {layers} of {petals} petals in {palette}, {tempo}, {placement}, {texture}.",
-      "slots": ["mood", "material", "form", "layers", "petals", "palette", "tempo", "placement", "texture"],
-      "ownSlots": {
-        "form": {
-          "label": "form",
-          "words": [
-            { "id": "flower", "label": "flower", "uniforms": { "uForm": 0 } },
-            { "id": "anemone", "label": "anemone", "uniforms": { "uForm": 1 } },
-            { "id": "star", "label": "star", "uniforms": { "uForm": 2 } },
-            { "id": "shell", "label": "spiral shell", "uniforms": { "uForm": 3 } }
-          ]
-        },
-        "petals": {
-          "label": "petals",
-          "words": [
-            { "id": "three", "label": "three", "uniforms": { "uPetals": 3 } },
-            { "id": "four", "label": "four", "uniforms": { "uPetals": 4 } },
-            { "id": "five", "label": "five", "uniforms": { "uPetals": 5 } },
-            { "id": "six", "label": "six", "uniforms": { "uPetals": 6 } },
-            { "id": "seven", "label": "seven", "uniforms": { "uPetals": 7 } },
-            { "id": "eight", "label": "eight", "uniforms": { "uPetals": 8 } },
-            { "id": "nine", "label": "nine", "uniforms": { "uPetals": 9 } },
-            { "id": "ten", "label": "ten", "uniforms": { "uPetals": 10 } },
-            { "id": "eleven", "label": "eleven", "uniforms": { "uPetals": 11 } },
-            { "id": "twelve", "label": "twelve", "uniforms": { "uPetals": 12 } }
-          ]
-        },
-        "layers": {
-          "label": "layers",
-          "words": [
-            { "id": "one", "label": "a single ring", "uniforms": { "uLayers": 1 } },
-            { "id": "two", "label": "two rings", "uniforms": { "uLayers": 2 } },
-            { "id": "three", "label": "three rings", "uniforms": { "uLayers": 3 } },
-            { "id": "four", "label": "four rings", "uniforms": { "uLayers": 4 } }
-          ]
-        }
-      },
+  "material": {
+    "label": "material",
+    "words": [
+      { "id": "glass", "label": "glass", "uniforms": { "uMaterial": 0 } },
+      { "id": "frosted", "label": "frosted", "uniforms": { "uMaterial": 1 } },
+      { "id": "ink", "label": "ink", "uniforms": { "uMaterial": 2 } },
+      { "id": "glow", "label": "glowing", "uniforms": { "uMaterial": 3 } },
+      { "id": "clay", "label": "clay", "uniforms": { "uMaterial": 4 } }
+    ]
+  },
+  "palette": {
+    "label": "colour",
+    "words": [
+      { "id": "dusk", "label": "Dusk", "seed": "#FF6F91",
+        "dark":  { "bgTop": "#0B0618", "bgBottom": "#1C0A26", "inner": "#5A1FB8", "outer": "#FF4F7A", "core": "#FFB35C", "rim": "#FFC6D9" },
+        "light": { "bgTop": "#F4E9F2", "bgBottom": "#F7D9CF", "inner": "#7B4FD6", "outer": "#E8577E", "core": "#F29A3A", "rim": "#FFFFFF" } },
+      { "id": "ember", "label": "Ember", "seed": "#E8622A",
+        "dark":  { "bgTop": "#120604", "bgBottom": "#260A05", "inner": "#9E1B0F", "outer": "#FF7A1A", "core": "#FFD36B", "rim": "#FFB36B" },
+        "light": { "bgTop": "#FBEFE4", "bgBottom": "#F6D9C2", "inner": "#C2341F", "outer": "#F08A2E", "core": "#E0A82A", "rim": "#FFF4E6" } },
+      { "id": "glacier", "label": "Glacier", "seed": "#4FB8D8",
+        "dark":  { "bgTop": "#03101C", "bgBottom": "#071D2E", "inner": "#1B4FA8", "outer": "#5FE0F0", "core": "#E8FBFF", "rim": "#BDF3FF" },
+        "light": { "bgTop": "#EAF4F8", "bgBottom": "#D4E8F0", "inner": "#2F6FC4", "outer": "#4CC3D9", "core": "#9AD8FF", "rim": "#FFFFFF" } },
+      { "id": "moss", "label": "Moss", "seed": "#8FB84A",
+        "dark":  { "bgTop": "#050C07", "bgBottom": "#0D1A0F", "inner": "#2E6B2A", "outer": "#B8D65A", "core": "#F2E27A", "rim": "#D8F0A0" },
+        "light": { "bgTop": "#EEF1E2", "bgBottom": "#DFE6CB", "inner": "#4A7A3A", "outer": "#9CBF4A", "core": "#D9A63A", "rim": "#FBFFF0" } },
+      { "id": "coral", "label": "Coral", "seed": "#FF7A63",
+        "dark":  { "bgTop": "#021416", "bgBottom": "#06262A", "inner": "#FF6B5A", "outer": "#FFB38A", "core": "#FFE0A0", "rim": "#7FF0E0" },
+        "light": { "bgTop": "#E6F4F1", "bgBottom": "#CFE9E4", "inner": "#F0604F", "outer": "#FFA47A", "core": "#F5C042", "rim": "#FFFFFF" } },
+      { "id": "orchid", "label": "Orchid", "seed": "#D04AD8",
+        "dark":  { "bgTop": "#0E0514", "bgBottom": "#1F0A26", "inner": "#A02AD8", "outer": "#FF6AD5", "core": "#FFF0A8", "rim": "#F0B0FF" },
+        "light": { "bgTop": "#F6ECF6", "bgBottom": "#ECD6EE", "inner": "#9B3CC8", "outer": "#E05AB8", "core": "#F0B84A", "rim": "#FFFFFF" } },
+      { "id": "graphite", "label": "Graphite", "seed": "#8A8F99",
+        "dark":  { "bgTop": "#0A0A0B", "bgBottom": "#151517", "inner": "#6B6F78", "outer": "#D8DCE4", "core": "#FFFFFF", "rim": "#FFFFFF" },
+        "light": { "bgTop": "#F2F1EE", "bgBottom": "#E2E0DB", "inner": "#3A3D44", "outer": "#8A8F99", "core": "#1A1A1A", "rim": "#FFFFFF" } },
+      { "id": "saffron", "label": "Saffron", "seed": "#E8A817",
+        "dark":  { "bgTop": "#120C02", "bgBottom": "#241604", "inner": "#B86E0A", "outer": "#FFC93C", "core": "#FFF1B0", "rim": "#FFE08A" },
+        "light": { "bgTop": "#FBF4DF", "bgBottom": "#F3E2B4", "inner": "#B5750F", "outer": "#E9B42A", "core": "#C9541B", "rim": "#FFFBEB" } },
+      { "id": "tide", "label": "Tide", "seed": "#1FA39A",
+        "dark":  { "bgTop": "#011012", "bgBottom": "#03201F", "inner": "#0F6E73", "outer": "#3FD6B0", "core": "#D7FFF1", "rim": "#9AF5DD" },
+        "light": { "bgTop": "#E4F3F0", "bgBottom": "#C8E6E0", "inner": "#13757A", "outer": "#32B89A", "core": "#F2C14E", "rim": "#FFFFFF" } },
+      { "id": "rose", "label": "Rose", "seed": "#E58FA8",
+        "dark":  { "bgTop": "#140A0E", "bgBottom": "#241219", "inner": "#B5506E", "outer": "#F4A6BC", "core": "#FFE3EA", "rim": "#FFD0DC" },
+        "light": { "bgTop": "#FCEFF2", "bgBottom": "#F6DCE3", "inner": "#C85F7E", "outer": "#F0A2B6", "core": "#E8B06A", "rim": "#FFFFFF" } },
+      { "id": "slate", "label": "Slate", "seed": "#6A86A8",
+        "dark":  { "bgTop": "#080B10", "bgBottom": "#111824", "inner": "#3D5677", "outer": "#9DB4D1", "core": "#E6EEF8", "rim": "#C7D6EA" },
+        "light": { "bgTop": "#EEF1F5", "bgBottom": "#DCE2EA", "inner": "#435C7D", "outer": "#8EA5C2", "core": "#2B3A50", "rim": "#FFFFFF" } },
+      { "id": "meadow", "label": "Meadow", "seed": "#7CCB4E",
+        "dark":  { "bgTop": "#06100A", "bgBottom": "#0E1F10", "inner": "#3E9A3A", "outer": "#B5EB6E", "core": "#FFF7A8", "rim": "#DDFBB0" },
+        "light": { "bgTop": "#F2FAE9", "bgBottom": "#DFF2CC", "inner": "#4E9E3E", "outer": "#9AD66A", "core": "#F2C94C", "rim": "#FFFFFF" } }
+    ]
+  },
+  "commonSeeded": [
+    { "id": "tempo", "uniform": "uSpeed", "range": [0.3, 2.0] },
+    { "id": "mood", "presets": [
+      { "uEnergy": 0.6, "uSaturation": 0.75, "uContrast": 0.9, "uExposure": 0.88 },
+      { "uEnergy": 1.0, "uSaturation": 1.0, "uContrast": 1.0, "uExposure": 1.0 },
+      { "uEnergy": 1.3, "uSaturation": 1.25, "uContrast": 1.1, "uExposure": 1.12 } ] },
+    { "id": "texture", "presets": [
+      { "uGrain": 0.0, "uFilm": 0.0 },
+      { "uGrain": 0.035, "uFilm": 0.0 },
+      { "uGrain": 0.07, "uFilm": 1.0 } ] }
+  ],
+  "subjects": [
+    {
+      "id": "bloom", "label": "Bloom", "shader": "bloom.agsl",
       "materials": ["glass", "frosted", "ink", "glow", "clay"],
-      "exclude": [
-        { "comment": "Small forms with four rings turn to mush and cost the most.", "when": { "placement": "scattered" }, "deny": { "layers": ["four"] } },
-        { "comment": "A three-armed anemone reads as a broken star.", "when": { "form": "anemone" }, "deny": { "petals": ["three"] } }
-      ],
-      "default": {
-        "mood": "quiet", "material": "glass", "form": "flower", "layers": "two", "petals": "six",
-        "palette": "dusk", "tempo": "slow", "placement": "low", "texture": "fine-grain", "seed": 1
-      }
+      "seeded": [
+        { "id": "bloom.form", "uniform": "uForm", "choices": [0, 1, 2, 3] },
+        { "id": "bloom.petals", "uniform": "uPetals", "int": [3, 12] },
+        { "id": "bloom.layers", "uniform": "uLayers", "int": [1, 4] },
+        { "id": "bloom.placement", "presets": [
+          { "uCenter": [0.0, 0.08], "uScale": 0.62, "uMirror": 0, "uScatter": 0 },
+          { "uCenter": [0.0, -0.72], "uScale": 0.85, "uMirror": 0, "uScatter": 0 },
+          { "uCenter": [0.30, -0.70], "uScale": 0.9, "uMirror": 1, "uScatter": 0 },
+          { "uCenter": [0.0, 0.0], "uScale": 0.19, "uMirror": 0, "uScatter": 1 } ] }
+      ]
+    },
+    {
+      "id": "pebbles", "label": "Pebbles", "shader": "pebbles.agsl",
+      "materials": ["glass", "frosted", "ink", "glow", "clay"],
+      "seeded": [
+        { "id": "pebbles.count", "uniform": "uCount", "int": [5, 16] },
+        { "id": "pebbles.shapes", "uniform": "uShapes", "choices": [0, 1, 2, 3, 4] },
+        { "id": "pebbles.depth", "uniform": "uDepth", "range": [0.0, 1.0] },
+        { "id": "pebbles.arrange", "uniform": "uArrange", "choices": [0, 1, 2, 3] },
+        { "id": "pebbles.size", "uniform": "uSize", "range": [0.09, 0.22] }
+      ]
+    },
+    {
+      "id": "silk", "label": "Silk", "shader": "silk.agsl",
+      "materials": ["glass", "frosted", "ink", "clay"],
+      "seeded": [
+        { "id": "silk.fold", "uniform": "uFold", "range": [0.0, 2.0] },
+        { "id": "silk.light", "uniform": "uLightAng", "range": [0.0, 6.2832] },
+        { "id": "silk.scale", "uniform": "uFoldScale", "range": [0.9, 3.6] },
+        { "id": "silk.drape", "uniform": "uDrape", "choices": [0, 1, 2] }
+      ]
+    },
+    {
+      "id": "ripples", "label": "Ripples", "shader": "ripples.agsl",
+      "materials": ["glass", "frosted", "ink", "glow", "clay"],
+      "seeded": [
+        { "id": "ripples.scale", "uniform": "uRipple", "range": [1.6, 6.0] },
+        { "id": "ripples.depth", "uniform": "uDepthW", "range": [0.0, 1.0] },
+        { "id": "ripples.floor", "uniform": "uFloor", "choices": [0, 1, 2] },
+        { "id": "ripples.flow", "uniform": "uFlow", "range": [0.0, 6.2832] }
+      ]
+    },
+    {
+      "id": "horizon", "label": "Horizon", "shader": "horizon.agsl",
+      "materials": ["glass", "frosted", "ink", "glow", "clay"],
+      "seeded": [
+        { "id": "horizon.land", "uniform": "uLand", "choices": [0, 1, 2, 3] },
+        { "id": "horizon.layers", "uniform": "uLayersH", "int": [2, 5] },
+        { "id": "horizon.sky", "uniform": "uSky", "choices": [0, 1, 2] },
+        { "id": "horizon.height", "uniform": "uHorizonY", "range": [-0.55, 0.25] }
+      ]
+    },
+    {
+      "id": "cosmos", "label": "Cosmos", "shader": "cosmos.agsl",
+      "materials": ["glass", "frosted", "ink", "glow", "clay"],
+      "seeded": [
+        { "id": "cosmos.cloud", "uniform": "uCloud", "choices": [0, 1, 2] },
+        { "id": "cosmos.stars", "uniform": "uStars", "range": [0.15, 1.0] },
+        { "id": "cosmos.scale", "uniform": "uCloudScale", "range": [0.7, 1.6] },
+        { "id": "cosmos.centre", "uniform": "uCloudCenter", "choices": [[0.0, 0.0], [0.15, 0.4], [-0.2, -0.3], [0.1, -0.55]] }
+      ]
     }
-  }
+  ],
+  "default": { "material": "glass", "subject": "bloom", "palette": "dusk", "seed": 1 }
 }

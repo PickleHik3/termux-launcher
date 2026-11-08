@@ -45,6 +45,8 @@ uniform float uFilm;        // texture: 0..1 film finish (halation tint, lifted 
 const float PI = 3.14159265;
 const float TAU = 6.28318531;
 
+float sq(float x) { return x * x; }
+
 float hash11(float p) {
     p = fract(p * .1031);
     p *= p + 33.33;
@@ -203,7 +205,7 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
             float sa = sin(ang);
             float3 L = normalize(float3(lg.x * ca + lg.y * sa, -lg.x * sa + lg.y * ca, .85));
             float diff = dot(n, L);
-            float fres = pow(1.0 - n.z, 2.0);
+            float fres = sq(1.0 - n.z);
             float spec = pow(max(dot(n, normalize(L + float3(0.0, 0.0, 1.0))), 0.0), 40.0);
 
             float tone = clamp(uc * .65 + outer * .45 - .05, 0.0, 1.0);
@@ -219,13 +221,13 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
                 col = mix(col, behind * tint * mix(.80, 1.0, light), fill * .92);
                 col += fill * pig * (.05 + .30 * max(diff, 0.0) * (.3 + uc)) * uDark;
                 float inner = exp(-uc * 3.2) * .5 + .10;
-                float line = exp(-pow((dist - .86) * 16.0, 2.0));
+                float line = exp(-sq((dist - .86) * 16.0));
                 col += fill * (pig * inner * .40 * uDark
                     + mix(uRim, float3(1.0), .25) * fres * (.55 + .35 * energy)
                     + float3(1.0) * spec * .55 * energy
                     + mix(uRim, float3(1.0), .45) * line * .22 * energy
                     + pig * vein * .10);
-                float seam = exp(-pow(edge / (px * 1.6 + .006 * len), 2.0)) * ends;
+                float seam = exp(-sq(edge / (px * 1.6 + .006 * len))) * ends;
                 col *= 1.0 - seam * mix(.18, .38, light);
             } else if (mat < 1.5) {
                 // Frosted: diffused, milky, soft-edged; light scatters through it.
@@ -248,7 +250,7 @@ float3 bloom(float3 col, float3 bg0, float2 q, float2 p, float2 c, float t, floa
                 float3 wet = col * mix(float3(1.0), pig, dens);
                 float3 gouache = mix(col, pig * (.70 + .55 * streak), dens * .92);
                 col = mix(col, mix(gouache, wet, light), fill);
-                float stroke = exp(-pow(edge / (px * 1.4 + .004 * len), 2.0)) * ends;
+                float stroke = exp(-sq(edge / (px * 1.4 + .004 * len))) * ends;
                 col = mix(col, mix(uRim, uInner * .35, light), stroke * .55);
             } else if (mat < 3.5) {
                 // Glow: emissive outlines, a filament vein and a halo, adding where petals cross.

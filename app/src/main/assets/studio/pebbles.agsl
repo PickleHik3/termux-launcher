@@ -1,0 +1,192 @@
+// Studio subject: Pebbles. 5-16 soft shapes (rounded squares, pills, cookies, stones or a mix) at
+// depths, drifting slowly with depth parallax, each casting a soft shadow on what lies behind.
+//
+// Rough cost per pixel: one loop of at most 16 shapes; a shape far from the pixel costs one SDF
+// (about 20 ops, one atan for cookies and stones) and is skipped; a near one adds a shadow SDF and
+// about 40 ops of shading. Typically 400-700 ops, worst case about 1,100. Finish 30 ops.
+
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uSeed;
+uniform float uDark;
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;
+uniform float3 uOuter;
+uniform float3 uCore;
+uniform float3 uRim;
+uniform float uMaterial;    // 0 glass, 1 frosted, 2 ink, 3 glow, 4 clay
+uniform float uSpeed;
+uniform float uEnergy;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uExposure;
+uniform float uGrain;
+uniform float uFilm;
+
+uniform float uCount;       // 5..16
+uniform float uShapes;      // 0 rounded squares, 1 pills, 2 cookies, 3 stones, 4 mixed
+uniform float uDepth;       // 0 flat .. 1 deep
+uniform float uArrange;     // 0 scattered, 1 piled low, 2 diagonal stream, 3 one big among small
+uniform float uSize;        // base radius in screen units (height = 2)
+
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+float sq(float x) { return x * x; }
+
+float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float vnoise1(float x) {
+    float i = floor(x); float f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(hash11(i), hash11(i + 1.0), f);
+}
+
+float3 finish(float3 col, float2 p, float2 fragCoord) {
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(p * float2(1.4, .75)));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return clamp(col, 0.0, 1.0);
+}
+
+float2 rot2(float2 v, float a) {
+    float c = cos(a); float s = sin(a);
+    return float2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+float sdShape(float2 q, float type, float r, float h) {
+    if (type < .5) {
+        float2 d = abs(q) - float2(r * .74);
+        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r * .26;
+    } else if (type < 1.5) {
+        float2 d = q - float2(clamp(q.x, -r * .55, r * .55), 0.0);
+        return length(d) - r * .45;
+    } else if (type < 2.5) {
+        float a = atan(q.y, q.x);
+        float k = 5.0 + floor(h * 5.0);
+        return length(q) - r * (.88 + .08 * cos(a * k));
+    }
+    float a = atan(q.y, q.x);
+    return length(q * float2(1.0, 1.2 + .35 * h))
+        - r * (.92 + .07 * sin(a * 2.0 + h * 6.0) + .04 * sin(a * 3.0 + h * 11.0));
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float t = uTime * uSpeed + s * 200.0;
+    float mat = floor(uMaterial + .5);
+    float px = 2.0 / uResolution.y;
+    float light = 1.0 - uDark;
+
+    float3 col = mix(uBgBottom, uBgTop, smoothstep(-1.1, 1.1, p.y));
+    col += mix(uInner, uRim, .5) * exp(-dot(p - float2(.2, .5), p - float2(.2, .5)) * 1.5) * mix(.04, .10, uDark);
+    if (mat > 1.5 && mat < 2.5) {
+        col *= .96 + .05 * hash21(floor(fragCoord * float2(.5, 1.5))) - .04 * vnoise1(p.y * 3.0 + s * 9.0);
+    }
+    if (mat > 2.5 && mat < 3.5) { col *= 1.0 - .5 * uDark; }
+
+    float count = floor(uCount + .5);
+    float2 lightDir = normalize(float2(-.5, .8));
+    for (int i = 0; i < 16; i++) {
+        float fi = float(i);
+        if (fi >= count) { break; }
+        float h1 = hash11(fi * 7.31 + s * 91.0);
+        float h2 = hash11(fi * 3.17 + s * 47.0);
+        float h3 = hash11(fi * 5.93 + s * 13.0);
+        float h4 = hash11(fi * 1.71 + s * 71.0);
+        float h5 = hash11(fi * 9.13 + s * 29.0);
+        float z = count > 1.5 ? fi / (count - 1.0) : 1.0;     // 0 far .. 1 near, drawn in order
+        float depthK = mix(1.0, mix(.45, 1.25, z), uDepth);
+
+        float2 base = (float2(h1, h2) - .5) * float2(.95, 1.9);
+        if (uArrange > .5 && uArrange < 1.5) {
+            base = float2((h1 - .5) * 1.05, -1.0 + 1.0 * h2 * h2);
+        } else if (uArrange > 1.5 && uArrange < 2.5) {
+            base = mix(float2(-.55, 1.0), float2(.55, -1.0), h1) + float2(.8, .45) * (h2 - .5) * .45;
+        } else if (uArrange > 2.5) {
+            base = i == 0 ? float2(.05, -.1) : float2(cos(h1 * TAU), sin(h1 * TAU)) * float2(.42, .85) * (.8 + .3 * h2);
+        }
+        base += float2(sin(t * .07 * (.5 + z) + h3 * TAU), cos(t * .05 * (.5 + z) + h4 * TAU))
+            * .05 * (.4 + z * uDepth);
+        base.x += sin(t * .031) * .10 * (z - .5) * uDepth;
+        float r = uSize * depthK * (.6 + .8 * h3);
+        if (uArrange > 2.5 && i == 0) { r = uSize * 2.6; }
+        float ang = h4 * TAU + .18 * sin(t * .05 + h1 * 6.0);
+        float type = uShapes < 3.5 ? floor(uShapes + .5) : floor(h5 * 4.0);
+
+        float2 lp = p - base;
+        float d = sdShape(rot2(lp, -ang), type, r, h2);
+        float lift = .02 + .05 * z * uDepth + .015 * step(3.5, mat);
+        if (d > r * .4 + .25) { continue; }
+        float dsh = sdShape(rot2(lp + lightDir * lift, -ang), type, r, h2);
+
+        float blur = px * 1.2 + r * .10 * (1.0 - z) * uDepth + r * .05 * step(.5, mat) * step(mat, 1.5);
+        float fill = 1.0 - smoothstep(-blur, blur, d);
+        float inner = clamp(-d / r, 0.0, 1.0);
+        float edgeBand = 1.0 - inner;
+        float2 nxy = lp / max(r, 1e-3) * pow(edgeBand, 1.5) * 1.3;
+        float3 n = normalize(float3(nxy, 1.0));
+        float3 L = normalize(float3(lightDir, .9));
+        float diff = dot(n, L);
+        float fres = sq(1.0 - n.z);
+        float spec = pow(max(dot(n, normalize(L + float3(0.0, 0.0, 1.0))), 0.0), 40.0);
+        float haze = (1.0 - z) * uDepth * .45;
+
+        float3 pig = mix(uInner, uOuter, h5) * (.9 + .2 * h1);
+        if (h3 > .86) { pig = uCore; }
+        pig = mix(pig, col, haze);
+
+        float shK = .18 + .32 * step(3.5, mat) + .15 * step(.5, mat) * step(mat, 1.5);
+        float sh = (1.0 - smoothstep(-.01, .06 + .05 * z, dsh)) * (1.0 - fill);
+        col *= 1.0 - shK * sh * (1.0 - step(2.5, mat) * step(mat, 3.5));
+
+        if (mat < .5) {
+            float3 tint = mix(float3(1.0), pig * mix(1.5, 1.15, light), mix(.5, .7, light));
+            col = mix(col, col * tint * mix(.8, 1.0, light) + pig * .06 * uDark, fill);
+            col += fill * (mix(uRim, float3(1.0), .3) * fres * .6 * uEnergy + float3(spec) * .8 * uEnergy);
+            float line = exp(-sq((inner - .06) * 30.0)) * fill;
+            col += line * mix(uRim, float3(1.0), .5) * .25;
+            float seam = exp(-sq(d / (px * 1.5 + .003)));
+            col *= 1.0 - seam * mix(.2, .4, light);
+        } else if (mat < 1.5) {
+            float3 milk = mix(pig, uRim, .25) * (.6 + .4 * diff) + mix(col, float3(1.0), .3) * .2;
+            col = mix(col, milk, fill * .78);
+            col += fill * smoothstep(.75, 1.0, edgeBand) * uRim * .18;
+        } else if (mat < 2.5) {
+            float streak = vnoise1(dot(lp, float2(.7, .7)) * 60.0 + h1 * 20.0);
+            float dens = clamp(.65 + .35 * streak + .4 * smoothstep(.8, 1.0, edgeBand), 0.0, 1.0);
+            float3 wet = col * mix(float3(1.0), pig, dens);
+            float3 gouache = mix(col, pig * (.75 + .4 * streak), dens * .92);
+            col = mix(col, mix(gouache, wet, light), fill);
+            float stroke = exp(-sq(d / (px * 1.4 + .003)));
+            col = mix(col, mix(uRim, uInner * .35, light), stroke * .6);
+        } else if (mat < 3.5) {
+            float outline = exp(-abs(d) / (.006 + px * 1.5));
+            float halo = exp(-max(d, 0.0) / (.05 + .2 * r)) * (1.0 - fill);
+            float g = (outline * .8 + fill * (.10 + .25 * edgeBand * edgeBand) + halo * .25) * uEnergy;
+            float3 gc = mix(pig, uRim, outline * .4);
+            col = mix(col + gc * g, mix(col, gc * .9, clamp(g, 0.0, 1.0) * .8), light);
+        } else {
+            float wrap = clamp((diff + .35) / 1.35, 0.0, 1.0);
+            float3 shade = pig * (.28 + .8 * wrap) + uRim * fres * .12 + float3(spec * .06);
+            col = mix(col, shade, fill);
+        }
+    }
+    return half4(half3(finish(col, p, fragCoord)), 1.0);
+}

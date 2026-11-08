@@ -1,0 +1,152 @@
+// Studio subject: Ripples. Light from moving water falling on a floor (sand, tile or darkness);
+// the light network shifts like a pool floor.
+//
+// Rough cost per pixel: one caustic evaluation is a 5-step loop of about 18 ops (2 sin, 2 cos, a
+// length, a divide). Glass runs it 3 times (colour split), clay twice (relief), the rest once.
+// With floor and finish: about 200 ops, 400 for glass.
+
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uSeed;
+uniform float uDark;
+uniform float3 uBgTop;
+uniform float3 uBgBottom;
+uniform float3 uInner;
+uniform float3 uOuter;
+uniform float3 uCore;
+uniform float3 uRim;
+uniform float uMaterial;
+uniform float uSpeed;
+uniform float uEnergy;
+uniform float uSaturation;
+uniform float uContrast;
+uniform float uExposure;
+uniform float uGrain;
+uniform float uFilm;
+
+uniform float uRipple;      // ripple scale
+uniform float uDepthW;      // 0 shallow pool .. 1 deep sea
+uniform float uFloor;       // 0 sand, 1 tile, 2 dark
+uniform float uFlow;        // drift direction, radians
+
+const float TAU = 6.28318531;
+
+float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
+float hash21(float2 p) {
+    float3 q = fract(float3(p.xyx) * .1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float vnoise(float2 p) {
+    float2 i = floor(p); float2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + float2(1.0, 0.0)), f.x),
+               mix(hash21(i + float2(0.0, 1.0)), hash21(i + 1.0), f.x), f.y);
+}
+
+float3 finish(float3 col, float2 p, float2 fragCoord) {
+    col = max(col, float3(0.0)) * uExposure;
+    float3 darkTone = 1.0 - exp(-col * 1.55);
+    float3 over = max(col - .9, float3(0.0));
+    float3 lightTone = col - over + .1 * (1.0 - exp(-over * 10.0));
+    col = mix(lightTone, darkTone, uDark);
+    float lum = dot(col, float3(.2126, .7152, .0722));
+    col = mix(float3(lum), col, uSaturation);
+    col = (col - .45) * uContrast + .45;
+    float vig = 1.0 - .38 * uFilm * smoothstep(.35, 1.25, length(p * float2(1.4, .75)));
+    col = mix(col, col * float3(1.04, 1.0, .93) + float3(.025, .018, .032), uFilm) * vig;
+    float frame = floor(uTime * 12.0);
+    float gr = hash21(fragCoord + frame * float2(17.0, 31.0)) + hash21(fragCoord * 1.37 - frame) - 1.0;
+    col += gr * uGrain * (.6 + .4 * (1.0 - lum));
+    return clamp(col, 0.0, 1.0);
+}
+
+// The water-turbulence caustic: 0..1, sharp bright network. sharp sets the line power.
+float caustic(float2 q, float t, float sharp) {
+    float2 i = q;
+    float c = 1.0;
+    float inten = .005;
+    for (int n = 0; n < 5; n++) {
+        float tt = t * (1.0 - 3.5 / float(n + 1));
+        i = q + float2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+        c += 1.0 / length(float2(q.x / (sin(i.x + tt) / inten), q.y / (cos(i.y + tt) / inten)));
+    }
+    c /= 5.0;
+    c = 1.17 - pow(c, 1.4);
+    return clamp(pow(abs(c), sharp), 0.0, 1.5);
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - .5 * uResolution) / uResolution.y * 2.0;
+    p.y = -p.y;
+    float s = hash11(uSeed * .1373 + .71);
+    float t = uTime * uSpeed * .35 + s * 50.0;
+    float mat = floor(uMaterial + .5);
+    float light = 1.0 - uDark;
+    float deep = uDepthW;
+
+    float2 flow = float2(cos(uFlow), sin(uFlow)) * t * .08;
+    // Perspective: the floor recedes toward the top of the screen.
+    float persp = 1.0 + .5 * deep * (p.y + 1.0);
+    float2 fp = float2(p.x * persp, p.y * (1.0 + .3 * deep));
+    float2 q = fp * uRipple + flow + s * 20.0 - 250.0;
+
+    // Floor.
+    float3 floorCol = mix(uBgBottom, uBgTop, .5 + .3 * p.y);
+    float2 wob = float2(sin(q.y * .9 + t), cos(q.x * .8 - t * .8)) * .02;
+    if (uFloor < .5) {
+        float dune = sin((fp.y + .15 * vnoise(fp * 3.0 + s * 9.0)) * 34.0) * .5 + .5;
+        floorCol *= .9 + .12 * dune + .05 * hash21(floor(fragCoord));
+    } else if (uFloor < 1.5) {
+        float2 tq = (fp + wob) * 5.0;
+        float2 tf = abs(fract(tq) - .5);
+        float grout = smoothstep(.47, .49, max(tf.x, tf.y));
+        float3 tile = mix(uInner, uOuter, .35 + .3 * hash21(floor(tq)));
+        floorCol = mix(mix(floorCol, tile, .55), floorCol * .6, grout);
+    } else {
+        floorCol = mix(uBgBottom, uBgTop, .5 + .3 * p.y) * .45;
+    }
+
+    float sharp = mix(8.0, 3.5, deep);
+    if (mat > .5 && mat < 1.5) { sharp = 2.5; }
+    float c = caustic(q, t, sharp);
+    float3 lightCol = mix(uRim, uCore, .4);
+    float3 col;
+
+    if (mat < .5) {
+        // Glass: the light splits into colour at the edges of the network.
+        float cr = caustic(q + float2(.035, .0), t, sharp);
+        float cb = caustic(q - float2(.035, .0), t, sharp);
+        float3 cc = float3(cr, c, cb);
+        col = floorCol * (.55 + .25 * light) + cc * lightCol * (.9 * uEnergy) * mix(1.0, .55, deep);
+        col = mix(col, uInner * .5 + col * .5, deep * .5);
+    } else if (mat < 1.5) {
+        // Frosted: the network softened, milky light.
+        col = mix(floorCol, mix(uRim, float3(1.0), .3), c * .35 * uEnergy);
+        col = mix(col, mix(uInner, uBgTop, .5), deep * .35);
+    } else if (mat < 2.5) {
+        // Ink: the network drawn as brush lines on paper.
+        float3 paper = mix(uBgBottom, uBgTop, .5) * (.96 + .05 * hash21(floor(fragCoord * float2(.5, 1.5))));
+        float line = smoothstep(.25, .6, c);
+        float3 inkCol = mix(uRim, uInner * .4, light);
+        col = mix(paper, mix(uOuter, inkCol, .6), line * .85);
+        col = mix(col, paper * mix(float3(1.0), uOuter, .25), smoothstep(.05, .2, c) * (1.0 - line) * .5);
+    } else if (mat < 3.5) {
+        // Glow: neon light network over darkness.
+        float3 base = floorCol * mix(.25, .8, light);
+        float halo = pow(c, .35) * .25;
+        float3 gc = mix(uOuter, uRim, c * .5);
+        col = mix(base + gc * (c * 1.1 + halo) * uEnergy,
+                  mix(base, gc, clamp(c * .9 + halo, 0.0, 1.0) * .85), light);
+    } else {
+        // Clay: the light network pressed into a matte relief.
+        float c2 = caustic(q + float2(.04, .04), t, sharp);
+        float slope = (c - c2) * 2.5;
+        float3 clay = mix(uInner, uOuter, .5 + .3 * c);
+        col = clay * (.55 + .35 * clamp(.5 + slope, 0.0, 1.0) + .15 * c);
+    }
+    // Deep water: blue darkness from below, soft shafts of light from above.
+    float shafts = pow(vnoise(float2(p.x * 3.0 + p.y * 1.2 + t * .15, s * 7.0)), 3.0) * smoothstep(-1.0, 1.0, p.y);
+    col = mix(col, uInner * mix(.35, .9, light), deep * .45 * smoothstep(1.0, -1.0, p.y));
+    col += lightCol * shafts * deep * .35 * (1.0 - step(1.5, mat) * step(mat, 2.5));
+    return half4(half3(finish(col, p, fragCoord)), 1.0);
+}
