@@ -2981,6 +2981,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         mReturnHold.onPaused();
+        // A landing still waiting for its post lands before the screen goes.
+        flushLandedFrameSettle();
         // The frost under a keyboard over the display goes with the screen; onResume's pass
         // makes it again.
         releaseKeyboardFrost();
@@ -12176,6 +12178,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
+        // A landing's settle still posted has no window left to lay out.
+        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
+        mLandedFrameSettle.drop();
         unregisterRotationListener();
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
@@ -27306,6 +27311,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page,
                                    @Nullable com.termux.app.wall.PageRef landed) {
+        // A landing still waiting for its post lands first, so this settle reads it done.
+        flushLandedFrameSettle();
         Trace.beginSection("Wall.settleChrome");
         try {
             doSettlePlaceChrome(page, landed);
@@ -28307,52 +28314,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mMotionInvariantHandler.postDelayed(mMotionInvariantTick,
                             com.termux.app.chrome.MotionInvariants.WINDOW_MS + 50);
                     }
-                    Trace.beginSection("Wall.pageSettled");
-                    try {
-                        onWallPageSettledTraced(page);
-                    } finally {
+                    // The landed frame draws the page at rest with the chrome at the end of its
+                    // travel; making that the layout waits for just after it (LandedFrameSettle).
+                    com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+                    View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                    boolean windowDraws = !isDestroyed() && decor != null
+                        && decor.isAttachedToWindow();
+                    if (com.termux.app.wall.LandedFrameSettle.defers(
+                            wall != null && wall.settleEndsSlide(), windowDraws)) {
+                        Trace.beginSection("Wall.landed");
                         Trace.endSection();
+                        com.termux.app.wall.PaneWallPage earlier = mLandedFrameSettle.hold(page);
+                        if (earlier != null) runWallPageSettle(earlier);
+                        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
+                        mLandingHandler.post(mLandedFrameSettleRunnable);
+                        return;
                     }
-                }
-                private void onWallPageSettledTraced(
-                        @NonNull com.termux.app.wall.PaneWallPage wallPage) {
-                    // The place the Workspace's page shows: the display's while the display
-                    // window is in front of it.
-                    com.termux.app.wall.PaneWallPage page = placeOf(wallPage);
-                    refreshGroundStrip();
-                    // Everything a place change moves apart from the bar runs here, once the wall
-                    // has stopped: the layout and the look are every place's, so the slide never
-                    // has anything to re-lay, and what is left — the keyboard, the touchpad, who
-                    // owns the phone's keyboard, which keys can act — lands in one pass at rest
-                    // rather than in the release frame (ADR 0003). The dock and the keyboard have
-                    // already travelled there with the slide; this is where what they showed
-                    // becomes the layout.
-                    mSettledWallPage = page;
-                    settlePlaceChrome(page);
-                    noteTerminalPlaceMayBeVisible();
-                    if (mWidgetPaneController != null) {
-                        mWidgetPaneController.onWallPageShown(
-                            page == com.termux.app.wall.PaneWallPage.WIDGETS);
-                    }
-                    Trace.beginSection("Wall.displayAttachment");
-                    try {
-                        syncDisplayAttachment(page);
-                    } finally {
-                        Trace.endSection();
-                    }
-                    // A display window left before its display came up goes, once the wall has
-                    // finished settling rather than inside it.
-                    if (page != com.termux.app.wall.PaneWallPage.DISPLAY) {
-                        dropUnstartedDisplayWhenSettled(0L);
-                    }
-                    dismissHelpOverlay();
-                    // The "Go to …" read-out lands with the page (showTerminalActionHint).
-                    if (mWallReadoutShowing) {
-                        mWallReadoutShowing = false;
-                        com.termux.app.notice.AppNotice.clearReadout(TermuxActivity.this);
-                    }
+                    flushLandedFrameSettle();
+                    runWallPageSettle(page);
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
+                    // The wall moving again reads the settled state: a landing still waiting
+                    // for its post lands first.
+                    flushLandedFrameSettle();
                     Trace.beginSection("Wall.offsetChanged");
                     try {
                         onWallOffsetChangedTraced(offsetPx);
@@ -28418,6 +28402,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    // A landing still waiting for its post lands before the page changes again.
+                    flushLandedFrameSettle();
                     // One window-bar refresh for the whole change, however many syncs ask.
                     batchWindowBarRefresh(() -> {
                         noteTerminalPlaceMayBeVisible();
@@ -28478,6 +28464,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAppliedChromeVariant = chromeVariant();
             mAppliedChromeHome = home;
             applyMinimalStatusChrome();
+        }
+    }
+
+    /** The place settle a slide's landed frame left for just after it (LandedFrameSettle). */
+    private final com.termux.app.wall.LandedFrameSettle mLandedFrameSettle =
+        new com.termux.app.wall.LandedFrameSettle();
+    /** Where that settle is posted: the main looper, whether or not the decor is attached. */
+    private final Handler mLandingHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mLandedFrameSettleRunnable = this::flushLandedFrameSettle;
+
+    /**
+     * Runs the settle a landed frame left waiting, now; nothing when none waits. The post runs it
+     * just after that frame, and anything that reads the settled state first runs it here.
+     */
+    private void flushLandedFrameSettle() {
+        com.termux.app.wall.PaneWallPage page = mLandedFrameSettle.take();
+        if (page == null) return;
+        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
+        if (isDestroyed() || mPaneWallController == null) return;
+        runWallPageSettle(page);
+    }
+
+    /** What a wall at rest on {@code page} makes the layout, traced as the page's settle. */
+    private void runWallPageSettle(@NonNull com.termux.app.wall.PaneWallPage page) {
+        Trace.beginSection("Wall.pageSettled");
+        try {
+            doRunWallPageSettle(page);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doRunWallPageSettle(
+            @NonNull com.termux.app.wall.PaneWallPage wallPage) {
+        // The place the Workspace's page shows: the display's while the display
+        // window is in front of it.
+        com.termux.app.wall.PaneWallPage page = placeOf(wallPage);
+        refreshGroundStrip();
+        // Everything a place change moves apart from the bar runs here, once the wall
+        // has stopped: the layout and the look are every place's, so the slide never
+        // has anything to re-lay, and what is left — the keyboard, the touchpad, who
+        // owns the phone's keyboard, which keys can act — lands in one pass at rest
+        // rather than in the release frame (ADR 0003). The dock and the keyboard have
+        // already travelled there with the slide; this is where what they showed
+        // becomes the layout.
+        mSettledWallPage = page;
+        settlePlaceChrome(page);
+        noteTerminalPlaceMayBeVisible();
+        if (mWidgetPaneController != null) {
+            mWidgetPaneController.onWallPageShown(
+                page == com.termux.app.wall.PaneWallPage.WIDGETS);
+        }
+        Trace.beginSection("Wall.displayAttachment");
+        try {
+            syncDisplayAttachment(page);
+        } finally {
+            Trace.endSection();
+        }
+        // A display window left before its display came up goes, once the wall has
+        // finished settling rather than inside it.
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) {
+            dropUnstartedDisplayWhenSettled(0L);
+        }
+        dismissHelpOverlay();
+        // The "Go to …" read-out lands with the page (showTerminalActionHint).
+        if (mWallReadoutShowing) {
+            mWallReadoutShowing = false;
+            com.termux.app.notice.AppNotice.clearReadout(TermuxActivity.this);
         }
     }
 
