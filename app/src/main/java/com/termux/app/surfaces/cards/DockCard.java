@@ -101,8 +101,8 @@ public final class DockCard {
      * row of its own ({@link Row#DOCK_MONOCHROME}).
      */
     public static final List<Option> SHOW_HIDE = java.util.Collections.unmodifiableList(
-        Arrays.asList(Option.COMMAND_PALETTE, Option.FLOAT_TERMINAL, Option.DRAWER_ICON, Option.NOTIFICATION_DOTS,
-            Option.QUICK_REPLY, Option.SEARCH_FIELD));
+        Arrays.asList(Option.COMMAND_PALETTE, Option.FLOAT_TERMINAL, Option.NOTIFICATION_DOTS,
+            Option.QUICK_REPLY));
 
     /** What the card reads and writes. */
     public interface Host {
@@ -184,8 +184,7 @@ public final class DockCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
-                Row.DOCK_APP_ICONS)
+            .tier(1, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME)
             .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);

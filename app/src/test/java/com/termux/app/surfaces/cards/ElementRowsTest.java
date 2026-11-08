@@ -26,8 +26,7 @@ import java.util.List;
 public class ElementRowsTest {
 
     private static final List<Item> SHARED = Arrays.asList(Item.STATUS_BAR, Item.APPS_ROW,
-        Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.SEARCH_FIELD, Item.DRAWER_ICON,
-        Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL);
+        Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL);
 
     @Test
     public void eachScreenListsTheSharedRowsThenItsOwnContent() {
@@ -40,6 +39,16 @@ public class ElementRowsTest {
         assertEquals(SHARED, home.subList(0, SHARED.size()));
         assertEquals(Item.WIDGETS, home.get(home.size() - 1));
         assertFalse(home.contains(Item.TERMINAL));
+    }
+
+    @Test
+    public void theSearchFieldAndTheDrawerIconAreEveryPagesSoOnlyTheWholeAppListHasThem() {
+        for (PaneWallPage screen : new PaneWallPage[] {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS}) {
+            assertFalse(ElementRows.rows(screen).contains(Item.SEARCH_FIELD));
+            assertFalse(ElementRows.rows(screen).contains(Item.DRAWER_ICON));
+        }
+        assertTrue(ElementRows.wholeApp().contains(Item.SEARCH_FIELD));
+        assertTrue(ElementRows.wholeApp().contains(Item.DRAWER_ICON));
     }
 
     @Test

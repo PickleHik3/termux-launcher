@@ -92,7 +92,7 @@ public class EditorCardSectionsTest {
                 Row.RIM),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS,
                 Row.TINT_HUE),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
+            "SECTION_LAYOUT", Arrays.asList(Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
             "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.TOOL_COLOURS)));
     }
@@ -127,7 +127,7 @@ public class EditorCardSectionsTest {
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
+            CARD, Arrays.asList(Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
             "SECTION_APPEARANCE", block(),
@@ -137,8 +137,7 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
-                Row.DOCK_APP_ICONS),
+            CARD, Arrays.asList(Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
             "SECTION_LAYOUT", Arrays.asList(Row.DOCK_BARS),
