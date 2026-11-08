@@ -163,6 +163,9 @@ android {
                 // mode, looper mode and shadow set) for the life of the worker, and the suite uses
                 // about fourteen. A fresh worker every 150 classes lets them go.
                 forkEvery = 150
+                // Six test workers at 2g each run the suite on six cores instead of one; the
+                // machine keeps room for other builds alongside.
+                maxParallelForks = 6
                 maxHeapSize = "2g"
             }
         }
