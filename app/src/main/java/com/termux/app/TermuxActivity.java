@@ -17751,8 +17751,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * screen does, and on the same pass rather than per frame.
      */
     private boolean applyEdgeStacksAndInvalidate(@NonNull PlaceLayout layout) {
+        Trace.beginSection("Place.edgeStacks.walk");
         boolean moved = applyEdgeStacks(layout);
+        Trace.endSection();
+        Trace.beginSection("Place.edgeStacks.metrics");
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
+        Trace.endSection();
         // While a Home page can be on screen the canvas reaches up under the status bar and each
         // page keeps its own top (PageTopInsets): the Workspace's a bar band below it, and Home's
         // one band of its own bar below it, the same band where Home wears the Workspace's bar
@@ -33099,7 +33103,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWindowBarRefreshPending = true;
             return;
         }
-        doRefreshTerminalWindowBar();
+        Trace.beginSection("Bar.refresh");
+        try {
+            doRefreshTerminalWindowBar();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /**
