@@ -1293,6 +1293,9 @@ public final class TermuxInAppKeyboard {
             mPlaceOwnsSystemIme, mExternalTextInputActive, mPlaceKeepsSystemImeWhileVisible,
             mVisible);
         if (mPlaceHoldsSystemIme == holds) return;
+        android.util.Log.i("CROSSLOOK-DBG", "t=" + android.os.SystemClock.uptimeMillis()
+            + " kb placeHoldsSystemIme " + mPlaceHoldsSystemIme + "->" + holds
+            + " shownForTravel=" + mShownForTravel);
         mPlaceHoldsSystemIme = holds;
         if (holds) releaseSystemImeToPlace();
         else suppressSystemIme();
@@ -1644,6 +1647,13 @@ public final class TermuxInAppKeyboard {
         if (mDestroyed || mKeyboardView == null)
             return;
         juloo.keyboard2.Theme.Palette next = createPalette();
+        android.util.Log.i("CROSSLOOK-DBG", "t=" + android.os.SystemClock.uptimeMillis()
+            + " kb setGlassFaces n=" + faces.length + " tone=" + tone + " same="
+            + (mAppliedPalette != null && sameInks(mAppliedPalette, next))
+            + " key=" + Integer.toHexString(next.keyBackground)
+            + " fn=" + Integer.toHexString(next.functionKeyBackground)
+            + " label=" + Integer.toHexString(next.labelColor)
+            + " gradB=" + Integer.toHexString(next.keyGradientBottomOverlay));
         if (mAppliedPalette != null && sameInks(mAppliedPalette, next))
             return;
         mKeyboardView.setPalette(next);

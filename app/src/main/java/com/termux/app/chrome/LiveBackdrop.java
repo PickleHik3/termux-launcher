@@ -1346,6 +1346,9 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * ({@link #mGroundBitmap}, {@link #mFrameRect}) or the scene's region, {@link #mInverse} and
      * the wall's matrix. 0 at rest, for a panel and below Android 12: the one picture.
      */
+    /** CROSSLOOK-DBG: each surface's last logged plan. */
+    private final java.util.WeakHashMap<View, String> mCrossLookLast = new java.util.WeakHashMap<>();
+
     private int layersPlan(@NonNull LivePicture picture, @NonNull View surface, int margin,
                            int reach, @NonNull BackdropLayers.Mode mode) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || picture.panelRadius()) return 0;
@@ -1441,6 +1444,27 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             int plan = BackdropLayers.plan(place, true, displaced, groundReady, scene != null,
                 scene != null && scene.generation != picture.groundGeneration(), pagesBeneath,
                 pagesMove, pagesReady, localChanged, fixed);
+            {
+                // CROSSLOOK-DBG: each surface's plan, when it changes.
+                String id;
+                try {
+                    id = surface.getId() == View.NO_ID ? surface.getClass().getSimpleName()
+                        : surface.getResources().getResourceEntryName(surface.getId());
+                } catch (RuntimeException e) {
+                    id = surface.getClass().getSimpleName();
+                }
+                String key = "place=" + place + " plan=" + Integer.toBinaryString(plan)
+                    + " displaced=" + displaced + " ground=" + groundReady
+                    + " scene=" + (scene != null) + " pagesBeneath=" + pagesBeneath
+                    + " pagesMove=" + pagesMove + " pagesReady=" + pagesReady
+                    + " local=" + mLocal.size() + " localChanged=" + localChanged
+                    + " fixed=" + fixed + " mode=" + mode;
+                if (!key.equals(mCrossLookLast.get(surface))) {
+                    mCrossLookLast.put(surface, key);
+                    android.util.Log.i("CROSSLOOK-DBG", "t=" + android.os.SystemClock.uptimeMillis()
+                        + " glass " + id + " " + key);
+                }
+            }
             if (displaced && (plan & BackdropLayers.LAYERS) == 0) {
                 // The one picture, recorded live: a trace shows how often a swipe falls back.
                 Trace.beginSection("Glass.layers.fallback");

@@ -8538,6 +8538,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyDecorNavBarSurfaceState(@NonNull ChromeSpec state) {
         boolean visible = shouldShowDecorNavBarSurface(state);
         peekDbgStrip("strip-pass", state, visible);
+        crossLookStrip(state, visible, "pass-in");
         if (mNavFadeActive && !mCrossing.crossing()) endNavStripFade();
         if (mNavFadeActive && applyDecorNavBarSurfaceFade(state, visible)) return;
         if (!visible) {
@@ -8571,6 +8572,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         overlay.setVisibility(View.VISIBLE);
         // The Peek glass reflection runs on down the card's foot.
         syncPeekReflection();
+        crossLookStrip(state, visible, "plain");
+    }
+
+    private void crossLookStrip(@NonNull ChromeSpec state, boolean visible, @NonNull String where) {
+        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
+        ImageView backdrop = mDecorNavBarBlurBackdrop;
+        String key = "strip[" + where + "] visible=" + visible + " kbShown=" + state.keyboardShown
+            + " fade=" + mNavFadeActive + " herePage=" + mNavFadeHerePage
+            + " hereShown=" + mNavFadeHereShown + " hereTint=" + crossLookName(mNavFadeHereTint)
+            + " thereKnown=" + mNavFadeThereKnown + " thereShown=" + mNavFadeThereShown
+            + " stackDress=" + (mCrossing.crossing() ? mCrossing.seam().stackDressPage() : null)
+            + " ovVis=" + (overlay == null ? -1 : overlay.getVisibility())
+            + " tint=" + (mDecorNavBarTintOverlay == null ? "none"
+                : crossLookName(mDecorNavBarTintOverlay.getBackground()))
+            + " blurOn=" + navStripBlurEnabled(state) + " radius=" + navStripBlurRadiusDp(state)
+            + " bdVis=" + (backdrop == null ? -1 : backdrop.getVisibility())
+            + " bdDrawable=" + (backdrop == null ? "none" : crossLookName(backdrop.getDrawable()));
+        boolean changed = !key.equals(mCrossLookStripLast);
+        mCrossLookStripLast = key;
+        crossLookDbg(key + " share=" + mNavFadeShare + " ovAlpha="
+            + (overlay == null ? -1f : overlay.getAlpha()) + " bdAlpha="
+            + (backdrop == null ? -1f : backdrop.getAlpha()), changed);
     }
 
     // ---- The under-pill strip across the seam ----------------------------------------------
@@ -8771,6 +8794,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FrameLayout overlay = mDecorNavBarSurfaceOverlay;
         if (overlay != null) overlay.setAlpha(navStripFadeAlpha());
         peekDbgStrip("strip-fade", state, visible);
+        crossLookStrip(state, visible, "fade");
         return true;
     }
 
@@ -9249,6 +9273,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mGlassDragPreview;
 
+    // CROSSLOOK-DBG: temporary logging of the keyboard's and the nav strip's dress across a
+    // crossing. Reverted before merge.
+    private static final String CROSSLOOK_TAG = "CROSSLOOK-DBG";
+    @Nullable private String mCrossLookKbLast;
+    @Nullable private String mCrossLookStripLast;
+
+    private void crossLookDbg(@NonNull String msg, boolean frames) {
+        StringBuilder b = new StringBuilder("t=").append(SystemClock.uptimeMillis())
+            .append(" crossing=").append(mCrossing != null && mCrossing.crossing())
+            .append(" page=").append(mLastWallPage).append(' ').append(msg);
+        if (frames) {
+            StackTraceElement[] st = new Throwable().getStackTrace();
+            for (int i = 1; i < Math.min(st.length, 7); i++)
+                b.append(" <").append(st[i].getMethodName()).append(':').append(st[i].getLineNumber());
+        }
+        android.util.Log.i(CROSSLOOK_TAG, b.toString());
+    }
+
+    private static String crossLookName(@Nullable Object o) {
+        if (o == null) return "null";
+        if (o instanceof LayoutNeutralDrawable) return "LayoutNeutral";
+        return o.getClass().getSimpleName();
+    }
+
+    private void crossLookKb(@NonNull ChromeSpec state, @NonNull String where) {
+        View host = findViewById(R.id.inapp_keyboard_view_host);
+        View container = findViewById(R.id.inapp_keyboard_container);
+        boolean unified = state.keyboardShown && shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+        String key = "kb[" + where + "] shown=" + state.keyboardShown
+            + " form=" + inAppKeyboardForm() + " overlays=" + inAppKeyboardOverlays()
+            + " home=" + inAppKeyboardOnHome() + " display=" + inAppKeyboardOnDisplay()
+            + " place=" + inAppKeyboardPlace()
+            + " material=" + (state.keyboardShown ? inAppKeyboardMaterial() : null)
+            + " travel=" + mKeyboardTravelSolidness
+            + " unified=" + unified
+            + " ready=" + (unified && isUnifiedAccessoryBackdropReady(state))
+            + " frame=" + stackStandsDownOnFrame()
+            + " bandAsked=" + mKeyboardBandAskedThisPass
+            + " hostBg=" + (host == null ? "noHost" : crossLookName(host.getBackground()))
+            + " hostAlpha=" + (host == null ? -1f : host.getAlpha())
+            + " contVis=" + (container == null ? -1 : container.getVisibility())
+            + " contH=" + (container == null ? -1 : container.getHeight())
+            + " blur=" + state.blurEnabled;
+        boolean changed = !key.equals(mCrossLookKbLast);
+        mCrossLookKbLast = key;
+        crossLookDbg(key + " contTy=" + (container == null ? 0f : container.getTranslationY()),
+            changed);
+    }
+
     /**
      * The keyboard host's material for {@code state}, then the keys' legends re-chosen against the
      * faces that material draws, row by row (ChromeInk#bandFaces): measured where the host wears
@@ -9260,8 +9333,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Chrome.kb.host");
         applyInAppKeyboardHostMaterial(state);
         Trace.endSection();
+        crossLookKb(state, "apply");
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null) return;
+        crossLookDbg("kb faces due=" + com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging
+            .due(mGlassDragPreview, mCrossing.crossing()) + " bandAsked="
+            + mKeyboardBandAskedThisPass, false);
         // Mid-drag the legends keep the inks they have: re-chosen per tick, every one re-sampled
         // the band's rows and rebuilt the palette. The release's full pass chooses them once.
         // A crossing's frames likewise: the faces are mid-way between two pages' dresses, and the
@@ -9298,6 +9375,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void rejudgeKeyboardGlassFaces() {
         TermuxInAppKeyboard keyboard = mInAppKeyboard;
         if (keyboard == null || mChrome == null || !mKeyboardBandAskedThisPass) return;
+        crossLookDbg("kb rejudge due=" + com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging
+            .due(mGlassDragPreview, mCrossing.crossing()), false);
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
             mCrossing.crossing())) return;
         pushKeyboardGlassFaces(keyboard);
@@ -9498,6 +9577,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             chromeRestOf(frame.from).keyboardReveal() > 0f,
             chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.chromeFraction);
         if (solidness == mKeyboardTravelSolidness) return;
+        crossLookDbg("kb travel from=" + frame.from + " toward=" + frame.toward + " solidness="
+            + solidness + " was=" + mKeyboardTravelSolidness, false);
         boolean wasTravelling = mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL;
         mKeyboardTravelSolidness = solidness;
         // The settle has a repaint owed either way: to take the blend's layers off, or to leave
@@ -9902,6 +9983,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !stackStandsDownOnFrame() ? navStripSpec(state).stackAlphaPercent / 100f : 1f);
         // The frost of the surface right above: the keyboard's radius while it is up.
         int stripRadiusDp = navStripBlurRadiusDp(state);
+        crossLookDbg("strip backdrop alpha=" + backdrop.getAlpha() + " radius=" + stripRadiusDp
+            + " dirty=" + mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR)
+            + " lastRadius=" + mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR),
+            false);
         // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
         // only) so the refraction edge band clears the visible seam and meets the dock's downward
         // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
@@ -10677,6 +10762,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 keyboardSurfaceHost.setBackground(null);
             }
             clearInAppKeyboardBackdrop();
+            crossLookDbg("kb coat off by accessory backdrop", false);
         }
     }
 
