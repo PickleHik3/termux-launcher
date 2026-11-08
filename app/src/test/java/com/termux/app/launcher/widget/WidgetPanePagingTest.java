@@ -141,6 +141,33 @@ public class WidgetPanePagingTest {
             fixture.paletteSwipes);
     }
 
+    @Test public void aDownSwipeTheShadeTakesFollowsLiveAndSendsNoPaletteSwipe() {
+        Fixture fixture = new Fixture();
+        fixture.pullDownTakes = true;
+        int x = fixture.pane.getWidth() / 2;
+        int h = fixture.pane.getHeight();
+        fixture.swipe(x, h * 3 / 4, x, h / 4);
+        assertEquals("an up swipe never asks the shade", Collections.singletonList(true),
+            fixture.paletteSwipes);
+        assertTrue(fixture.pullDown.isEmpty());
+        fixture.swipe(x, h / 4, x, h * 3 / 4);
+        assertEquals("the shade's swipe is not also the palette's",
+            Collections.singletonList(true), fixture.paletteSwipes);
+        assertEquals("begin", fixture.pullDown.get(0));
+        assertTrue("every later move is passed on", fixture.pullDown.contains("move"));
+        assertEquals("the let-go swipe reads as down", "end 1",
+            fixture.pullDown.get(fixture.pullDown.size() - 1));
+    }
+
+    @Test public void aDownSwipeTheShadeDeclinesIsThePaletteGestureAsBefore() {
+        Fixture fixture = new Fixture();
+        int x = fixture.pane.getWidth() / 2;
+        int h = fixture.pane.getHeight();
+        fixture.swipe(x, h / 4, x, h * 3 / 4);
+        assertEquals(Collections.singletonList(false), fixture.paletteSwipes);
+        assertEquals(Collections.singletonList("begin"), fixture.pullDown);
+    }
+
     @Test public void aSidewaysSwipeOnTheFreeAreaStillPages() {
         Fixture fixture = new Fixture();
         fixture.controller.menuAddPage();
@@ -302,6 +329,9 @@ public class WidgetPanePagingTest {
         final WidgetPaneView pane;
         final WidgetPaneController controller;
         final List<Boolean> paletteSwipes = new ArrayList<>();
+        /** What the live pull down was told: begin, move, end <way>, cancel. */
+        final List<String> pullDown = new ArrayList<>();
+        boolean pullDownTakes;
 
         Fixture() {
             activity.setTheme(com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -316,6 +346,18 @@ public class WidgetPanePagingTest {
                 @Override public void captureWidgetSurfaceOrigin() { }
                 @Override public void restoreWidgetSurfaceOrigin() { }
                 @Override public void onHomePaletteSwipe(boolean up) { paletteSwipes.add(up); }
+                @Override public boolean onHomePullDownBegin(float rawX, float rawY, long time) {
+                    pullDown.add("begin");
+                    return pullDownTakes;
+                }
+                @Override public void onHomePullDown(float rawX, float rawY, long time) {
+                    pullDown.add("move");
+                }
+                @Override public void onHomePullDownEnd(float rawX, float rawY, long time,
+                                                        int releaseWay) {
+                    pullDown.add("end " + releaseWay);
+                }
+                @Override public void onHomePullDownCancel() { pullDown.add("cancel"); }
             });
             layout();
         }

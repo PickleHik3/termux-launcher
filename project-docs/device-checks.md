@@ -861,3 +861,16 @@ longer counted as an error. Owed:
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
   Undo brings it back) and back on its own slot (nothing moves) · pong.
+- **Swipe down on Home pulls the shade under the finger (11-08, feat/live-shade-pull).** Android
+  15 or later, Settings › Home › Gestures › Swipe down set to Notifications, Shizuku running and
+  the privileged lane on and bound (Settings › Shizuku shows it running). On a Home page's free
+  area, swipe down slowly: the notification shade comes down with the finger from the first
+  move and goes back up when the finger does; let go half way slowly and it settles by itself,
+  fling and it opens, flick back up and it shuts; no second open after the release. Start the
+  swipe high and low on the page, on the left and right side, keyboard down; with the keyboard
+  up (not always-on) the swipe still puts the keyboard away. Turn the lane off, stop Shizuku,
+  and set Swipe down to Quick settings: each time the shade opens when the swipe is let go, as
+  before. With the status bar hidden (an immersive app's state never reaches Home, so check a
+  full-screen Home if one is set up) the swipe opens on release. On an Android 14 phone or
+  emulator: opens on release only. `adb logcat -s ShadePullInjector PrivilegedLaneService` shows
+  no "failed" line on a good pull · pong (Android version first) and an Android 14 emulator.

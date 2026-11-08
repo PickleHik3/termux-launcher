@@ -95,6 +95,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** The drawer's drag was let go; velocity is positive downward. */
         default void onHomeDrawerDragEnd(float velocityYPxPerSec) { }
         default void onHomeDrawerDragCancel() { }
+        /** A swipe down on the free area took off: true when the shade follows it live. */
+        default boolean onHomePullDownBegin(float rawX, float rawY, long time) { return false; }
+        default void onHomePullDown(float rawX, float rawY, long time) { }
+        /** The live pull down let go; {@code releaseWay} is positive for a swipe down. */
+        default void onHomePullDownEnd(float rawX, float rawY, long time, int releaseWay) { }
+        default void onHomePullDownCancel() { }
         /** A double tap on the page's free area (Settings › Home › Gestures). */
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
@@ -278,6 +284,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 host.onHomeDrawerDragEnd(velocityYPxPerSec);
             }
             @Override public void onFreeAreaDrawerDragCancel() { host.onHomeDrawerDragCancel(); }
+            @Override public boolean onFreeAreaPullDownBegin(float rawX, float rawY, long time) {
+                return host.onHomePullDownBegin(rawX, rawY, time);
+            }
+            @Override public void onFreeAreaPullDown(float rawX, float rawY, long time) {
+                host.onHomePullDown(rawX, rawY, time);
+            }
+            @Override public void onFreeAreaPullDownEnd(float rawX, float rawY, long time,
+                                                        int releaseWay) {
+                host.onHomePullDownEnd(rawX, rawY, time, releaseWay);
+            }
+            @Override public void onFreeAreaPullDownCancel() { host.onHomePullDownCancel(); }
             @Override public void onFreeAreaDoubleTap() { host.onHomeDoubleTap(); }
             @Override public void onFreeAreaTwoFingerSwipe(boolean up) {
                 host.onHomeTwoFingerSwipe(up);

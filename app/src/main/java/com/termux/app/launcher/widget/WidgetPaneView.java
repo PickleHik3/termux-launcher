@@ -79,6 +79,23 @@ public final class WidgetPaneView extends FrameLayout
         /** The stream was cancelled: the drawer eases back to where it was. */
         default void onFreeAreaDrawerDragCancel() { }
         /**
+         * A swipe down on the free area passed the slop at ({@code rawX}, {@code rawY}), screen
+         * coordinates, at {@code time} (uptime ms): true when the system shade follows it live,
+         * after which the pane reports {@link #onFreeAreaPullDown}, then
+         * {@link #onFreeAreaPullDownEnd} or {@link #onFreeAreaPullDownCancel} instead of a
+         * palette swipe. False leaves the gesture to the discrete swipe.
+         */
+        default boolean onFreeAreaPullDownBegin(float rawX, float rawY, long time) { return false; }
+        /** Every move of the live pull down. */
+        default void onFreeAreaPullDown(float rawX, float rawY, long time) { }
+        /**
+         * The live pull down let go; {@code releaseWay} is how the swipe reads
+         * ({@link HomeSwipePolicy#release}: positive down, 0 for neither).
+         */
+        default void onFreeAreaPullDownEnd(float rawX, float rawY, long time, int releaseWay) { }
+        /** The live pull down's stream was cancelled. */
+        default void onFreeAreaPullDownCancel() { }
+        /**
          * Two taps in quick succession on the page's free area; sent only while
          * {@link #setExtraGestures} watches for it.
          */
@@ -252,6 +269,8 @@ public final class WidgetPaneView extends FrameLayout
         com.termux.app.launcher.home.HomeGestures.Action.NONE;
     /** The free-area stream is the app drawer's live drag. */
     private boolean drawerDragging;
+    /** The palette gesture's stream is a swipe down the system shade follows live. */
+    private boolean shadePulling;
     /**
      * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
      * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
@@ -981,6 +1000,11 @@ public final class WidgetPaneView extends FrameLayout
                 seamDragging = false;
                 verticalDragging = false;
                 drawerDragging = false;
+                if (shadePulling) {
+                    // A stream that ended without reaching this view: let the shade go.
+                    shadePulling = false;
+                    if (listener != null) listener.onFreeAreaPullDownCancel();
+                }
                 // A swipe on a Home float is the float's, except a sideways one on its terminal
                 // when the terminal has no use for it: that one pages as it would beside it.
                 boolean onFloat = pinnedLayerHolds(event);
@@ -1081,6 +1105,10 @@ public final class WidgetPaneView extends FrameLayout
                     if (verticalCandidate) {
                         // The palette gesture: the grid's long press is cancelled by the claim.
                         verticalDragging = true;
+                        // Swipe down may pull the shade under the finger from this move on.
+                        shadePulling = dy > 0 && listener != null
+                            && listener.onFreeAreaPullDownBegin(event.getRawX(), event.getRawY(),
+                                event.getEventTime());
                         return true;
                     }
                 } else if (axis == HomeSwipePolicy.Axis.HORIZONTAL) {
@@ -1273,6 +1301,12 @@ public final class WidgetPaneView extends FrameLayout
     private boolean onVerticalTouch(@NonNull MotionEvent event) {
         if (pagingVelocity != null) pagingVelocity.addMovement(event);
         switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (shadePulling && listener != null) {
+                    listener.onFreeAreaPullDown(event.getRawX(), event.getRawY(),
+                        event.getEventTime());
+                }
+                return true;
             case MotionEvent.ACTION_UP: {
                 verticalDragging = false;
                 verticalCandidate = false;
@@ -1285,12 +1319,25 @@ public final class WidgetPaneView extends FrameLayout
                 int way = HomeSwipePolicy.release(event.getY() - pagingDownY, velocityY,
                     com.termux.app.wall.BorderDrag.KEYBOARD_COMMIT_DP * density,
                     com.termux.app.wall.BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
+                if (shadePulling) {
+                    // The shade had the swipe: it settles by itself, or falls back to opening.
+                    shadePulling = false;
+                    if (listener != null) {
+                        listener.onFreeAreaPullDownEnd(event.getRawX(), event.getRawY(),
+                            event.getEventTime(), way);
+                    }
+                    return true;
+                }
                 if (way != 0 && listener != null) listener.onFreeAreaVerticalSwipe(way < 0);
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
                 verticalDragging = false;
                 verticalCandidate = false;
+                if (shadePulling) {
+                    shadePulling = false;
+                    if (listener != null) listener.onFreeAreaPullDownCancel();
+                }
                 return true;
             default:
                 return true;
