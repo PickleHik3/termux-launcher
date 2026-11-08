@@ -6122,7 +6122,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             onDockRowContentChanged();
             return;
         }
-        peekTravelLog("card-change now=" + (card != null), false);
         View host = findViewById(R.id.accessory_surface_host);
         if (host != null && mDockShapeCut) {
             // Cuts the card afresh, re-aims the glass program and the reflection, or puts the
@@ -26299,52 +26298,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (seam.moved()) mChromeTravelMoved = true;
-        // PEEKTRAVEL-DBG: only when what the Peek answer reads changes, or a relayout ran.
-        int peekDbgKey = (mPeekCard != null ? 1 : 0) | (peekCardWanted() ? 2 : 0)
-            | (isInAppKeyboardShown() ? 4 : 0) | (stackDressPage().ordinal() << 3)
-            | (seam.dockReveal() <= 0.05f ? 64 : 0);
-        if (seam.relayout() || peekDbgKey != mPeekTravelDbgKey) {
-            mPeekTravelDbgKey = peekDbgKey;
-            peekTravelLog("frame relayout=" + seam.relayout() + " restyle=" + seam.restyle()
-                + " dockReveal=" + seam.dockReveal() + " kbReveal=" + seam.keyboardReveal(),
-                false);
-        }
         return seam.dockReveal();
-    }
-
-    /** PEEKTRAVEL-DBG: the last frame's key, so the travel logs only changes. */
-    private int mPeekTravelDbgKey = -1;
-
-    /** PEEKTRAVEL-DBG: the Peek answer's inputs now, with the crossing as it began. */
-    private void peekTravelLog(@NonNull String where, boolean frames) {
-        if (mPreferences == null) return;
-        PlaceLayout layout = arrangement().layout();
-        StringBuilder b = new StringBuilder("PEEKTRAVEL-DBG t=").append(SystemClock.uptimeMillis())
-            .append(' ').append(where)
-            .append(" lastPage=").append(mLastWallPage)
-            .append(" rowsPage=").append(stackDressPage())
-            .append(" wanted=").append(peekCardWanted())
-            .append(" card=").append(mPeekCard != null)
-            .append(" specPeek=").append(shownDockSurfaceSpec().peek)
-            .append(" committedDesign=").append(committedDockDesign())
-            .append(" dockShown=").append(mDockRows.surfaceShown())
-            .append(" kb=").append(isInAppKeyboardShown())
-            .append(" imeLift=").append(mImeLiftPx)
-            .append(" field=").append(mAppliedPromptFieldBandPx)
-            .append(" floating=").append(arrangement().floating())
-            .append(" standsDown=").append(stackStandsDownOnFrame())
-            .append(" bottom=").append(com.termux.app.place.EdgeStackPolicy.stack(layout,
-                PlaceLayout.Edge.BOTTOM))
-            .append(" rowStands=").append(com.termux.app.dock.DockPlacement.peekRowStands(layout,
-                false))
-            .append(" seam[").append(mCrossing.seam().peekTravelDebug()).append(']');
-        if (frames) {
-            StackTraceElement[] trace = new Throwable().getStackTrace();
-            for (int i = 1; i < Math.min(trace.length, 7); i++)
-                b.append(" <- ").append(trace[i].getMethodName()).append(':')
-                    .append(trace[i].getLineNumber());
-        }
-        android.util.Log.i("PEEKTRAVEL-DBG", b.toString());
     }
 
     /**
@@ -27348,8 +27302,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             // A keyboard swipe still landing lands first: it owns the same travel state.
             settleKeyboardSwipeTravelNow();
-            peekTravelLog("settle-begin page=" + page, true);
-            mPeekTravelDbgKey = -1;
             boolean leavingKeyboardUp = committedKeyboardVisible();
             moved = mChromeTravelMoved;
             com.termux.app.wall.PaneWallPage left = mLastWallPage;
@@ -27494,7 +27446,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGeometry.endBatch();
             Trace.endSection();
         }
-        peekTravelLog("settle-end page=" + page, false);
         Trace.beginSection("Settle.contentResize");
         if (contentPreRolled) finishTravelContentResizeAfterLayout(gridHold);
         if (held) settleTerminalTravelDisplacement();
