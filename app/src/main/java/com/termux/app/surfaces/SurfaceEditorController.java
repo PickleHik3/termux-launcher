@@ -1757,15 +1757,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.HOME)
             resetHome();
         if (card == EditorCard.DOCK) {
-            // The dock's height, type and the Search field and Drawer icon live in the layout
-            // session, so its Undo covers them.
+            // The dock's height lives in the layout session, so its Undo covers it. Type, Search
+            // field and Drawer icon are every page's (Global card): a card reset leaves them.
             float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
                 .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
             if (layout != null) {
                 layout.setDockHeightScale(scale);
-                layout.setDockStyle(DockStyle.GLASS_TRAY);
-                layout.setSearchField(false);
-                layout.setDrawerTile(false);
                 layout.setWallStripHeightDp(
                     com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
             } else {
@@ -3656,6 +3653,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (screen != null)
                     return elementsView(screen);
             }
+            // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
+            // Global card holds them, drawn by the cards they came from.
+            if (row == Row.DOCK_TYPE)
+                return dockCard().view(row, widthPx);
+            if (row == Row.STATUS_POSITION) {
+                com.termux.app.surfaces.cards.CardRowView position =
+                    com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
+                        widthPx, mStatusCardHost);
+                if (position == null) return null;
+                mOwnRows.put(row, position);
+                return position.view;
+            }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
             if (card != null && CardBody.redesigned(card))
@@ -3685,8 +3694,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (card == EditorCard.DOCK)
+            if (row == Row.DOCK_TYPE || card == EditorCard.DOCK)
                 dockCard().restate(row);
+            else if (row == Row.STATUS_POSITION)
+                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);

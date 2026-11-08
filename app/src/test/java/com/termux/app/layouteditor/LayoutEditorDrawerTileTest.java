@@ -94,12 +94,12 @@ public class LayoutEditorDrawerTileTest {
     }
 
     @Test
-    public void onAHomeLayoutTheToggleIsHomesOwn() {
+    public void aToggleFlippedOnAHomePageIsEveryPages() {
         com.termux.app.place.KindFixtures.onHomePage(places);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         plan.setDrawerTile(true);
         assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).drawerTile());
-        assertFalse("the Workspace keeps its own",
+        assertTrue("the Workspace reads the same one (ADR 0023 §1)",
             places.forVariant(LayoutVariant.NORMAL).drawerTile());
     }
 

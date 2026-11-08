@@ -65,7 +65,7 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS,
+        assertEquals(Arrays.asList(Row.STATUS_INDICATORS,
             Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
             Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
             Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS,

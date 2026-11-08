@@ -55,8 +55,7 @@ public class EditorRowsTest {
 
     @Test
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
-        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE,
-            Row.DOCK_APP_ICONS),
+        assertEquals(Arrays.asList(Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
             Row.DOCK_MONOCHROME,
@@ -71,7 +70,7 @@ public class EditorRowsTest {
 
     @Test
     public void theStatusBarCardOpensOnItsPlaceAndStrip() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
+        assertEquals(Arrays.asList(Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
             Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
@@ -161,7 +160,7 @@ public class EditorRowsTest {
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
-            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
+            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.SECTION_LAYOUT, Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
             Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
             Row.TOOL_COLOURS),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));

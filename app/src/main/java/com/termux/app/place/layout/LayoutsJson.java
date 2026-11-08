@@ -86,6 +86,12 @@ public final class LayoutsJson {
     public static final String KEYBOARD_FORM = "keyboard_form";
     public static final String BAR_ORDER = "bar_order";
     public static final String STATUS_COMPACT = "status_compact";
+    /**
+     * The edge the status bar stands on, one value for every page (ADR 0023 §1). Held by the Home
+     * document whatever kind asks ({@link #SHARED_ORIENTATION_FIELDS}); a kind's own
+     * {@code status_bar} keeps only its put-away mark.
+     */
+    public static final String STATUS_EDGE = "status_edge";
     public static final String WIDGET_COLUMNS = "widget_columns";
     public static final String WIDGET_ROWS = "widget_rows";
     public static final String DRESS_PREFIX = "dress.";
@@ -103,6 +109,20 @@ public final class LayoutsJson {
     public static final List<String> WIDE_FIELDS = Collections.unmodifiableList(java.util.Arrays.asList(
         DOCK_DESIGN, SEARCH_FIELD, DRAWER_TILE, DRAWER_TILE_POSITION,
         KEYBOARD_SHOWN, KEYBOARD_ROWS, KEYBOARD_OPEN));
+
+    /**
+     * The values every page reads from the Home document (ADR 0023 §1): the dock's design, search
+     * field and drawer tile, and where the tile stands. A kind document holds none of them.
+     */
+    public static final List<String> SHARED_WIDE_FIELDS = Collections.unmodifiableList(
+        java.util.Arrays.asList(DOCK_DESIGN, SEARCH_FIELD, DRAWER_TILE, DRAWER_TILE_POSITION));
+
+    /**
+     * The per-orientation values every page reads from the Home document (ADR 0023 §1): the status
+     * bar's edge and whether it rests compact.
+     */
+    public static final List<String> SHARED_ORIENTATION_FIELDS = Collections.unmodifiableList(
+        java.util.Arrays.asList(STATUS_EDGE, STATUS_COMPACT));
 
     /** The four sizes, per orientation, in the {@code sizes} document. */
     public static final List<String> SIZE_FIELDS = Collections.unmodifiableList(java.util.Arrays.asList(
@@ -301,6 +321,8 @@ public final class LayoutsJson {
             || SEARCH_FIELD.equals(key) || DRAWER_TILE.equals(key) || KEYBOARD_SHOWN.equals(key)
             || KEYBOARD_OPEN.equals(key) || AZ_ROW.equals(key) || STATUS_COMPACT.equals(key)) {
             wanted = Boolean.class;
+        } else if (STATUS_EDGE.equals(key)) {
+            wanted = String.class;
         } else if (key.endsWith(ORDER_SUFFIX) || GRID_FIELDS.contains(key)
             || KEYBOARD_ROWS.equals(key) || KEYBOARD_CHIN.equals(key)
             || WALL_STRIP_HEIGHT.equals(key) || DOCK_HEIGHT.equals(key)
