@@ -124,7 +124,7 @@ typedef struct {
     uint8_t* uri_buf;
     uint8_t* run_uri;
     uint8_t* last_uri;
-    // OSC sniffer (see sniff_write): the string being read, its first three bytes, and whether it
+    // OSC sniffer (see write_stream): the string being read, its first three bytes, and whether it
     // is one we keep ("99;", "66;" or "9;4"). osc_body holds what follows those three bytes.
     bool osc_active, osc_skip, osc_overflow;
     uint8_t osc_head[3];
@@ -149,7 +149,11 @@ typedef struct {
 } Core;
 
 static void kitty_free(Core* c);
-static void kitty_write(Core* c, const uint8_t* data, size_t len);
+// The kitty query watch's side of the write loop (see the end of this file).
+static bool kq_watching(Core* c);
+static bool kq_in_apc(Core* c);
+static void kq_apc_started(Core* c);
+static size_t kq_step(Core* c, uint8_t b);
 
 // Extra code points (combining marks, ZWJ sequences) one sync can carry; matches
 // GhosttyNative.EXTRA_CAPACITY. A cluster past the cap keeps its first code point.
@@ -508,11 +512,10 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetColors(
 // The OSC sniffer. libghostty-vt parses and drops two OSC strings the Java core acts on: OSC 99
 // (kitty notifications), handed to Java whole, and OSC 66 (text sizing), whose text is written back
 // as plain text so a program that did not probe loses the size but not the words. It also reads
-// OSC 9;4 to tell "9;4;1" from "9;4;1;0" (see on_progress). Every byte still goes through the
-// library, in order, through vt_write_until stopping at OSC boundaries: the
-// library's own parser says where a string starts and ends, so a string split across writes, a
-// UTF-8 sequence split across writes and a CAN or SUB inside a string behave exactly as one
-// vt_write would. Only the kept strings' bytes are copied, and at most OSC_CAP of each.
+// OSC 9;4 to tell "9;4;1" from "9;4;1;0" (see on_progress). The write loop (write_stream) stops at
+// OSC boundaries for it: the library's own parser says where a string starts and ends, so a string
+// split across writes, a UTF-8 sequence split across writes and a CAN or SUB inside a string behave
+// exactly as one vt_write would. Only the kept strings' bytes are copied, and at most OSC_CAP of each.
 
 static void osc_begin(Core* c) {
     c->osc_active = true;
@@ -582,36 +585,36 @@ static void write_sized_text(Core* c) {
     ghostty_terminal_vt_write(c->term, c->text_buf, n);
 }
 
-// Writes data through the sniffer and returns the bytes consumed: all of them, or fewer when the
-// write reached a boundary in stop_at, which *out then reports.
-static size_t sniff_write(Core* c, const uint8_t* data, size_t len, uint32_t stop_at, GhosttyTerminalWriteStop* out) {
+// The one write loop: every byte goes to the library once and in order, through vt_write_until
+// stopping where either interceptor needs to look, and each stop is handled where it falls in the
+// stream. The OSC sniffer stops at OSC starts and ends (and at ground while sized text waits); the
+// kitty query watch stops at APC starts and then reads the APC a byte at a time (kq_step), holding
+// back a query's content, which the Java core answers. Replies, events and query answers are
+// therefore produced in stream order, and GhosttyCore keeps them in that order for Java.
+static void write_stream(Core* c, const uint8_t* data, size_t len) {
+    const bool queries = kq_watching(c);
     size_t off = 0;
-    for (;;) {
-        if (off >= len) {
-            send_progress(c, false);
-            // A string that ended on the last byte: its text goes in now if the stream is at ground
-            // (BEL), or after the next write's first byte completes ESC \.
-            if (c->text_len == 0) return off;
-            GhosttyTerminalWriteStop at = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
-            if (ghostty_terminal_vt_write_until(c->term, data, 0, GHOSTTY_TERMINAL_BOUNDARY_GROUND, &at) == GHOSTTY_SUCCESS
-                && (at.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND))
-                write_sized_text(c);
-            return off;
+    while (off < len) {
+        if (queries && kq_in_apc(c)) {
+            off += kq_step(c, data[off]);
+            continue;
         }
-        uint32_t want = GHOSTTY_TERMINAL_BOUNDARY_OSC_START | GHOSTTY_TERMINAL_BOUNDARY_OSC_END | stop_at;
+        uint32_t want = GHOSTTY_TERMINAL_BOUNDARY_OSC_START | GHOSTTY_TERMINAL_BOUNDARY_OSC_END;
         if (c->text_len > 0) want |= GHOSTTY_TERMINAL_BOUNDARY_GROUND;
+        if (queries) want |= GHOSTTY_TERMINAL_BOUNDARY_APC_START;
         GhosttyTerminalWriteStop stop = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
         GhosttyResult r = ghostty_terminal_vt_write_until(c->term, data + off, len - off, want, &stop);
         if (r == GHOSTTY_NO_VALUE) {
+            // No boundary: all of it went in.
             osc_append(c, data + off, len - off);
             off = len;
-            continue;
+            break;
         }
         if (r != GHOSTTY_SUCCESS) {
-            // Never lose output: hand the rest over unsniffed.
+            // Never lose output: hand the rest over unwatched.
             ghostty_terminal_vt_write(c->term, data + off, len - off);
-            send_progress(c, false);
-            return len;
+            off = len;
+            break;
         }
         size_t used = stop.consumed;
         if (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_OSC_END) {
@@ -624,11 +627,17 @@ static size_t sniff_write(Core* c, const uint8_t* data, size_t len, uint32_t sto
         if (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_OSC_START) osc_begin(c);
         off += used;
         if ((stop.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND) && c->text_len > 0) write_sized_text(c);
-        if ((stop.reached & stop_at) && out != NULL) {
-            *out = stop;
-            if (off < len) return off;
-        }
+        if (queries && (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_APC_START) && stop.kind == GHOSTTY_TERMINAL_STRING_KIND_APC)
+            kq_apc_started(c);
     }
+    send_progress(c, false);
+    // A string that ended on the last byte: its text goes in now if the stream is at ground (BEL),
+    // or after the next write's first byte completes ESC \.
+    if (c->text_len == 0) return;
+    GhosttyTerminalWriteStop at = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
+    if (ghostty_terminal_vt_write_until(c->term, data, 0, GHOSTTY_TERMINAL_BOUNDARY_GROUND, &at) == GHOSTTY_SUCCESS
+        && (at.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND))
+        write_sized_text(c);
 }
 
 JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
@@ -637,12 +646,12 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
     Core* c = core_of(h);
     if (c == NULL || data == NULL || offset < 0 || length <= 0) return;
     if ((jlong) offset + length > (*env)->GetArrayLength(env, data)) return;
-    // One vt_write for the whole range. Not a critical section: callbacks call into Java while the
-    // elements are held, which GetByteArrayElements allows and GetPrimitiveArrayCritical does not.
+    // One pass over the range (write_stream). Not a critical section: callbacks call into Java while
+    // the elements are held, which GetByteArrayElements allows and GetPrimitiveArrayCritical does not.
     jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
     if (bytes == NULL) { clear_exception(env); return; }
     c->env = env;
-    kitty_write(c, (const uint8_t*) bytes + offset, (size_t) length);
+    write_stream(c, (const uint8_t*) bytes + offset, (size_t) length);
     c->env = NULL;
     (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
 }
@@ -1273,58 +1282,60 @@ static void kq_answer(Core* c) {
     k->held_len = 0;
 }
 
-// vt_write with the query watch in front. Ghostty stops at each APC introducer; the APC's control
-// header is then held back until it shows whether this is a query. Anything else is released to
-// Ghostty unchanged. A query is kept from Ghostty entirely: it gets only the terminator, an empty
-// APC it ignores, and the Java core answers (through GhosttyCore.onKittyQuery, called here between
-// writes, never from a library callback). The header can span writes; what is held stays here.
-static void kitty_write(Core* c, const uint8_t* data, size_t len) {
+// The query watch. write_stream stops at each APC introducer; the APC's control header is then
+// held back until it shows whether this is a query. Anything else is released to Ghostty unchanged.
+// A query is kept from Ghostty entirely: it gets only the terminator, an empty APC it ignores, and
+// the Java core answers (through GhosttyCore.onKittyQuery, called between library calls, never from
+// a library callback). The header can span writes; what is held stays here.
+
+static bool kq_watching(Core* c) {
+    return c->kitty != NULL && c->kitty->on_query != NULL;
+}
+
+// Whether the watch is reading an APC's bytes itself (kq_step) rather than leaving them to the loop.
+static bool kq_in_apc(Core* c) {
+    return c->kitty->watch != KQ_GROUND;
+}
+
+static void kq_apc_started(Core* c) {
+    c->kitty->watch = KQ_HEADER;
+    c->kitty->held_len = 0;
+}
+
+// One byte of an APC the watch is reading: 1 when it held the byte, 0 when the byte goes on to the
+// library through write_stream (after a release, or as the terminator of a query it answered).
+static size_t kq_step(Core* c, uint8_t b) {
     KittyState* k = c->kitty;
-    if (k == NULL || k->on_query == NULL) {
-        sniff_write(c, data, len, 0, NULL);
-        return;
-    }
-    size_t i = 0;
-    while (i < len) {
-        if (k->watch == KQ_GROUND) {
-            // The OSC sniffer writes up to the next APC start (merge interim: nested in this loop).
-            GhosttyTerminalWriteStop stop = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
-            i += sniff_write(c, data + i, len - i, GHOSTTY_TERMINAL_BOUNDARY_APC_START, &stop);
-            if ((stop.reached & GHOSTTY_TERMINAL_BOUNDARY_APC_START) && stop.kind == GHOSTTY_TERMINAL_STRING_KIND_APC) {
-                k->watch = KQ_HEADER;
-                k->held_len = 0;
-            }
-            continue;
-        }
-        uint8_t b = data[i];
-        bool content = b >= 0x20 && b < 0x7f;
-        if (k->watch == KQ_HEADER) {
-            if (content && b != ';' && k->held_len < KQ_HEADER_MAX) {
-                if (kq_hold(k, b)) i++; else kq_release(c);
-                continue;
-            }
-            if ((b == ';' || b == 0x1b || b == 0x9c) && kq_is_query(k->held, k->held_len)) {
-                k->watch = KQ_QUERY;
-                if (b == ';') {
-                    if (kq_hold(k, b)) i++; else kq_release(c);
-                }
-                continue;
-            }
+    bool content = b >= 0x20 && b < 0x7f;
+    if (k->watch == KQ_HEADER) {
+        if (content && b != ';' && k->held_len < KQ_HEADER_MAX) {
+            if (kq_hold(k, b)) return 1;
             kq_release(c);
-            continue;
+            return 0;
         }
-        // KQ_QUERY: hold the payload up to the terminator.
-        if (content) {
-            if (k->held_len < KQ_QUERY_MAX && kq_hold(k, b)) i++; else kq_release(c);
-            continue;
+        if ((b == ';' || b == 0x1b || b == 0x9c) && kq_is_query(k->held, k->held_len)) {
+            k->watch = KQ_QUERY;
+            if (b != ';') return 0;
+            if (kq_hold(k, b)) return 1;
+            kq_release(c);
+            return 0;
         }
-        if (b == 0x1b || b == 0x9c) {
-            kq_answer(c);
-            k->watch = KQ_GROUND;
-        } else {
-            kq_release(c);  // CAN, SUB or another control byte: Ghostty decides what it means
-        }
+        kq_release(c);
+        return 0;
     }
+    // KQ_QUERY: hold the payload up to the terminator.
+    if (content) {
+        if (k->held_len < KQ_QUERY_MAX && kq_hold(k, b)) return 1;
+        kq_release(c);
+        return 0;
+    }
+    if (b == 0x1b || b == 0x9c) {
+        kq_answer(c);
+        k->watch = KQ_GROUND;
+    } else {
+        kq_release(c);  // CAN, SUB or another control byte: Ghostty decides what it means
+    }
+    return 0;
 }
 
 // Turn images on: Ghostty's store per screen is storage_limit bytes (KittyImageStore's, so both
