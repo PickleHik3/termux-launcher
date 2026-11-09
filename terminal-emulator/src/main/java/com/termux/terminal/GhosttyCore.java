@@ -179,9 +179,14 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         return mHandle != 0 && GhosttyNative.nativeGetColors(mHandle, out);
     }
 
-    /** Resident, virtual and compressed bytes of the primary screen, or null. For measuring. */
+    /** The primary screen's memory (see {@link GhosttyNative#MEM_RESIDENT_BYTES}), or null. For measuring. */
     long[] memoryUsage() {
         return mHandle == 0 ? null : GhosttyNative.nativeMemoryUsage(mHandle);
+    }
+
+    /** Compress history (see {@link GhosttyNative#nativeCompress}); -1 when released. For measuring. */
+    int compress(boolean full) {
+        return mHandle == 0 ? -1 : GhosttyNative.nativeCompress(mHandle, full);
     }
 
     @Override

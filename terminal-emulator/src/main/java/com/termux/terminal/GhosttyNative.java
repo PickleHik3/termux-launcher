@@ -91,7 +91,10 @@ final class GhosttyNative {
         void onClipboardWrite(byte[] data);
     }
 
-    /** System property naming a directory holding the library, for JVM tests on the host. */
+    /**
+     * System property naming a directory holding the library, for JVM tests on the host and for
+     * {@link TerminalParseBench}, which runs outside the app.
+     */
     static final String TEST_LIBRARY_DIR_PROPERTY = "termux.ghostty.libDir";
 
     private static final String LIBRARY = "termux-ghostty";
@@ -168,6 +171,26 @@ final class GhosttyNative {
 
     static native String nativeGetPwd(long handle);
 
-    /** Resident, virtual and compressed bytes of the primary screen's pages, or null. */
+    /** Slots of {@link #nativeMemoryUsage}, all for the primary screen; -1 when unavailable. */
+    static final int MEM_RESIDENT_BYTES = 0;
+    static final int MEM_VIRTUAL_BYTES = 1;
+    static final int MEM_COMPRESSED_BYTES = 2;
+    static final int MEM_PAGES = 3;
+    static final int MEM_COMPRESSED_PAGES = 4;
+    /** 1 when compressing history can free memory on this device, 0 when not. */
+    static final int MEM_COMPRESSION_SUPPORTED = 5;
+
+    /** The primary screen's memory (see MEM_*), or null. Looks at every page: for measuring only. */
     static native long[] nativeMemoryUsage(long handle);
+
+    /** {@link #nativeCompress} results. */
+    static final int COMPRESS_UNSUPPORTED = 0;
+    static final int COMPRESS_PENDING = 1;
+    static final int COMPRESS_COMPLETE = 2;
+
+    /**
+     * Compress history: one bounded step, or every eligible page when {@code full}. Returns a
+     * COMPRESS_* result, or -1 on error. For measuring only.
+     */
+    static native int nativeCompress(long handle, boolean full);
 }

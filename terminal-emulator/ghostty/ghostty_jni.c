@@ -663,20 +663,40 @@ JNIEXPORT jstring JNICALL Java_com_termux_terminal_GhosttyNative_nativeGetPwd(JN
     return borrowed_string(env, core_of(h), GHOSTTY_TERMINAL_DATA_PWD);
 }
 
-// Resident, virtual and compressed bytes of the primary screen, for measuring; -1 when unavailable.
+// The primary screen's memory, for measuring, in the order of GhosttyNative.MEM_*: resident,
+// virtual and compressed bytes, pages, compressed pages, and 1 when compression can free memory
+// here (0 when not); all -1 when unavailable. Looks at every page: not for every write.
 JNIEXPORT jlongArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeMemoryUsage(JNIEnv* env, jclass cls, jlong h) {
     (void) cls;
     Core* c = core_of(h);
     if (c == NULL) return NULL;
     GhosttyTerminalMemoryUsage usage = GHOSTTY_INIT_SIZED(GhosttyTerminalMemoryUsage);
-    jlong v[3] = {-1, -1, -1};
+    jlong v[6] = {-1, -1, -1, -1, -1, -1};
     if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MEMORY_USAGE, &usage) == GHOSTTY_SUCCESS) {
         v[0] = (jlong) usage.primary_resident_bytes;
         v[1] = (jlong) usage.primary_virtual_bytes;
         v[2] = (jlong) usage.primary_compressed_bytes;
+        v[3] = (jlong) usage.primary_pages;
+        v[4] = (jlong) usage.primary_compressed_pages;
+        v[5] = usage.compression_supported ? 1 : 0;
     }
-    jlongArray arr = (*env)->NewLongArray(env, 3);
+    jlongArray arr = (*env)->NewLongArray(env, 6);
     if (arr == NULL) { clear_exception(env); return NULL; }
-    (*env)->SetLongArrayRegion(env, arr, 0, 3, v);
+    (*env)->SetLongArrayRegion(env, arr, 0, 6, v);
     return arr;
+}
+
+// Compress the history once, synchronously (full) or one bounded step. Returns the library's
+// result (0 unsupported, 1 more work pending, 2 complete) or -1 on error. For measuring.
+JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeCompress(
+    JNIEnv* env, jclass cls, jlong h, jboolean full) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return -1;
+    GhosttyTerminalCompressionResult result = GHOSTTY_TERMINAL_COMPRESSION_RESULT_UNSUPPORTED;
+    GhosttyTerminalCompressionMode mode = full ? GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL
+                                               : GHOSTTY_TERMINAL_COMPRESSION_MODE_INCREMENTAL;
+    if (ghostty_terminal_compress(c->term, mode, &result) != GHOSTTY_SUCCESS) return -1;
+    return (jint) result;
 }

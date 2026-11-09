@@ -1576,9 +1576,14 @@ public final class TerminalEmulator {
         if (core != null) core.release();
     }
 
-    /** Resident, virtual and compressed bytes of the Ghostty core's primary screen, or null. */
+    /** The Ghostty core's primary-screen memory (see GhosttyNative.MEM_*), or null. */
     public long[] getGhosttyMemoryUsage() {
         return mGhostty == null ? null : mGhostty.memoryUsage();
+    }
+
+    /** The Ghostty core, or null; for {@link TerminalParseBench}. */
+    GhosttyCore ghosttyCore() {
+        return mGhostty;
     }
 
     /**
