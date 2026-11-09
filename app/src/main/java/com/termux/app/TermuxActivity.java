@@ -802,8 +802,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private ResolvedArrangement mHomeArrangement;
     @Nullable private ResolvedArrangement mWorkspaceArrangement;
-    /** The Assistant page's (ADR 0022): its own kind's layout, never the Workspace's. */
-    @Nullable private ResolvedArrangement mAssistantArrangement;
     @Nullable private PlaceLayoutStore mArrangedStore;
     @Nullable private PlaceOrientation mArrangedOrientation;
     private int mArrangedRevision = Integer.MIN_VALUE;
@@ -4810,11 +4808,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int groundOfWallPage(@NonNull com.termux.app.wall.PaneWallPage wallPage) {
         if (!shouldUseWallpaperPassthroughMode()) return mWallGroundColor;
         com.termux.app.wall.WallPages pages = wallPages();
-        boolean terminal = com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(wallPage);
+        // The Assistant page is of the Workspace (ADR 0025) but its pane is its own glass, never
+        // the terminal's tint (ADR 0022): its ground is its dim alone.
+        boolean terminal = com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(wallPage)
+            && wallPage != com.termux.app.wall.PaneWallPage.ASSISTANT;
         com.termux.app.wall.WallPages.Page page = null;
         if (wallPage == com.termux.app.wall.PaneWallPage.ASSISTANT) {
-            // The Assistant page wears its own dim; its pane is its own glass, never the
-            // terminal's tint (ADR 0022).
+            // Its dim is the Workspace's look, read through its own page.
             page = pages.assistant();
         } else if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0) {
             // A Display page wears its own dim (W6).
@@ -6997,24 +6997,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Puts the Assistant page on the wall after page {@code afterId} (the end when there is no
-     * such page), unless it has one. The first time, its layout and look start from Home's
-     * (ADR 0022 section 2). Returns the page's id, or -1 when none was added.
+     * such page), unless it has one. It wears the Workspace's layout and look (ADR 0025), so
+     * nothing is seeded. Returns the page's id, or -1 when none was added.
      */
     private int addAssistantPage(int afterId) {
         if (wallPages().assistant() != null) return -1;
-        com.termux.app.place.layout.LayoutStore layouts =
-            com.termux.app.place.layout.LayoutStore.shared(this);
-        if (com.termux.app.place.layout.AssistantSeed.needsSeed(layouts.current())) {
-            layouts.update(com.termux.app.place.layout.LayoutKind.ASSISTANT, assistant ->
-                com.termux.app.place.layout.AssistantSeed.seed(assistant,
-                    layouts.current().kind(com.termux.app.place.layout.LayoutKind.HOME)));
-        }
-        android.content.SharedPreferences prefs =
-            mPreferences == null ? null : mPreferences.getSharedPreferences();
-        if (prefs != null) {
-            com.termux.app.look.AssistantLookSeed.seed(
-                new com.termux.app.look.PrefsLookStore(prefs));
-        }
         com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
             pages.add(com.termux.app.wall.WallPages.PageKind.ASSISTANT,
                 pages.page(afterId) != null ? afterId : com.termux.app.wall.WallPages.END, null));
@@ -16832,16 +16819,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The page {@code page}'s arrangement is read for, with no id said: Home's for a Home page,
-     * the Assistant page's own for it (status bar alone, ADR 0022), the Terminal page's for every
-     * window. Builds nothing, so a frame's readers may ask it.
+     * the Terminal page's for every Workspace page, the Display and Assistant pages included
+     * (ADR 0025). Builds nothing, so a frame's readers may ask it.
      */
     @NonNull
     private static com.termux.app.wall.PageRef arrangedPageOf(
             @NonNull com.termux.app.wall.PaneWallPage page) {
-        if (com.termux.app.wall.PaneWallPolicy.isHomePlace(page))
-            return com.termux.app.wall.PageRef.HOME;
-        return page == com.termux.app.wall.PaneWallPage.ASSISTANT
-            ? com.termux.app.wall.PageRef.ASSISTANT : com.termux.app.wall.PageRef.TERMINAL;
+        return com.termux.app.wall.PaneWallPolicy.isHomePlace(page)
+            ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
     }
 
     /**
@@ -16901,7 +16886,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mArrangedRotation = rotation;
             mHomeArrangement = null;
             mWorkspaceArrangement = null;
-            mAssistantArrangement = null;
             mArrangedStore = store;
             mArrangedOrientation = orientation;
         }
@@ -16917,22 +16901,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
             return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
-        if (page.kind == com.termux.app.wall.PaneWallPage.ASSISTANT) {
-            ResolvedArrangement assistant = mAssistantArrangement;
-            if (assistant == null) {
-                assistant = ResolvedArrangement.resolve(store, orientation,
-                    com.termux.app.wall.PageRef.ASSISTANT);
-                // A first read can seed a layout: every half is read again on its next ask.
-                if (store.revision() != revision) {
-                    mHomeArrangement = null;
-                    mWorkspaceArrangement = null;
-                } else {
-                    mAssistantArrangement = assistant;
-                }
-            }
-            mArrangedRevision = store.revision();
-            return assistant;
-        }
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -16944,7 +16912,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (store.revision() != revision) {
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
-                mAssistantArrangement = null;
             }
             if (home) held = withSideBarDock(held);
             if (home) mHomeArrangement = held;
@@ -19195,7 +19162,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (rotation == mArrangedRotation || mArrangedRotation < 0) return;
                 mHomeArrangement = null;
                 mWorkspaceArrangement = null;
-                mAssistantArrangement = null;
                 scheduleLayoutsRelayout();
             }
         };

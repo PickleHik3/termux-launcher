@@ -27,8 +27,11 @@ import java.util.Set;
  * {@code layouts} file, never the flat key, which stays as it was for a downgrade. Everything else
  * passes through to the preferences.
  *
- * <p>The scope names the kind: none is the Terminal's, {@code home.} Home's, {@code display.} the
- * Display's, {@code minimal.} Terminal-minimal's. The four sizes are the one {@code sizes} document
+ * <p>The scope names the kind: none is the Workspace's, {@code home.} Home's, {@code minimal.}
+ * Workspace-minimal's. The retired scopes {@code display.} and {@code assistant.} (and their
+ * {@code place.dress.*} spellings) are the Workspace's too (ADR 0025): Terminal, Display and
+ * Assistant pages wear one document. Each place's remembered keyboard stays its own: the
+ * Terminal's in the document, the Display's and the Assistant's in their flat keys. The four sizes are the one {@code sizes} document
  * whatever the scope, and the widget grid is Home's whatever the scope: the cross-layout rules of
  * before (linked keys, grid key, dock rule, page fallback) are the shape of the data now.
  *
@@ -85,12 +88,8 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.TERMINAL,
             LayoutsJson.KEYBOARD_OPEN)))
             return new Route(LayoutKind.TERMINAL, null, LayoutsJson.KEYBOARD_OPEN);
-        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.DISPLAY,
-            LayoutsJson.KEYBOARD_OPEN)))
-            return new Route(LayoutKind.DISPLAY, null, LayoutsJson.KEYBOARD_OPEN);
-        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.ASSISTANT,
-            LayoutsJson.KEYBOARD_OPEN)))
-            return new Route(LayoutKind.ASSISTANT, null, LayoutsJson.KEYBOARD_OPEN);
+        // The Display's and the Assistant's remembered keyboard are their places' own, not the
+        // layout's: their documents are retired (ADR 0025), so they stay in the flat keys.
         return null;
     }
 
@@ -101,7 +100,8 @@ final class LayoutDocumentPrefs implements SharedPreferences {
             LayoutKind.DISPLAY, LayoutKind.ASSISTANT}) {
             String scope = scopeOf(k);
             if (rest.startsWith(scope)) {
-                kind = k;
+                // A retired scope's keys are the Workspace's (ADR 0025).
+                kind = k.live();
                 rest = rest.substring(scope.length());
                 break;
             }
@@ -142,8 +142,9 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         LayoutKind kind = LayoutKind.forKey(parts[0]);
         if (kind == null || kind == LayoutKind.TERMINAL_MINIMAL) return null;
         for (PlaceOrientation o : PlaceOrientation.values()) {
+            // A Display or Assistant page shows what the Workspace shows (ADR 0025).
             if (o.storageValue().equals(parts[1]))
-                return new Route(kind, o, LayoutsJson.DRESS_PREFIX + parts[2]);
+                return new Route(kind.live(), o, LayoutsJson.DRESS_PREFIX + parts[2]);
         }
         return null;
     }
@@ -213,17 +214,15 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
         Layouts layouts = store.current();
         for (LayoutKind kind : LayoutKind.values()) {
+            // A retired kind's keys read the Workspace's document, listed once under its own.
+            if (kind.retired()) continue;
             KindLayout layout = layouts.kind(kind);
             String scope = LAYOUT + scopeOf(kind);
             for (String field : layout.wide().keys()) {
                 if (LayoutsJson.KEYBOARD_OPEN.equals(field)) {
-                    if (kind == LayoutKind.TERMINAL || kind == LayoutKind.DISPLAY
-                        || kind == LayoutKind.ASSISTANT)
-                        all.put(PlaceLayoutStore.memoryKey(kind == LayoutKind.TERMINAL
-                                ? com.termux.app.wall.PaneWallPage.TERMINAL
-                                : kind == LayoutKind.ASSISTANT
-                                ? com.termux.app.wall.PaneWallPage.ASSISTANT
-                                : com.termux.app.wall.PaneWallPage.DISPLAY, field),
+                    if (kind == LayoutKind.TERMINAL)
+                        all.put(PlaceLayoutStore.memoryKey(
+                                com.termux.app.wall.PaneWallPage.TERMINAL, field),
                             layout.wide().get(field));
                 } else if (LayoutsJson.WIDE_FIELDS.contains(field)) {
                     // Shared fields read from Home alone: another kind's stale copy is not shown.

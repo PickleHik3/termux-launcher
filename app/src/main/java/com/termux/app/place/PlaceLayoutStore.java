@@ -902,13 +902,12 @@ public final class PlaceLayoutStore {
 
     /**
      * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
-     * and the A-Z index); Terminal and Display pages the status bar and the extra keys; Assistant pages the status bar alone.
+     * and the A-Z index); the Workspace's pages (Terminal, Display and Assistant, ADR 0025) the
+     * status bar and the extra keys.
      */
     public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
         if (element == Element.STATUS) return true;
         if (kind == PageKind.HOME) return element == Element.APPS || element == Element.AZ;
-        // The Assistant page's composer owns the bottom edge (ADR 0022 section 2).
-        if (kind == PageKind.ASSISTANT) return false;
         return element == Element.EXTRA_KEYS;
     }
 

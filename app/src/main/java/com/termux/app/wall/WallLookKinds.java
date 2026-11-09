@@ -8,9 +8,9 @@ import com.termux.shared.termux.settings.preferences.LookGrid;
 import java.util.List;
 
 /**
- * The look grid's page kinds read from the wall (ADR 0018 §3): a Home page is Home kind, the
- * Terminal page Terminal kind, and every Display page Display kind, whether or not a window is
- * bound to it. The wall itself, a page pending removal and a page the wall does not hold have no
+ * The look grid's page kinds read from the wall (ADR 0018 §3): a Home page is Home kind, and
+ * every Workspace page (the Terminal page, every Display page, the Assistant page) is Terminal
+ * kind, the Workspace's look (ADR 0025). The wall itself, a page pending removal and a page the wall does not hold have no
  * kind.
  *
  * <p>{@link #kindOf} runs inside every {@link LookGrid#resolve}, many times per chrome pass, so it
@@ -60,16 +60,14 @@ public final class WallLookKinds implements LookGrid.PageKinds {
         tableOf = pages;
     }
 
-    /** The grid's kind for a wall page kind. */
+    /**
+     * The grid's kind for a wall page kind: Home's for a Home page, the Workspace's
+     * ({@link LookGrid.Kind#TERMINAL}) for every other. Terminal, Display and Assistant pages wear
+     * one look (ADR 0025); cells saved under {@code @kind:display} or {@code @kind:assistant} stay
+     * in the file and are no longer read.
+     */
     @NonNull
     public static LookGrid.Kind of(@NonNull WallPages.PageKind kind) {
-        switch (kind) {
-            case HOME: return LookGrid.Kind.HOME;
-            case DISPLAY: return LookGrid.Kind.DISPLAY;
-            case ASSISTANT: return LookGrid.Kind.ASSISTANT;
-            case TERMINAL:
-            default:
-                return LookGrid.Kind.TERMINAL;
-        }
+        return kind == WallPages.PageKind.HOME ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL;
     }
 }

@@ -26,11 +26,17 @@ public final class LayoutVariant {
     public static final LayoutVariant NORMAL = new LayoutVariant("NORMAL", "", -1, null);
     public static final LayoutVariant MINIMAL = new LayoutVariant("MINIMAL", "minimal.", -1, null);
     public static final LayoutVariant HOME = new LayoutVariant("HOME", "home.", -1, PageKind.HOME);
-    /** The Display's layout (ADR 0020 §4): Display pages wear it while minimal mode is off. */
+    /**
+     * The retired Display layout's key scope (ADR 0020 §4, retired by ADR 0025): no page wears it;
+     * its keys route to the Workspace's document.
+     */
     public static final LayoutVariant DISPLAY =
         new LayoutVariant("DISPLAY", "display.", -1, PageKind.DISPLAY);
 
-    /** The Assistant's layout (ADR 0022): Assistant pages wear it whatever minimal mode says. */
+    /**
+     * The retired Assistant layout's key scope (ADR 0022, retired by ADR 0025): no page wears it;
+     * its keys route to the Workspace's document.
+     */
     public static final LayoutVariant ASSISTANT =
         new LayoutVariant("ASSISTANT", "assistant.", -1, PageKind.ASSISTANT);
 
@@ -73,15 +79,14 @@ public final class LayoutVariant {
     }
 
     /**
-     * The layout a page of {@code kind} wears (ADR 0020 §1): Home's, the Assistant's (ADR 0022), the Display's, or the
-     * Terminal's ({@link #NORMAL}); Terminal-minimal for the last two while {@code minimal}.
+     * The layout a page of {@code kind} wears (ADR 0020 §1, ADR 0025): Home's on a Home page, the
+     * Workspace's ({@link #NORMAL}, or {@link #MINIMAL} while {@code minimal}) on every other
+     * page: Terminal, Display and Assistant pages wear one layout.
      */
     @NonNull
     public static LayoutVariant ofKind(@NonNull PageKind kind, boolean minimal) {
         if (kind == PageKind.HOME) return HOME;
-        if (kind == PageKind.ASSISTANT) return ASSISTANT;
-        if (minimal) return MINIMAL;
-        return kind == PageKind.DISPLAY ? DISPLAY : NORMAL;
+        return minimal ? MINIMAL : NORMAL;
     }
 
     /** The document in the {@code layouts} file this layout reads and writes. */

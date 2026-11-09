@@ -111,10 +111,10 @@ public class DressResolverTest {
     // ------------------------------------------------------------------ one layout (Home layout off)
 
 
-    /** A Display page is of the Display kind, so the Display kind's visibility is read (C2). */
+    /** A Display page wears the Workspace's dress, so the Terminal kind's visibility is read (ADR 0025). */
     @Test
-    public void aDisplayPageIsOfTheDisplayKind() {
-        assertEquals(com.termux.app.wall.WallPages.PageKind.DISPLAY,
+    public void aDisplayPageWearsTheWorkspacesKind() {
+        assertEquals(com.termux.app.wall.WallPages.PageKind.TERMINAL,
             DressResolver.kindOf(PaneWallPage.DISPLAY));
         assertEquals(com.termux.app.wall.WallPages.PageKind.TERMINAL,
             DressResolver.kindOf(PaneWallPage.TERMINAL));
@@ -397,7 +397,7 @@ public class DressResolverTest {
     public void eachPageWearsItsKindsLayout() {
         assertEquals(LayoutVariant.HOME, home().layout());
         assertEquals("the Terminal's layout", LayoutVariant.NORMAL, terminal().layout());
-        assertEquals(LayoutVariant.DISPLAY, display().layout());
+        assertEquals("the Workspace's layout (ADR 0025)", LayoutVariant.NORMAL, display().layout());
         assertFalse("Home leaves the extra keys out", home().wears(Element.EXTRA_KEYS));
         assertTrue(home().wears(Element.APPS));
         assertEquals(WORKSPACE, home().shape());
@@ -430,10 +430,11 @@ public class DressResolverTest {
         assertEquals("the Terminal keeps its own", DockStyle.GLASS_TRAY, terminal().dockDesign());
         assertEquals(DockStyle.GLASS_TRAY, display().dockDesign());
 
-        stored.designs.put(LayoutVariant.DISPLAY, DockStyle.LENS_BEADS);
-        assertEquals(DockStyle.LENS_BEADS, display().dockDesign());
-        assertEquals("the Display's edit leaves the Terminal", DockStyle.GLASS_TRAY,
-            terminal().dockDesign());
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+        assertEquals("one Workspace (ADR 0025)", terminal().dockDesign(), display().dockDesign());
+        assertEquals(terminal().dockDesign(),
+            dresses.dressOf(PaneWallPage.ASSISTANT).dockDesign());
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.GLASS_TRAY);
 
         stored.minimal = true;
         stored.designs.put(LayoutVariant.MINIMAL, DockStyle.LENS_BEADS);
@@ -452,7 +453,7 @@ public class DressResolverTest {
         assertFalse(display().searchField());
         assertTrue(terminal().drawerTile());
         assertFalse(home().drawerTile());
-        assertFalse(display().drawerTile());
+        assertTrue("the Display wears the Workspace's (ADR 0025)", display().drawerTile());
         assertNotEquals("a field on one layout only sets them apart", home(), terminal());
     }
 
@@ -470,39 +471,30 @@ public class DressResolverTest {
         DressResolver empty = new DressResolver(new Stored());
         assertSame(LayoutVariant.HOME, empty.layoutOf(PaneWallPage.WIDGETS));
         assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.TERMINAL));
-        assertSame(LayoutVariant.DISPLAY, empty.layoutOf(PaneWallPage.DISPLAY));
+        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.DISPLAY));
+        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.ASSISTANT));
     }
 
-    // ---- the Assistant page (ADR 0022) ---------------------------------------------------------
+    // ---- the Assistant page: of the Workspace (ADR 0025) -----------------------------------------
 
-    private void assistantShowsAsShipped() {
-        for (Element element : Element.values())
-            stored.kindShown.put(PageKind.ASSISTANT + "." + element,
-                com.termux.app.place.PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT,
-                    element));
+    @Test
+    public void theAssistantPageWearsTheWorkspacesKind() {
+        assertEquals(PageKind.TERMINAL, DressResolver.kindOf(PaneWallPage.ASSISTANT));
     }
 
     @Test
-    public void theAssistantPageIsOfTheAssistantKind() {
-        assertEquals(PageKind.ASSISTANT, DressResolver.kindOf(PaneWallPage.ASSISTANT));
-    }
-
-    @Test
-    public void theAssistantPageWearsTheStatusBarAndNoDockExtraKeysOrWindowBar() {
-        assistantShowsAsShipped();
+    public void theAssistantPageWearsTheWorkspacesDress() {
+        stored.kindShown.put(PageKind.TERMINAL + "." + Element.APPS, true);
         Dress assistant = dresses.dressOf(PaneWallPage.ASSISTANT);
-        assertTrue(assistant.wears(Element.STATUS));
-        for (Element element : Element.values()) {
-            if (element == Element.STATUS) continue;
-            assertFalse(element + " is off by default", assistant.wears(element));
-        }
+        assertEquals(terminal(), assistant);
+        assertEquals(terminal(), display());
+        assertTrue(assistant.wears(Element.APPS));
     }
 
     @Test
-    public void minimalModeDoesNotApplyToTheAssistantPage() {
-        assistantShowsAsShipped();
+    public void minimalModeDressesTheAssistantPageWithTheWorkspace() {
         stored.minimal = true;
-        assertEquals(LayoutVariant.ASSISTANT, dresses.layoutOf(PaneWallPage.ASSISTANT));
-        assertTrue(dresses.wears(PaneWallPage.ASSISTANT, Element.STATUS));
+        assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.ASSISTANT));
+        assertEquals(terminal(), dresses.dressOf(PaneWallPage.ASSISTANT));
     }
 }

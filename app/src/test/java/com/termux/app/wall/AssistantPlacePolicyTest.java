@@ -13,16 +13,17 @@ import com.termux.app.place.PlaceLayoutStore;
 import org.junit.Test;
 
 /**
- * The Assistant page (ADR 0022) is neither Home nor the Workspace: every place decision that
- * used to read "not Home" as "a window" asks these instead.
+ * The Assistant page (ADR 0022) is of the Workspace (ADR 0025), as terminal windows and Display
+ * pages are: it wears the Workspace's layout, look and dress. What stays its own is its content:
+ * its pane's insets, its body swipe, and no window chips on its bar.
  */
 public class AssistantPlacePolicyTest {
 
     @Test
-    public void onlyTerminalAndDisplayAreWorkspacePlaces() {
+    public void terminalDisplayAndAssistantAreWorkspacePlaces() {
         assertTrue(PaneWallPolicy.isWorkspacePlace(PaneWallPage.TERMINAL));
         assertTrue(PaneWallPolicy.isWorkspacePlace(PaneWallPage.DISPLAY));
-        assertFalse(PaneWallPolicy.isWorkspacePlace(PaneWallPage.ASSISTANT));
+        assertTrue(PaneWallPolicy.isWorkspacePlace(PaneWallPage.ASSISTANT));
         assertFalse(PaneWallPolicy.isWorkspacePlace(PaneWallPage.WIDGETS));
         assertFalse(PaneWallPolicy.isWorkspacePlace(null));
     }
@@ -35,18 +36,31 @@ public class AssistantPlacePolicyTest {
     }
 
     @Test
-    public void theAssistantKindWearsTheStatusBarAlone() {
-        assertSame(PageKind.ASSISTANT, DressResolver.kindOf(PaneWallPage.ASSISTANT));
-        assertTrue(PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT, Element.STATUS));
-        assertFalse(PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT, Element.EXTRA_KEYS));
-        assertFalse(PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT, Element.APPS));
-        assertFalse(PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT, Element.AZ));
+    public void theAssistantPageWearsTheWorkspacesDress() {
+        assertSame(PageKind.TERMINAL, DressResolver.kindOf(PaneWallPage.ASSISTANT));
+        assertSame(PageKind.TERMINAL, DressResolver.kindOf(PaneWallPage.DISPLAY));
+        for (Element element : Element.values()) {
+            assertEquals(element.name(),
+                PlaceLayoutStore.kindShowsByDefault(PageKind.TERMINAL, element),
+                PlaceLayoutStore.kindShowsByDefault(PageKind.ASSISTANT, element));
+        }
     }
 
     @Test
-    public void theAssistantArrangementIsItsOwnNotTheTerminals() {
+    public void aSlideBetweenTwoWorkspacePagesCrossesNoSeam() {
+        assertFalse(com.termux.app.place.SeamTravel.crosses(PaneWallPage.TERMINAL,
+            PaneWallPage.ASSISTANT));
+        assertFalse(com.termux.app.place.SeamTravel.crosses(PaneWallPage.DISPLAY,
+            PaneWallPage.ASSISTANT));
+        assertTrue(com.termux.app.place.SeamTravel.crosses(PaneWallPage.WIDGETS,
+            PaneWallPage.ASSISTANT));
+        assertSame(PaneWallPage.TERMINAL,
+            com.termux.app.place.SeamDress.screenOf(PaneWallPage.ASSISTANT));
+    }
+
+    @Test
+    public void theAssistantPageIsNoHomePage() {
         assertSame(PageRef.ASSISTANT, PageRef.of(PaneWallPage.ASSISTANT));
-        assertFalse(PageRef.ASSISTANT.equals(PageRef.TERMINAL));
         assertFalse(PageRef.ASSISTANT.isHome());
     }
 
