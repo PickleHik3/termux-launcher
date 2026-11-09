@@ -1,14 +1,14 @@
 package com.termux.terminal;
 
 /**
- * Copies rows from libghostty-vt into the Java {@link TerminalBuffer}, which stays the copy every
- * reader uses: the renderer, selection, find, links and the transcript. Pure: it takes the cell
- * arrays the shim fills (see {@link GhosttyNative#CELL_INTS}) and a {@link HistorySource}, so tests
- * drive it with plain arrays.
+ * Copies rows from libghostty-vt into Java {@link TerminalRow}s: the screen rows a sync changed,
+ * into the Java buffer that holds the screen, and history rows one at a time when a reader asks
+ * ({@link GhosttyContent}). Pure: it takes the cell arrays the shim fills (see
+ * {@link GhosttyNative#CELL_INTS}), so tests drive it with plain arrays.
  */
 final class GhosttyMirror {
 
-    /** Rows that have gone into the library's history, read one at a time. */
+    /** Rows that have gone into the library's history, read one at a time when a reader asks. */
     interface HistorySource {
         /**
          * Fill {@code cells} and {@code extra} with history row {@code y} (0 is the oldest kept).
@@ -32,6 +32,13 @@ final class GhosttyMirror {
         void sync(long nanos) {
             syncNanos += nanos;
             syncMaxNanos = Math.max(syncMaxNanos, nanos);
+        }
+
+        /** History rows read on demand; nothing copies history per turn any more. */
+        void history(long nanos, int rows) {
+            historyNanos += nanos;
+            historyMaxNanos = Math.max(historyMaxNanos, nanos);
+            historyRows += rows;
         }
     }
 
@@ -109,41 +116,6 @@ final class GhosttyMirror {
             stats.screenNanos += nanos;
             stats.screenMaxNanos = Math.max(stats.screenMaxNanos, nanos);
             stats.screenRows += copied;
-        }
-    }
-
-    /**
-     * {@code scrolled} rows left the top of the screen for the library's history since the last
-     * sync. Scroll the Java screen as far, then rewrite the rows that landed in the transcript from
-     * the library's history, since they may have changed after the last sync and before scrolling
-     * off. Rows past the transcript's capacity are not read at all.
-     *
-     * @param historyRows how many rows the library's history holds now
-     */
-    static void scrollIntoTranscript(TerminalBuffer buffer, int columns, int screenRows, int scrolled,
-                                     int historyRows, HistorySource source, int[] cells, int[] extra) {
-        if (scrolled <= 0) return;
-        Stats stats = GhosttyMirror.stats;
-        long start = stats == null ? 0 : System.nanoTime();
-        int capacity = buffer.mTotalRows - screenRows;
-        // Beyond a full transcript plus a screen, every row would be pushed out again at once.
-        int steps = Math.min(scrolled, capacity + screenRows);
-        for (int i = 0; i < steps; i++) buffer.scrollDownOneLine(0, screenRows, TextStyle.NORMAL);
-        int copy = Math.min(Math.min(scrolled, buffer.getActiveTranscriptRows()), historyRows);
-        for (int i = 0; i < copy; i++) {
-            // The newest row that left is at transcript row -1 and at history row historyRows - 1.
-            int externalRow = -copy + i;
-            int historyRow = historyRows - copy + i;
-            int result = source.readHistoryRow(historyRow, cells, extra);
-            if (result < 0) continue;
-            TerminalRow row = buffer.allocateFullLineIfNecessary(buffer.externalToInternalRow(externalRow));
-            applyRow(row, columns, cells, 0, extra, 0, result);
-        }
-        if (stats != null) {
-            long nanos = System.nanoTime() - start;
-            stats.historyNanos += nanos;
-            stats.historyMaxNanos = Math.max(stats.historyMaxNanos, nanos);
-            stats.historyRows += copy;
         }
     }
 }

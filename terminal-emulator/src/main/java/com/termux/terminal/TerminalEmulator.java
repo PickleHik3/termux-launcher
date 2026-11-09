@@ -959,7 +959,8 @@ public final class TerminalEmulator {
 
     /** What this pane shows and holds, row by row, whichever core parses its output. */
     public TerminalContent getContent() {
-        return mScreen;
+        GhosttyContent ghostty = mGhosttyContent;
+        return ghostty != null ? ghostty : mScreen;
     }
 
     public boolean isAlternateBufferActive() {
@@ -1097,19 +1098,24 @@ public final class TerminalEmulator {
         }
         endSynchronizedUpdateForResize();
         resizeScreen();
+        // A Ghostty pane's history stays in the library; rows the Java reflow pushed above the
+        // screen are not history, and its screen is rewritten from Ghostty's reflow below.
+        if (mGhostty != null) mMainBuffer.clearTranscript();
         sendInBandResizeReport();
         resizeGhostty();
     }
 
     /**
-     * The Ghostty core reflows on its own, and its screen then replaces the one the Java buffer
-     * reflowed; the transcript keeps the Java reflow. Ghostty sends its own size report (mode 2048).
+     * The Ghostty core reflows on its own, screen and history alike; its screen then replaces the
+     * one the Java buffer reflowed, and history rows read before the resize are read again. Ghostty
+     * sends its own size report (mode 2048).
      */
     private void resizeGhostty() {
         if (mGhostty == null) return;
         try {
             mGhostty.setHistoryLimit(GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
             mGhostty.resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels);
+            mGhosttyContent.forgetHistory();
             applyGhosttyState();
         } catch (RuntimeException e) {
             ghosttyFailed(e);
@@ -1138,6 +1144,9 @@ public final class TerminalEmulator {
      */
     public int predictRowsOnlyResizeShift(int rows) {
         if (rows == mRows || rows < 2 || mScreen == mAltBuffer) return 0;
+        // The Ghostty core settles the resize, so it predicts it too.
+        if (mGhosttyContent != null)
+            return GhosttyContent.rowsOnlyResizeShift(rows - mRows, mGhosttyContent.historyRows());
         return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow);
     }
 
@@ -1513,12 +1522,16 @@ public final class TerminalEmulator {
     }
 
     // Experimental libghostty-vt core, chosen per session with debug.tl.terminal_core=ghostty.
-    // Ghostty parses; this emulator's buffers, cursor and mode bits mirror it, so every reader of
-    // the emulator works unchanged. Kitty graphics, sixel, iTerm2 images, text sizing, kitty
-    // notifications and the fork's own modes (7727, 5523) are not handled in this mode.
+    // Ghostty parses; the screen rows each sync changed are copied into this emulator's buffer, and
+    // cursor and mode bits into its fields. History stays in Ghostty: readers reach it through
+    // getContent() (GhosttyContent), and the Java transcript stays empty. Kitty graphics, sixel,
+    // iTerm2 images, text sizing, kitty notifications, prompt marks and the fork's own modes (7727,
+    // 5523) are not handled in this mode.
 
     /** The Ghostty core parsing this session's output, or null for the Java parser. */
     private GhosttyCore mGhostty;
+    /** Its rows as readers see them; null exactly when {@link #mGhostty} is. */
+    private GhosttyContent mGhosttyContent;
     /** Colours read back from the Ghostty core, reused. */
     private final int[] mGhosttyColors = new int[TextStyle.NUM_INDEXED_COLORS];
     /** The cursor shape Ghostty reported last; only a change made by the program moves ours. */
@@ -1561,6 +1574,8 @@ public final class TerminalEmulator {
             GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
         if (core == null) return false;
         mGhostty = core;
+        mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls);
+        mMainBuffer.clearTranscript();
         mGhosttyCursorShape = -1;
         mGhosttySyncHeld = false;
         try {
@@ -1578,14 +1593,25 @@ public final class TerminalEmulator {
     }
 
     /**
-     * Free the Ghostty core. The screen it left stays in this emulator's buffers, and any later
+     * Free the Ghostty core. The screen it left stays in this emulator's buffers, its readable
+     * history is handed to the Java transcript (one native read per row, once), and any later
      * output (the "[Process completed]" line) goes through the Java parser.
      */
     public void releaseGhosttyCore() {
         GhosttyCore core = mGhostty;
+        GhosttyContent content = mGhosttyContent;
         mGhostty = null;
-        mGhosttyPending = false;
-        if (core != null) core.release();
+        mGhosttyContent = null;
+        if (core == null) return;
+        try {
+            // Output parsed since the last sync would move history under the rows handed over.
+            if (!mGhosttyPending && core.isAlive()) content.handOverHistory();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty history not handed over", e);
+        } finally {
+            mGhosttyPending = false;
+            core.release();
+        }
     }
 
     /** The Ghostty core's primary-screen memory (see GhosttyNative.MEM_*), or null. */
@@ -1598,11 +1624,7 @@ public final class TerminalEmulator {
         return mGhostty;
     }
 
-    /**
-     * Hand the bytes to Ghostty in one write. Nothing is mirrored here: however many rows the
-     * write scrolls off, the library's history holds every one the transcript can keep (see
-     * {@link GhosttyCore#historyLimit}) until the next sync copies them.
-     */
+    /** Hand the bytes to Ghostty in one write. Nothing is copied until the next sync. */
     private void writeGhostty(byte[] buffer, int length) {
         if (length <= 0) return;
         try {
@@ -1638,16 +1660,12 @@ public final class TerminalEmulator {
             clearExtraCursors();
             resetGraphemeTracking();
         }
+        // The rows that scrolled off move the shared scroll count, which a scrolled-back view and a
+        // selection follow, by the same rows the Java core counts one line at a time.
+        mGhosttyContent.onSync(mScreen, state[GhosttyNative.STATE_HISTORY],
+            mScreen == mMainBuffer ? state[GhosttyNative.STATE_SCROLLED] : 0);
         if (state[GhosttyNative.STATE_COLS] == mColumns && state[GhosttyNative.STATE_ROWS] == mRows
             && mScreen.mColumns == mColumns && mScreen.mScreenRows == mRows) {
-            if (mScreen == mMainBuffer) {
-                int scrolled = state[GhosttyNative.STATE_SCROLLED];
-                GhosttyMirror.scrollIntoTranscript(mMainBuffer, mColumns, mRows, scrolled,
-                    state[GhosttyNative.STATE_HISTORY], core, core.historyCells(), core.historyExtra());
-                // The mirror scrolls the buffer directly, so the counters the Java core bumps per
-                // line (a scrolled-back view and a selection follow them) move here, by the same rows.
-                if (scrolled > 0) mScrolls.add(scrolled);
-            }
             GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra());
         }
         mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
@@ -4682,6 +4700,8 @@ public final class TerminalEmulator {
      * {@link Integer#MIN_VALUE} if there is none. Rows are in the external coordinate system.
      */
     public int findPromptRow(int fromRow, boolean backwards) {
+        // The Ghostty core keeps no OSC 133 marks yet; walking its history would read every row for none.
+        if (mGhostty != null) return Integer.MIN_VALUE;
         return mScreen.findRowWithMark(fromRow, TerminalRow.MARK_PROMPT_START, backwards);
     }
 
@@ -5277,6 +5297,7 @@ public final class TerminalEmulator {
         if (mGhostty != null) {
             try {
                 mGhostty.reset();
+                mGhosttyContent.forgetHistory();
                 applyGhosttyState();
             } catch (RuntimeException e) {
                 ghosttyFailed(e);

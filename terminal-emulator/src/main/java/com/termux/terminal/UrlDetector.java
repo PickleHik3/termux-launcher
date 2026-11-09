@@ -53,6 +53,8 @@ public final class UrlDetector {
 
     /** How far a chain of wrap flags is followed beyond the context, so a long paragraph stays one line. */
     private static final int MAX_WRAP_CHAIN = 64;
+    /** The most rows a call reads above or below the rows it was asked about. */
+    static final int ROWS_READ_AROUND = CONTEXT_ROWS + 2 * MAX_WRAP_CHAIN;
 
     /** Consecutive rows a vertical line glyph must fill in one column for it to be a pane divider. */
     private static final int DIVIDER_RUN = 8;

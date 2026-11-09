@@ -5,7 +5,7 @@ import junit.framework.TestCase;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The mirror's row and scroll copying, driven with plain arrays in place of the library. */
+/** The mirror's row copying, driven with plain arrays in place of the library. */
 public class GhosttyMirrorTest extends TestCase {
 
     private static final int COLUMNS = 6;
@@ -110,55 +110,5 @@ public class GhosttyMirrorTest extends TestCase {
         assertEquals("tóp", text(buffer, 0));
         assertEquals("k", text(buffer, 1));
         assertEquals("bot", text(buffer, 2));
-    }
-
-    public void testRowsScrolledOffAreRewrittenFromHistory() {
-        TerminalBuffer buffer = new TerminalBuffer(COLUMNS, 10, 3);
-        for (int y = 0; y < 3; y++) buffer.setChar(0, y, 'a' + y, TextStyle.NORMAL);
-        // The library's history after the write: two older rows, then the two that just left,
-        // the second of which changed after the last sync.
-        final String[] history = {"old1", "old2", "a", "b-new"};
-        final List<Integer> asked = new ArrayList<>();
-        GhosttyMirror.HistorySource source = (y, cells, extra) -> {
-            asked.add(y);
-            RowBuilder b = new RowBuilder().text(0, history[y]);
-            System.arraycopy(b.cells, 0, cells, 0, b.cells.length);
-            return y == 3 ? GhosttyNative.ROW_WRAPPED : 0;
-        };
-        int[] cells = new int[COLUMNS * GhosttyNative.CELL_INTS];
-        GhosttyMirror.scrollIntoTranscript(buffer, COLUMNS, 3, 2, history.length, source, cells, new int[8]);
-        assertEquals(2, buffer.getActiveTranscriptRows());
-        assertEquals("a", text(buffer, -2));
-        assertEquals("b-new", text(buffer, -1).trim());
-        assertTrue(buffer.getLineWrap(-1));
-        assertFalse(buffer.getLineWrap(-2));
-        assertEquals("c", text(buffer, 0));
-        assertEquals(List.of(2, 3), asked);
-    }
-
-    public void testScrollPastTheTranscriptReadsOnlyWhatFits() {
-        TerminalBuffer buffer = new TerminalBuffer(COLUMNS, 5, 3); // two transcript rows
-        final List<Integer> asked = new ArrayList<>();
-        GhosttyMirror.HistorySource source = (y, cells, extra) -> {
-            asked.add(y);
-            RowBuilder b = new RowBuilder().text(0, "h" + y);
-            System.arraycopy(b.cells, 0, cells, 0, b.cells.length);
-            return 0;
-        };
-        GhosttyMirror.scrollIntoTranscript(buffer, COLUMNS, 3, 50, 60, source,
-            new int[COLUMNS * GhosttyNative.CELL_INTS], new int[8]);
-        assertEquals(2, buffer.getActiveTranscriptRows());
-        assertEquals(List.of(58, 59), asked);
-        assertEquals("h58", text(buffer, -2));
-        assertEquals("h59", text(buffer, -1));
-    }
-
-    public void testNoScrollReadsNothing() {
-        TerminalBuffer buffer = new TerminalBuffer(COLUMNS, 10, 3);
-        GhosttyMirror.scrollIntoTranscript(buffer, COLUMNS, 3, 0, 5, (y, c, e) -> {
-            fail("read history row " + y);
-            return -1;
-        }, new int[COLUMNS * GhosttyNative.CELL_INTS], new int[8]);
-        assertEquals(0, buffer.getActiveTranscriptRows());
     }
 }

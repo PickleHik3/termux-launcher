@@ -54,7 +54,7 @@ public class GhosttyCoreTest extends TerminalTestCase {
         if (!ghostty(5, 3)) return;
         enterString("1\r\n2\r\n3\r\n4\r\n5");
         assertLinesAre("3    ", "4    ", "5    ");
-        assertEquals(2, mTerminal.getScreen().getActiveTranscriptRows());
+        assertEquals(2, mTerminal.getContent().historyRows());
         assertLineIs(-2, "1    ");
         assertLineIs(-1, "2    ");
     }
@@ -169,8 +169,12 @@ public class GhosttyCoreTest extends TerminalTestCase {
         enterString("abcdef");
         mTerminal.resize(3, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
         assertEquals(3, mTerminal.mColumns);
-        assertLineIs(0, "abc");
-        assertLineIs(1, "def");
+        // Ghostty's reflow, not the Java buffer's: the cursor's row stays put, so the line's first
+        // half goes into history, and the screen and cursor agree on where the text is.
+        assertEquals(1, mTerminal.getContent().historyRows());
+        assertLineIs(-1, "abc");
+        assertLineIs(0, "def");
+        assertEquals(0, mTerminal.getCursorRow());
     }
 
     public void testOneWriteLongerThanAPageLandsWholeAndInOrder() {
@@ -178,7 +182,7 @@ public class GhosttyCoreTest extends TerminalTestCase {
         // must come through the library's history at the one sync.
         if (!ghostty(6, 3, 10000)) return;
         enterString(numberedLines(0, 6000));
-        assertEquals(6000 - 2, mTerminal.getScreen().getActiveTranscriptRows());
+        assertEquals(6000 - 2, mTerminal.getContent().historyRows());
         assertLinesAre("5998  ", "5999  ", "      ");
         assertTranscriptCountsDownFrom(5997, 5998, 6);
     }
@@ -191,7 +195,7 @@ public class GhosttyCoreTest extends TerminalTestCase {
         enterString(numberedLines(0, 20000));
         enterString(numberedLines(100000, 150000));
         int capacity = 100 - 3;
-        assertEquals(capacity, mTerminal.getScreen().getActiveTranscriptRows());
+        assertEquals(capacity, mTerminal.getContent().historyRows());
         assertLinesAre("149998  ", "149999  ", "        ");
         assertTranscriptCountsDownFrom(149997, capacity, 8);
     }

@@ -220,9 +220,19 @@ public final class TerminalParseBench {
                     .put("mirror_history_ms", round(split.historyNanos / 1e6))
                     .put("mirror_history_max_ms", round(split.historyMaxNanos / 1e6))
                     .put("mirror_history_rows", split.historyRows);
+                // History is read when a reader asks: every readable row once, as a find or a
+                // transcript copy would, into a window that holds none of them yet.
+                TerminalContent content = emulator.getContent();
+                int rows = content.historyRows();
+                long readStart = System.nanoTime();
+                for (int y = -rows; y < 0; y++) content.row(y);
+                long readNanos = System.nanoTime() - readStart;
+                result.put("scrollback_rows", rows)
+                    .put("scrollback_read_ms", round(readNanos / 1e6))
+                    .put("scrollback_us_per_row", rows == 0 ? 0 : round(readNanos / 1e3 / rows));
             }
             if (emulator != null) {
-                result.put("transcript_rows_used", emulator.getScreen().getActiveTranscriptRows())
+                result.put("transcript_rows_used", emulator.getContent().historyRows())
                     .put("tail", tail(emulator));
             }
             if (core != null) result.putRaw("ghostty", ghosttyMemory(core));
@@ -266,10 +276,10 @@ public final class TerminalParseBench {
      * compared.
      */
     private static String tail(TerminalEmulator emulator) {
-        TerminalBuffer screen = emulator.getScreen();
+        TerminalContent screen = emulator.getContent();
         for (int y = emulator.mRows - 1; y >= 0; y--) {
-            if (screen.getSelectedText(0, y, emulator.mColumns, y).trim().isEmpty()) continue;
-            return screen.getSelectedText(0, Math.max(0, y - 1), emulator.mColumns, y).trim();
+            if (screen.text(0, y, emulator.mColumns, y).trim().isEmpty()) continue;
+            return screen.text(0, Math.max(0, y - 1), emulator.mColumns, y).trim();
         }
         return "";
     }

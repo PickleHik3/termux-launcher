@@ -7,8 +7,8 @@ import java.util.ArrayList;
 /**
  * One session's libghostty-vt terminal, the experimental core behind
  * {@code adb shell setprop debug.tl.terminal_core ghostty}. {@link TerminalEmulator} hands it the
- * shell's output and copies the result back into its own buffers, so everything that reads the
- * emulator keeps working unchanged.
+ * shell's output and copies the changed screen rows into its own buffer; history stays here and is
+ * read through {@link GhosttyContent} when a reader asks.
  *
  * <p>Main thread only, like the emulator. Replies and clipboard text that arrive during a write are
  * held here and handed on after it, so nothing reaches back into the terminal mid-write.
@@ -56,13 +56,10 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     /**
      * Rows of history the library keeps for a Java transcript of {@code transcriptRows} rows.
      *
-     * <p>A sync copies the rows that scrolled off since the last one into the transcript, which
-     * keeps the newest {@code transcriptRows} of them at most, so that is all history must still
-     * hold at the sync, however much was written in between. Ghostty prunes whole pages once
-     * history passes its limit, so after pruning it holds more than the limit minus one page: one
-     * page of margin keeps every row the transcript can take. When pruning took rows the sync has
-     * not seen, the native sync counts everything in history as new and the transcript is
-     * rewritten from it whole.
+     * <p>Readers see at most the rows the Java transcript would hold ({@link GhosttyContent}), so
+     * both cores show the same history. Ghostty prunes whole pages once history passes its limit,
+     * so after pruning it holds more than the limit minus one page: one page of margin keeps the
+     * readable history full instead of dropping by up to a page each time a page goes.
      */
     static int historyLimit(int transcriptRows, int columns) {
         return transcriptRows + pageRowsBound(columns);
