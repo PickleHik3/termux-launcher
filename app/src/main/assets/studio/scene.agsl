@@ -10,6 +10,7 @@ uniform shader art;
 uniform shader regions;
 uniform shader clouds;     // the art's clouds alone (premultiplied); empty for scenes without
 uniform shader lights;     // id per lit shape, nearest-sampled; black for scenes without
+uniform shader fish;       // 4x4 atlas of 256x128 cells, one sprite each, head to +x; empty if none
 
 uniform float2 uOut;       // output size in px
 uniform float2 uArt;       // art size in px
@@ -32,6 +33,8 @@ uniform float  uCaustics;  // light web on the sea floor
 uniform float  uBubbles;   // bubbles rising through open water
 uniform float  uShafts;    // light shafts breathing
 uniform float  uMist;      // ground mist drifting along the horizon
+uniform float  uStars;     // stars in a sky painted without them
+uniform float  uFish;      // fish swimming through open water; the value scales their speed
 
 float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 
@@ -47,6 +50,46 @@ float noise(float2 p) {
 }
 
 float luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+// Sparse twinkling stars on a jittered grid.
+float starField(float2 p) {
+    float2 cell = floor(p / 16.0);
+    float2 at = (float2(hash(cell + 3.0), hash(cell + 5.0)) * 0.7 + 0.15) * 16.0;
+    float sd = length(p - cell * 16.0 - at);
+    return step(0.93, hash(cell)) * smoothstep(1.9, 0.7, sd)
+         * (0.55 + 0.45 * sin(uTime * 1.6 + hash(cell + 7.0) * 40.0));
+}
+
+// One fish: its species, size, depth, direction and speed come from its slot number k.
+// Returns the sprite colour (premultiplied) at p, or nothing.
+half4 fishSlot(float2 p, float k) {
+    float h1 = hash(float2(k, 11.0));
+    float h2 = hash(float2(k, 23.0));
+    float h3 = hash(float2(k, 37.0));
+    float species = mod(k * 5.0 + 3.0, 16.0);
+    float len = mix(80.0, 170.0, h2) * (species > 14.5 ? 1.6 : 1.0);   // cell 15 is the turtle
+    float dir = h1 > 0.5 ? 1.0 : -1.0;
+    float speed = mix(16.0, 42.0, h3) * uFish * (species > 14.5 ? 0.5 : 1.0);
+    // swim lanes cover only the part of the art the phone shows, so few fish are off screen
+    float vis = min(uArt.x, uOut.x * uArt.y / uOut.y);
+    float span = vis + len * 2.0 + 160.0;
+    float x = (uArt.x - vis) * 0.5 + mod(uTime * speed + h1 * span, span) - len;
+    if (dir < 0.0) x = uArt.x - x;
+    float y = mix(330.0, 1060.0, fract(h2 * 7.13 + h3)) + sin(uTime * 0.45 + k * 2.1) * 16.0;
+    float2 d = p - float2(x, y);
+    if (abs(d.x) > len * 0.55 || abs(d.y) > len * 0.27) return half4(0.0);
+    float u = d.x * dir / len;                                  // -0.5 tail .. 0.5 head
+    float v = d.y / (len * 0.5);                                // the cell is 2:1
+    v += sin(uTime * 7.0 + k * 1.7) * 0.05 * clamp(0.15 - u, 0.0, 0.65);   // tail beat
+    float2 cu = float2(u + 0.5, v + 0.5);
+    if (cu.x < 0.01 || cu.x > 0.99 || cu.y < 0.01 || cu.y > 0.99) return half4(0.0);
+    float2 origin = float2(mod(species, 4.0) * 256.0, floor(species / 4.0) * 128.0);
+    half4 f = fish.eval(origin + cu * float2(256.0, 128.0));
+    // smaller fish read as farther away: fade them toward the water colour
+    float far = (1.0 - clamp((len - 80.0) / 90.0, 0.0, 1.0)) * 0.4;
+    float3 water = float3(art.eval(float2(uArt.x - 6.0, y)).rgb);
+    return half4(half3(mix(float3(f.rgb), water * float(f.a), far)), f.a);
+}
 
 half4 main(float2 fc) {
     // Fill the height, centre-crop the sides (phones are taller than the 2:3 art).
@@ -110,8 +153,8 @@ half4 main(float2 fc) {
     float lit = float(lights.eval(p).r);
     if (uFlicker > 0.0 && lit > 0.02) {
         float id = floor(lit * 255.0 + 0.5);
-        float slot = floor(uTime * 0.2 + hash(float2(id, 1.7)) * 5.0);
-        float off = step(1.0 - 0.12 * uFlicker, hash(float2(id * 1.31, slot)));
+        float slot = floor(uTime * 0.05 + hash(float2(id, 1.7)) * 5.0);   // a window changes every ~20 s at most
+        float off = step(1.0 - 0.05 * uFlicker, hash(float2(id * 1.31, slot)));
         float buzz = 0.93 + 0.07 * sin(uTime * (3.0 + hash(float2(id, 4.0)) * 4.0));
         c *= mix(buzz, 0.28, off);
     }
@@ -155,6 +198,31 @@ half4 main(float2 fc) {
         c = mix(c, float3(0.92, 0.98, 1.0), ring * uBubbles * 0.7);
     }
 
+    // Fish: ten slots swimming through open water, so they pass behind kelp and coral.
+    if (uFish > 0.0 && sky > 0.02) {
+        half4 f = fishSlot(p, 0.0);
+        half4 g;
+        g = fishSlot(p, 1.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 2.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 3.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 4.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 5.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 6.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 7.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 8.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 9.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 10.0); f = g + f * (1.0 - g.a);
+        g = fishSlot(p, 11.0); f = g + f * (1.0 - g.a);
+        float a = float(f.a) * sky;
+        c = c * (1.0 - a) + float3(f.rgb) * sky;
+    }
+
+    // Stars in a sky painted without them, fading toward the horizon and the city glow.
+    if (uStars > 0.0 && sky > 0.5) {
+        float tt = clamp(p.y / max(uHorizon, 1.0), 0.0, 1.0);
+        c += starField(p) * uStars * smoothstep(0.85, 0.2, tt) * 0.7;
+    }
+
     // Ground mist: drifting banks along the horizon.
     float mistAmt = uMist + (uAtm > 0.5 && uAtm < 1.5 ? 1.0 : 0.0) + (uAtm > 2.5 && uAtm < 3.5 ? 0.8 : 0.0);
     float mist = 0.0;
@@ -181,12 +249,7 @@ half4 main(float2 fc) {
         float3 land = mix(float3(0.035, 0.05, 0.10), float3(0.30, 0.38, 0.58), l);
         float3 skyc = mix(float3(0.03, 0.05, 0.13), float3(0.16, 0.20, 0.36), pow(t, 2.2));
         skyc = mix(skyc, float3(0.22, 0.26, 0.40), cloud * 0.8);
-        float2 cell = floor(p / 16.0);
-        float2 at = (float2(hash(cell + 3.0), hash(cell + 5.0)) * 0.7 + 0.15) * 16.0;
-        float sd = length(p - cell * 16.0 - at);
-        float star = step(0.93, hash(cell)) * smoothstep(1.9, 0.7, sd)
-                   * (0.55 + 0.45 * sin(uTime * 1.6 + hash(cell + 7.0) * 40.0));
-        skyc += star * (1.0 - t) * (1.0 - cloud) * 0.8;
+        skyc += starField(p) * (1.0 - t) * (1.0 - cloud) * 0.8;
         float2 moon = float2(uArt.x * 0.7, uHorizon * 0.38);
         float md = length(p - moon);
         skyc += float3(0.95, 0.93, 0.85) * smoothstep(34.0, 30.0, md) + float3(0.25, 0.28, 0.4) * exp(-md / 120.0) * 0.6;

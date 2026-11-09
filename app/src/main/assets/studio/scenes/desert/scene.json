@@ -6,8 +6,8 @@
     1024,
     1536
   ],
-  "horizon": 834,
-  "cloudTop": 720,
+  "horizon": 712,
+  "cloudTop": 668,
   "clouds": "clouds.webp",
   "atmospheres": {
     "golden-hour": 0,
@@ -16,6 +16,6 @@
   "effects": {
     "shimmer": 1,
     "plume": 1,
-    "plumeY": 1050
+    "plumeY": 740
   }
 }

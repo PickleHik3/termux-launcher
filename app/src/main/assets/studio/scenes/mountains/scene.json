@@ -6,8 +6,8 @@
     1024,
     1536
   ],
-  "horizon": 1052,
-  "cloudTop": 660,
+  "horizon": 960,
+  "cloudTop": 548,
   "clouds": "clouds.webp",
   "atmospheres": {
     "midday": 0,
@@ -16,6 +16,6 @@
   },
   "effects": {
     "plume": 1,
-    "plumeY": 850
+    "plumeY": 660
   }
 }

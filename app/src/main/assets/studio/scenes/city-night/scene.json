@@ -6,14 +6,15 @@
     1024,
     1536
   ],
-  "horizon": 973,
+  "horizon": 1000,
   "lights": "lights.png",
   "atmospheres": {
     "night": 0,
     "misty-night": 3
   },
   "effects": {
-    "flicker": 1
+    "flicker": 0.6,
+    "stars": 1
   },
   "motionGain": {
     "sway": 0.5

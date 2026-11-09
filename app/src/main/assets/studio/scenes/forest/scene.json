@@ -6,7 +6,7 @@
     1024,
     1536
   ],
-  "horizon": 1000,
+  "horizon": 760,
   "atmospheres": {
     "morning": 0,
     "misty-dawn": 1,

@@ -2,7 +2,7 @@
 importScripts('https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/canvaskit.js');
 const V = self.location.search;            // cache stamp passed through from the page
 let kit, paint, effect, surface, sw = 0, sh = 0, words, places, gl = null, none;
-const packs = {};                          // place key -> { scene, shaders: [art, regions, clouds, lights] }
+const packs = {};                          // place key -> { scene, shaders: [art, regions, clouds, lights, fish] }
 const ready = (async () => {
   kit = await CanvasKitInit({ locateFile: f => 'https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.40.0/bin/' + f });
   paint = new kit.Paint();
@@ -27,7 +27,7 @@ async function pack(key) {
     return img.makeShaderOptions(kit.TileMode.Clamp, kit.TileMode.Clamp, filter, kit.MipmapMode.None);
   };
   const L = kit.FilterMode.Linear, N = kit.FilterMode.Nearest;
-  const shaders = await Promise.all([load(scene.art, L), load(scene.regions, L), load(scene.clouds, L), load(scene.lights, N)]);
+  const shaders = await Promise.all([load(scene.art, L), load(scene.regions, L), load(scene.clouds, L), load(scene.lights, N), load(scene.fish, L)]);
   return packs[key] = { scene, shaders };
 }
 function uniforms(scene, atm, motion, time, width, height) {
@@ -36,7 +36,8 @@ function uniforms(scene, atm, motion, time, width, height) {
     scene.atmospheres[atm] ?? 0,
     m.sway * (g.sway ?? 1), m.water * (g.water ?? 1), m.cloud, m.gust,
     e.anchor || 0, (e.flicker || 0) * m.life, (e.plume || 0) * m.life, e.plumeY || 0, (e.shimmer || 0) * m.life,
-    e.caustics || 0, (e.bubbles || 0) * m.life, e.shafts || 0, e.mist || 0];
+    e.caustics || 0, (e.bubbles || 0) * m.life, e.shafts || 0, e.mist || 0,
+    e.stars || 0, (e.fish || 0) * (0.5 + 0.5 * m.life)];
 }
 self.onmessage = async ({ data }) => {
   try {

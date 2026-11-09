@@ -14,9 +14,11 @@
   "effects": {
     "caustics": 1,
     "bubbles": 1,
-    "anchor": 1250
+    "anchor": 1350,
+    "fish": 1
   },
   "motionGain": {
     "sway": 2.5
-  }
+  },
+  "fish": "fish.webp"
 }
