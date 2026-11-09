@@ -270,7 +270,7 @@ final class DisplayCardPage implements SetupCardPage {
         TerminalSession session = run.session();
         TerminalEmulator emulator = session == null ? null : session.getEmulator();
         if (emulator == null) return "";
-        String text = emulator.getScreen().getTranscriptText();
+        String text = emulator.getContent().transcriptText(true, false);
         return text == null ? "" : text;
     }
 

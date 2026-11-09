@@ -11,7 +11,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import androidx.annotation.Nullable;
-import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.WcWidth;
 import com.termux.view.R;
@@ -98,9 +98,9 @@ public class TextSelectionCursorController implements CursorController {
 
     public void setInitialTextSelectionPosition(MotionEvent event) {
         int[] columnAndRow = terminalView.getColumnAndRow(event, true);
-        TerminalBuffer screen = terminalView.mEmulator.getScreen();
+        TerminalContent screen = terminalView.mEmulator.getContent();
         clampToScreen(columnAndRow, terminalView.mEmulator.mColumns, terminalView.mEmulator.mRows,
-            screen.getActiveTranscriptRows());
+            screen.historyRows());
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
         expandSelectionToWord();
@@ -131,7 +131,7 @@ public class TextSelectionCursorController implements CursorController {
         mSnapScratch[1] = mSelY1;
         mSnapScratch[2] = mSelX2;
         mSnapScratch[3] = mSelY2;
-        if (!TextBlockSelection.snap(terminalView.mEmulator.getScreen(), mSnapScratch))
+        if (!TextBlockSelection.snap(terminalView.mEmulator.getContent(), mSnapScratch))
             return;
         mSelX1 = mSnapScratch[0];
         mSelY1 = mSnapScratch[1];
@@ -145,8 +145,8 @@ public class TextSelectionCursorController implements CursorController {
      * {@link #selectAtCursor()}, so a key-triggered selection lands on the same word a tap would.
      */
     private void expandSelectionToWord() {
-        TerminalBuffer screen = terminalView.mEmulator.getScreen();
-        TerminalRow line = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(mSelY1));
+        TerminalContent screen = terminalView.mEmulator.getContent();
+        TerminalRow line = screen.row(mSelY1);
         char[] text = line.mText;
         int startIndex = line.findStartOfColumn(mSelX1);
         if (startIndex >= 0 && startIndex < text.length && text[startIndex] != ' ') {
@@ -210,9 +210,9 @@ public class TextSelectionCursorController implements CursorController {
     public void selectAll() {
         if (terminalView.mEmulator == null)
             return;
-        TerminalBuffer screen = terminalView.mEmulator.getScreen();
+        TerminalContent screen = terminalView.mEmulator.getContent();
         int scrollbackRows = Math.max(0,
-            screen.getActiveRows() - terminalView.mEmulator.mRows);
+            screen.activeRows() - terminalView.mEmulator.mRows);
         mSelX1 = 0;
         mSelY1 = -scrollbackRows;
         mSelX2 = Math.max(0, terminalView.mEmulator.mColumns - 1);
@@ -341,8 +341,8 @@ public class TextSelectionCursorController implements CursorController {
 
     @Override
     public void updatePosition(TextSelectionHandleView handle, int x, int y) {
-        TerminalBuffer screen = terminalView.mEmulator.getScreen();
-        final int scrollRows = screen.getActiveRows() - terminalView.mEmulator.mRows;
+        TerminalContent screen = terminalView.mEmulator.getContent();
+        final int scrollRows = screen.activeRows() - terminalView.mEmulator.mRows;
         if (handle == mStartHandle) {
             mSelX1 = terminalView.getCursorX(x);
             mSelY1 = terminalView.getCursorY(y);
@@ -414,8 +414,8 @@ public class TextSelectionCursorController implements CursorController {
         terminalView.invalidate();
     }
 
-    private int getValidCurX(TerminalBuffer screen, int cy, int cx) {
-        String line = screen.getSelectedText(0, cy, cx, cy);
+    private int getValidCurX(TerminalContent screen, int cy, int cx) {
+        String line = screen.text(0, cy, cx, cy);
         if (!TextUtils.isEmpty(line)) {
             int col = 0;
             for (int i = 0, len = line.length(); i < len; i++) {

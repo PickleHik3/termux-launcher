@@ -30,6 +30,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   says "decodes on the CPU", and its frames still update with the hardware canvas (a frozen frame
   means updateTexImage ran before the render thread posted the buffer).
 
+- **Terminal engine: Fast (libghostty-vt) (11-09, merged from exp/ghostty-wave3).** Verified on
+  pong 11-09 on both engines: parse and frame benchmarks, the protocol sheet, emoji widths,
+  XTVERSION/DA1/mode 2027, kitty images (PNG, animated GIF, tmux placeholders), sixel at the top and
+  bottom of a pane, mode 2026 hold, trim with an image on screen, links in scrollback, prompt jumps,
+  OSC 99 notifications, the Terminal engine row in light and dark, the crash guard (force-stop keeps
+  Fast on, a native crash turns it off, an update turns it back on), an idle Fast pane (6 frames in
+  30 s). Still owed · pong, Fast engine: a sixel taller than the pane and one at the right edge;
+  `clear` and `printf '\e[2J'` with a sixel on screen; `printf '\e[c'` answers `?62;4;22c`. Drop
+  build: Settings › Terminal › Clipboard & compatibility shows Terminal engine (the library is in
+  the APK).
+
 - **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
   shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
   waited in `SurfaceSyncGroup` for the scene SurfaceView's first buffer, which came only after the EGL

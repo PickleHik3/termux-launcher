@@ -172,7 +172,7 @@ final class SetupShellRun {
         TerminalSession s = session;
         TerminalEmulator emulator = s == null ? null : s.getEmulator();
         if (emulator == null) return "";
-        String text = emulator.getScreen().getTranscriptText();
+        String text = emulator.getContent().transcriptText(true, false);
         return text == null ? "" : DisplayCardLogic.redact(text, secret);
     }
 

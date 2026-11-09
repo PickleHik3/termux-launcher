@@ -81,6 +81,10 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setTerminalCursorTrailStyle(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
+            case "terminal_engine":
+                // Read when a pane is opened; open panes keep their engine.
+                mPreferences.setTerminalEngine(value);
+                break;
             case "terminal_retro_effect":
                 mPreferences.setTerminalRetroEffect(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
@@ -100,6 +104,8 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "terminal_cursor_trail_style":
                 return mPreferences.getTerminalCursorTrailStyle();
+            case "terminal_engine":
+                return mPreferences.getTerminalEngine();
             case "terminal_retro_effect":
                 return mPreferences.getTerminalRetroEffect();
             case "idle_tear_rate":

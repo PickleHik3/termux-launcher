@@ -411,6 +411,14 @@
         <item>secondary</item>
         <item>tertiary</item>
     </string-array>
+    <string-array name="settings_terminal_engine_entries">
+        <item>@string/settings_terminal_engine_standard</item>
+        <item>@string/settings_terminal_engine_ghostty</item>
+    </string-array>
+    <string-array name="settings_terminal_engine_values" translatable="false">
+        <item>standard</item>
+        <item>ghostty</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_entries">
         <item>None</item>
         <item>CRT</item>

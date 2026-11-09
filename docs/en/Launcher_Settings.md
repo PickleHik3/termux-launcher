@@ -40,7 +40,9 @@ apps in the drawer**, which opens the Linux apps section. See
 
 "Windows, panes, status bar and text". **Appearance** opens the Appearance editor on the
 Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (font,
-cursor trail, terminal effect) and **Clipboard & compatibility** pages. See
+cursor trail, terminal effect) and **Clipboard & compatibility** pages. **Terminal engine**, on
+Clipboard & compatibility, picks what reads terminal output for panes you open next; see
+[Terminal engine](Terminal_Kitty_Protocols.md#terminal-engine). See
 [Panes, windows and sessions](Panes_Windows_And_Sessions.md), [Status bar](Status_Bar.md),
 [Terminal fonts](Terminal_Fonts.md) and [Touch, links and clipboard](Touch_Links_And_Clipboard.md).
 Whether scripts may open panes is covered on [launcherctl](LauncherCtl.md).

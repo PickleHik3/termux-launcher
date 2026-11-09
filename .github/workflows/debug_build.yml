@@ -29,6 +29,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+      - name: Setup Zig for the libghostty-vt terminal engine (-Pghostty=true)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
@@ -95,7 +99,7 @@ jobs:
           export TERMUX_APP_VERSION_NAME="$NIGHTLY_VERSION_NAME" # Used by app/build.gradle
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}" # Used by app/build.gradle
-          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon assembleStaging || \
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true assembleStaging || \
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
 
           echo "Validating APKs"

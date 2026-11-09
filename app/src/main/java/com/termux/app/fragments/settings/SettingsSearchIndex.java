@@ -119,7 +119,8 @@ public final class SettingsSearchIndex {
 
     /** Rows a page hides on a phone that lacks their feature, so a result never points at nothing. */
     private static boolean hiddenOnThisPhone(@Nullable String key) {
-        return "terminal_retro_effect".equals(key) && !com.termux.app.terminal.PaneRetroEffect.available();
+        return ("terminal_retro_effect".equals(key) && !com.termux.app.terminal.PaneRetroEffect.available())
+            || ("terminal_engine".equals(key) && !com.termux.terminal.TerminalEngine.isAvailable());
     }
 
     /** Reads give the default; writes go nowhere. */

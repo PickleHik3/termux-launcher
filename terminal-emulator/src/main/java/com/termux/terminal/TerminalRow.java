@@ -50,7 +50,8 @@ public final class TerminalRow {
     private int mSpaceUsed;
 
     /**
-     * If this row has been line wrapped due to text output at the end of line.
+     * If this row has been line wrapped due to text output at the end of line. Written through
+     * {@link #setLineWrap}, so the stamp moves.
      */
     boolean mLineWrap;
 
@@ -83,7 +84,8 @@ public final class TerminalRow {
 
     /**
      * The OSC 133 mark of this row, one of the {@code MARK_*} values. Marks live on the row rather than
-     * in a separate list so that they follow it through the circular buffer for free.
+     * in a separate list so that they follow it through the circular buffer for free. Written
+     * through {@link #setShellIntegrationMark}, so the stamp moves.
      */
     public byte mShellIntegrationMark;
 
@@ -119,6 +121,16 @@ public final class TerminalRow {
     private int mHintIndex;
 
     /**
+     * Moves on every change to what this row holds: its text, widths, styles, side tables, wrap
+     * flag, mark and placements. Every method that changes any of them moves it, and the fields
+     * other classes may read ({@link #mText}, {@link #mLineWrap}, {@link #mShellIntegrationMark},
+     * {@link #mHasBitmap}) are written only from here. A reader that kept the stamp along with the
+     * row object knows the row is unchanged while both are the same; the stamp says nothing about
+     * how two different row objects compare. The hint above is not content and does not move it.
+     */
+    private long mStamp;
+
+    /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
@@ -130,6 +142,34 @@ public final class TerminalRow {
     }
 
     /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    /** Whether this row soft-wraps into the one below it. */
+    public boolean getLineWrap() {
+        return mLineWrap;
+    }
+
+    /** Whether this row soft-wraps into the one below it. */
+    void setLineWrap(boolean lineWrap) {
+        mStamp++;
+        mLineWrap = lineWrap;
+    }
+
+    /** Set the OSC 133 mark, one of the {@code MARK_*} values. */
+    void setShellIntegrationMark(byte mark) {
+        mStamp++;
+        mShellIntegrationMark = mark;
+    }
+
+    /** Replace one cell's style without touching its text (DECCARA and DECRARA). */
+    void setStyleAt(int column, long style) {
+        mStamp++;
+        mStyle[column] = style;
+    }
+
+    /** See {@link #mStamp}: equal stamps on the same row object mean nothing in it changed. */
+    public long getStamp() {
+        return mStamp;
+    }
+
     public boolean hasDecorationColors() {
         return mDecorationColors != null;
     }
@@ -191,6 +231,7 @@ public final class TerminalRow {
 
     /** Store a packed record, or zero to make the cell plain again. */
     void setTextSizeRecord(int column, int record) {
+        mStamp++;
         if (mTextSizes == null) {
             if (record == 0)
                 return;
@@ -256,6 +297,7 @@ public final class TerminalRow {
 
     /** Forget every text sizing record on this row, leaving the text where it is. */
     void clearTextSizes() {
+        mStamp++;
         mTextSizes = null;
     }
 
@@ -263,6 +305,7 @@ public final class TerminalRow {
      * NOTE: The sourceX2 is exclusive.
      */
     public void copyInterval(TerminalRow line, int sourceX1, int sourceX2, int destinationX) {
+        mStamp++;
         mHasNonOneWidthOrSurrogateChars |= line.mHasNonOneWidthOrSurrogateChars;
         final int x1 = line.findStartOfColumn(sourceX1);
         final int x2 = line.findStartOfColumn(sourceX2);
@@ -353,6 +396,7 @@ public final class TerminalRow {
     }
 
     public void clear(long style) {
+        mStamp++;
         Arrays.fill(mText, ' ');
         Arrays.fill(mCharWidths, (byte) 1);
         Arrays.fill(mStyle, style);
@@ -380,12 +424,14 @@ public final class TerminalRow {
     }
 
     void addKittyPlacement(KittyPlacement placement) {
+        mStamp++;
         if (mKittyPlacements == null) mKittyPlacements = new java.util.ArrayList<>(2);
         mKittyPlacements.add(placement);
         placement.anchor = this;
     }
 
     void removeKittyPlacement(KittyPlacement placement) {
+        mStamp++;
         if (mKittyPlacements != null && mKittyPlacements.remove(placement)
             && mKittyPlacements.isEmpty())
             mKittyPlacements = null;
@@ -406,9 +452,9 @@ public final class TerminalRow {
         row.mLineWrap = mLineWrap && columns >= mColumns;
         row.mShellIntegrationMark = mShellIntegrationMark;
         row.mHasBitmap = mHasBitmap;
+        row.mStamp++;
         if (mKittyPlacements != null) {
-            java.util.ArrayList<KittyPlacement> carried = mKittyPlacements;
-            mKittyPlacements = null;
+            java.util.ArrayList<KittyPlacement> carried = takeKittyPlacements();
             for (KittyPlacement placement : carried) {
                 placement.fitToColumns(columns);
                 row.addKittyPlacement(placement);
@@ -417,9 +463,22 @@ public final class TerminalRow {
         return row;
     }
 
+    /**
+     * The placements anchored here, which the caller moves to another row, leaving none here; null
+     * when there were none.
+     */
+    java.util.ArrayList<KittyPlacement> takeKittyPlacements() {
+        java.util.ArrayList<KittyPlacement> taken = mKittyPlacements;
+        if (taken == null) return null;
+        mStamp++;
+        mKittyPlacements = null;
+        return taken;
+    }
+
     /** Detach every placement anchored here; returns whether there were any. */
     boolean dropKittyPlacements() {
         if (mKittyPlacements == null) return false;
+        mStamp++;
         for (KittyPlacement placement : mKittyPlacements) placement.anchor = null;
         mKittyPlacements = null;
         return true;
@@ -455,6 +514,7 @@ public final class TerminalRow {
         if (mCharWidths[start] != 1 || column >= mColumns - 1) return false;
         // A sized block already owns how many cells it covers; widening would eat its neighbour.
         if (isTextSizeCell(column) || isTextSizeCell(column + 1)) return false;
+        mStamp++;
         if (wideDisplayCharacterStartingAt(column + 1))
             setChar(column + 1, ' ', mStyle[column + 1]);
         int nextStart = findStartOfColumn(column + 1);
@@ -525,6 +585,7 @@ public final class TerminalRow {
                          int hyperlinkId, int newCodePointDisplayWidth, boolean updateCellMetadata) {
         if (columnToSet < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
+        mStamp++;
         if (updateCellMetadata) {
             mStyle[columnToSet] = style;
             setDecorationColor(columnToSet, decorationColor);
