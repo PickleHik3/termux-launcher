@@ -1654,9 +1654,7 @@ public final class TerminalEmulator {
         GhosttyContent content = mGhosttyContent;
         mGhostty = null;
         mGhosttyContent = null;
-        if (mGhosttyImages != null) mGhosttyImages.release();
-        mGhosttyImages = null;
-        mGhosttyLinks = null;
+        releaseGhosttyCompanions();
         if (core == null) return;
         try {
             // Output parsed since the last sync would move history under the rows handed over.
@@ -1669,6 +1667,20 @@ public final class TerminalEmulator {
         }
     }
 
+    /**
+     * Give back what a pane keeps beside its Ghostty core: the image bitmaps (with their budget and
+     * their memory-trim registration) and the link-id bridge. Every way off the core goes through
+     * here: a pane closing ({@link #releaseGhosttyCore}) and a Ghostty error ({@link #ghosttyFailed}).
+     */
+    private void releaseGhosttyCompanions() {
+        GhosttyImages images = mGhosttyImages;
+        mGhosttyImages = null;
+        if (images != null) images.release();
+        mGhosttyLinks = null;
+        mGhosttyCursorShape = -1;
+        mGhosttyMouseShape = -1;
+    }
+
     /** The Ghostty core's primary-screen memory (see GhosttyNative.MEM_*), or null. */
     public long[] getGhosttyMemoryUsage() {
         return mGhostty == null ? null : mGhostty.memoryUsage();
@@ -1677,6 +1689,18 @@ public final class TerminalEmulator {
     /** The Ghostty core, or null; for {@link TerminalParseBench}. */
     GhosttyCore ghosttyCore() {
         return mGhostty;
+    }
+
+    /** The Ghostty core's images, or null; for tests in this package. */
+    GhosttyImages ghosttyImages() {
+        return mGhosttyImages;
+    }
+
+    /** For tests: draw this pane's Ghostty images from {@code cache} (stand-in bitmaps). */
+    void useGhosttyImageCacheForTests(GhosttyImageCache<android.graphics.Bitmap> cache) {
+        if (mGhostty == null) return;
+        if (mGhosttyImages != null) mGhosttyImages.release();
+        mGhosttyImages = new GhosttyImages(mGhostty, mSession, TerminalEmulator::monotonicMillis, cache);
     }
 
     /** Hand the bytes to Ghostty in one write. Nothing is copied until the next sync. */
@@ -1720,6 +1744,9 @@ public final class TerminalEmulator {
         mGhostty = null;
         mGhosttyContent = null;
         mGhosttyPending = false;
+        // Images are lost in a replay; links come back from the replayed OSC 8 into a pool the
+        // fresh Java core starts empty (reset).
+        releaseGhosttyCompanions();
         if (core == null) return;
         boolean alternate = mScreen == mAltBuffer;
         byte[] replay = null;
