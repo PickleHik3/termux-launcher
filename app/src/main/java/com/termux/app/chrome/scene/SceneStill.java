@@ -64,7 +64,8 @@ public final class SceneStill {
         WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
         if (motion.kind == WallpaperMotion.Kind.VIDEO && motion.id != null
             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            File video = VideoImport.file(context, motion.id);
+            File video = VideoVariants.playable(context, ShaderStore.readVideoRate(prefs.getSharedPreferences()));
+            if (video == null) video = VideoImport.file(context, motion.id);
             return video.isFile() ? VideoStill.render(video, widthPx, heightPx) : null;
         }
         if (motion.kind != WallpaperMotion.Kind.SHADER || motion.id == null) return null;

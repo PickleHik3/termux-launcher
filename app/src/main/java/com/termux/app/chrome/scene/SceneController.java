@@ -124,7 +124,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private final SharedPreferences.OnSharedPreferenceChangeListener mChoiceListener =
         (prefs, key) -> {
             if (TERMUX_APP.KEY_WALLPAPER_MOTION.equals(key)
-                || ShaderStore.KEY_MOTION_APPLIED_AT.equals(key) || KEY_VIDEO_RATE.equals(key)) {
+                || ShaderStore.KEY_MOTION_APPLIED_AT.equals(key) || KEY_VIDEO_RATE.equals(key)
+                || VideoVariants.KEY_VARIANT_REV.equals(key)) {
                 refresh();
             }
         };
@@ -326,15 +327,21 @@ public final class SceneController implements LatencyProbe.CommitListener {
             if (!videoPath.equals(mDebugVideoPath)) importDebugVideo(videoPath);
             String name = mDebugVideoName;
             if (name == null) return null;
-            return new SceneLayerView.Spec("vfile:" + videoPath + ":" + name,
-                VideoImport.file(mActivity, name), true);
+            File played = VideoVariants.playable(mActivity, mVideoRateHz);
+            if (played == null) played = VideoImport.file(mActivity, name);
+            return new SceneLayerView.Spec("vfile:" + videoPath + ":" + name + "@" + played.getName(),
+                played, true);
         }
         mDebugVideoPath = null;
         mDebugVideoName = null;
         mDebugGaveUp = null;
         if (mMotion.kind == WallpaperMotion.Kind.VIDEO && mMotion.id != null) {
-            File video = VideoImport.file(mActivity, mMotion.id);
-            return video.isFile() ? new SceneLayerView.Spec(mMotion.format(), video, false) : null;
+            File video = VideoVariants.playable(mActivity, mVideoRateHz);
+            // An import from before frame-rate versions is the file named after the choice.
+            if (video == null) video = VideoImport.file(mActivity, mMotion.id);
+            // The file name is in the key: a version finishing swaps the layer to it.
+            return video.isFile()
+                ? new SceneLayerView.Spec(mMotion.format() + "@" + video.getName(), video, false) : null;
         }
         if (mMotion.kind != WallpaperMotion.Kind.SHADER || mMotion.id == null || mMeta == null) return null;
         File channel0 = ShaderStore.textureFile(mActivity, mMotion.id, mMeta);

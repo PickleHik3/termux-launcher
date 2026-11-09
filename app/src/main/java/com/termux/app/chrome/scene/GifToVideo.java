@@ -43,7 +43,6 @@ public final class GifToVideo {
     static final String MIME_AVC = MediaFormat.MIMETYPE_VIDEO_AVC;
     static final String MIME_HEVC = MediaFormat.MIMETYPE_VIDEO_HEVC;
     static final int FPS = 30;
-    private static final long FRAME_NS = 1_000_000_000L / FPS;
     private static final long MAX_MS = 60_000L;
     /** Slack past the GIF's own length before the loop is called over when no end callback came. */
     private static final long END_SLACK_MS = 1_500L;
@@ -100,6 +99,11 @@ public final class GifToVideo {
     }
 
     @NonNull
+    static String chooseEncoderMime() {
+        return chooseMime();
+    }
+
+    @NonNull
     private static String chooseMime() {
         List<String> names = new ArrayList<>();
         try {
@@ -131,10 +135,22 @@ public final class GifToVideo {
     @Nullable
     public static Output convert(@NonNull File gif, @NonNull File out, int maxSide, long expectedMs,
                                  @Nullable Progress progress, @NonNull AtomicBoolean cancel) {
+        return convert(gif, out, maxSide, expectedMs, 0, progress, cancel);
+    }
+
+    /**
+     * As above at {@code rateHz} frames per second: the drawable's current frame is drawn onto the
+     * encoder surface every 1/rate of GIF time, not on every GIF frame. 0 means {@link #FPS}.
+     */
+    @WorkerThread
+    @Nullable
+    public static Output convert(@NonNull File gif, @NonNull File out, int maxSide, long expectedMs,
+                                 int rateHz, @Nullable Progress progress, @NonNull AtomicBoolean cancel) {
+        int rate = rateHz > 0 ? rateHz : FPS;
         String mime = chooseMime();
-        Output result = run(gif, out, mime, maxSide, expectedMs, progress, cancel);
+        Output result = run(gif, out, mime, maxSide, expectedMs, rate, progress, cancel);
         if (result == null && MIME_HEVC.equals(mime) && !cancel.get()) {
-            result = run(gif, out, MIME_AVC, maxSide, expectedMs, progress, cancel);
+            result = run(gif, out, MIME_AVC, maxSide, expectedMs, rate, progress, cancel);
         }
         if (result == null) {
             //noinspection ResultOfMethodCallIgnored
@@ -145,11 +161,11 @@ public final class GifToVideo {
 
     @Nullable
     private static Output run(@NonNull File gif, @NonNull File out, @NonNull String mime, int maxSide,
-                              long expectedMs, @Nullable Progress progress, @NonNull AtomicBoolean cancel) {
+                              long expectedMs, int rate, @Nullable Progress progress, @NonNull AtomicBoolean cancel) {
         HandlerThread thread = new HandlerThread("GifToVideo");
         thread.start();
         try {
-            Session s = new Session(new Handler(thread.getLooper()), gif, out, mime, maxSide, expectedMs, cancel);
+            Session s = new Session(new Handler(thread.getLooper()), gif, out, mime, maxSide, expectedMs, rate, cancel);
             s.mHandler.post(s::begin);
             long deadline = SystemClock.elapsedRealtime() + MAX_MS + 20_000L;
             try {
@@ -187,6 +203,8 @@ public final class GifToVideo {
         private final String mMime;
         private final int mMaxSide;
         private final long mExpectedMs;
+        private final int mRate;
+        private final long mFrameNs;
         private final AtomicBoolean mCancel;
         private final AtomicBoolean mEnded = new AtomicBoolean();
         private final MediaCodec.BufferInfo mInfo = new MediaCodec.BufferInfo();
@@ -204,13 +222,15 @@ public final class GifToVideo {
         private int mExtra = 1;   // one more frame after the end
 
         Session(@NonNull Handler handler, @NonNull File gif, @NonNull File out, @NonNull String mime, int maxSide,
-                long expectedMs, @NonNull AtomicBoolean cancel) {
+                long expectedMs, int rate, @NonNull AtomicBoolean cancel) {
             mHandler = handler;
             mGif = gif;
             mOut = out;
             mMime = mime;
             mMaxSide = maxSide;
             mExpectedMs = expectedMs;
+            mRate = rate;
+            mFrameNs = 1_000_000_000L / rate;
             mCancel = cancel;
         }
 
@@ -240,7 +260,7 @@ public final class GifToVideo {
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
                 format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate(mSize[0], mSize[1]));
-                format.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
+                format.setInteger(MediaFormat.KEY_FRAME_RATE, mRate);
                 format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
                 mCodec = MediaCodec.createEncoderByType(mMime);
                 mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -285,7 +305,7 @@ public final class GifToVideo {
                     complete();
                     return;
                 }
-                mNext += FRAME_NS;
+                mNext += mFrameNs;
                 long wait = (mNext - SystemClock.elapsedRealtimeNanos()) / 1_000_000L;
                 if (wait < -100L) mNext = SystemClock.elapsedRealtimeNanos();   // fell behind: do not burst
                 mHandler.postDelayed(this::step, Math.max(0L, wait));
@@ -306,7 +326,7 @@ public final class GifToVideo {
                 if (!mEosSeen || !mMuxerStarted || mFirstPtsUs < 0L) {
                     Log.w(TAG, "encoder gave no complete video (eos=" + mEosSeen + ", muxer=" + mMuxerStarted + ")");
                 } else {
-                    long durationMs = (mLastPtsUs - mFirstPtsUs) / 1000L + 1000L / FPS;
+                    long durationMs = (mLastPtsUs - mFirstPtsUs) / 1000L + 1000L / mRate;
                     mMuxerStarted = false;
                     mMuxer.stop();
                     mOk = true;

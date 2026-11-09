@@ -1,6 +1,7 @@
 package com.termux.app.chrome.scene;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -175,42 +176,53 @@ public final class VideoImport {
             return Result.failure("That file is not a GIF.");
         }
         fields.sizeBytes = staged.length();
-        File source = staged;
-        File converted = new File(dir, CONVERTED);
-        if (gif && gifInfo != null && VideoHint.isAnimated(gifInfo.frames)) {
-            int maxSide = Math.min(VideoChannel.GIF_MAX_SIDE_PX, screenLongSide(app));
-            GifToVideo.Output out = GifToVideo.convert(staged, converted, maxSide, fields.durationMs, progress,
-                new AtomicBoolean());
-            if (out != null) {
-                VideoHint.Fields v = new VideoHint.Fields();
-                v.convertedFromGif = true;
-                v.mime = out.mime;
-                v.width = out.width;
-                v.height = out.height;
-                v.durationMs = out.durationMs;
-                v.sizeBytes = out.file.length();
-                v.hardware = hardwareDecoder(out.mime);
-                fields = v;
-                source = converted;
-                name = mp4Name(name);
-                //noinspection ResultOfMethodCallIgnored
-                staged.delete();
-            }
-        }
-        File target = new File(dir, name);
-        File[] old = dir.listFiles();
-        if (old != null) {
-            for (File f : old) {
-                //noinspection ResultOfMethodCallIgnored
-                if (!f.equals(source)) f.delete();
-            }
-        }
-        if (!source.renameTo(target)) {
+        boolean animated = gif && gifInfo != null && VideoHint.isAnimated(gifInfo.frames);
+        float fps = gif ? gifFps(gifInfo) : fields.frameRate;
+        fields.frameRate = fps;
+        String hint = VideoHint.describe(fields);
+        if (!VideoVariants.acquire(null)) {
             //noinspection ResultOfMethodCallIgnored
-            source.delete();
+            staged.delete();
             return Result.failure("Could not keep that file.");
         }
-        return Result.success(name, VideoHint.describe(fields));
+        try {
+            // The old import goes only now: a file that could not be read above leaves it alone.
+            File[] old = dir.listFiles();
+            if (old != null) {
+                for (File f : old) {
+                    //noinspection ResultOfMethodCallIgnored
+                    if (!f.equals(staged)) f.delete();
+                }
+            }
+            File original = new File(dir, VideoVariants.originalFileName(name, gif));
+            if (!staged.renameTo(original)) {
+                //noinspection ResultOfMethodCallIgnored
+                staged.delete();
+                return Result.failure("Could not keep that file.");
+            }
+            VideoVariants.Meta meta = new VideoVariants.Meta(name, fields.mime == null ? "" : fields.mime,
+                fields.width, fields.height, fps, fields.durationMs, fields.sizeBytes, gif, animated,
+                fields.hardware, hint);
+            if (!meta.write(dir)) {
+                VideoVariants.deleteAllLocked(app);
+                return Result.failure("Could not keep that file.");
+            }
+            SharedPreferences prefs = VideoVariants.prefs(app);
+            int rate = prefs == null ? SceneFramePolicy.DEFAULT_RATE_HZ : ShaderStore.readVideoRate(prefs);
+            int clamped = VideoVariantRules.clampRate(fps, rate);
+            if (prefs != null && clamped != rate) ShaderStore.writeVideoRate(prefs, clamped);
+            // A failed encode keeps the source: it plays at the chosen draw rate (a GIF on the CPU path).
+            if (!gif || animated) {
+                GifToVideo.Progress p = progress;
+                if (!VideoVariants.makeVariant(app, dir, meta, clamped, p, new AtomicBoolean())) {
+                    Log.w(TAG, "no " + clamped + " fps version of " + name + "; the source plays");
+                }
+            }
+            VideoVariants.finishRound(app, dir, meta);
+        } finally {
+            VideoVariants.LOCK.unlock();
+        }
+        return Result.success(name, hint);
     }
 
     /** Bytes copied, or -1 when the stream is longer than {@link #MAX_BYTES}. */
@@ -246,7 +258,7 @@ public final class VideoImport {
         return WallpaperMotion.safeName(name) ? name : "video.mp4";
     }
 
-    private static int screenLongSide(@NonNull Context context) {
+    static int screenLongSide(@NonNull Context context) {
         android.util.DisplayMetrics m = context.getResources().getDisplayMetrics();
         return Math.max(2, Math.max(m.widthPixels, m.heightPixels));
     }
@@ -261,10 +273,17 @@ public final class VideoImport {
         }
     }
 
+    /** A GIF's nominal frame rate: its frames over its length; 0 for a still. */
+    static float gifFps(@Nullable VideoHint.GifInfo info) {
+        if (info == null || !VideoHint.isAnimated(info.frames) || info.durationMs <= 0L) return 0f;
+        return info.frames * 1000f / info.durationMs;
+    }
+
     @NonNull
     private static VideoHint.Fields gifFields(@Nullable VideoHint.GifInfo info) {
         VideoHint.Fields f = new VideoHint.Fields();
         f.mime = "image/gif";
+        f.frameRate = gifFps(info);
         if (info != null) {
             f.width = info.width;
             f.height = info.height;
@@ -299,7 +318,8 @@ public final class VideoImport {
                 long frames = parseLong(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT));
                 if (frames > 0L) fps = frames * 1000f / f.durationMs;
             }
-            f.frameRate = fps;
+            float track = trackFrameRate(file);
+            f.frameRate = track > 0f ? track : fps;
             if (f.mime != null) f.hardware = hardwareDecoder(f.mime);
         } catch (RuntimeException e) {
             Log.w(TAG, "could not read the video's details", e);
@@ -328,6 +348,30 @@ public final class VideoImport {
             ex.release();
         }
         return null;
+    }
+
+    /** The video track's declared frame rate, 0 when it names none. */
+    private static float trackFrameRate(@NonNull File file) {
+        android.media.MediaExtractor ex = new android.media.MediaExtractor();
+        try {
+            ex.setDataSource(file.getPath());
+            for (int i = 0; i < ex.getTrackCount(); i++) {
+                android.media.MediaFormat f = ex.getTrackFormat(i);
+                String m = f.getString(android.media.MediaFormat.KEY_MIME);
+                if (m == null || !m.startsWith("video/")) continue;
+                if (!f.containsKey(android.media.MediaFormat.KEY_FRAME_RATE)) return 0f;
+                try {
+                    return f.getFloat(android.media.MediaFormat.KEY_FRAME_RATE);
+                } catch (ClassCastException e) {
+                    return f.getInteger(android.media.MediaFormat.KEY_FRAME_RATE);
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "could not read the frame rate", e);
+        } finally {
+            ex.release();
+        }
+        return 0f;
     }
 
     /** Whether a hardware decoder exists for {@code mime}; null when the codec list names none. */
