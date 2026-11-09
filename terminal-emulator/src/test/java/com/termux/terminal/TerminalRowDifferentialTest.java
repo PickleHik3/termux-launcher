@@ -329,6 +329,51 @@ public class TerminalRowDifferentialTest extends TestCase {
         }
     }
 
+    /**
+     * Writes cluster near the previous one, as text painted left to right does, with widening and
+     * clears between them. That is where a remembered position in the row could go stale.
+     */
+    public void testWritesNearThePreviousWriteMatchLegacy() {
+        Random random = new Random(0xB1A5L);
+        for (int c = 0; c < 4000; c++) {
+            int columns = 3 + random.nextInt(37);
+            TerminalRow actual = new TerminalRow(columns, TextStyle.NORMAL);
+            LegacyTerminalRow legacy = new LegacyTerminalRow(columns, TextStyle.NORMAL);
+            int column = random.nextInt(columns);
+            for (int s = 0; s < 80; s++) {
+                column = Math.max(0, Math.min(columns - 1, column + random.nextInt(5) - 1));
+                int cp = pickCodePoint(random);
+                String what = "case " + c + " step " + s + " col " + column + " U+" + Integer.toHexString(cp);
+                int kind = random.nextInt(10);
+                Throwable actualThrown = null;
+                Throwable legacyThrown = null;
+                try {
+                    if (kind < 7) actual.setChar(column, cp, TextStyle.NORMAL);
+                    else if (kind < 8) actual.widenCell(column);
+                    else if (kind < 9) actual.appendCodePointToCell(column, cp);
+                    else actual.copyInterval(actual, 0, column + 1, 0);
+                } catch (RuntimeException e) {
+                    actualThrown = e;
+                }
+                try {
+                    if (kind < 7) legacy.setChar(column, cp, TextStyle.NORMAL);
+                    else if (kind < 8) legacy.widenCell(column);
+                    else if (kind < 9) legacy.appendCodePointToCell(column, cp);
+                    else legacy.copyInterval(legacy, 0, column + 1, 0);
+                } catch (RuntimeException e) {
+                    legacyThrown = e;
+                }
+                assertEquals(what + " threw", describe(legacyThrown), describe(actualThrown));
+                assertSameRow(what, actual, legacy);
+                if (legacyThrown != null) break;
+                if (random.nextInt(40) == 0) {
+                    actual.clear(TextStyle.NORMAL);
+                    legacy.clear(TextStyle.NORMAL);
+                }
+            }
+        }
+    }
+
     /** The walk must find the same text start the old scans did, for every column of every shape. */
     public void testFindStartOfColumnStaysTheSame() {
         TerminalRow actual = new TerminalRow(10, TextStyle.NORMAL);

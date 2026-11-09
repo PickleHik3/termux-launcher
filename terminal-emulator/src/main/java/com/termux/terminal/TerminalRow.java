@@ -108,6 +108,17 @@ public final class TerminalRow {
     private int[] mTextSizes;
 
     /**
+     * Where the last {@link #locateColumn} found a cell: the cell that starts at column
+     * {@code mHintColumn} has its code point at {@code mText[mHintIndex]}, and nothing before that
+     * index has changed since. Text is written left to right, so the next write usually starts its
+     * walk here instead of at column 0. Every change to {@link #mText} or {@link #mCharWidths}
+     * happens in {@link #setChar}, at or after the index its own walk just recorded, or in
+     * {@link #clear} and {@link #widenCell}, which put the hint back to the start of the row.
+     */
+    private int mHintColumn;
+    private int mHintIndex;
+
+    /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
@@ -346,6 +357,7 @@ public final class TerminalRow {
         Arrays.fill(mCharWidths, (byte) 1);
         Arrays.fill(mStyle, style);
         mSpaceUsed = mColumns;
+        mHintColumn = mHintIndex = 0;
         mHasNonOneWidthOrSurrogateChars = false;
         mHasBitmap = false;
         // Erasing a row drops its links and decoration colors, as they belong to the erased text.
@@ -452,6 +464,8 @@ public final class TerminalRow {
         System.arraycopy(mCharWidths, nextEnd, mCharWidths, nextStart, mSpaceUsed - nextEnd);
         mSpaceUsed -= removed;
         mCharWidths[start] = 2;
+        // The cell after this one is gone, so a hint that points at it no longer does.
+        mHintColumn = mHintIndex = 0;
         mStyle[column + 1] = mStyle[column];
         setDecorationColor(column + 1, getDecorationColor(column));
         setHyperlinkId(column + 1, getHyperlinkId(column));
@@ -463,22 +477,33 @@ public final class TerminalRow {
      * Walk the row once to the cell covering {@code column}. The result is the index in
      * {@link #mText} of the code point stored for that cell, shifted left one bit, with bit 0 set
      * when the column is the right half of a double-width character. Zero-width code points
-     * belong to the cell before them. Returns -1 when the row's cells end before the column.
+     * belong to the cell before them. Returns -1 when the row's cells end before the column. The
+     * walk starts at {@link #mHintColumn} when that is not past the column, and leaves the hint at
+     * the cell it found.
      */
     private int locateColumn(int column) {
         final char[] text = mText;
         final byte[] widths = mCharWidths;
         final int used = mSpaceUsed;
         int currentColumn = 0;
-        for (int index = 0; index < used; ) {
+        int index = 0;
+        if (mHintColumn <= column) {
+            currentColumn = mHintColumn;
+            index = mHintIndex;
+        }
+        for (; index < used; ) {
             int width = widths[index];
             if (width > 0) {
-                if (currentColumn + width > column)
+                if (currentColumn + width > column) {
+                    mHintColumn = currentColumn;
+                    mHintIndex = index;
                     return (index << 1) | (currentColumn < column ? 1 : 0);
+                }
                 currentColumn += width;
             }
             index += Character.isHighSurrogate(text[index]) ? 2 : 1;
         }
+        mHintColumn = mHintIndex = 0;
         return -1;
     }
 
