@@ -18,6 +18,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
+  800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends
+  on its own; the hint reads "GIF converted to video · 800×1412 · 5 s · N MB · hardware decoded";
+  the stored file under files/wallpaper/video/ is an .mp4 and the GIF is gone; the MP4's size; the
+  launcher process CPU near idle (was about 50% of one core with the GIF; `dumpsys cpuinfo`); the
+  loop seam (end to start) has no hitch, flash or black frame; it is cover-cropped like a video.
+  A one-frame GIF stays a still. `debug.tl.video_file` on a .gif runs the same conversion.
+  Fallback (force a failure): the GIF still plays, its hint says "decodes on the CPU", and its
+  frames still update with the hardware canvas (a frozen frame means updateTexImage ran before the
+  render thread posted the buffer).
+
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
   guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and

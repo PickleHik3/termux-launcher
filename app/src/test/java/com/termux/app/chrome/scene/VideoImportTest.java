@@ -48,6 +48,13 @@ public class VideoImportTest {
     }
 
     @Test
+    public void convertedNameIsMp4() {
+        assertEquals("anim.mp4", VideoImport.mp4Name("anim.gif"));
+        assertEquals("a b.mp4", VideoImport.mp4Name("a b.GIF"));
+        assertEquals("video.mp4", VideoImport.mp4Name(".gif"));
+    }
+
+    @Test
     public void longNamesAreCutKeepingTheExtension() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 300; i++) sb.append('x');
