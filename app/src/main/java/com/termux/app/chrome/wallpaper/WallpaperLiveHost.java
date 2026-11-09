@@ -400,6 +400,8 @@ public final class WallpaperLiveHost {
         if (prefs != null) {
             WallpaperMotion current = ShaderStore.readMotion(prefs);
             int rate = ShaderStore.readVideoRate(prefs);
+            Logger.logInfo(LOG_TAG, "release without Done: preview " + current.format() + " at " + rate
+                + " Hz, back to " + mOpened.format() + " at " + mOpenedRate + " Hz");
             if (LivePreviewLogic.mustRevert(false, mOpened, current, mOpenedRate, rate)) {
                 ShaderStore.apply(mContext.getApplicationContext(), prefs, mOpened);
                 ShaderStore.writeVideoRate(prefs, mOpenedRate);
@@ -410,6 +412,8 @@ public final class WallpaperLiveHost {
     }
 
     public void release() {
+        Logger.logInfo(LOG_TAG, "release (supported " + mSupported + ", committed " + mCommitted
+            + ", released " + mReleased + ")");
         if (mSupported && !mCommitted && !mReleased) revertPreview();
         mReleased = true;
         mSwap.cancel();
