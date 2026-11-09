@@ -7050,16 +7050,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.google.android.material.snackbar.Snackbar bar =
                     com.google.android.material.snackbar.Snackbar.make(root,
                         R.string.assistant_page_added, 4000);
-                View chrome = findViewById(R.id.accessory_stack_container);
-                if (chrome == null || chrome.getVisibility() != View.VISIBLE
-                        || !chrome.isLaidOut() || chrome.getHeight() <= 0) {
-                    chrome = getExtraKeysView();
-                    if (chrome != null && (chrome.getVisibility() != View.VISIBLE
-                            || !chrome.isLaidOut() || chrome.getHeight() <= 0)) chrome = null;
-                }
-                if (chrome != null) bar.setAnchorView(chrome);
-                bar
-                    .setAction(R.string.page_overview_undo, v -> undo.run()).show();
+                // Kept just above whichever bottom chrome stands highest, every frame: the chrome
+                // grows and moves as the page lands and the keyboard comes up, and the bar's own
+                // anchor keeps the first position. Fade, so the bar's translation is ours.
+                bar.setAnimationMode(
+                    com.google.android.material.snackbar.BaseTransientBottomBar.ANIMATION_MODE_FADE);
+                final View barView = bar.getView();
+                final View[] chrome = { getExtraKeysView(),
+                    findViewById(R.id.accessory_stack_container) };
+                final int gap = Math.round(8 * getResources().getDisplayMetrics().density);
+                final int[] at = new int[2];
+                final android.view.ViewTreeObserver.OnPreDrawListener follow = () -> {
+                    if (!barView.isLaidOut()) return true;
+                    int top = Integer.MAX_VALUE;
+                    for (View c : chrome) {
+                        if (c == null || !c.isShown() || c.getHeight() <= 0) continue;
+                        c.getLocationOnScreen(at);
+                        top = Math.min(top, at[1]);
+                    }
+                    barView.getLocationOnScreen(at);
+                    float natural = at[1] - barView.getTranslationY() + barView.getHeight();
+                    float want = top == Integer.MAX_VALUE ? 0f
+                        : Math.min(0f, top - gap - natural);
+                    if (barView.getTranslationY() != want) barView.setTranslationY(want);
+                    return true;
+                };
+                root.getViewTreeObserver().addOnPreDrawListener(follow);
+                bar.addCallback(new com.google.android.material.snackbar.BaseTransientBottomBar
+                        .BaseCallback<com.google.android.material.snackbar.Snackbar>() {
+                    @Override public void onDismissed(
+                            com.google.android.material.snackbar.Snackbar sb, int event) {
+                        root.getViewTreeObserver().removeOnPreDrawListener(follow);
+                    }
+                });
+                bar.setAction(R.string.page_overview_undo, v -> undo.run()).show();
             }
         });
     }
