@@ -63,6 +63,12 @@ public class TerminalParseBenchTest extends TestCase {
                 // Both cores end on the same last line, and the mirror ran in turns.
                 assertEquals(line, javaTail, field(line, "tail"));
                 assertTrue(line, Integer.parseInt(field(line, "turns")) >= 1);
+                // The copy is split into its screen and history parts, with the rows each moved.
+                assertTrue(line, Long.parseLong(field(line, "mirror_screen_rows")) > 0);
+                assertTrue(line, Long.parseLong(field(line, "mirror_history_rows")) > 0);
+                assertNotNull(line, field(line, "mirror_sync_ms"));
+                assertNotNull(line, field(line, "mirror_history_max_ms"));
+                assertNull(GhosttyMirror.stats);
             }
             if (ghostty) assertNotNull(line, field(line, "resident_bytes"));
         }

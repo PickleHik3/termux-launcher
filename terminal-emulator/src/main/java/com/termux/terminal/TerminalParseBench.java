@@ -165,6 +165,8 @@ public final class TerminalParseBench {
 
             int turns = 0;
             long mirrorNanos = 0, mirrorMaxNanos = 0;
+            GhosttyMirror.Stats split = MODE_GHOSTTY_MIRROR.equals(mode) ? new GhosttyMirror.Stats() : null;
+            GhosttyMirror.stats = split;
             long cpu0 = threadCpuNanos(), alloc0 = allocatedBytes(), gc0 = gcCount();
             long start = System.nanoTime();
             if (MODE_JAVA.equals(mode)) {
@@ -209,7 +211,15 @@ public final class TerminalParseBench {
             if (MODE_GHOSTTY_MIRROR.equals(mode)) {
                 // How long the mirror holds the thread: in all, and in the longest turn.
                 result.put("turns", turns).put("mirror_ms", round(mirrorNanos / 1e6))
-                    .put("mirror_max_ms", round(mirrorMaxNanos / 1e6));
+                    .put("mirror_max_ms", round(mirrorMaxNanos / 1e6))
+                    .put("mirror_sync_ms", round(split.syncNanos / 1e6))
+                    .put("mirror_sync_max_ms", round(split.syncMaxNanos / 1e6))
+                    .put("mirror_screen_ms", round(split.screenNanos / 1e6))
+                    .put("mirror_screen_max_ms", round(split.screenMaxNanos / 1e6))
+                    .put("mirror_screen_rows", split.screenRows)
+                    .put("mirror_history_ms", round(split.historyNanos / 1e6))
+                    .put("mirror_history_max_ms", round(split.historyMaxNanos / 1e6))
+                    .put("mirror_history_rows", split.historyRows);
             }
             if (emulator != null) {
                 result.put("transcript_rows_used", emulator.getScreen().getActiveTranscriptRows())
@@ -220,6 +230,7 @@ public final class TerminalParseBench {
         } catch (RuntimeException e) {
             return result.put("error", e.toString());
         } finally {
+            GhosttyMirror.stats = null;
             if (emulator != null) emulator.releaseGhosttyCore();
             else if (core != null) core.release();
         }

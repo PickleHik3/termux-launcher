@@ -1612,7 +1612,12 @@ public final class TerminalEmulator {
     private void applyGhosttyState() {
         mGhosttyPending = false;
         GhosttyCore core = mGhostty;
-        if (core == null || !core.sync()) return;
+        if (core == null) return;
+        GhosttyMirror.Stats stats = GhosttyMirror.stats;
+        long syncStart = stats == null ? 0 : System.nanoTime();
+        boolean synced = core.sync();
+        if (stats != null) stats.sync(System.nanoTime() - syncStart);
+        if (!synced) return;
         int[] state = core.state();
         int flags = state[GhosttyNative.STATE_FLAGS];
         TerminalBuffer screen = (flags & GhosttyNative.FLAG_ALT_SCREEN) != 0 ? mAltBuffer : mMainBuffer;

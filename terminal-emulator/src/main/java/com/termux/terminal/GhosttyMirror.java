@@ -21,6 +21,24 @@ final class GhosttyMirror {
     private GhosttyMirror() {}
 
     /**
+     * Where the mirror's cost goes, split by part. Only the parse bench sets {@link #stats}; with
+     * it null the app's path pays one static read per call and no clock.
+     */
+    static final class Stats {
+        long syncNanos, syncMaxNanos;
+        long screenNanos, screenMaxNanos, screenRows;
+        long historyNanos, historyMaxNanos, historyRows;
+
+        void sync(long nanos) {
+            syncNanos += nanos;
+            syncMaxNanos = Math.max(syncMaxNanos, nanos);
+        }
+    }
+
+    /** Set by the bench around a run; null otherwise. */
+    static Stats stats;
+
+    /**
      * Write one row's cells into {@code row}. Wide characters take their two cells from the first;
      * a spacer cell adds nothing. Extra code points (combining marks and the like) join the cell
      * they belong to, read in order from {@code extra} starting at {@code extraOffset}.
@@ -74,13 +92,23 @@ final class GhosttyMirror {
      * @param dirty per screen row, the row result or -1 when the row did not change
      */
     static void applyScreen(TerminalBuffer buffer, int columns, int rows, int[] screen, int[] dirty, int[] extra) {
+        Stats stats = GhosttyMirror.stats;
+        long start = stats == null ? 0 : System.nanoTime();
+        int copied = 0;
         int extraOffset = 0;
         for (int y = 0; y < rows; y++) {
             int result = dirty[y];
             if (result < 0) continue;
+            copied++;
             TerminalRow row = buffer.allocateFullLineIfNecessary(buffer.externalToInternalRow(y));
             applyRow(row, columns, screen, y * columns * GhosttyNative.CELL_INTS, extra, extraOffset, result);
             extraOffset += result & GhosttyNative.ROW_EXTRA_MASK;
+        }
+        if (stats != null) {
+            long nanos = System.nanoTime() - start;
+            stats.screenNanos += nanos;
+            stats.screenMaxNanos = Math.max(stats.screenMaxNanos, nanos);
+            stats.screenRows += copied;
         }
     }
 
@@ -95,6 +123,8 @@ final class GhosttyMirror {
     static void scrollIntoTranscript(TerminalBuffer buffer, int columns, int screenRows, int scrolled,
                                      int historyRows, HistorySource source, int[] cells, int[] extra) {
         if (scrolled <= 0) return;
+        Stats stats = GhosttyMirror.stats;
+        long start = stats == null ? 0 : System.nanoTime();
         int capacity = buffer.mTotalRows - screenRows;
         // Beyond a full transcript plus a screen, every row would be pushed out again at once.
         int steps = Math.min(scrolled, capacity + screenRows);
@@ -108,6 +138,12 @@ final class GhosttyMirror {
             if (result < 0) continue;
             TerminalRow row = buffer.allocateFullLineIfNecessary(buffer.externalToInternalRow(externalRow));
             applyRow(row, columns, cells, 0, extra, 0, result);
+        }
+        if (stats != null) {
+            long nanos = System.nanoTime() - start;
+            stats.historyNanos += nanos;
+            stats.historyMaxNanos = Math.max(stats.historyMaxNanos, nanos);
+            stats.historyRows += copy;
         }
     }
 }
