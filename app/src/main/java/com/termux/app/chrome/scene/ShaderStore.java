@@ -168,6 +168,127 @@ public final class ShaderStore {
         if (!staged.renameTo(file)) throw new IOException("cannot replace " + file);
     }
 
+    // ---- Saved shaders: list, new id, delete, texture (the picker's needs) ---------------------
+
+    /** The video rate (15 / 30 / 60): a key of the app's own preferences, read by the video source. */
+    public static final String KEY_VIDEO_RATE = "wallpaper_video_rate_hz";
+
+    /** One saved shader as the list shows it. */
+    public static final class Entry {
+        @NonNull public final String id;
+        @NonNull public final String name;
+
+        public Entry(@NonNull String id, @NonNull String name) {
+            this.id = id;
+            this.name = name;
+        }
+    }
+
+    /** A new shader id: safe as a folder name, unique in practice. */
+    @NonNull
+    public static String newId() {
+        return "s" + Long.toString(System.currentTimeMillis(), 36)
+            + Integer.toString(new java.util.Random().nextInt(36 * 36), 36);
+    }
+
+    /** The saved shaders (those with a source file), by name. */
+    @WorkerThread
+    @NonNull
+    public static java.util.List<Entry> list(@NonNull Context context) {
+        java.util.ArrayList<Entry> out = new java.util.ArrayList<>();
+        File[] dirs = shadersDir(context).listFiles();
+        if (dirs == null) return out;
+        for (File dir : dirs) {
+            String id = dir.getName();
+            if (!dir.isDirectory() || !WallpaperMotion.safeName(id) || !new File(dir, SOURCE_FILE).isFile()) continue;
+            out.add(new Entry(id, readMeta(context, id).name));
+        }
+        java.util.Collections.sort(out, (a, b) -> {
+            int c = a.name.compareToIgnoreCase(b.name);
+            return c != 0 ? c : a.id.compareTo(b.id);
+        });
+        return out;
+    }
+
+    /** Removes the shader's folder: source, settings and texture. */
+    @WorkerThread
+    public static void delete(@NonNull Context context, @NonNull String id) {
+        File dir = shaderDir(context, id);
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        dir.delete();
+    }
+
+    /**
+     * Copies the picked image into the shader's folder as its iChannel0 texture and returns the
+     * file name to store in {@link Meta#texture}. The previous texture file goes.
+     *
+     * @param displayName the picked file's name, used (cleaned) as the stored name
+     */
+    @WorkerThread
+    @NonNull
+    public static String importTexture(@NonNull Context context, @NonNull String id, @NonNull android.net.Uri uri,
+                                       @Nullable String displayName, @Nullable String previous) throws IOException {
+        String name = textureName(displayName);
+        File dir = shaderDir(context, id);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
+        File target = new File(dir, name);
+        File staged = new File(dir, name + ".tmp");
+        try (java.io.InputStream in = context.getContentResolver().openInputStream(uri);
+             FileOutputStream out = new FileOutputStream(staged, false)) {
+            if (in == null) throw new IOException("cannot open " + uri);
+            byte[] buf = new byte[16384];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        if (previous != null && !previous.equals(name) && WallpaperMotion.safeName(previous)) {
+            //noinspection ResultOfMethodCallIgnored
+            new File(dir, previous).delete();
+        }
+        if (!staged.renameTo(target)) throw new IOException("cannot replace " + target);
+        return name;
+    }
+
+    /** Deletes the texture file {@code name} of shader {@code id}. */
+    @WorkerThread
+    public static void removeTexture(@NonNull Context context, @NonNull String id, @Nullable String name) {
+        if (name == null || !WallpaperMotion.safeName(name)) return;
+        //noinspection ResultOfMethodCallIgnored
+        new File(shaderDir(context, id), name).delete();
+    }
+
+    /** A stored texture name from a picked file's name: one safe segment that cannot clash with the shader files. */
+    @NonNull
+    static String textureName(@Nullable String displayName) {
+        StringBuilder b = new StringBuilder();
+        String raw = displayName == null ? "" : displayName.trim();
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            b.append(c == '/' || c == '\\' || c == ':' || c < 0x20 ? '_' : c);
+        }
+        String n = b.toString();
+        if (n.length() > 64) n = n.substring(n.length() - 64);
+        if (n.isEmpty() || n.startsWith(".") || n.equals(SOURCE_FILE) || n.equals(META_FILE) || n.endsWith(".tmp")) {
+            return "texture";
+        }
+        return WallpaperMotion.safeName(n) ? n : "texture";
+    }
+
+    public static int readVideoRate(@NonNull SharedPreferences prefs) {
+        int v = prefs.getInt(KEY_VIDEO_RATE, 30);
+        return v == 15 || v == 60 ? v : 30;
+    }
+
+    public static void writeVideoRate(@NonNull SharedPreferences prefs, int hz) {
+        prefs.edit().putInt(KEY_VIDEO_RATE, hz == 15 || hz == 60 ? hz : 30).apply();
+    }
+
     // ---- The motion choice and the pending marker --------------------------------------------
 
     @NonNull

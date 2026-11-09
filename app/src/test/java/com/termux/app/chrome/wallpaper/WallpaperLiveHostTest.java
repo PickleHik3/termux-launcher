@@ -3,17 +3,19 @@ package com.termux.app.chrome.wallpaper;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.view.ContextThemeWrapper;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.termux.R;
-import com.termux.app.chrome.scene.LiveWallpaperChoice;
+import com.termux.app.chrome.scene.ShaderStore;
+import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -26,10 +28,11 @@ import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowLooper;
 
 /**
- * The Photo | Live host on Android 13: Live opens on the stored state, a scene's page shows the
- * knobs the scene has, Back goes from a scene's page to the grid, and terminal-app mode shows the
- * phone-wallpaper switch. Thumbnails stay blank here ({@code RuntimeShader} does not draw under
- * Robolectric). Android 12 and below: {@link WallpaperLiveHostBelow33Test}.
+ * The Photo | Video | Shader host on Android 13: it opens on the stored motion, the Shader kind
+ * lists shaders and opens the editor, Back goes from the editor to the list, an empty shader is
+ * not applied, the Video page has its format line and Back to photo only while a motion is in
+ * use, and terminal-app mode shows the phone-wallpaper switch. Thumbnails stay blank here (GL
+ * does not draw under Robolectric). Android 9 and below: {@link WallpaperLiveHostBelow29Test}.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {android.os.Build.VERSION_CODES.TIRAMISU}, qualifiers = "w411dp-h891dp-xxhdpi")
@@ -38,15 +41,16 @@ public class WallpaperLiveHostTest {
 
     private Activity mActivity;
     private ContextThemeWrapper mThemed;
-    private TermuxAppSharedPreferences mPrefs;
+    private SharedPreferences mStore;
 
     @Before
     public void setUp() {
         mActivity = Robolectric.buildActivity(Activity.class).setup().get();
         mThemed = new ContextThemeWrapper(mActivity, R.style.Theme_TermuxActivity_DayNight_NoActionBar);
-        mPrefs = TermuxAppSharedPreferences.build(mActivity, false);
-        assertNotNull(mPrefs);
-        LiveWallpaperChoice.none().write(mPrefs);
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mActivity, false);
+        assertNotNull(prefs);
+        mStore = prefs.getSharedPreferences();
+        ShaderStore.apply(mActivity, mStore, WallpaperMotion.photo());
     }
 
     @NonNull
@@ -78,157 +82,141 @@ public class WallpaperLiveHostTest {
         v.performClick();
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void opensOnPhotoWithNothingInUse_andLiveShowsTheFiveScenes() {
+    public void opensOnPhotoWithNothingInUse() {
         WallpaperLiveHost host = open(true);
         assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
         assertFalse(host.showingLive());
-        assertNotNull(host.grid());
+        assertNotNull(host.list());
         assertEquals(View.VISIBLE, host.picker().root().getVisibility());
-        assertEquals(6, LiveWallpaperChoice.USER_KINDS.length);
+        assertEquals(View.GONE, host.list().root().getVisibility());
+        assertEquals(View.GONE, host.video().root().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void opensOnLiveWhileASceneIsInUse_withTheChipOnThatScene() {
-        LiveWallpaperChoice.none().withScene("nebula").write(mPrefs);
+    public void theKindRowOffersPhotoVideoAndShader() {
         WallpaperLiveHost host = open(true);
-        assertEquals(LiveSceneLogic.Kind.LIVE, host.kind());
+        MaterialButtonToggleGroup group = host.root().findViewById(R.id.segmented_pill_track);
+        int visible = 0;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            if (group.getChildAt(i).getVisibility() == View.VISIBLE) visible++;
+        }
+        assertEquals(3, visible);
+        assertEquals(R.id.segmented_pill_default, group.getCheckedButtonId());
+
+        group.check(R.id.segmented_pill_third);
+        assertEquals(LiveSceneLogic.Kind.SHADER, host.kind());
+        assertTrue(host.showingLive());
+        assertEquals(View.GONE, host.picker().root().getVisibility());
+        assertEquals(View.VISIBLE, host.list().root().getVisibility());
+
+        group.check(R.id.segmented_pill_capsule);
+        assertEquals(LiveSceneLogic.Kind.VIDEO, host.kind());
+        assertEquals(View.VISIBLE, host.video().root().getVisibility());
+        assertEquals(View.GONE, host.list().root().getVisibility());
+
+        group.check(R.id.segmented_pill_default);
+        assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertEquals(View.VISIBLE, host.picker().root().getVisibility());
+    }
+
+    @Test
+    public void opensOnShaderWhileOneIsInUse_withBackToPhotoOnTheList() {
+        ShaderStore.apply(mActivity, mStore, WallpaperMotion.shader("abc"));
+        WallpaperLiveHost host = open(true);
+        assertEquals(LiveSceneLogic.Kind.SHADER, host.kind());
         // The sheet must not wait on the GONE photo picker's readiness (it never comes).
         assertTrue(host.showingLive());
         assertEquals(View.GONE, host.picker().root().getVisibility());
-        for (int i = 0; i < LiveWallpaperChoice.USER_KINDS.length; i++) {
-            boolean inUse = "nebula".equals(LiveWallpaperChoice.USER_KINDS[i]);
-            assertEquals(LiveWallpaperChoice.USER_KINDS[i], inUse ? View.VISIBLE : View.GONE,
-                host.grid().badge(i).getVisibility());
-        }
+        assertEquals(View.VISIBLE, host.list().backToPhotoButton().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void aSceneWithDensityAndColour_showsBoth_andOthersShowNeither() {
+    public void opensOnVideoWhileOneIsInUse() {
+        ShaderStore.apply(mActivity, mStore, WallpaperMotion.video("loop.mp4"));
         WallpaperLiveHost host = open(true);
-        // Aurora is the first tile.
-        tap(host.grid().tile(0));
-        assertTrue(host.detailShown());
-        LiveSceneDetailPage detail = host.detail();
-        assertEquals(View.VISIBLE, detail.densityRow().getVisibility());
-        assertEquals(View.VISIBLE, detail.colourRow().getVisibility());
-        assertEquals(3, detail.chips().getChildCount());
-        // Nebula Drift is the third.
-        assertTrue(host.consumeBack());
-        tap(host.grid().tile(2));
-        assertEquals(View.GONE, detail.densityRow().getVisibility());
-        assertEquals(View.GONE, detail.colourRow().getVisibility());
+        assertEquals(LiveSceneLogic.Kind.VIDEO, host.kind());
+        assertEquals(View.VISIBLE, host.video().backToPhotoButton().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void theGridComesBackAtItsScroll() {
+    public void theVideoPage_hasTheFormatLineAndBackToPhotoOnlyWhileInUse() {
         WallpaperLiveHost host = open(true);
-        android.widget.ScrollView scroll = host.grid().root().findViewById(R.id.live_picker_scroll);
-        scroll.scrollTo(0, 0);
-        tap(host.grid().tile(1));
-        // The saved position is what comes back, whatever the view did while hidden.
-        assertTrue(host.consumeBack());
-        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
-        assertEquals(0, scroll.getScrollY());
+        host.video().show(WallpaperMotion.photo(), 30);
+        android.widget.TextView format = host.video().root().findViewById(R.id.video_format);
+        assertTrue(format.getText().toString().startsWith("Best: an H.265 MP4"));
+        assertEquals(View.VISIBLE, host.video().chooseButton().getVisibility());
+        assertEquals(View.GONE, host.video().backToPhotoButton().getVisibility());
+        assertEquals(View.GONE, host.video().hintLine().getVisibility());
+        host.video().show(WallpaperMotion.video("loop.mp4"), 30);
+        assertEquals(View.VISIBLE, host.video().backToPhotoButton().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void aRelaunchShowsTheSideItCarried_atTheScrollItCarried() {
+    public void newShaderOpensTheEditor_andBackGoesToTheList() {
+        MaterialButtonToggleGroup group = null;
         WallpaperLiveHost host = open(true);
-        assertEquals(0, host.gridScrollY());
-        host.restoreSide(true, 300);
-        assertTrue(host.showingLive());
-        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
-        android.widget.ScrollView scroll = host.grid().root().findViewById(R.id.live_picker_scroll);
-        int most = Math.max(0, scroll.getChildAt(0).getHeight() - scroll.getHeight());
-        assertEquals("put back once laid out", Math.min(300, most), scroll.getScrollY());
-        assertEquals(scroll.getScrollY(), host.gridScrollY());
-
-        // A scene's page over the grid: the scroll it opened from is the one carried.
-        tap(host.grid().tile(1));
-        scroll.scrollTo(0, 0);
-        assertEquals(Math.min(300, most), host.gridScrollY());
-
-        host.restoreSide(false, 0);
-        assertFalse(host.showingLive());
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void backFromASceneGoesToTheGrid_thenIsNotSpent() {
-        WallpaperLiveHost host = open(true);
+        group = host.root().findViewById(R.id.segmented_pill_track);
+        group.check(R.id.segmented_pill_third);
         assertFalse(host.consumeBack());
-        tap(host.grid().tile(1));
-        assertTrue(host.detailShown());
+        tap(host.list().newButton());
+        assertTrue(host.editorShown());
+        ShaderEditorPage editor = host.editor();
+        assertTrue(editor.isNew());
+        // A new shader has nothing to delete and nothing in use to go back from.
+        assertEquals(View.GONE, editor.deleteButton().getVisibility());
+        assertEquals(View.GONE, editor.backToPhotoButton().getVisibility());
+        assertEquals(View.GONE, editor.errorStrip().getVisibility());
+        assertEquals(View.GONE, editor.tooHeavyLine().getVisibility());
+
         assertTrue(host.consumeBack());
-        assertFalse(host.detailShown());
-        // The fade has the grid up at alpha 0 at once; it ends with the page gone.
-        assertEquals(View.VISIBLE, host.grid().root().getVisibility());
-        assertEquals(View.VISIBLE, host.detail().root().getVisibility());
+        assertFalse(host.editorShown());
         ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
-        assertEquals(View.VISIBLE, host.grid().root().getVisibility());
-        assertEquals(View.GONE, host.detail().root().getVisibility());
+        assertEquals(View.VISIBLE, host.list().root().getVisibility());
+        assertEquals(View.GONE, editor.root().getVisibility());
         assertFalse(host.consumeBack());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void backToPhoto_showsOnlyWhileASceneIsInUse() {
+    public void applyingAnEmptyShader_showsTheMessageAndChangesNothing() {
         WallpaperLiveHost host = open(true);
-        tap(host.grid().tile(0));
-        assertEquals(View.GONE, host.detail().backToPhotoButton().getVisibility());
+        ((MaterialButtonToggleGroup) host.root().findViewById(R.id.segmented_pill_track))
+            .check(R.id.segmented_pill_third);
+        tap(host.list().newButton());
+        ShaderEditorPage editor = host.editor();
+        tap(editor.applyButton());
+        assertEquals(View.VISIBLE, editor.errorStrip().getVisibility());
+        assertEquals(mActivity.getString(R.string.shader_empty),
+            ((android.widget.TextView) editor.errorStrip()).getText().toString());
+        assertEquals(WallpaperMotion.photo(), ShaderStore.readMotion(mStore));
+        assertTrue(editor.applyButton().isEnabled());
+    }
+
+    @Test
+    public void theEditorShowsTooHeavyOnlyWhenTheRunningShaderHoldsForWeight() {
+        WallpaperLiveHost host = open(true);
+        host.setHeldReasonSource(() -> com.termux.app.chrome.scene.ShaderSafety.REASON_TOO_HEAVY);
+        ((MaterialButtonToggleGroup) host.root().findViewById(R.id.segmented_pill_track))
+            .check(R.id.segmented_pill_third);
+        tap(host.list().newButton());
+        assertEquals(View.VISIBLE, host.editor().tooHeavyLine().getVisibility());
+        host.setHeldReasonSource(() -> null);
         host.consumeBack();
-        LiveWallpaperChoice.none().withScene("aurora").write(mPrefs);
-        tap(host.grid().tile(0));
-        assertEquals(View.VISIBLE, host.detail().backToPhotoButton().getVisibility());
+        tap(host.list().newButton());
+        assertEquals(View.GONE, host.editor().tooHeavyLine().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void sceneInUseOpensWithItsStoredKnobs() {
-        LiveWallpaperChoice.none().withScene("aurora").withSpeed(1.5f).withRateHz(60).withPalette(2).write(mPrefs);
-        WallpaperLiveHost host = open(true);
-        tap(host.grid().tile(0));
-        LiveWallpaperChoice shown = host.detail().current();
-        assertEquals("aurora", shown.scene);
-        assertEquals(1.5f, shown.speed, 0f);
-        assertEquals(60, shown.rateHz);
-        assertEquals(2, shown.palette);
+    public void alsoPhoneRowShowsInTerminalAppModeOnly() {
+        assertEquals(View.GONE, open(true).editor().alsoRow().getVisibility());
+        assertEquals(View.VISIBLE, open(false).editor().alsoRow().getVisibility());
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void openingTheScenePageWritesNothing() {
-        WallpaperLiveHost host = open(true);
-        tap(host.grid().tile(0));
-        assertNull("the preview is not the wallpaper", LiveWallpaperChoice.read(mPrefs).scene);
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void phoneWallpaperSwitch_showsInTerminalAppModeOnly() {
-        WallpaperLiveHost homeApp = open(true);
-        tap(homeApp.grid().tile(0));
-        assertEquals(View.GONE, homeApp.detail().alsoRow().getVisibility());
-
-        WallpaperLiveHost terminal = open(false);
-        tap(terminal.grid().tile(0));
-        assertEquals(View.VISIBLE, terminal.detail().alsoRow().getVisibility());
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void frameRateIsTheStoredOne() {
-        LiveWallpaperChoice.none().withScene("bloom").withRateHz(15).write(mPrefs);
-        WallpaperLiveHost host = open(true);
-        tap(host.grid().tile(3));
-        assertEquals(15, host.detail().current().rateHz);
-        assertEquals(R.id.segmented_pill_default, ((com.google.android.material.button.MaterialButtonToggleGroup)
-            host.detail().rateGroup()).getCheckedButtonId());
+    public void theVideoSourceUntilWaveB_saysVideoIsNotReady() {
+        WallpaperLiveHost.VideoSource.Result r = WallpaperLiveHost.VideoSource.UNAVAILABLE
+            .importFile(mActivity, android.net.Uri.parse("content://x/y"));
+        assertFalse(r.ok);
+        assertEquals("Video arrives in the next build", r.error);
     }
 }

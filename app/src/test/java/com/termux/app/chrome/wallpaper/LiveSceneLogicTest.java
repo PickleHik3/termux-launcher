@@ -5,82 +5,44 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.R;
-import com.termux.app.chrome.scene.LiveWallpaperChoice;
+import com.termux.app.chrome.scene.WallpaperMotion;
 
 import org.junit.Test;
 
 public class LiveSceneLogicTest {
 
-    private static LiveWallpaperChoice stored(String scene) {
-        return new LiveWallpaperChoice(scene, 1.5f, 60, 0.4f, 2);
+    @Test
+    public void kindOf_followsTheStoredMotion() {
+        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.kindOf(WallpaperMotion.photo()));
+        assertEquals(LiveSceneLogic.Kind.VIDEO, LiveSceneLogic.kindOf(WallpaperMotion.video("loop.mp4")));
+        assertEquals(LiveSceneLogic.Kind.SHADER, LiveSceneLogic.kindOf(WallpaperMotion.shader("abc")));
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void picker_opensOnLiveOnlyWhileASceneIsInUseAndSupported() {
-        assertEquals(LiveSceneLogic.Kind.LIVE, LiveSceneLogic.startKind(stored("aurora"), true));
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(LiveWallpaperChoice.none(), true));
-        // Below Android 13 a stored scene cannot run: the picker stays on Photo.
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(stored("aurora"), false));
+    public void picker_opensOnTheKindInUseOnlyWhenSupported() {
+        assertEquals(LiveSceneLogic.Kind.SHADER, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), true));
+        assertEquals(LiveSceneLogic.Kind.VIDEO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), true));
+        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.photo(), true));
+        // Below Android 10 a stored motion cannot run: the picker stays on Photo.
+        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), false));
+        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), false));
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void inUse_isTheStoredSceneOnly() {
-        assertTrue(LiveSceneLogic.inUse(stored("nebula"), "nebula"));
-        assertFalse(LiveSceneLogic.inUse(stored("nebula"), "bloom"));
-        assertFalse(LiveSceneLogic.inUse(LiveWallpaperChoice.none(), "nebula"));
+    public void inUse_isTheStoredShaderOnly() {
+        assertTrue(LiveSceneLogic.inUse(WallpaperMotion.shader("abc"), "abc"));
+        assertFalse(LiveSceneLogic.inUse(WallpaperMotion.shader("abc"), "xyz"));
+        assertFalse(LiveSceneLogic.inUse(WallpaperMotion.photo(), "abc"));
+        // A video named like a shader id is not that shader.
+        assertFalse(LiveSceneLogic.inUse(WallpaperMotion.video("abc"), "abc"));
+        assertFalse(LiveSceneLogic.inUse(WallpaperMotion.shader("abc"), null));
     }
 
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
     @Test
-    public void detailStart_sceneInUseKeepsEveryKnob() {
-        LiveWallpaperChoice s = stored("aurora");
-        assertEquals(s, LiveSceneLogic.detailStart(s, "aurora"));
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void detailStart_otherSceneKeepsSpeedAndRateButNotDensityOrColour() {
-        LiveWallpaperChoice start = LiveSceneLogic.detailStart(stored("aurora"), "particles");
-        assertEquals("particles", start.scene);
-        assertEquals(1.5f, start.speed, 0f);
-        assertEquals(60, start.rateHz);
-        assertEquals(0f, start.density, 0f);
-        assertEquals(0, start.palette);
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void detailStart_withNothingInUseIsDefaultsOnTheScene() {
-        LiveWallpaperChoice start = LiveSceneLogic.detailStart(LiveWallpaperChoice.none(), "bloom");
-        assertEquals("bloom", start.scene);
-        assertEquals(LiveWallpaperChoice.DEFAULT_SPEED, start.speed, 0f);
-        assertEquals(LiveWallpaperChoice.DEFAULT_RATE_HZ, start.rateHz);
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void knobs_densityAndColourOnlyWhereTheSceneHasThem() {
-        for (String kind : LiveWallpaperChoice.USER_KINDS) {
-            assertEquals(kind, LiveWallpaperChoice.supportsDensity(kind), LiveSceneLogic.showsDensity(kind));
-            assertEquals(kind, LiveWallpaperChoice.supportsPalette(kind), LiveSceneLogic.showsColour(kind));
-            assertEquals(kind, LiveSceneLogic.showsColour(kind), LiveSceneLogic.palettes(kind).length > 0);
-        }
-        assertTrue(LiveSceneLogic.showsDensity("aurora"));
-        assertTrue(LiveSceneLogic.showsColour("particles"));
-        assertFalse(LiveSceneLogic.showsDensity("nebula"));
-        assertFalse(LiveSceneLogic.showsColour("contour-waves"));
-        assertFalse(LiveSceneLogic.showsColour("bloom"));
-        assertArrayEquals(LiveWallpaperChoice.paletteNames("aurora"), LiveSceneLogic.palettes("aurora"));
-    }
-
-    @org.junit.Ignore("Pins the deleted AGSL scenes; wave C rewrites the picker and this test (shader-video-wallpapers-2026-11-09)")
-    @Test
-    public void backToPhoto_onlyWhileASceneIsInUse() {
-        assertTrue(LiveSceneLogic.showsBackToPhoto(stored("bloom")));
-        assertFalse(LiveSceneLogic.showsBackToPhoto(LiveWallpaperChoice.none()));
+    public void backToPhoto_onlyWhileAVideoOrShaderIsInUse() {
+        assertTrue(LiveSceneLogic.showsBackToPhoto(WallpaperMotion.shader("abc")));
+        assertTrue(LiveSceneLogic.showsBackToPhoto(WallpaperMotion.video("loop.mp4")));
+        assertFalse(LiveSceneLogic.showsBackToPhoto(WallpaperMotion.photo()));
     }
 
     @Test
@@ -121,23 +83,13 @@ public class LiveSceneLogicTest {
     }
 
     @Test
-    public void everyUserSceneHasANameAndAFact() {
-        for (String kind : LiveWallpaperChoice.USER_KINDS) {
-            assertTrue(kind, LiveSceneLogic.nameRes(kind) != 0);
-            assertTrue(kind, LiveSceneLogic.descRes(kind) != 0);
-        }
-        assertEquals(R.string.wallpaper_kind_live, LiveSceneLogic.nameRes("contour-waves"));
-        assertEquals(R.string.live_scenes_heading, LiveSceneLogic.descRes("bloom"));
-    }
-
-    @Test
     public void photoEndsScene_onlyForAHomePhoto() {
         assertTrue(LiveSceneLogic.photoEndsScene(WallpaperSlots.Slot.HOME));
         assertFalse(LiveSceneLogic.photoEndsScene(WallpaperSlots.Slot.LOCK));
     }
 
     @Test
-    public void useAsWallpaper_returnsToTheGridUnlessItFailed() {
+    public void apply_returnsToTheListUnlessItFailed() {
         assertFalse(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.SET));
         assertFalse(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.IN_APP_ONLY));
         assertTrue(LiveSceneLogic.staysOnScenePage(LiveWallpaperApplier.Result.STILL_FAILED));

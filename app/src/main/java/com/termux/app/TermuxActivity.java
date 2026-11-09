@@ -24673,10 +24673,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         slots, overviewListener(), navigator::close,
                         start, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
                 // The picker's frame over the editor: back to the editor, and the editor's Done.
-                // Photo | Live above the picker where scenes can run; the sheet frames the host.
+                // Photo | Video | Shader above the picker where motion can run; the sheet frames the host.
                 final com.termux.app.chrome.wallpaper.WallpaperLiveHost liveHost =
                     new com.termux.app.chrome.wallpaper.WallpaperLiveHost(TermuxActivity.this, picker,
                         () -> applyHomeWallpaperInPlace(true));
+                liveHost.setHeldReasonSource(() -> mScene == null ? null : mScene.heldReason());
                 final com.termux.app.surfaces.WallpaperSheet shell =
                     new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,
                         liveHost.root());
