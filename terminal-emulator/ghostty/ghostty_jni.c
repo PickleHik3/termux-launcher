@@ -54,6 +54,18 @@ enum {
 enum { LINK_Y = 0, LINK_X0, LINK_X1, LINK_URI_OFFSET, LINK_URI_LENGTH, LINK_INTS };
 // The longest URI kept; a longer link reads as plain text, as the Java core's pool refuses it.
 #define URI_CAP 8192
+// Runs and URI bytes one sync or row read hands over; match GhosttyLinks.MAX_RUNS and URI_BYTES.
+#define LINK_RUNS_CAP 256
+#define LINK_URI_BYTES (16 * 1024)
+
+// Link runs read out of the terminal and kept here until they go to Java (link_flush). A sync's
+// come from capture(), so while a render hold is on they are the frozen frame's, not the live one's.
+typedef struct {
+    jint* runs;      // LINK_INTS ints per run, LINK_RUNS_CAP runs; made on first use
+    uint8_t* uris;   // LINK_URI_BYTES
+    int count, uri_used;
+    int last_offset, last_len;  // the URI stored last, which the next run often repeats
+} LinkBuf;
 
 // Events handed to Java during a write (GhosttyNative.EVENT_*), in the order they happened.
 enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY_NOTIFICATION = 4 };
@@ -119,11 +131,13 @@ typedef struct {
     jint* dirty_buf;
     uint32_t* extra_buf;
     int buf_cols, buf_rows;
-    // The URI of the cell being read, of the run it may extend and of the run written last: three
-    // URI_CAP slices of one allocation, made on the first link.
+    // The URI of the cell being read and of the run it may extend: two URI_CAP slices of one
+    // allocation, made on the first link.
     uint8_t* uri_buf;
     uint8_t* run_uri;
-    uint8_t* last_uri;
+    // Links of the snapshot's changed rows (capture), and of the history row read last.
+    LinkBuf snap_links;
+    LinkBuf row_links;
     // OSC sniffer (see write_stream): the string being read, its first three bytes, and whether it
     // is one we keep ("99;", "66;" or "9;4"). osc_body holds what follows those three bytes.
     bool osc_active, osc_skip, osc_overflow;
@@ -145,6 +159,7 @@ typedef struct {
     long snap_scrolled;  // rows that left the screen since the last sync handed them to Java
     uint16_t snap_cx, snap_cy;
     bool snap_visible;
+    int snap_mouse;  // the OSC 22 pointer shape
     struct KittyState* kitty;  // kitty graphics, set up by nativeKittySetup; see the end of this file
 } Core;
 
@@ -339,6 +354,10 @@ static void core_free(Core* c, JNIEnv* env) {
     free(c->dirty_buf);
     free(c->extra_buf);
     free(c->uri_buf);
+    free(c->snap_links.runs);
+    free(c->snap_links.uris);
+    free(c->row_links.runs);
+    free(c->row_links.uris);
     free(c->osc_body);
     free(c->text_buf);
     free(c);
@@ -760,61 +779,79 @@ static int copy_render_row(Core* c, jint* cells, int cols, uint32_t* extra, int 
     return used;
 }
 
-// Where one sync or row read puts its link runs (see LINK_*); count includes runs already written.
-typedef struct {
-    jintArray runs;
-    jbyteArray uris;
-    int run_cap, uri_cap;
-    int count, uri_used;
-    int last_offset, last_len;  // the URI written last, which the next run often repeats
-} LinkOut;
-
-static void link_out_init(JNIEnv* env, LinkOut* out, jintArray runs, jbyteArray uris) {
-    memset(out, 0, sizeof(*out));
-    out->last_offset = -1;
-    if (runs == NULL || uris == NULL) return;
-    out->runs = runs;
-    out->uris = uris;
-    out->run_cap = ((*env)->GetArrayLength(env, runs) - 1) / LINK_INTS;
-    out->uri_cap = (*env)->GetArrayLength(env, uris);
-    if (out->run_cap < 0) out->run_cap = 0;
+static void link_reset(LinkBuf* buf) {
+    buf->count = 0;
+    buf->uri_used = 0;
+    buf->last_offset = -1;
+    buf->last_len = 0;
 }
 
-static void link_out_finish(JNIEnv* env, LinkOut* out) {
-    if (out->runs == NULL || (*env)->GetArrayLength(env, out->runs) < 1) return;
-    jint count = out->count;
-    (*env)->SetIntArrayRegion(env, out->runs, 0, 1, &count);
-}
-
-// One run of cells [x0, x1) of row y sharing the URI in run_uri. A run whose URI is the one written
-// last (a link that wraps onto the next row) shares its bytes.
-static void emit_link(JNIEnv* env, Core* c, LinkOut* out, int y, int x0, int x1, size_t len) {
-    if (out->count >= out->run_cap) return;
-    int offset = -1;
-    if (out->last_offset >= 0 && (size_t) out->last_len == len
-        && memcmp(c->last_uri, c->run_uri, len) == 0) {
-        offset = out->last_offset;
-    } else {
-        if ((size_t) out->uri_cap - (size_t) out->uri_used < len) return;
-        offset = out->uri_used;
-        (*env)->SetByteArrayRegion(env, out->uris, offset, (jsize) len, (const jbyte*) c->run_uri);
-        out->uri_used += (int) len;
-        out->last_offset = offset;
-        out->last_len = (int) len;
-        memcpy(c->last_uri, c->run_uri, len);
+// Hand the runs to Java: links[0] = count, then LINK_INTS ints per run, and the URI bytes. Runs
+// that do not fit the arrays are dropped. Empties the buffer.
+static void link_flush(JNIEnv* env, LinkBuf* buf, jintArray links_out, jbyteArray uris_out) {
+    if (links_out == NULL || uris_out == NULL) { link_reset(buf); return; }
+    jsize run_room = ((*env)->GetArrayLength(env, links_out) - 1) / LINK_INTS;
+    jsize uri_room = (*env)->GetArrayLength(env, uris_out);
+    jint count = 0;
+    if (run_room > 0 && buf->count > 0) {
+        int uri_end = buf->uri_used < uri_room ? buf->uri_used : uri_room;
+        // Keep, in order, the runs whose URI lies inside what Java can take.
+        for (int i = 0; i < buf->count && count < run_room; i++) {
+            jint* run = buf->runs + i * LINK_INTS;
+            if (run[LINK_URI_OFFSET] + run[LINK_URI_LENGTH] > uri_end) continue;
+            if (count != i) memmove(buf->runs + count * LINK_INTS, run, sizeof(jint) * LINK_INTS);
+            count++;
+        }
+        if (count > 0) {
+            (*env)->SetIntArrayRegion(env, links_out, 1, count * LINK_INTS, buf->runs);
+            (*env)->SetByteArrayRegion(env, uris_out, 0, uri_end, (const jbyte*) buf->uris);
+        }
     }
-    jint run[LINK_INTS] = {y, x0, x1, offset, (jint) len};
-    (*env)->SetIntArrayRegion(env, out->runs, 1 + out->count * LINK_INTS, LINK_INTS, run);
-    out->count++;
+    if ((*env)->GetArrayLength(env, links_out) >= 1) (*env)->SetIntArrayRegion(env, links_out, 0, 1, &count);
+    link_reset(buf);
+}
+
+// One run of cells [x0, x1) of row y sharing the URI in run_uri. A run whose URI is the one stored
+// last (a link that wraps onto the next row) shares its bytes.
+static void store_link(Core* c, LinkBuf* buf, int y, int x0, int x1, size_t len) {
+    if (buf->count >= LINK_RUNS_CAP) return;
+    if (buf->runs == NULL) {
+        buf->runs = malloc(sizeof(jint) * LINK_INTS * LINK_RUNS_CAP);
+        buf->uris = malloc(LINK_URI_BYTES);
+        if (buf->runs == NULL || buf->uris == NULL) {
+            free(buf->runs);
+            free(buf->uris);
+            buf->runs = NULL;
+            buf->uris = NULL;
+            return;
+        }
+    }
+    int offset;
+    if (buf->last_offset >= 0 && (size_t) buf->last_len == len
+        && memcmp(buf->uris + buf->last_offset, c->run_uri, len) == 0) {
+        offset = buf->last_offset;
+    } else {
+        if ((size_t) (LINK_URI_BYTES - buf->uri_used) < len) return;
+        offset = buf->uri_used;
+        memcpy(buf->uris + offset, c->run_uri, len);
+        buf->uri_used += (int) len;
+        buf->last_offset = offset;
+        buf->last_len = (int) len;
+    }
+    jint* run = buf->runs + buf->count * LINK_INTS;
+    run[LINK_Y] = y;
+    run[LINK_X0] = x0;
+    run[LINK_X1] = x1;
+    run[LINK_URI_OFFSET] = offset;
+    run[LINK_URI_LENGTH] = (jint) len;
+    buf->count++;
 }
 
 // The OSC 8 links of one row, as runs of cells sharing a URI. row_ref is the row's first cell.
-static void read_links(JNIEnv* env, Core* c, LinkOut* out, const GhosttyGridRef* row_ref, int width, int y) {
-    if (out->runs == NULL) return;
-    if (c->uri_buf == NULL) c->uri_buf = malloc(3 * URI_CAP);
+static void read_links(Core* c, LinkBuf* buf, const GhosttyGridRef* row_ref, int width, int y) {
+    if (c->uri_buf == NULL) c->uri_buf = malloc(2 * URI_CAP);
     if (c->uri_buf == NULL) return;
     c->run_uri = c->uri_buf + URI_CAP;
-    c->last_uri = c->uri_buf + 2 * URI_CAP;
     int start = -1;
     size_t run_len = 0;
     for (int x = 0; x <= width; x++) {
@@ -829,13 +866,38 @@ static void read_links(JNIEnv* env, Core* c, LinkOut* out, const GhosttyGridRef*
             if (has && ghostty_grid_ref_hyperlink_uri(&ref, c->uri_buf, URI_CAP, &n) != GHOSTTY_SUCCESS) n = 0;
         }
         if (start >= 0 && n == run_len && memcmp(c->uri_buf, c->run_uri, n) == 0) continue;
-        if (start >= 0) emit_link(env, c, out, y, start, x, run_len);
+        if (start >= 0) store_link(c, buf, y, start, x, run_len);
         start = -1;
         if (n > 0) {
             memcpy(c->run_uri, c->uri_buf, n);
             run_len = n;
             start = x;
         }
+    }
+}
+
+// The links of the render state's changed rows, read from the terminal at the moment the render
+// state was updated (capture), into snap_links. A sync hands over exactly these rows.
+static void capture_links(Core* c) {
+    link_reset(&c->snap_links);
+    GhosttyRenderStateDirty dirty = GHOSTTY_RENDER_STATE_DIRTY_FULL;
+    ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirty);
+    if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FALSE
+        || ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &c->row_iter) != GHOSTTY_SUCCESS)
+        return;
+    for (int y = 0; y < c->rows && ghostty_render_state_row_iterator_next(c->row_iter); y++) {
+        bool row_dirty = dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL;
+        if (!row_dirty) ghostty_render_state_row_get(c->row_iter, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &row_dirty);
+        if (!row_dirty) continue;
+        GhosttyRow raw_row = 0;
+        bool linked = false;
+        if (ghostty_render_state_row_get(c->row_iter, GHOSTTY_RENDER_STATE_ROW_DATA_RAW, &raw_row) == GHOSTTY_SUCCESS)
+            ghostty_row_get(raw_row, GHOSTTY_ROW_DATA_HYPERLINK, &linked);
+        if (!linked) continue;
+        // The viewport is never scrolled, so render row y is active row y.
+        GhosttyGridRef row_ref = {0};
+        GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = (uint32_t) y}}};
+        if (ghostty_terminal_grid_ref(c->term, p, &row_ref) == GHOSTTY_SUCCESS) read_links(c, &c->snap_links, &row_ref, c->cols, y);
     }
 }
 
@@ -847,7 +909,8 @@ static int prompt_bit(GhosttyRow row) {
 }
 
 // Take the snapshot: the render state, and the scalars that must come from the same moment (screen,
-// history, rows scrolled off, cursor). Called by a sync outside a hold and when a hold begins.
+// history, rows scrolled off, cursor, pointer shape, the changed rows' links). Called by a sync
+// outside a hold and when a hold begins.
 static bool capture(Core* c) {
     int screen = current_screen(c);
     size_t history = history_rows(c);
@@ -892,7 +955,12 @@ static bool capture(Core* c) {
     c->snap_cx = cx;
     c->snap_cy = cy;
     c->snap_visible = visible;
-    return ghostty_render_state_update(c->render, c->term) == GHOSTTY_SUCCESS;
+    GhosttyMouseShape mouse = GHOSTTY_MOUSE_SHAPE_TEXT;
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MOUSE_SHAPE, &mouse);
+    c->snap_mouse = (int) mouse;
+    if (ghostty_render_state_update(c->render, c->term) != GHOSTTY_SUCCESS) return false;
+    capture_links(c);
+    return true;
 }
 
 // Bring Java up to date after writes: fills state[] (see ST_*), and for every row that changed
@@ -929,8 +997,6 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
 
     uint8_t kitty = 0;
     ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, &kitty);
-    GhosttyMouseShape mouse = GHOSTTY_MOUSE_SHAPE_TEXT;
-    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MOUSE_SHAPE, &mouse);
 
     int flags = c->events;
     c->events = 0;
@@ -950,7 +1016,7 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     st[ST_MODES] = read_modes(c);
     st[ST_KITTY_FLAGS] = kitty;
     st[ST_CURSOR_STYLE] = (jint) cursor.visual_style;
-    st[ST_MOUSE_SHAPE] = (jint) mouse;
+    st[ST_MOUSE_SHAPE] = (jint) c->snap_mouse;
     (*env)->SetIntArrayRegion(env, state_out, 0, ST_COUNT, st);
 
     // Rows: copy each changed row into the reusable row buffer, then into the Java arrays.
@@ -959,8 +1025,6 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     jint* dirty_rows = c->dirty_buf;
     for (int y = 0; y < rows; y++) dirty_rows[y] = -1;
     int extra_used = 0;
-    LinkOut links;
-    link_out_init(env, &links, links_out, uris_out);
     if (dirty != GHOSTTY_RENDER_STATE_DIRTY_FALSE
         && ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &c->row_iter) == GHOSTTY_SUCCESS) {
         int y = 0;
@@ -972,22 +1036,14 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
                 if (n >= 0) {
                     (*env)->SetIntArrayRegion(env, screen_out, y * cols * CELL_INTS, cols * CELL_INTS, row_cells);
                     GhosttyRow raw_row = 0;
-                    bool wrap = false, linked = false;
+                    bool wrap = false;
                     int prompt = 0;
                     if (ghostty_render_state_row_get(c->row_iter, GHOSTTY_RENDER_STATE_ROW_DATA_RAW, &raw_row) == GHOSTTY_SUCCESS) {
                         ghostty_row_get(raw_row, GHOSTTY_ROW_DATA_WRAP, &wrap);
-                        ghostty_row_get(raw_row, GHOSTTY_ROW_DATA_HYPERLINK, &linked);
                         prompt = prompt_bit(raw_row);
                     }
                     dirty_rows[y] = n | (wrap ? ROW_WRAPPED : 0) | prompt;
                     extra_used += n;
-                    if (linked) {
-                        // The viewport is never scrolled, so render row y is active row y.
-                        GhosttyGridRef row_ref = {0};
-                        GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = (uint32_t) y}}};
-                        if (ghostty_terminal_grid_ref(c->term, p, &row_ref) == GHOSTTY_SUCCESS)
-                            read_links(env, c, &links, &row_ref, cols, y);
-                    }
                 }
                 bool clean = false;
                 ghostty_render_state_row_set(c->row_iter, GHOSTTY_RENDER_STATE_ROW_OPT_DIRTY, &clean);
@@ -997,7 +1053,8 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     }
     (*env)->SetIntArrayRegion(env, dirty_out, 0, rows, dirty_rows);
     if (extra_used > 0) (*env)->SetIntArrayRegion(env, extra_out, 0, extra_used, (const jint*) extra);
-    link_out_finish(env, &links);
+    // The changed rows' links as capture() read them; a later sync while still held has none.
+    link_flush(env, &c->snap_links, links_out, uris_out);
     GhosttyRenderStateDirty clean_state = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
     ghostty_render_state_set(c->render, GHOSTTY_RENDER_STATE_OPT_DIRTY, &clean_state);
     return JNI_TRUE;
@@ -1023,8 +1080,6 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryR
     int used = 0;
     bool wrap = false, linked = false;
     int prompt = 0;
-    LinkOut links;
-    link_out_init(env, &links, links_out, uris_out);
     // Look the row up once: a grid ref is a page and a cell within it, and every page holds rows
     // of the terminal's full width, so the row's other cells differ only in x.
     GhosttyGridRef row_ref = {0};
@@ -1066,8 +1121,9 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryR
     }
     (*env)->SetIntArrayRegion(env, cells_out, 0, cols * CELL_INTS, row);
     if (used > 0) (*env)->SetIntArrayRegion(env, extra_out, 0, used, (const jint*) extra);
-    if (linked) read_links(env, c, &links, &row_ref, width, 0);
-    link_out_finish(env, &links);
+    link_reset(&c->row_links);
+    if (linked) read_links(c, &c->row_links, &row_ref, width, 0);
+    link_flush(env, &c->row_links, links_out, uris_out);
     return used | (wrap ? ROW_WRAPPED : 0) | prompt;
 }
 

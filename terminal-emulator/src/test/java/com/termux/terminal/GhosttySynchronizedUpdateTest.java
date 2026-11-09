@@ -135,4 +135,24 @@ public class GhosttySynchronizedUpdateTest extends SynchronizedUpdateTest {
         enterString("x");
         assertLineIs(0, "x    ");
     }
+
+    /**
+     * Links and the pointer shape belong to the frozen frame: a row the hold keeps keeps the link it
+     * had, and a pointer shape set during the hold waits for its end, like the rows.
+     */
+    public void testTheHeldFrameKeepsItsLinksAndPointerShape() {
+        withTerminalSized(5, 3);
+        String before = mTerminal.getPointerShape();
+        enterString("\033]8;;https://a.example\033\\aaa\033]8;;\033\\"
+            + "\033[?2026h\r\033]8;;https://b.example\033\\bbb\033]8;;\033\\\033]22;pointer\007");
+        assertTrue(mTerminal.isScreenUpdateHeld());
+        assertLineIs(0, "aaa  ");
+        assertEquals("https://a.example", mTerminal.getHyperlinkUriAt(0, 0));
+        assertEquals(before, mTerminal.getPointerShape());
+
+        enterString("\033[?2026l");
+        assertLineIs(0, "bbb  ");
+        assertEquals("https://b.example", mTerminal.getHyperlinkUriAt(0, 0));
+        assertEquals("pointer", mTerminal.getPointerShape());
+    }
 }
