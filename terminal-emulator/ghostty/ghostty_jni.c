@@ -794,3 +794,27 @@ JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeFormat
     return out;
 }
 
+// The primary screen's history byte limit; lowering it prunes whole pages at once.
+JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetHistoryByteLimit(
+    JNIEnv* env, jclass cls, jlong h, jlong bytes) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || bytes <= 0) return;
+    size_t limit = (size_t) bytes;
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &limit);
+}
+
+// The library's compression activity token (compare for equality only), or -1 on error. It moves
+// only when there may be new history to compress, so an idle step can skip a terminal whose last
+// pass completed under the same token.
+JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCompressionActivity(
+    JNIEnv* env, jclass cls, jlong h) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return -1;
+    uint64_t token = 0;
+    if (ghostty_terminal_compression_activity(c->term, &token) != GHOSTTY_SUCCESS) return -1;
+    return (jlong) (token & 0x7fffffffffffffffULL);
+}

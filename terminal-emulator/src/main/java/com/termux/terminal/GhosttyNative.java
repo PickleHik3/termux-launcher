@@ -190,7 +190,7 @@ final class GhosttyNative {
 
     /**
      * Compress history: one bounded step, or every eligible page when {@code full}. Returns a
-     * COMPRESS_* result, or -1 on error. For measuring only.
+     * COMPRESS_* result, or -1 on error.
      */
     static native int nativeCompress(long handle, boolean full);
 
@@ -202,4 +202,10 @@ final class GhosttyNative {
      * formatter fails.
      */
     static native byte[] nativeFormatReplay(long handle, int historyRows);
+
+    /** The most bytes of history the primary screen keeps; Ghostty prunes in whole pages. */
+    static native void nativeSetHistoryByteLimit(long handle, long bytes);
+
+    /** The compression activity token, compared for equality only; -1 on error. */
+    static native long nativeCompressionActivity(long handle);
 }

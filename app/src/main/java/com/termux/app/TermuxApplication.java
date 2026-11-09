@@ -95,6 +95,8 @@ public class TermuxApplication extends Application {
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
         // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
+        // Memory pressure for the Ghostty core's panes.
+        com.termux.app.terminal.GhosttyFailSafes.install(this);
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);

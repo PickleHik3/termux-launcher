@@ -1698,6 +1698,16 @@ public final class TerminalEmulator {
         appendInternal(bytes, bytes.length);
     }
 
+    /**
+     * One idle compression step on the Ghostty core (see {@link GhosttyIdleCompressor}): a
+     * {@code GhosttyNative.COMPRESS_*} result, or -1 with the Java core. Compression never changes
+     * what the terminal holds, so an error here only stops the chain.
+     */
+    int compressGhosttyIdleStep() {
+        GhosttyCore core = mGhostty;
+        return core == null ? -1 : core.compressIdleStep();
+    }
+
     /** For tests: make the Ghostty core's next sync fail as a Ghostty error would. */
     void failNextGhosttySyncForTests(RuntimeException failure, boolean formatterFailsToo) {
         if (mGhostty == null) return;

@@ -428,6 +428,7 @@ public final class TerminalSession extends TerminalOutput {
         // The emulator is only safe to touch from the main thread, which is where this runs.
         if (mEmulator != null) mEmulator.shutdownKittyGraphics();
         if (mEmulator != null) mEmulator.releaseGhosttyCore();
+        mGhosttyIdleCompressor.cancel();
     }
 
     /** Experimental: parse with libghostty-vt (debug.tl.terminal_core=ghostty), or say why not. */
@@ -702,6 +703,7 @@ public final class TerminalSession extends TerminalOutput {
         int bytesRead = appendProcessOutputSlice();
         if (bytesRead <= 0) return false;
         flushBatchedOutput();
+        onGhosttyOutput();
         LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
@@ -727,6 +729,7 @@ public final class TerminalSession extends TerminalOutput {
         mLastTurnBytes = total;
         if (total > 0) {
             flushBatchedOutput();
+            onGhosttyOutput();
             LatencyProbe.outputArrived();
             notifyScreenUpdate();
         }
@@ -776,6 +779,42 @@ public final class TerminalSession extends TerminalOutput {
             // More of the burst is waiting: let the frame clock and input run before the next turn.
             requestNewInputTurn();
         }
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** Where the idle compressor's callbacks go; a test in this package swaps in a fake. */
+    GhosttyIdleCompressor.Scheduler mGhosttyIdleScheduler = new GhosttyIdleCompressor.Scheduler() {
+        @Override
+        public void postDelayed(Runnable runnable, long delayMillis) {
+            mMainThreadHandler.postDelayed(runnable, delayMillis);
+        }
+
+        @Override
+        public void cancel(Runnable runnable) {
+            mMainThreadHandler.removeCallbacks(runnable);
+        }
+    };
+
+    /** Compresses a Ghostty pane's history once its output goes quiet; idle with the Java core. */
+    final GhosttyIdleCompressor mGhosttyIdleCompressor = new GhosttyIdleCompressor(
+        new GhosttyIdleCompressor.Scheduler() {
+            @Override
+            public void postDelayed(Runnable runnable, long delayMillis) {
+                mGhosttyIdleScheduler.postDelayed(runnable, delayMillis);
+            }
+
+            @Override
+            public void cancel(Runnable runnable) {
+                mGhosttyIdleScheduler.cancel(runnable);
+            }
+        },
+        () -> mEmulator == null ? -1 : mEmulator.compressGhosttyIdleStep());
+
+    /** A turn of output reached the emulator: with the Ghostty core, compress once it goes quiet. */
+    private void onGhosttyOutput() {
+        if (mEmulator.isGhosttyCoreActive()) mGhosttyIdleCompressor.onOutput();
+        else mGhosttyIdleCompressor.cancel();
     }
 
     @SuppressLint("HandlerLeak")
