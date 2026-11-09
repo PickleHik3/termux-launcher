@@ -256,8 +256,8 @@ the sync (`TerminalEmulator.java:1645-1651`), never from inside a write.
 | Feature | Ghostty at `vt-1.0.0` | Ghostty mode |
 |---|---|---|
 | Cursor trail | n/a | keep; reads the snapshot cursor |
-| Sixel | DCS ignored | drop (later: sniff DCS with `vt_write_until`, decode with `TerminalSixel`, re-send as a kitty image at ground) |
-| iTerm2 images (OSC 1337 File) | parsed, dropped | drop (same later route) |
+| Sixel | DCS ignored | slice 8: sniff the DCS with `vt_write_until`, decode with `TerminalSixel`, re-send as a kitty image at ground |
+| iTerm2 images (OSC 1337 File) | parsed, dropped | drop; not planned (the developer's call, 2026-11-09: complete kitty support comes first) |
 | OSC 66 text sizing | parsed, dropped | drop: it changes cell layout and cannot live outside the grid |
 | OSC 99 notifications | parsed, dropped; OSC 9/777 reach `DESKTOP_NOTIFICATION` | keep: sniff OSC strings with `vt_write_until`, feed `KittyNotifications` on the main thread; map OSC 9/777 to the same path |
 | OSC 8 links | per cell, `ghostty_grid_ref_hyperlink_uri` | map: URI table per pane, id per cell in `TerminalRow` |
@@ -305,6 +305,7 @@ Each ships behind `debug.tl.terminal_core=ghostty`; the Java core's numbers must
 | 5 | Kitty graphics on Ghostty (§7) | `GhosttyImageCacheTest` budget; `KittyImageStoreTest` unchanged; `frames kitty ghostty` (enable the workload for Ghostty) against `frames kitty java` Once images work, XTVERSION gains ` (libghostty-vt 1.0)` so programs matching "ghostty" pick kitty graphics; before that it must not contain "ghostty". |
 | 6 | Fail-safes (§9) | fallback unit test (inject a failure mid-stream, compare the Java screen); `parse` memory fields after idle compress; `bench` PSS after-flood and after-close |
 | 7 | Reader-thread parse (§5), only if its gate fires | lock-order tests with a fake core on the JVM; `frames flood/type/tui ghostty` |
+| 8 | Sixel on the Ghostty core: the slice 4 sniffer catches the sixel DCS, `TerminalSixel` decodes it, and the pixels go to Ghostty as a kitty image placed at the cursor, so it scrolls and clears like the Java core's sixel. Once it works, DA1 reports `4` on the Ghostty core too. For people who need sixel; kitty graphics stay the primary path | unit tests: the same sixel stream on both cores gives the same placement and cursor; split-across-append DCS; a malformed stream is dropped without losing later output; `look ghostty` against `look java` on the sixel section |
 
 ## Risks and open questions
 
