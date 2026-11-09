@@ -18,6 +18,18 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **GL shader wallpaper, wave A (11-09, feat/gl-wallpaper).** Emulator first, then pong with the
+  developer's go-ahead. Copy a sample in and point the debug route at it:
+  `adb shell "run-as com.termux sh -c 'cat > files/home/plasma.glsl'" < tools/shaders/plasma.glsl`,
+  `adb shell setprop debug.tl.shader_file /data/data/com.termux/files/home/plasma.glsl`, tap Home
+  once. Passes: the plasma moves behind Home and the panes at 30 fps; a drag moves the bright spot
+  (iMouse, y not flipped); the dock and status-bar glass show a blurred plasma; screen off and on,
+  or the drawer over it, resumes where it stopped (no jump to t = 0); battery saver holds the
+  frame; `tools/shaders/gradient.glsl` (ShaderEditor `void main`) draws a gradient that follows
+  touch; editing the pushed file again reloads within a second; a broken file logs
+  `SceneLayer` errors with the user's line numbers and draws black. `setprop debug.tl.shader_file ""`
+  removes the layer. No `SceneThread` crash in logcat, `dumpsys meminfo` graphics flat over five
+  minutes.
 - **Live blur plans once per swipe (11-08, perf/glass-translate).** Live blur and Glass Look on,
   a terminal printing (`yes | pv -qL 20` in a pane), a Home float and a built-in widget on Home2,
   the in-app keyboard up once and down once. Swipe slowly Home2 ↔ Workspace ↔ AI. Passes: the
