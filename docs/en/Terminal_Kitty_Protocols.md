@@ -42,7 +42,8 @@ Properties are read from the app's cached copy, so editing the file is not enoug
 with. Verified on device: a session opened straight after the file edit still reported
 `xterm-256color`, while one opened after `termux-reload-settings` reported `xterm-kitty`.
 
-XTVERSION reports `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel color-register count and
+XTVERSION reports `termux-launcher(version)`; with the Fast [terminal engine](#terminal-engine) it
+reports `termux-launcher(version) (libghostty-vt 1.0)`. XTSMGRAPHICS reports the Sixel color-register count and
 geometry for the current screen. Capability detectors such as chafa and notcurses can therefore pick
 a supported renderer instead of relying on a conservative terminal-name fallback.
 
@@ -369,6 +370,30 @@ shared memory and falls back to sending the picture through the terminal. `kitte
 **Key inspector** in the [command palette](Command_Palette_And_Actions.md) shows each key event,
 the binding that claimed it, the active kitty keyboard flags, and the exact bytes written to the
 shell. It has no shortcut of its own, so it can inspect any key.
+
+## Terminal engine
+
+Builds that carry libghostty-vt (Ghostty's terminal library) offer **Settings → Terminal →
+Clipboard & compatibility → Terminal engine**:
+
+- **Standard (Termux)**, the default, is the Java engine Termux has always used.
+- **Fast (LibGhostty)** reads output with libghostty-vt. On pong it parses heavy output about 15
+  times quicker (a 13 MB `cat` shows in about 1 s instead of 5), keeps scrollback compressed when
+  idle, and holds the screen still while a program draws a frame (synchronized output, mode 2026).
+
+The choice applies to panes you open after changing it; open panes keep their engine. Drawing,
+fonts, links, copy, prompt jumps, kitty images and keyboard are the same on both. Where Fast differs:
+
+- Emoji follow Ghostty's widths: an emoji with VS16 (❤️) and a flag take two cells, and programs can
+  see this through mode 2027.
+- Text sizing (OSC 66) prints as plain text; tlstore's headings fall back to one size.
+- iTerm2 images are not shown.
+- A kitty temporary-file transfer (`t=t`) is read only from the app's temporary folder; tools such
+  as `kitten icat` notice and send the pixels directly instead.
+
+If the app crashes in native code while a Fast pane is open, new panes use Standard until the app
+is updated, so a fault cannot bring the home screen down twice; force-stopping the app does not
+count as a crash.
 
 ## Current limitations
 

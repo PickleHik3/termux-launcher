@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-09
 ---
 
 # Both terminal cores serve rows through one interface
 
-Number note: 0024 is taken on `v2-redesign` (`0024-the-wallpaper-moves-in-glsl.md`) but not on
-`exp/ghostty-core`; this ADR takes 0025 so the two never collide on merge.
+Number note: written as 0025, renumbered 0026 at the merge into `v2-redesign`, where 0025 is
+`0025-the-workspace-is-terminal-display-and-assistant.md`.
 
 The experimental libghostty-vt core (`debug.tl.terminal_core=ghostty`, waves 1 and 2 on
 `exp/ghostty-core`) parses about 15 times faster than the Java core on pong but then copies
@@ -76,3 +76,12 @@ We decided:
 - ADR 0019 (resize on pause) is untouched: it rejected live reflow for main-thread cost, and
   this ADR does not move reflow off the main thread.
 - The spec is `project-docs/active/ghostty-core-wave3-2026-11-09.md`.
+
+## Outcome (2026-11-09)
+
+Accepted after the wave 3 pong session (`project-docs/device-checks.md`, results in the developer's
+`~/reports/ghostty-core-2026-11-09/w3`). With the history copy gone, parsing a 13 MB transcript runs at
+340 MB/s on the Ghostty core (the Java core 14–18 MB/s); the per-turn screen copy costs 0.6 ms at
+worst, and the main thread's p90 delay during a flood fell from 36 ms to 1.6 ms. Full-screen redraw
+stays drawing-bound and equal on both cores. Both cores serve every reader through
+`TerminalContent`; the engine is a user setting ("Terminal engine", Standard by default).

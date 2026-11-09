@@ -364,6 +364,15 @@ to the **Workspace** at the window you left, opening one if there is none; a lon
 **Home float** on the page you are on, as Home's long-press Terminal item does.
 _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
+**Terminal engine**:
+What reads a pane's output and keeps its screen and history: **Standard** (the Java core Termux
+has always had) or **Fast** (libghostty-vt, Ghostty's terminal library, about 15 times quicker on
+heavy output). Chosen on Settings › Terminal › Clipboard & compatibility for panes opened after the
+change; offered only in builds that carry the library. A native crash with a Fast pane open turns
+Fast off for new panes until the app is updated. In code a `TerminalContent` behind
+`TerminalSession.chooseEngine` (ADR 0026); `debug.tl.terminal_core` overrides it for testing.
+_Avoid_: core (in prose), backend, Ghostty mode, renderer (drawing is the same for both)
+
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
 the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle

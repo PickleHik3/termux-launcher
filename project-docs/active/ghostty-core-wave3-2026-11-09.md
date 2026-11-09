@@ -1,6 +1,6 @@
 # libghostty-vt core, wave 3: one content interface, no history copy (2026-11-09)
 
-Decision: ADR 0025. Research: `project-docs/reference/terminal/libghostty-vt-research-2026-11-07.md`
+Decision: ADR 0026. Research: `project-docs/reference/terminal/libghostty-vt-research-2026-11-07.md`
 and `gpu-text-rendering-android-research-2026-11-09.md` (main checkout, untracked). Ghostty headers
 and guides at `vt-1.0.0`: `include/ghostty/vt/*.h`, `dist/doxygen/pages/guides/*.md`.
 Base: `exp/ghostty-core` at `ab9c067fc`. Experiment only: nothing here reaches a drop.
@@ -42,7 +42,7 @@ Sources: `~/reports/ghostty-core-2026-11-09/wave2/results.tsv`, `frames-window/*
    rows only.**
 2. **"Keep the copy, move it off-thread" is not cheaper.** Every reader below reads
    `TerminalBuffer` on the main thread without a lock, so a background copy needs a second full
-   buffer or locks in 21 classes. Rejected (ADR 0025).
+   buffer or locks in 21 classes. Rejected (ADR 0026).
 3. **Parsing off the UI thread is not justified by today's numbers.** With history gone, a turn is
    `vt_write` for at most `DRAIN_BUDGET_NANOS` = 4 ms (`te/TerminalSession.java:647`) plus a 45-row
    copy. Parse is 73 ms of the 0.94 s flood; the start delay was the copy (worst copy turn 7–20 ms
