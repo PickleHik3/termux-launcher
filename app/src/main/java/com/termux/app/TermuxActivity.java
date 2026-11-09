@@ -17609,7 +17609,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the IME even with the launcher's keyboard up, because there that keyboard is only
         // the frame mouse mode's touchpad stands in.
         boolean display = displayTakesSystemKeyboard();
-        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display, display);
+        // The Assistant place does as well: its composer is a real text field, typed into with the
+        // phone's keyboard whether or not the launcher's own is up.
+        boolean assistant = mPaneWallController != null
+            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.ASSISTANT;
+        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display || assistant,
+            display || assistant);
     }
 
     // ---------------------------------------------------------------- the edge stacks
