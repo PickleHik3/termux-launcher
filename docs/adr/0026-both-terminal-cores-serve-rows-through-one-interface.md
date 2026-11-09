@@ -75,7 +75,7 @@ We decided:
 - Ghostty mode loses sixel, iTerm2 images and text sizing until someone builds a translator.
 - ADR 0019 (resize on pause) is untouched: it rejected live reflow for main-thread cost, and
   this ADR does not move reflow off the main thread.
-- The spec is `project-docs/active/ghostty-core-wave3-2026-11-09.md`.
+- The spec is `project-docs/reference/terminal/ghostty-core-wave3-2026-11-09.md`.
 
 ## Outcome (2026-11-09)
 
