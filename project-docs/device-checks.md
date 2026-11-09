@@ -30,6 +30,22 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `SceneLayer` errors with the user's line numbers and draws black. `setprop debug.tl.shader_file ""`
   removes the layer. No `SceneThread` crash in logcat, `dumpsys meminfo` graphics flat over five
   minutes.
+- **Video and GIF wallpaper, wave B (11-09, feat/gl-video).** Emulator first, then pong with the
+  developer's go-ahead. The debug route imports a file and plays it (no picker yet). The app cannot
+  read `/data/local/tmp`, so push into its own external folder:
+  `adb push clip.mp4 /sdcard/Android/data/com.termux/files/clip.mp4`, then
+  `adb shell setprop debug.tl.video_file /sdcard/Android/data/com.termux/files/clip.mp4`, tap Home
+  once (`logcat -s SceneLayer VideoImport` prints the hint line). Do the same with an H.264 MP4, an
+  H.265 MP4, a portrait file with rotation metadata and a GIF. Passes: it plays behind Home and the
+  panes, centre-cropped (no stretch, upright, no green or black bars), looping with no visible
+  hitch at the seam, muted; the dock and status-bar glass show the blurred video; screen off and on,
+  or the drawer over it, continues from where it stopped (not from the start); battery saver holds
+  the frame; the GIF animates at its own speed (frame changes visible over 5 s); `dumpsys meminfo`
+  graphics flat over five minutes and `dumpsys media.player` shows one player; clearing the
+  property (`setprop debug.tl.video_file ""`) removes the layer and the player is gone. A file over
+  150 MB or a text file renamed `.mp4` logs `VideoImport` "not imported" and shows photo.
+  Owed after wave C: Use as wallpaper on a video gives a still of the clip (frame about 0.5 s in)
+  for Home and Lock.
 - **Live blur plans once per swipe (11-08, perf/glass-translate).** Live blur and Glass Look on,
   a terminal printing (`yes | pv -qL 20` in a pane), a Home float and a built-in widget on Home2,
   the in-app keyboard up once and down once. Swipe slowly Home2 ↔ Workspace ↔ AI. Passes: the

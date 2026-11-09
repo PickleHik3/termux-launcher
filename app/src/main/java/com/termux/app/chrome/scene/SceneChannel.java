@@ -30,6 +30,16 @@ public interface SceneChannel {
     /** Once per drawn frame: brings the texture up to date; true when a new frame arrived. */
     boolean update(long frameTimeNanos);
 
+    /**
+     * Writes the matrix that maps a target pixel's uv (0..1, origin bottom-left) to this channel's
+     * texture coordinate, with the content centre-cropped to cover a {@code targetW} x
+     * {@code targetH} target and its rotation undone; false (and {@code out16} untouched) for a
+     * channel that has none.
+     */
+    default boolean transform(@androidx.annotation.NonNull float[] out16, int targetW, int targetH) {
+        return false;
+    }
+
     /** The content's size in pixels; 0 until known. */
     int width();
 

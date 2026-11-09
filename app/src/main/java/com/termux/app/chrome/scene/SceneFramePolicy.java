@@ -19,6 +19,8 @@ package com.termux.app.chrome.scene;
 public final class SceneFramePolicy {
 
     public static final String PROP_SHADER_FILE = "debug.tl.shader_file";
+    /** An absolute path to a video or GIF: imported (copied in) and played, without the picker. */
+    public static final String PROP_VIDEO_FILE = "debug.tl.video_file";
     public static final String PROP_SHADER_GUARD = "debug.tl.shader_guard";
     public static final String PROP_RATE = "debug.tl.scene_rate";
     public static final String PROP_GLASS = "debug.tl.scene_glass";

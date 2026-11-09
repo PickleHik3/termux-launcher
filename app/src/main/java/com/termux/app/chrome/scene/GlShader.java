@@ -36,14 +36,66 @@ final class GlShader {
         }
     }
 
+    /** Our own program for a video: {@code iChannel0} is a {@code samplerExternalOES}, centre-cropped (cover). */
+    private static final String PASSTHROUGH_FS = "#version 300 es\n"
+        + "#extension GL_OES_EGL_image_external_essl3 : require\n"
+        + "precision highp float;\n"
+        + "uniform vec2 uTarget;\n"
+        + "uniform mat4 uTexMatrix;\n"
+        + "uniform samplerExternalOES iChannel0;\n"
+        + "out vec4 tlFragColor;\n"
+        + "void main() {\n"
+        + "  vec2 uv = gl_FragCoord.xy / uTarget;\n"
+        + "  vec2 tc = (uTexMatrix * vec4(uv, 0.0, 1.0)).xy;\n"
+        + "  tlFragColor = vec4(texture(iChannel0, tc).rgb, 1.0);\n"
+        + "}\n";
+
     final int program;
     @NonNull final ShaderPrelude.Built built;
     /** Location per {@link ShaderPrelude#UNIFORMS} index; -1 when the program lacks it. */
     @NonNull private final int[] mLoc = new int[ShaderPrelude.UNIFORMS.length];
 
+    /** Location of {@code uTexMatrix}; -1 for a user shader. */
+    private int mTexMatrixLoc = -1;
+    private int mTargetLoc = -1;
+
     private GlShader(int program, @NonNull ShaderPrelude.Built built) {
         this.program = program;
         this.built = built;
+    }
+
+    /** The video passthrough program (spec decision 2); throws {@link IllegalStateException} when the GPU rejects it. */
+    @NonNull
+    static GlShader buildPassthrough() {
+        int vs = compile(GLES20.GL_VERTEX_SHADER, VERTEX_ES3, null);
+        int fs;
+        try {
+            fs = compile(GLES20.GL_FRAGMENT_SHADER, PASSTHROUGH_FS, null);
+        } catch (IllegalStateException e) {
+            GLES20.glDeleteShader(vs);
+            throw e;
+        }
+        int program = GLES20.glCreateProgram();
+        GLES20.glAttachShader(program, vs);
+        GLES20.glAttachShader(program, fs);
+        GLES20.glBindAttribLocation(program, POSITION, "aPos");
+        GLES20.glLinkProgram(program);
+        GLES20.glDeleteShader(vs);
+        GLES20.glDeleteShader(fs);
+        int[] ok = new int[1];
+        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, ok, 0);
+        if (ok[0] == 0) {
+            String log = GLES20.glGetProgramInfoLog(program);
+            GLES20.glDeleteProgram(program);
+            throw new IllegalStateException("video program did not link: " + log);
+        }
+        ShaderPrelude.Built built = new ShaderPrelude.Built(PASSTHROUGH_FS, ShaderPrelude.Flavour.ES3_MAIN, 0, 0,
+            new int[0]);
+        GlShader shader = new GlShader(program, built);
+        shader.readUniforms();
+        shader.mTexMatrixLoc = GLES20.glGetUniformLocation(program, "uTexMatrix");
+        shader.mTargetLoc = GLES20.glGetUniformLocation(program, "uTarget");
+        return shader;
     }
 
     @NonNull
@@ -140,6 +192,8 @@ final class GlShader {
     /** Sets every uniform the program has from {@code in}; the program is made current. */
     void apply(@NonNull ShaderInputs in) {
         GLES20.glUseProgram(program);
+        if (mTexMatrixLoc >= 0) GLES20.glUniformMatrix4fv(mTexMatrixLoc, 1, false, in.texMatrix, 0);
+        if (mTargetLoc >= 0) GLES20.glUniform2f(mTargetLoc, in.width, in.height);
         int[] l = mLoc;
         float t = (float) in.timeSec;
         if (l[ShaderPrelude.I_RESOLUTION] >= 0) GLES20.glUniform3f(l[ShaderPrelude.I_RESOLUTION], in.width, in.height, 1f);

@@ -82,6 +82,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     public static final String REVERT_CONTEXT_LOST = "context_lost";
     public static final String REVERT_NO_GLES3 = "no_gles3";
     public static final String REVERT_COMPILE = "compile";
+    public static final String REVERT_VIDEO = "video";
 
     /** What the layer runs: one shader file, its channel image and its quality. Immutable. */
     public static final class Spec {
@@ -92,6 +93,18 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @NonNull public final ShaderSafety.Quality quality;
         /** Debug route: reload the source when its time stamp moves, and never revert on errors. */
         public final boolean debugFile;
+        /** A video or GIF to play through the passthrough program (spec decision 9); null for a shader. */
+        @Nullable public final File video;
+
+        /** A video layer: Full quality, the file is its own source. */
+        public Spec(@NonNull String key, @NonNull File videoFile, boolean debugFile) {
+            this.key = key;
+            this.source = videoFile;
+            this.channel0 = null;
+            this.quality = ShaderSafety.Quality.FULL;
+            this.debugFile = debugFile;
+            this.video = videoFile;
+        }
 
         public Spec(@NonNull String key, @NonNull File source, @Nullable File channel0,
                     @NonNull ShaderSafety.Quality quality, boolean debugFile) {
@@ -100,6 +113,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             this.channel0 = channel0;
             this.quality = quality;
             this.debugFile = debugFile;
+            this.video = null;
         }
     }
 
@@ -407,6 +421,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @Nullable private EGLSurface mWindow;
         @Nullable private android.view.Surface mSurfaceObj;
         @Nullable private SceneLowRes mLowRes;
+        /** The video channel while the layer plays one; its frames gate the draws. */
+        @Nullable private VideoChannel mVideo;
         /** The surface's size (the view's: the window surface follows the layout). */
         private int mSurfaceW, mSurfaceH;
         private boolean mSurfaceReady;
@@ -468,6 +484,13 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 goIdle();
                 return;
             }
+            VideoChannel video = mVideo;
+            if (video != null && video.failed()) {
+                Log.w(TAG, "the video cannot play, back to photo");
+                giveUp(REVERT_VIDEO);
+                goIdle();
+                return;
+            }
             long nowMs = SystemClock.uptimeMillis();
             boolean touched = false;
             if (!mRing.isEmpty()) {
@@ -496,8 +519,10 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             if (period == Long.MAX_VALUE) mIn.pause();
             // With no ambient motion (rate 0) a touch still shows: one frame for it.
             boolean touchFrame = touched && moving && mPeriodNs == Long.MAX_VALUE;
-            if (SceneFramePolicy.shouldDraw(false, period, mLastDrawNs, frameTimeNanos)
-                || mSurfaceBlank || touchFrame) {
+            boolean due = SceneFramePolicy.shouldDraw(false, period, mLastDrawNs, frameTimeNanos);
+            // A video draws when the decoder delivered a frame, not on every tick of the rate cap.
+            if (due && video != null && !video.frameWaiting()) due = false;
+            if (due || mSurfaceBlank || touchFrame) {
                 mSurfaceBlank = false;
                 mLastDrawNs = frameTimeNanos;
                 if (period != Long.MAX_VALUE) mIn.advance(nowMs);
@@ -627,6 +652,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 mPendingCleared = true;
                 ShaderStore.clearPending(mAppContext);
             }
+            if (mSpec.video != null) return;   // a video's cost is the decoder's, not the shader's
             // debug.tl.shader_guard=off: no step-down or hold (a CPU-rendered emulator is always heavy).
             if (!SceneFramePolicy.shaderGuard(SHADER_GUARD.get(nowMs))) {
                 mHeavy.reset();
@@ -684,8 +710,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                     return false;
                 }
                 mSeenLookGen = -1;
-                loadShader();
-                if (mSpec.channel0 != null) mGl.setChannel(0, new ImageChannel(mSpec.channel0));
+                if (mSpec.video != null) {
+                    loadVideo();
+                } else {
+                    loadShader();
+                    if (mSpec.channel0 != null) mGl.setChannel(0, new ImageChannel(mSpec.channel0));
+                }
                 mChannelsPaused = false;
             }
             android.view.Surface surface = mSurfaceObj;
@@ -697,7 +727,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         }
 
         private void startWatching() {
-            if (!mSpec.debugFile || mWatching) return;
+            if (!mSpec.debugFile || mSpec.video != null || mWatching) return;
             mWatching = true;
             handler.postDelayed(mWatch, WATCH_MS);
         }
@@ -717,10 +747,27 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             handler.postDelayed(mWatch, WATCH_MS);
         }
 
-        /**
-         * (Re)reads the source file and builds the program. A stored shader that fails is dropped
-         * and reverts; the debug route logs the errors and keeps the last good program.
-         */
+                /** The passthrough program with the video file as channel 0; a program that will not build goes back to photo. */
+        private void loadVideo() {
+            SceneGl gl = mGl;
+            File file = mSpec.video;
+            if (gl == null || file == null) return;
+            gl.egl.makeCurrentOffscreen();
+            try {
+                gl.setShader(GlShader.buildPassthrough());
+                VideoChannel channel = new VideoChannel(file);
+                mVideo = channel;
+                gl.setChannel(0, channel);
+                Log.i(TAG, "video layer on " + file.getName());
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "the video program does not build", e);
+                gl.setShader(null);
+                mVideo = null;
+                giveUp(REVERT_VIDEO);
+            }
+        }
+
+        /** (Re)reads the source file and builds the program; on failure the old one is dropped. */
         private void loadShader() {
             SceneGl gl = mGl;
             if (gl == null) return;
@@ -777,6 +824,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             gl.egl.destroySurface(mWindow);
             mWindow = null;
             mGl = null;
+            mVideo = null;
             if (lost) gl.abandon();
             else gl.release();
         }

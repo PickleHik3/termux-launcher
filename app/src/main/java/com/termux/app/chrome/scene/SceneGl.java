@@ -163,6 +163,7 @@ final class SceneGl {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + c);
             if (ch != null && ch.textureId() != 0) {
                 ch.update(frameTimeNanos);
+                ch.transform(in.texMatrix, w, h);
                 GLES20.glBindTexture(ch.external() ? GLES11Ext.GL_TEXTURE_EXTERNAL_OES
                     : GLES20.GL_TEXTURE_2D, ch.textureId());
                 in.channelResolution[c * 3] = ch.width();
