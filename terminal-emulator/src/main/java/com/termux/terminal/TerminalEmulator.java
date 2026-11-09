@@ -1178,6 +1178,7 @@ public final class TerminalEmulator {
             setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
             mSynchronizedUpdateDeadline = 0;
             mKittyGraphics.synchronizedHoldEnded();
+            endGhosttyHold();
             return false;
         }
         return true;
@@ -1538,18 +1539,22 @@ public final class TerminalEmulator {
     private int mGhosttyCursorShape = -1;
     /** The kitty keyboard flags Ghostty holds for the current screen. */
     private int mGhosttyKeyboardFlags;
-    /** Whether Ghostty had synchronized output (mode 2026) on at the last sync. */
-    private boolean mGhosttySyncHeld;
+    /** Set while {@link #applyGhosttyState} runs, so ending a hold from inside it does not sync again. */
+    private boolean mGhosttyApplying;
     /** Whether output went to the Ghostty core since the last sync. */
     private boolean mGhosttyPending;
 
-    /** The DEC private mode bits Ghostty answers for, as {Ghostty bit, our bit} pairs. */
+    /**
+     * The DEC private mode bits Ghostty answers for, as {Ghostty bit, our bit} pairs. Read live at
+     * every sync, held or not, as the Java core's are. Two are not here: cursor visibility (25) is
+     * part of the frame a render hold keeps, and synchronized output (2026) is the hold itself; see
+     * {@link #applyGhosttyHold}.
+     */
     private static final int[][] GHOSTTY_MODE_BITS = {
         {GhosttyNative.MODE_APPLICATION_CURSOR_KEYS, DECSET_BIT_APPLICATION_CURSOR_KEYS},
         {GhosttyNative.MODE_REVERSE_VIDEO, DECSET_BIT_REVERSE_VIDEO},
         {GhosttyNative.MODE_ORIGIN, DECSET_BIT_ORIGIN_MODE},
         {GhosttyNative.MODE_AUTOWRAP, DECSET_BIT_AUTOWRAP},
-        {GhosttyNative.MODE_CURSOR_VISIBLE, DECSET_BIT_CURSOR_ENABLED},
         {GhosttyNative.MODE_APPLICATION_KEYPAD, DECSET_BIT_APPLICATION_KEYPAD},
         {GhosttyNative.MODE_MOUSE_PRESS_RELEASE, DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE},
         {GhosttyNative.MODE_MOUSE_BUTTON_EVENT, DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT},
@@ -1558,7 +1563,6 @@ public final class TerminalEmulator {
         {GhosttyNative.MODE_MOUSE_SGR, DECSET_BIT_MOUSE_PROTOCOL_SGR},
         {GhosttyNative.MODE_MOUSE_SGR_PIXELS, DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS},
         {GhosttyNative.MODE_BRACKETED_PASTE, DECSET_BIT_BRACKETED_PASTE_MODE},
-        {GhosttyNative.MODE_SYNCHRONIZED_OUTPUT, DECSET_BIT_SYNCHRONIZED_UPDATE},
         {GhosttyNative.MODE_PASTE_EVENTS, DECSET_BIT_PASTE_EVENTS},
     };
 
@@ -1577,7 +1581,6 @@ public final class TerminalEmulator {
         mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls);
         mMainBuffer.clearTranscript();
         mGhosttyCursorShape = -1;
-        mGhosttySyncHeld = false;
         try {
             applyGhosttyState();
         } catch (RuntimeException e) {
@@ -1627,6 +1630,13 @@ public final class TerminalEmulator {
     /** Hand the bytes to Ghostty in one write. Nothing is copied until the next sync. */
     private void writeGhostty(byte[] buffer, int length) {
         if (length <= 0) return;
+        // A hold past its deadline ends before more output is parsed, as the Java core's does on
+        // the next question, so a program asking (DECRQM 2026) is never told it still holds.
+        if (isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE)) isScreenUpdateHeld();
+        if (mGhostty == null) {
+            appendBatched(buffer, length);
+            return;
+        }
         try {
             mGhostty.write(buffer, 0, length);
             mGhosttyPending = true;
@@ -1647,6 +1657,20 @@ public final class TerminalEmulator {
         mGhosttyPending = false;
         GhosttyCore core = mGhostty;
         if (core == null) return;
+        mGhosttyApplying = true;
+        try {
+            applyGhosttyState(core);
+        } finally {
+            mGhosttyApplying = false;
+        }
+    }
+
+    /**
+     * One sync. While a render hold (mode 2026) is on, the library leaves the frame it froze when the
+     * hold began: the rows, cursor, screen and scroll count below are that frame's, and only modes,
+     * replies and events are live, as with the Java core.
+     */
+    private void applyGhosttyState(GhosttyCore core) {
         GhosttyMirror.Stats stats = GhosttyMirror.stats;
         long syncStart = stats == null ? 0 : System.nanoTime();
         boolean synced = core.sync();
@@ -1671,6 +1695,8 @@ public final class TerminalEmulator {
         mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
         mCursorRow = Math.max(0, Math.min(mRows - 1, state[GhosttyNative.STATE_CURSOR_Y]));
         applyGhosttyModes(state[GhosttyNative.STATE_MODES]);
+        setDecsetinternalBit(DECSET_BIT_CURSOR_ENABLED, (flags & GhosttyNative.FLAG_CURSOR_VISIBLE) != 0);
+        applyGhosttyHold((flags & GhosttyNative.FLAG_HELD) != 0, (flags & GhosttyNative.FLAG_HOLD_BEGAN) != 0);
         mGhosttyKeyboardFlags = state[GhosttyNative.STATE_KITTY_FLAGS];
         int shape = state[GhosttyNative.STATE_CURSOR_STYLE];
         if (mGhosttyCursorShape >= 0 && shape != mGhosttyCursorShape) {
@@ -1698,14 +1724,45 @@ public final class TerminalEmulator {
             if ((modes & pair[0]) != 0) set |= pair[1];
         }
         mCurrentDecSetFlags = (mCurrentDecSetFlags & ~mirrored) | set;
-        boolean held = (modes & GhosttyNative.MODE_SYNCHRONIZED_OUTPUT) != 0;
-        if (held && !mGhosttySyncHeld) {
-            mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
-        } else if (!held && mGhosttySyncHeld) {
+    }
+
+    /**
+     * Follow Ghostty's render hold with the same bit and deadline the Java core's mode 2026 uses, so
+     * {@link #isScreenUpdateHeld} answers for both cores and owns the one timeout. A hold that began
+     * since the last sync arms the deadline, including one that began right after another ended; a
+     * hold that ended (the program, a reset or a resize) hands the client one update, as the Java
+     * core does on release. Setting the mode again during a hold does not reach here, so it does
+     * not push the deadline out.
+     */
+    private void applyGhosttyHold(boolean held, boolean began) {
+        boolean wasHeld = isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE);
+        if (held) {
+            if (began || !wasHeld) {
+                setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, true);
+                mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+            }
+        } else if (wasHeld) {
+            setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
             mSynchronizedUpdateDeadline = 0;
             mSession.onScreenChanged();
         }
-        mGhosttySyncHeld = held;
+    }
+
+    /**
+     * The hold ran out ({@link #isScreenUpdateHeld}): end it in Ghostty too and take the frame as it
+     * is now, so the update the caller is about to deliver shows it. Nothing with the Java core.
+     */
+    private void endGhosttyHold() {
+        GhosttyCore core = mGhostty;
+        if (core == null) return;
+        try {
+            core.endHold();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+            return;
+        }
+        mGhosttyPending = true;
+        if (!mGhosttyApplying) flushBatchedOutput();
     }
 
     /** A clock the cursor-trail timestamp reads, injectable so a JVM test can control time. */

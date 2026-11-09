@@ -4,7 +4,8 @@
 // - Every entry point runs on the thread that owns the session (the main thread); the terminal is
 //   not reentrant and nothing here locks.
 // - Callbacks fire inside ghostty_terminal_vt_write/resize/reset. They only record what happened
-//   or hand bytes to Java; they never call back into the terminal.
+//   or hand bytes to Java, and never write to the terminal. The one that reads it is the render
+//   hold's (on_render_hold), which takes the snapshot when a hold begins, as the library asks.
 // - No pointer from the library is kept across a mutating call: render-state rows and grid refs
 //   are read and copied out within the entry point that produced them.
 // - A null or freed handle is a no-op, never a crash.
@@ -48,6 +49,8 @@ enum {
 enum {
     F_CURSOR_VISIBLE = 1, F_ALT_SCREEN = 2, F_CURSOR_BLINK = 4, F_PALETTE_CHANGED = 8,
     F_TITLE_CHANGED = 16, F_PWD_CHANGED = 32, F_BELL = 64, F_DIRTY_FULL = 128,
+    F_HELD = 256,        // a render hold (mode 2026) is on now
+    F_HOLD_BEGAN = 512,  // a hold began since the last sync; the snapshot is the frame it froze
 };
 
 // ST_MODES bits, one per DEC private mode Java reads.
@@ -96,6 +99,14 @@ typedef struct {
     jint* dirty_buf;
     uint32_t* extra_buf;
     int buf_cols, buf_rows;
+    // The snapshot Java reads, from the last capture(): a sync outside a render hold, or the
+    // start of one. While held, syncs leave it and the render state as the hold found them.
+    bool held;
+    int snap_screen;
+    size_t snap_history;
+    long snap_scrolled;  // rows that left the screen since the last sync handed them to Java
+    uint16_t snap_cx, snap_cy;
+    bool snap_visible;
 } Core;
 
 // Extra code points (combining marks, ZWJ sequences) one sync can carry; matches
@@ -139,6 +150,23 @@ static void on_write_pty(GhosttyTerminal t, void* ud, const uint8_t* data, size_
     (*env)->CallVoidMethod(env, c->sink, c->on_reply, arr);
     clear_exception(env);
     (*env)->DeleteLocalRef(env, arr);
+}
+
+static bool capture(Core* c);
+
+// Render hold (mode 2026). When a hold begins the terminal holds exactly the frame the program wants
+// left on screen, and nothing after the start of the hold has been parsed yet, so the snapshot is
+// taken here. Syncs leave it alone until the hold ends: the program resets the mode, a reset or a
+// resize ends it, or Java ends it on its timeout (nativeEndHold; the library has no clock).
+static void on_render_hold(GhosttyTerminal t, void* ud, bool held) {
+    (void) t;
+    Core* c = ud;
+    if (c == NULL) return;
+    if (held) {
+        capture(c);
+        c->events |= F_HOLD_BEGAN;
+    }
+    c->held = held;
 }
 
 static void on_bell(GhosttyTerminal t, void* ud) { (void) t; if (ud) ((Core*) ud)->events |= F_BELL; }
@@ -328,6 +356,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*) on_render_hold);
     // History only has to hold what the next sync copies into the Java transcript; Java picks the
     // row limit (GhosttyCore.historyLimit). Bytes are unlimited so a styled burst cannot prune rows
     // the next sync still needs.
@@ -429,6 +458,19 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeReset(JNIEnv
     pin_top(c);
 }
 
+// End a render hold that ran past Java's timeout: reset mode 2026 as the program would have. Setting
+// the mode from here never calls on_render_hold, so the hold is marked over here too; the next sync
+// takes a fresh snapshot.
+JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeEndHold(JNIEnv* env, jclass cls, jlong h) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || !c->held) return;
+    GhosttyTerminalModeConfig cfg = {.mode = ghostty_mode_new(2026, false), .value = false};
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_MODE, &cfg);
+    c->held = false;
+}
+
 static int read_modes(Core* c) {
     int bits = 0;
     for (size_t i = 0; i < sizeof(MODE_BITS) / sizeof(MODE_BITS[0]); i++) {
@@ -477,24 +519,9 @@ static int copy_render_row(Core* c, jint* cells, int cols, uint32_t* extra, int 
     return used;
 }
 
-// Bring Java up to date after writes: fills state[] (see ST_*), and for every row that changed
-// since the last sync writes its cells to screen[y * cols * CELL_INTS] and its extra code points to
-// extra[], with dirty[y] = number of extras for the row (| ROW_WRAPPED), or -1 when it did not change.
-JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
-    JNIEnv* env, jclass cls, jlong h, jintArray state_out, jintArray screen_out, jintArray dirty_out,
-    jintArray extra_out) {
-    (void) cls;
-    Core* c = core_of(h);
-    if (c == NULL || state_out == NULL || screen_out == NULL || dirty_out == NULL || extra_out == NULL) return JNI_FALSE;
-    const int cols = c->cols, rows = c->rows;
-    if ((*env)->GetArrayLength(env, state_out) < ST_COUNT
-        || (*env)->GetArrayLength(env, screen_out) < cols * rows * CELL_INTS
-        || (*env)->GetArrayLength(env, dirty_out) < rows) return JNI_FALSE;
-    int extra_cap = (*env)->GetArrayLength(env, extra_out);
-    if (extra_cap > EXTRA_CAPACITY) extra_cap = EXTRA_CAPACITY;
-
-    jint st[ST_COUNT];
-    memset(st, 0, sizeof(st));
+// Take the snapshot: the render state, and the scalars that must come from the same moment (screen,
+// history, rows scrolled off, cursor). Called by a sync outside a hold and when a hold begins.
+static bool capture(Core* c) {
     int screen = current_screen(c);
     size_t history = history_rows(c);
     long scrolled = 0;
@@ -527,7 +554,39 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     // copies them.
     if (screen == GHOSTTY_TERMINAL_SCREEN_PRIMARY || c->last_screen != GHOSTTY_TERMINAL_SCREEN_PRIMARY) pin_top(c);
 
-    if (ghostty_render_state_update(c->render, c->term) != GHOSTTY_SUCCESS) return JNI_FALSE;
+    c->snap_screen = screen;
+    c->snap_history = history;
+    c->snap_scrolled += scrolled;
+    uint16_t cx = 0, cy = 0;
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_X, &cx);
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_Y, &cy);
+    bool visible = false;
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE, &visible);
+    c->snap_cx = cx;
+    c->snap_cy = cy;
+    c->snap_visible = visible;
+    return ghostty_render_state_update(c->render, c->term) == GHOSTTY_SUCCESS;
+}
+
+// Bring Java up to date after writes: fills state[] (see ST_*), and for every row that changed
+// since the last sync writes its cells to screen[y * cols * CELL_INTS] and its extra code points to
+// extra[], with dirty[y] = number of extras for the row (| ROW_WRAPPED), or -1 when it did not change.
+JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
+    JNIEnv* env, jclass cls, jlong h, jintArray state_out, jintArray screen_out, jintArray dirty_out,
+    jintArray extra_out) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || state_out == NULL || screen_out == NULL || dirty_out == NULL || extra_out == NULL) return JNI_FALSE;
+    const int cols = c->cols, rows = c->rows;
+    if ((*env)->GetArrayLength(env, state_out) < ST_COUNT
+        || (*env)->GetArrayLength(env, screen_out) < cols * rows * CELL_INTS
+        || (*env)->GetArrayLength(env, dirty_out) < rows) return JNI_FALSE;
+    int extra_cap = (*env)->GetArrayLength(env, extra_out);
+    if (extra_cap > EXTRA_CAPACITY) extra_cap = EXTRA_CAPACITY;
+
+    jint st[ST_COUNT];
+    memset(st, 0, sizeof(st));
+    if (!c->held && !capture(c)) return JNI_FALSE;
     GhosttyRenderStateDirty dirty = GHOSTTY_RENDER_STATE_DIRTY_FULL;
     ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirty);
     GhosttyRenderStateCursor cursor = GHOSTTY_INIT_SIZED(GhosttyRenderStateCursor);
@@ -540,27 +599,24 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
         c->palette_known = true;
     }
 
-    uint16_t cx = 0, cy = 0;
-    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_X, &cx);
-    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_Y, &cy);
-    bool visible = false;
-    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE, &visible);
     uint8_t kitty = 0;
     ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, &kitty);
 
     int flags = c->events;
     c->events = 0;
-    if (visible) flags |= F_CURSOR_VISIBLE;
-    if (screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE) flags |= F_ALT_SCREEN;
+    if (c->snap_visible) flags |= F_CURSOR_VISIBLE;
+    if (c->snap_screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE) flags |= F_ALT_SCREEN;
+    if (c->held) flags |= F_HELD;
     if (cursor.blinking) flags |= F_CURSOR_BLINK;
     if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL) flags |= F_DIRTY_FULL;
     st[ST_COLS] = cols;
     st[ST_ROWS] = rows;
-    st[ST_CURSOR_X] = cx;
-    st[ST_CURSOR_Y] = cy;
+    st[ST_CURSOR_X] = c->snap_cx;
+    st[ST_CURSOR_Y] = c->snap_cy;
     st[ST_FLAGS] = flags;
-    st[ST_SCROLLED] = (jint) scrolled;
-    st[ST_HISTORY] = (jint) history;
+    st[ST_SCROLLED] = (jint) c->snap_scrolled;
+    c->snap_scrolled = 0;
+    st[ST_HISTORY] = (jint) c->snap_history;
     st[ST_MODES] = read_modes(c);
     st[ST_KITTY_FLAGS] = kitty;
     st[ST_CURSOR_STYLE] = (jint) cursor.visual_style;

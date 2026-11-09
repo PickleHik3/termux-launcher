@@ -111,7 +111,7 @@ final class GhosttyContent implements TerminalContent {
         int result = mCore.readHistoryRow(mLibraryHistory + externalRow, mCore.historyCells(), mCore.historyExtra());
         if (result < 0) {
             row.clear(TextStyle.NORMAL);
-            row.mLineWrap = false;
+            row.setLineWrap(false);
         } else {
             GhosttyMirror.applyRow(row, mWindowColumns, mCore.historyCells(), 0, mCore.historyExtra(), 0, result);
         }
