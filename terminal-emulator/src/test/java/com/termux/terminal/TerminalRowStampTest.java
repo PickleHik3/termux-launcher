@@ -80,6 +80,8 @@ public class TerminalRowStampTest extends TerminalTestCase {
     /** Last copy of every row seen, by row object. */
     private final Map<TerminalRow, Copy> mSeen = new IdentityHashMap<>();
     private int mUnmovedChecks;
+    /** Unmoved-stamp checks of rows that held a link or a prompt mark, so both are proven covered. */
+    private int mUnmovedLinkChecks, mUnmovedMarkChecks;
 
     private void check(String step, TerminalRow row) {
         if (row == null) return;
@@ -87,6 +89,13 @@ public class TerminalRowStampTest extends TerminalTestCase {
         Copy before = mSeen.put(row, now);
         if (before == null || before.stamp != now.stamp) return;
         mUnmovedChecks++;
+        for (int link : now.links) {
+            if (link != TerminalHyperlinks.NO_LINK) {
+                mUnmovedLinkChecks++;
+                break;
+            }
+        }
+        if (now.mark != TerminalRow.MARK_NONE) mUnmovedMarkChecks++;
         String difference = before.differenceFrom(now);
         if (difference != null)
             fail("after " + step + ": a row changed (" + difference + ") but its stamp stayed " + now.stamp);
@@ -255,6 +264,8 @@ public class TerminalRowStampTest extends TerminalTestCase {
             assertTrue(mTerminal.useGhosttyCore());
             for (int i = 0; i < 300; i++) {
                 String output = randomOutput(random, columns, rows);
+                // Holds (mode 2026) too: rows the held frame keeps must keep their stamps honest.
+                if (random.nextInt(20) == 0) output = (random.nextBoolean() ? "\033[?2026h" : "\033[?2026l") + output;
                 feed(output);
                 String step = "round " + round + " step " + i + " " + output.replace("\033", "ESC");
                 TerminalContent content = mTerminal.getContent();
@@ -262,5 +273,8 @@ public class TerminalRowStampTest extends TerminalTestCase {
             }
         }
         assertTrue("few rows were checked with an unmoved stamp: " + mUnmovedChecks, mUnmovedChecks > 5_000);
+        // OSC 8 links and OSC 133 marks reach the Ghostty core's rows, so the checks above cover them.
+        assertTrue("no linked row was checked: " + mUnmovedLinkChecks, mUnmovedLinkChecks > 100);
+        assertTrue("no marked row was checked: " + mUnmovedMarkChecks, mUnmovedMarkChecks > 100);
     }
 }

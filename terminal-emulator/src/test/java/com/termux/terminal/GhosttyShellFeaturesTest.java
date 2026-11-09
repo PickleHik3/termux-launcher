@@ -2,6 +2,7 @@ package com.termux.terminal;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -283,9 +284,22 @@ public class GhosttyShellFeaturesTest extends TerminalTestCase {
         assertEquals("", panes[1].row(0).trim());
     }
 
+    private static String kitty(String control, String payload) {
+        return "\033_G" + control + (payload == null ? "" : ";" + payload) + "\033\\";
+    }
+
     /**
-     * Sequences split anywhere, code points split anywhere, and strings cancelled by CAN or SUB:
-     * byte-by-byte feeding must leave exactly what one write leaves.
+     * Replies from both of the write loop's interceptors and from Ghostty itself, interleaved: two
+     * status reports around a kitty query, a kitty notification query, then another kitty query and
+     * a status report. Each answer must come out where its sequence was.
+     */
+    private static final String MIXED_REPLIES = "\033[5n" + kitty("i=31,s=1,v=1,a=q,t=d,f=24", "AAAA") + "\033[5n"
+        + "\033]99;i=q2:p=?;\033\\" + kitty("a=q,i=32,s=1,v=1,f=32", "/wAA/w==") + "\033[5n";
+
+    /**
+     * Sequences split anywhere, code points split anywhere, strings cancelled by CAN or SUB, kitty
+     * queries, a kitty transmit and place and a synchronized-output hold: byte-by-byte feeding must
+     * leave exactly what one write leaves, with the replies in the same order.
      */
     public void testSplitWritesLeaveWhatOneWriteLeaves() {
         if (!libraryBuilt()) return;
@@ -298,11 +312,37 @@ public class GhosttyShellFeaturesTest extends TerminalTestCase {
             + "\033]2;a title\007\033[1;31mred\033[0m \033]9;4;1;33\007"
             + "\033]133;A\007$ \033]133;B\007ls\r\n\033]133;C\007\033]133;D;2\007"
             + "\033]66;s=2;one\033\\\033]66;s=2;two\007three\r\n"
-            + "\033]9;ping\007\033]22;pointer\007\033[5n";
+            + "\033]9;ping\007\033]22;pointer\007\033[5n"
+            + MIXED_REPLIES
+            + "\033[?2026h" + link("https://example.com/held", "H") + "\033[?2026l"
+            + kitty("a=t,i=7,f=32,s=1,v=1,q=2", "/wAA/w==") + kitty("a=p,i=7,p=1,q=2", null)
+            + kitty("a=T,i=8,f=32,s=1,v=1,q=2", "AP8A/w==") + "\033[5n";
         Pane whole = new Pane(24, 9, 50, true);
         Pane split = new Pane(24, 9, 50, true);
         whole.feed(stream);
         split.feedByteByByte(stream);
+        assertFalse(whole.emulator.isScreenUpdateHeld());
+        assertFalse(split.emulator.isScreenUpdateHeld());
+
+        // The interleaved replies, in the order the Java core gives them, inside both outputs.
+        Pane java = new Pane(24, 9, 50, false);
+        java.output.getOutputAndClear();
+        java.feed(MIXED_REPLIES);
+        String mixed = java.output.getOutputAndClear();
+        assertTrue(mixed, mixed.startsWith("\033[0n\033_Gi=31;OK\033\\\033[0n\033]99;i=q2:p=?;"));
+        assertTrue(mixed, mixed.endsWith("\033_Gi=32;OK\033\\\033[0n"));
+
+        // Image placements: the a=p of image 7 and the a=T of image 8, the same on both.
+        int[] wholePlacements = new int[16 * GhosttyNative.KP_INTS];
+        int[] splitPlacements = new int[16 * GhosttyNative.KP_INTS];
+        int placed = whole.emulator.ghosttyCore().kittyPlacements(wholePlacements);
+        assertEquals(2, placed);
+        assertEquals(placed, split.emulator.ghosttyCore().kittyPlacements(splitPlacements));
+        assertTrue(Arrays.equals(wholePlacements, splitPlacements));
+        // What the hold kept back is there once it ends, link and all.
+        int held = whole.row(8).indexOf('H');
+        assertTrue(whole.row(8), held >= 0);
+        assertEquals("https://example.com/held", whole.emulator.getHyperlinkUriAt(8, held));
 
         TerminalContent w = whole.emulator.getContent(), s = split.emulator.getContent();
         assertEquals(w.historyRows(), s.historyRows());
@@ -315,7 +355,10 @@ public class GhosttyShellFeaturesTest extends TerminalTestCase {
         }
         assertEquals(whole.emulator.getCursorRow(), split.emulator.getCursorRow());
         assertEquals(whole.emulator.getCursorCol(), split.emulator.getCursorCol());
-        assertEquals(whole.output.getOutputAndClear(), split.output.getOutputAndClear());
+        String wholeReplies = whole.output.getOutputAndClear();
+        assertEquals(wholeReplies, split.output.getOutputAndClear());
+        assertTrue(wholeReplies, wholeReplies.contains(mixed));
+        assertTrue(wholeReplies, wholeReplies.endsWith(mixed + "\033[0n"));
         assertEquals(whole.emulator.getTitle(), split.emulator.getTitle());
         assertEquals(whole.emulator.getProgressValue(), split.emulator.getProgressValue());
         assertEquals(2, split.emulator.getLastCommandExitCode());
