@@ -120,7 +120,7 @@ typedef struct {
     uint8_t* run_uri;
     uint8_t* last_uri;
     // OSC sniffer (see sniff_write): the string being read, its first three bytes, and whether it
-    // is one we keep (99 or 66). osc_body holds what follows "NN;".
+    // is one we keep ("99;", "66;" or "9;4"). osc_body holds what follows those three bytes.
     bool osc_active, osc_skip, osc_overflow;
     uint8_t osc_head[3];
     int osc_head_len;
@@ -472,8 +472,8 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetColors(
 // The OSC sniffer. libghostty-vt parses and drops two OSC strings the Java core acts on: OSC 99
 // (kitty notifications), handed to Java whole, and OSC 66 (text sizing), whose text is written back
 // as plain text so a program that did not probe loses the size but not the words. It also reads
-// OSC 9;4 to tell "9;4;1" from "9;4;1;0" (see on_progress). Every byte still
-// goes through the library, in order, through vt_write_until stopping at OSC boundaries: the
+// OSC 9;4 to tell "9;4;1" from "9;4;1;0" (see on_progress). Every byte still goes through the
+// library, in order, through vt_write_until stopping at OSC boundaries: the
 // library's own parser says where a string starts and ends, so a string split across writes, a
 // UTF-8 sequence split across writes and a CAN or SUB inside a string behave exactly as one
 // vt_write would. Only the kept strings' bytes are copied, and at most OSC_CAP of each.
