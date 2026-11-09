@@ -313,6 +313,13 @@ public final class WallpaperLiveHost {
         photo.setText(R.string.wallpaper_kind_photo);
         video.setText(R.string.wallpaper_kind_video);
         shader.setText(R.string.wallpaper_kind_shader);
+        // The segment style already tints icons with the same selector as the label, so the
+        // glyphs follow checked / unchecked and the theme. 18dp + 4dp is the style's own size:
+        // at font scale 1.3 "Shader" (about 57dp) plus 24dp padding fits a ~110dp segment.
+        float density = context.getResources().getDisplayMetrics().density;
+        setKindGlyph(photo, R.drawable.ic_wallpaper_kind_photo, density);
+        setKindGlyph(video, R.drawable.ic_wallpaper_kind_video, density);
+        setKindGlyph(shader, R.drawable.ic_wallpaper_kind_shader, density);
         shader.setVisibility(View.VISIBLE);
         ((ViewGroup.MarginLayoutParams) group.getLayoutParams()).topMargin = 0;
         group.setContentDescription(context.getString(R.string.wallpaper_kind_label));
@@ -325,6 +332,15 @@ public final class WallpaperLiveHost {
                 : checkedId == videoId ? LiveSceneLogic.Kind.VIDEO : LiveSceneLogic.Kind.SHADER);
         });
         return row;
+    }
+
+    private static void setKindGlyph(@NonNull MaterialButton button, int drawableRes, float density) {
+        button.setIconResource(drawableRes);
+        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        button.setIconSize(Math.round(18 * density));
+        button.setIconPadding(Math.round(4 * density));
+        button.setSingleLine(true);
+        button.setEllipsize(android.text.TextUtils.TruncateAt.END);
     }
 
     /**

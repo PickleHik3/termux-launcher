@@ -27,7 +27,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 cell = floor(g);
     vec2 f = fract(g) - 0.5;
     float h = hash21(cell);
-    float star = step(0.93, h) * smoothstep(0.12, 0.0, length(f));
+    float star = step(0.93, h) * (1.0 - smoothstep(0.0, 0.12, length(f)));
     star *= 0.5 + 0.5 * sin(iTime * (1.0 + 3.0 * h) + h * 40.0);
     col += vec3(0.8, 0.9, 1.0) * star * 0.7;
     fragColor = vec4(col, 1.0);

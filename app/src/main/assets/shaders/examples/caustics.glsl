@@ -18,7 +18,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 col = deep + vec3(0.35, 0.8, 1.0) * c * 0.9;
     if (iMouse.z > 0.0) {
         vec2 m = (iMouse.xy - 0.5 * iResolution.xy) / iResolution.y;
-        float near = smoothstep(0.5, 0.0, length(uv - m));
+        float near = (1.0 - smoothstep(0.0, 0.5, length(uv - m)));
         col += vec3(0.2, 0.5, 0.7) * near * (0.25 + c);
     }
     fragColor = vec4(col, 1.0);
