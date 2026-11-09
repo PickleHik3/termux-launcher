@@ -71,8 +71,8 @@ public class LayoutOverrideTest {
     }
 
     @Test
-    public void theWorkspaceIsTheNormalAndDisplayLayouts() {
-        assertEquals(Arrays.asList(LayoutVariant.HOME, LayoutVariant.NORMAL, LayoutVariant.DISPLAY),
+    public void theWorkspaceIsTheNormalLayout() {
+        assertEquals(Arrays.asList(LayoutVariant.HOME, LayoutVariant.NORMAL),
             LayoutOverride.variantsOf(EnumSet.of(Side.HOME, Side.WORKSPACE)));
         assertEquals(Arrays.asList(LayoutVariant.HOME),
             LayoutOverride.variantsOf(EnumSet.of(Side.HOME)));
