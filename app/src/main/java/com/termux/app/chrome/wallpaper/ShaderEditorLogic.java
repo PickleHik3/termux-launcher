@@ -55,6 +55,57 @@ public final class ShaderEditorLogic {
         return n.length() > MAX_NAME ? n.substring(0, MAX_NAME).trim() : n;
     }
 
+    /**
+     * Whether Apply saves a new shader rather than updating the open one: an example is read-only,
+     * so applying it always saves a copy under a fresh id.
+     */
+    public static boolean savesAsCopy(boolean isExample, boolean isNew) {
+        return isExample || isNew;
+    }
+
+    /**
+     * {@code name} when no saved shader has it (compared without case), else {@code name 2},
+     * {@code name 3} and so on, cut so the result stays within {@link #MAX_NAME}.
+     */
+    @NonNull
+    public static String uniqueName(@NonNull String name, @NonNull java.util.Collection<String> existing) {
+        java.util.HashSet<String> taken = new java.util.HashSet<>();
+        for (String e : existing) taken.add(e.toLowerCase(java.util.Locale.ROOT));
+        if (!taken.contains(name.toLowerCase(java.util.Locale.ROOT))) return name;
+        for (int n = 2; ; n++) {
+            String suffix = " " + n;
+            String base = name.length() + suffix.length() > MAX_NAME
+                ? name.substring(0, MAX_NAME - suffix.length()).trim() : name;
+            String candidate = base + suffix;
+            if (!taken.contains(candidate.toLowerCase(java.util.Locale.ROOT))) return candidate;
+        }
+    }
+
+    /** One tile slot of the Shader list. */
+    public static final class Slot {
+        public static final int USER = 0, EXAMPLES_HEADING = 1, EXAMPLE = 2;
+        public final int kind;
+        /** Index into the user shaders or the examples; -1 for the heading. */
+        public final int index;
+
+        Slot(int kind, int index) {
+            this.kind = kind;
+            this.index = index;
+        }
+    }
+
+    /** The list's order: the user's shaders, then the "Examples" heading and the examples (none, no heading). */
+    @NonNull
+    public static List<Slot> listOrder(int userCount, int exampleCount) {
+        List<Slot> out = new java.util.ArrayList<>();
+        for (int i = 0; i < userCount; i++) out.add(new Slot(Slot.USER, i));
+        if (exampleCount > 0) {
+            out.add(new Slot(Slot.EXAMPLES_HEADING, -1));
+            for (int i = 0; i < exampleCount; i++) out.add(new Slot(Slot.EXAMPLE, i));
+        }
+        return out;
+    }
+
     /** Whether "Too heavy at this quality" shows above the knobs. */
     public static boolean showsTooHeavy(@Nullable String heldReason) {
         return ShaderSafety.REASON_TOO_HEAVY.equals(heldReason);

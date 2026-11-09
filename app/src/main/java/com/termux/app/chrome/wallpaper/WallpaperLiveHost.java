@@ -29,6 +29,7 @@ import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.scene.LiveWallpaperChoice;
 import com.termux.app.chrome.scene.ShaderCheck;
 import com.termux.app.chrome.scene.ShaderErrors;
+import com.termux.app.chrome.scene.ShaderExamples;
 import com.termux.app.chrome.scene.ShaderStore;
 import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.logger.Logger;
@@ -163,6 +164,10 @@ public final class WallpaperLiveHost {
             mList = new ShaderListPage(context, new ShaderListPage.Listener() {
                 @Override public void onOpen(@NonNull String id) {
                     openShader(id);
+                }
+
+                @Override public void onOpenExample(@NonNull String slug) {
+                    openExample(slug);
                 }
 
                 @Override public void onNew() {
@@ -453,6 +458,18 @@ public final class WallpaperLiveHost {
         goTo(Page.EDITOR, true);
     }
 
+    /** A bundled example in the editor; nothing is saved until Apply, which saves a copy. */
+    private void openExample(@NonNull String slug) {
+        if (mList == null || mEditor == null || mReleased) return;
+        ShaderExamples.Example example = ShaderExamples.find(mContext, slug);
+        if (example == null || example.source == null) return;
+        mEditor.showExample(example.meta(), example.source, LiveSceneLogic.showsBackToPhoto(readStored()),
+            mPicker.alsoPhone().isChecked(), heldReason());
+        mEditorSaved = false;
+        mListScrollY = mList.scrollY();
+        goTo(Page.EDITOR, true);
+    }
+
     /** The editor goes without applying: a new shader's folder, or a texture picked and not saved, is dropped. */
     private void discardEditor() {
         if (mEditor == null || mEditorSaved) return;
@@ -491,7 +508,11 @@ public final class WallpaperLiveHost {
                 });
                 return;
             }
-            boolean saved = saveShader(app, draft);
+            // An example is never edited in place: Apply saves a copy (draft.id is a fresh id),
+            // its name made different from every saved shader's.
+            final ShaderEditorPage.Draft toSave = ShaderEditorLogic.savesAsCopy(draft.isExample, draft.isNew)
+                && draft.isExample ? withUniqueName(app, draft) : draft;
+            boolean saved = saveShader(app, toSave);
             mRoot.post(() -> {
                 if (mReleased || mEditor == null) return;
                 if (!saved) {
@@ -504,6 +525,14 @@ public final class WallpaperLiveHost {
                 useMotion(WallpaperMotion.shader(draft.id));
             });
         });
+    }
+
+    @NonNull
+    private static ShaderEditorPage.Draft withUniqueName(@NonNull Context app, @NonNull ShaderEditorPage.Draft d) {
+        List<String> names = new java.util.ArrayList<>();
+        for (ShaderStore.Entry e : ShaderStore.list(app)) names.add(e.name);
+        String unique = ShaderEditorLogic.uniqueName(d.name, names);
+        return unique.equals(d.name) ? d : d.withName(unique);
     }
 
     private static boolean saveShader(@NonNull Context app, @NonNull ShaderEditorPage.Draft d) {

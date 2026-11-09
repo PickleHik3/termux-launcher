@@ -8,6 +8,8 @@
     <string name="wallpaper_kind_label">Wallpaper kind</string>
 
     <string name="shader_list_heading">Shaders</string>
+    <string name="shader_examples_heading">Examples</string>
+    <string name="shader_example_note">Example. Apply saves a copy you can edit.</string>
     <string name="shader_new">New shader</string>
     <string name="shader_default_name">Shader</string>
     <string name="live_in_use">In use</string>

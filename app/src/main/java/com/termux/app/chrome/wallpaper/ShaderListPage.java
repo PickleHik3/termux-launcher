@@ -15,6 +15,7 @@ import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
 import com.termux.R;
 import com.termux.app.chrome.scene.SceneThumbView;
+import com.termux.app.chrome.scene.ShaderExamples;
 import com.termux.app.chrome.scene.ShaderStore;
 import com.termux.app.chrome.scene.WallpaperMotion;
 
@@ -36,6 +37,9 @@ public final class ShaderListPage {
     public interface Listener {
         /** A saved shader's editor. */
         void onOpen(@NonNull String id);
+
+        /** A bundled example's editor, by slug. */
+        void onOpenExample(@NonNull String slug);
 
         void onNew();
 
@@ -139,14 +143,19 @@ public final class ShaderListPage {
                 ShaderStore.Meta meta = ShaderStore.readMeta(app, e.id);
                 loaded.add(new Loaded(e, source, ShaderStore.textureFile(app, e.id, meta)));
             }
+            final List<Loaded> examples = new ArrayList<>();
+            for (ShaderExamples.Example e : ShaderExamples.load(app)) {
+                examples.add(new Loaded(new ShaderStore.Entry(e.slug, e.name), e.source, null));
+            }
             mRoot.post(() -> {
                 if (mReleased || generation != mGeneration) return;
-                show(loaded, stored);
+                show(loaded, examples, stored);
             });
         });
     }
 
-    private void show(@NonNull List<Loaded> loaded, @NonNull WallpaperMotion stored) {
+    private void show(@NonNull List<Loaded> loaded, @NonNull List<Loaded> examples,
+                      @NonNull WallpaperMotion stored) {
         LayoutInflater inflater = LayoutInflater.from(mContext);
         mGrid.removeAllViews();
         mTiles.clear();
@@ -158,17 +167,38 @@ public final class ShaderListPage {
                 - 2 * mContext.getResources().getDimensionPixelSize(R.dimen.settings_gutter);
         }
         final int tileW = Math.max(1, gridW / COLUMNS);
-        final float radius = 16f * mContext.getResources().getDisplayMetrics().density;
+        final DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
+        final float radius = 16f * dm.density;
         final int accent = com.google.android.material.color.MaterialColors.getColor(mContext,
             androidx.appcompat.R.attr.colorPrimary, 0);
-        for (Loaded l : loaded) {
+        for (ShaderEditorLogic.Slot slot : ShaderEditorLogic.listOrder(loaded.size(), examples.size())) {
+            if (slot.kind == ShaderEditorLogic.Slot.EXAMPLES_HEADING) {
+                TextView heading = new TextView(mContext);
+                heading.setText(R.string.shader_examples_heading);
+                heading.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
+                heading.setTextColor(com.google.android.material.color.MaterialColors.getColor(mContext,
+                    com.google.android.material.R.attr.colorOnSurface, 0));
+                heading.setSingleLine(true);
+                heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                heading.setAccessibilityHeading(true);
+                heading.setPadding(Math.round(6f * dm.density), Math.round(16f * dm.density), 0,
+                    Math.round(8f * dm.density));
+                GridLayout.LayoutParams hp = new GridLayout.LayoutParams(
+                    GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(0, COLUMNS));
+                hp.width = tileW * COLUMNS;
+                hp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                mGrid.addView(heading, hp);
+                continue;
+            }
+            final boolean example = slot.kind == ShaderEditorLogic.Slot.EXAMPLE;
+            final Loaded l = example ? examples.get(slot.index) : loaded.get(slot.index);
             final String id = l.entry.id;
             View tile = inflater.inflate(R.layout.live_scene_tile, mGrid, false);
             ((LiveAspectFrame) tile.findViewById(R.id.live_scene_frame)).setRatio(mRatio);
             ((SceneThumbView) tile.findViewById(R.id.live_scene_thumb)).setShader(l.source, l.texture);
             TextView name = tile.findViewById(R.id.live_scene_name);
             name.setText(l.entry.name);
-            boolean inUse = LiveSceneLogic.inUse(stored, id);
+            boolean inUse = !example && LiveSceneLogic.inUse(stored, id);
             // In use: a border round the thumbnail (the chip is too wide for a third of the page).
             tile.findViewById(R.id.live_scene_in_use).setVisibility(View.GONE);
             LiveAspectFrame frame = tile.findViewById(R.id.live_scene_frame);
@@ -182,7 +212,10 @@ public final class ShaderListPage {
             }
             tile.setContentDescription(inUse ? l.entry.name + ", " + mContext.getString(R.string.live_in_use)
                 : l.entry.name);
-            tile.setOnClickListener(v -> mListener.onOpen(id));
+            tile.setOnClickListener(v -> {
+                if (example) mListener.onOpenExample(id);
+                else mListener.onOpen(id);
+            });
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
             lp.width = tileW;
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
