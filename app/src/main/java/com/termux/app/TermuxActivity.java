@@ -31125,7 +31125,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void addDisplay(int row) {
                     // A lasting unbound Display page, after the current page: a drawer launch's
                     // temporary page is made lasting instead (its app stays on it), and one
-                    // already on the wall is used. The display starts on it.
+                    // already on the wall is used. The display starts on it only with the
+                    // autostart setting on; else the page shows its Start button.
                     final int after = linuxRouteFromPageId();
                     com.termux.app.wall.WallPages.Result added =
                         wallPagesStore().edit(pages -> pages.addDisplayPage(after));
@@ -31133,7 +31134,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTemporaryDisplaySawApp = false;
                     mTemporaryDisplayStartedByLaunch = false;
                     if (mPaneWallController != null) mPaneWallController.refreshPages();
-                    openDisplayWindow(true, added.ok() && added.page != null ? added.page.id : -1);
+                    openDisplayWindow(mPreferences != null
+                            && mPreferences.isX11DisplayAutostartEnabled(),
+                        added.ok() && added.page != null ? added.page.id : -1);
                 }
                 @Override @Nullable public TerminalSession windowSession(int row) {
                     if (mPaneController == null) return null;
