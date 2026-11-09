@@ -43,6 +43,17 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
 
     private GhosttyCore() {}
 
+    /**
+     * Appended to our XTVERSION name on this core. Programs that match "ghostty" in the answer
+     * then pick kitty graphics, which this core draws; DA1 and TERM_PROGRAM stay ours.
+     */
+    static final String XTVERSION_SUFFIX = " (libghostty-vt 1.0)";
+
+    /** The XTVERSION answer of a Ghostty pane: the Java core's name and {@link #XTVERSION_SUFFIX}. */
+    static String xtVersionName() {
+        return TerminalEmulator.xtVersionName() + XTVERSION_SUFFIX;
+    }
+
     /** Whether new sessions should use this core, read from {@link #CORE_PROPERTY}. */
     static boolean isRequested(DebugSwitch.Reader reader) {
         return CORE_GHOSTTY.equals(reader.read(CORE_PROPERTY));
@@ -75,7 +86,7 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (!GhosttyNative.isAvailable()) return null;
         GhosttyCore core = new GhosttyCore();
         long handle = GhosttyNative.nativeCreate(columns, rows, cellWidthPixels, cellHeightPixels, historyRows, core,
-            TerminalEmulator.xtVersionName().getBytes(StandardCharsets.UTF_8));
+            xtVersionName().getBytes(StandardCharsets.UTF_8));
         if (handle == 0) return null;
         core.mHandle = handle;
         core.setUpKittyGraphics();

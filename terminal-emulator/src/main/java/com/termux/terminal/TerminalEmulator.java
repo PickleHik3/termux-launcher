@@ -829,7 +829,10 @@ public final class TerminalEmulator {
             ? "termux-launcher" : "termux-launcher(" + appVersionName + ")";
     }
 
-    /** The XTVERSION answer both cores give; Ghostty panes copy it into native memory at creation. */
+    /**
+     * Our XTVERSION name. Ghostty panes answer it with GhosttyCore.XTVERSION_SUFFIX after it, copied
+     * into native memory at creation.
+     */
     static String xtVersionName() {
         return sXtVersionName;
     }
