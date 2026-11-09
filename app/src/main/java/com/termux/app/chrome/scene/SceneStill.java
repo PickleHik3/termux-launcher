@@ -51,6 +51,14 @@ public final class SceneStill {
     @WorkerThread
     @Nullable
     public static Bitmap renderActive(@NonNull Context context, int widthPx, int heightPx) {
+        return renderActive(context, widthPx, heightPx, null);
+    }
+
+    /** As above, with the look the caller resolved (from an activity); null resolves from {@code context}. */
+    @WorkerThread
+    @Nullable
+    public static Bitmap renderActive(@NonNull Context context, int widthPx, int heightPx,
+                                      @Nullable ShaderLook look) {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
         if (prefs == null) return null;
         WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
@@ -64,7 +72,7 @@ public final class SceneStill {
         if (source == null) return null;
         ShaderStore.Meta meta = ShaderStore.readMeta(context, motion.id);
         return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx,
-            ShaderLook.resolve(context));
+            look != null ? look : ShaderLook.resolve(context));
     }
 
     /**
