@@ -18,8 +18,8 @@ Latest stable: v1.2.2.
 - On the Fast engine, kitty images (animated GIFs from `kitten icat` included), sixel pictures, links, prompt jumps and notifications work as they do on Standard.
 - If the launcher crashes with a Fast pane open, new panes use Standard until the next update, so the home screen cannot fall over twice.
 - Output shows faster on the Standard engine too, most of all CJK text, emoji and box drawing.
-- The CRT effect gains colour bleed, scanlines that follow the beam, brighter highlights and a Composite signal switch, plus an Idle glitch rate; a keystroke powers the screen on at once, and a bell tears it once.
-- The window bar's text colour no longer changes from one start of the launcher to the next.
+- The CRT effect gains colour bleed, scanlines that follow the beam, brighter highlights and a Composite signal switch, plus an Idle glitch rate; a keystroke powers the screen on at once, and a bell tears it once (#225).
+- The terminal's text no longer flips between dark and pale each time the launcher starts, which made it hard to read on light wallpapers (#228).
 
 ### Workspace
 - Terminal, Display and Assistant pages are one Workspace, with one layout and one look.
@@ -58,7 +58,7 @@ Latest stable: v1.2.2.
 
 ### Voice and on-device AI
 - Speech recognition runs on the graphics chip or the processor, with Auto picking and falling back; Settings › Voice input chooses the cleanup model and where speech runs.
-- Whisper Base is offered for the graphics chip, with a note that it may be slower on some phones.
+- Whisper Base is offered for the graphics chip, with a note that it may be slower on some phones (#227).
 - Model names read as words instead of file names.
 
 ### Downloads
