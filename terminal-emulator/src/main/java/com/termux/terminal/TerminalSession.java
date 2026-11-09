@@ -193,13 +193,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void initializeEmulator(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         mEmulator = new TerminalEmulator(this, mBoldWithBright, columns, rows, cellWidthPixels, cellHeightPixels, mTranscriptRows, mClient);
-        // Ghostty when the Terminal engine setting or the debug property asks for it (either is
-        // enough), the library loads and the crash guard allows it; see TerminalEngine.
-        boolean preferred = mClient != null && mClient.prefersGhosttyEngine();
-        boolean property = GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES);
-        if ((preferred || property) && TerminalEngine.useGhostty(preferred, property,
-            GhosttyNative.isAvailable(), mClient != null && mClient.isGhosttyEngineBlocked()))
-            useGhosttyCoreOrLog();
+        chooseEngine(GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES));
 
         int[] processId = new int[1];
         mTerminalFileDescriptor = JNI.createSubprocess(mShellPath, mCwd, mArgs, mEnv, processId, rows, columns, cellWidthPixels, cellHeightPixels);
@@ -437,13 +431,28 @@ public final class TerminalSession extends TerminalOutput {
         mGhosttyIdleCompressor.cancel();
     }
 
-    /** Experimental: parse with libghostty-vt (debug.tl.terminal_core=ghostty), or say why not. */
-    private void useGhosttyCoreOrLog() {
-        // After a native crash in the library the core stays off for new panes; the stored engine
-        // choice is left as the user set it (GhosttyCrashGuard).
-        if (GhosttyCrashGuard.isDisabledAfterCrash()) {
-            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty off after a crash, using the Java core ("
-                + GhosttyCrashGuard.disabledReason() + ")");
+    /**
+     * The one place a new session's engine is decided: Ghostty when the Terminal engine setting or
+     * the debug property {@code debug.tl.terminal_core=ghostty} asks for it (either is enough), the
+     * library loads, and the crash guard has not turned it off ({@link TerminalEngine#useGhostty}).
+     * Otherwise Standard, with one log line saying why when Ghostty was asked for. After a native
+     * crash the stored choice is left as the user set it (GhosttyCrashGuard).
+     */
+    void chooseEngine(boolean propertyAsksGhostty) {
+        boolean preferred = mClient != null && mClient.prefersGhosttyEngine();
+        if (!preferred && !propertyAsksGhostty) return;
+        boolean blocked = GhosttyCrashGuard.isDisabledAfterCrash();
+        // Checked only when asked for: the first check loads the library.
+        boolean available = !blocked && GhosttyNative.isAvailable();
+        if (!TerminalEngine.useGhostty(preferred, propertyAsksGhostty, available, blocked)) {
+            if (blocked) {
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty off after a crash, using the Java core ("
+                    + GhosttyCrashGuard.disabledReason() + ")");
+            } else {
+                Throwable why = GhosttyNative.loadError();
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty unavailable, using the Java core"
+                    + (why == null ? "" : " (" + why + ")"));
+            }
             return;
         }
         try {
@@ -451,9 +460,7 @@ public final class TerminalSession extends TerminalOutput {
                 Logger.logInfo(mClient, LOG_TAG, "Terminal core: ghostty");
                 return;
             }
-            Throwable why = GhosttyNative.loadError();
-            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty unavailable, using the Java core"
-                + (why == null ? "" : " (" + why + ")"));
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty would not start, using the Java core");
         } catch (Throwable t) {
             mEmulator.releaseGhosttyCore();
             Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core (" + t + ")");

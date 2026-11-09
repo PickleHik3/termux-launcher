@@ -89,14 +89,6 @@ public interface TerminalSessionClient {
         return false;
     }
 
-    /**
-     * Hook for the Ghostty crash guard: true when it has switched the Ghostty core off, so new
-     * sessions use Standard whatever the setting says. Nothing turns it off yet.
-     */
-    default boolean isGhosttyEngineBlocked() {
-        return false;
-    }
-
     void onColorsChanged(@NonNull TerminalSession session);
 
     void onTerminalCursorStateChange(boolean state);
