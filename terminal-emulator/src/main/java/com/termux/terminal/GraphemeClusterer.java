@@ -2,6 +2,7 @@ package com.termux.terminal;
 
 import android.icu.text.BreakIterator;
 
+import java.text.CharacterIterator;
 import java.util.Locale;
 
 /** Incremental extended-grapheme decisions backed by Android ICU on supported devices. */
@@ -14,6 +15,8 @@ final class GraphemeClusterer {
      * cluster is the single code point {@link #mFirstCodePoint} instead.
      */
     private final StringBuilder mCluster = new StringBuilder();
+    /** What the break iterator reads: {@link #mCluster} in place, with no String copy. */
+    private final ClusterText mClusterText = new ClusterText(mCluster);
     private BreakIterator mIterator;
     private boolean mIcuUnavailable;
     private int mFirstCodePoint = -1;
@@ -90,7 +93,8 @@ final class GraphemeClusterer {
         if (mIcuUnavailable) return fallbackContinuation();
         try {
             if (mIterator == null) mIterator = BreakIterator.getCharacterInstance(Locale.ROOT);
-            mIterator.setText(mCluster.toString());
+            mClusterText.rewind();
+            mIterator.setText(mClusterText);
             mIterator.first();
             return mIterator.next() == mCluster.length();
         } catch (RuntimeException | LinkageError error) {
@@ -109,5 +113,96 @@ final class GraphemeClusterer {
 
     private static boolean isRegionalIndicator(int codePoint) {
         return codePoint >= 0x1F1E6 && codePoint <= 0x1F1FF;
+    }
+
+    /**
+     * A {@link CharacterIterator} over a StringBuilder that another object keeps changing. The
+     * clusterer asks ICU about its text for most non-ASCII code points, so the iterator is made
+     * once and {@link #rewind} points it at the builder's current length, where a String and a
+     * StringCharacterIterator would be made on every call. It answers exactly as
+     * java.text.StringCharacterIterator does over the builder's text at the time of the rewind.
+     */
+    static final class ClusterText implements CharacterIterator {
+        private final CharSequence mText;
+        private int mEnd;
+        private int mPosition;
+
+        ClusterText(CharSequence text) {
+            mText = text;
+        }
+
+        /** Cover the text as it is now and stand at its start. */
+        void rewind() {
+            mEnd = mText.length();
+            mPosition = 0;
+        }
+
+        @Override
+        public char first() {
+            mPosition = 0;
+            return current();
+        }
+
+        @Override
+        public char last() {
+            mPosition = (mEnd != 0) ? mEnd - 1 : mEnd;
+            return current();
+        }
+
+        @Override
+        public char setIndex(int position) {
+            if (position < 0 || position > mEnd) throw new IllegalArgumentException("Invalid index");
+            mPosition = position;
+            return current();
+        }
+
+        @Override
+        public char current() {
+            return (mPosition >= 0 && mPosition < mEnd) ? mText.charAt(mPosition) : DONE;
+        }
+
+        @Override
+        public char next() {
+            if (mPosition < mEnd - 1) {
+                mPosition++;
+                return mText.charAt(mPosition);
+            }
+            mPosition = mEnd;
+            return DONE;
+        }
+
+        @Override
+        public char previous() {
+            if (mPosition > 0) {
+                mPosition--;
+                return mText.charAt(mPosition);
+            }
+            return DONE;
+        }
+
+        @Override
+        public int getBeginIndex() {
+            return 0;
+        }
+
+        @Override
+        public int getEndIndex() {
+            return mEnd;
+        }
+
+        @Override
+        public int getIndex() {
+            return mPosition;
+        }
+
+        @Override
+        public Object clone() {
+            // An independent snapshot of the text as it is now, as a StringCharacterIterator
+            // clone would be. ICU does not clone while it breaks a cluster.
+            ClusterText copy = new ClusterText(mText.subSequence(0, mEnd).toString());
+            copy.mEnd = mEnd;
+            copy.mPosition = mPosition;
+            return copy;
+        }
     }
 }
