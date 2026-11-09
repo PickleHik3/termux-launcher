@@ -77,7 +77,12 @@ final class SceneGl {
 
     /** Makes a context on this thread; throws {@link SceneEgl.EglException} when there is none. */
     SceneGl() {
-        egl = new SceneEgl();
+        this(new SceneEgl());
+    }
+
+    /** Builds the pipeline on a context made already (the layer posts its first buffer in between). */
+    SceneGl(@NonNull SceneEgl egl) {
+        this.egl = egl;
         FloatBuffer tri = ByteBuffer.allocateDirect(6 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         tri.put(new float[] {-1f, -1f, 3f, -1f, -1f, 3f}).position(0);
         GLES20.glGenBuffers(1, mName, 0);
