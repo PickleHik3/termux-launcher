@@ -38,6 +38,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   below the cursor into history, the Java core drops them); exit the shell and scroll the finished
   pane back. Then `ghostty-core-bench.sh pong parse`: `mirror_history_ms` 0, `scrollback_us_per_row`
   near 3.5, `mirror_max_ms` under 8.3 ms.
+  Wave 3 slice 6 (exp/ghostty-slice6, fail-safes and memory): `ghostty-core-bench.sh pong parse`
+  shows `idle_compress` complete and `after_idle_compress` resident well under the run's (about
+  0.44 of 1.59 MB); `dumpsys meminfo` PSS after a flood, 1 s idle, and after closing the pane;
+  `am send-trim-memory <pkg> BACKGROUND` with Ghostty panes open logs nothing and keeps every pane
+  scrollable; with output stopped, `dumpsys gfxinfo` over 30 s shows no frames from an idle Ghostty
+  pane. Crash guard: open a Ghostty pane, `run-as <pkg> kill -SEGV <pid>`; after the relaunch,
+  logcat says `ghostty turned off for new panes` and new panes log `ghostty off after a crash`;
+  `adb install -r` of the same APK turns it back on; `am force-stop` with a Ghostty pane open does
+  not turn it off (API 30+).
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
