@@ -175,6 +175,15 @@ public final class WallpaperLiveHost {
     /** The editor's shader is on disk (applied once): leaving it keeps the folder. */
     private boolean mEditorSaved;
     @NonNull private VideoSource mVideoSource = VideoSource.UNAVAILABLE;
+    /** The choice and video rate when the host was shown (or last committed): what closing without Done goes back to. */
+    @NonNull private WallpaperMotion mOpened = WallpaperMotion.photo();
+    private int mOpenedRate = 30;
+    /** A shader draft was saved and previewed since: its id may carry new source Done must apply. */
+    private boolean mDraftApplied;
+    /** Done ran: closing keeps the choice. */
+    private boolean mCommitted;
+    /** Ids of example copies made only to preview; deleted unless Done keeps one. */
+    private final List<String> mCopies = new java.util.ArrayList<>();
     @Nullable private Supplier<String> mHeldReason;
 
     @Nullable private ActivityResultLauncher<String[]> mImportLauncher;
@@ -300,7 +309,12 @@ public final class WallpaperLiveHost {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         mRoot.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        if (mSupported) showKind(LiveSceneLogic.startKind(readStored(), true));
+        if (mSupported) {
+            mOpened = readStored();
+            SharedPreferences openPrefs = prefs();
+            mOpenedRate = openPrefs == null ? 30 : ShaderStore.readVideoRate(openPrefs);
+            showKind(LiveSceneLogic.startKind(readStored(), true));
+        }
     }
 
     /** What the sheet frames: the picker, with Photo | Video | Shader above it where they are offered. */
@@ -334,7 +348,69 @@ public final class WallpaperLiveHost {
         return true;
     }
 
+    /** Whether Done has a preview to apply: what the surface's Done asks before it commits. */
+    public boolean hasPendingChanges() {
+        return mSupported && !mReleased && !mCommitted
+            && LivePreviewLogic.commitHasWork(mOpened, readStored(), mDraftApplied);
+    }
+
+    /**
+     * Done: the previewed choice goes to the phone as Use as wallpaper did (the stills on Home and
+     * Lock). Nothing to apply runs {@code onDone} at once; otherwise one of the callbacks runs when
+     * the applier answers.
+     */
+    public void commit(@NonNull Runnable onDone, @NonNull Runnable onFailed) {
+        if (!mSupported || mReleased) {
+            onDone.run();
+            return;
+        }
+        final WallpaperMotion current = readStored();
+        final boolean work = LivePreviewLogic.commitHasWork(mOpened, current, mDraftApplied);
+        mCommitted = true;
+        dropPreviewCopies(current);
+        if (!work) {
+            onDone.run();
+            return;
+        }
+        commitMotion(current, result -> {
+            if (result == LiveWallpaperApplier.Result.FAILED) {
+                mCommitted = false;
+                onFailed.run();
+            } else {
+                onDone.run();
+            }
+        });
+    }
+
+    /** Deletes the preview-only copies except the one {@code keep} names. */
+    private void dropPreviewCopies(@NonNull WallpaperMotion keep) {
+        final Context app = mContext.getApplicationContext();
+        final List<String> drop = new java.util.ArrayList<>();
+        for (String id : mCopies) if (LivePreviewLogic.dropsCopy(keep, id)) drop.add(id);
+        mCopies.clear();
+        if (drop.isEmpty()) return;
+        IO.execute(() -> {
+            for (String id : drop) ShaderStore.delete(app, id);
+        });
+    }
+
+    /** Closing without Done: the choice and rate the host opened with go back, and the preview copies go. */
+    private void revertPreview() {
+        SharedPreferences prefs = prefs();
+        if (prefs != null) {
+            WallpaperMotion current = ShaderStore.readMotion(prefs);
+            int rate = ShaderStore.readVideoRate(prefs);
+            if (LivePreviewLogic.mustRevert(false, mOpened, current, mOpenedRate, rate)) {
+                ShaderStore.apply(mContext.getApplicationContext(), prefs, mOpened);
+                ShaderStore.writeVideoRate(prefs, mOpenedRate);
+            }
+        }
+        // The saved source of a shader the user edited stays; only a copy made for the preview goes.
+        dropPreviewCopies(WallpaperMotion.photo());
+    }
+
     public void release() {
+        if (mSupported && !mCommitted && !mReleased) revertPreview();
         mReleased = true;
         mSwap.cancel();
         if (mPage == Page.EDITOR) discardEditor();
@@ -731,8 +807,10 @@ public final class WallpaperLiveHost {
                     return;
                 }
                 mEditorSaved = true;
+                if (draft.isExample) mCopies.add(draft.id);
+                if (listKey == null) mDraftApplied = true;
                 mEditor.showErrors(null);
-                useMotion(WallpaperMotion.shader(draft.id));
+                previewMotion(WallpaperMotion.shader(draft.id));
             });
         });
     }
@@ -759,39 +837,56 @@ public final class WallpaperLiveHost {
         }
     }
 
-    /** Starts {@code motion} and puts its still on Home and Lock where that applies. */
-    private void useMotion(@NonNull WallpaperMotion motion) {
+    /**
+     * A pick only writes the choice, so the scene behind the sheet shows it; Done applies it
+     * ({@link #commit}) and closing any other way puts the opened-with choice back.
+     */
+    private void previewMotion(@NonNull WallpaperMotion motion) {
         if (mReleased) return;
-        setBusy(true);
+        setBusy(false);
+        SharedPreferences prefs = prefs();
+        if (prefs == null) {
+            toast(R.string.wallpaper_picker_apply_failed);
+            return;
+        }
+        ShaderStore.apply(mContext.getApplicationContext(), prefs, motion);
+        mPhotoStale = true;
+        if (mEditor != null) mEditor.setBackToPhotoVisible(true);
+        if (mVideo != null) mVideo.setBackToPhotoVisible(true);
+        // A previewed shader goes back to the list, where "In use" shows it.
+        if (mPage == Page.EDITOR) showList();
+        else if (mPage == Page.LIST && mList != null) mList.bind(readStored());
+    }
+
+    /** Starts {@code motion} and puts its still on Home and Lock where that applies; it becomes the opened-with state. */
+    private void commitMotion(@NonNull WallpaperMotion motion, @NonNull LiveWallpaperApplier.Callback cb) {
+        if (!mReleased) setBusy(true);
         boolean also = mPicker.alsoPhone().isChecked();
         LiveWallpaperApplier.useMotion(mContext, motion, mHomeApp, also, result -> {
-            if (mReleased) return;
-            setBusy(false);
-            switch (result) {
-                case SET:
-                    mListener.onSystemWallpaperChanged();
-                    break;
-                case STILL_FAILED:
-                    toast(R.string.live_still_failed);
-                    break;
-                case FAILED:
-                    toast(R.string.wallpaper_picker_apply_failed);
-                    break;
-                case IN_APP_ONLY:
-                default:
-                    break;
+            if (!mReleased) setBusy(false);
+            if (result == LiveWallpaperApplier.Result.SET) mListener.onSystemWallpaperChanged();
+            if (!mReleased) {
+                if (result == LiveWallpaperApplier.Result.STILL_FAILED) toast(R.string.live_still_failed);
+                else if (result == LiveWallpaperApplier.Result.FAILED) toast(R.string.wallpaper_picker_apply_failed);
+                mPhotoStale = true;
+                if (mEditor != null) mEditor.setBackToPhotoVisible(true);
+                if (mVideo != null) mVideo.setBackToPhotoVisible(true);
             }
-            mPhotoStale = true;
-            if (mEditor != null) mEditor.setBackToPhotoVisible(true);
-            if (mVideo != null) mVideo.setBackToPhotoVisible(true);
-            // A shader that is on goes back to the list, where "In use" confirms it; a message stays on its page.
-            if (!LiveSceneLogic.staysOnScenePage(result) && mPage == Page.EDITOR) showList();
-            else if (mPage == Page.LIST && mList != null) mList.bind(readStored());
+            if (result != LiveWallpaperApplier.Result.FAILED) {
+                mOpened = motion;
+                SharedPreferences prefs = prefs();
+                if (prefs != null) mOpenedRate = ShaderStore.readVideoRate(prefs);
+                mDraftApplied = false;
+            }
+            cb.onDone(result);
         });
     }
 
     private void backToPhoto() {
         if (mReleased) return;
+        // A deliberate button, not a pick: the photo is what the sheet goes back to from here on.
+        mOpened = WallpaperMotion.photo();
+        mDraftApplied = false;
         setBusy(true);
         LiveWallpaperApplier.backToPhoto(mContext, result -> {
             if (mReleased) return;
@@ -810,7 +905,11 @@ public final class WallpaperLiveHost {
         if (mReleased) return;
         final Context app = mContext.getApplicationContext();
         mEditorSaved = true;
+        mCopies.remove(id);
+        if (mOpened.kind == WallpaperMotion.Kind.SHADER && id.equals(mOpened.id)) mOpened = WallpaperMotion.photo();
         if (LiveSceneLogic.inUse(readStored(), id)) {
+            mOpened = WallpaperMotion.photo();
+            mDraftApplied = false;
             // The running shader goes: the photo is back first, so nothing draws a deleted shader.
             setBusy(true);
             LiveWallpaperApplier.backToPhoto(mContext, result -> {
@@ -965,7 +1064,10 @@ public final class WallpaperLiveHost {
                 if (prefs != null) prefs.edit().putString(KEY_VIDEO_HINT, done.hint == null ? "" : done.hint).apply();
                 mVideo.endImport();
                 mVideo.setHint(videoStatus(done.name, done.hint));
-                useMotion(WallpaperMotion.video(done.name));
+                WallpaperMotion imported = WallpaperMotion.video(done.name);
+                // Importing deleted the previous video's files: over a video there is nothing to go back to.
+                if (LivePreviewLogic.importCommitsAtOnce(mOpened)) commitMotion(imported, r -> {});
+                else previewMotion(imported);
                 refreshVideoState(false);
             });
         });
