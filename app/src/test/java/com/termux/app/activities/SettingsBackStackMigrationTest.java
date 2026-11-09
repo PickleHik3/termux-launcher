@@ -7,6 +7,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.os.SystemClock;
 
 import androidx.fragment.app.Fragment;
 
@@ -15,6 +16,7 @@ import com.termux.shared.termux.TermuxConstants;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -39,6 +41,11 @@ public class SettingsBackStackMigrationTest {
 
     private static final String PAGES = "com.termux.app.fragments.settings.termux.";
 
+    @After
+    public void forgetTheClose() {
+        SettingsActivity.setLastClosedAtMs(SettingsReopenPolicy.NO_CLOSE);
+    }
+
     /** Saves a stack the way the old build did: no tree version, fresh enough to restore. */
     private static void saveOldStack(String... classAndKey) throws Exception {
         JSONArray entries = new JSONArray();
@@ -50,6 +57,8 @@ public class SettingsBackStackMigrationTest {
             if (parts.length > 1) entry.put("scroll_to_key", parts[1]);
             entries.put(entry);
         }
+        // Settings restores a page only after a close it saw this process; say it was just closed.
+        SettingsActivity.setLastClosedAtMs(SystemClock.elapsedRealtime());
         JSONObject root = new JSONObject();
         root.put("stopped_at_epoch_ms", System.currentTimeMillis() - 1000);
         root.put("entries", entries);
@@ -135,6 +144,7 @@ public class SettingsBackStackMigrationTest {
 
     @Test
     public void aReopenNeverLandsInsideAnEditorButOnThePageThatOpenedIt() throws Exception {
+        SettingsActivity.setLastClosedAtMs(SystemClock.elapsedRealtime());
         // Linux apps, then the Set up Linux apps guide (an editor), saved against today's tree.
         JSONArray entries = new JSONArray();
         for (String name : new String[]{PAGES + "X11DisplayPreferencesFragment",
@@ -160,6 +170,7 @@ public class SettingsBackStackMigrationTest {
 
     @Test
     public void aGuideOpenedStraightFromTheRootReopensOnLinuxAppsNotTheRoot() throws Exception {
+        SettingsActivity.setLastClosedAtMs(SystemClock.elapsedRealtime());
         // The guide pushed with nothing under it (its row on the root chain), then a page in it.
         JSONArray entries = new JSONArray();
         for (String name : new String[]{PAGES + "GuiAppsSetupGuideFragment",
