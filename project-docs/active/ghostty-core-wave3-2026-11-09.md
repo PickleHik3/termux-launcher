@@ -226,6 +226,8 @@ the sync (`TerminalEmulator.java:1645-1651`), never from inside a write.
 
 ## 7. Kitty graphics on the Ghostty core
 
+- **Advertising.** DA1 keeps no `4` on the Ghostty core (no sixel); `TERM_PROGRAM` stays `termux-launcher`. We never claim to be Ghostty or kitty.
+
 - **Storage.** `KITTY_IMAGE_STORAGE_LIMIT` = `KittyImageStore.MAX_STORED_BYTES` (32 MiB,
   `te/KittyImageStore.java:33`) per screen, replacing 0 (`jni:302-304`). Media: direct only, as
   today. PNG: a decoder installed once with `ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG)` before
@@ -300,7 +302,7 @@ Each ships behind `debug.tl.terminal_core=ghostty`; the Java core's numbers must
 | 2 | `GhosttyContent`: history on demand (§4), `takeScrolledRows`, `text()` via formatter; the history copy is deleted | `GhosttyContentTest` (prune, alt screen, resize, parity cases of §3); `parse`: mirror at or under 10 ms over 20 turns; `bench ghostty`; `frames flood ghostty` start delay p90 under 8.3 ms |
 | 3 | Snapshot holds via `RENDER_HOLD`; row stamp fast path (§6) | `RowRenderCacheTest` stamp cases; `frames tui`, `frames btop`, `frames type` for both cores, Ghostty no worse than wave 2 |
 | 4 | OSC 8, OSC 133, progress, pointer shape, OSC 99 sniffer (§7–8) | unit tests feeding each sequence to both cores and comparing getters; `look ghostty` against `look java` |
-| 5 | Kitty graphics on Ghostty (§7) | `GhosttyImageCacheTest` budget; `KittyImageStoreTest` unchanged; `frames kitty ghostty` (enable the workload for Ghostty) against `frames kitty java` |
+| 5 | Kitty graphics on Ghostty (§7) | `GhosttyImageCacheTest` budget; `KittyImageStoreTest` unchanged; `frames kitty ghostty` (enable the workload for Ghostty) against `frames kitty java` Once images work, XTVERSION gains ` (libghostty-vt 1.0)` so programs matching "ghostty" pick kitty graphics; before that it must not contain "ghostty". |
 | 6 | Fail-safes (§9) | fallback unit test (inject a failure mid-stream, compare the Java screen); `parse` memory fields after idle compress; `bench` PSS after-flood and after-close |
 | 7 | Reader-thread parse (§5), only if its gate fires | lock-order tests with a fake core on the JVM; `frames flood/type/tui ghostty` |
 
