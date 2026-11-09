@@ -548,4 +548,85 @@ public class RowRenderCacheTest {
         assertTrue(recorded[1]);
         assertFalse(recorded[2]);
     }
+
+    // Row stamps: an unmoved stamp on the same row object skips the compare, a moved one is
+    // compared exactly, and nothing else about the answer changes.
+
+    @Test
+    public void aRowRewrittenWithWhatItHeldMovesItsStampButIsNotRecorded() {
+        mRows[1].setChar(3, 'q', 0L);
+        frame();
+        long stamp = mRows[1].getStamp();
+        // The Ghostty core rewrites every row it marks dirty, whether or not the row changed.
+        mRows[1].setChar(3, 'q', 0L);
+
+        assertTrue("the rewrite moved the stamp", mRows[1].getStamp() != stamp);
+        assertNone(frame());
+    }
+
+    @Test
+    public void aRowWhoseStampMovedIsComparedAfterSeveralCleanFrames() {
+        frame();
+        frame();
+        frame();
+        mRows[0].setChar(7, 'z', StyleFixtures.style(1, 2, 0));
+
+        assertOnly(0, frame());
+        assertNone(frame());
+    }
+
+    @Test
+    public void aDifferentRowObjectWithTheSameStampIsRecorded() {
+        mRows[2].setChar(0, 'y', 0L);
+        mRows[2].setChar(1, 'y', 0L);
+        frame();
+        TerminalRow other = new TerminalRow(COLUMNS, 0L);
+        other.setChar(0, 'x', 0L);
+        // Stamps count per row, so another row can carry the very same number.
+        while (other.getStamp() < mRows[2].getStamp()) other.setChar(0, 'x', 0L);
+        assertTrue(other.getStamp() == mRows[2].getStamp());
+        mRows[2] = other;
+
+        assertOnly(2, frame());
+        assertNone(frame());
+    }
+
+    @Test
+    public void theCursorSelectionAndLinksStillMoveARowWhoseStampDidNot() {
+        frame();
+        long stamp = mRows[1].getStamp();
+
+        assertOnly(1, frame(1, 4, -1, -1));
+        assertOnly(1, frame());
+        assertAll(frame(-1, -1, 0, 2));
+        assertAll(frame());
+
+        mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
+            mPalette, 1080, 600, ROWS);
+        boolean[] recorded = new boolean[ROWS];
+        for (int i = 0; i < ROWS; i++)
+            recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS, -1, 1, true, 0, CURSOR_COLOR,
+                -1, -1, i == 1 ? 42 : 0);
+        assertOnly(1, recorded);
+        assertTrue("nothing here touched the row", mRows[1].getStamp() == stamp);
+    }
+
+    @Test
+    public void aFrameThatRecordsEverythingStillDoesWithUnmovedStamps() {
+        frame();
+        mCache.invalidate();
+
+        assertAll(frame());
+        assertNone(frame());
+    }
+
+    @Test
+    public void aRowCarryingAnImageKeepsReportingItWhileItsStampHoldsStill() {
+        mRows[0].setChar(1, 'a', TextStyle.encodeBitmap(1, 0, 0));
+        frame();
+
+        assertNone(frame());
+        assertTrue(mCache.rowCarriesAnImage(0));
+        assertFalse(mCache.rowCarriesAnImage(1));
+    }
 }
