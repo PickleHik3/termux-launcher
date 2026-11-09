@@ -114,8 +114,10 @@ public final class LayoutStore {
     }
 
     /** Changes one kind's document, writes it whole, and asks for one redress. */
-    public synchronized void update(@NonNull LayoutKind kind, @NonNull UnaryOperator<KindLayout> change) {
+    public synchronized void update(@NonNull LayoutKind asked, @NonNull UnaryOperator<KindLayout> change) {
         assertMainThread();
+        // A retired kind's document is the Workspace's (ADR 0025).
+        LayoutKind kind = asked.live();
         KindLayout before = mCurrent.kind(kind);
         KindLayout after = change.apply(before);
         if (after.equals(before)) return;
@@ -146,12 +148,17 @@ public final class LayoutStore {
         notifyChanged();
     }
 
-    /** The five documents as the file holds them. */
+    /**
+     * The documents as the file holds them. A retired kind's (ADR 0025) is left out: its key in
+     * the file is left as it was, for a downgrade.
+     */
     @NonNull
     public static Map<String, String> documents(@NonNull Layouts layouts) {
         Map<String, String> out = new LinkedHashMap<>();
-        for (LayoutKind kind : LayoutKind.values())
+        for (LayoutKind kind : LayoutKind.values()) {
+            if (kind.retired()) continue;
             out.put(kind.key, LayoutsJson.write(layouts.kind(kind)));
+        }
         out.put(LayoutsJson.KEY_SIZES, LayoutsJson.write(layouts.sizes()));
         return out;
     }

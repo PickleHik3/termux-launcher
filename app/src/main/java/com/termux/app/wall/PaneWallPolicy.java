@@ -93,13 +93,14 @@ public final class PaneWallPolicy {
     }
 
     /**
-     * Whether {@code page} is a place of the Workspace: a terminal window, or the display window
-     * in front. The one test every chrome decision that used to read "not Home" asks, so the
-     * Assistant page (ADR 0022), which is neither Home nor the Workspace, is never dressed as a
-     * window by inversion.
+     * Whether {@code page} is a place of the Workspace: a terminal window, the display window in
+     * front, or the Assistant page. The three are one Workspace (ADR 0025): one layout, one look,
+     * one dress, and a slide between two of them is no crossing of the seam. The one test every
+     * chrome decision that used to read "not Home" asks.
      */
     public static boolean isWorkspacePlace(@Nullable PaneWallPage page) {
-        return page == PaneWallPage.TERMINAL || page == PaneWallPage.DISPLAY;
+        return page == PaneWallPage.TERMINAL || page == PaneWallPage.DISPLAY
+            || page == PaneWallPage.ASSISTANT;
     }
 
     /** Whether {@code page} is a Home page. */
@@ -109,8 +110,8 @@ public final class PaneWallPolicy {
 
     /**
      * Whether the window bar's chips (the session's windows, the add button, the stats) show on
-     * {@code page}'s bar: everywhere but the Assistant page, which wears the status bar alone
-     * (ADR 0022 section 2).
+     * {@code page}'s bar: everywhere but the Assistant page. It wears the Workspace's bar (ADR
+     * 0025), but it is no window of the session's row, so no chip there could stand for it.
      */
     public static boolean showsWindowChips(@Nullable PaneWallPage page) {
         return page != PaneWallPage.ASSISTANT;

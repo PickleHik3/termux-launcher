@@ -58,7 +58,12 @@ public class LayoutCommandTest {
         assertNull(LayoutCommand.get(store, "page2"));
         String refused = LayoutCommand.refusal("page2", "{}");
         assertNotNull(refused);
-        for (LayoutKind kind : LayoutKind.values()) assertTrue(refused.contains(kind.key));
+        for (LayoutKind kind : LayoutKind.values()) {
+            // A retired name still works but is not offered (ADR 0025).
+            if (!kind.retired()) assertTrue(refused.contains(kind.key));
+        }
+        assertTrue(LayoutCommand.isName("display"));
+        assertTrue(LayoutCommand.isName("assistant"));
         assertTrue(refused.contains("sizes"));
     }
 

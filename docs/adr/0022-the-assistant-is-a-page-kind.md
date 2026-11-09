@@ -2,6 +2,7 @@
 status: proposed
 date: 2026-11-05
 amends: 0015 §1 (a fourth page kind) and §3 (its dress), 0020 §1 and §5 (a fifth layout document)
+amended-by: 0025 (§2 superseded: the Assistant page wears the Workspace's layout, dress and look)
 ---
 
 # The Assistant is a page kind

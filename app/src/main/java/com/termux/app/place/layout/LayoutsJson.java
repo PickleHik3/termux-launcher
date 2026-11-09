@@ -181,6 +181,8 @@ public final class LayoutsJson {
     public static Layouts read(@NonNull Source source) {
         Map<LayoutKind, KindLayout> kinds = new EnumMap<>(LayoutKind.class);
         for (LayoutKind kind : LayoutKind.values()) {
+            // A retired kind's document (ADR 0025) is never read: the Workspace's is worn.
+            if (kind.retired()) continue;
             String json = source.read(kind.key);
             if (json == null) continue;
             try {

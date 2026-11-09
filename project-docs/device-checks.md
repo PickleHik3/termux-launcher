@@ -887,4 +887,14 @@ longer counted as an error. Owed:
   over Home; rest there first so Home's page (and the dock's, on its second page) turns, then let
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
-  Undo brings it back) and back on its own slot (nothing moves) · pong.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **The Workspace is Terminal, Display and Assistant pages (11-09, feat/workspace-family,
+  ADR 0025).** With an Assistant page and a Display page on the wall: the Assistant page wears
+  what a terminal page wears (status bar, extra keys, dock rows as set; the window bar without
+  window chips). Type in the composer with the soft keyboard up and with the in-app keyboard up:
+  the composer and its send button are never under the extra keys, the dock or a keyboard. Swipe
+  Terminal ↔ Assistant ↔ Display ten times: no chrome moves or redraws at landing. Swipe Home ↔
+  Assistant: the same crossing as Home ↔ Terminal. Open Appearance and Layout from a long-press on
+  the Assistant page's chrome: the title says "Workspace layout", the Where chip "Workspace
+  pages", and a change made there shows on the terminal and the Display page. Upgrade an install
+  that had its own Display layout: the Display page now wears the terminal's. Minimal mode on: the
+  Assistant page wears the minimal layout · emulator.
