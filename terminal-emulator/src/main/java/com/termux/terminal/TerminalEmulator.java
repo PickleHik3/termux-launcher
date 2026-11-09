@@ -787,18 +787,13 @@ public final class TerminalEmulator {
     private final TerminalHyperlinks mHyperlinks = new TerminalHyperlinks();
 
     /**
-     * The number of scrolled lines since last calling {@link #clearScrollCounter()}. Used for moving selection up along
-     * with the scrolling text.
+     * Lines scrolled off the top: {@code pending} since the view last took them (a scrolled-back
+     * view and a selection move up by them), and {@code total} ever, never reset. A kitty graphics
+     * placement captures the cursor row when the command arrives but lands after an asynchronous
+     * decode; the difference in the total across that gap is how many rows the captured anchor has
+     * since moved up. Both buffers share it.
      */
-    private int mScrollCounter = 0;
-
-    /**
-     * Total lines ever scrolled off the top, never reset (unlike {@link #mScrollCounter}, which the
-     * view consumes and clears). A kitty graphics placement captures the cursor row when the command
-     * arrives but lands after an asynchronous decode; the difference in this count across that gap is
-     * how many rows the captured anchor has since moved up.
-     */
-    private long mScrollEventCount;
+    private final ScrollCount mScrolls = new ScrollCount();
 
     /**
      * If automatic scrolling of terminal is disabled
@@ -845,7 +840,7 @@ public final class TerminalEmulator {
     }
 
     long scrollEventCount() {
-        return mScrollEventCount;
+        return mScrolls.total;
     }
 
     public int getCellWidthPixels() {
@@ -931,6 +926,8 @@ public final class TerminalEmulator {
         mSession = session;
         mScreen = mMainBuffer = new TerminalBuffer(client, columns, getTerminalTranscriptRows(transcriptRows), rows);
         mAltBuffer = new TerminalBuffer(client, columns, rows, rows);
+        mMainBuffer.setScrollCount(mScrolls);
+        mAltBuffer.setScrollCount(mScrolls);
         mClient = client;
         mBoldWithBright = boldWithBright;
         mRows = rows;
@@ -951,7 +948,17 @@ public final class TerminalEmulator {
         setCursorBlinkState(true);
     }
 
+    /**
+     * The Java buffer on screen: the Java parser's own, and where Java-only features (sixel, text
+     * sizing, kitty placements, extra cursors) live. Readers of rows, text and scroll position use
+     * {@link #getContent()}, which serves both cores.
+     */
     public TerminalBuffer getScreen() {
+        return mScreen;
+    }
+
+    /** What this pane shows and holds, row by row, whichever core parses its output. */
+    public TerminalContent getContent() {
         return mScreen;
     }
 
@@ -1639,10 +1646,7 @@ public final class TerminalEmulator {
                     state[GhosttyNative.STATE_HISTORY], core, core.historyCells(), core.historyExtra());
                 // The mirror scrolls the buffer directly, so the counters the Java core bumps per
                 // line (a scrolled-back view and a selection follow them) move here, by the same rows.
-                if (scrolled > 0) {
-                    mScrollCounter += scrolled;
-                    mScrollEventCount += scrolled;
-                }
+                if (scrolled > 0) mScrolls.add(scrolled);
             }
             GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra());
         }
@@ -4692,9 +4696,10 @@ public final class TerminalEmulator {
      * @param row a row in the external coordinate system, so negative for transcript rows.
      */
     public String getHyperlinkUriAt(int row, int column) {
-        if (column < 0 || column >= mColumns || row < -mScreen.getActiveTranscriptRows() || row >= mRows)
+        TerminalContent content = getContent();
+        if (column < 0 || column >= mColumns || row < -content.historyRows() || row >= mRows)
             return null;
-        return mHyperlinks.getUri(mScreen.getHyperlinkIdAt(row, column));
+        return mHyperlinks.getUri(content.row(row).getHyperlinkId(column));
     }
 
     /**
@@ -4738,8 +4743,7 @@ public final class TerminalEmulator {
     }
 
     private void scrollDownOneLine() {
-        mScrollCounter++;
-        mScrollEventCount++;
+        mScrolls.add(1);
         long currentStyle = getStyle();
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
             // Horizontal margin: Do not put anything into scroll history, just non-margin part of screen up.
@@ -5188,12 +5192,13 @@ public final class TerminalEmulator {
         resetGraphemeTracking();
     }
 
+    /** Rows scrolled since the last {@link #clearScrollCounter()}; the view takes them through {@link #getContent()}. */
     public int getScrollCounter() {
-        return mScrollCounter;
+        return mScrolls.pending;
     }
 
     public void clearScrollCounter() {
-        mScrollCounter = 0;
+        mScrolls.pending = 0;
     }
 
     public boolean isAutoScrollDisabled() {
@@ -5587,7 +5592,7 @@ public final class TerminalEmulator {
      * (transcripts, find, AI context) must see the text exactly as it sits on screen.
      */
     public String getSelectedText(int x1, int y1, int x2, int y2) {
-        String selectedText = mScreen.getSelectedText(x1, y1, x2, y2);
+        String selectedText = getContent().text(x1, y1, x2, y2);
         return mClipboardCleanupEnabled ? ClipboardCleanup.forCopy(selectedText) : selectedText;
     }
 

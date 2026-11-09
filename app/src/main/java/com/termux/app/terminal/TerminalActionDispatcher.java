@@ -16,6 +16,7 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalRenderMetrics;
 import com.termux.view.TerminalView;
@@ -979,10 +980,10 @@ public final class TerminalActionDispatcher {
                     if (refused != null) return refused;
                     int lines = arguments.optInt("lines", PANE_READ_DEFAULT_LINES);
                     lines = Math.max(1, Math.min(PANE_READ_MAX_LINES, lines));
-                    String transcript = target.getEmulator() == null ? ""
-                        : target.getEmulator().getScreen().getTranscriptTextWithoutJoinedLines();
+                    String tail = target.getEmulator() == null ? ""
+                        : tailText(target.getEmulator().getContent(), lines);
                     return ok().put("id", target.mHandle)
-                        .put("text", lastLines(transcript, lines))
+                        .put("text", tail)
                         .put("running", target.isRunning());
                 }
                 case TOOL_AGENT_STATUS: {
@@ -2197,6 +2198,31 @@ public final class TerminalActionDispatcher {
 
     /** The last {@code count} lines of {@code text}, with trailing blank lines dropped. */
     @NonNull
+    /**
+     * {@link #lastLines} of the whole transcript, one line per row, reading only as many rows from
+     * the bottom as it takes: the Ghostty core reads each history row natively, and a pane read asks
+     * for 60 lines of a transcript that may hold thousands. The window doubles until it holds
+     * {@code count} lines or reaches the oldest row, where the transcript's own trim applies.
+     */
+    static String tailText(@NonNull TerminalContent content, int count) {
+        final int first = -content.historyRows();
+        final int last = content.screenRows() - 1;
+        for (long span = (long) count + content.screenRows(); ; span *= 2) {
+            int from = (int) Math.max(first, last - span + 1);
+            String text = content.text(0, from, content.columns(), last, false, false);
+            if (from == first) return lastLines(text.trim(), count);
+            String tail = lastLines(text, count);
+            if (lineCount(tail) >= count) return tail;
+        }
+    }
+
+    private static int lineCount(@NonNull String text) {
+        if (text.isEmpty()) return 0;
+        int lines = 1;
+        for (int i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) lines++;
+        return lines;
+    }
+
     static String lastLines(@NonNull String text, int count) {
         int end = text.length();
         while (end > 0 && (text.charAt(end - 1) == '\n' || text.charAt(end - 1) == ' ')) end--;

@@ -33938,7 +33938,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
         if (emulator == null) return null;
         int top = Math.max(0, emulator.mRows - com.termux.app.terminal.AgentScreenRules.TAIL_ROWS);
-        return emulator.getScreen().getSelectedText(0, top, emulator.mColumns,
+        return emulator.getContent().text(0, top, emulator.mColumns,
             emulator.mRows - 1, true, false);
     }
 
@@ -33964,7 +33964,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static boolean screenLooksLikeQuestion(@NonNull TerminalSession shell) {
         com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
         if (emulator == null) return false;
-        String screen = emulator.getScreen().getSelectedText(0, 0, emulator.mColumns,
+        String screen = emulator.getContent().text(0, 0, emulator.mColumns,
             emulator.mRows - 1, true, false);
         return com.termux.app.statusbar.ShellAttentionCues.looksLikeQuestion(screen);
     }

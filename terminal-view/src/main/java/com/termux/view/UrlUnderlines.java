@@ -2,7 +2,7 @@ package com.termux.view;
 
 import androidx.annotation.Nullable;
 
-import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.UrlDetector;
 
@@ -46,7 +46,7 @@ final class UrlUnderlines {
      * Compute — or confirm — the underlines for rows {@code [topRow, endRow)}. Must run once per
      * frame before any row is drawn or its cache consulted.
      */
-    void prepare(TerminalBuffer screen, int topRow, int endRow, int columns, int screenRows,
+    void prepare(TerminalContent screen, int topRow, int endRow, int columns, int screenRows,
                  boolean enabled) {
         final int visible = Math.max(0, endRow - topRow);
         if (mSegments.length < visible) {
@@ -103,19 +103,19 @@ final class UrlUnderlines {
         return index >= 0 && index < mKeys.length ? mKeys[index] : 0;
     }
 
-    private static long hashRows(TerminalBuffer screen, int screenRows, int firstRow, int lastRowExclusive) {
-        final int minRow = -screen.getActiveTranscriptRows();
+    private static long hashRows(TerminalContent screen, int screenRows, int firstRow, int lastRowExclusive) {
+        final int minRow = -screen.historyRows();
         final int maxRow = screenRows;
         firstRow = Math.max(minRow, firstRow);
         lastRowExclusive = Math.min(maxRow, lastRowExclusive);
         long hash = 1125899906842597L;
         for (int row = firstRow; row < lastRowExclusive; row++) {
-            TerminalRow line = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            TerminalRow line = screen.row(row);
             final int used = line.getSpaceUsed();
             hash = hash * 31 + used;
             final char[] text = line.mText;
             for (int i = 0; i < used; i++) hash = hash * 31 + text[i];
-            hash = hash * 31 + (screen.getLineWrap(row) ? 1 : 0);
+            hash = hash * 31 + (line.getLineWrap() ? 1 : 0);
         }
         return hash;
     }

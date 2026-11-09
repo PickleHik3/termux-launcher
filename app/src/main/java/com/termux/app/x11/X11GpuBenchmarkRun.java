@@ -244,7 +244,7 @@ public final class X11GpuBenchmarkRun {
         TerminalSession s = session;
         TerminalEmulator emulator = s == null ? null : s.getEmulator();
         if (emulator == null) return;
-        X11GpuBenchmarkStep found = X11GpuBenchmarkStep.lastIn(emulator.getScreen().getTranscriptText());
+        X11GpuBenchmarkStep found = X11GpuBenchmarkStep.lastIn(emulator.getContent().transcriptText(true, false));
         // A step whose line has scrolled out of the transcript stays the step.
         if (found == null || found.sameAs(step)) return;
         if (step != null && found.number < step.number) return;

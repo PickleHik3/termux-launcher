@@ -17,9 +17,13 @@ import androidx.annotation.Nullable;
  * <p>
  * See {@link #externalToInternalRow(int)} for how to map from logical screen rows to array indices.
  */
-public final class TerminalBuffer {
+public final class TerminalBuffer implements TerminalContent {
 
     private TerminalSessionClient mClient;
+
+    /** The emulator's scroll count, shared with its other buffer; null for a buffer on its own. */
+    @Nullable
+    private ScrollCount mScrolls;
 
     TerminalRow[] mLines;
 
@@ -77,6 +81,61 @@ public final class TerminalBuffer {
 
     public TerminalSessionClient getClient() {
         return mClient;
+    }
+
+    void setScrollCount(@Nullable ScrollCount scrolls) {
+        mScrolls = scrolls;
+    }
+
+    // --- TerminalContent: the Java core serves readers straight from this buffer ---------------
+
+    @Override
+    public int columns() {
+        return mColumns;
+    }
+
+    @Override
+    public int screenRows() {
+        return mScreenRows;
+    }
+
+    @Override
+    public int historyRows() {
+        return mActiveTranscriptRows;
+    }
+
+    @Override
+    public long firstRowIndex() {
+        return (mScrolls == null ? 0 : mScrolls.total) - mActiveTranscriptRows;
+    }
+
+    @Override
+    public int takeScrolledRows() {
+        return mScrolls == null ? 0 : mScrolls.take();
+    }
+
+    @NonNull
+    @Override
+    public TerminalRow row(int externalRow) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow));
+    }
+
+    @NonNull
+    @Override
+    public String text(int x1, int y1, int x2, int y2, boolean joinWrapped, boolean joinFullLines) {
+        return getSelectedText(x1, y1, x2, y2, joinWrapped, joinFullLines);
+    }
+
+    @Nullable
+    @Override
+    public TextBlock textBlockAt(int column, int externalRow) {
+        return getTextBlockAt(externalRow, column);
+    }
+
+    @NonNull
+    @Override
+    public String textBlockText(@NonNull TextBlock block) {
+        return getTextBlockText(block);
     }
 
     public String getTranscriptText() {

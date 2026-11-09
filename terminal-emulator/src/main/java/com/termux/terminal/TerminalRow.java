@@ -119,6 +119,11 @@ public final class TerminalRow {
     }
 
     /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    /** Whether this row soft-wraps into the one below it. */
+    public boolean getLineWrap() {
+        return mLineWrap;
+    }
+
     public boolean hasDecorationColors() {
         return mDecorationColors != null;
     }

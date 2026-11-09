@@ -611,7 +611,7 @@ public class TerminalPaneController {
         // scrolled partly into the transcript, which the row-top mapping below carries as is.
         int[] block = mCursorBlockScratch;
         if (view.mRenderer != null
-            && view.mRenderer.copyCursorBlock(emulator.getScreen(), row, column, block)) {
+            && view.mRenderer.copyCursorBlock(emulator.getContent(), row, column, block)) {
             row = block[0];
             column = block[1];
             rows = block[2];

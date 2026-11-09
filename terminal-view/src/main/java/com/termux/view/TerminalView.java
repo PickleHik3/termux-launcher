@@ -54,7 +54,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.KittyKeyEncoder;
-import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
@@ -755,7 +755,7 @@ public final class TerminalView extends View {
                     mScroller.fling(0, 0, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.mRows / 2, mEmulator.mRows / 2);
                 } else {
                 	//this doesn't fling in less
-                    mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.getScreen().getActiveTranscriptRows(), 0);
+                    mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.getContent().historyRows(), 0);
                 }
                 // The lift is read by onUp next: while the wheel runs on, a program tracking the
                 // mouse must not also get it as a click, nor the client a tap to raise the keyboard.
@@ -1049,7 +1049,7 @@ public final class TerminalView extends View {
 
     @Override
     protected int computeVerticalScrollRange() {
-        return mEmulator == null ? 1 : mEmulator.getScreen().getActiveRows();
+        return mEmulator == null ? 1 : mEmulator.getContent().activeRows();
     }
 
     @Override
@@ -1059,7 +1059,7 @@ public final class TerminalView extends View {
 
     @Override
     protected int computeVerticalScrollOffset() {
-        return mEmulator == null ? 1 : mEmulator.getScreen().getActiveRows() + mTopRow - mEmulator.mRows;
+        return mEmulator == null ? 1 : mEmulator.getContent().activeRows() + mTopRow - mEmulator.mRows;
     }
 
     public void onScreenUpdated() {
@@ -1069,7 +1069,10 @@ public final class TerminalView extends View {
     public void onScreenUpdated(boolean skipScrolling) {
         if (mEmulator == null)
             return;
-        int rowsInHistory = mEmulator.getScreen().getActiveTranscriptRows();
+        TerminalContent content = mEmulator.getContent();
+        int rowsInHistory = content.historyRows();
+        // Taken every time, so rows scrolled while following the output never move a later view.
+        int rowShift = content.takeScrolledRows();
         if (mTopRow < -rowsInHistory) {
             mTopRow = -rowsInHistory;
             clearScrollOffset();
@@ -1079,7 +1082,6 @@ public final class TerminalView extends View {
             // transcript: keep the viewport pinned to the same content while output arrives.
             // The user gets back to following the output by scrolling to the bottom or by
             // typing (see snapToBottomForInput()).
-            int rowShift = mEmulator.getScrollCounter();
             if (-mTopRow + rowShift > rowsInHistory) {
                 // .. unless we're hitting the end of the history transcript, in which
                 // case we abort text selection and stay pinned at the oldest line.
@@ -1092,7 +1094,6 @@ public final class TerminalView extends View {
                 decrementYTextSelectionCursors(rowShift);
             }
         }
-        mEmulator.clearScrollCounter();
         invalidate();
         // Tell a screen reader the content of this control changed, so that it gets the updated text.
         mAccessibilityTextUpdates.onScreenUpdated();
@@ -1241,7 +1242,7 @@ public final class TerminalView extends View {
             announceForAccessibility(text);
             return true;
         } else if (action == R.id.a11y_speak_cursor_line && mEmulator != null) {
-            CharSequence lineText = mEmulator.getScreen().getSelectedText(0, mTopRow + mEmulator.getCursorRow(), mEmulator.mColumns, mTopRow + mEmulator.getCursorRow());
+            CharSequence lineText = mEmulator.getContent().text(0, mTopRow + mEmulator.getCursorRow(), mEmulator.mColumns, mTopRow + mEmulator.getCursorRow());
             announceForAccessibility(lineText);
             return true;
         }
@@ -1489,7 +1490,7 @@ public final class TerminalView extends View {
             return null;
         }
         int row = mEmulator.getCursorRow();
-        String text = mEmulator.getScreen().getSelectedText(0, row, 99, row);
+        String text = mEmulator.getContent().text(0, row, 99, row);
         if (text.indexOf(mSplitChar) >= 0) {
             text = text.substring(text.indexOf(mSplitChar) + 1);
             text = text.replaceAll("[^a-zA-Z ]", "");
@@ -1505,7 +1506,7 @@ public final class TerminalView extends View {
         }
         int row = mEmulator.getCursorRow();
         int cut = mEmulator.getCursorCol();
-        String originalText = mEmulator.getScreen().getSelectedText(0, row, 99, row);
+        String originalText = mEmulator.getContent().text(0, row, 99, row);
         if (originalText.indexOf(mSplitChar) >= 0) {
             if (cut >= originalText.length()) {
                 originalText = originalText + currentChar;
@@ -1530,7 +1531,7 @@ public final class TerminalView extends View {
         if (mEmulator == null || isAlternateBufferActive()) return false;
         int row = mEmulator.getCursorRow();
         int cursor = mEmulator.getCursorCol();
-        String line = mEmulator.getScreen().getSelectedText(0, row, 99, row);
+        String line = mEmulator.getContent().text(0, row, 99, row);
         return hasAppSearchPrefixInLine(line, cursor, mSplitChar);
     }
 
@@ -2008,7 +2009,7 @@ public final class TerminalView extends View {
             } else if (mEmulator.isAlternateBufferActive()) {
                 handleKeyCode(down ? KeyEvent.KEYCODE_DPAD_DOWN : KeyEvent.KEYCODE_DPAD_UP, 0);
             } else {
-                mTopRow = Math.min(0, Math.max(-(mEmulator.getScreen().getActiveTranscriptRows()),
+                mTopRow = Math.min(0, Math.max(-(mEmulator.getContent().historyRows()),
                     mTopRow + (down ? 1 : -1)));
                 if (!awakenScrollBars()) invalidate();
             }
@@ -2134,7 +2135,7 @@ public final class TerminalView extends View {
                 // e.g. less, which shifts to the alt screen without mouse handling.
                 handleKeyCode(up ? KeyEvent.KEYCODE_DPAD_UP : KeyEvent.KEYCODE_DPAD_DOWN, 0);
             } else {
-                mTopRow = Math.min(0, Math.max(-(mEmulator.getScreen().getActiveTranscriptRows()), mTopRow + (up ? -1 : 1)));
+                mTopRow = Math.min(0, Math.max(-(mEmulator.getContent().historyRows()), mTopRow + (up ? -1 : 1)));
                 if (!awakenScrollBars())
                     invalidate();
             }
@@ -2153,7 +2154,7 @@ public final class TerminalView extends View {
                 */
             } else {
             	/*
-                mTopRow = Math.min(0, Math.max(-(mEmulator.getScreen().getActiveTranscriptRows()), mTopRow + (up ? -1 : 1)));
+                mTopRow = Math.min(0, Math.max(-(mEmulator.getContent().historyRows()), mTopRow + (up ? -1 : 1)));
                 if (!awakenScrollBars())
                     invalidate();
                     */
@@ -2176,7 +2177,7 @@ public final class TerminalView extends View {
     }
 
     private int getScrollPixelMinimum() {
-        return -mEmulator.getScreen().getActiveTranscriptRows() * mRenderer.mFontLineSpacing;
+        return -mEmulator.getContent().historyRows() * mRenderer.mFontLineSpacing;
     }
 
     /**
@@ -3553,7 +3554,7 @@ public final class TerminalView extends View {
             || mEmulator.isAlternateBufferActive())
             return 0;
         return travelFillRows(mTravelRevealRows, mTopRow,
-            mEmulator.getScreen().getActiveTranscriptRows());
+            mEmulator.getContent().historyRows());
     }
 
     /**
@@ -4158,7 +4159,7 @@ public final class TerminalView extends View {
         // foreground — and the gutter needs no fill of its own there either.
         final int defaultBack = reverseVideo
             ? palette[TextStyle.COLOR_INDEX_FOREGROUND] : palette[TextStyle.COLOR_INDEX_BACKGROUND];
-        final TerminalBuffer screen = mEmulator.getScreen();
+        final TerminalContent screen = mEmulator.getContent();
         final int topExternalRow = mTopRow;
         final int bottomExternalRow = mTopRow + rows - 1;
         for (int c = 0; c < columns; c++) {
@@ -4222,9 +4223,9 @@ public final class TerminalView extends View {
     /** A cell's resolved background colour, or 0 (transparent) when it is the default background —
      *  reusing {@link TerminalRenderer#resolveRunColors} so the gutter and the grid never disagree
      *  about what a cell's background actually is. */
-    private static int edgeBackColor(TerminalBuffer screen, int externalRow, int column, int[] palette,
+    private static int edgeBackColor(TerminalContent screen, int externalRow, int column, int[] palette,
                                       boolean boldWithBright, boolean reverseVideo, int defaultBack) {
-        final long style = screen.getStyleAt(externalRow, column);
+        final long style = screen.row(externalRow).getStyle(column);
         final int backColor = (int) TerminalRenderer.resolveRunColors(style, palette, boldWithBright, reverseVideo);
         return backColor == defaultBack ? 0 : backColor;
     }
@@ -4341,7 +4342,7 @@ public final class TerminalView extends View {
 
     private CharSequence getText() {
         if (mEmulator == null) return "";
-        return mEmulator.getScreen().getSelectedText(0, mTopRow, mEmulator.mColumns, mTopRow + mEmulator.mRows);
+        return mEmulator.getContent().text(0, mTopRow, mEmulator.mColumns, mTopRow + mEmulator.mRows);
     }
 
     public int getCursorX(float x) {
@@ -4502,7 +4503,7 @@ public final class TerminalView extends View {
      */
     public boolean revealBufferRow(int row, int marginRows) {
         if (mEmulator == null) return false;
-        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int lowest = -mEmulator.getContent().historyRows();
         int margin = Math.max(0, Math.min(marginRows, Math.max(0, (mEmulator.mRows - 1) / 2)));
         int target = mTopRow;
         if (row < mTopRow + margin) target = row - margin;
@@ -4519,7 +4520,7 @@ public final class TerminalView extends View {
 
     public boolean jumpToBufferRow(int row) {
         if (mEmulator == null) return false;
-        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int lowest = -mEmulator.getContent().historyRows();
         int newTopRow = Math.max(lowest, Math.min(0, row));
         if (newTopRow == mTopRow) return false;
         mTopRow = newTopRow;
@@ -4542,7 +4543,7 @@ public final class TerminalView extends View {
         int row = mEmulator.findPromptRow(mTopRow, backwards);
         if (row == Integer.MIN_VALUE)
             return false;
-        int lowest = -mEmulator.getScreen().getActiveTranscriptRows();
+        int lowest = -mEmulator.getContent().historyRows();
         int newTopRow = Math.max(lowest, Math.min(0, row));
         if (newTopRow == mTopRow) {
             // The prompt is already on screen: the view cannot scroll past its last row, so there is
