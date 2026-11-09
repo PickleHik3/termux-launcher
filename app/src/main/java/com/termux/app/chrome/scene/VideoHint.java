@@ -28,6 +28,8 @@ public final class VideoHint {
         @Nullable public Boolean hardware;
         /** True for a GIF that was converted to a video: described as a video of the GIF. */
         public boolean convertedFromGif;
+        /** True for an animated GIF that plays through an encoded version, so the CPU note is left out. */
+        public boolean versioned;
     }
 
     /** A GIF with more than one frame moves; a single frame stays a still. */
@@ -56,7 +58,7 @@ public final class VideoHint {
         if (f.durationMs > 0L) append(out, duration(f.durationMs));
         if (f.sizeBytes > 0L) append(out, size(f.sizeBytes));
         if (gif) {
-            append(out, "decodes on the CPU");
+            if (!f.versioned) append(out, "decodes on the CPU");
         } else if (f.hardware != null) {
             append(out, f.hardware ? "hardware decoded" : "software decoded on this phone, expect more battery");
         }

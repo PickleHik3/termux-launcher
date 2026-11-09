@@ -2,7 +2,6 @@ package com.termux.app.chrome.scene;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.system.Os;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -28,7 +27,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The stored video's frame-rate versions on disk (the rules are {@link VideoVariantRules}). The
  * video folder ({@link VideoImport#dir}) holds one import at a time: the untouched source
  * ({@code original.<ext>}, a video or a GIF), one {@code v<rate>.mp4} per prepared rate (the
- * original tier's file is a hard link or copy of the source), and {@code meta.json} with the
+ * original tier's file is a copy of the source), and {@code meta.json} with the
  * source's description. The identity shown to the user stays {@code video:<name>} in
  * {@code wallpaper_motion}; which file plays for a rate is {@link #playable}.
  *
@@ -146,6 +145,22 @@ public final class VideoVariants {
         File dir = VideoImport.dir(context.getApplicationContext());
         File variant = new File(dir, VideoVariantRules.variantFileName(rateHz));
         if (variant.isFile() && variant.length() > 0L) return variant;
+        // A GIF source has no playable original: while its version is being made, the nearest
+        // ready version plays rather than the GIF on the CPU path.
+        Meta meta = Meta.read(dir);
+        if (meta != null && meta.gif) {
+            File nearest = null;
+            int best = Integer.MAX_VALUE;
+            for (int r : VideoVariantRules.RATES) {
+                File f = new File(dir, VideoVariantRules.variantFileName(r));
+                int d = Math.abs(r - rateHz);
+                if (f.isFile() && f.length() > 0L && d < best) {
+                    best = d;
+                    nearest = f;
+                }
+            }
+            if (nearest != null) return nearest;
+        }
         return findOriginal(dir);
     }
 
@@ -354,7 +369,7 @@ public final class VideoVariants {
     }
 
     /**
-     * Creates the file for {@code rateHz} next to the source: a hard link (else a copy) when it is
+     * Creates the file for {@code rateHz} next to the source: a copy of the source when it is
      * a video's original tier, an encode otherwise. The lock is held. False on failure or cancel;
      * nothing partial stays.
      */
@@ -367,14 +382,9 @@ public final class VideoVariants {
         //noinspection ResultOfMethodCallIgnored
         tmp.delete();
         if (!meta.gif && rateHz == VideoVariantRules.originalRate(meta.fps)) {
+            // A copy, not a hard link: SELinux denies link() on app data files (avc: denied { link }).
             //noinspection ResultOfMethodCallIgnored
             target.delete();
-            try {
-                Os.link(original.getPath(), target.getPath());
-                return true;
-            } catch (Exception e) {
-                Log.w(TAG, "hard link failed, copying", e);
-            }
             try {
                 copyFile(original, tmp);
             } catch (IOException e) {

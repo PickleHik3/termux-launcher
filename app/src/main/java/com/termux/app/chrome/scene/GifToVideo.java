@@ -388,7 +388,10 @@ public final class GifToVideo {
             }
             if (mDrawable != null) {
                 mDrawable.stop();
-                mDrawable.clearAnimationCallbacks();
+                // Not clearAnimationCallbacks(): the drawable posts onAnimationEnd to the main looper,
+                // and the framework's runnable iterates the list without a null check, so clearing
+                // it here crashed the main thread (NPE in postOnAnimationEnd). The callback only
+                // sets a flag; the drawable is dropped and collected.
                 mDrawable = null;
             }
             if (!mOk) {

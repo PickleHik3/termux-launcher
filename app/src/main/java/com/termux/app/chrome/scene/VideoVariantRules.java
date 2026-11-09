@@ -68,8 +68,7 @@ public final class VideoVariantRules {
 
     /**
      * True once the untouched source can go: every available rate has its own file. For a video
-     * the original-tier file is a hard link (or copy) of the source, so dropping the source name
-     * loses nothing; for a GIF every available rate has been encoded.
+     * the original-tier file is a copy of the source, so dropping the source loses nothing; for a GIF every available rate has been encoded.
      */
     public static boolean pruneOriginal(float fps, @NonNull boolean[] readyByRateIndex) {
         int[] avail = availableRates(fps);

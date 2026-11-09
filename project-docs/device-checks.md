@@ -43,6 +43,19 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   (cosmetic). Still owed · drop build: Settings › Terminal › Clipboard & compatibility shows
   Terminal engine (the library is in the APK).
 
+- **Frame-rate versions of the stored video (11-09, round 3).** Emulator-checked: a 60 fps clip
+  imported at 30 stores original.mp4 + v60.mp4 (copy) + v30.mp4; tapping 15 shows "Preparing 15 fps
+  version… NN%" with Choose and Back to photo greyed and the pills live, the layer plays the source
+  meanwhile and swaps to v15.mp4 when done, and the source is pruned once 15/30/60 all exist; a
+  24 fps clip greys 60 with "Clip is 24 fps" and clamps a stored 60 to 30; a 20 fps GIF greys 60,
+  encodes 15 and 30 and drops the .gif after both. Owed · pong: import the 1080p60 clip at 30
+  (encode time by the clock, launcher CPU with the 30 fps file vs the 16% codec share measured
+  with the 60 fps source), tap 15 (codec share near 4%), the 15 and 30 versions look right (no
+  stutter from the frame drop, rotation kept on a rotated clip), `v<rate>.mp4` sizes; the GIF
+  flow on the 32 MB GIF (15 and 30 fps versions, time each); kill the app mid-encode and reopen
+  the Video page (the preparation resumes, no .tmp left); a still (one-frame) GIF stays a still
+  with no bar; light/dark and font 1.3 for the rate note and the longer status line.
+
 - **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
   shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
   waited in `SurfaceSyncGroup` for the scene SurfaceView's first buffer, which came only after the EGL

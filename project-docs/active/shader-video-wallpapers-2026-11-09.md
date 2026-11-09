@@ -158,8 +158,8 @@ at its own rate whatever the scene draws. Decided (developer):
   same bar ("Preparing N fps version… P%"); the draw rate switches at once and the source plays
   meanwhile. Default stays 30.
 - **Pruning.** The untouched source is kept next to the versions; once every rate the clip can
-  offer has its own file, the source is deleted (for a video the original-tier file is a hard link
-  to the source, so nothing is lost; for a GIF every rate is an encode and the GIF goes last).
+  offer has its own file, the source is deleted (for a video the original-tier file is a copy of the
+  source, made at import; SELinux denies hard links on app data; for a GIF every rate is an encode and the GIF goes last).
   A new import or Back to photo removes everything.
 - **Rates a clip cannot reach are greyed** with "Clip is N fps": the lowest rate at or above the
   clip's frame rate plays the untouched file; frames are never invented. A stored rate above the

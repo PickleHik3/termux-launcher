@@ -179,6 +179,7 @@ public final class VideoImport {
         boolean animated = gif && gifInfo != null && VideoHint.isAnimated(gifInfo.frames);
         float fps = gif ? gifFps(gifInfo) : fields.frameRate;
         fields.frameRate = fps;
+        fields.versioned = animated;
         String hint = VideoHint.describe(fields);
         if (!VideoVariants.acquire(null)) {
             //noinspection ResultOfMethodCallIgnored
@@ -211,8 +212,14 @@ public final class VideoImport {
             int rate = prefs == null ? SceneFramePolicy.DEFAULT_RATE_HZ : ShaderStore.readVideoRate(prefs);
             int clamped = VideoVariantRules.clampRate(fps, rate);
             if (prefs != null && clamped != rate) ShaderStore.writeVideoRate(prefs, clamped);
+            // A video's original tier is a copy of the source, made at import whatever the chosen
+            // rate, so the source can go once every lower rate has its encode.
+            if (!gif && !VideoVariants.makeVariant(app, dir, meta, VideoVariantRules.originalRate(fps), null,
+                    new AtomicBoolean())) {
+                Log.w(TAG, "no original-tier copy for " + name + "; the source plays");
+            }
             // A failed encode keeps the source: it plays at the chosen draw rate (a GIF on the CPU path).
-            if (!gif || animated) {
+            if ((!gif || animated) && VideoVariantRules.needsEncode(fps, gif, clamped)) {
                 GifToVideo.Progress p = progress;
                 if (!VideoVariants.makeVariant(app, dir, meta, clamped, p, new AtomicBoolean())) {
                     Log.w(TAG, "no " + clamped + " fps version of " + name + "; the source plays");
