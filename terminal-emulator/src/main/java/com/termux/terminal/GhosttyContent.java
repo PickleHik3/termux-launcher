@@ -25,6 +25,8 @@ final class GhosttyContent implements TerminalContent {
     private final GhosttyCore mCore;
     private final TerminalBuffer mMainBuffer;
     private final ScrollCount mScrolls;
+    /** Gives history rows read here the session's link ids. */
+    private final GhosttyLinks mLinks;
 
     /** The Java buffer holding the screen the last sync wrote: the main buffer or the alternate one. */
     private TerminalBuffer mScreen;
@@ -36,11 +38,12 @@ final class GhosttyContent implements TerminalContent {
     private long[] mKeys = new long[0];
     private int mWindowColumns;
 
-    GhosttyContent(GhosttyCore core, TerminalBuffer mainBuffer, ScrollCount scrolls) {
+    GhosttyContent(GhosttyCore core, TerminalBuffer mainBuffer, ScrollCount scrolls, GhosttyLinks links) {
         mCore = core;
         mMainBuffer = mainBuffer;
         mScreen = mainBuffer;
         mScrolls = scrolls;
+        mLinks = links;
     }
 
     /**
@@ -113,11 +116,53 @@ final class GhosttyContent implements TerminalContent {
             row.clear(TextStyle.NORMAL);
             row.setLineWrap(false);
         } else {
-            GhosttyMirror.applyRow(row, mWindowColumns, mCore.historyCells(), 0, mCore.historyExtra(), 0, result);
+            GhosttyMirror.applyRow(row, mWindowColumns, mCore.historyCells(), 0, mCore.historyExtra(), 0, result,
+                historyLinkIds(mWindowColumns));
         }
         mKeys[slot] = key;
         if (stats != null) stats.history(System.nanoTime() - start, 1);
         return row;
+    }
+
+    /** The link ids of the history row just read, or null. */
+    private int[] historyLinkIds(int columns) {
+        mLinks.begin();
+        return mLinks.cellIds(mCore.linkRuns(), mCore.linkUris(), 0, columns);
+    }
+
+    /** Mark the link ids the history rows read so far carry, so a full link pool keeps them. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        for (int slot = 0; slot < mWindow.length; slot++)
+            if (mWindow[slot] != null && mKeys[slot] != Long.MIN_VALUE) mWindow[slot].markUsedHyperlinkIds(used);
+    }
+
+    /**
+     * The closest row above or below {@code fromRow} (external, exclusive) that starts a shell
+     * prompt, or {@link Integer#MIN_VALUE}, as {@link TerminalBuffer#findRowWithMark} answers on the
+     * Java core. Screen rows carry the mark from the sync; history rows are searched in the library
+     * by their prompt flag alone, so a jump does not read every row's cells into the window.
+     */
+    int findPromptRow(int fromRow, boolean backwards) {
+        int first = -historyRows();
+        int last = mScreen.mScreenRows - 1;
+        if (backwards) {
+            for (int row = Math.min(fromRow - 1, last); row >= 0; row--)
+                if (mScreen.row(row).mShellIntegrationMark == TerminalRow.MARK_PROMPT_START) return row;
+            int start = Math.min(fromRow - 1, -1);
+            if (start >= first) {
+                int found = mCore.findPromptRow(mLibraryHistory + start, mLibraryHistory + first);
+                if (found >= 0) return found - mLibraryHistory;
+            }
+        } else {
+            int start = Math.max(fromRow + 1, first);
+            if (start <= -1) {
+                int found = mCore.findPromptRow(mLibraryHistory + start, mLibraryHistory - 1);
+                if (found >= 0) return found - mLibraryHistory;
+            }
+            for (int row = Math.max(fromRow + 1, 0); row <= last; row++)
+                if (mScreen.row(row).mShellIntegrationMark == TerminalRow.MARK_PROMPT_START) return row;
+        }
+        return Integer.MIN_VALUE;
     }
 
     /** The slot for an absolute index, sizing the window to the screen first. */
@@ -168,7 +213,8 @@ final class GhosttyContent implements TerminalContent {
         int[] extra = mCore.historyExtra();
         for (int y = -rows; y < 0; y++) {
             int result = mCore.readHistoryRow(mLibraryHistory + y, cells, extra);
-            if (result >= 0) GhosttyMirror.applyRow(mMainBuffer.row(y), mMainBuffer.mColumns, cells, 0, extra, 0, result);
+            if (result >= 0) GhosttyMirror.applyRow(mMainBuffer.row(y), mMainBuffer.mColumns, cells, 0, extra, 0, result,
+                historyLinkIds(mMainBuffer.mColumns));
         }
     }
 }

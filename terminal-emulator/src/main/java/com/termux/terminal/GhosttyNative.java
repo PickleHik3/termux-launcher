@@ -31,6 +31,20 @@ final class GhosttyNative {
     /** Set in a row result when the row soft-wraps into the next; the low bits count its extras. */
     static final int ROW_WRAPPED = 1 << 24;
     static final int ROW_EXTRA_MASK = ROW_WRAPPED - 1;
+    /** Set in a row result when OSC 133 marked the row as the first line of a shell prompt. */
+    static final int ROW_PROMPT = 1 << 25;
+
+    /**
+     * The link runs a sync or row read writes: element 0 is the run count, then per run of
+     * {@link #LINK_INTS} its row, first column, end column (exclusive), and the offset and length
+     * of its UTF-8 URI in the byte array passed beside it.
+     */
+    static final int LINK_Y = 0;
+    static final int LINK_X0 = 1;
+    static final int LINK_X1 = 2;
+    static final int LINK_URI_OFFSET = 3;
+    static final int LINK_URI_LENGTH = 4;
+    static final int LINK_INTS = 5;
 
     /** Extra code points (combining marks and the like) one sync or row read carries at most. */
     static final int EXTRA_CAPACITY = 8192;
@@ -46,7 +60,9 @@ final class GhosttyNative {
     static final int STATE_MODES = 7;
     static final int STATE_KITTY_FLAGS = 8;
     static final int STATE_CURSOR_STYLE = 9;
-    static final int STATE_COUNT = 10;
+    /** The pointer shape a program asked for with OSC 22, as a {@link #mouseShapeName} index. */
+    static final int STATE_MOUSE_SHAPE = 10;
+    static final int STATE_COUNT = 11;
 
     /** Bits of {@link #STATE_FLAGS}. */
     static final int FLAG_CURSOR_VISIBLE = 1;
@@ -86,7 +102,26 @@ final class GhosttyNative {
     static final int CURSOR_UNDERLINE = 2;
     static final int CURSOR_BLOCK_HOLLOW = 3;
 
-    /** Where native calls come back to during a write. Neither call may touch the terminal. */
+    // Kinds of Sink.onEvent.
+
+    /** OSC 133: {@code a} is a {@code SEMANTIC_*} step, {@code b} the exit code or {@link #NO_EXIT_CODE}. */
+    static final int EVENT_PROMPT = 1;
+    /** OSC 9;4: {@code a} is the state (0-4, as the Java core numbers them), {@code b} the percent or -1. */
+    static final int EVENT_PROGRESS = 2;
+    /** OSC 9 or OSC 777: {@code first} is the title (empty when the protocol has none), {@code second} the body. */
+    static final int EVENT_NOTIFICATION = 3;
+    /** OSC 99: {@code first} is everything after {@code 99;}. */
+    static final int EVENT_KITTY_NOTIFICATION = 4;
+
+    /** OSC 133 steps in {@link #EVENT_PROMPT}. */
+    static final int SEMANTIC_PROMPT_START = 1;
+    static final int SEMANTIC_INPUT_START = 2;
+    static final int SEMANTIC_OUTPUT_START = 3;
+    static final int SEMANTIC_COMMAND_END = 4;
+    /** {@link #EVENT_PROMPT}'s exit code when the shell reported none. */
+    static final int NO_EXIT_CODE = Integer.MIN_VALUE;
+
+    /** Where native calls come back to during a write. No call may touch the terminal. */
     interface Sink {
         /** Bytes the terminal answers the program with (device reports and the like). */
         void onPtyReply(byte[] data);
@@ -99,6 +134,25 @@ final class GhosttyNative {
          * so the Java core's code answers it. Called between writes, never from a library callback.
          */
         void onKittyQuery(byte[] apc);
+
+        /** Something a program asked for (see EVENT_*); strings are UTF-8 or null. */
+        void onEvent(int kind, int a, int b, byte[] first, byte[] second);
+    }
+
+    /**
+     * OSC 22 pointer shapes by the library's number, as the CSS names the Java core keeps
+     * ({@code TerminalEmulator.getPointerShape}).
+     */
+    private static final String[] MOUSE_SHAPES = {
+        "default", "context-menu", "help", "pointer", "progress", "wait", "cell", "crosshair", "text",
+        "vertical-text", "alias", "copy", "move", "no-drop", "not-allowed", "grab", "grabbing", "all-scroll",
+        "col-resize", "row-resize", "n-resize", "e-resize", "s-resize", "w-resize", "ne-resize", "nw-resize",
+        "se-resize", "sw-resize", "ew-resize", "ns-resize", "nesw-resize", "nwse-resize", "zoom-in", "zoom-out",
+    };
+
+    /** The CSS name of a library pointer shape, or null for one this build does not know. */
+    static String mouseShapeName(int shape) {
+        return shape >= 0 && shape < MOUSE_SHAPES.length ? MOUSE_SHAPES[shape] : null;
     }
 
     /**
@@ -170,12 +224,24 @@ final class GhosttyNative {
     /**
      * Fill {@code state} (see STATE_*), and for each row changed since the last sync its cells in
      * {@code screen} at {@code y * columns * CELL_INTS} and its extras in {@code extra}, in row
-     * order; {@code dirty[y]} is the row result (extras | {@link #ROW_WRAPPED}) or -1 if unchanged.
+     * order; {@code dirty[y]} is the row result (extras | {@link #ROW_WRAPPED} | {@link #ROW_PROMPT})
+     * or -1 if unchanged. The changed rows' OSC 8 links go to {@code links} and {@code uris} (see
+     * {@link #LINK_INTS}).
      */
-    static native boolean nativeSync(long handle, int[] state, int[] screen, int[] dirty, int[] extra);
+    static native boolean nativeSync(long handle, int[] state, int[] screen, int[] dirty, int[] extra,
+                                     int[] links, byte[] uris);
 
-    /** Read history row {@code y} (0 is the oldest kept). Valid between a sync and the next write. */
-    static native int nativeReadHistoryRow(long handle, int y, int[] cells, int[] extra);
+    /**
+     * Read history row {@code y} (0 is the oldest kept), its links into {@code links} and {@code uris}
+     * as row 0. Valid between a sync and the next write.
+     */
+    static native int nativeReadHistoryRow(long handle, int y, int[] cells, int[] extra, int[] links, byte[] uris);
+
+    /**
+     * The first history row from {@code from} towards {@code to} (both inclusive, 0 is the oldest
+     * kept) that starts a shell prompt, or -1. Reads only the rows' prompt flags.
+     */
+    static native int nativeFindPromptRow(long handle, int from, int to);
 
     /** The current 259 colours as 0xAARRGGBB. */
     static native boolean nativeGetColors(long handle, int[] out);

@@ -10,8 +10,9 @@ import java.util.ArrayList;
  * shell's output and copies the changed screen rows into its own buffer; history stays here and is
  * read through {@link GhosttyContent} when a reader asks.
  *
- * <p>Main thread only, like the emulator. Replies and clipboard text that arrive during a write are
- * held here and handed on after it, so nothing reaches back into the terminal mid-write.
+ * <p>Main thread only, like the emulator. Replies, clipboard text and events (prompt marks,
+ * progress, notifications) that arrive during a write are held here and handed on after it, in the
+ * order they happened, so nothing reaches back into the terminal mid-write.
  */
 final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySource, GhosttyImageCache.Source {
 
@@ -40,6 +41,29 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     private final int[] mHistoryExtra = new int[HISTORY_EXTRA_CAPACITY];
     private final ByteArrayOutputStream mReplies = new ByteArrayOutputStream();
     private final ArrayList<String> mClipboard = new ArrayList<>();
+    /** Events since the last delivery, oldest first; at most {@link #MAX_EVENTS}. */
+    private final ArrayList<Event> mEvents = new ArrayList<>();
+    /** OSC 8 link runs of the last sync or history row read (see {@link GhosttyNative#LINK_INTS}). */
+    private final int[] mLinkRuns = new int[1 + GhosttyLinks.MAX_RUNS * GhosttyNative.LINK_INTS];
+    private final byte[] mLinkUris = new byte[GhosttyLinks.URI_BYTES];
+
+    /**
+     * Events one turn of output holds before later ones are dropped: a turn is at most a few ms of
+     * parsing, and a stream of progress reports collapses into its latest (see {@link #onEvent}).
+     */
+    static final int MAX_EVENTS = 1024;
+
+    /** Something a program asked for during a write, and how many reply bytes came before it. */
+    private static final class Event {
+        int kind, a, b;
+        byte[] first, second;
+        int replyMark;
+    }
+
+    /** Where {@link #deliver} hands events; strings are decoded, null when absent. */
+    interface EventTarget {
+        void onGhosttyEvent(int kind, int a, int b, String first, String second);
+    }
 
     private GhosttyCore() {}
 
@@ -141,7 +165,25 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
 
     /** Read the terminal's state and changed rows; false when there is nothing to read. */
     boolean sync() {
-        return mHandle != 0 && GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra);
+        return mHandle != 0 && GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra, mLinkRuns, mLinkUris);
+    }
+
+    /** OSC 8 link runs the last sync or history row read wrote. */
+    int[] linkRuns() {
+        return mLinkRuns;
+    }
+
+    /** The UTF-8 URIs {@link #linkRuns()} point into. */
+    byte[] linkUris() {
+        return mLinkUris;
+    }
+
+    /**
+     * The first history row from {@code from} towards {@code to} (inclusive, 0 the oldest kept)
+     * that starts a shell prompt, or -1.
+     */
+    int findPromptRow(int from, int to) {
+        return mHandle == 0 ? -1 : GhosttyNative.nativeFindPromptRow(mHandle, from, to);
     }
 
     int[] state() {
@@ -178,7 +220,7 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
 
     @Override
     public int readHistoryRow(int y, int[] cells, int[] extra) {
-        return mHandle == 0 ? -1 : GhosttyNative.nativeReadHistoryRow(mHandle, y, cells, extra);
+        return mHandle == 0 ? -1 : GhosttyNative.nativeReadHistoryRow(mHandle, y, cells, extra, mLinkRuns, mLinkUris);
     }
 
     String title() {
@@ -212,6 +254,70 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     @Override
     public void onClipboardWrite(byte[] data) {
         if (data != null) mClipboard.add(new String(data, StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public void onEvent(int kind, int a, int b, byte[] first, byte[] second) {
+        int mark = mReplies.size();
+        if (kind == GhosttyNative.EVENT_PROGRESS && !mEvents.isEmpty() && progressReplacesEarlier(a, b)) {
+            // A report that sets both state and value makes the one just before it moot.
+            Event last = mEvents.get(mEvents.size() - 1);
+            if (last.kind == GhosttyNative.EVENT_PROGRESS && last.replyMark == mark) {
+                last.a = a;
+                last.b = b;
+                return;
+            }
+        }
+        if (mEvents.size() >= MAX_EVENTS) return;
+        Event event = new Event();
+        event.kind = kind;
+        event.a = a;
+        event.b = b;
+        event.first = first;
+        event.second = second;
+        event.replyMark = mark;
+        mEvents.add(event);
+    }
+
+    /**
+     * Whether a progress report leaves nothing of the reports before it ({@code
+     * TerminalEmulator.setProgress}): clearing does, and so does a determinate state with a
+     * percentage. A report without one keeps the earlier value, so it cannot replace it.
+     */
+    private static boolean progressReplacesEarlier(int state, int percent) {
+        return state == TerminalEmulator.PROGRESS_STATE_NONE
+            || (percent >= 0 && (state == TerminalEmulator.PROGRESS_STATE_NORMAL
+            || state == TerminalEmulator.PROGRESS_STATE_ERROR || state == TerminalEmulator.PROGRESS_STATE_PAUSED));
+    }
+
+    /**
+     * Send the replies held since the last call to the program and hand the events to
+     * {@code target}, interleaved as they happened: a reply an event's handler writes (a kitty
+     * notification query) follows the replies to sequences that came before it.
+     */
+    void deliver(EventTarget target, TerminalOutput output) {
+        if (mEvents.isEmpty()) {
+            flushReplies(output);
+            return;
+        }
+        byte[] replies = mReplies.size() == 0 ? null : mReplies.toByteArray();
+        mReplies.reset();
+        int sent = 0;
+        // Handlers run with the list detached, so a handler that reaches back here sees it empty.
+        Event[] events = mEvents.toArray(new Event[0]);
+        mEvents.clear();
+        for (Event event : events) {
+            if (replies != null && event.replyMark > sent) {
+                output.write(replies, sent, event.replyMark - sent);
+                sent = event.replyMark;
+            }
+            target.onGhosttyEvent(event.kind, event.a, event.b, decode(event.first), decode(event.second));
+        }
+        if (replies != null && sent < replies.length) output.write(replies, sent, replies.length - sent);
+    }
+
+    private static String decode(byte[] utf8) {
+        return utf8 == null ? null : new String(utf8, StandardCharsets.UTF_8);
     }
 
     /** Send the replies held since the last call to the program. */

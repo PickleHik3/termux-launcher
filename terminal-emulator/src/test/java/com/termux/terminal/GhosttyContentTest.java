@@ -289,10 +289,15 @@ public class GhosttyContentTest extends TerminalTestCase {
         assertEquals(firstIndex, java.firstRowIndex());
     }
 
-    public void testPromptJumpsFindNothingOnTheGhosttyCore() {
+    public void testPromptJumpsReachAPromptInHistoryOnTheGhosttyCore() {
         if (!libraryBuilt()) return;
+        TerminalEmulator java = emulator(8, 4, 100, false);
         TerminalEmulator ghostty = emulator(8, 4, 100, true);
-        feed(ghostty, "\033]133;A\007$ ls\r\n" + numbered(0, 20));
-        assertEquals(Integer.MIN_VALUE, ghostty.findPromptRow(0, true));
+        for (TerminalEmulator emulator : new TerminalEmulator[]{java, ghostty})
+            feed(emulator, "\033]133;A\007$ ls\r\n" + numbered(0, 20));
+        int row = ghostty.findPromptRow(0, true);
+        assertEquals(java.findPromptRow(0, true), row);
+        assertTrue("the prompt is in history: " + row, row < 0 && row != Integer.MIN_VALUE);
+        assertEquals("$ ls", rowText(ghostty.getContent(), row).trim());
     }
 }

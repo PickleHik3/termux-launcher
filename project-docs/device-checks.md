@@ -51,6 +51,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `CSI > q` on Ghostty ends in ` (libghostty-vt 1.0)`; `frames kitty ghostty` against
   `frames kitty java`, and PSS after `kitten icat` of a large image then `clear` (bitmap freed two
   frames after it leaves the screen). Known gap: an image scrolled wholly into history is not drawn.
+  Wave 3 slice 4 (exp/ghostty-slice4, links, prompts, progress, pointer, notifications): both
+  cores, `look ghostty` against `look java`; `ls --hyperlink=always` then tap a link on screen and
+  after scrolling it 200 rows up (underlined whole, opens the same URL); a shell with OSC 133
+  prompts: jump between prompts into scrollback, a failing command's exit code where the app shows
+  it; `printf '\e]9;4;1;40\a'` then `\e]9;4;3\a` then `\e]9;4;0\a` (pill ring follows); `printf
+  '\e]9;hi\a'`, `'\e]777;notify;T;B\a'` and a kitty `\e]99;;Done\e\\` each post one notification;
+  `printf '\e]66;s=2;Big\a\n'` prints "Big" at normal size; tlstore still reports no text sizing.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame

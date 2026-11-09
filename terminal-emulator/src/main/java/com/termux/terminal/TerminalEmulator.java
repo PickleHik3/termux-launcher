@@ -1528,9 +1528,11 @@ public final class TerminalEmulator {
     // Experimental libghostty-vt core, chosen per session with debug.tl.terminal_core=ghostty.
     // Ghostty parses; the screen rows each sync changed are copied into this emulator's buffer, and
     // cursor and mode bits into its fields. History stays in Ghostty: readers reach it through
-    // getContent() (GhosttyContent), and the Java transcript stays empty. Kitty graphics are
-    // Ghostty's, drawn through GhosttyImages. Sixel, iTerm2 images, text sizing, kitty
-    // notifications, prompt marks and the fork's own modes (7727, 5523) are not handled in this mode.
+    // getContent() (GhosttyContent), and the Java transcript stays empty. OSC 8 links, OSC 133
+    // prompt marks and exit codes, OSC 9;4 progress, OSC 22 pointer shapes and OSC 9/99/777
+    // notifications reach the same state and callbacks as on the Java core (GhosttyCore events).
+    // Kitty graphics are Ghostty's, drawn through GhosttyImages. Sixel, iTerm2 images and the fork's
+    // own modes (7727, 5523) are not handled in this mode; OSC 66 sized text is written at normal size.
 
     /** The Ghostty core parsing this session's output, or null for the Java parser. */
     private GhosttyCore mGhostty;
@@ -1542,6 +1544,36 @@ public final class TerminalEmulator {
     private final int[] mGhosttyColors = new int[TextStyle.NUM_INDEXED_COLORS];
     /** The cursor shape Ghostty reported last; only a change made by the program moves ours. */
     private int mGhosttyCursorShape = -1;
+    /** The OSC 22 pointer shape Ghostty reported last; as with the cursor, only a change moves ours. */
+    private int mGhosttyMouseShape = -1;
+    /** Gives Ghostty rows this session's OSC 8 link ids; null exactly when {@link #mGhostty} is. */
+    private GhosttyLinks mGhosttyLinks;
+
+    /** What a Ghostty event does: the same as the sequence it came from does on the Java core. */
+    private final GhosttyCore.EventTarget mGhosttyEvents = new GhosttyCore.EventTarget() {
+        @Override
+        public void onGhosttyEvent(int kind, int a, int b, String first, String second) {
+            switch (kind) {
+                case GhosttyNative.EVENT_PROMPT:
+                    onGhosttyShellIntegration(a, b);
+                    break;
+                case GhosttyNative.EVENT_PROGRESS:
+                    // As doOscProgress: a negative percentage keeps the last value.
+                    setProgress(a, b);
+                    break;
+                case GhosttyNative.EVENT_NOTIFICATION:
+                    // OSC 9 carries no title, which the Java core passes as null.
+                    if (second != null && !(second.isEmpty() && (first == null || first.isEmpty())))
+                        mSession.onNotification(first == null || first.isEmpty() ? null : first, second);
+                    break;
+                case GhosttyNative.EVENT_KITTY_NOTIFICATION:
+                    if (first != null) mKittyNotifications.handle(first, mKittyNotificationHandler);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
     /** The kitty keyboard flags Ghostty holds for the current screen. */
     private int mGhosttyKeyboardFlags;
     /** Set while {@link #applyGhosttyState} runs, so ending a hold from inside it does not sync again. */
@@ -1583,11 +1615,21 @@ public final class TerminalEmulator {
             GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
         if (core == null) return false;
         mGhostty = core;
-        mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls);
+        mGhosttyLinks = new GhosttyLinks(mHyperlinks, new GhosttyLinks.UsedIds() {
+            @Override
+            public void markUsed(boolean[] used) {
+                mMainBuffer.markUsedHyperlinkIds(used);
+                mAltBuffer.markUsedHyperlinkIds(used);
+                GhosttyContent content = mGhosttyContent;
+                if (content != null) content.markUsedHyperlinkIds(used);
+            }
+        });
+        mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls, mGhosttyLinks);
         mGhosttyImages = new GhosttyImages(core, mSession, TerminalEmulator::monotonicMillis,
             GhosttyImages.bitmapCache(core));
         mMainBuffer.clearTranscript();
         mGhosttyCursorShape = -1;
+        mGhosttyMouseShape = -1;
         try {
             applyGhosttyState();
         } catch (RuntimeException e) {
@@ -1614,6 +1656,7 @@ public final class TerminalEmulator {
         mGhosttyContent = null;
         if (mGhosttyImages != null) mGhosttyImages.release();
         mGhosttyImages = null;
+        mGhosttyLinks = null;
         if (core == null) return;
         try {
             // Output parsed since the last sync would move history under the rows handed over.
@@ -1699,7 +1742,8 @@ public final class TerminalEmulator {
             mScreen == mMainBuffer ? state[GhosttyNative.STATE_SCROLLED] : 0);
         if (state[GhosttyNative.STATE_COLS] == mColumns && state[GhosttyNative.STATE_ROWS] == mRows
             && mScreen.mColumns == mColumns && mScreen.mScreenRows == mRows) {
-            GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra());
+            GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra(),
+                mGhosttyLinks, core.linkRuns(), core.linkUris());
         }
         mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
         mCursorRow = Math.max(0, Math.min(mRows - 1, state[GhosttyNative.STATE_CURSOR_Y]));
@@ -1714,6 +1758,10 @@ public final class TerminalEmulator {
                 : TERMINAL_CURSOR_STYLE_BLOCK;
         }
         mGhosttyCursorShape = shape;
+        int mouseShape = state[GhosttyNative.STATE_MOUSE_SHAPE];
+        if (mGhosttyMouseShape >= 0 && mouseShape != mGhosttyMouseShape)
+            setPointerShape(GhosttyNative.mouseShapeName(mouseShape));
+        mGhosttyMouseShape = mouseShape;
 
         if ((flags & GhosttyNative.FLAG_TITLE_CHANGED) != 0) setTitle(core.title());
         if ((flags & GhosttyNative.FLAG_PWD_CHANGED) != 0) setReportedWorkingDirectory(core.workingDirectory());
@@ -1721,7 +1769,7 @@ public final class TerminalEmulator {
             System.arraycopy(mGhosttyColors, 0, mColors.mCurrentColors, 0, mGhosttyColors.length);
             mSession.onColorsChanged();
         }
-        core.flushReplies(mSession);
+        core.deliver(mGhosttyEvents, mSession);
         core.flushClipboard(mSession);
         if ((flags & GhosttyNative.FLAG_BELL) != 0) mSession.onBell();
     }
@@ -4681,6 +4729,30 @@ public final class TerminalEmulator {
     }
 
     /**
+     * An OSC 133 step the Ghostty core reported, kept as {@link #doShellIntegration} keeps it. The
+     * prompt rows themselves are read from Ghostty's rows ({@link GhosttyContent#findPromptRow}).
+     */
+    private void onGhosttyShellIntegration(int step, int exitCode) {
+        mShellIntegrationSeen = true;
+        switch (step) {
+            case GhosttyNative.SEMANTIC_PROMPT_START:
+                mShellIntegrationCommandRunning = false;
+                break;
+            case GhosttyNative.SEMANTIC_OUTPUT_START:
+                mShellIntegrationCommandRunning = true;
+                break;
+            case GhosttyNative.SEMANTIC_COMMAND_END:
+                mShellIntegrationCommandRunning = false;
+                mLastCommandExitCode = exitCode == GhosttyNative.NO_EXIT_CODE ? COMMAND_EXIT_CODE_UNKNOWN : exitCode;
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
      * The exit status the shell last reported through OSC 133;D, or {@link #COMMAND_EXIT_CODE_UNKNOWN}
      * when no command has finished or shell integration is not in use.
      */
@@ -4766,8 +4838,8 @@ public final class TerminalEmulator {
      * {@link Integer#MIN_VALUE} if there is none. Rows are in the external coordinate system.
      */
     public int findPromptRow(int fromRow, boolean backwards) {
-        // The Ghostty core keeps no OSC 133 marks yet; walking its history would read every row for none.
-        if (mGhostty != null) return Integer.MIN_VALUE;
+        GhosttyContent ghostty = mGhosttyContent;
+        if (ghostty != null) return ghostty.findPromptRow(fromRow, backwards);
         return mScreen.findRowWithMark(fromRow, TerminalRow.MARK_PROMPT_START, backwards);
     }
 
@@ -5364,6 +5436,8 @@ public final class TerminalEmulator {
             try {
                 mGhostty.reset();
                 mGhosttyContent.forgetHistory();
+                // The pointer shape was just reset to the terminal's own; Ghostty's is only recorded.
+                mGhosttyMouseShape = -1;
                 applyGhosttyState();
             } catch (RuntimeException e) {
                 ghosttyFailed(e);
