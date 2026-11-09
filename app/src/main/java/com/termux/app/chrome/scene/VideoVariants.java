@@ -2,12 +2,27 @@ package com.termux.app.chrome.scene;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.system.Os;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The stored video's frame-rate versions on disk (the rules are {@link VideoVariantRules}). The
@@ -98,7 +113,18 @@ public final class VideoVariants {
     /** What is stored, or null when no video is stored (the folder is empty or has no meta). Reads disk; call off main or accept a few ms. */
     @Nullable
     public static State state(@NonNull Context context) {
-        throw new UnsupportedOperationException("engine wave: not built yet");
+        File dir = VideoImport.dir(context.getApplicationContext());
+        cleanTmp(dir);
+        Meta meta = Meta.read(dir);
+        if (meta == null) return null;
+        boolean[] ready = new boolean[VideoVariantRules.RATES.length];
+        long[] sizes = new long[ready.length];
+        for (int i = 0; i < ready.length; i++) {
+            File f = new File(dir, VideoVariantRules.variantFileName(VideoVariantRules.RATES[i]));
+            ready[i] = f.isFile() && f.length() > 0L;
+            sizes[i] = ready[i] ? f.length() : 0L;
+        }
+        return new State(meta.name, meta.fps, meta.gif, ready, sizes, findOriginal(dir) != null, meta.hint);
     }
 
     /**
@@ -108,7 +134,10 @@ public final class VideoVariants {
      */
     @Nullable
     public static File playable(@NonNull Context context, int rateHz) {
-        throw new UnsupportedOperationException("engine wave: not built yet");
+        File dir = VideoImport.dir(context.getApplicationContext());
+        File variant = new File(dir, VideoVariantRules.variantFileName(rateHz));
+        if (variant.isFile() && variant.length() > 0L) return variant;
+        return findOriginal(dir);
     }
 
     /**
@@ -121,12 +150,282 @@ public final class VideoVariants {
     @NonNull
     public static Result prepare(@NonNull Context context, int rateHz, @Nullable Progress progress,
                                  @NonNull AtomicBoolean cancel) {
-        throw new UnsupportedOperationException("engine wave: not built yet");
+        Context app = context.getApplicationContext();
+        if (!acquire(cancel)) return new Result(false, null, "Cancelled.");
+        try {
+            File dir = VideoImport.dir(app);
+            cleanTmp(dir);
+            Meta meta = Meta.read(dir);
+            if (meta == null) return new Result(false, null, "No video is stored.");
+            File target = new File(dir, VideoVariantRules.variantFileName(rateHz));
+            if (!VideoVariantRules.isAvailable(meta.fps, rateHz)) return new Result(true, findOriginal(dir), null);
+            if (target.isFile() && target.length() > 0L) return new Result(true, target, null);
+            if (meta.gif && !meta.animated) return new Result(true, findOriginal(dir), null);
+            if (findOriginal(dir) == null) return new Result(false, null, "The original video is gone.");
+            boolean made = makeVariant(app, dir, meta, rateHz,
+                progress == null ? null : progress::onProgress, cancel);
+            if (cancel.get()) return new Result(false, null, "Cancelled.");
+            if (!made) return new Result(false, null, "Could not prepare the " + rateHz + " fps version.");
+            finishRound(app, dir, meta);
+            return new Result(true, target, null);
+        } finally {
+            LOCK.unlock();
+        }
     }
 
     /** Removes everything in the video folder (a new import or Back to photo). */
     public static void deleteAll(@NonNull Context context) {
-        throw new UnsupportedOperationException("engine wave: not built yet");
+        if (!acquire(null)) return;
+        try {
+            deleteAllLocked(context.getApplicationContext());
+        } finally {
+            LOCK.unlock();
+        }
+    }
+
+    // ---- engine internals (shared with VideoImport) -------------------------------------------
+
+    private static final String TAG = "VideoVariants";
+    static final String META_FILE = "meta.json";
+    static final String ORIGINAL = "original";
+
+    /** One prepare or import at a time per process; a second caller waits. */
+    static final ReentrantLock LOCK = new ReentrantLock();
+
+    /** Takes {@link #LOCK}, giving up (false) when {@code cancel} is set while waiting. */
+    static boolean acquire(@Nullable AtomicBoolean cancel) {
+        try {
+            while (!LOCK.tryLock(200L, TimeUnit.MILLISECONDS)) {
+                if (cancel != null && cancel.get()) return false;
+            }
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /** The source's description, {@code meta.json} in the video folder. */
+    static final class Meta {
+        @NonNull final String name;
+        @NonNull final String mime;
+        final int width, height;
+        final float fps;
+        final long durationMs, sizeBytes;
+        final boolean gif;
+        /** A GIF with more than one frame; a still GIF is never encoded. */
+        final boolean animated;
+        @Nullable final Boolean hardware;
+        @NonNull final String hint;
+
+        Meta(@NonNull String name, @NonNull String mime, int width, int height, float fps, long durationMs,
+             long sizeBytes, boolean gif, boolean animated, @Nullable Boolean hardware, @NonNull String hint) {
+            this.name = name;
+            this.mime = mime;
+            this.width = width;
+            this.height = height;
+            this.fps = fps;
+            this.durationMs = durationMs;
+            this.sizeBytes = sizeBytes;
+            this.gif = gif;
+            this.animated = animated;
+            this.hardware = hardware;
+            this.hint = hint;
+        }
+
+        @NonNull
+        String toJson() {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("name", name);
+                o.put("mime", mime);
+                o.put("width", width);
+                o.put("height", height);
+                o.put("fps", (double) fps);
+                o.put("durationMs", durationMs);
+                o.put("sizeBytes", sizeBytes);
+                o.put("gif", gif);
+                o.put("animated", animated);
+                if (hardware != null) o.put("hardware", hardware.booleanValue());
+                o.put("hint", hint);
+                return o.toString(2);
+            } catch (JSONException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        /** Null when the text is not a description with a name. */
+        @Nullable
+        static Meta parse(@Nullable String json) {
+            if (json == null) return null;
+            try {
+                JSONObject o = new JSONObject(json);
+                String name = o.optString("name", "");
+                if (name.isEmpty()) return null;
+                boolean gif = o.optBoolean("gif", false);
+                return new Meta(name, o.optString("mime", ""), o.optInt("width", 0), o.optInt("height", 0),
+                    (float) o.optDouble("fps", 0.0), o.optLong("durationMs", 0L), o.optLong("sizeBytes", 0L), gif,
+                    o.optBoolean("animated", gif), o.has("hardware") ? o.optBoolean("hardware") : null,
+                    o.optString("hint", ""));
+            } catch (JSONException e) {
+                return null;
+            }
+        }
+
+        @Nullable
+        static Meta read(@NonNull File dir) {
+            File f = new File(dir, META_FILE);
+            if (!f.isFile()) return null;
+            try (InputStream in = new FileInputStream(f)) {
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+                return parse(new String(b.toByteArray(), StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                Log.w(TAG, "could not read " + META_FILE, e);
+                return null;
+            }
+        }
+
+        boolean write(@NonNull File dir) {
+            File tmp = new File(dir, META_FILE + ".tmp");
+            try (OutputStream out = new FileOutputStream(tmp, false)) {
+                out.write(toJson().getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                Log.w(TAG, "could not write " + META_FILE, e);
+                //noinspection ResultOfMethodCallIgnored
+                tmp.delete();
+                return false;
+            }
+            return tmp.renameTo(new File(dir, META_FILE));
+        }
+    }
+
+    /** The untouched source ({@code original.<ext>}), or null. */
+    @Nullable
+    static File findOriginal(@NonNull File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            String n = f.getName();
+            if (n.startsWith(ORIGINAL + ".") && !n.endsWith(".tmp") && f.isFile()) return f;
+        }
+        return null;
+    }
+
+    /** {@code original.<ext>} for a stored name: the name's own extension when plain, else mp4 (gif for a GIF). */
+    @NonNull
+    static String originalFileName(@NonNull String name, boolean gif) {
+        if (gif) return ORIGINAL + ".gif";
+        int dot = name.lastIndexOf('.');
+        String ext = dot >= 0 ? name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT) : "";
+        boolean plain = !ext.isEmpty() && ext.length() <= 4 && ext.matches("[a-z0-9]+") && !ext.equals("gif")
+            && !ext.equals("tmp");
+        return ORIGINAL + "." + (plain ? ext : "mp4");
+    }
+
+    /** Deletes half-written encodes. */
+    static void cleanTmp(@NonNull File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            //noinspection ResultOfMethodCallIgnored
+            if (f.getName().endsWith(".tmp")) f.delete();
+        }
+    }
+
+    static void deleteAllLocked(@NonNull Context app) {
+        File[] files = VideoImport.dir(app).listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
+    }
+
+    /**
+     * Creates the file for {@code rateHz} next to the source: a hard link (else a copy) when it is
+     * a video's original tier, an encode otherwise. The lock is held. False on failure or cancel;
+     * nothing partial stays.
+     */
+    static boolean makeVariant(@NonNull Context app, @NonNull File dir, @NonNull Meta meta, int rateHz,
+                               @Nullable GifToVideo.Progress progress, @NonNull AtomicBoolean cancel) {
+        File original = findOriginal(dir);
+        if (original == null) return false;
+        File target = new File(dir, VideoVariantRules.variantFileName(rateHz));
+        File tmp = new File(dir, target.getName() + ".tmp");
+        //noinspection ResultOfMethodCallIgnored
+        tmp.delete();
+        if (!meta.gif && rateHz == VideoVariantRules.originalRate(meta.fps)) {
+            //noinspection ResultOfMethodCallIgnored
+            target.delete();
+            try {
+                Os.link(original.getPath(), target.getPath());
+                return true;
+            } catch (Exception e) {
+                Log.w(TAG, "hard link failed, copying", e);
+            }
+            try {
+                copyFile(original, tmp);
+            } catch (IOException e) {
+                Log.w(TAG, "could not copy the source", e);
+                //noinspection ResultOfMethodCallIgnored
+                tmp.delete();
+                return false;
+            }
+            return tmp.renameTo(target);
+        }
+        GifToVideo.Output out;
+        if (meta.gif) {
+            int maxSide = Math.min(VideoChannel.GIF_MAX_SIDE_PX, VideoImport.screenLongSide(app));
+            out = GifToVideo.convert(original, tmp, maxSide, meta.durationMs, rateHz, progress, cancel);
+        } else {
+            out = VideoTranscode.convert(original, tmp, rateHz, progress, cancel);
+        }
+        if (out == null || cancel.get()) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return false;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        target.delete();
+        if (!tmp.renameTo(target)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return false;
+        }
+        return true;
+    }
+
+    private static void copyFile(@NonNull File from, @NonNull File to) throws IOException {
+        try (InputStream in = new FileInputStream(from); OutputStream out = new FileOutputStream(to, false)) {
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+    }
+
+    /** After a version was added: prune the source when every available rate has its file, then bump the revision. */
+    static void finishRound(@NonNull Context app, @NonNull File dir, @NonNull Meta meta) {
+        boolean[] ready = new boolean[VideoVariantRules.RATES.length];
+        for (int i = 0; i < ready.length; i++) {
+            File f = new File(dir, VideoVariantRules.variantFileName(VideoVariantRules.RATES[i]));
+            ready[i] = f.isFile() && f.length() > 0L;
+        }
+        if (VideoVariantRules.pruneOriginal(meta.fps, ready) && !(meta.gif && !meta.animated)) {
+            File original = findOriginal(dir);
+            //noinspection ResultOfMethodCallIgnored
+            if (original != null) original.delete();
+        }
+        SharedPreferences prefs = prefs(app);
+        if (prefs != null) bumpRev(prefs);
+    }
+
+    @Nullable
+    static SharedPreferences prefs(@NonNull Context app) {
+        TermuxAppSharedPreferences p = TermuxAppSharedPreferences.build(app, false);
+        return p == null ? null : p.getSharedPreferences();
     }
 
     /** Bumps {@link #KEY_VARIANT_REV}. */
