@@ -1,6 +1,7 @@
 # Shader and video wallpapers (2026-11-09)
 
-Status: decided 2026-11-09, build starting. Replaces the AGSL Live scenes of
+Status: built 2026-11-09 (waves A-C merged to local v2-redesign at 0fc3ff95d, emulator-checked; wave D on pong
+owed, see project-docs/device-checks.md). Decided 2026-11-09. Replaces the AGSL Live scenes of
 [live-wallpapers-2026-11-05.md](live-wallpapers-2026-11-05.md) (built 11-06, on pong). The parked
 Studio maker (`origin/feat/studio`) is unaffected and stays parked. Decision record: ADR 0024.
 
