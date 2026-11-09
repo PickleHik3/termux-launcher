@@ -315,6 +315,11 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
         return 0;
     }
 
+    // Grapheme clustering (mode 2027) on from the start, as the Ghostty app does: without it every
+    // code point of an emoji sequence, flag or skin tone takes its own cell. As the default it is
+    // also what a reset restores; a program can still turn it off with CSI ? 2027 l.
+    GhosttyTerminalModeConfig clustering = {.mode = GHOSTTY_MODE_GRAPHEME_CLUSTER, .value = true};
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, &clustering);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_USERDATA, c);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*) on_write_pty);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_BELL, (const void*) on_bell);
