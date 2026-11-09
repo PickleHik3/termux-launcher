@@ -15,7 +15,20 @@ public class DisplayPageLandingTest {
 
     private static Landing land(String binding, boolean found, boolean running, boolean starting,
                                 boolean hasWindow, boolean routed) {
-        return DisplayPagePolicy.landing(binding, found, running, starting, hasWindow, routed);
+        return DisplayPagePolicy.landing(binding, found, running, starting, hasWindow, routed,
+            true);
+    }
+
+    private static Landing landNoAutostart(String binding, boolean running, boolean starting) {
+        return DisplayPagePolicy.landing(binding, false, running, starting, false, false, false);
+    }
+
+    @Test public void unboundPageOnlyShowsStartWithAutostartOff() {
+        assertEquals(Landing.SHOW_START, landNoAutostart(null, false, false));
+        // A display already up or on its way is left alone either way (re-landing re-attaches
+        // nothing and starts nothing).
+        assertEquals(Landing.NOTHING, landNoAutostart(null, true, false));
+        assertEquals(Landing.NOTHING, landNoAutostart(null, false, true));
     }
 
     @Test public void unboundPageOnlyStartsTheDisplay() {

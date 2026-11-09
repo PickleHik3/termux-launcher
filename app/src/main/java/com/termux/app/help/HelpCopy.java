@@ -46,6 +46,7 @@ public final class HelpCopy {
                 case "wall.widgets": label = R.string.help_key_widgets; break;
                 case "wall.terminal": label = R.string.help_key_terminal; break;
                 case "wall.display": label = R.string.help_key_display; break;
+                case "wall.assistant": label = R.string.help_key_assistant; break;
                 case "pane.split": label = R.string.help_key_split; break;
                 case "window.new": label = R.string.help_key_window; break;
                 case "session.browser": label = R.string.help_key_sessions; break;

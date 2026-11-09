@@ -267,6 +267,7 @@ public final class LauncherToolRegistry {
                 // A page change is its own read-out: the page slides in. Naming it on the pill
                 // ("Go to Widgets" over Home) was clutter, and wrong (developer, 2026-10-31).
                 TOOL_WALL_GO, TOOL_WALL_WIDGETS, TOOL_WALL_TERMINAL, TOOL_WALL_DISPLAY,
+                TOOL_WALL_ASSISTANT,
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
@@ -430,6 +431,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WALL_WIDGETS = "wall.widgets";
     public static final String TOOL_WALL_TERMINAL = "wall.terminal";
     public static final String TOOL_WALL_DISPLAY = "wall.display";
+    public static final String TOOL_WALL_ASSISTANT = "wall.assistant";
     public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
@@ -693,6 +695,10 @@ public final class LauncherToolRegistry {
             "Show the pane wall's Display place.",
             schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WALL, R.string.tool_wall_display, R.string.tool_desc_wall_display, null);
+        addUi(map, TOOL_WALL_ASSISTANT,
+            "Show the pane wall's Assistant page, adding it first when the wall has none.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_assistant, R.string.tool_desc_wall_assistant, null);
         // The mouse key: bindable on the row, the in-app keyboard and a chord. In the terminal
         // it makes every touch the mouse; on the Display place it swaps the keyboard for a touchpad.
         addUi(map, TOOL_MOUSE_TOGGLE,
