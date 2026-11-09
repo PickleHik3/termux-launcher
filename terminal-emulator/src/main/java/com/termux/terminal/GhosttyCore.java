@@ -13,7 +13,7 @@ import java.util.ArrayList;
  * <p>Main thread only, like the emulator. Replies and clipboard text that arrive during a write are
  * held here and handed on after it, so nothing reaches back into the terminal mid-write.
  */
-final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySource {
+final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySource, GhosttyImageCache.Source {
 
     /** The system property that picks the core for new sessions; "ghostty" picks this one. */
     static final String CORE_PROPERTY = "debug.tl.terminal_core";
@@ -78,6 +78,7 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
             TerminalEmulator.xtVersionName().getBytes(StandardCharsets.UTF_8));
         if (handle == 0) return null;
         core.mHandle = handle;
+        core.setUpKittyGraphics();
         core.allocate(columns, rows);
         if (colors != null && colors.length >= TextStyle.NUM_INDEXED_COLORS)
             GhosttyNative.nativeSetColors(handle, colors);
@@ -210,5 +211,103 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (mClipboard.isEmpty()) return;
         for (int i = 0; i < mClipboard.size(); i++) output.onCopyTextToClipboard(mClipboard.get(i));
         mClipboard.clear();
+    }
+
+    // Kitty graphics. Ghostty stores, decodes and places images; GhosttyImages keeps the bitmaps.
+
+    /** Answers kitty queries with the Java core's code, into {@link #mReplies}; made on first use. */
+    private KittyGraphicsProtocol mQueryAnswerer;
+
+    /** The replies a query answer writes, kept in order with the replies Ghostty writes. */
+    private final TerminalOutput mQueryReplies = new TerminalOutput() {
+        @Override
+        public void write(byte[] data, int offset, int count) {
+            mReplies.write(data, offset, count);
+        }
+
+        @Override
+        public void titleChanged(String oldTitle, String newTitle) {
+        }
+
+        @Override
+        public void onCopyTextToClipboard(String text) {
+        }
+
+        @Override
+        public void onPasteTextFromClipboard() {
+        }
+
+        @Override
+        public void onBell() {
+        }
+
+        @Override
+        public void onColorsChanged() {
+        }
+    };
+
+    /**
+     * Turn images on with the Java core's storage limit, so a pane keeps the same image bytes on
+     * either core, and its file media rules: file and temp file, no shared memory.
+     */
+    private void setUpKittyGraphics() {
+        byte[] tempDir = protocolTempDir();
+        GhosttyNative.nativeKittySetup(mHandle, KittyImageStore.MAX_STORED_BYTES, tempDir);
+    }
+
+    /**
+     * The directory {@code t=t} files may come from: the shell's {@code $TMPDIR}, else the
+     * prefix's tmp beside the app's cache directory (where the shell's {@code $TMPDIR} points), as
+     * a canonical path; null when neither exists.
+     */
+    static byte[] protocolTempDir() {
+        try {
+            String tmp = System.getenv("TMPDIR");
+            java.io.File dir = tmp != null && !tmp.isEmpty() ? new java.io.File(tmp) : null;
+            if (dir == null || !dir.isDirectory()) {
+                String cache = System.getProperty("java.io.tmpdir");
+                java.io.File parent = cache == null ? null : new java.io.File(cache).getParentFile();
+                dir = parent == null ? null : new java.io.File(parent, "files/usr/tmp");
+            }
+            if (dir == null || !dir.isDirectory()) return null;
+            return dir.getCanonicalPath().getBytes(StandardCharsets.UTF_8);
+        } catch (java.io.IOException | SecurityException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public void onKittyQuery(byte[] apc) {
+        if (apc == null) return;
+        if (mQueryAnswerer == null) mQueryAnswerer = new KittyGraphicsProtocol(null, mQueryReplies);
+        mQueryAnswerer.accept(new String(apc, StandardCharsets.ISO_8859_1));
+    }
+
+    /** See {@link GhosttyNative#nativeKittyFrame}. */
+    boolean kittyFrame(long nowMillis, boolean tick, long[] out) {
+        return mHandle != 0 && GhosttyNative.nativeKittyFrame(mHandle, nowMillis, tick, out);
+    }
+
+    int kittyPlacements(int[] out) {
+        return mHandle == 0 ? 0 : GhosttyNative.nativeKittyPlacements(mHandle, out);
+    }
+
+    int kittyVirtualPlacements(int[] out) {
+        return mHandle == 0 ? 0 : GhosttyNative.nativeKittyVirtualPlacements(mHandle, out);
+    }
+
+    @Override
+    public boolean imageInfo(int imageId, long[] out) {
+        return mHandle != 0 && GhosttyNative.nativeKittyImageInfo(mHandle, imageId, out);
+    }
+
+    @Override
+    public int copyImageRows(int imageId, long generation, int firstRow, int rows, int[] argb) {
+        return mHandle == 0 ? -1 : GhosttyNative.nativeKittyImageCopy(mHandle, imageId, generation, firstRow, rows, argb);
+    }
+
+    @Override
+    public long imageGeneration(int imageId) {
+        return mHandle == 0 ? 0 : GhosttyNative.nativeKittyImageGeneration(mHandle, imageId);
     }
 }
