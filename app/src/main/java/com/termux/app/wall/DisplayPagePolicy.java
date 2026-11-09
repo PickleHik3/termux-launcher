@@ -8,8 +8,8 @@ import androidx.annotation.Nullable;
  * one display view is bound to one of them at a time ({@link PaneWallLayout#boundPageId}). Only the
  * bound page, with the display running, is live; every other Display page stands as a still: its
  * last picture once it has one, else a card naming what it shows ({@link PageStillPolicy}, the
- * one rule for every kind). Landing on a Display page starts the display; leaving keeps it
- * running.
+ * one rule for every kind). Landing on a Display page starts the display only with the
+ * autostart setting on (else the page offers Start); leaving keeps it running.
  *
  * <p>Pure and tested; the activity and the display frame apply the answers.
  */
@@ -43,8 +43,13 @@ public final class DisplayPagePolicy {
     public enum Landing {
         /** Nothing: the display is on its way, the page is routed, or its app is gone. */
         NOTHING,
-        /** An unbound page: start the display as before. */
+        /** An unbound page, with the autostart setting on: start the display. */
         START_DISPLAY,
+        /**
+         * An unbound page, with the autostart setting off: the display window comes up in its
+         * not-running state, with its Start button, and nothing is started.
+         */
+        SHOW_START,
         /** The bound app has a window on the running display: bring it forward. */
         RAISE_APP,
         /** The bound app has no window yet: launch it, starting the display first if need be. */
@@ -52,7 +57,8 @@ public final class DisplayPagePolicy {
     }
 
     /**
-     * What landing on a Display page does. A page with no binding only starts the display. A
+     * What landing on a Display page does. A page with no binding starts the display only when
+     * {@code autostart} (the display setting) is on, else it shows the Start button. A
      * bound page raises its app's window, or runs the app when it has none (the runner queues it
      * behind a display that is not up yet). A binding whose app is gone, a landing the app drawer
      * itself routed here ({@code routedByRunner}: the runner is already running the app), and a
@@ -60,10 +66,13 @@ public final class DisplayPagePolicy {
      */
     @NonNull
     public static Landing landing(@Nullable String binding, boolean appFound, boolean running,
-                                  boolean starting, boolean appHasWindow, boolean routedByRunner) {
+                                  boolean starting, boolean appHasWindow, boolean routedByRunner,
+                                  boolean autostart) {
         if (binding == null) {
-            return startsOnLanding(WallPages.PageKind.DISPLAY, running, starting)
-                ? Landing.START_DISPLAY : Landing.NOTHING;
+            if (!startsOnLanding(WallPages.PageKind.DISPLAY, running, starting)) {
+                return Landing.NOTHING;
+            }
+            return autostart ? Landing.START_DISPLAY : Landing.SHOW_START;
         }
         if (!appFound || routedByRunner) return Landing.NOTHING;
         if (running) return appHasWindow ? Landing.RAISE_APP : Landing.RUN_APP;

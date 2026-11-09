@@ -29553,7 +29553,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The wall came to rest on Display page {@code pageId}: the display starts there when it is
-     * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}).
+     * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}) and
+     * the autostart setting is on; with it off the page shows its Start button instead.
      * A page bound to a Linux app also brings its app up ({@link
      * com.termux.app.wall.DisplayPagePolicy#landing}): its window raised, or the app run.
      */
@@ -29590,7 +29591,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.wall.DisplayPagePolicy.landing(binding, app != null, running,
                 mDisplayRequested, app != null && !app.session && running
                     && linuxWindowIdFor(app) >= 0,
-                routed);
+                routed,
+                mPreferences != null && mPreferences.isX11DisplayAutostartEnabled());
         switch (landing) {
             case NOTHING:
                 return;
@@ -29617,7 +29619,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         attachEmbeddedDisplay();
         if (mPaneWallController.displayWindow() == null) return;
         mDisplayRequested = true;
-        if (com.termux.app.x11.X11CliInstaller.hasKeyboardData()) startEmbeddedDisplay();
+        // SHOW_START stops here: the window is up in its not-running state and its Start button
+        // starts the display (autostart is off).
+        if (landing == com.termux.app.wall.DisplayPagePolicy.Landing.START_DISPLAY
+            && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) startEmbeddedDisplay();
         syncDisplayOnRow();
     }
 
