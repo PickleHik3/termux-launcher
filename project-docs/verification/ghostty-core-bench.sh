@@ -19,6 +19,8 @@
 # installed APK on the class path), not in the launcher: per run it times the Java core, the Ghostty
 # core writing only, and the Ghostty core with the mirror, one JSON line each.
 #
+# WINDOW=1 runs each step in a full-size window of its own instead of a split pane.
+#
 # Results go to $OUT (default ~/reports/ghostty-core-<date>), one line per measurement in results.tsv.
 set -euo pipefail
 
@@ -51,13 +53,18 @@ open_pane() {
     case "$CORE" in java) ad adb shell setprop debug.tl.terminal_core java ;; ghostty) ad adb shell setprop debug.tl.terminal_core ghostty ;;
         *) echo "core must be java or ghostty" >&2; exit 2 ;; esac
     local since; since=$(ad adb shell date +%m-%d_%H:%M:%S.000 | tr -d '\r' | tr _ ' ')
-    PANE=$(run "launcherctl pane open --print-id --title bench-$CORE" | tail -1 | tr -d '\r')
+    # WINDOW=1 opens a full-size window of its own instead of splitting the pane on screen.
+    if [ "${WINDOW:-0}" = 1 ]; then
+        PANE=$(run "launcherctl window open --print-id --title bench-$CORE -- bash" | tail -1 | tr -d '\r')
+    else
+        PANE=$(run "launcherctl pane open --print-id --title bench-$CORE" | tail -1 | tr -d '\r')
+    fi
     timeout 2 tail -f /dev/null || true
     local seen; seen=$(ad adb shell logcat -d -T "'$since'" -s Termux.TerminalSession | grep -o 'Terminal core: [a-z]*.*' | tail -1 || true)
     record pane-core "${seen:-Terminal core: java (no log line)}"
     [ "$CORE" = java ] || [[ "$seen" == "Terminal core: ghostty" ]] || { echo "FAIL: ghostty core did not start" >&2; close_pane; exit 5; }
 }
-close_pane() { run "launcherctl pane close $PANE" >/dev/null 2>&1 || true; ad adb shell setprop debug.tl.terminal_core "''" || true; }
+close_pane() { if [ "${WINDOW:-0}" = 1 ]; then run "launcherctl window close $PANE" >/dev/null 2>&1 || true; else run "launcherctl pane close $PANE" >/dev/null 2>&1 || true; fi; ad adb shell setprop debug.tl.terminal_core "''" || true; }
 pss() { ad adb shell dumpsys meminfo "$PKG" | tr -d '\r' | awk '/TOTAL PSS:/{print "pss_kb="$3} /Native Heap:/{n=$3} /Java Heap:/{j=$3} END{print "native_kb="n, "java_kb="j}' | xargs; }
 cpu_ticks() { run "cat /proc/$PID0/stat" | awk '{print $14+$15}'; }
 
