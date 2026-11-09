@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshots/hero.webp" alt="Termux Launcher: an Android home screen with a real Linux terminal. Three phones show the Home page with widgets, a floating glass terminal, and the AI assistant page. Callouts: Android home with widgets; floating glass terminals; live glass on glass; AI assistant page; split panes and Kitty images; on-device voice." width="100%">
+  <img src="screenshots/hero.webp" alt="Termux Launcher: an Android home screen with a real Linux terminal. Three phones show the Home page with widgets, a floating glass terminal, and the AI assistant page. Callouts: Android home with widgets; floating glass terminals; live glass on glass; AI assistant page; Kitty images in the terminal; on-device voice." width="100%">
 </p>
 
 <p align="center">

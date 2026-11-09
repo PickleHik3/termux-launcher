@@ -46,24 +46,26 @@
     color: var(--ink-dim); font-size: 22px; text-align: center;
   }
   .phone img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
-  .p-home  { left: 452px; transform: rotate(-4deg); top: 256px; }
+  .p-home  { left: 396px; transform: rotate(-4deg); top: 256px; }
   .p-float { left: 642px; z-index: 2; top: 220px; }
-  .p-ai    { left: 832px; transform: rotate(4deg); top: 256px; }
+  .p-ai    { left: 888px; transform: rotate(4deg); top: 256px; }
 
   /* Callouts */
   .callout {
-    position: absolute; width: 380px;
+    position: absolute; width: 330px;
     padding: 18px 22px; border-radius: var(--radius-lg);
     background: var(--glass); border: 1px solid var(--rim);
-    font-size: 32px; font-weight: 600; line-height: 1.2;
+    font-size: 30px; font-weight: 600; line-height: 1.2;
   }
   .callout .dot {
     display: inline-block; width: 14px; height: 14px; border-radius: 50%;
     background: var(--accent); margin-right: 12px; vertical-align: middle;
   }
-  .left  { left: 48px; }
-  .right { right: 48px; }
-  .r1 { top: 300px; } .r2 { top: 520px; } .r3 { top: 740px; }
+  .left  { left: 40px; }
+  .right { right: 40px; }
+  .r1 { top: 300px; } .r2 { top: 520px; } .r3 { top: 760px; }
+  .r2k { top: 430px; }
+  .callout .inset { display: block; width: 100%; margin-top: 12px; border-radius: 14px; border: 1px solid var(--rim); }
   svg.lines { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
   svg.lines path { stroke: var(--accent); stroke-width: 2.5; fill: none; opacity: 0.7; }
   svg.lines circle { fill: var(--accent); }
@@ -75,7 +77,7 @@
     <p>An Android home screen with a real Linux terminal</p>
   </header>
 
-  <!-- Each screen shows shots/<name>.png when present, otherwise the label. -->
+  <!-- Each screen shows shots/<name>.webp when present, otherwise the label. -->
   <div class="phone p-home"><div class="screen" data-shot="home">Home</div></div>
   <div class="phone p-float"><div class="screen" data-shot="float">Floating terminal</div></div>
   <div class="phone p-ai"><div class="screen" data-shot="assistant">Assistant</div></div>
@@ -84,24 +86,23 @@
   <div class="callout left r2"><span class="dot"></span>Floating glass terminals</div>
   <div class="callout left r3"><span class="dot"></span>Live glass on glass</div>
   <div class="callout right r1"><span class="dot"></span>AI assistant page</div>
-  <div class="callout right r2"><span class="dot"></span>Split panes and Kitty images</div>
+  <div class="callout right r2k"><span class="dot"></span>Kitty images in the terminal<img class="inset" src="shots/kitty.webp" alt=""></div>
   <div class="callout right r3"><span class="dot"></span>On-device voice</div>
 
   <!-- Leader lines: callout edge to a point on a phone. Adjust the end points if shots move. -->
   <svg class="lines" viewBox="0 0 1600 1000">
-    <path d="M428 338 C 470 338, 480 420, 540 430"/><circle cx="540" cy="430" r="6"/>
-    <path d="M428 558 C 560 558, 620 560, 720 560"/><circle cx="720" cy="560" r="6"/>
-    <path d="M428 778 C 560 778, 640 720, 760 700"/><circle cx="760" cy="700" r="6"/>
-    <path d="M1172 338 C 1120 338, 1100 420, 1040 430"/><circle cx="1040" cy="430" r="6"/>
-    <path d="M1172 558 C 1050 558, 960 520, 880 480"/><circle cx="880" cy="480" r="6"/>
-    <path d="M1172 778 C 1110 778, 1080 760, 1020 750"/><circle cx="1020" cy="750" r="6"/>
+    <path d="M370 338 C 420 338, 440 560, 474 575"/><circle cx="474" cy="575" r="6"/>
+    <path d="M370 558 C 560 558, 620 470, 700 360"/><circle cx="700" cy="360" r="6"/>
+    <path d="M370 798 C 560 778, 640 720, 740 690"/><circle cx="740" cy="690" r="6"/>
+    <path d="M1230 338 C 1190 338, 1160 330, 1130 350"/><circle cx="1130" cy="350" r="6"/>
+    <path d="M1230 818 C 1180 818, 1160 720, 1118 700"/><circle cx="1118" cy="700" r="6"/>
   </svg>
 
   <script>
     for (const el of document.querySelectorAll('[data-shot]')) {
       const img = new Image();
       img.onload = () => { el.textContent = ''; el.appendChild(img); };
-      img.src = 'shots/' + el.dataset.shot + '.png';
+      img.src = 'shots/' + el.dataset.shot + '.webp';
     }
   </script>
 </body>
