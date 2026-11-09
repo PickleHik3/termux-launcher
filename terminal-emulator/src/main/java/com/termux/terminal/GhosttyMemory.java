@@ -46,6 +46,11 @@ public final class GhosttyMemory {
         return sCores.size();
     }
 
+    /** Image caches a trim reaches now; for tests. */
+    static boolean hasImageTrim(ImageTrim trim) {
+        return sImageTrims.contains(trim);
+    }
+
     /** Add an image cache to drop on pressure; remove it when its pane closes. */
     public static void addImageTrim(ImageTrim trim) {
         if (trim != null && !sImageTrims.contains(trim)) sImageTrims.add(trim);

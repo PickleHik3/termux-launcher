@@ -27,7 +27,7 @@ import java.util.List;
  *
  * <p>Main thread only, between writes.
  */
-final class GhosttyImages {
+final class GhosttyImages implements GhosttyMemory.ImageTrim {
 
     /** The shortest gap between two animation redraws: one frame at 120 Hz. */
     static final long MIN_REDRAW_MILLIS = 8;
@@ -62,6 +62,9 @@ final class GhosttyImages {
         mOutput = output;
         mClock = clock;
         mCache = cache;
+        // Lives exactly as long as the pane's Ghostty core, unlike the cache's own release, which
+        // also runs when the pane is hidden; so trims reach the cache whenever it holds bitmaps.
+        GhosttyMemory.addImageTrim(this);
     }
 
     /** The app's cache: Android bitmaps charged to the process-wide frame budget. */
@@ -253,8 +256,14 @@ final class GhosttyImages {
         mCache.release();
     }
 
+    @Override
+    public void trimImages() {
+        trim();
+    }
+
     /** The pane is closing. */
     void release() {
+        GhosttyMemory.removeImageTrim(this);
         cancelRedraw();
         mCache.release();
         mPlacements.clear();
