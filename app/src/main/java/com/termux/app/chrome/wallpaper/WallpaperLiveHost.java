@@ -61,6 +61,8 @@ import java.util.function.Supplier;
 public final class WallpaperLiveHost {
 
     private static final String LOG_TAG = "WallpaperLiveHost";
+    /** The hint line of the video in use, kept at import time. */
+    private static final String KEY_VIDEO_HINT = "wallpaper_video_hint";
     /** An imported shader file longer than this is not read (a shader is a few KB). */
     private static final long MAX_IMPORT_BYTES = 1L << 20;
     private static final String[] SHADER_MIME_TYPES = {
@@ -420,8 +422,10 @@ public final class WallpaperLiveHost {
     private void showVideo() {
         if (mVideo == null) return;
         SharedPreferences prefs = prefs();
-        mVideo.show(readStored(), prefs == null ? 30 : ShaderStore.readVideoRate(prefs));
-        mVideo.setHint(null);
+        WallpaperMotion stored = readStored();
+        mVideo.show(stored, prefs == null ? 30 : ShaderStore.readVideoRate(prefs));
+        mVideo.setHint(stored.kind == WallpaperMotion.Kind.VIDEO && stored.id != null
+            ? videoStatus(stored.id, prefs == null ? null : prefs.getString(KEY_VIDEO_HINT, null)) : null);
         goTo(Page.VIDEO, false);
     }
 
@@ -705,10 +709,19 @@ public final class WallpaperLiveHost {
                     mVideo.setHint(done.error != null ? done.error : mContext.getString(R.string.video_failed));
                     return;
                 }
-                mVideo.setHint(done.hint);
+                SharedPreferences prefs = prefs();
+                if (prefs != null) prefs.edit().putString(KEY_VIDEO_HINT, done.hint == null ? "" : done.hint).apply();
+                mVideo.setHint(videoStatus(done.name, done.hint));
                 useMotion(WallpaperMotion.video(done.name));
             });
         });
+    }
+
+    /** "In use: name" and, under it, the import's one-line hint. */
+    @NonNull
+    private String videoStatus(@NonNull String name, @Nullable String hint) {
+        String line = mContext.getString(R.string.video_in_use, name);
+        return hint == null || hint.isEmpty() ? line : line + "\n" + hint;
     }
 
     private void toast(@StringRes int res) {
