@@ -120,6 +120,30 @@ public class VideoHintTest {
     }
 
     @Test
+    public void frameCountDecidesAnimated() throws Exception {
+        assertEquals(3, VideoHint.GifInfo.read(new ByteArrayInputStream(gif(4, 4, 10, 10, 10))).frames);
+        assertEquals(1, VideoHint.GifInfo.read(new ByteArrayInputStream(gif(4, 4, 10))).frames);
+        assertTrue(VideoHint.isAnimated(2));
+        assertFalse(VideoHint.isAnimated(1));
+        assertFalse(VideoHint.isAnimated(0));
+    }
+
+    @Test
+    public void convertedGifHint() {
+        VideoHint.Fields f = new VideoHint.Fields();
+        f.convertedFromGif = true;
+        f.mime = "video/avc";
+        f.width = 800;
+        f.height = 1412;
+        f.durationMs = 5_000L;
+        f.sizeBytes = 3_100_000L;
+        f.hardware = Boolean.TRUE;
+        assertEquals("GIF converted to video · 800×1412 · 5 s · 3 MB · hardware decoded", VideoHint.describe(f));
+        f.hardware = null;
+        assertEquals("GIF converted to video · 800×1412 · 5 s · 3 MB", VideoHint.describe(f));
+    }
+
+    @Test
     public void gifInfoRejectsOtherFilesAndSurvivesTruncation() throws Exception {
         assertNull(VideoHint.GifInfo.read(new ByteArrayInputStream("not a gif at all".getBytes("UTF-8"))));
         byte[] whole = gif(10, 10, 50, 50);

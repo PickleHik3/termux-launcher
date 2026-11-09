@@ -215,6 +215,22 @@ final class VideoChannel implements SceneChannel {
         }
     };
 
+    private boolean mSoftwareCanvas;
+
+    /** A hardware canvas (no CPU copy of the frame); the software one once the hardware one has thrown. */
+    @NonNull
+    private Canvas lockCanvas(@NonNull Surface surface) {
+        if (!mSoftwareCanvas) {
+            try {
+                return surface.lockHardwareCanvas();
+            } catch (IllegalStateException | IllegalArgumentException | Surface.OutOfResourcesException e) {
+                Log.w(TAG, "hardware canvas unavailable, drawing the GIF in software", e);
+                mSoftwareCanvas = true;
+            }
+        }
+        return surface.lockCanvas(null);
+    }
+
     /** Draws the GIF's current frame into the surface and takes it into the texture. */
     private void drawGif() {
         Surface surface = mSurface;
@@ -224,7 +240,7 @@ final class VideoChannel implements SceneChannel {
         mGifDue = false;
         Canvas canvas = null;
         try {
-            canvas = surface.lockCanvas(null);
+            canvas = lockCanvas(surface);
             canvas.drawColor(0, PorterDuff.Mode.CLEAR);
             d.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
             d.draw(canvas);
