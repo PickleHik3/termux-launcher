@@ -30,6 +30,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup Zig for the libghostty-vt terminal engine (-Pghostty=true)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
       - name: Build and attach APKs to release
         shell: bash {0}
         env:
@@ -133,7 +138,7 @@ jobs:
           if grep -q 'android:debuggable="true"' "$RELEASE_MANIFEST_PATH"; then
             exit_on_error "Merged release manifest is debuggable: $RELEASE_MANIFEST_PATH"
           fi
-          if ! ./gradlew :app:assembleRelease; then
+          if ! ./gradlew -Pghostty=true :app:assembleRelease; then
             exit_on_error "Build failed for '$APK_VERSION_TAG' release."
           fi
 

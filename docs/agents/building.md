@@ -14,6 +14,10 @@ and a JDK compatible with AGP 8.13.2; the code targets Java 11.
 - `./gradlew :app:connectedDebugAndroidTest`: instrumentation on a connected emulator or device.
 - `./gradlew lintDebug`: Android lint.
 - `./gradlew :app:verifyReleaseHardening`: release build safety settings.
+- `-Pghostty=true` on any of these builds the Fast terminal engine (libghostty-vt, pinned tarball,
+  arm64-v8a and x86_64 only) and its tests' host library; it needs Zig 0.17 and the NDK. Without it
+  the APK has no library and Settings hides **Terminal engine**. CI's nightly `assembleStaging` and
+  the release workflow's `assembleRelease` pass it (`mlugg/setup-zig`), so drops carry the engine.
 
 ## Installing
 
