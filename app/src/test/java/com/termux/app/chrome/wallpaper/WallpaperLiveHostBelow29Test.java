@@ -21,7 +21,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
-/** Below Android 10 (API 29) moving wallpapers are not offered at all: no Photo | Live row, and the picker is the Photo page alone. */
+/** Below Android 10 (API 29) moving wallpapers are not offered at all: no Photo | Video | Shader row, and the picker is the Photo page alone. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -50,10 +50,11 @@ public class WallpaperLiveHostBelow29Test {
 
         assertFalse(LiveWallpaperChoice.isSupported());
         assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
-        assertNull(host.grid());
-        assertNull(host.detail());
+        assertNull(host.list());
+        assertNull(host.editor());
+        assertNull(host.video());
         assertFalse(host.consumeBack());
-        // Only the content region: no Photo | Live row above it, and the Photo page stays visible.
+        // Only the content region: no Photo | Video | Shader row above it, and the Photo page stays visible.
         assertEquals(1, ((ViewGroup) host.root()).getChildCount());
         assertEquals(View.VISIBLE, picker.root().getVisibility());
     }

@@ -11,8 +11,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
 import com.termux.app.chrome.ManagedWallpaper;
-import com.termux.app.chrome.scene.LiveWallpaperChoice;
 import com.termux.app.chrome.scene.SceneStill;
+import com.termux.app.chrome.scene.ShaderStore;
+import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -59,34 +60,34 @@ public final class LiveWallpaperApplier {
     // --- Use as wallpaper ---
 
     /**
-     * Starts {@code choice} in the app and, when {@link LiveSceneLogic#setsSystemWallpaper} says so,
+     * Starts {@code motion} in the app and, when {@link LiveSceneLogic#setsSystemWallpaper} says so,
      * puts its t = 0 still on Home and Lock, remembering what they showed.
      *
      * @param launcherIsHomeApp the launcher is the phone's home app
      * @param alsoPhone         "Also set as phone wallpaper" (terminal-app mode)
      */
     @MainThread
-    public static void useScene(@NonNull Context ctx, @NonNull LiveWallpaperChoice choice,
+    public static void useMotion(@NonNull Context ctx, @NonNull WallpaperMotion motion,
                                 boolean launcherIsHomeApp, boolean alsoPhone, @Nullable Callback cb) {
         final Context app = ctx.getApplicationContext();
         final TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
-        if (prefs == null || choice.scene == null) {
+        if (prefs == null || !motion.moves()) {
             post(cb, Result.FAILED);
             return;
         }
-        choice.write(prefs);
+        ShaderStore.apply(app, prefs.getSharedPreferences(), motion);
         final boolean touches = LiveSceneLogic.setsSystemWallpaper(launcherIsHomeApp, alsoPhone);
         if (!touches) {
             post(cb, Result.IN_APP_ONLY);
             return;
         }
-        GeneratedWallpaperApplier.onWorker(() -> post(cb, setStill(app, prefs, choice)));
+        GeneratedWallpaperApplier.onWorker(() -> post(cb, setStill(app, prefs, motion)));
     }
 
     @WorkerThread
     @NonNull
     private static Result setStill(@NonNull Context app, @NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull LiveWallpaperChoice choice) {
+                                   @NonNull WallpaperMotion motion) {
         try {
             int[] size = ManagedWallpaper.portraitSize(app);
             int[] still = LiveSceneLogic.stillSize(size[0], size[1]);
@@ -137,7 +138,7 @@ public final class LiveWallpaperApplier {
             } else {
                 clearMemory(app);
             }
-            Logger.logInfo(LOG_TAG, "Scene " + choice.scene + " still set on Home and Lock ("
+            Logger.logInfo(LOG_TAG, "Motion " + motion + " still set on Home and Lock ("
                 + remember + (memory == null ? ", nothing to remember" : "") + ")");
             return Result.SET;
         } catch (RuntimeException e) {
@@ -161,7 +162,7 @@ public final class LiveWallpaperApplier {
             post(cb, Result.FAILED);
             return;
         }
-        LiveWallpaperChoice.none().write(prefs);
+        ShaderStore.apply(app, prefs.getSharedPreferences(), WallpaperMotion.photo());
         GeneratedWallpaperApplier.onWorker(() -> post(cb, restore(app)));
     }
 
@@ -231,8 +232,8 @@ public final class LiveWallpaperApplier {
     public static void photoChosen(@NonNull Context ctx) {
         final Context app = ctx.getApplicationContext();
         final TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
-        if (prefs != null && LiveWallpaperChoice.read(prefs).scene != null) {
-            LiveWallpaperChoice.none().write(prefs);
+        if (prefs != null && ShaderStore.readMotion(prefs.getSharedPreferences()).moves()) {
+            ShaderStore.apply(app, prefs.getSharedPreferences(), WallpaperMotion.photo());
         }
         GeneratedWallpaperApplier.onWorker(() -> {
             try {

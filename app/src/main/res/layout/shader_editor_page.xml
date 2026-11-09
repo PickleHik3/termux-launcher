@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shader editor (ShaderEditorPage), under the sheet's bar: name, a monospace code box that
+     scrolls sideways instead of wrapping, Paste and Import file, the error strip, the knobs
+     (Quality, Frame rate, Texture), "Also set as phone wallpaper" in terminal-app mode only,
+     Apply, Back to photo while a motion is in use, and Delete. The knobs reuse the settings rows
+     (preference_segmented_pill). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:id="@+id/shader_editor_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:id="@+id/shader_editor_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:accessibilityHeading="true"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingTop="4dp"
+                android:paddingEnd="@dimen/settings_gutter"
+                android:text="@string/shader_editor_heading"
+                android:textAppearance="?attr/textAppearanceTitleLarge"
+                android:textColor="?attr/colorOnSurface" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/shader_name_layout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:hint="@string/shader_name_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/shader_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionDone"
+                    android:inputType="textCapSentences"
+                    android:maxLength="60"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/shader_code_layout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:hint="@string/shader_code_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/shader_code"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:minLines="12"
+                    android:scrollHorizontally="true"
+                    android:textSize="13sp"
+                    android:typeface="monospace" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/shader_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingEnd="@dimen/settings_gutter"
+                android:text="@string/shader_description"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingEnd="@dimen/settings_gutter">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_paste"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/shader_paste" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_import"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/shader_import" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/shader_errors"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingTop="8dp"
+                android:paddingEnd="@dimen/settings_gutter"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorError"
+                android:typeface="monospace"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/shader_too_heavy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingTop="8dp"
+                android:paddingEnd="@dimen/settings_gutter"
+                android:text="@string/shader_too_heavy"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorError"
+                android:visibility="gone" />
+
+            <include
+                android:id="@+id/shader_knob_quality"
+                layout="@layout/preference_segmented_pill" />
+
+            <include
+                android:id="@+id/shader_knob_rate"
+                layout="@layout/preference_segmented_pill" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingEnd="@dimen/settings_gutter">
+
+                <TextView
+                    android:id="@+id/shader_texture_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="middle"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_texture_choose"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/shader_texture_choose" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_texture_remove"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/shader_texture_remove"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Terminal-app mode only: the same remembered setting as the Photo page's. -->
+            <LinearLayout
+                android:id="@+id/live_also_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingTop="8dp"
+                android:paddingEnd="@dimen/settings_gutter"
+                android:paddingBottom="8dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/live_also_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/wallpaper_picker_also_set_phone"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/live_also_phone_hint"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/live_also_switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/shader_progress"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:indeterminate="true"
+                android:visibility="invisible" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/shader_apply"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minHeight="48dp"
+                android:text="@string/shader_apply" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/live_back_to_photo"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minHeight="48dp"
+                android:text="@string/live_back_to_photo"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/shader_delete"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/settings_gutter"
+                android:layout_marginEnd="@dimen/settings_gutter"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minHeight="48dp"
+                android:text="@string/shader_delete"
+                android:textColor="?attr/colorError"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_gutter"
+                android:paddingTop="8dp"
+                android:paddingEnd="@dimen/settings_gutter">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_app_menu_info"
+                    android:tint="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="@string/live_lock_note"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

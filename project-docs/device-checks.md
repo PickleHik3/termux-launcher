@@ -873,3 +873,19 @@ longer counted as an error. Owed:
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
   Undo brings it back) and back on its own slot (nothing moves) · pong.
+- **Wallpaper picker: Photo | Video | Shader (11-09, feat/gl-picker, wave C).** Open Appearance →
+  Wallpaper. The row reads Photo | Video | Shader, three even segments; at font scale 1.3 the
+  labels stay on one line. Dark and light. Shader: "New shader" opens the editor (Name, code box,
+  Paste, Import file, Quality, Frame rate, Texture: none, Apply). Paste a Shadertoy shader (the
+  clipboard), Apply: the list returns with the shader marked "In use" and its thumbnail drawn, the
+  Home and Lock screens show its still, and the back scene moves. Paste a broken shader, Apply:
+  up to three "Line N: message" lines show under the buttons at the user's own line numbers, and
+  nothing else changes. The code box scrolls sideways, does not wrap and does not autocorrect.
+  Import file (a .glsl from Downloads) fills the box; Texture "Choose image" copies a photo (name
+  shown, Remove clears it); Delete asks first, and deleting the shader in use brings the photo
+  back. Edit the shader in use (change a colour) and Apply: the back scene must show the change
+  (open note in the build report). Quality Quarter on a heavy shader shows "Too heavy at this
+  quality" when it holds. Video: the format line reads in full, "Choose video or GIF" opens the
+  system picker (until the video import lands it answers "Video arrives in the next build");
+  Back to photo returns the photo on Home and Lock. Terminal-app mode: the editor shows "Also set
+  as phone wallpaper". Reopen the picker with a shader in use: it opens on Shader · pong.

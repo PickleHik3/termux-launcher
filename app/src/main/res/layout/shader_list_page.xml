@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Shader half of the wallpaper picker: the saved shaders in two columns (ShaderListPage
+     adds the tiles), New shader, and Back to photo while a video or a shader is in use. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/shader_list_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/settings_gutter"
+        android:paddingTop="8dp"
+        android:paddingEnd="@dimen/settings_gutter"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:id="@+id/shader_list_heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginBottom="8dp"
+            android:accessibilityHeading="true"
+            android:text="@string/shader_list_heading"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <GridLayout
+            android:id="@+id/shader_list_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/shader_new"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/shader_new" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/shader_list_back_to_photo"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/live_back_to_photo"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>
