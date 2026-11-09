@@ -75,8 +75,9 @@ typedef struct {
     GhosttyRenderState render;
     GhosttyRenderStateRowIterator row_iter;
     GhosttyRenderStateRowCells row_cells;
-    GhosttyTrackedGridRef top;
-    bool top_set;
+    GhosttyTrackedGridRef top;     // the active area's top row at the last sync
+    GhosttyTrackedGridRef bottom;  // and its bottom row, for when a prune took the top one
+    bool top_set, bottom_set;
     int last_screen;
     size_t last_history;
     JNIEnv* env;       // set only while an entry point runs
@@ -196,6 +197,7 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
     if (c->top) ghostty_tracked_grid_ref_free(c->top);
+    if (c->bottom) ghostty_tracked_grid_ref_free(c->bottom);
     if (c->row_cells) ghostty_render_state_row_cells_free(c->row_cells);
     if (c->row_iter) ghostty_render_state_row_iterator_free(c->row_iter);
     if (c->render) ghostty_render_state_free(c->render);
@@ -225,10 +227,14 @@ static void set_history_limit(Core* c, jint lines) {
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &line_limit);
 }
 
-// Pin the top row of the active area, so the next sync can tell how many rows went to history.
+// Pin the top and bottom rows of the active area, so the next sync can tell how many rows went to
+// history. Java names rows by how many have ever scrolled off, so the count has to stay exact even
+// when a long write prunes the page holding the top pin.
 static void pin_top(Core* c) {
     GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
     c->top_set = ghostty_tracked_grid_ref_set(c->top, c->term, p) == GHOSTTY_SUCCESS;
+    GhosttyPoint b = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = (uint32_t) (c->rows - 1)}}};
+    c->bottom_set = ghostty_tracked_grid_ref_set(c->bottom, c->term, b) == GHOSTTY_SUCCESS;
     c->last_screen = current_screen(c);
     c->last_history = history_rows(c);
 }
@@ -303,6 +309,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     }
     GhosttyPoint origin = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
     if (ghostty_terminal_grid_ref_track(c->term, origin, &c->top) != GHOSTTY_SUCCESS
+        || ghostty_terminal_grid_ref_track(c->term, origin, &c->bottom) != GHOSTTY_SUCCESS
         || !alloc_buffers(c)) {
         core_free(c, env);
         return 0;
@@ -487,20 +494,28 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     size_t history = history_rows(c);
     long scrolled = 0;
     if (screen == GHOSTTY_TERMINAL_SCREEN_PRIMARY && screen == c->last_screen) {
+        // Screen coordinates count history first, so a row that was at active y is now at
+        // history + y - scrolled.
         GhosttyPointCoordinate p;
         GhosttyResult where = c->top_set
             ? ghostty_tracked_grid_ref_point(c->top, GHOSTTY_POINT_TAG_SCREEN, &p)
             : GHOSTTY_INVALID_VALUE;
-        if (where == GHOSTTY_SUCCESS)
+        if (where == GHOSTTY_SUCCESS) {
             scrolled = (long) history - (long) p.y;
-        else if (where == GHOSTTY_NO_VALUE)
-            // The pinned row is gone: its page was pruned (or erased), and every older row with
-            // it, so every row history holds now arrived since the last sync.
-            scrolled = (long) history;
-        else
+        } else if (where == GHOSTTY_NO_VALUE) {
+            // The top row's page was pruned (or erased). The bottom row may still be there; if it
+            // is gone too, every row of the last sync is, and counting exactly the rows history and
+            // the screen hold now keeps every older index below the oldest readable one.
+            GhosttyResult bottom = c->bottom_set
+                ? ghostty_tracked_grid_ref_point(c->bottom, GHOSTTY_POINT_TAG_SCREEN, &p)
+                : GHOSTTY_INVALID_VALUE;
+            scrolled = bottom == GHOSTTY_SUCCESS
+                ? (long) history + (long) (c->rows - 1) - (long) p.y
+                : (long) history + (long) c->rows;
+        } else {
             scrolled = (long) history - (long) c->last_history;
+        }
         if (scrolled < 0) scrolled = 0;
-        if ((size_t) scrolled > history) scrolled = (long) history;
     }
     // Re-pin only on the primary screen: a pin left there while the alternate screen is up still
     // counts the rows a write scrolled off before switching, and the sync after the switch back
@@ -582,8 +597,8 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     return JNI_TRUE;
 }
 
-// Read one history row (0 = oldest) cell by cell into cells/extra. Only valid between a sync and
-// the next write. Returns the number of extra code points (| ROW_WRAPPED), or -1 if the row is gone.
+// Read one history row (0 = oldest) cell by cell into cells/extra, when a reader asks for it (Java
+// keeps no copy of history). Only valid between a sync and the next write. Returns the number of extra code points (| ROW_WRAPPED), or -1 if the row is gone.
 JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryRow(
     JNIEnv* env, jclass cls, jlong h, jint y, jintArray cells_out, jintArray extra_out) {
     (void) cls;
