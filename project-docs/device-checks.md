@@ -29,6 +29,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `ghostty-core-bench.sh pong parse` (in-process parse, nothing drawn); also a command that prints
   and at once opens a full-screen program (`seq 100; vim`): the printed rows are in scrollback
   after quitting it.
+  Wave 3 slices 1-2 (exp/ghostty-wave3, history read on demand, no Java transcript): both cores,
+  `seq 5000` then swipe back to the top (rows in order, no blanks), scroll back 20 rows and run
+  `yes | head -3000` (the view stays on its rows until they leave the 2000-row history), long-press
+  select in scrollback while output streams (selection stays put), find a word 1500 rows up, tap a
+  URL in scrollback, `Select URL`, copy transcript, a pane read; split resize and keyboard up/down
+  with history (rows reflow, the travel lands without a jump: Ghostty's shrink pushes blank rows
+  below the cursor into history, the Java core drops them); exit the shell and scroll the finished
+  pane back. Then `ghostty-core-bench.sh pong parse`: `mirror_history_ms` 0, `scrollback_us_per_row`
+  near 3.5, `mirror_max_ms` under 8.3 ms.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
