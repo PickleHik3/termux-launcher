@@ -14,13 +14,17 @@ import java.util.List;
  * The grid cells a card's rows read and write (appearance-cards-overhaul §1): the card's element
  * (none on Customization, Home and Workspace) and where it applies, Global, Home or Workspace.
  * Customization writes Base; Home the all-glass cell of Home pages; Workspace the all-glass cells
- * of Terminal and Display pages together. The status bar, the dock, the keyboard and Menus and
+ * of the Workspace's pages. Terminal, Display and Assistant pages read the Terminal kind's cell
+ * (ADR 0025); the Display kind's is written too, so a downgrade's Display pages keep the look. The status bar, the dock, the keyboard and Menus and
  * dialogs choose with their Applies to row; Widgets stand on Home alone and the terminal on the
  * Workspace alone. Pure.
  */
 public final class EditorChips {
 
-    /** Where a card's values apply: everywhere, Home pages, or Terminal and Display pages. */
+    /**
+     * Where a card's values apply: everywhere, Home pages, or the Workspace's pages (read from the
+     * Terminal kind; the Display kind is kept in step for a downgrade, ADR 0025).
+     */
     public enum AppliesTo {
         GLOBAL(),
         HOME(LookGrid.Kind.HOME),

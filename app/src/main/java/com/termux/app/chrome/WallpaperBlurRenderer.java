@@ -2,6 +2,7 @@ package com.termux.app.chrome;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Trace;
 
 import androidx.annotation.NonNull;
@@ -20,10 +21,18 @@ import com.termux.shared.view.ViewUtils;
  * capture's size here, so a 1.5×-wide parallax frame cost ~15.6 MB per radius instead of ~1 MB,
  * and the byte budget evicted radii mid-session. Bilinear up on draw is the same resample the
  * upscale did, so the picture is the one it was.</p>
+ *
+ * <p>On Android 12+ the blur runs on the GPU ({@link WallpaperGpuBlur}): RenderScript has no GPU
+ * driver on many devices and ran its intrinsic on every CPU core. Below Android 12, and for the
+ * rest of the process once a GPU bake fails, RenderScript blurs it. Both share
+ * {@link WallpaperBlurSizing}, so the frame's size and softness are the same either way.</p>
  */
 final class WallpaperBlurRenderer {
 
     private static final String LOG_TAG = "ChromeRenderer";
+
+    /** Set once a GPU bake failed; RenderScript bakes every frame for the rest of the process. */
+    private static volatile boolean sGpuFailed;
 
     private WallpaperBlurRenderer() {}
 
@@ -44,22 +53,30 @@ final class WallpaperBlurRenderer {
             return sourceBitmap;
         }
 
-        // Low radii must keep the source crisp: a fixed 4x down/up resample softened the frame far
-        // beyond the requested blur and shifted content by a few pixels, so at 1-5dp the glass read
-        // as showing a different wallpaper than the one right next to it. Use the smallest factor
-        // that keeps the script radius inside RenderScript's 25px cap instead. The factor is also
-        // the frame's stored scale, so a radius under 25px keeps a full-size frame.
-        float downsampleFactor = Math.max(1f, Math.min(ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR,
-            (float) Math.ceil(blurRadiusPx / 25f)));
-        float scriptRadius = blurRadiusPx / downsampleFactor;
-        if (scriptRadius > 25f) {
-            downsampleFactor = (float) Math.ceil(blurRadiusPx / 25f);
-            scriptRadius = blurRadiusPx / downsampleFactor;
-        }
-        scriptRadius = Math.max(0.1f, Math.min(25f, scriptRadius));
+        float downsampleFactor = WallpaperBlurSizing.downsampleFactor(blurRadiusPx);
+        float scriptRadius = WallpaperBlurSizing.scriptRadius(blurRadiusPx, downsampleFactor);
+        int scaledWidth = WallpaperBlurSizing.scaledSide(sourceBitmap.getWidth(), downsampleFactor);
+        int scaledHeight = WallpaperBlurSizing.scaledSide(sourceBitmap.getHeight(), downsampleFactor);
 
-        int scaledWidth = Math.max(1, Math.round(sourceBitmap.getWidth() / downsampleFactor));
-        int scaledHeight = Math.max(1, Math.round(sourceBitmap.getHeight() / downsampleFactor));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !sGpuFailed) {
+            try {
+                // Null only for an interrupted worker; RenderScript would be wasted on it too.
+                return WallpaperGpuBlur.blur(sourceBitmap, scaledWidth, scaledHeight,
+                    WallpaperBlurSizing.gpuBlurRadius(scriptRadius));
+            } catch (Throwable e) {
+                // Once is enough: a GPU that failed a bake leaves RenderScript the process's blur.
+                sGpuFailed = true;
+                Logger.logStackTraceWithMessage(LOG_TAG,
+                    "GPU wallpaper blur failed, using RenderScript from now on", e);
+            }
+        }
+        return renderScriptBlur(context, sourceBitmap, scaledWidth, scaledHeight, scriptRadius);
+    }
+
+    /** RenderScript's intrinsic, below Android 12 and after a GPU bake failed. */
+    @Nullable
+    private static Bitmap renderScriptBlur(@NonNull Context context, @NonNull Bitmap sourceBitmap,
+                                           int scaledWidth, int scaledHeight, float scriptRadius) {
         Bitmap blurInput = null;
         Bitmap blurOutput = null;
         AndroidStockBlurImpl blurImpl = new AndroidStockBlurImpl();

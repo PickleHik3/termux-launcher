@@ -2,6 +2,8 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -62,6 +64,89 @@ public class EditorScreenLookTest {
         SurfacePresets.applyLook(preferences, preset("frost"));
     }
 
+    /** The user's own look: Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth, Rim Bright. */
+    private void setUpCustom() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 12);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 3);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 3);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 0);
+        preferences.setFancierGlassDispersionPercent(40);
+        preferences.setFancierGlassBendDp(30);
+        preferences.setSurfaceGlassRim("gradient");
+    }
+
+    private void assertCustomValues() {
+        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(3, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(1, preferences.lookGrid().value(LookGrid.Property.FROST, null,
+            LookGrid.NO_PAGE));
+        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(40, preferences.getFancierGlassDispersionPercent());
+        assertEquals(30, preferences.getFancierGlassBendDp());
+        assertEquals("gradient", preferences.getSurfaceGlassRim());
+    }
+
+    @Test
+    public void customComesBackAfterALookInTheSameVisit() {
+        setUpCustom();
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+        tapLook(editor, SOLID);
+        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+
+        assertCustomValues();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
+    public void customComesBackAfterALookWasKeptWithDone() {
+        setUpCustom();
+        SurfaceEditorController first = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        tapLook(first, SOLID);
+        first.done();
+
+        // The next visit opens on Solid; its Custom chip is the user's own look again.
+        SurfaceEditorController second = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(SOLID, model(second).value(Row.LOOK));
+        tapLook(second, AppearanceLooks.CUSTOM_STOP);
+        assertCustomValues();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(second).value(Row.LOOK));
+    }
+
+    @Test
+    public void aSliderMovedOffALookIsCustomAndSavedWhenItLeaves() {
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertEquals(FROST, model(editor).value(Row.LOOK));
+        model(editor).onValue(Row.OPACITY, 33, false);
+        model(editor).onReleased(Row.OPACITY);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+
+        tapLook(editor, SOLID);
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertNotNull(SurfacePresets.custom(preferences));
+    }
+
+    @Test
+    public void aCustomLookAtOpenIsSavedAndUndoPutsTheSlotBack() {
+        setUpCustom();
+        assertNull(SurfacePresets.custom(preferences));
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        assertNotNull("saved at open", SurfacePresets.custom(preferences));
+
+        tapLook(editor, SOLID);
+        editor.undo();
+        assertNull("Cancel leaves the slot as it was at open", SurfacePresets.custom(preferences));
+        assertCustomValues();
+    }
+
     @Test
     public void aLookOnCustomizationReachesEveryPage() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
@@ -100,6 +185,70 @@ public class EditorScreenLookTest {
         assertFalse(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.TERMINAL));
         assertFalse(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.DISPLAY));
         assertEquals("the Workspace follows Base again", FROST, model(editor).value(Row.LOOK));
+    }
+
+    private int homeOpacity() {
+        return preferences.lookGrid().value(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME);
+    }
+
+    private void moveHomeOpacity(SurfaceEditorController editor, int value) {
+        model(editor).onValue(Row.OPACITY, value, false);
+        model(editor).onReleased(Row.OPACITY);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+    }
+
+    @Test
+    public void aCardCustomComesBackAfterALookInTheSameVisit() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+        tapLook(editor, SOLID);
+        assertEquals(SOLID, model(editor).value(Row.LOOK));
+        tapLook(editor, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, homeOpacity());
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
+    public void aCardCustomComesBackAfterALookWasKeptWithDone() {
+        SurfaceEditorController first = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(first, 33);
+        tapLook(first, SOLID);
+        first.done();
+
+        SurfaceEditorController second = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        assertEquals(SOLID, model(second).value(Row.LOOK));
+        tapLook(second, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33, homeOpacity());
+    }
+
+    @Test
+    public void aCardCustomIsKeptPerCard() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        tapLook(editor, SOLID);
+        editor.done();
+
+        // The Workspace card never had a Custom: its chip writes nothing.
+        SurfaceEditorController workspace = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL,
+            TERMINAL_PAGE);
+        tapLook(workspace, SOLID);
+        tapLook(workspace, AppearanceLooks.CUSTOM_STOP);
+        assertEquals(33 == preferences.lookGrid().value(LookGrid.Property.OPACITY, null,
+            LookGrid.Kind.TERMINAL), false);
+    }
+
+    @Test
+    public void undoPutsACardsSavedCustomBackAsItWasAtOpen() {
+        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        moveHomeOpacity(editor, 33);
+        assertNull(CardCustoms.raw(preferences.getSharedPreferences()));
+        tapLook(editor, SOLID);
+        assertNotNull(CardCustoms.raw(preferences.getSharedPreferences()));
+        editor.undo();
+        assertNull("the slot is as it was at open",
+            CardCustoms.raw(preferences.getSharedPreferences()));
+        assertEquals(FROST, model(editor).value(Row.LOOK));
     }
 
     @Test

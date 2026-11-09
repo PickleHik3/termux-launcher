@@ -51,7 +51,7 @@ public class PlaceLayoutLiveDocumentsTest {
             layout -> layout.withWide(LayoutsJson.DOCK_DESIGN, other.storageValue()));
 
         assertEquals(other, home.dockStyle());
-        assertEquals("the Terminal's is not touched", before,
+        assertEquals("every page reads the dock Home holds (ADR 0023 §1)", other,
             store.forVariant(LayoutVariant.NORMAL).dockStyle());
     }
 

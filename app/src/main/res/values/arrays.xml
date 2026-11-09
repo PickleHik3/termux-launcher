@@ -97,6 +97,18 @@
         <item>light</item>
         <item>polished</item>
     </string-array>
+    <string-array name="settings_keyboard_voice_polish_level_pill_entries">
+        <item>@string/tai_fn_level_light</item>
+        <item>@string/tai_fn_level_polished</item>
+    </string-array>
+    <string-array name="cleanup_accelerator_entries">
+        <item>@string/tai_fn_cpu</item>
+        <item>@string/tai_fn_gpu</item>
+    </string-array>
+    <string-array name="cleanup_accelerator_values">
+        <item>cpu</item>
+        <item>gpu</item>
+    </string-array>
     <string-array name="settings_keyboard_voice_mic_sensitivity_entries">
         <item>@string/settings_keyboard_voice_mic_sensitivity_normal</item>
         <item>@string/settings_keyboard_voice_mic_sensitivity_high</item>
@@ -287,6 +299,16 @@
         <item>5</item>
         <item>10</item>
     </string-array>
+    <string-array name="speech_model_accelerator_entries">
+        <item>@string/speech_model_accelerator_auto</item>
+        <item>@string/speech_model_accelerator_cpu</item>
+        <item>@string/speech_model_accelerator_gpu</item>
+    </string-array>
+    <string-array name="speech_model_accelerator_values">
+        <item>auto</item>
+        <item>cpu</item>
+        <item>gpu</item>
+    </string-array>
     <string-array name="termux_ai_catalog_backend_filter_entries">
         <item>@string/termux_ai_catalog_backend_all</item>
         <item>@string/termux_ai_backend_label_litert</item>
@@ -389,6 +411,14 @@
         <item>secondary</item>
         <item>tertiary</item>
     </string-array>
+    <string-array name="settings_terminal_engine_entries">
+        <item>@string/settings_terminal_engine_standard</item>
+        <item>@string/settings_terminal_engine_ghostty</item>
+    </string-array>
+    <string-array name="settings_terminal_engine_values" translatable="false">
+        <item>standard</item>
+        <item>ghostty</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_entries">
         <item>None</item>
         <item>CRT</item>
@@ -396,6 +426,16 @@
         <item>CRT (amber)</item>
         <item>CRT (Material colours)</item>
         <item>TFT grid</item>
+    </string-array>
+    <string-array name="settings_idle_tear_rate_entries">
+        <item>Rare (every 2–5 minutes)</item>
+        <item>Sometimes (every 30–90 seconds)</item>
+        <item>Often (every 10–30 seconds)</item>
+    </string-array>
+    <string-array name="settings_idle_tear_rate_values">
+        <item>rare</item>
+        <item>sometimes</item>
+        <item>often</item>
     </string-array>
     <string-array name="settings_terminal_retro_effect_values">
         <item>none</item>

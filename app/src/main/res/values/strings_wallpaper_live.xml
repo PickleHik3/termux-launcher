@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Video and Shader halves of the wallpaper picker (ShaderListPage, ShaderEditorPage,
+     VideoPage, WallpaperLiveHost). Headings name the thing; descriptions state one fact. -->
+<resources>
+    <string name="wallpaper_kind_photo">Photo</string>
+    <string name="wallpaper_kind_video">Video</string>
+    <string name="wallpaper_kind_shader">Shader</string>
+    <string name="wallpaper_kind_label">Wallpaper kind</string>
+
+    <string name="shader_list_heading">Shaders</string>
+    <string name="shader_examples_heading">Examples</string>
+    <string name="shader_example_note">Example. Apply saves a copy you can edit.</string>
+    <string name="shader_edit_named">Edit %1$s</string>
+    <string name="shader_new">New shader</string>
+    <string name="shader_default_name">Shader</string>
+    <string name="live_in_use">In use</string>
+
+    <string name="shader_editor_heading">Shader</string>
+    <string name="shader_name_hint">Name</string>
+    <string name="shader_code_hint">Shader code</string>
+    <string name="shader_paste">Paste</string>
+    <string name="shader_import">Import file</string>
+    <string name="shader_description">Shadertoy and ShaderEditor shaders paste as-is.</string>
+    <string name="shader_empty">Paste or write a shader first.</string>
+    <string name="shader_clipboard_empty">The clipboard has no text.</string>
+    <string name="shader_import_failed">Could not read that file.</string>
+    <string name="shader_import_unavailable">Importing needs the app\'s file picker.</string>
+    <string name="shader_texture_failed">Could not use that image.</string>
+    <string name="shader_too_heavy">Too heavy at this quality</string>
+    <string name="shader_knob_quality">Quality</string>
+    <string name="shader_quality_full">Full</string>
+    <string name="shader_quality_half">Half</string>
+    <string name="shader_quality_quarter">Quarter</string>
+    <string name="shader_texture_none">Texture: none</string>
+    <string name="shader_texture_named">Texture: %1$s</string>
+    <string name="shader_texture_choose">Choose image</string>
+    <string name="shader_texture_remove">Remove</string>
+    <string name="shader_apply">Apply</string>
+    <string name="shader_delete">Delete</string>
+    <string name="shader_delete_confirm">Delete this shader?</string>
+    <string name="shader_delete_yes">Delete</string>
+    <string name="shader_delete_no">Cancel</string>
+
+    <string name="video_heading">Video</string>
+    <string name="video_format_hint">Best: an H.265 MP4 at the screen\'s size or smaller, 24–30 fps, a 5–15 s seamless loop, under 20 MB. H.264 also works. A GIF is converted to a video when you choose it.</string>
+    <string name="video_choose">Choose video or GIF</string>
+    <string name="video_in_use">In use: %1$s</string>
+    <string name="video_copying">Copying…</string>
+    <string name="video_converting">Converting GIF to video… %1$d%%</string>
+    <string name="video_preparing">Preparing %1$d fps version… %2$d%%</string>
+    <string name="video_rate_reason">Clip is %1$d fps</string>
+    <string name="video_version_suffix">%1$d fps version · %2$s</string>
+    <string name="video_applying">Setting wallpaper…</string>
+    <string name="video_failed">Could not use that file.</string>
+
+    <string name="live_knob_frame_rate">Frame rate</string>
+    <string name="live_rate_15">15 fps</string>
+    <string name="live_rate_30">30 fps</string>
+    <string name="live_rate_60">60 fps</string>
+
+    <string name="live_back_to_photo">Back to photo</string>
+    <string name="live_lock_note">The lock screen shows a still of this wallpaper.</string>
+    <string name="live_also_phone_hint">Sets a still on the home and lock screen.</string>
+    <string name="wallpaper_motion_reverted">The shader stopped working, so the photo is back.</string>
+    <string name="live_still_failed">Could not draw the still. It plays in the app only.</string>
+</resources>

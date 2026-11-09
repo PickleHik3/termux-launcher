@@ -4458,8 +4458,10 @@ public final class SuggestionBarView extends GridLayout
                 } else {
                     View pressTarget = resolvePrimaryPressTarget(view);
                     bindAppContextLongPress(pressTarget, entry, pinnedIndex, null, null, true);
+                    // The lifted pin's slot stays hidden in every drawing during its lift, and
+                    // the lift keeps hold of this one, so its end shows the slot on screen.
                     DockLift lift = dockLift;
-                    if (lift != null && pinnedItem == lift.pin) view.setAlpha(0f);
+                    if (lift != null && pinnedItem == lift.pin) lift.source.hide(view);
                 }
             } else {
                 View pressTarget = resolvePrimaryPressTarget(view);
@@ -8513,21 +8515,23 @@ public final class SuggestionBarView extends GridLayout
         @NonNull final PinnedAppItem pin;
         final int sourceIndex;
         @NonNull final LauncherAppEntry entry;
-        /** The slot it left, hidden while it is in the air. */
-        @NonNull final View sourceSlot;
+        /** The slot it left, hidden while it is in the air, shown again however the lift ends. */
+        @NonNull final com.termux.app.dock.LiftSourceSlot<View> source =
+            new com.termux.app.dock.LiftSourceSlot<>(LIFT_SOURCE_SHADE);
         /** The row's children have been told the stream is no longer theirs. */
         boolean childrenCancelled;
 
         DockLift(@NonNull com.termux.app.launcher.widget.IconCarry carry,
-                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry,
-                 @NonNull View sourceSlot) {
+                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry) {
             this.carry = carry;
             this.pin = pin;
             this.sourceIndex = sourceIndex;
             this.entry = entry;
-            this.sourceSlot = sourceSlot;
         }
     }
+
+    private static final com.termux.app.dock.LiftSourceSlot.Shade<View> LIFT_SOURCE_SHADE =
+        (slot, shown) -> slot.setAlpha(shown ? 1f : 0f);
 
     @Nullable private DockLift dockLift;
 
@@ -8615,15 +8619,21 @@ public final class SuggestionBarView extends GridLayout
                     DockLift lift = made[0];
                     if (lift != null) revealLiftSource(lift);
                 }
+                @Override public void onEnded() {
+                    // Every end, the edge of the screen and a cancel included: nothing the row
+                    // hid for the lift stays hidden.
+                    DockLift lift = made[0];
+                    if (lift != null) revealLiftSource(lift);
+                }
                 @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
             });
-        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, slot);
+        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry);
         made[0] = lift;
         dockLift = lift;
-        slot.setAlpha(0f);
+        lift.source.hide(slot);
         if (!carry.begin(icon, size, dx, dy, rawX, rawY)) {
             dockLift = null;
-            slot.setAlpha(1f);
+            lift.source.end();
             return false;
         }
         return true;
@@ -8683,13 +8693,13 @@ public final class SuggestionBarView extends GridLayout
             slot.dropXRatio);
     }
 
-    /** The slot the lifted icon left shows again: in place, or by drawing the row again. */
+    /**
+     * The slot the lifted icon left shows again: the one the row drew for it last, since every
+     * drawing during the lift hands its slot to the lift. Drawing the row again would not do: a
+     * drawing that matches the one on screen is skipped, and left the slot hidden.
+     */
     private void revealLiftSource(@NonNull DockLift lift) {
-        if (lift.sourceSlot.getParent() == this) {
-            lift.sourceSlot.setAlpha(1f);
-        } else {
-            reloadWithInput("", lastTerminalView);
-        }
+        lift.source.end();
     }
 
     /** Takes {@code pin} out of the row as the store holds it now, without an Undo. */

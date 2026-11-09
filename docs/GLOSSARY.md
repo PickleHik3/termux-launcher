@@ -364,6 +364,15 @@ to the **Workspace** at the window you left, opening one if there is none; a lon
 **Home float** on the page you are on, as Home's long-press Terminal item does.
 _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
+**Terminal engine**:
+What reads a pane's output and keeps its screen and history: **Standard** (the Java core Termux
+has always had) or **Fast** (libghostty-vt, Ghostty's terminal library, about 20 times quicker at
+reading heavy output). Chosen on Settings › Terminal › Clipboard & compatibility for panes opened after the
+change; offered only in builds that carry the library. A native crash with a Fast pane open turns
+Fast off for new panes until the app is updated. In code a `TerminalContent` behind
+`TerminalSession.chooseEngine` (ADR 0026); `debug.tl.terminal_core` overrides it for testing.
+_Avoid_: core (in prose), backend, Ghostty mode, renderer (drawing is the same for both)
+
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
 the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
@@ -515,6 +524,18 @@ _Avoid_: Global as the scope chip's label (the old chip; in prose and code say B
 the Appearance editor's card for the Base look (developer, 2026-11-03).
 
 ### Look and motion
+
+**Backdrop layers**:
+While the pages move, a Live glass surface's backdrop as a short stack of pictures that each move
+on their own instead of one recording: the **ground** (the stored pre-blurred wallpaper frame at
+the parallax offset, or a live scene's frame at its glass rate), the **pages** (the pages under the
+dock or a pinned float, captured blurred as the swipe starts and moved by their travel) and the
+**local** layer (what lies beneath the surface on its own page or float, recorded and blurred
+once). The glass composites them in its one draw. The first and the landed frame of a swipe are
+the resting picture; a layer that is not ready falls back to the live recording (ADR 0021 §2b,
+`BackdropLayers`). Under "See through: One layer" a glass with glass above it shows the stored frame, so the glass
+above sees it but not through it, at rest too.
+_Avoid_: frozen glass, page snapshot, freeze frame
 
 **Ambient effect**:
 A built-in shader effect that animates continuously rather than in answer to something. It is off

@@ -1427,9 +1427,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalEmulator emulator = session.getEmulator();
         if (emulator == null)
             return;
-        com.termux.terminal.TerminalBuffer screen = emulator.getScreen();
+        com.termux.terminal.TerminalContent screen = emulator.getContent();
         LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
-        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.getActiveTranscriptRows(), emulator.mRows - 1))
+        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.historyRows(), emulator.mRows - 1))
             urlSet.add(span.url);
         TerminalSheetController sheet = mHost.sheetController();
         String title = mContext.getString(R.string.action_select_url);

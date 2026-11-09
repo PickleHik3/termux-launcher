@@ -27,12 +27,12 @@ import java.util.Objects;
 public final class WallPages {
 
     /** What a page is. */
-    public enum PageKind { HOME, TERMINAL, DISPLAY }
+    public enum PageKind { HOME, TERMINAL, DISPLAY, ASSISTANT }
 
     /** Why an edit was refused. */
     public enum Error {
-        UNKNOWN_PAGE, BAD_INDEX, SECOND_TERMINAL, LAST_HOME, LAST_PAGE, NEEDS_CONFIRM,
-        NOT_PENDING, BINDING_NOT_DISPLAY
+        UNKNOWN_PAGE, BAD_INDEX, SECOND_TERMINAL, SECOND_ASSISTANT, LAST_HOME, LAST_PAGE,
+        NEEDS_CONFIRM, NOT_PENDING, BINDING_NOT_DISPLAY
     }
 
     /** What an accepted edit did. */
@@ -256,6 +256,13 @@ public final class WallPages {
         return null;
     }
 
+    /** The Assistant page, when the wall has one. */
+    @Nullable
+    public Page assistant() {
+        for (Page p : pages()) if (p.kind == PageKind.ASSISTANT) return p;
+        return null;
+    }
+
     /** The pages Edit pages lists: those on the wall without the temporary ones. */
     @NonNull
     public List<Page> listedPages() {
@@ -412,6 +419,7 @@ public final class WallPages {
                 return "Home";
             }
             case TERMINAL: return "Terminal";
+            case ASSISTANT: return "Assistant";
             case DISPLAY:
             default: return page.binding != null && appName != null ? appName : "Display";
         }
@@ -498,6 +506,7 @@ public final class WallPages {
                        boolean temporary) {
         if (binding != null && kind != PageKind.DISPLAY) return refuse(Error.BINDING_NOT_DISPLAY);
         if (kind == PageKind.TERMINAL && hasTerminal()) return refuse(Error.SECOND_TERMINAL);
+        if (kind == PageKind.ASSISTANT && hasAssistant()) return refuse(Error.SECOND_ASSISTANT);
         int at = all.size();
         if (afterId != END) {
             int i = indexInAll(afterId);
@@ -742,6 +751,7 @@ public final class WallPages {
         if (homeIsDisplayWindow) return WallRow.START_IN_DISPLAY;
         Page home = home();
         if (home != null && home.kind == PageKind.DISPLAY) return WallRow.START_IN_DISPLAY;
+        if (home != null && home.kind == PageKind.ASSISTANT) return WallRow.START_IN_ASSISTANT;
         return home != null && home.kind == PageKind.TERMINAL
             ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
     }
@@ -770,6 +780,10 @@ public final class WallPages {
     public Result chooseStartIn(@Nullable String startIn) {
         String value = StartInPolicy.read(startIn);
         if (WallRow.START_IN_DISPLAY.equals(value)) return homeOnDisplayPage();
+        if (WallRow.START_IN_ASSISTANT.equals(value)) {
+            Page a = assistant();
+            return a == null ? refuse(Error.UNKNOWN_PAGE) : setHome(a.id);
+        }
         if (WallRow.START_IN_WORKSPACE.equals(value)) {
             Page t = terminal();
             return t == null ? refuse(Error.UNKNOWN_PAGE) : setHome(t.id);
@@ -1006,6 +1020,11 @@ public final class WallPages {
                                int last, boolean parked) {
         return new WallPages(all, pending, detached, homeId, nextId, display,
             last, parked);
+    }
+
+    private boolean hasAssistant() {
+        for (Page p : all) if (p.kind == PageKind.ASSISTANT) return true;
+        return false;
     }
 
     private boolean hasTerminal() {

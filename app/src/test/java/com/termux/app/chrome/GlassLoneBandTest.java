@@ -104,12 +104,12 @@ public class GlassLoneBandTest {
     public void theProgramHoldsEveryBandAndEasesTheBendsNormal() {
         String agsl = GlassRefraction.AGSL;
         assertTrue(agsl.contains("    float hs = min(b.x, b.y);\n"));
-        assertTrue(agsl.contains("    float reach = max(uBand, uSoftRim) * (1.0 + kShelfThick * uShelf)"
+        assertTrue(agsl.contains("    float reach = max(sBand, sSoft) * (1.0 + kShelfThick * uShelf)"
             + " * (live ? 1.0 + kLagBand : 1.0);\n"));
         assertTrue(agsl.contains("    float2 nb = rectNormal(p, b, min(max(cr * 1.5, reach), hs));\n"));
-        assertTrue(agsl.contains("    float t = clamp(inside / min(uBand, hs), 0.0, 1.0);\n"));
+        assertTrue(agsl.contains("    float t = clamp(inside / min(sBand, hs), 0.0, 1.0);\n"));
         assertTrue(agsl.contains("        softB = min(softB, hs);\n"));
-        assertTrue(agsl.contains("float tl = clamp(inside / min(uBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);"));
+        assertTrue(agsl.contains("float tl = clamp(inside / min(sBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);"));
         assertTrue(agsl.contains("float sl = min(softB * (1.0 + kLagBand * lean), hs);"));
         assertTrue(agsl.contains("float lower = uShelf > 0.0 ? max(nb.y, 0.0) * uShelf : 0.0;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));

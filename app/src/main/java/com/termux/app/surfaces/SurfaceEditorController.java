@@ -63,6 +63,7 @@ import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -722,6 +723,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private boolean mSession;
     @Nullable private Runnable mOnDone;
+    /** The card sheet and the bar are kept unseen under the picker rising with the entry. */
+    private boolean mChromeVeiled;
+    /** The next fresh presentation stands in place ({@link #presentInPlace}). */
+    private boolean mNextInPlace;
     private boolean mWallpaperSettled;
     @Nullable private Runnable mWallpaperWaiter;
     private int mPresentToken;
@@ -729,6 +734,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public void setOnDone(@Nullable Runnable onDone) {
         mOnDone = onDone;
+    }
+
+    /**
+     * {@link #present} with the editor already where it stood: the frame at its pose, the card at
+     * its detent, nothing growing or rising, and {@code onSettled} run right after the frame's
+     * first pass. A relaunch reopening the carried session, whose first drawn frame shows it.
+     */
+    @Override
+    public void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                               @Nullable Runnable onSettled) {
+        mNextInPlace = true;
+        try {
+            present(card, place, onSettled);
+        } finally {
+            mNextInPlace = false;
+        }
+    }
+
+    @Override
+    public void setChromeVeiled(boolean veiled) {
+        if (mChromeVeiled == veiled)
+            return;
+        mChromeVeiled = veiled;
+        // Before the presentation the views may not exist yet; present applies it once they do.
+        if (!mOpen)
+            return;
+        if (mSheet != null)
+            mSheet.setVeiled(veiled);
+        if (mBar != null)
+            mBar.setUnderOverview(veiled || mHost.isPageOverviewOpen());
     }
 
     /** Opens the session: holds the wall and starts reading the editor's wallpaper now. */
@@ -745,10 +780,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
         mWallpaperSettled = false;
-        if (mHost.editorPaintsWallpaper())
-            loadEditorWallpaper(rootContainer);
-        else
+        if (!mHost.editorPaintsWallpaper()) {
+            mPreparedWallpaper = null;
             mWallpaperSettled = true;
+        } else if (!takePreparedWallpaper(rootContainer)) {
+            loadEditorWallpaper(rootContainer);
+        }
     }
 
     @Override
@@ -871,6 +908,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         ViewGroup content = mHost.findView(android.R.id.content);
         if (rootContainer == null || content == null)
             return;
+        final boolean animate = !mNextInPlace;
         final int token = ++mPresentToken;
         // A theme preview no carried session owns (its relaunch lost the handover) is kept, as
         // every other write of a session that ended without Discard is.
@@ -883,6 +921,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mEntryCustom = prefs.getSurfaceCustomPreset();
+        mEntryCardCustoms = CardCustoms.raw(prefs.getSharedPreferences());
         mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
         mSettingsNow = mEntrySettings.signature();
         mEntryMinimal = mHost.isMinimalMode();
@@ -903,6 +942,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         // On disk until the session ends, so a launcher killed before Done starts on this state.
         AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom);
+        // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
+        // tried and kept comes back to it. Undo and a killed session put the slot back as
+        // mEntryCustom has it.
+        if (carried == null && (AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
+                || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL))))
+            SurfacePresets.saveCustom(prefs);
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
         com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
@@ -947,6 +992,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
         mSheet.attach(content);
+        mSheet.setVeiled(mChromeVeiled);
+        if (mChromeVeiled)
+            mBar.setUnderOverview(true);
         mSheet.setLandscape(mBar.isLandscape());
         notifyDirty();
 
@@ -960,18 +1008,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // With no card named (or one that cannot stand here) the screen's card stands at peek:
         // the sheet is never down while the editor is open.
         if (card != null)
-            raiseOrReport(card);
+            raiseOrReport(card, animate);
         if (mCard == null)
-            raiseScreenCard();
+            raiseScreenCard(animate);
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
             frameSizeChanged();
             mFramed = true;
-            if (!layoutFrame(true))
-                layoutFrameWhenReady(content, token, FRAME_RETRIES);
+            if (!layoutFrame(animate))
+                layoutFrameWhenReady(content, token, FRAME_RETRIES, animate);
             positionTargets();
-            long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
+            long wait = !animate || ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
@@ -1033,6 +1081,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         switch (kind) {
             case HOME: return getString(R.string.editor_chip_kind_home);
             case DISPLAY: return getString(R.string.editor_chip_kind_display);
+            case ASSISTANT: return getString(R.string.editor_chip_kind_assistant);
             case TERMINAL:
             default:
                 return getString(R.string.editor_chip_kind_terminal);
@@ -1194,9 +1243,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Raises the card {@link #present} was asked for, or logs why it cannot stand there. */
     private void raiseOrReport(@NonNull EditorCard card) {
+        raiseOrReport(card, true);
+    }
+
+    private void raiseOrReport(@NonNull EditorCard card, boolean animate) {
         String refusal = cardRefusal(card);
         if (refusal == null)
-            openCard(card, true);
+            openCard(card, animate);
         else
             Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
     }
@@ -1283,7 +1336,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
     private void raiseScreenCard() {
-        openCard(EditorCard.forScreen(mScreen), true, EditorCardSheet.DETENT_PEEK);
+        raiseScreenCard(true);
+    }
+
+    private void raiseScreenCard(boolean animate) {
+        openCard(EditorCard.forScreen(mScreen), animate, EditorCardSheet.DETENT_PEEK);
     }
 
     /**
@@ -1346,7 +1403,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     public void onPageOverviewChanged() {
         if (mBar != null)
-            mBar.setUnderOverview(mHost.isPageOverviewOpen());
+            mBar.setUnderOverview(mHost.isPageOverviewOpen() || mChromeVeiled);
         restateCard();
         EditorCardSheet sheet = mSheet;
         if (sheet == null || !sheetUp())
@@ -1700,15 +1757,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.HOME)
             resetHome();
         if (card == EditorCard.DOCK) {
-            // The dock's height, type and the Search field and Drawer icon live in the layout
-            // session, so its Undo covers them.
+            // The dock's height lives in the layout session, so its Undo covers it. Type, Search
+            // field and Drawer icon are every page's (Global card): a card reset leaves them.
             float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
                 .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
             if (layout != null) {
                 layout.setDockHeightScale(scale);
-                layout.setDockStyle(DockStyle.GLASS_TRAY);
-                layout.setSearchField(false);
-                layout.setDrawerTile(false);
                 layout.setWallStripHeightDp(
                     com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
             } else {
@@ -1837,17 +1891,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** The opening pass found no laid-out window: it tries again on the next frames, a few times. */
-    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts) {
+    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts,
+                                      boolean animate) {
         if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
             return;
         content.postOnAnimation(() -> {
             if (!mOpen || token != mPresentToken || mFrameCtxValid)
                 return;
             frameSizeChanged();
-            if (layoutFrame(true))
+            if (layoutFrame(animate))
                 positionTargets();
             else
-                layoutFrameWhenReady(content, token, attempts - 1);
+                layoutFrameWhenReady(content, token, attempts - 1, animate);
         });
     }
 
@@ -2567,7 +2622,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLabelInk;
 
     /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
-    private void loadEditorWallpaper(@NonNull View rootContainer) {
+    private int loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
         View decor = rootContainer.getRootView();
         final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
@@ -2589,26 +2644,102 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 ? sampleLabelPicture(picture, decorWidth, decorHeight)
                 : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
             final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
-            rootContainer.post(() -> {
-                if (!mSession || token != mWallpaperToken)
-                    return;
-                mLabelPicture = sample;
-                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
-                mLabelPictureHeight = sampleHeight;
-                // The bar may not be up yet (the first open after a theme relaunch); present()
-                // applies the ink again once it is.
-                applyLabelInk();
-                if (picture != null) {
-                    mEditorWallpaper = picture;
-                    showEditorWallpaper(picture);
-                } else if (mPageListener != null) {
-                    mPageListener.onFrameWallpaperMissing();
-                }
-                wallpaperSettled();
-            });
+            rootContainer.post(() -> landWallpaper(token, picture, sample, sampleHeight));
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
+        return token;
+    }
+
+    /**
+     * A read of the editor's wallpaper answered: painted into the session, or, read ahead of it
+     * ({@link #prepareWallpaper}), kept for {@link #beginSession}.
+     */
+    private void landWallpaper(int token, @Nullable Drawable picture, @Nullable int[] sample,
+                               int sampleHeight) {
+        if (token != mWallpaperToken)
+            return;
+        if (!mSession) {
+            PreparedWallpaper prepared = mPreparedWallpaper;
+            if (prepared != null && prepared.token == token)
+                prepared.answer(picture, sample, sampleHeight);
+            return;
+        }
+        mLabelPicture = sample;
+        mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+        mLabelPictureHeight = sampleHeight;
+        // The bar may not be up yet (the first open after a theme relaunch); present()
+        // applies the ink again once it is.
+        applyLabelInk();
+        if (picture != null) {
+            mEditorWallpaper = picture;
+            showEditorWallpaper(picture);
+        } else if (mPageListener != null) {
+            mPageListener.onFrameWallpaperMissing();
+        }
+        wallpaperSettled();
+    }
+
+    /** The editor's wallpaper read ahead of the session; null when none is. */
+    @Nullable private PreparedWallpaper mPreparedWallpaper;
+
+    /** A read begun by {@link #prepareWallpaper}, and what it answered once it has. */
+    private static final class PreparedWallpaper {
+        final int token;
+        boolean answered;
+        @Nullable Drawable picture;
+        @Nullable int[] sample;
+        int sampleHeight;
+
+        PreparedWallpaper(int token) {
+            this.token = token;
+        }
+
+        void answer(@Nullable Drawable picture, @Nullable int[] sample, int sampleHeight) {
+            answered = true;
+            this.picture = picture;
+            this.sample = sample;
+            this.sampleHeight = sampleHeight;
+        }
+    }
+
+    /**
+     * A Wallpaper door's tap: the editor's wallpaper starts reading now, while the door's menu
+     * slides away, and the session it opens takes the read over.
+     */
+    @Override
+    public void prepareWallpaper() {
+        if (mSession || mPreparedWallpaper != null || prefs() == null
+            || !mHost.editorPaintsWallpaper())
+            return;
+        View rootContainer = mHost.findView(R.id.terminal_root_container);
+        if (rootContainer == null)
+            return;
+        mPreparedWallpaper = new PreparedWallpaper(loadEditorWallpaper(rootContainer));
+    }
+
+    @Override
+    public void dropPreparedWallpaper() {
+        if (mPreparedWallpaper == null || mSession)
+            return;
+        mPreparedWallpaper = null;
+        mWallpaperToken++;
+    }
+
+    /**
+     * The session takes over a read {@link #prepareWallpaper} began: posted when it has answered,
+     * as a fresh read's answer is, so the surface's scrim is up first. False when there is none.
+     */
+    private boolean takePreparedWallpaper(@NonNull View rootContainer) {
+        PreparedWallpaper prepared = mPreparedWallpaper;
+        mPreparedWallpaper = null;
+        if (prepared == null || prepared.token != mWallpaperToken)
+            return false;
+        if (prepared.answered)
+            rootContainer.post(() -> landWallpaper(prepared.token, prepared.picture,
+                prepared.sample, prepared.sampleHeight));
+        // Not yet answered: the read lands into the session when it does.
+        return true;
     }
 
     /**
@@ -3080,6 +3211,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
+                case WALLPAPER_DIM: return wallpaperDimValue(prefs);
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -3185,6 +3317,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case GLASS_EDGE:
                 case REFLECTION:
                 case GRAIN:
+                case WALLPAPER_DIM:
                     return getString(R.string.appearance_readout_percent, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
@@ -3520,6 +3653,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (screen != null)
                     return elementsView(screen);
             }
+            // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
+            // Global card holds them, drawn by the cards they came from.
+            if (row == Row.DOCK_TYPE)
+                return dockCard().view(row, widthPx);
+            if (row == Row.STATUS_POSITION) {
+                com.termux.app.surfaces.cards.CardRowView position =
+                    com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
+                        widthPx, mStatusCardHost);
+                if (position == null) return null;
+                mOwnRows.put(row, position);
+                return position.view;
+            }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
             if (card != null && CardBody.redesigned(card))
@@ -3549,8 +3694,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (card == EditorCard.DOCK)
+            if (row == Row.DOCK_TYPE || card == EditorCard.DOCK)
                 dockCard().restate(row);
+            else if (row == Row.STATUS_POSITION)
+                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);
@@ -3692,6 +3839,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return hue;
     }
 
+    /** The card whose chips are up, as {@link CardCustoms} names it. */
+    @NonNull
+    private String cardKey() {
+        return (mChips.element == null ? "all" : mChips.element.name()) + ":"
+            + mChips.appliesTo.name();
+    }
+
+    @Nullable private String mEntryCardCustoms;
+
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
 
@@ -3707,10 +3863,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
-        // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
-        // keeps its own writer (the same cell, Base).
+        // Margin is one number for every page, Base's alone: whatever Where says, it keeps its
+        // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
-            return onPageSide();
+            return false;
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;
@@ -3751,21 +3907,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
         if (row == Row.LOOK) {
             int[] look = GlassRows.lookCell(value);
+            String slot = cardKey();
             if (look == null) {
                 mHeldCustomCells.add(mChips);
+                // This card's own Custom comes back; with none saved nothing is written.
+                look = CardCustoms.get(prefs.getSharedPreferences(), slot);
             } else {
                 mHeldCustomCells.remove(mChips);
+                // Leaving a Custom the card wears: its values are the card's saved Custom.
+                int[] worn = {cellValue(grid, LookGrid.Property.FROST),
+                    cellValue(grid, LookGrid.Property.OPACITY),
+                    cellValue(grid, LookGrid.Property.TINT)};
+                if (GlassRows.lookStopFor(worn[0], worn[1], worn[2]) == AppearanceLooks.CUSTOM_STOP)
+                    CardCustoms.put(prefs.getSharedPreferences(), slot, worn);
+            }
+            if (look != null) {
                 // One editor: a page card's Look first clears the element values beneath it on
                 // its kinds (developer, 2026-11-03), then lands in its cells.
                 SharedPreferences store = prefs.getSharedPreferences();
                 SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
-                com.termux.shared.termux.settings.preferences.LookGrid into = batch == null ? grid
+                LookGrid into = batch == null ? grid
                     : SurfacePresets.writingInto(prefs, batch).lookGrid();
                 if (mChips.element == null && mChips.onKind())
                     SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
-                com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties = {com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST, com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY, com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
+                LookGrid.Property[] properties = {LookGrid.Property.FROST,
+                    LookGrid.Property.OPACITY, LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
-                    for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(properties[i]))
+                    for (LookGrid.Key cell : mChips.cells(properties[i]))
                         into.write(cell, look[i]);
                 if (batch != null)
                     batch.applyToStore();
@@ -3776,11 +3944,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return false;
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
                 grid.write(cell, GlassRows.toCell(row, value));
-            // A kind's Margin moves the shapes as Base's does (writeMargin).
-            if (row == Row.MARGIN) {
-                requestGeometryPreview();
-                syncLayoutSession();
-            }
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -3885,6 +4048,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
                 break;
+            case WALLPAPER_DIM: writeWallpaperDim(value); break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
@@ -4819,6 +4983,39 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
+    /** The Home tab's dim of the editor's page: its own override, else the wall-wide dim. */
+    private com.termux.app.look.PageLook.Scope wallpaperDimScope() {
+        return mScopePageId < 0 ? com.termux.app.look.PageLook.Scope.GLOBAL
+            : com.termux.app.look.PageLook.Scope.page(mScopePageId);
+    }
+
+    private int wallpaperDimValue(@NonNull TermuxAppSharedPreferences prefs) {
+        com.termux.app.look.PageLook look = pageLook();
+        int own = look == null ? -1
+            : look.read(wallpaperDimScope(), TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
+        return own >= 0 ? Math.min(100, own) : prefs.getWallpaperBackdropDim();
+    }
+
+    /**
+     * The Home tab dims every Home page alike (one look per page kind, ADR 0020), each under its
+     * own key so the Terminal page keeps the wall-wide dim; with no pages to name, the wall-wide one.
+     */
+    private void writeWallpaperDim(int value) {
+        com.termux.app.look.PageLook look = pageLook();
+        if (look == null)
+            return;
+        int dim = clamp(value, 0, 100);
+        String key = TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
+        boolean written = false;
+        for (com.termux.app.wall.WallPages.Page page : scopePages()) {
+            if (page.kind != com.termux.app.wall.WallPages.PageKind.HOME) continue;
+            look.write(com.termux.app.look.PageLook.Scope.page(page.id), key, dim);
+            written = true;
+        }
+        if (!written) look.write(wallpaperDimScope(), key, dim);
+        syncDirty();
+    }
+
     /** Corners: one radius for every surface and the terminal, on both halves. */
     private void writeCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -5563,6 +5760,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry.restore(prefs);
         if (mEntryCustom != null)
             prefs.setSurfaceCustomPreset(mEntryCustom);
+        CardCustoms.restore(prefs.getSharedPreferences(), mEntryCardCustoms);
         if (mEntrySettings != null) {
             List<String> written = mEntrySettings.restore(settingsStore());
             refreshSettingsSignature();
@@ -5583,8 +5781,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Saves the look. A half left at a Custom the user made stores it as the saved Custom; with
-     * both halves on Looks the saved Custom goes, and the next Custom starts from those Looks. A
+     * Saves the look. A half left at a Custom the user made stores it as the saved Custom. Done
+     * on a Look leaves the saved Custom as it is, so Custom is still there to come back to. A
      * visit that changed no look leaves it alone.
      */
     private void commitLook() {
@@ -5597,9 +5795,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         boolean custom = AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
             || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL));
-        if (!custom)
-            prefs.setSurfaceCustomPreset(null);
-        else if (mSessionCustom.isTouched(prefs))
+        if (custom && mSessionCustom.isTouched(prefs))
             SurfacePresets.saveCustom(prefs);
     }
 
@@ -5721,11 +5917,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (outline != null)
             outline.setVisibility(View.GONE);
         clearOutlines();
+        boolean veiled = mChromeVeiled;
+        mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
-        if (sheet != null)
-            sheet.hide(true, sheet::detach);
+        if (sheet != null) {
+            sheet.hide(true, () -> {
+                sheet.detach();
+                sheet.setVeiled(false);
+            });
+        }
         EditorBar bar = mBar;
         if (bar != null) {
+            if (veiled)
+                bar.setUnderOverview(mHost.isPageOverviewOpen());
             bar.setShown(false);
             bar.detach();
         }
@@ -6744,6 +6948,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return com.termux.app.place.layout.IconSize.values().length - 1;
             case TINT_HUE:
                 return 2;
+            case WALLPAPER_DIM:
+                return 100;
             default:
                 return 1;
         }
@@ -6838,8 +7044,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The name a redesigned card gives a row where it is not the row's own. */
     @Nullable
     private CharSequence cardRowName(@NonNull Row row) {
-        if (row == Row.MARGIN && (mCard == EditorCard.TERMINAL || mCard == EditorCard.KEYBOARD))
-            return getString(R.string.editor_row_outer_margin);
         if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
             return getString(R.string.editor_row_background_opacity);
         if (row == Row.KEYBOARD_THEME)
@@ -6868,6 +7072,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
             case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
             case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case WALLPAPER_DIM: return R.drawable.ic_ms_wallpaper;
             case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
             case LINK_GESTURES: return R.drawable.ic_ms_swipe;
             case LINK_GLASS_REFRACTION: return R.drawable.ic_ms_blur_on;

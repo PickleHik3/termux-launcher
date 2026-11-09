@@ -21,6 +21,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiSettings;
+import com.termux.ai.TaiSpeechModels;
+import com.termux.ai.TaiVoiceBench;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
 
@@ -125,6 +128,10 @@ public class TaiBenchResultFragment extends Fragment {
         if (record == null) record = TaiBenchLeaderboard.latestRecord(benchmarks, key);
         if (record == null) {
             column.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_result_missing)), padded(context));
+            return;
+        }
+        if (TaiVoiceBench.isVoice(record)) {
+            renderVoice(context, benchmarks, record);
             return;
         }
         String modelId = record.optString("modelId", "");
@@ -269,6 +276,196 @@ public class TaiBenchResultFragment extends Fragment {
         delete.setOnClickListener(v -> confirmDelete(modelId, displayName));
         actions.addView(delete, TaiBenchViews.block(context, 8));
         column.addView(actions);
+    }
+
+    /**
+     * A voice result: speed, word errors and load time; where it ran (a GPU that fell back says so);
+     * each clip with what it heard against what was said, folded; the history of its speed; and "Use
+     * this", which makes this model and processor what voice input uses.
+     */
+    private void renderVoice(@NonNull Context context, @Nullable JSONObject benchmarks, @NonNull JSONObject record) {
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks, TaiBenchHomeFragment.versions(), true);
+        TaiBenchLeaderboard.Row row = TaiBenchLeaderboard.find(board, key);
+        String modelId = record.optString("modelId", "");
+        String displayName = record.optString("displayName", modelId);
+        String accelerator = record.optString("accelerator", "");
+        String ranOn = record.isNull("ranOn") ? accelerator : record.optString("ranOn", accelerator);
+        boolean fellBack = TaiVoiceBench.fellBack(record);
+        boolean installed = record.optBoolean("installed", true);
+        JSONObject phases = record.optJSONObject("phases");
+        JSONObject load = phases == null ? null : phases.optJSONObject("load");
+        JSONObject voice = TaiVoiceBench.headline(record);
+        double realtime = voice == null ? Double.NaN : voice.optDouble("realtime", Double.NaN);
+        double wer = voice == null ? Double.NaN : voice.optDouble("wer", Double.NaN);
+        long loadMs = load == null ? -1L : load.optLong("ms", -1L);
+        JSONObject conditions = record.optJSONObject("conditions");
+
+        TaiBenchViews.Card head = TaiBenchViews.card(context);
+        head.core.addView(TaiBenchViews.title(context, displayName));
+        LinearLayout pills = TaiBenchViews.row(context, 4,
+            TaiBenchViews.backendPill(context, TaiBenchViews.engineLabel(record.optString("engine", ""))),
+            TaiBenchViews.pill(context, TaiBenchViews.processorLabel(accelerator), TaiModelCentreRows.Tone.NEUTRAL));
+        if (row != null && row.rank > 0) pills.addView(TaiBenchViews.pill(context, getString(R.string.tai_bench_rank, row.rank), TaiModelCentreRows.Tone.NEUTRAL), pillParams(context));
+        if (row != null && row.wrongText) pills.addView(TaiBenchViews.pill(context, getString(R.string.tai_bench_voice_wrong_text), TaiModelCentreRows.Tone.WARN), pillParams(context));
+        if (!installed) pills.addView(TaiBenchViews.pill(context, getString(R.string.tai_bench_mark_not_installed), TaiModelCentreRows.Tone.NEUTRAL), pillParams(context));
+        TextView inUse = TaiBenchViews.pill(context, getString(R.string.tai_bench_voice_in_use), TaiModelCentreRows.Tone.ACCENT);
+        inUse.setVisibility(inUse(context, modelId, ranOn) ? View.VISIBLE : View.GONE);
+        pills.addView(inUse, pillParams(context));
+        head.core.addView(pills, TaiBenchViews.block(context, 6));
+        head.core.addView(TaiBenchViews.body(context, TaiBenchViews.voiceSummaryLine(context, realtime, wer, loadMs)), TaiBenchViews.block(context, 4));
+        if (fellBack) {
+            TextView note = TaiBenchViews.body(context, getString(R.string.tai_bench_voice_fell_back));
+            note.setTextColor(TaiBenchViews.color(context, com.termux.shared.R.attr.termuxColorError));
+            head.core.addView(note, TaiBenchViews.block(context, 2));
+        }
+        StringBuilder when = new StringBuilder(TaiBenchViews.ago(record.optLong("timestamp", 0L)));
+        if (row != null) {
+            if (row.charging) when.append(" · ").append(getString(R.string.tai_bench_mark_charging));
+            if (row.warmStart) when.append(" · ").append(getString(R.string.tai_bench_mark_warm_start));
+            if (row.lowBattery) when.append(" · ").append(getString(R.string.tai_bench_mark_low_battery));
+            if (row.olderVersion) when.append(" · ").append(getString(R.string.tai_bench_mark_older_version));
+        }
+        if (!TaiBenchStore.STATUS_COMPLETE.equals(record.optString("status", ""))) {
+            when.append(" · ").append(getString(R.string.tai_bench_result_status, record.optString("status", "")));
+        }
+        head.core.addView(TaiBenchViews.mono(context, when), TaiBenchViews.block(context, 6));
+        column.addView(head.outer);
+
+        // The details.
+        column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_result_details_header), ""));
+        TaiBenchViews.Card details = TaiBenchViews.card(context);
+        addDetail(details.core, getString(R.string.tai_bench_voice_result_speed), TaiBenchViews.realtime(context, realtime));
+        addDetail(details.core, getString(R.string.tai_bench_voice_result_wer), TaiBenchViews.wordErrors(context, wer)
+            + (voice == null ? "" : " (" + voice.optInt("errors", 0) + "/" + voice.optInt("words", 0) + ")"));
+        addDetail(details.core, getString(R.string.tai_bench_phase_load), TaiBenchViews.millis(context, loadMs));
+        addDetail(details.core, getString(R.string.tai_bench_voice_result_ran_on), fellBack
+            ? getString(R.string.tai_bench_voice_fell_back) : TaiBenchViews.processorLabel(ranOn));
+        if (conditions != null) {
+            String battery = conditions.isNull("batteryStart") ? getString(R.string.tai_bench_none)
+                : getString(R.string.tai_bench_result_battery_span, conditions.optInt("batteryStart", 0), conditions.optInt("batteryEnd", conditions.optInt("batteryStart", 0)));
+            addDetail(details.core, getString(R.string.tai_bench_device_battery), battery);
+            String heat = conditions.isNull("thermalStart") ? getString(R.string.tai_bench_none)
+                : TaiBenchViews.heatLabel(context, conditions.optString("thermalStart", null)) + " → "
+                + TaiBenchViews.heatLabel(context, conditions.isNull("thermalEnd") ? null : conditions.optString("thermalEnd", null));
+            addDetail(details.core, getString(R.string.tai_bench_device_heat), heat);
+        }
+        addDetail(details.core, getString(R.string.tai_bench_result_versions), getString(R.string.tai_bench_result_versions_value,
+            record.optString("appVersion", ""), "LiteRT", record.optString("runtimeVersion", "")));
+        column.addView(details.outer);
+
+        // Each clip: its speed and errors, and what it heard against what was said, folded.
+        org.json.JSONArray clips = phases == null ? null : phases.optJSONArray("clips");
+        if (clips != null && clips.length() > 0) {
+            column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_voice_result_clips_header), ""));
+            TaiBenchViews.Card clipCard = TaiBenchViews.card(context);
+            for (int i = 0; i < clips.length(); i++) {
+                JSONObject clip = clips.optJSONObject(i);
+                if (clip == null) continue;
+                clipCard.core.addView(clipView(context, clip), i == 0
+                    ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    : TaiBenchViews.block(context, 12));
+            }
+            column.addView(clipCard.outer);
+        }
+
+        // The history.
+        List<TaiBenchLeaderboard.Point> history = TaiBenchLeaderboard.voiceHistory(benchmarks, key);
+        column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_result_history_header),
+            getResources().getQuantityString(R.plurals.tai_bench_result_runs, history.size(), history.size())));
+        TaiBenchViews.Card chart = TaiBenchViews.card(context);
+        if (history.size() < 2) {
+            chart.core.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_result_history_empty)));
+        } else {
+            TaiBenchHistoryView view = new TaiBenchHistoryView(context);
+            view.setHistory(history);
+            chart.core.addView(view, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TaiBenchViews.dp(context, 96)));
+            String span = getString(R.string.tai_bench_result_history_span, TaiBenchViews.realtime(context, history.get(0).decodeTps),
+                TaiBenchViews.realtime(context, history.get(history.size() - 1).decodeTps));
+            if (!TaiBenchLeaderboard.dividers(history).isEmpty()) span += " · " + getString(R.string.tai_bench_result_history_dividers);
+            chart.core.addView(TaiBenchViews.mono(context, span), TaiBenchViews.block(context, 6));
+        }
+        column.addView(chart.outer);
+
+        // The actions: Use this sets the model and the processor it measured; nothing is picked for the user.
+        LinearLayout actions = new LinearLayout(context);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 16), 0);
+        TextView use = TaiBenchViews.goButton(context, getString(R.string.tai_bench_voice_use));
+        use.setMinHeight(TaiBenchViews.dp(context, 44));
+        TaiBenchViews.setEnabled(use, installed && TaiBenchStore.STATUS_COMPLETE.equals(record.optString("status", ""))
+            && !inUse(context, modelId, ranOn));
+        use.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            useThis(modelId, displayName, ranOn);
+            inUse.setVisibility(View.VISIBLE);
+            TaiBenchViews.setEnabled(use, false);
+        });
+        actions.addView(use, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView again = TaiBenchViews.ghostButton(context, getString(R.string.tai_bench_run_again));
+        again.setMinHeight(TaiBenchViews.dp(context, 44));
+        TaiBenchViews.setEnabled(again, installed && !TaiBenchSession.get().isActive());
+        again.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            TaiBenchHomeFragment.openVoice(getActivity(), modelId);
+        });
+        actions.addView(again, TaiBenchViews.block(context, 8));
+        TextView delete = TaiBenchViews.errorButton(context, getString(R.string.tai_bench_delete_results));
+        delete.setMinHeight(TaiBenchViews.dp(context, 40));
+        delete.setOnClickListener(v -> confirmDelete(modelId, displayName));
+        actions.addView(delete, TaiBenchViews.block(context, 8));
+        column.addView(actions);
+    }
+
+    /** One clip: "JFK, 11 s · 4.2× real time · 0% word errors", then what it heard and what was said, folded. */
+    @NonNull
+    private View clipView(@NonNull Context context, @NonNull JSONObject clip) {
+        LinearLayout block = new LinearLayout(context);
+        block.setOrientation(LinearLayout.VERTICAL);
+        JSONObject wall = clip.optJSONObject("wallMs");
+        double speed = wall == null ? Double.NaN : TaiVoiceBench.realtime(clip.optLong("audioMs", 0L), wall.optDouble("med", 0.0));
+        String id = clip.optString("id", "");
+        LinearLayout head = new LinearLayout(context);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.addView(TaiBenchViews.body(context, TaiBenchViews.clipName(context, id) + " · " + TaiBenchViews.realtime(context, speed)
+            + " · " + TaiBenchViews.wordErrors(context, clip.optDouble("wer", Double.NaN))),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView toggle = TaiBenchViews.ghostButton(context, getString(R.string.tai_bench_live_show));
+        head.addView(toggle);
+        block.addView(head);
+        String reference = "";
+        for (TaiVoiceBench.Clip known : TaiVoiceBench.CLIPS) if (known.id.equals(id)) reference = known.reference;
+        TextView text = TaiBenchViews.mono(context, getString(R.string.tai_bench_voice_result_heard) + "\n" + clip.optString("text", "").trim()
+            + (reference.isEmpty() ? "" : "\n\n" + getString(R.string.tai_bench_voice_result_reference) + "\n" + reference));
+        text.setTextIsSelectable(true);
+        text.setVisibility(View.GONE);
+        toggle.setOnClickListener(v -> {
+            boolean show = text.getVisibility() != View.VISIBLE;
+            text.setVisibility(show ? View.VISIBLE : View.GONE);
+            toggle.setText(show ? R.string.tai_bench_live_hide : R.string.tai_bench_live_show);
+        });
+        block.addView(text, TaiBenchViews.block(context, 6));
+        return block;
+    }
+
+    /** Whether voice input uses {@code modelId} on {@code accelerator} now. */
+    private static boolean inUse(@NonNull Context context, @NonNull String modelId, @NonNull String accelerator) {
+        try {
+            TaiSettings settings = new TaiSettings(context);
+            return modelId.equals(TaiSpeechModels.activeModelId(context)) && accelerator.equals(settings.getSttAccelerator(modelId));
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** "Use this": the speech model and its Runs on choice, in one tap. */
+    private void useThis(@NonNull String modelId, @NonNull String displayName, @NonNull String accelerator) {
+        Context context = getContext();
+        if (context == null) return;
+        TaiSettings settings = new TaiSettings(context);
+        TaiSpeechModels.activate(settings, modelId);
+        settings.setSttAccelerator(modelId, accelerator);
+        AppNotice.show(context, getString(R.string.tai_bench_voice_use_done, displayName, TaiBenchViews.processorLabel(accelerator)), false);
     }
 
     private void addDetail(@NonNull LinearLayout core, @NonNull String label, @NonNull String value) {

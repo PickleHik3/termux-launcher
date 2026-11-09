@@ -77,6 +77,8 @@ the Workspace bars the effect also covers (`chrome/ChromeRetroEffect.java`), dra
    Idle animations is on, and then within the 10-22 caps (a few percent, under 3 flash-like events a
    second). Glitches are events, under 400 ms, and never fire while the user is typing or scrolling
    (a key commit or a scroll within the last 1.5 s suppresses them, as scenes already hold still).
+   Amended 2026-11-07 (#225): events the user or their shell caused (bell, power on and off, focus,
+   death) play at once, even mid-typing; only the ambient parts (flicker, ambient tear) hold.
    Every animated part is off while Android's "Remove animations" is on
    (`ValueAnimator.areAnimatorsEnabled()` false).
 4. **Battery.** Static passes ride the pane's own invalidates; a pane at rest costs nothing. Only
@@ -96,7 +98,10 @@ the Workspace bars the effect also covers (`chrome/ChromeRetroEffect.java`), dra
    top edge lit (about +8% white), bottom edge darker (about −18% black), linear top to bottom; the
    inner lip's shadow onto the screen is decision 5's recess. The 1 dp line stays. Bend clearance
    (`PaneBezel.screen`, `bendClearancePx`) is recomputed from the new sizes, nothing else changes.
-7. **Glitch, events only** (each bounded; all pane-only; all honour decision 3):
+7. **Glitch, events only** (each bounded; all pane-only; all honour decision 3 as amended). Amended
+   2026-11-07 (#225): a closing pane stays on screen for its closing event (power-off for a close
+   someone asked for, snow for a shell that ended on its own) and goes when it ends; a new pane
+   powers on once the split reveal has ended. A bell while a bell tear plays restarts nothing.
    - *Bell*: one horizontal tear band (a 3–6 row slice shifted sideways a few px) plus a brief red/blue
      split, under 150 ms.
    - *Pane opens*: power-on sweep, about 400 ms (a bright horizontal line widening to the screen, with
@@ -104,7 +109,8 @@ the Workspace bars the effect also covers (`chrome/ChromeRetroEffect.java`), dra
    - *Pane closes*: collapse to a bright line, about 250 ms.
    - *Pane takes focus*: faint degauss wobble (a damped sideways shear of a few px), under 300 ms.
    - *Pane's process dies*: a burst of snow for about 300 ms before the dead-pane card.
-   - *Ambient glitch*: a random tear every 2–5 minutes, under 200 ms, only under Idle animations.
+   - *Ambient glitch*: a random tear every 2–5 minutes, under 200 ms, only under Idle animations
+     (2026-11-07: the Idle glitch rate setting also offers every 30–90 s and every 10–30 s).
 8. **Unfocused panes dim**: with more than one pane, unfocused ones lose about 10% brightness and 20%
    saturation inside the CRT pass. Static (one uniform per pane), no extra frames.
 9. **Cursor trail**: an AGSL glow halo under kitty's quad, about one cell wide, additive in the trail
@@ -146,6 +152,12 @@ Each wave is one worker, merged and shot before the next starts.
 6. **Deck look** (wave 8): three workers on disjoint seams: `DeckLook` + strip (dock/statusbar),
    keyboard (inapp-keyboard module + TermuxInAppKeyboard), extra keys (termux-shared
    ExtraKeysView); then the TermuxActivity wiring.
+7. **Wave 9: signal** (`PaneRetroEffect` constants): (a) chroma bleed: luma stays sharp, chroma is
+   the mean of three horizontal taps, the glow taps at 2.0 dp sideways and 1.0 dp up and down;
+   (b) beam-width scanlines: the row floor goes 0.70 to 0.92 with luma (smoothstep 0.15 to 0.85);
+   (c) highlights: bloom weight 0.35 plus 0.10 above 0.7 to 0.95 luma; (d) opt-in Composite signal
+   (`terminal_retro_composite`, panes only): luma `[0.25 0.5 0.25]` over the row, chroma over five
+   taps, sharpen off. No new samples anywhere.
 
 ## Wave 8: the deck look (decided 2026-11-03)
 

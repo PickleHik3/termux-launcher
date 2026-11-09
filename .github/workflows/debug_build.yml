@@ -29,6 +29,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+      - name: Setup Zig for the libghostty-vt terminal engine (-Pghostty=true)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
@@ -95,11 +99,11 @@ jobs:
           export TERMUX_APP_VERSION_NAME="$NIGHTLY_VERSION_NAME" # Used by app/build.gradle
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}" # Used by app/build.gradle
-          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon assembleStaging || \
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true assembleStaging || \
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
 
           echo "Validating APKs"
-          for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
+          for abi in universal arm64-v8a armeabi-v7a x86_64; do
             if ! test -f "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk"; then
               files_found="$(ls "$APK_DIR_PATH")"
               exit_on_error "Failed to find built APK at '$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk'. Files found: "$'\n'"$files_found"
@@ -112,7 +116,6 @@ jobs:
             "${APK_BASENAME_PREFIX}_arm64-v8a.apk" \
             "${APK_BASENAME_PREFIX}_armeabi-v7a.apk" \
             "${APK_BASENAME_PREFIX}_x86_64.apk" \
-            "${APK_BASENAME_PREFIX}_x86.apk" \
             > "${APK_BASENAME_PREFIX}_sha256sums"); then
             exit_on_error "Generate sha25sums failed for '$APK_VERSION_TAG' release."
           fi
@@ -147,14 +150,6 @@ jobs:
           name: ${{ env.APK_BASENAME_PREFIX }}_x86_64
           path: |
             ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_x86_64.apk
-            ${{ env.APK_DIR_PATH }}/output-metadata.json
-
-      - name: Attach x86 APK file
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ env.APK_BASENAME_PREFIX }}_x86
-          path: |
-            ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_x86.apk
             ${{ env.APK_DIR_PATH }}/output-metadata.json
 
       - name: Attach sha256sums file

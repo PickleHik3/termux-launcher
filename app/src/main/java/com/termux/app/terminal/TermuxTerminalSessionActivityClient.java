@@ -455,12 +455,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
         // Split panes / windows: route the finished shell through the pane controller first.
         com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
-        if (panes != null && panes.windowOf(finishedSession) != null
-            && KilledShellNotice.keepsPane(finishedSession.getExitStatus(),
+        boolean inWindow = panes != null && panes.windowOf(finishedSession) != null;
+        if (inWindow && KilledShellNotice.keepsPane(finishedSession.getExitStatus(),
                 finishedSession.isFinishRequested())) {
             // A signal nobody here sent (Android's phantom-process limit, the low-memory killer, a
             // `kill` from another shell): the pane stays with its "[Process completed (signal N)]"
             // line until Enter, as in stock Termux, rather than its window vanishing unexplained.
+            // The snow plays on the pane as it is; nothing waits for it.
+            panes.screenEvent(finishedSession, PaneScreenEvent.Kind.DEATH_SNOW);
             mHost.clearShellAttention(finishedSession.getPid());
             showKilledShellNotice(finishedSession);
             mHost.scheduleWindowBarRefresh();
@@ -468,6 +470,42 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             termuxSessionListNotifyUpdated();
             return;
         }
+        // The pane plays its closing event before it goes: off for a close someone asked for while
+        // the shell ran, snow for a shell that ended on its own. The pane stays for the event's
+        // length, then goes as it would have at once; without an event it goes at once.
+        if (inWindow) {
+            PaneScreenEvent.Kind closing = finishedSession.isFinishRequested()
+                ? PaneScreenEvent.Kind.POWER_OFF : PaneScreenEvent.Kind.DEATH_SNOW;
+            if (panes.screenEvent(finishedSession, closing)
+                && panes.postOnHost(() -> finishedSessionAfterHold(finishedSession),
+                    closing.durationMs))
+                return;
+        }
+        removeFinishedPaneOrSession(service, finishedSession);
+    }
+
+    /**
+     * The rest of {@link #onSessionFinished} once a closing event has played: the host and the
+     * service are fetched again, and nothing happens when either is gone.
+     */
+    private void finishedSessionAfterHold(@NonNull TerminalSession finishedSession) {
+        if (!mHost.isHostAlive()) return;
+        TermuxService service = mHost.service();
+        if (service == null) return;
+        if (service.wantsToStop()) {
+            mHost.finishActivityIfNotFinishing();
+            return;
+        }
+        removeFinishedPaneOrSession(service, finishedSession);
+    }
+
+    /**
+     * What {@link #onSessionFinished} does with a finished shell that keeps no pane: its pane (and
+     * window) closes, or, for a shell no pane holds, the session is removed by the exit rules.
+     */
+    private void removeFinishedPaneOrSession(@NonNull TermuxService service,
+                                             @NonNull TerminalSession finishedSession) {
+        com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
         if (panes != null && closeFinishedPane(panes, service, finishedSession)) return;
         int index = service.getIndexOfSession(finishedSession);
         // For plugin commands that expect the result back, we should immediately close the session
@@ -695,6 +733,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Ensure blinker starts again after reset if cursor blinking was disabled before reset like
         // with "tput civis" which would have called onTerminalCursorStateChange()
         mHost.focusedView().setTerminalCursorBlinkerState(true, true);
+    }
+
+    @Override
+    public boolean prefersGhosttyEngine() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences != null
+            && com.termux.terminal.TerminalEngine.isGhosttyPreference(preferences.getTerminalEngine());
     }
 
     @Override

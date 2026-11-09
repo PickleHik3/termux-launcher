@@ -32,7 +32,7 @@ public class EditorScreenCardsTest {
         // Overhaul §2: Appearance (open first) closing on Minimal layout, then Layout.
         // Rows in group order (2026-11-04): the Look, sliders, toggles, then Tint colour.
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.MARGIN, Row.RIM,
+            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM,
             Row.CONTRAST, Row.MINIMAL, Row.TINT_HUE), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS),
             EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));

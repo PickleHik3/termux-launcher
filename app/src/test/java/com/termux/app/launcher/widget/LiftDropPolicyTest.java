@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.termux.app.launcher.widget.LiftDropPolicy.Item;
 import com.termux.app.launcher.widget.LiftDropPolicy.Place;
+import com.termux.app.launcher.widget.LiftDropPolicy.Release;
 
 import org.junit.Test;
 
@@ -60,5 +61,29 @@ public class LiftDropPolicyTest {
             LiftDropPolicy.targetsFor(Item.DOCK_APP, false));
         assertEquals(Collections.singletonList(HomeDropTargets.Target.REMOVE),
             LiftDropPolicy.targetsFor(Item.HOME_FOLDER, true));
+    }
+
+    @Test
+    public void aReleaseGoesToTheTargetThenTheDockThenHome() {
+        assertEquals(Release.TARGET, LiftDropPolicy.release(false, true, true, true));
+        assertEquals(Release.DOCK, LiftDropPolicy.release(false, false, true, true));
+        assertEquals(Release.HOME, LiftDropPolicy.release(false, false, false, true));
+    }
+
+    /**
+     * Let go at the screen's leftmost edge, beside the row and off Home's grid: Home, if it has
+     * been following the finger, decides (and puts nothing down off its grid); otherwise the icon
+     * goes back. Either way it is a release with an answer, never one that leaves the icon nowhere.
+     */
+    @Test
+    public void aReleaseAtTheScreensEdgeGoesHomeOrBack() {
+        assertEquals(Release.BACK, LiftDropPolicy.release(false, false, false, false));
+        assertEquals(Release.HOME, LiftDropPolicy.release(false, false, false, true));
+    }
+
+    @Test
+    public void aCancelAlwaysGoesBack() {
+        assertEquals(Release.BACK, LiftDropPolicy.release(true, true, true, true));
+        assertEquals(Release.BACK, LiftDropPolicy.release(true, false, false, false));
     }
 }

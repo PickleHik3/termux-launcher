@@ -2,16 +2,12 @@ package com.termux.app.chrome.scene;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
-import android.graphics.Canvas;
-import android.graphics.HardwareRenderer;
-import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.RenderEffect;
-import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.hardware.HardwareBuffer;
 import android.media.Image;
 import android.media.ImageReader;
+import android.opengl.EGLSurface;
 import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -23,21 +19,23 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.terminal.FrameProbe;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * The scene rendered a second time at {@link #DIVISOR} of the screen per axis into an offscreen
- * target, blurred, and published as {@link LiveSceneFrame} for the glass surfaces to sample. The
- * target is an {@link ImageReader} surface drawn by a {@link HardwareRenderer}: the scene's
- * program on a RenderNode. Scene thread only (its handler is the scene thread's).
+ * The scene at 1/{@code divisor} of the screen per axis, blurred, and published as
+ * {@link LiveSceneFrame} for the glass surfaces to sample. The target is an {@link ImageReader}
+ * whose surface is an EGL window surface of the scene's own GL context: {@link SceneGl} blurs the
+ * frame's texture horizontally into a low-res texture, then vertically onto this surface, and the
+ * swap queues the image. Scene thread only (its handler is the scene thread's).
  *
- * <p>Blur: a {@link RenderEffect} blur on the node, so it runs on the GPU at 1/8 size, keyed to the
- * radius glass currently asks the blur cache for ({@link LiveSceneFrame#blurRadiusDp()}): sigma is
- * half the radius in pixels of this pass, which reads close to the stock blur's frost (eyeballed on
- * paper, not measured). The 8x bilinear upscale in the glass draw softens it further.</p>
+ * <p>Blur: separable Gaussian on the GPU at 1/divisor size, keyed to the radius glass currently
+ * asks the blur cache for ({@link LiveSceneFrame#blurRadiusDp()}): sigma is half the radius in
+ * pixels of this pass, the same number the {@code RenderEffect} blur of the AGSL scenes used. The
+ * 8x bilinear upscale in the glass draw softens it further.</p>
  *
  * <p>Image lifetime: each new image is acquired ({@code acquireLatestImage}, older queued ones are
  * dropped), its {@link HardwareBuffer} wrapped by {@link Bitmap#wrapHardwareBuffer} (no pixel
@@ -49,11 +47,11 @@ import java.nio.ByteOrder;
  * bitmaps are never recycled: dropping the reference is enough, and a glass surface that still
  * names one only ever reads {@link LiveSceneFrame#current()}.</p>
  */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@RequiresApi(Build.VERSION_CODES.Q)
 final class SceneLowRes {
 
-    /** Pixels per axis at which the glass reads the scene: one eighth. */
-    static final int DIVISOR = 8;
+    /** The Look's default glass blur ({@code DEFAULT_SURFACE_BASE_BLUR}), used while no glass has asked. */
+    static final int FALLBACK_BLUR_DP = TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
     /** Images held open at most: the frame on screen and those not yet safe to give back. */
     static final int HELD = 4;
     /** One more than {@link #HELD}, so the producer always has a buffer to draw into. */
@@ -67,14 +65,14 @@ final class SceneLowRes {
 
     private static final FrameProbe.Source GLASS = FrameProbe.source("sceneGlass");
 
-    @NonNull private final SceneProgram mProgram;
-    @NonNull private final Paint mPaint = new Paint();
-    @NonNull private final RenderNode mNode = new RenderNode("SceneLowRes");
-    @NonNull private final HardwareRenderer mRenderer = new HardwareRenderer();
+    @NonNull private final SceneEgl mEgl;
     @NonNull private final ImageReader mReader;
+    @Nullable private final EGLSurface mSurface;
     @NonNull private final SceneImageLedger<Image> mLedger =
         new SceneImageLedger<>(HELD, MIN_NEWER, MIN_AGE_MS, Image::close);
     private final int mWidth, mHeight;
+    /** Screen pixels per low-res pixel, per axis: 2, 4 or 8 ({@code debug.tl.scene_glass_div}). */
+    private final int mDivisor;
     /** Soft path: the reader's images are CPU readable, so no GPU readback is needed. */
     private boolean mCpuReadable;
     @NonNull private final SceneSoftPool mPool = new SceneSoftPool(POOL);
@@ -82,15 +80,14 @@ final class SceneLowRes {
     @NonNull private final BitmapShader[] mPoolShaders = new BitmapShader[POOL];
     @Nullable private ByteBuffer mStaging;
     private long mFrames;
-    private int mBlurDp = -1;
     private boolean mClosed;
-    private boolean mEventsSet;
 
-    SceneLowRes(int screenWidth, int screenHeight, @NonNull Handler sceneHandler,
-                @NonNull ScenePrograms.Factory programs) {
-        mProgram = programs.create(1f / DIVISOR);
-        mWidth = Math.max(1, screenWidth / DIVISOR);
-        mHeight = Math.max(1, screenHeight / DIVISOR);
+    SceneLowRes(int screenWidth, int screenHeight, int divisor, @NonNull Handler sceneHandler,
+                @NonNull SceneEgl egl) {
+        mEgl = egl;
+        mDivisor = divisor;
+        mWidth = Math.max(1, screenWidth / divisor);
+        mHeight = Math.max(1, screenHeight / divisor);
         ImageReader reader = null;
         if ("soft".equals(COPY.get(SystemClock.uptimeMillis()))) {
             try {
@@ -110,47 +107,36 @@ final class SceneLowRes {
         }
         mReader = reader;
         mReader.setOnImageAvailableListener(this::onImage, sceneHandler);
-        mPaint.setShader(mProgram.shader());
-        mNode.setPosition(0, 0, mWidth, mHeight);
-        mRenderer.setName("SceneLowRes");
-        mRenderer.setOpaque(true);
-        mRenderer.setContentRoot(mNode);
-        mRenderer.setSurface(mReader.getSurface());
+        mSurface = egl.windowSurface(mReader.getSurface());
+        if (mSurface == null) Log.w(TAG, "EGL refused the glass reader's surface; glass keeps the still");
     }
 
-    /** Renders one frame; the caller has set nothing, the program is brought up to date here. */
-    void render(@NonNull SceneEvents events, long nowMs, long timeMs, float density,
-                boolean eventsStale) {
-        if (mClosed) return;
+    /**
+     * Renders one glass frame from the scene texture {@code gl} has just drawn. The context may end
+     * current on this pass's surface; the caller makes its own current again.
+     */
+    void render(@NonNull SceneGl gl, float density) {
+        if (mClosed || mSurface == null) return;
         mLedger.reap(SystemClock.uptimeMillis());
         if (!mLedger.canProduce()) return;
-        Trace.beginSection("Scene.contour.lowres");
+        Trace.beginSection("Scene.glass.render");
         try {
-            mProgram.setSize(mWidth, mHeight, density);
-            mProgram.setTime(timeMs);
-            if (eventsStale || !mEventsSet) {
-                mProgram.setEvents(events, nowMs, density);
-                mEventsSet = true;
-            }
-            syncBlur(density);
-            Canvas c = mNode.beginRecording(mWidth, mHeight);
-            c.drawRect(0f, 0f, mWidth, mHeight, mPaint);
-            mNode.endRecording();
-            mRenderer.createRenderRequest().syncAndDraw();
+            float sigma = sigmaPx(LiveSceneFrame.blurRadiusDp(), density, mDivisor);
+            gl.blurSceneHorizontally(mWidth, mHeight, sigma);
+            if (!mEgl.makeCurrent(mSurface)) return;
+            gl.blurLowVertically(mWidth, mHeight, sigma);
+            mEgl.swap(mSurface);
             mFrames++;
         } finally {
             Trace.endSection();
         }
     }
 
-    /** The node's blur follows the radius glass asks for; changed only when that moves. */
-    private void syncBlur(float density) {
-        int dp = LiveSceneFrame.blurRadiusDp();
-        if (dp == mBlurDp) return;
-        mBlurDp = dp;
-        float sigma = dp * density / DIVISOR / 2f;
-        mNode.setRenderEffect(sigma < 0.3f ? null
-            : RenderEffect.createBlurEffect(sigma, sigma, Shader.TileMode.CLAMP));
+    /** The blur's sigma in pixels of this pass for a glass radius of {@code dp} (0: the Look's default). */
+    static float sigmaPx(int dp, float density, int divisor) {
+        // Glass has not asked for a radius yet: blur at the Look's default, never hand it raw texels.
+        if (dp <= 0) dp = FALLBACK_BLUR_DP;
+        return dp * density / divisor / 2f;
     }
 
     /**
@@ -268,17 +254,22 @@ final class SceneLowRes {
         return true;
     }
 
+    int divisor() {
+        return mDivisor;
+    }
+
     long framesRendered() {
         return mFrames;
     }
 
+    /** Lets go of the EGL surface, the held images and the reader; the context stays. */
     void close() {
         if (mClosed) return;
         mClosed = true;
         LiveSceneFrame.retire();
-        mRenderer.destroy();
+        // The producer goes first, so the reader is never closed under a connected EGL surface.
+        mEgl.destroySurface(mSurface);
         mLedger.closeAll();
         mReader.close();
-        mNode.discardDisplayList();
     }
 }

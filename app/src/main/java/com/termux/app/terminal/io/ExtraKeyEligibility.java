@@ -112,6 +112,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WALL_WIDGETS, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_TERMINAL, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_DISPLAY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_WALL_ASSISTANT, Band.LAUNCHER);
         // The keyboard is the launcher's, not the terminal's: a widget's own text field needs one
         // as much as a shell does.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, Band.LAUNCHER);
@@ -242,7 +243,22 @@ public final class ExtraKeyEligibility {
         if (!isUsable(keyValue, place)) return false;
         if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
         PaneWallPage target = placeSwitchTarget(keyValue);
-        return target == null || pages.contains(target);
+        // The Assistant key stays live with no page: it adds the page (AssistantEntry).
+        return target == null || target == PaneWallPage.ASSISTANT || pages.contains(target);
+    }
+
+    /**
+     * The place a key row is dressed for: the half the stack wears ({@code stackDressPage}, the
+     * other half's while a crossing stands its rows) or else where the wall rests
+     * ({@code restingPlace}). Asked on every crossing frame and at the settle alike, so a toolbar a
+     * crossing brings up rises already drawn live where it lands (and its place switch for the
+     * place it lands on already in front) rather than dead in the leaving place's terms until the
+     * settle restates it.
+     */
+    @NonNull
+    public static PaneWallPage rowPlace(@NonNull PaneWallPage restingPlace,
+                                        @Nullable PaneWallPage stackDressPage) {
+        return stackDressPage != null ? stackDressPage : restingPlace;
     }
 
     /** Whether the key sending {@code keyValue} can act on {@code place}. */
@@ -299,6 +315,7 @@ public final class ExtraKeyEligibility {
             case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PaneWallPage.ASSISTANT;
             case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
             default: return null;
         }

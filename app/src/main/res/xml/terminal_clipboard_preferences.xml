@@ -20,5 +20,12 @@
             app:key="terminal_margin_adjustment"
             app:title="@string/settings_adjust_keyboard_title"
             app:summary="@string/settings_adjust_keyboard_summary" />
+        <ListPreference
+            app:key="terminal_engine"
+            app:title="@string/settings_terminal_engine_title"
+            app:summary="@string/settings_terminal_engine_summary"
+            app:entries="@array/settings_terminal_engine_entries"
+            app:entryValues="@array/settings_terminal_engine_values"
+            app:defaultValue="standard" />
     </PreferenceCategory>
 </PreferenceScreen>

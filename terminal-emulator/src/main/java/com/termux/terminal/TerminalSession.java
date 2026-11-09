@@ -193,6 +193,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void initializeEmulator(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         mEmulator = new TerminalEmulator(this, mBoldWithBright, columns, rows, cellWidthPixels, cellHeightPixels, mTranscriptRows, mClient);
+        chooseEngine(GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES));
 
         int[] processId = new int[1];
         mTerminalFileDescriptor = JNI.createSubprocess(mShellPath, mCwd, mArgs, mEnv, processId, rows, columns, cellWidthPixels, cellHeightPixels);
@@ -426,6 +427,44 @@ public final class TerminalSession extends TerminalOutput {
         // closed pane keeps its images alive, and keeps decoding them, for the life of the process.
         // The emulator is only safe to touch from the main thread, which is where this runs.
         if (mEmulator != null) mEmulator.shutdownKittyGraphics();
+        if (mEmulator != null) mEmulator.releaseGhosttyCore();
+        mGhosttyIdleCompressor.cancel();
+    }
+
+    /**
+     * The one place a new session's engine is decided: Ghostty when the Terminal engine setting or
+     * the debug property {@code debug.tl.terminal_core=ghostty} asks for it (either is enough), the
+     * library loads, and the crash guard has not turned it off ({@link TerminalEngine#useGhostty}).
+     * Otherwise Standard, with one log line saying why when Ghostty was asked for. After a native
+     * crash the stored choice is left as the user set it (GhosttyCrashGuard).
+     */
+    void chooseEngine(boolean propertyAsksGhostty) {
+        boolean preferred = mClient != null && mClient.prefersGhosttyEngine();
+        if (!preferred && !propertyAsksGhostty) return;
+        boolean blocked = GhosttyCrashGuard.isDisabledAfterCrash();
+        // Checked only when asked for: the first check loads the library.
+        boolean available = !blocked && GhosttyNative.isAvailable();
+        if (!TerminalEngine.useGhostty(preferred, propertyAsksGhostty, available, blocked)) {
+            if (blocked) {
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty off after a crash, using the Java core ("
+                    + GhosttyCrashGuard.disabledReason() + ")");
+            } else {
+                Throwable why = GhosttyNative.loadError();
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty unavailable, using the Java core"
+                    + (why == null ? "" : " (" + why + ")"));
+            }
+            return;
+        }
+        try {
+            if (mEmulator.useGhosttyCore()) {
+                Logger.logInfo(mClient, LOG_TAG, "Terminal core: ghostty");
+                return;
+            }
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty would not start, using the Java core");
+        } catch (Throwable t) {
+            mEmulator.releaseGhosttyCore();
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core (" + t + ")");
+        }
     }
 
     @Override
@@ -637,7 +676,8 @@ public final class TerminalSession extends TerminalOutput {
     int mLastTurnBytes;
 
     /**
-     * Parse at most one slice of waiting shell output, without telling the client. Main thread only.
+     * Parse at most one slice of waiting shell output, without telling the client or, with the
+     * Ghostty core, mirroring it (see {@link #flushBatchedOutput()}). Main thread only.
      *
      * @return the bytes parsed, 0 when nothing was waiting
      */
@@ -650,12 +690,27 @@ public final class TerminalSession extends TerminalOutput {
         Trace.beginSection("Terminal.append");
         mAppendingProcessOutput = true;
         try {
-            mEmulator.append(mReceiveBuffer, bytesRead);
+            mEmulator.appendBatched(mReceiveBuffer, bytesRead);
         } finally {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
         return bytesRead;
+    }
+
+    /**
+     * Bring the emulator up to date with the slices parsed since the last call: with the Ghostty
+     * core this copies its screen and the rows it scrolled off into the Java buffers, once per turn
+     * however many slices it took. Nothing to do with the Java core.
+     */
+    private void flushBatchedOutput() {
+        if (!mEmulator.isGhosttyCoreActive()) return;
+        Trace.beginSection("Terminal.mirror");
+        try {
+            mEmulator.flushBatchedOutput();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /**
@@ -667,6 +722,8 @@ public final class TerminalSession extends TerminalOutput {
     boolean drainProcessOutputSlice() {
         int bytesRead = appendProcessOutputSlice();
         if (bytesRead <= 0) return false;
+        flushBatchedOutput();
+        onGhosttyOutput();
         LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
@@ -691,6 +748,8 @@ public final class TerminalSession extends TerminalOutput {
         } while (more && mNanoClock.getAsLong() - start < DRAIN_BUDGET_NANOS);
         mLastTurnBytes = total;
         if (total > 0) {
+            flushBatchedOutput();
+            onGhosttyOutput();
             LatencyProbe.outputArrived();
             notifyScreenUpdate();
         }
@@ -740,6 +799,42 @@ public final class TerminalSession extends TerminalOutput {
             // More of the burst is waiting: let the frame clock and input run before the next turn.
             requestNewInputTurn();
         }
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** Where the idle compressor's callbacks go; a test in this package swaps in a fake. */
+    GhosttyIdleCompressor.Scheduler mGhosttyIdleScheduler = new GhosttyIdleCompressor.Scheduler() {
+        @Override
+        public void postDelayed(Runnable runnable, long delayMillis) {
+            mMainThreadHandler.postDelayed(runnable, delayMillis);
+        }
+
+        @Override
+        public void cancel(Runnable runnable) {
+            mMainThreadHandler.removeCallbacks(runnable);
+        }
+    };
+
+    /** Compresses a Ghostty pane's history once its output goes quiet; idle with the Java core. */
+    final GhosttyIdleCompressor mGhosttyIdleCompressor = new GhosttyIdleCompressor(
+        new GhosttyIdleCompressor.Scheduler() {
+            @Override
+            public void postDelayed(Runnable runnable, long delayMillis) {
+                mGhosttyIdleScheduler.postDelayed(runnable, delayMillis);
+            }
+
+            @Override
+            public void cancel(Runnable runnable) {
+                mGhosttyIdleScheduler.cancel(runnable);
+            }
+        },
+        () -> mEmulator == null ? -1 : mEmulator.compressGhosttyIdleStep());
+
+    /** A turn of output reached the emulator: with the Ghostty core, compress once it goes quiet. */
+    private void onGhosttyOutput() {
+        if (mEmulator.isGhosttyCoreActive()) mGhosttyIdleCompressor.onOutput();
+        else mGhosttyIdleCompressor.cancel();
     }
 
     @SuppressLint("HandlerLeak")

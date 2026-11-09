@@ -30,6 +30,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup Zig for the libghostty-vt terminal engine (-Pghostty=true)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
       - name: Build and attach APKs to release
         shell: bash {0}
         env:
@@ -133,7 +138,7 @@ jobs:
           if grep -q 'android:debuggable="true"' "$RELEASE_MANIFEST_PATH"; then
             exit_on_error "Merged release manifest is debuggable: $RELEASE_MANIFEST_PATH"
           fi
-          if ! ./gradlew :app:assembleRelease; then
+          if ! ./gradlew -Pghostty=true :app:assembleRelease; then
             exit_on_error "Build failed for '$APK_VERSION_TAG' release."
           fi
 
@@ -149,7 +154,7 @@ jobs:
           done
 
           echo "Validating APKs"
-          for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
+          for abi in universal arm64-v8a armeabi-v7a x86_64; do
             if ! test -f "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk"; then
               files_found="$(ls "$APK_DIR_PATH")"
               exit_on_error "Failed to find built APK at '$APK_DIR_PATH/${APK_BASENAME_PREFIX}_$abi.apk'. Files found: "$'\n'"$files_found"
@@ -162,7 +167,6 @@ jobs:
             "${APK_BASENAME_PREFIX}_arm64-v8a.apk" \
             "${APK_BASENAME_PREFIX}_armeabi-v7a.apk" \
             "${APK_BASENAME_PREFIX}_x86_64.apk" \
-            "${APK_BASENAME_PREFIX}_x86.apk" \
             > "${APK_BASENAME_PREFIX}_sha256sums"); then
             exit_on_error "Generate sha25sums failed for '$APK_VERSION_TAG' release."
           fi
@@ -173,7 +177,6 @@ jobs:
             "${APK_BASENAME_PREFIX}_arm64-v8a.apk"
             "${APK_BASENAME_PREFIX}_armeabi-v7a.apk"
             "${APK_BASENAME_PREFIX}_x86_64.apk"
-            "${APK_BASENAME_PREFIX}_x86.apk"
             "${APK_BASENAME_PREFIX}_sha256sums"
           )
 
@@ -191,7 +194,6 @@ jobs:
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_arm64-v8a.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_armeabi-v7a.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_x86_64.apk" \
-            "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_x86.apk" \
             "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_sha256sums"; then
             exit_on_error "Attach APKs to release failed for '$APK_VERSION_TAG' release."
           fi

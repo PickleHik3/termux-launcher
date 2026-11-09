@@ -187,8 +187,10 @@ public final class SettingsRowIcons {
         // Voice output and speech models
         key(R.drawable.ic_ms_record_voice_over, "speech_model_pick", "keyboard_voice_model");
         key(R.drawable.ic_ms_timer, "speech_model_idle_unload", "keyboard_voice_silence_timeout_ms");
+        key(R.drawable.ic_ms_developer_board, "speech_model_accelerator", "keyboard_voice_polish_accelerator");
         key(R.drawable.ic_ms_graphic_eq, "speech_output_voice", "keyboard_voice_mic_sensitivity");
         key(R.drawable.ic_ms_play_arrow, "speech_output_sample");
+        key(R.drawable.ic_ms_record_voice_over, "tai_read_aloud");
 
         // Status bar
         key(R.drawable.ic_ms_music_note, "status_widget_media");
@@ -218,6 +220,7 @@ public final class SettingsRowIcons {
         // Terminal
         key(R.drawable.ic_ms_cleaning_services, "terminal_clipboard_cleanup");
         key(R.drawable.ic_ms_height, "terminal_margin_adjustment", "in_app_keyboard_floating_height");
+        key(R.drawable.ic_ms_speed, "terminal_engine");
         key(R.drawable.ic_ms_view_quilt, "terminal_sub_windows");
         key(R.drawable.ic_ms_toolbar, "status_bar");
         key(R.drawable.ic_ms_text_fields, "terminal_sub_text");

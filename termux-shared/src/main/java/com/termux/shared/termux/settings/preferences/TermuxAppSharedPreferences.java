@@ -311,12 +311,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * The Margin the surfaces of Home pages ({@code home}) or of the Workspace's pages wear, in dp
-     * as stored: that kind's own once the Home or Workspace card set it, else Base's.
+     * The Margin the surfaces wear, in dp as stored: Base's on every page, Home's and the
+     * Workspace's alike (one Margin since 2026-11-08, {@link LookGridMarginMigration}). The half
+     * is still named so callers that ask for one keep compiling against one answer.
      */
     public int getLayoutMarginDp(boolean home) {
-        return fromGrid(SurfaceProperty.SIDE_GAP, lookGrid().value(LookGrid.Property.MARGIN, null,
-            home ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL));
+        return getBaseMarginDp();
     }
 
     /** Base's Margin, in dp as stored: what every kind of page wears until it holds its own. */
@@ -805,6 +805,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_GLASS_SEE_THROUGH}: "all" or "one". */
+    public String getGlassSeeThrough() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_GLASS_SEE_THROUGH, TERMUX_APP.DEFAULT_VALUE_GLASS_SEE_THROUGH, true);
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+            ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL;
+    }
+
+    /** Whether See through is One layer. */
+    public boolean isGlassSeeThroughOne() {
+        return TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(getGlassSeeThrough());
+    }
+
+    public void setGlassSeeThrough(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_GLASS_SEE_THROUGH,
+            TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE.equals(value)
+                ? TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ONE : TERMUX_APP.VALUE_GLASS_SEE_THROUGH_ALL,
+            false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */
     public int getFancierGlassBendDp() {
         return lookGrid().value(LookGrid.Property.DEPTH, null, LookGrid.NO_PAGE);
@@ -873,6 +893,45 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_CLARITY,
             DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_CLARITY,
                 TERMUX_APP.MAX_FANCIER_GLASS_CLARITY), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_FACE_CLARITY}. Clamped, a percentage. */
+    public int getFancierGlassFaceClarityPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY);
+    }
+
+    public void setFancierGlassFaceClarityPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, value);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DIM}. Clamped, a percentage. */
+    public int getFancierGlassDimPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM);
+    }
+
+    public void setFancierGlassDimPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM, value);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_SIZE_LENS}. Clamped, a percentage. */
+    public int getFancierGlassSizeLensPercent() {
+        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS);
+    }
+
+    public void setFancierGlassSizeLensPercent(int value) {
+        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, value);
+    }
+
+    private int faceTerm(String key) {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences, key,
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM),
+            TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM, TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM);
+    }
+
+    private void setFaceTerm(String key, int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, key,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM,
+                TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM), false);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_MOTION_LIGHT}. */
@@ -1048,36 +1107,97 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.STATUS_BAR_CUTOUT_AUTO;
     }
 
-    /** A custom camera gap's centre in dp from the screen's centre, clamped to its range. */
-    public int getStatusBarCutoutCenter() {
-        return clampStatusBarCutoutCenter(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_CENTER));
+    /** The camera gap's sideways nudge in dp, clamped to its range. */
+    public int getStatusBarCutoutOffsetX() {
+        return clampStatusBarCutoutOffsetX(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_X, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_OFFSET_X));
     }
 
-    public void setStatusBarCutoutCenter(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER,
-            clampStatusBarCutoutCenter(value), false);
+    public void setStatusBarCutoutOffsetX(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_X,
+            clampStatusBarCutoutOffsetX(value), false);
     }
 
-    private static int clampStatusBarCutoutCenter(int value) {
-        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_CENTER,
-            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_CENTER, value));
+    private static int clampStatusBarCutoutOffsetX(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_OFFSET_X,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_OFFSET_X, value));
     }
 
-    /** A custom camera gap's width in dp, clamped to its range. */
-    public int getStatusBarCutoutWidth() {
-        return clampStatusBarCutoutWidth(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_WIDTH));
+    /** The camera gap's downward nudge in dp, clamped to its range. */
+    public int getStatusBarCutoutOffsetY() {
+        return clampStatusBarCutoutOffsetY(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_Y, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_OFFSET_Y));
     }
 
-    public void setStatusBarCutoutWidth(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH,
-            clampStatusBarCutoutWidth(value), false);
+    public void setStatusBarCutoutOffsetY(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_OFFSET_Y,
+            clampStatusBarCutoutOffsetY(value), false);
     }
 
-    private static int clampStatusBarCutoutWidth(int value) {
-        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_WIDTH,
-            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_WIDTH, value));
+    private static int clampStatusBarCutoutOffsetY(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_OFFSET_Y,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_OFFSET_Y, value));
+    }
+
+    /** The camera gap's size in percent, clamped to its range. */
+    public int getStatusBarCutoutScale() {
+        return clampStatusBarCutoutScale(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_SCALE, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_SCALE));
+    }
+
+    public void setStatusBarCutoutScale(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_SCALE,
+            clampStatusBarCutoutScale(value), false);
+    }
+
+    private static int clampStatusBarCutoutScale(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_SCALE,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_SCALE, value));
+    }
+
+    /** The air kept from the camera in dp, clamped to its range. */
+    public int getStatusBarCutoutMargin() {
+        return clampStatusBarCutoutMargin(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MARGIN, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN));
+    }
+
+    public void setStatusBarCutoutMargin(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MARGIN,
+            clampStatusBarCutoutMargin(value), false);
+    }
+
+    private static int clampStatusBarCutoutMargin(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_MARGIN,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_MARGIN, value));
+    }
+
+    /** Whether the first centre and width were already turned into nudges (see the constants). */
+    public boolean isStatusBarCutoutMigrated() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MIGRATED, false);
+    }
+
+    public void setStatusBarCutoutMigrated(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MIGRATED, value, false);
+    }
+
+    /** The first centre in dp as it was stored, or null when it never was. For the migration only. */
+    @Nullable
+    public Integer getLegacyStatusBarCutoutCenter() {
+        return mSharedPreferences != null
+            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER)
+            ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, 0)) : null;
+    }
+
+    /** The first width in dp as it was stored, or null when it never was. For the migration only. */
+    @Nullable
+    public Integer getLegacyStatusBarCutoutWidth() {
+        return mSharedPreferences != null
+            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH)
+            ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, 32)) : null;
     }
 
     /** The place the weather is fetched for, trimmed; empty when it follows the device. */
@@ -1150,6 +1270,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE, value, false);
     }
 
+    public String getTerminalEngine() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_ENGINE, TERMUX_APP.DEFAULT_TERMINAL_ENGINE, true);
+    }
+
+    public void setTerminalEngine(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_ENGINE, value, false);
+    }
+
     public String getTerminalRetroEffect() {
         return SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT, true);
@@ -1170,6 +1299,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SCREEN_EVENTS, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERMINAL_RETRO_COMPOSITE}. */
+    public boolean isTerminalRetroCompositeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_RETRO_COMPOSITE, TERMUX_APP.DEFAULT_VALUE_TERMINAL_RETRO_COMPOSITE);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERMINAL_RETRO_COMPOSITE}. */
+    public void setTerminalRetroCompositeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_RETRO_COMPOSITE, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_ANIMATIONS}. */
     public boolean isIdleAnimationsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -1179,6 +1319,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_ANIMATIONS}. */
     public void setIdleAnimationsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IDLE_ANIMATIONS, value, false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_TEAR_RATE}. */
+    public String getIdleTearRate() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IDLE_TEAR_RATE, TERMUX_APP.DEFAULT_VALUE_IDLE_TEAR_RATE, true);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_IDLE_TEAR_RATE}. */
+    public void setIdleTearRate(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_IDLE_TEAR_RATE, value, false);
     }
 
     public boolean isOsc52ClipboardReadEnabled() {
@@ -3184,6 +3335,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setFancierGlassEdgeLightPercent(FRESH_INSTALL_GLASS_EDGE_LIGHT);
             setFancierGlassDispersionPercent(FRESH_INSTALL_GLASS_DISPERSION);
             setFancierGlassClarityPercent(FRESH_INSTALL_GLASS_CLARITY);
+            setFancierGlassFaceClarityPercent(100);
+            setFancierGlassDimPercent(0);
+            setFancierGlassSizeLensPercent(100);
             // The Layout margin writes both of these; the pane gap matches it at this size.
             setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);
             setTerminalPaneGap(FRESH_INSTALL_MARGIN);
@@ -3217,7 +3371,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     // Clear's blur and grain are its point on the editor's Glass curve (Glass 20).
     private static final int FRESH_INSTALL_BASE_BLUR = 7;
     private static final int FRESH_INSTALL_BASE_OPACITY = 10;
-    private static final int FRESH_INSTALL_BASE_GRAIN = 3;
+    private static final int FRESH_INSTALL_BASE_GRAIN = 0;
     private static final int FRESH_INSTALL_GLASS_BEND = 27;
     private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 18;
     private static final int FRESH_INSTALL_GLASS_EDGE_LIGHT = 10;
@@ -4255,6 +4409,72 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setWallpaperLockChoice(@Nullable String choice) {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_CHOICE,
             normaliseWallpaperLockChoice(choice), false);
+    }
+
+    /** The live wallpaper scene's kind as stored, or empty for none; the model validates it. */
+    @androidx.annotation.NonNull
+    public String getLiveWallpaperSceneRaw() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SCENE,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SCENE, false);
+    }
+
+    public void setLiveWallpaperSceneRaw(@Nullable String kind) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SCENE,
+            kind == null ? "" : kind, false);
+    }
+
+    /** Speed, clamped to 0.25..2 (a missing or non-finite value reads as 1). */
+    public float getLiveWallpaperSpeed() {
+        float v = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SPEED,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED);
+        if (Float.isNaN(v) || Float.isInfinite(v)) return TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED;
+        return Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_SPEED, v));
+    }
+
+    public void setLiveWallpaperSpeed(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_SPEED,
+            Float.isNaN(value) ? TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_SPEED
+                : Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_SPEED, value)),
+            false);
+    }
+
+    /** Frame rate in Hz: 15, 30 or 60; anything else reads as 30. */
+    public int getLiveWallpaperRateHz() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_RATE_HZ,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ);
+        return v == 15 || v == 60 ? v : TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ;
+    }
+
+    public void setLiveWallpaperRateHz(int hz) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_RATE_HZ,
+            hz == 15 || hz == 60 ? hz : TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ, false);
+    }
+
+    /** Density, clamped to -1..1. */
+    public float getLiveWallpaperDensity() {
+        float v = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_DENSITY,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY);
+        if (Float.isNaN(v) || Float.isInfinite(v)) return TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY;
+        return Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_DENSITY, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_DENSITY, v));
+    }
+
+    public void setLiveWallpaperDensity(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_DENSITY,
+            Float.isNaN(value) ? TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY
+                : Math.max(TERMUX_APP.MIN_LIVE_WALLPAPER_DENSITY, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_DENSITY, value)),
+            false);
+    }
+
+    /** Palette, clamped to 0..2. */
+    public int getLiveWallpaperPalette() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_PALETTE,
+            TERMUX_APP.DEFAULT_VALUE_LIVE_WALLPAPER_PALETTE);
+        return Math.max(0, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_PALETTE, v));
+    }
+
+    public void setLiveWallpaperPalette(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_LIVE_WALLPAPER_PALETTE,
+            Math.max(0, Math.min(TERMUX_APP.MAX_LIVE_WALLPAPER_PALETTE, value)), false);
     }
 
     @androidx.annotation.NonNull

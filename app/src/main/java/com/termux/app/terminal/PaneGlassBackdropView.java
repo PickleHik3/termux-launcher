@@ -200,6 +200,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     /** Live blur's picture of what is beneath this slab, or null for the stored frame. */
     @Nullable private LivePicture mLivePicture;
+    /** The picture's drawable this view shows: its own, or the aimed one. */
+    @Nullable private Drawable mLiveDrawable;
     /** The node the live picture is drawn into, carrying the refraction; made on first live draw. */
     @Nullable private android.graphics.RenderNode mLiveNode;
     /** Builds the live node's effect, made again only when its uniforms move. */
@@ -219,12 +221,23 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * it on the next draw.
      */
     public void setLivePicture(@Nullable LivePicture picture) {
-        if (picture == mLivePicture) return;
-        if (mLivePicture != null) mLivePicture.drawable().setCallback(null);
+        setLivePicture(picture, false);
+    }
+
+    /**
+     * {@link #setLivePicture(LivePicture)}; {@code aimed} shows the picture of another surface
+     * through its aimed drawable ({@link LivePicture#aimAt}), as a float's titlebar shows its
+     * float's picture, and leaves that picture's colour filter to its own surface.
+     */
+    public void setLivePicture(@Nullable LivePicture picture, boolean aimed) {
+        Drawable shown = picture == null ? null : aimed ? picture.aimedDrawable() : picture.drawable();
+        if (picture == mLivePicture && shown == mLiveDrawable) return;
+        if (mLiveDrawable != null) mLiveDrawable.setCallback(null);
         mLivePicture = picture;
-        if (picture != null) {
-            picture.drawable().setCallback(this);
-            picture.drawable().setColorFilter(mFramePaint.getColorFilter());
+        mLiveDrawable = shown;
+        if (shown != null) {
+            shown.setCallback(this);
+            if (!aimed) shown.setColorFilter(mFramePaint.getColorFilter());
         }
         // The live node is emptied by the next draw, which draws the stored frame in its place
         // ({@link #retireLiveNode}): emptied now, a frame this slab already recorded would show it
@@ -284,7 +297,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     @Override
     public void invalidateDrawable(@NonNull Drawable drawable) {
-        if (mLivePicture != null && drawable == mLivePicture.drawable()) {
+        if (mLiveDrawable != null && drawable == mLiveDrawable) {
             invalidate();
             return;
         }
@@ -293,7 +306,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     @Override
     protected boolean verifyDrawable(@NonNull Drawable who) {
-        return super.verifyDrawable(who) || (mLivePicture != null && who == mLivePicture.drawable());
+        return super.verifyDrawable(who) || (mLiveDrawable != null && who == mLiveDrawable);
     }
 
     /**
@@ -305,6 +318,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     private boolean drawLive(@NonNull Canvas canvas, int width, int height) {
         if (!showsLive() || !(canvas instanceof android.graphics.RecordingCanvas)) return false;
+        // A scene on: the recording holds its frame, so this slab is redrawn at each publish and
+        // the recorder (a pre-draw of that frame) records the new one.
+        if (LiveSceneFrame.current() != null) LiveSceneFrame.noteDrawn(this);
         LivePicture picture = mLivePicture;
         GlassRefraction.Look look = mLook;
         float density = getResources().getDisplayMetrics().density;
@@ -339,7 +355,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             node.setRenderEffect(effect);
             mLiveEffectSet = effect;
         }
-        Drawable drawable = picture.drawable();
+        Drawable drawable = mLiveDrawable;
+        if (drawable == null) return false;
         android.graphics.RecordingCanvas recording = node.beginRecording(width, height);
         try {
             drawable.setBounds(0, 0, width, height);
@@ -494,7 +511,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mFramePaint.setColorFilter(filter);
         mPreviousFramePaint.setColorFilter(filter);
         // The live picture wears the same frost and even-out, after its blur.
-        if (mLivePicture != null) mLivePicture.drawable().setColorFilter(filter);
+        if (mLivePicture != null && mLiveDrawable == mLivePicture.drawable()) {
+            mLiveDrawable.setColorFilter(filter);
+        }
     }
 
     /** The filter the frame is drawn through right now, for tests. */

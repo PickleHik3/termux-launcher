@@ -33,6 +33,29 @@ public final class WallpaperFrostPainter {
     @NonNull private final SurfaceDirtyLedger mLedger;
 
     @NonNull private final int[] mTmpViewLocation = new int[2];
+    @NonNull private final FrostPassGate mPassGate = new FrostPassGate();
+
+    /** A bounds view's visibility, screen position and size, into the pass's key. */
+    private void addBounds(@Nullable View view) {
+        if (view == null) {
+            mPassGate.add(-1);
+            return;
+        }
+        mPassGate.add(view.getVisibility());
+        if (view.getVisibility() != View.VISIBLE) return;
+        view.getLocationOnScreen(mTmpViewLocation);
+        mPassGate.add(mTmpViewLocation[0]).add(mTmpViewLocation[1])
+            .add(view.getWidth()).add(view.getHeight());
+    }
+
+    /** What a frost view shows now, so a hide from elsewhere is not skipped over. */
+    private void addFrostState(@Nullable ImageView frost) {
+        if (frost == null) {
+            mPassGate.add(-1);
+            return;
+        }
+        mPassGate.add(frost.getVisibility()).add(frost.getDrawable() != null);
+    }
 
     WallpaperFrostPainter(@NonNull ChromeRenderer.Surfaces surfaces,
                           @NonNull WallpaperBlurCache blurCache,
@@ -58,7 +81,9 @@ public final class WallpaperFrostPainter {
         mSurfaces.updateTerminalGlassFrost();
         ImageView statusFrost = frostView(R.id.terminal_status_bar_wallpaper_backdrop);
         ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
+        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
         if (statusFrost == null || paneFrost == null) {
+            mPassGate.invalidate();
             mSurfaces.onWindowBarFrostEdge(false);
             return;
         }
@@ -78,6 +103,47 @@ public final class WallpaperFrostPainter {
             clearTopPane();
             return;
         }
+        // A bar standing between the dock's own rows is on the dock's sheet, which already carries
+        // this frost: a frost of its own here would draw the same blurred wallpaper a second time,
+        // and with no wash over it — the bar wears no glass on the plank.
+        boolean onPlank = mSurfaces.statusBarOnDockPlank();
+        // Docked, the bar's screen edges are seams, and so is its top while the strip continues
+        // it — whether or not the strip's own frost is up this pass. Only the edge the shape model
+        // says faces the opening keeps its rim: a bar joined to the dock under it keeps none. The
+        // capsule keeps its rim all round.
+        int paneSeams = mSurfaces.statusBarSeamEdges();
+        // A bar split round the camera has its cards' own views: the frost crops to the main
+        // card, the second one to its own. The host still says whether the bar shows at all.
+        View barHost = mSurfaces.findChromeView(R.id.terminal_window_bar_host);
+        View mainCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background);
+        View sideCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background_side);
+        boolean barShown = barHost != null && barHost.getVisibility() == View.VISIBLE;
+
+        // Nothing this pass reads has moved since it last landed: the frost is where it will stay.
+        View statusBackground = mSurfaces.findChromeView(R.id.terminal_status_bar_background);
+        float rimCornerPx = capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f;
+        mPassGate.begin();
+        mPassGate.add(blurRadiusDp).add(stripRadiusDp).add(capsule).add(lead.ordinal())
+            .add(onPlank).add(paneSeams).add(rimCornerPx)
+            .add(statusCover()).add(dockCover())
+            .add(mSurfaces.statusLookPage()).add(mSurfaces.stackLookPage())
+            .add(java.util.Objects.hashCode(status().refraction()))
+            .add(java.util.Objects.hashCode(dock().refraction()))
+            .add(java.util.Objects.hashCode(mSurfaces.fancierGlassLook()))
+            .add(mLedger.frostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE))
+            .add(mLedger.frostRadiusDp(SurfaceDirtyLedger.FrostRadius.OFF_DOCK))
+            .add(mBlurCache.hasRadius(blurRadiusDp)).add(mBlurCache.hasRadius(stripRadiusDp))
+            .add(mBlurCache.frameRectLeft()).add(mBlurCache.frameRectTop())
+            .add(mBlurCache.frameRectWidth()).add(mBlurCache.frameRectHeight());
+        addBounds(statusBackground);
+        addBounds(barHost);
+        addBounds(mainCard);
+        addBounds(sideCard);
+        addFrostState(statusFrost);
+        addFrostState(paneFrost);
+        addFrostState(sideFrost);
+        if (mPassGate.unchanged(mLedger.isFrostDirty())) return;
+
         // Docked: the strip touches the screen's top and sides and runs on into the surface below
         // it, so every one of its edges is a seam — no rim along the physical top of the screen.
         boolean statusApplied = lead != ChromeEdgeRule.TopLead.NONE && applyFrost(statusFrost,
@@ -90,21 +156,22 @@ public final class WallpaperFrostPainter {
             stripIsDockSheet ? dockCover() : statusCover(), stripIsDockSheet ? dock() : status());
         if (lead == ChromeEdgeRule.TopLead.NONE)
             hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
-        // A bar standing between the dock's own rows is on the dock's sheet, which already carries
-        // this frost: a frost of its own here would draw the same blurred wallpaper a second time,
-        // and with no wash over it — the bar wears no glass on the plank.
-        boolean onPlank = mSurfaces.statusBarOnDockPlank();
-        // Docked, the bar's screen edges are seams, and so is its top while the strip continues
-        // it — whether or not the strip's own frost is up this pass. Only the edge the shape model
-        // says faces the opening keeps its rim: a bar joined to the dock under it keeps none. The
-        // capsule keeps its rim all round.
-        int paneSeams = mSurfaces.statusBarSeamEdges();
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
-            mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
+            barShown && mainCard != null ? mainCard : barHost, blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
             paneSeams, statusCover(), status());
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        boolean sideApplied = paneApplied && barShown && sideFrost != null && sideCard != null
+            && sideCard.getVisibility() == View.VISIBLE && applyFrost(sideFrost, sideCard,
+                blurRadiusDp, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE,
+                SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+                capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
+                paneSeams, statusCover(), status());
+        if (!sideApplied && sideFrost != null)
+            hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
+        if (statusApplied || paneApplied) mPassGate.landed();
+        else mPassGate.invalidate();
         if (statusApplied || paneApplied) {
             mLedger.clearFrostDirty();
             mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, blurRadiusDp);
@@ -114,10 +181,13 @@ public final class WallpaperFrostPainter {
     }
 
     public void clearTopPane() {
+        mPassGate.invalidate();
         ImageView statusFrost = frostView(R.id.terminal_status_bar_wallpaper_backdrop);
         ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
         if (statusFrost != null) hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         if (paneFrost != null) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
+        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        if (sideFrost != null) hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.APP_DRAWER);

@@ -130,8 +130,25 @@ public class TaiBenchHomeFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card and the empty state; the action floats over the list.
-        assertEquals(2, adapter.getItemCount());
+        // The Text / Voice choice, the device card and the empty state; the action floats over the list.
+        assertEquals(3, adapter.getItemCount());
+    }
+
+    @Test
+    public void aVoiceResultStaysOffTheTextBoard() throws Exception {
+        JSONObject voice = new JSONObject().put("id", "v1").put("kind", "voice").put("benchVersion", "voice_v1")
+            .put("timestamp", 1_700_000_000_000L).put("modelId", "parakeet-tdt-0.6b-v3").put("backend", "stt")
+            .put("accelerator", "cpu").put("ranOn", "cpu").put("speculative", false)
+            .put("phases", new JSONObject().put("voice", new JSONObject().put("realtime", 15.0).put("wer", 0.03)))
+            .put("status", "complete");
+        seed(voice);
+        TaiBenchHomeFragment home = launch();
+        assertFalse(home.voiceForTest());
+        assertFalse(home.hasRowsForTest());
+        RecyclerView.Adapter<?> adapter = ((RecyclerView) home.requireView().findViewById(R.id.tai_bench_list)).getAdapter();
+        assertNotNull(adapter);
+        // The choice, the device card and the empty state: no "older benchmark" note for a voice result.
+        assertEquals(3, adapter.getItemCount());
     }
 
     @Test
@@ -143,8 +160,8 @@ public class TaiBenchHomeFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card and two rows: one list, no sort tabs; the action floats over the list.
-        assertEquals(3, adapter.getItemCount());
+        // The Text / Voice choice, the device card and two rows: one list, no sort tabs; the action floats over the list.
+        assertEquals(4, adapter.getItemCount());
     }
 
     @Test
@@ -156,7 +173,7 @@ public class TaiBenchHomeFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card and the empty state; the action floats over the list.
-        assertEquals(2, adapter.getItemCount());
+        // The Text / Voice choice, the device card and the empty state; the action floats over the list.
+        assertEquals(3, adapter.getItemCount());
     }
 }

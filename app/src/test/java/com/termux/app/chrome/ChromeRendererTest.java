@@ -549,4 +549,51 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.applied.size());
         assertEquals(0, surfaces.invariantsEnforced);
     }
+
+    /**
+     * A top-pane frost asked for while the frame's commit is booked goes with that commit: cut
+     * once, after its apply, instead of now and again once the apply has moved the bands.
+     */
+    @Test
+    public void aFrostAskedWhileACommitIsBookedRunsOnceAfterItsApply() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("nothing is cut before the commit", 0, surfaces.terminalGlassFrostUpdates);
+
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals("one cut, with the commit", 1, surfaces.terminalGlassFrostUpdates);
+        // With nothing booked, a frost runs when it is asked for, as before.
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals(2, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** A commit whose apply cut the frost itself owes no second one. */
+    @Test
+    public void aFrostTheCommitsApplyCutsIsNotCutAgain() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_TOP_PANE_FROST;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(1, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** Tearing the chrome down drops the owed frost with the commit. */
+    @Test
+    public void cancellingTheCommitDropsTheFrostItOwed() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.cancelPendingWork();
+        mainLooper().idle();
+
+        assertEquals(0, surfaces.applied.size());
+        assertEquals(0, surfaces.terminalGlassFrostUpdates);
+    }
 }

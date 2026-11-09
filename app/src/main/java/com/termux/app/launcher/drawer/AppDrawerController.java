@@ -375,8 +375,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float mSeedRadiusPx;
     private float mOpenRadiusPx;
     private float mTravelPx;
+    /**
+     * The row pull's travel, which the release rule's thresholds are read in. Equal to
+     * {@link #mTravelPx} except after a follow, so a follow commits at the same finger distance.
+     */
+    private float mReleaseTravelPx;
     private float mLiftPx;
     private float mSlopPx;
+    /** The slop the live drag takes off: the claim's for a pull on the row, none for a follow. */
+    private float mDragSlopPx;
     private float mCapturedGapPx;
     /** Radius of the frame currently painted; shared with the glass pane's outline provider. */
     private float mCurrentRadiusPx;
@@ -430,6 +437,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mEngaged;
     }
 
+    /** True while a finger's drag owns the plane ({@link #beginDrag} took it). */
+    public boolean isDragging() {
+        return mDragging;
+    }
+
     public void setDockChoreographyTarget(@Nullable AppDrawerDockChoreographyTarget target) {
         mDockTarget = target;
     }
@@ -469,6 +481,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? AppDrawerCommitPolicy.Direction.CLOSING
             : AppDrawerCommitPolicy.Direction.OPENING;
         mDownRawY = downPull;
+        mDragSlopPx = mSlopPx;
         mDragging = true;
         mProgress.vel = 0f;
         if (!closing) {
@@ -492,6 +505,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // function of p, so the chain has to be integrated while the finger is moving or the letters
         // would arrive already settled on the frame the finger left the glass.
         kick();
+    }
+
+    /**
+     * A cold open whose finger is not on the pinned apps row (Home's swipe up): the plane's top
+     * edge follows the finger edge for edge ({@link AppDrawerPullGeometry#followTravelPx}), from
+     * {@code anchorPull}, the claim point on the pull's axis, with no slop taken off and no dock
+     * hop. A close drag on the plane afterwards keeps that travel, so it follows too. Refused
+     * while the plane is engaged, like any open.
+     */
+    public void beginFollowDrag(float anchorPull, @NonNull AppDrawerGestureArbiter.Pull pull,
+                                @NonNull AppDrawerPullGeometry.Seed seed) {
+        if (mEngaged || mOpen) return;
+        beginDrag(anchorPull, pull, seed);
+        if (!mDragging || mDockRect == null || mOpenRect == null) return;
+        mTravelPx = AppDrawerPullGeometry.followTravelPx(mDockRect.top, mOpenRect.top,
+            dp(MIN_TRAVEL_DP), mTravelPx);
+        mLiftPx = AppDrawerPullGeometry.FOLLOW_LIFT_PX;
+        mDragSlopPx = 0f;
+        mDownRawY = anchorPull;
+        applyFrame(mProgress.value);
     }
 
     /**
@@ -520,7 +553,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Every {@code ACTION_MOVE} of a claimed drag. The plane tracks this 1:1, unsmoothed. */
     public void updateDrag(float rawY) {
         if (!mDragging) return;
-        float travelled = AppDrawerTransitionGeometry.progressForDrag(rawY, mDownRawY, mSlopPx,
+        float travelled = AppDrawerTransitionGeometry.progressForDrag(rawY, mDownRawY, mDragSlopPx,
             mTravelPx);
         float p = AppDrawerTransitionGeometry.clamp01(
             mDirection == AppDrawerCommitPolicy.Direction.OPENING
@@ -539,7 +572,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     public void endDrag(float velocityPxPerSec) {
         if (!mDragging) return;
         mDragging = false;
-        AppDrawerCommitPolicy.Decision decision = AppDrawerCommitPolicy.decide(mProgress.value,
+        AppDrawerCommitPolicy.Decision decision = AppDrawerCommitPolicy.decide(
+            AppDrawerPullGeometry.releaseProgress(mProgress.value, mGrabProgress, mTravelPx,
+                mReleaseTravelPx),
             velocityPxPerSec, mDirection, mDensity);
         boolean open;
         switch (decision) {
@@ -1348,6 +1383,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(
             AppDrawerPullGeometry.travelSpanPx(pull, host.getWidth(), host.getHeight()),
             dp(MIN_TRAVEL_DP), dp(MAX_TRAVEL_DP));
+        mReleaseTravelPx = mTravelPx;
         mLiftPx = AppDrawerPullGeometry.liftPxFor(pull, dp(DOCK_LIFT_DP));
         mSlopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
 

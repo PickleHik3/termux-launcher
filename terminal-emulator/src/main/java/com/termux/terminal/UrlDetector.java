@@ -53,6 +53,8 @@ public final class UrlDetector {
 
     /** How far a chain of wrap flags is followed beyond the context, so a long paragraph stays one line. */
     private static final int MAX_WRAP_CHAIN = 64;
+    /** The most rows a call reads above or below the rows it was asked about. */
+    static final int ROWS_READ_AROUND = CONTEXT_ROWS + 2 * MAX_WRAP_CHAIN;
 
     /** Consecutive rows a vertical line glyph must fill in one column for it to be a pane divider. */
     private static final int DIVIDER_RUN = 8;
@@ -124,10 +126,10 @@ public final class UrlDetector {
      * flag, so a window would hand back a truncated address where the renderer underlines a whole
      * one, and a tap would open an address the user never saw.
      */
-    public static UrlSpan at(TerminalBuffer screen, int column, int row) {
-        if (column < 0 || column >= screen.mColumns) return null;
+    public static UrlSpan at(TerminalContent screen, int column, int row) {
+        if (column < 0 || column >= screen.columns()) return null;
         int first = Math.min(row, 0);
-        int last = Math.max(row, screen.mScreenRows - 1);
+        int last = Math.max(row, screen.screenRows() - 1);
         for (UrlSpan span : find(screen, first, last)) {
             if (span.covers(row, column)) return span;
         }
@@ -138,18 +140,18 @@ public final class UrlDetector {
      * Every address that touches a row in {@code [firstRow, lastRow]}, top to bottom. Rows are
      * external: negative for the transcript, {@code 0..mScreenRows-1} for the screen.
      */
-    public static List<UrlSpan> find(TerminalBuffer screen, int firstRow, int lastRow) {
+    public static List<UrlSpan> find(TerminalContent screen, int firstRow, int lastRow) {
         return find(screen, firstRow, lastRow, new Cache(false));
     }
 
     /**
-     * {@link #find(TerminalBuffer, int, int)}, answered from {@code cache} wherever the text it
+     * {@link #find(TerminalContent, int, int)}, answered from {@code cache} wherever the text it
      * would read is unchanged since the cache's last call. The answer is the same either way.
      */
-    public static List<UrlSpan> find(TerminalBuffer screen, int firstRow, int lastRow, Cache cache) {
+    public static List<UrlSpan> find(TerminalContent screen, int firstRow, int lastRow, Cache cache) {
         List<UrlSpan> found = new ArrayList<>();
-        final int minRow = -screen.getActiveTranscriptRows();
-        final int maxRow = screen.mScreenRows - 1;
+        final int minRow = -screen.historyRows();
+        final int maxRow = screen.screenRows() - 1;
         if (firstRow > lastRow || lastRow < minRow || firstRow > maxRow) return found;
         firstRow = Math.max(minRow, firstRow);
         lastRow = Math.min(maxRow, lastRow);
@@ -158,7 +160,7 @@ public final class UrlDetector {
         // the rows read, so a divider cut by the edge of that span can only be shorter than it is.
         final int dividerFirst = Math.max(minRow, firstRow - CONTEXT_ROWS - 2 * MAX_WRAP_CHAIN);
         final int dividerLast = Math.min(maxRow, lastRow + CONTEXT_ROWS + MAX_WRAP_CHAIN);
-        final Dividers dividers = new Dividers(screen, dividerFirst, dividerLast, Math.min(DIVIDER_RUN, screen.mScreenRows));
+        final Dividers dividers = new Dividers(screen, dividerFirst, dividerLast, Math.min(DIVIDER_RUN, screen.screenRows()));
 
         int scanFirst = Math.max(minRow, firstRow - CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > dividerFirst && lineWraps(screen, scanFirst - 1); i++) scanFirst--;
@@ -170,7 +172,7 @@ public final class UrlDetector {
         int scanLast = Math.min(maxRow, lastRow + CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < dividerLast && lineWraps(screen, scanLast); i++) scanLast++;
 
-        final int columns = screen.mColumns;
+        final int columns = screen.columns();
         final List<Line> lines = cache.mLines;
         lines.clear();
         cache.mLinesInUse = 0;
@@ -280,7 +282,7 @@ public final class UrlDetector {
     }
 
     /**
-     * What {@link #find(TerminalBuffer, int, int, Cache)} found last time, group by group, and
+     * What {@link #find(TerminalContent, int, int, Cache)} found last time, group by group, and
      * the line objects it reads the screen into. One per caller that asks every frame; not
      * thread-safe.
      */
@@ -557,9 +559,8 @@ public final class UrlDetector {
         return -1;
     }
 
-    private static boolean lineWraps(TerminalBuffer screen, int row) {
-        TerminalRow line = screen.mLines[screen.externalToInternalRow(row)];
-        return line != null && line.mLineWrap;
+    private static boolean lineWraps(TerminalContent screen, int row) {
+        return screen.row(row).mLineWrap;
     }
 
     /**
@@ -569,7 +570,7 @@ public final class UrlDetector {
      * a last run of text at least {@link #MIN_HAND_WRAPPED_CELLS} cells wide, and below it a single
      * run of text starting at the same column. The row below always exists: it is the scan's first.
      */
-    private static boolean rowReachesEdge(TerminalBuffer screen, Dividers dividers, int externalRow) {
+    private static boolean rowReachesEdge(TerminalContent screen, Dividers dividers, int externalRow) {
         char[] cells = readCells(screen, externalRow);
         char[] below = null;
         int[] windows = dividers.windows(externalRow);
@@ -602,11 +603,10 @@ public final class UrlDetector {
     }
 
     /** One char per cell of a row: blank where empty, the glyph in every cell a wide glyph covers. */
-    private static char[] readCells(TerminalBuffer screen, int externalRow) {
-        char[] cells = new char[screen.mColumns];
+    private static char[] readCells(TerminalContent screen, int externalRow) {
+        char[] cells = new char[screen.columns()];
         java.util.Arrays.fill(cells, ' ');
-        TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
-        if (line == null) return cells;
+        TerminalRow line = screen.row(externalRow);
         final char[] chars = line.mText;
         final int used = line.getSpaceUsed();
         int column = 0;
@@ -657,16 +657,15 @@ public final class UrlDetector {
         /** The one window of a row without dividers; callers only read it. */
         private final int[] mWholeRow;
 
-        Dividers(TerminalBuffer screen, int first, int last, int minRun) {
+        Dividers(TerminalContent screen, int first, int last, int minRun) {
             mFirst = first;
-            mColumns = screen.mColumns;
+            mColumns = screen.columns();
             mWholeRow = new int[] {0, mColumns};
             int rows = Math.max(0, last - first + 1);
             mCells = new boolean[rows][];
             boolean any = false;
             for (int r = 0; r < rows; r++) {
-                TerminalRow line = screen.mLines[screen.externalToInternalRow(first + r)];
-                if (line == null) continue;
+                TerminalRow line = screen.row(first + r);
                 final char[] chars = line.mText;
                 final int used = line.getSpaceUsed();
                 int column = 0;
@@ -762,11 +761,10 @@ public final class UrlDetector {
             return rows[rowCount - 1];
         }
 
-        void appendRow(TerminalBuffer screen, int externalRow) {
+        void appendRow(TerminalContent screen, int externalRow) {
             if (rowCount == rows.length) rows = java.util.Arrays.copyOf(rows, rowCount * 2);
             rows[rowCount++] = externalRow;
-            TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
-            if (line == null) return;
+            TerminalRow line = screen.row(externalRow);
             final char[] chars = line.mText;
             final int used = line.getSpaceUsed();
             int column = 0;

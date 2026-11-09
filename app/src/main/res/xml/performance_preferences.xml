@@ -41,6 +41,14 @@
             app:title="@string/settings_performance_live_blur_title"
             app:summary="@string/settings_performance_live_blur_summary"
             android:defaultValue="false" />
+        <ListPreference
+            app:key="glass_see_through"
+            app:icon="@drawable/ic_ms_live_blur"
+            app:title="@string/settings_performance_see_through_title"
+            app:summary="@string/settings_performance_see_through_summary"
+            app:entries="@array/settings_performance_see_through_entries"
+            app:entryValues="@array/settings_performance_see_through_values"
+            app:defaultValue="all" />
         <SwitchPreferenceCompat
             app:key="live_windows_while_swiping"
             app:icon="@drawable/ic_ms_desktop_windows"
@@ -80,11 +88,26 @@
             app:summary="@string/settings_terminal_screen_events_summary"
             app:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="terminal_retro_composite"
+            app:icon="@drawable/ic_ms_tv_gen"
+            app:title="@string/settings_terminal_retro_composite_title"
+            app:summary="@string/settings_terminal_retro_composite_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="idle_animations"
             app:icon="@drawable/ic_ms_animation"
             app:title="@string/settings_idle_animations_title"
             app:summary="@string/settings_idle_animations_summary"
             app:defaultValue="false" />
+        <ListPreference
+            app:key="idle_tear_rate"
+            app:icon="@drawable/ic_ms_animation"
+            app:title="@string/settings_idle_tear_rate_title"
+            app:entries="@array/settings_idle_tear_rate_entries"
+            app:entryValues="@array/settings_idle_tear_rate_values"
+            app:dependency="idle_animations"
+            app:useSimpleSummaryProvider="true"
+            app:defaultValue="rare" />
     </PreferenceCategory>
 
 </PreferenceScreen>

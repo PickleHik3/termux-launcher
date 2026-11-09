@@ -95,6 +95,20 @@ public final class ChromeShade {
      */
     public static final int MAX_STRUCTURAL_ALPHA = 0xB4;
 
+    /**
+     * The most alpha the arithmetic may spend on a <em>fill</em> (a card wash, a shell, a rest
+     * state). 0x4D is 30%: the light glass ({@code #E1E7F2}) reaches {@link #TARGET_FILL} at about
+     * 0x3E, so every fill that has somewhere to go still gets there. The cap only bites where
+     * black cannot reach the target at all, which is a dark nominal glass under
+     * {@link ChromeInk.Polarity#DARK_INK} (a dark theme over a bright wallpaper): the search then
+     * ran to {@link #MAX_STRUCTURAL_ALPHA}, 70% black, and the drawer's cards became opaque slabs
+     * over the glass they are meant to show. A constant authored above the cap keeps its own.
+     */
+    public static final int MAX_FILL_ALPHA = 0x4D;
+
+    /** Same idea for a press or selection state, which sits one step above its rest fill. */
+    public static final int MAX_STATE_ALPHA = 0x66;
+
     // ------------------------------------------------------------------ the snapshot
 
     @Nullable private static ChromeInk.Polarity sPolarity;
@@ -187,10 +201,17 @@ public final class ChromeShade {
     @ColorInt
     public static int structural(@ColorInt int paleSeed, @NonNull ChromeInk.Polarity polarity,
                                  @ColorInt int surface, double target) {
+        return structural(paleSeed, polarity, surface, target, MAX_STRUCTURAL_ALPHA);
+    }
+
+    /** {@link #structural(int, ChromeInk.Polarity, int, double)} with its own alpha ceiling. */
+    @ColorInt
+    public static int structural(@ColorInt int paleSeed, @NonNull ChromeInk.Polarity polarity,
+                                 @ColorInt int surface, double target, int maxAlpha) {
         if (polarity == ChromeInk.Polarity.PALE_INK) return paleSeed;
         int base = OnGlass.opaque(surface);
         int floor = Color.alpha(paleSeed);
-        int ceiling = Math.max(MAX_STRUCTURAL_ALPHA, floor);
+        int ceiling = Math.max(maxAlpha, floor);
         for (int alpha = floor; alpha <= ceiling; alpha++) {
             int candidate = OnGlass.withAlpha(Color.BLACK, alpha);
             if (separation(candidate, base) >= target) return candidate;
@@ -218,7 +239,9 @@ public final class ChromeShade {
     /** {@link #structural(int, double)} at {@link #TARGET_FILL}: a card wash or a shell. */
     @ColorInt
     public static int fill(@ColorInt int paleSeed) {
-        return structural(paleSeed, TARGET_FILL);
+        ChromeInk.Polarity polarity = sPolarity;
+        if (polarity == null) return paleSeed;
+        return structural(paleSeed, polarity, sNominalGlass, TARGET_FILL, MAX_FILL_ALPHA);
     }
 
     /**
@@ -232,10 +255,10 @@ public final class ChromeShade {
     public static int stateFill(@ColorInt int paleSeed, @ColorInt int restFill) {
         ChromeInk.Polarity polarity = sPolarity;
         if (polarity == null) return paleSeed;
-        int resolved = structural(paleSeed, polarity, sNominalGlass, TARGET_FILL);
+        int resolved = structural(paleSeed, polarity, sNominalGlass, TARGET_FILL, MAX_FILL_ALPHA);
         if (polarity == ChromeInk.Polarity.PALE_INK) return resolved;
-        int rest = structural(restFill, polarity, sNominalGlass, TARGET_FILL);
-        int ceiling = Math.max(MAX_STRUCTURAL_ALPHA, Color.alpha(resolved));
+        int rest = structural(restFill, polarity, sNominalGlass, TARGET_FILL, MAX_FILL_ALPHA);
+        int ceiling = Math.max(MAX_STATE_ALPHA, Color.alpha(resolved));
         for (int alpha = Color.alpha(resolved); alpha <= ceiling; alpha++) {
             int candidate = OnGlass.withAlpha(Color.BLACK, alpha);
             if (separation(candidate, rest, sNominalGlass) >= TARGET_STATE) return candidate;

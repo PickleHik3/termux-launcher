@@ -62,6 +62,24 @@ final class TaiSpeechActions {
         return modelId.startsWith("whisper-");
     }
 
+    /** The Whisper Base model that runs on the GPU at full precision. */
+    static boolean isGpuModel(@NonNull String modelId) {
+        return com.termux.ai.TaiModelCatalog.WHISPER_BASE_GPU_ID.equals(modelId);
+    }
+
+    /** The one line the GPU model carries on this phone; {@code warning} is the longer one the install sheet shows. */
+    @NonNull
+    static String gpuAdviceLine(@NonNull Context context, @NonNull com.termux.ai.TaiSpeechGpuAdvice.Advice advice,
+                                boolean warning) {
+        switch (advice) {
+            case NO_GPU: return context.getString(warning
+                ? R.string.speech_gpu_advice_no_gpu_warning : R.string.speech_gpu_advice_no_gpu);
+            case RECOMMENDED: return context.getString(R.string.speech_gpu_advice_recommended);
+            case SLOWER: return context.getString(R.string.speech_gpu_advice_slower);
+            default: return context.getString(R.string.speech_gpu_advice_try);
+        }
+    }
+
     static boolean isSmall(@NonNull String modelId) {
         return modelId.startsWith("whisper-acft-small");
     }

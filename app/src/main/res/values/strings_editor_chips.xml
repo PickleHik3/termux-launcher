@@ -8,8 +8,9 @@
     <string name="editor_reset_for">%1$s for %2$s</string>
     <!-- A kind of page, in a row's source: every page of that kind. -->
     <string name="editor_chip_kind_home">Home pages</string>
-    <string name="editor_chip_kind_terminal">Terminal pages</string>
+    <string name="editor_chip_kind_terminal">Workspace pages</string>
     <string name="editor_chip_kind_display">Display pages</string>
+    <string name="editor_chip_kind_assistant">Assistant page</string>
     <string name="editor_chip_all_glass">All glass</string>
     <string name="editor_element_widgets">Widgets</string>
     <string name="editor_element_sheets">Menus and dialogs</string>

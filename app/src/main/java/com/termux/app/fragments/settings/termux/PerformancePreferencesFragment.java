@@ -42,13 +42,16 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_LOW_MEMORY_PRESET = "low_memory_preset";
     private static final String KEY_GLASS_REFRACTION = "fancier_glass";
     private static final String KEY_LIVE_BLUR = "live_blur";
+    private static final String KEY_SEE_THROUGH = "glass_see_through";
     private static final String KEY_LIVING_GLASS = TermuxStylePreferencesDataStore.KEY_MOTION_LIGHT;
     private static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
     /** The trail's on/off, which the preset and the Appearance editor write; not Terminal's style list. */
     private static final String KEY_CURSOR_TRAIL = "terminal_cursor_trail";
     private static final String KEY_TERMINAL_EFFECT = "terminal_retro_effect";
     private static final String KEY_SCREEN_EVENTS = "terminal_screen_events";
+    private static final String KEY_COMPOSITE = "terminal_retro_composite";
     private static final String KEY_IDLE_ANIMATIONS = "idle_animations";
+    private static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     /** Run after a switch has stored its new value, so the rows read what was written. */
@@ -65,10 +68,16 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         if (effect != null) effect.setVisible(PaneRetroEffect.available());
         Preference events = findPreference(KEY_SCREEN_EVENTS);
         if (events != null) events.setVisible(PaneRetroEffect.available());
+        Preference composite = findPreference(KEY_COMPOSITE);
+        if (composite != null) composite.setVisible(PaneRetroEffect.available());
         Preference liveBlur = findPreference(KEY_LIVE_BLUR);
         if (liveBlur != null) liveBlur.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
+        Preference seeThrough = findPreference(KEY_SEE_THROUGH);
+        if (seeThrough != null) seeThrough.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
         Preference idle = findPreference(KEY_IDLE_ANIMATIONS);
         if (idle != null) idle.setVisible(PaneRetroEffect.available());
+        Preference tearRate = findPreference(KEY_IDLE_TEAR_RATE);
+        if (tearRate != null) tearRate.setVisible(PaneRetroEffect.available());
         SwitchPreferenceCompat preset = findPreference(KEY_LOW_MEMORY_PRESET);
         if (preset != null) {
             preset.setOnPreferenceChangeListener((row, newValue) -> {
@@ -205,7 +214,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         @Override
         public void putBoolean(@Nullable String key, boolean value) {
             if (isIoKey(key)) io.putBoolean(key, value);
-            else if (KEY_SCREEN_EVENTS.equals(key) || KEY_IDLE_ANIMATIONS.equals(key))
+            else if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
+                || KEY_IDLE_ANIMATIONS.equals(key))
                 view.putBoolean(key, value);
             else if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 // turnOn and turnOff, run by the switch's change listener, have set it already.
@@ -229,7 +239,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         @Override
         public boolean getBoolean(@Nullable String key, boolean defValue) {
             if (isIoKey(key)) return io.getBoolean(key, defValue);
-            if (KEY_SCREEN_EVENTS.equals(key) || KEY_IDLE_ANIMATIONS.equals(key))
+            if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
+                || KEY_IDLE_ANIMATIONS.equals(key))
                 return view.getBoolean(key, defValue);
             if (KEY_LOW_MEMORY_PRESET.equals(key)) {
                 TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
@@ -248,12 +259,25 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
 
         @Override
         public void putString(@Nullable String key, @Nullable String value) {
-            if (KEY_TERMINAL_EFFECT.equals(key)) view.putString(key, value);
+            if (KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)) {
+                view.putString(key, value);
+            } else if (KEY_SEE_THROUGH.equals(key)) {
+                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+                if (prefs == null) return;
+                prefs.setGlassSeeThrough(value);
+                // The launcher re-reads the glass on its next apply when it resumes.
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+            }
         }
 
         @Override
         public String getString(@Nullable String key, @Nullable String defValue) {
-            return KEY_TERMINAL_EFFECT.equals(key) ? view.getString(key, defValue) : defValue;
+            if (KEY_SEE_THROUGH.equals(key)) {
+                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+                return prefs == null ? defValue : prefs.getGlassSeeThrough();
+            }
+            return KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)
+                ? view.getString(key, defValue) : defValue;
         }
     }
 }

@@ -106,10 +106,17 @@
     <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active</string>
     <string name="settings_terminal_cursor_trail_style_title">Cursor trail</string>
     <string name="settings_terminal_retro_effect_title">Terminal effect</string>
+    <string name="settings_terminal_engine_title">Terminal engine</string>
+    <string name="settings_terminal_engine_summary">Applies to panes you open after changing it.</string>
+    <string name="settings_terminal_engine_standard">Standard (Termux)</string>
+    <string name="settings_terminal_engine_ghostty">Fast (LibGhostty)</string>
     <string name="settings_terminal_screen_events_title">Screen events</string>
     <string name="settings_terminal_screen_events_summary">Bell tear, power on and off, focus wobble, death static on CRT panes</string>
+    <string name="settings_terminal_retro_composite_title">Composite signal</string>
+    <string name="settings_terminal_retro_composite_summary">Blend neighbouring pixels sideways like a video cable, so dithering and pixel art read as shades. Text gets a little softer.</string>
     <string name="settings_idle_animations_title">Idle animations</string>
     <string name="settings_idle_animations_summary">Ambient glitch and flicker on CRT panes while nothing happens. Uses battery.</string>
+    <string name="settings_idle_tear_rate_title">Idle glitch rate</string>
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
@@ -147,14 +154,16 @@
     <string name="settings_weather_location_title">Location</string>
     <string name="settings_weather_location_summary_device">Uses your device location</string>
     <string name="settings_status_cutout_header">Camera cutout</string>
-    <string name="settings_status_cutout_title">Keep icons clear of the camera</string>
+    <string name="settings_status_cutout_title">Keep clear of the camera</string>
     <string name="settings_status_cutout_auto">Auto</string>
     <string name="settings_status_cutout_custom">Custom</string>
     <string name="settings_status_cutout_off">Off</string>
-    <string name="settings_status_cutout_center_title">Position</string>
-    <string name="settings_status_cutout_center_summary">Slide the gap left or right to line it up with the camera.</string>
-    <string name="settings_status_cutout_width_title">Width</string>
-    <string name="settings_status_cutout_width_summary">Make the gap as wide as the camera.</string>
+    <string name="settings_status_cutout_margin_title">Margin</string>
+    <string name="settings_status_cutout_margin_summary">Space between the camera and the bar.</string>
+    <string name="settings_status_cutout_x_title">Move sideways</string>
+    <string name="settings_status_cutout_x_summary">Lines the gap up with the camera.</string>
+    <string name="settings_status_cutout_y_title">Move down</string>
+    <string name="settings_status_cutout_size_title">Size</string>
     <string name="settings_weather_location_current">Now: %1$s</string>
     <string name="settings_weather_location_search_hint">Search for a city</string>
     <string name="settings_weather_location_type_more">Keep typing a city name</string>
@@ -255,6 +264,7 @@
     <string name="settings_extra_keys_action_types_title">Types \"%1$s\"</string>
     <string name="settings_extra_keys_action_picker_title">Choose a key</string>
     <string name="settings_extra_keys_action_search_hint">Search keys or actions</string>
+    <string name="settings_extra_keys_action_send_chord">Send %1$s as keys</string>
     <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
     <string name="settings_extra_keys_action_macro_summary">Send as a macro (keys separated by spaces)</string>
     <string name="settings_extra_keys_action_keys">Terminal keys</string>
@@ -280,6 +290,8 @@
     <string name="settings_extra_keys_page_options_cd">Page options</string>
     <string name="settings_extra_keys_row_options_cd">Row options</string>
     <string name="settings_extra_keys_add_key_cd">Add key</string>
+    <string name="settings_extra_keys_guide_title">What a key can be</string>
+    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.\nText: typed as written.\nCombination: ctrl+f7 or alt+shift+tab, pressed together.\nMacro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.\nTool: a launcher action, like the keyboard, mouse mode or a page.\nDisplay label: any text, or a glyph from the Ω button\'s search.\nSwipe up: a second key on the same cap.\nWhile a Linux display is showing, the row sends its keys to it.</string>
     <string name="settings_extra_keys_hint">Tap to edit · Hold the handle to reorder</string>
     <plurals name="settings_extra_keys_row_count">
         <item quantity="one">%d row</item>
@@ -332,6 +344,7 @@
     <string name="settings_start_in_home">Home</string>
     <string name="settings_start_in_workspace">Terminal</string>
     <string name="settings_start_in_display">Display</string>
+    <string name="settings_start_in_assistant">Assistant</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
         <item>@string/settings_start_in_workspace</item>
@@ -503,6 +516,7 @@
     <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
     <string name="launcher_entry_terminal">Terminal</string>
     <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_assistant">Assistant</string>
     <string name="launcher_entry_new_float">New float here</string>
     <string name="window_chip_home_float">Home float, page %1$d</string>
     <!-- A minimised Home float's window chip in the bar, spoken after its label: it is folded into the chip. -->
@@ -1733,8 +1747,8 @@
         <string name="tai_centre_parallel_title">Simultaneous downloads</string>
         <string name="tai_centre_parallel_summary">Two usually fill a home connection; more only split it.</string>
         <string name="tai_centre_sheet_title">Install %1$s</string>
-        <string name="tai_centre_sheet_size_base">Base · %1$s</string>
-        <string name="tai_centre_sheet_size_small">Small · %1$s</string>
+        <string name="tai_centre_sheet_size_base">Base\n%1$s</string>
+        <string name="tai_centre_sheet_size_small">Small\n%1$s</string>
         <string name="tai_centre_sheet_language_english">English</string>
         <string name="tai_centre_sheet_language_many">Many languages</string>
         <string name="tai_centre_sheet_window_10">10 seconds</string>
@@ -1972,6 +1986,36 @@
         <string name="tai_bench_delete_results_message">Every run of this model, on every processor, leaves the leaderboard. The model itself stays.</string>
         <string name="tai_bench_delete_results_confirm">Delete results</string>
         <string name="tai_bench_delete_results_done">%1$d results deleted</string>
+        <!-- Benchmark: voice (speech-to-text) runs. -->
+        <string name="tai_bench_kind_desc">Text or voice models</string>
+        <string name="tai_bench_kind_text">Text</string>
+        <string name="tai_bench_kind_voice">Voice</string>
+        <string name="tai_bench_voice_label">Voice</string>
+        <string name="tai_bench_voice_empty_summary">Run a benchmark to see which speech model this phone runs well.</string>
+        <string name="tai_bench_voice_apart_header">Not ranked</string>
+        <string name="tai_bench_voice_realtime">%1$s× real time</string>
+        <string name="tai_bench_voice_wer">%1$s%% word errors</string>
+        <string name="tai_bench_voice_loads">loads in %1$s</string>
+        <string name="tai_bench_voice_fell_back">GPU unavailable, ran on CPU</string>
+        <string name="tai_bench_voice_wrong_text">Wrong text</string>
+        <string name="tai_bench_voice_choose_hint">Each model runs on the CPU, and on the GPU where this phone offers it, over three recorded clips (59 s of speech).</string>
+        <string name="tai_bench_voice_empty_installed">No speech model is installed. Get one in the Model centre under Speech.</string>
+        <string name="tai_bench_voice_check_summary">%1$d speech models · Voice</string>
+        <string name="tai_bench_phase_voice">clips</string>
+        <string name="tai_bench_test_voice">Transcribing the clips</string>
+        <string name="tai_bench_dial_realtime">speed, so far</string>
+        <string name="tai_bench_voice_result_speed">Speed</string>
+        <string name="tai_bench_voice_result_wer">Word errors</string>
+        <string name="tai_bench_voice_result_ran_on">Ran on</string>
+        <string name="tai_bench_voice_result_clips_header">Clips</string>
+        <string name="tai_bench_voice_clip_jfk_short">JFK, 3 s</string>
+        <string name="tai_bench_voice_clip_jfk">JFK, 11 s</string>
+        <string name="tai_bench_voice_clip_bush">Radio address, 45 s</string>
+        <string name="tai_bench_voice_result_heard">What it heard</string>
+        <string name="tai_bench_voice_result_reference">What was said</string>
+        <string name="tai_bench_voice_use">Use this</string>
+        <string name="tai_bench_voice_in_use">In use</string>
+        <string name="tai_bench_voice_use_done">Voice input now uses %1$s on the %2$s.</string>
         <!-- Keyboard › Voice input › Speech model, the picker (D5). -->
         <string name="speech_picker_get_more_title">Get more in Model centre</string>
         <string name="speech_picker_get_more_summary">Whisper and Parakeet, with the size, language and window to choose</string>
@@ -2336,6 +2380,7 @@
     <string name="tool_wall_widgets">Go to Home</string>
     <string name="tool_wall_terminal">Go to Terminal</string>
     <string name="tool_wall_display">Go to Display</string>
+    <string name="tool_wall_assistant">Go to Assistant</string>
     <string name="tool_wall_go">Go to place</string>
     <string name="tool_mouse_toggle">Mouse mode</string>
     <!-- The size in cells a pane drag will give its panes (ADR 0019): a divider's two panes, top/left first; a floating pane. -->
@@ -2435,6 +2480,7 @@
     <string name="tool_desc_wall_widgets">Show the Home pages.</string>
     <string name="tool_desc_wall_terminal">Show the terminal.</string>
     <string name="tool_desc_wall_display">Show the Linux display.</string>
+    <string name="tool_desc_wall_assistant">Show the Assistant page, adding it when the wall has none.</string>
     <string name="tool_desc_wall_go">Show a chosen place, or the one to the left or right.</string>
     <string name="tool_desc_mouse_toggle">Touches become mouse clicks in the terminal, and a touchpad takes the keyboard\'s place on the display.</string>
     <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
@@ -2562,7 +2608,7 @@
     <string name="settings_keyboard_voice_polish_title">Clean up dictation</string>
     <string name="settings_keyboard_voice_polish_summary">Review local corrections before inserting; requires a cleanup model.</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
-    <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
+    <string name="settings_keyboard_voice_polish_level_title">Level</string>
     <string name="settings_keyboard_voice_polish_level_light">Light: what you meant, as one cleaned-up paragraph.</string>
     <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists.</string>
     <string name="settings_keyboard_voice_pause_title">Phrase pause</string>
@@ -2602,8 +2648,26 @@
     <string name="speech_model_window_change_action">Download and switch</string>
     <string name="speech_model_window_changed">%1$s now uses the %2$d-second window</string>
     <string name="speech_model_window_kept">The %1$d-second version could not be downloaded. %2$s keeps its %3$d-second window.</string>
-    <string name="speech_model_idle_unload_title">Unload after idle</string>
+    <string name="speech_model_idle_unload_title">Unload after</string>
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
+    <string name="speech_model_accelerator_title">Runs on</string>
+    <string name="speech_model_accelerator_hint">GPU uses less battery, may be slower</string>
+    <string name="speech_model_get_more_models">Get more models</string>
+    <string name="read_aloud_title">Read aloud</string>
+    <string name="read_aloud_summary">The voice and speed for spoken answers</string>
+    <string name="speech_model_accelerator_summary">%1$s · which part of the phone runs voice input</string>
+    <string name="speech_model_accelerator_auto">Auto</string>
+    <string name="speech_model_accelerator_cpu">CPU</string>
+    <string name="speech_model_accelerator_gpu">GPU</string>
+    <string name="speech_model_accelerator_gpu_choice">GPU · uses less battery, may be slower</string>
+    <string name="speech_model_accelerator_gpu_unavailable">GPU unavailable, using CPU</string>
+    <string name="tai_centre_sheet_size_gpu">Base GPU\n%1$s</string>
+    <string name="speech_gpu_size_hint">Runs on the GPU and uses little CPU. Many languages, 30-second window.</string>
+    <string name="speech_gpu_advice_no_gpu">No usable GPU found on this phone</string>
+    <string name="speech_gpu_advice_no_gpu_warning">No usable GPU found on this phone. It may not run, and the CPU is slower.</string>
+    <string name="speech_gpu_advice_try">Try it on this phone\'s GPU</string>
+    <string name="speech_gpu_advice_recommended">Recommended</string>
+    <string name="speech_gpu_advice_slower">Slower on this phone</string>
     <string name="speech_output_header">Voice output</string>
     <string name="speech_output_missing_title">No voice yet</string>
     <string name="speech_output_missing_summary">Get the voice model in Model centre to hear text read aloud</string>
@@ -2615,6 +2679,7 @@
     <string name="speech_output_sample_playing">Playing · tap to stop</string>
     <string name="speech_output_sample_text">Hi, I am %1$s. This is how I will sound when I read to you.</string>
     <string name="cleanup_model_automatic_title">Automatic</string>
+    <string name="cleanup_model_automatic_with">Automatic · %1$s</string>
     <string name="voice_input_listening">Listening…</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_cleaning_up">Cleaning up…</string>
@@ -2875,6 +2940,7 @@
     <string name="help_key_widgets">Home</string>
     <string name="help_key_terminal">Terminal</string>
     <string name="help_key_display">Display</string>
+    <string name="help_key_assistant">Assistant</string>
     <string name="help_key_split">Split</string>
     <string name="help_key_window">new window</string>
     <string name="help_key_sessions">Sessions</string>

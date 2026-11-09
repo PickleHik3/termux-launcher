@@ -96,13 +96,13 @@ public final class DressResolver {
     @NonNull private static final Set<Element> HOME_NOT_OFFERED = EnumSet.of(Element.EXTRA_KEYS);
 
     /**
-     * The kind of page a wall page carries: the Home pages' row, a Display page, or the
-     * Workspace's terminal windows.
+     * The kind whose dress a wall page wears: Home's on the Home pages' row, the Workspace's
+     * ({@link PageKind#TERMINAL}) on every other page. Terminal windows, Display pages and the
+     * Assistant page are one Workspace and wear one dress (ADR 0025).
      */
     @NonNull
     public static PageKind kindOf(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) return PageKind.HOME;
-        return page == PaneWallPage.DISPLAY ? PageKind.DISPLAY : PageKind.TERMINAL;
+        return page == PaneWallPage.WIDGETS ? PageKind.HOME : PageKind.TERMINAL;
     }
 
     @NonNull private final Source mSource;

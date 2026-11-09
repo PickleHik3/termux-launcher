@@ -191,9 +191,17 @@ public final class ChromeInk {
         /** The polarity and policy the matrix was built for. */
         @Nullable Polarity evenOutPolarity;
         @Nullable EvenOutPolicy evenOutPolicy;
-        /** How far each ink's side is out of reach on the composited ground; see EvenOut#shortfall. */
+        /**
+         * Whether the even-out measured this pane (its lightness was read under a policy): only a
+         * measured pane votes on the band's ink. An unread pane's zeros below mean nothing.
+         */
+        boolean measured;
+        /** How far each ink's side misses on the ground it would draw; see {@link PaneSide}. */
         double shortPale;
         double shortDark;
+        /** Each side's body-text ratio over its target on that ground; see {@link PaneSide}. */
+        double marginPale;
+        double marginDark;
         @NonNull OnGlass.Resolution resolution;
 
         PaneAnswer(@NonNull OnGlass.Resolution resolution) {
@@ -700,7 +708,7 @@ public final class ChromeInk {
         }
         if (answer != null && answer.sampled
                 && answer.matches(dim, tint, veilColor, ink, dimInk, target)
-                && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
+                && sameStage(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
             if (answer.parked) parkPane(key, false);
             return answer.resolution;
         }
@@ -730,41 +738,38 @@ public final class ChromeInk {
         GlassBackdropCache.Lightness lightness = null;
         android.graphics.ColorMatrix evenOut = null;
         Polarity evenOutPolarity = null;
-        double shortPale = 0d;
-        double shortDark = 0d;
+        boolean measured = false;
+        PaneSide paleSide = null;
+        PaneSide darkSide = null;
+        double largeTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
+        // The normal foreground is body text; the dim one is text a program asked to recede, and
+        // is held to the large-text tier, scaled by the same level. The veil is held to
+        // veilCeiling255 (none today): a pane the user made thin stays glass.
+        int cap255 = veilCeiling255(tint);
         if (policy != null && sampled) {
             lightness = answer != null && answer.lightness != null
                 ? answer.lightness : sampleLightnessTraced(rootRect);
             if (lightness != null) {
-                // The limit is applied on the composited ground (after frost, dim and tint), and
-                // a side the chain cannot reach is not chosen over one it can.
-                EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
-                shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
-                    policy.level, chain);
-                shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
-                    policy.level, chain);
-                // One polarity for the whole band: every live pane's shortfalls vote, this
-                // pane's fresh ones included (its old answer, if any, is replaced).
-                evenOutPolarity = bandPolarity(policy, key, shortPale, shortDark);
+                // Each side is judged on the ground it would draw (#228): the matrix at its
+                // strength, then frost, dim and tint, the same ground the ink is resolved on.
+                paleSide = paneSide(lightness, policy, Polarity.PALE_INK, dim, tint, target,
+                    largeTarget, cap255);
+                darkSide = paneSide(lightness, policy, Polarity.DARK_INK, dim, tint, target,
+                    largeTarget, cap255);
+                measured = true;
+                // One polarity for the whole band: every measured pane votes, this pane's fresh
+                // sides included (its old answer, if any, is replaced).
+                evenOutPolarity = bandPolarity(key, paleSide, darkSide);
                 mBandPolarity = evenOutPolarity;
-                boolean pale = evenOutPolarity == Polarity.PALE_INK;
-                EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
-                    pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
-                mapping = mapping.toward(policy.strengthPercent / 100d);
-                evenOut = EvenOutMatrix.of(mapping);
-                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, dim, tint), evenOutPolarity);
+                PaneSide chosen = evenOutPolarity == Polarity.PALE_INK ? paleSide : darkSide;
+                evenOut = chosen.matrix;
+                flat = chosen.ground;
             }
         }
-        // The normal foreground is body text; the dim one is text a program asked to recede, and
-        // is held to the large-text tier, scaled by the same level.
-        // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
-        // the user made thin stays glass, and the ink is reported as capped instead.
-        int cap255 = veilCeiling255(tint);
         android.os.Trace.beginSection("Ink.terminalPane.resolve");
         OnGlass.Resolution resolution;
         try {
-            resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
-                target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
+            resolution = resolvePane(flat, ink, target, dimInk, largeTarget, veilColor, cap255);
         } finally {
             android.os.Trace.endSection();
         }
@@ -794,8 +799,11 @@ public final class ChromeInk {
         answer.evenOut = evenOut;
         answer.evenOutPolarity = evenOutPolarity;
         answer.evenOutPolicy = policy;
-        answer.shortPale = shortPale;
-        answer.shortDark = shortDark;
+        answer.measured = measured;
+        answer.shortPale = measured ? paleSide.shortfall : 0d;
+        answer.shortDark = measured ? darkSide.shortfall : 0d;
+        answer.marginPale = measured ? paleSide.margin : 0d;
+        answer.marginDark = measured ? darkSide.margin : 0d;
         mEvenOutGeneration++;
         publishPaneBand(tint);
         return resolution;
@@ -872,7 +880,7 @@ public final class ChromeInk {
 
     /**
      * The ink the pane band chose on its last measurement, weighing every live pane's shortfall
-     * for both inks ({@link #bandPolarity(EvenOutPolicy, Rect, double, double)}); null before a
+     * for both inks ({@link #decideBand}); null before a
      * pane is measured or while the even-out stage is off. The palette wears this ink outright:
      * the ground it is handed ({@link #terminalPaneGround}) is the band's worst end for this ink,
      * and judging the ink again there would send it to the other side.
@@ -1095,53 +1103,158 @@ public final class ChromeInk {
     /** The polarity the band was last mapped on, or null before the first measured pane. */
     @Nullable private Polarity mBandPolarity;
 
-    /** Whether the polarity this pane's matrix was built for is no longer the band's choice. */
-    private boolean polarityMoved(@NonNull PaneAnswer pane) {
-        EvenOutPolicy policy = mEvenOutPolicy;
-        if (policy == null || pane.evenOutPolarity == null) return false;
-        return pane.evenOutPolarity != bandPolarity(policy, null, 0d, 0d, pane);
+    /**
+     * Whether two policies agree on everything a pane's answer depends on. The pane band's ink
+     * does not read {@link EvenOutPolicy#current} (#228), so a scheme arriving after the first
+     * pane, which only moves {@code current}, re-measures nothing.
+     */
+    private static boolean sameStage(@Nullable EvenOutPolicy a, @Nullable EvenOutPolicy b) {
+        return a == null ? b == null : a.sameStage(b);
     }
 
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Object fresh,
-                                  double shortPale, double shortDark) {
-        return bandPolarity(policy, fresh, shortPale, shortDark, null);
+    /** Whether the polarity this pane's matrix was built for is no longer the band's choice. */
+    private boolean polarityMoved(@NonNull PaneAnswer pane) {
+        if (mEvenOutPolicy == null || !pane.measured || pane.evenOutPolarity == null) return false;
+        Polarity band = bandPolarity(null, null, null);
+        return band != null && pane.evenOutPolarity != band;
+    }
+
+    /** What one ink side would draw on a pane, and how its body text reads there. */
+    @VisibleForTesting
+    static final class PaneSide {
+        @NonNull final Polarity polarity;
+        /** The mapping at the stage's strength, and the matrix that draws it. */
+        @NonNull final EvenOut.Mapping mapping;
+        @NonNull final android.graphics.ColorMatrix matrix;
+        /** The band's worst end for this ink as drawn, opaque: what the palette is solved on. */
+        @ColorInt final int ground;
+        /** {@link EvenOut#shortfall}: whether a band with room can be placed on this side. */
+        final double placement;
+        /** {@link EvenOut#overshoot} of {@link #ground}: whether the drawn band is on this side. */
+        final double overshoot;
+        /** The larger of the two, in tone; 0 means this side reaches its limit as drawn. */
+        final double shortfall;
+        /**
+         * The side's most extreme body ink ({@link EvenOut.Ceiling#inkTone}) resolved on
+         * {@link #ground} by {@link #resolvePane}, the call the pane's own ink is resolved with.
+         */
+        @NonNull final OnGlass.Resolution reference;
+        /** {@link #reference}'s ratio over its target: 1 or more reads. */
+        final double margin;
+
+        PaneSide(@NonNull Polarity polarity, @NonNull EvenOut.Mapping mapping,
+                 @NonNull android.graphics.ColorMatrix matrix, @ColorInt int ground,
+                 double placement, double overshoot, @NonNull OnGlass.Resolution reference) {
+            this.polarity = polarity;
+            this.mapping = mapping;
+            this.matrix = matrix;
+            this.ground = ground;
+            this.placement = placement;
+            this.overshoot = overshoot;
+            this.shortfall = Math.max(placement, overshoot);
+            this.reference = reference;
+            this.margin = reference.ratio / reference.target;
+        }
     }
 
     /**
-     * The band's one polarity: the palette's current ink when every live pane can reach it with
-     * room, else the other side when every pane can reach that, else the side with the least
-     * total shortfall (the current one on a tie). A pane being measured ({@code fresh}, with its
-     * new shortfalls) replaces any stored answer of that pane; panes with no measurement (no
-     * shortfalls stored) do not vote.
+     * The terminal pane's ink resolved on {@code flat}: the one call both the pane's reported
+     * ratio and each side's {@link PaneSide#reference} go through, so the shortfall the band votes
+     * on and the ratio the pane reports are measured the same way.
      */
     @NonNull
-    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Object fresh,
-                                  double freshPale, double freshDark, @Nullable PaneAnswer self) {
+    @VisibleForTesting
+    static OnGlass.Resolution resolvePane(@ColorInt int flat, @ColorInt int ink, double target,
+                                          @ColorInt int dimInk, double largeTarget,
+                                          @ColorInt int veilColor, int cap255) {
+        return OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink, target, dimInk, largeTarget,
+            veilColor, cap255);
+    }
+
+    /**
+     * One ink side of a pane, measured on the ground it would draw (#228): the side's mapping at
+     * the stage's strength, its matrix, the band's worst end through matrix, frost, the dim and
+     * the tint, and how far that ground misses the side's limit. The shortfall used to be read on
+     * the chain before the matrix and its strength, so a side could report room it never drew
+     * (dark ink at 1.37:1 against a 4.5 target). Pure.
+     */
+    @NonNull
+    @VisibleForTesting
+    static PaneSide paneSide(@NonNull GlassBackdropCache.Lightness lightness,
+                             @NonNull EvenOutPolicy policy, @NonNull Polarity side,
+                             @ColorInt int dim, @ColorInt int tint, double target,
+                             double largeTarget, int cap255) {
+        boolean pale = side == Polarity.PALE_INK;
+        EvenOut.Ceiling ceiling = pale ? policy.pale : policy.dark;
+        EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
+        double placement = EvenOut.shortfall(lightness, ceiling, side, policy.level, chain);
+        EvenOut.Mapping mapping = EvenOut.mapThrough(lightness, ceiling, side, policy.level, chain)
+            .toward(policy.strengthPercent / 100d);
+        android.graphics.ColorMatrix matrix = EvenOutMatrix.of(mapping);
+        int ground = EvenOut.worstEnd(bandEnds(mapping, matrix, dim, tint), side);
+        double overshoot = EvenOut.overshoot(
+            com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(ground),
+            ceiling, side);
+        int reference = com.google.android.material.color.utilities.Hct.from(0d, 0d,
+            ceiling.inkTone).toInt();
+        OnGlass.Resolution resolved = resolvePane(ground, reference, target, reference,
+            largeTarget, pale ? Color.BLACK : Color.WHITE, cap255);
+        return new PaneSide(side, mapping, matrix, ground, placement, overshoot, resolved);
+    }
+
+    /**
+     * The band's one polarity from every live, measured pane ({@link #decideBand}); a pane being
+     * measured ({@code fresh}, with its new sides) replaces any stored answer of that pane, and a
+     * pane with no measurement does not vote. Null when nobody votes. Never reads the palette's
+     * current ink, so the same panes give the same answer whatever was worn before (#228).
+     */
+    @Nullable
+    private Polarity bandPolarity(@Nullable Object fresh, @Nullable PaneSide freshPale,
+                                  @Nullable PaneSide freshDark) {
         double totalPale = 0d, totalDark = 0d;
         double worstPale = 0d, worstDark = 0d;
-        if (fresh != null) {
-            totalPale = worstPale = freshPale;
-            totalDark = worstDark = freshDark;
+        double marginPale = Double.POSITIVE_INFINITY, marginDark = Double.POSITIVE_INFINITY;
+        boolean any = false;
+        if (fresh != null && freshPale != null && freshDark != null) {
+            totalPale = worstPale = freshPale.shortfall;
+            totalDark = worstDark = freshDark.shortfall;
+            marginPale = freshPale.margin;
+            marginDark = freshDark.margin;
+            any = true;
         }
         for (java.util.Map.Entry<Object, PaneAnswer> e : mPanes.entrySet()) {
             PaneAnswer pane = e.getValue();
             if (pane.parked || (fresh != null && e.getKey().equals(fresh))) continue;
-            if (pane.evenOutPolicy == null || pane.evenOutPolarity == null) continue;
+            if (!pane.measured) continue;
             totalPale += pane.shortPale;
             totalDark += pane.shortDark;
             worstPale = Math.max(worstPale, pane.shortPale);
             worstDark = Math.max(worstDark, pane.shortDark);
+            marginPale = Math.min(marginPale, pane.marginPale);
+            marginDark = Math.min(marginDark, pane.marginDark);
+            any = true;
         }
-        Polarity current = policy.current;
-        boolean paleCurrent = current == Polarity.PALE_INK;
-        double ownWorst = paleCurrent ? worstPale : worstDark;
-        double otherWorst = paleCurrent ? worstDark : worstPale;
-        if (ownWorst <= 0d) return current;
-        Polarity other = paleCurrent ? Polarity.DARK_INK : Polarity.PALE_INK;
-        if (otherWorst <= 0d) return other;
-        double ownTotal = paleCurrent ? totalPale : totalDark;
-        double otherTotal = paleCurrent ? totalDark : totalPale;
-        return otherTotal < ownTotal ? other : current;
+        if (!any) return null;
+        return decideBand(worstPale, worstDark, totalPale, totalDark, marginPale, marginDark);
+    }
+
+    /**
+     * The pane band's ink from its voters' sides: the side every pane reaches as drawn when only
+     * one does; when both do, or neither, the one with the least total shortfall; on a tie the
+     * one whose body text reads better on the worst pane (the higher {@link PaneSide#margin});
+     * pale ink when even that is equal. A function of what is drawn only (#228).
+     */
+    @NonNull
+    @VisibleForTesting
+    static Polarity decideBand(double worstPale, double worstDark, double totalPale,
+                               double totalDark, double marginPale, double marginDark) {
+        boolean paleReaches = worstPale <= 0d;
+        boolean darkReaches = worstDark <= 0d;
+        if (paleReaches != darkReaches) return paleReaches ? Polarity.PALE_INK : Polarity.DARK_INK;
+        if (totalPale != totalDark) {
+            return totalPale < totalDark ? Polarity.PALE_INK : Polarity.DARK_INK;
+        }
+        return marginDark > marginPale ? Polarity.DARK_INK : Polarity.PALE_INK;
     }
 
     /** Bumped whenever a pane is measured anew or the stage changes; panes poll it to re-dress. */
@@ -1350,8 +1463,11 @@ public final class ChromeInk {
                 policy.level, chain);
             double shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
                 policy.level, chain);
-            Polarity polarity = onePolarity(memo.polarity != null ? memo.polarity : policy.current,
-                shortPale, shortDark);
+            // The side it was mapped on is kept only while the palette wears the same ink: a band
+            // first measured before the scheme loaded must not hold that launch's guess (#228).
+            boolean sameInk = memo.policy != null && memo.policy.current == policy.current;
+            Polarity polarity = onePolarity(sameInk && memo.polarity != null ? memo.polarity
+                : policy.current, shortPale, shortDark);
             boolean pale = polarity == Polarity.PALE_INK;
             EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
                 pale ? policy.pale : policy.dark, polarity, policy.level, chain);

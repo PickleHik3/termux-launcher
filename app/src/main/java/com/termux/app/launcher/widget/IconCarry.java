@@ -54,6 +54,12 @@ public final class IconCarry {
         default void onPlacedOnHome() { }
         /** Let go anywhere that took nothing: whatever the source hid shows again. */
         default void onReturned() { }
+        /**
+         * The carry is over, however it ended (after any of the calls above, and also when one of
+         * them threw): whatever the source still hides shows again. An icon that moved has left
+         * its slot already, so this only ever undoes a hide that nothing else undid.
+         */
+        default void onEnded() { }
         boolean reducedMotion();
     }
 
@@ -138,31 +144,44 @@ public final class IconCarry {
     public void end(float rawX, float rawY, boolean canceled) {
         if (ended) return;
         ended = true;
+        try {
+            finish(rawX, rawY, canceled);
+        } finally {
+            host.onEnded();
+        }
+    }
+
+    private void finish(float rawX, float rawY, boolean canceled) {
         int target = over;
-        boolean dock = overDock;
         overlay.release();
-        if (!canceled && target >= 0 && target < targets.size()) {
-            cancelHome();
-            leaveDock();
-            host.onTarget(targets.get(target));
-            return;
+        LiftDropPolicy.Release release = LiftDropPolicy.release(canceled,
+            target >= 0 && target < targets.size(), overDock, drop.follower() != null);
+        switch (release) {
+            case TARGET:
+                cancelHome();
+                leaveDock();
+                host.onTarget(targets.get(target));
+                return;
+            case DOCK: {
+                cancelHome();
+                boolean taken = host.dropOnDock(rawX, rawY);
+                leaveDock();
+                if (!taken) host.onReturned();
+                return;
+            }
+            case HOME: {
+                leaveDock();
+                HomeAppDrop.Follower follower = drop.follower();
+                if (follower != null && follower.releaseAt(rawX, rawY)) host.onPlacedOnHome();
+                else host.onReturned();
+                return;
+            }
+            case BACK:
+            default:
+                leaveDock();
+                cancelHome();
+                host.onReturned();
         }
-        if (!canceled && dock) {
-            cancelHome();
-            boolean taken = host.dropOnDock(rawX, rawY);
-            leaveDock();
-            if (!taken) host.onReturned();
-            return;
-        }
-        leaveDock();
-        HomeAppDrop.Follower follower = drop.follower();
-        boolean placed = false;
-        if (follower != null) {
-            if (canceled) follower.cancel();
-            else placed = follower.releaseAt(rawX, rawY);
-        }
-        if (placed) host.onPlacedOnHome();
-        else host.onReturned();
     }
 
     /** Whether the carry has ended. */

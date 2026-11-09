@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.Dress;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.LensBeadGeometry;
+import com.termux.app.dock.WornDockDesign;
 import com.termux.app.look.PageLook;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -466,6 +467,8 @@ public final class SeamCrossing {
          */
         boolean dressDiffers, shapeDiffers, wholeStack;
         boolean committedKeyboard, otherKeyboard;
+        /** Whether each half keeps the in-app keyboard up at rest, in the stack or not. */
+        boolean committedKeyboardUp, otherKeyboardUp;
         /**
          * Whether the committed half's stack is drawn from a picture taken as the crossing began,
          * so the stack itself stands and wears the other half's rows from the first frame and the
@@ -555,6 +558,7 @@ public final class SeamCrossing {
      */
     public void begin(@NonNull Endpoint committed, @NonNull Endpoint other,
                       @NonNull Stage stage) {
+        mLandedFootKeyboard = null;
         PlaceLayout here = committed.layout;
         PlaceLayout there = other.layout;
         mRun.committed = committed.page.kind;
@@ -565,8 +569,10 @@ public final class SeamCrossing {
         mRun.otherLayout = there;
         // Each half's Dock design, read once here so the frames read no store: one layout gives
         // both halves one design, and then no band eases and no bead melts (#93).
-        mRun.committedDesign = committed.dress.dockDesign();
-        mRun.otherDesign = other.dress.dockDesign();
+        // The designs the halves' slabs wear (WornDockDesign): none where a half shows no apps
+        // row, so a dock-off half and the other never differ by a design neither draws.
+        mRun.committedDesign = WornDockDesign.of(committed.dress.dockDesign(), here);
+        mRun.otherDesign = WornDockDesign.of(other.dress.dockDesign(), there);
         mRun.committedSearchField = committed.dress.searchField();
         mRun.otherSearchField = other.dress.searchField();
         mRun.dressDiffers = !committed.stack.equals(other.stack);
@@ -602,6 +608,8 @@ public final class SeamCrossing {
             mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
         }
         // A keyboard in the stack, not one floating in a frame of its own.
+        mRun.committedKeyboardUp = committed.keyboardUp;
+        mRun.otherKeyboardUp = other.keyboardUp;
         mRun.committedKeyboard = committed.keyboardUp
             && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
         mRun.otherKeyboard = other.keyboardUp
@@ -966,6 +974,25 @@ public final class SeamCrossing {
      */
     @NonNull
     public Landing land() {
+        return land(null);
+    }
+
+    /**
+     * The same, for a wall that landed on {@code landed}'s half: landed where the stack stood the
+     * other half's rows, the keyboard the dock's foot answered to is held past the landing
+     * ({@link #footKeyboardUp}) until the live keyboard comes to agree with it.
+     */
+    @NonNull
+    public Landing land(@Nullable PaneWallPage landed) {
+        Run run = mRun;
+        mLandedFootKeyboard = landed != null && run.other == landed && !run.landed
+            && rowsHoldFoot(run) ? run.otherKeyboardUp : null;
+        mLandedFootReads = 0;
+        return landDress();
+    }
+
+    @NonNull
+    private Landing landDress() {
         Landing landing = mLanding;
         landing.bandsMoved = !Float.isNaN(mRun.bandProgress);
         landing.laidOut = mRun.layout != null;
@@ -995,6 +1022,60 @@ public final class SeamCrossing {
     }
 
     // ---- What the chrome reads of a crossing between frames ----
+
+    /**
+     * The in-app keyboard the dock's foot under the gesture pill answers to on this frame
+     * ({@code DockSpec#footExists}), given the keyboard as it is now ({@code liveKeyboardUp}):
+     * the keyboard of the half whose rows the stack stands, as that half rests, from the frame
+     * the stack stands them; the live one otherwise. So a crossing from the Workspace's keyboard
+     * to Home's keyboard-down dock gives Home's rows their foot on the frame they stand, out of
+     * sight at the dip's swap, and the settle on Home, whose live keyboard is down, finds it
+     * there. Only where the leaving keyboard is below the screen by then (a dip, whose swap is
+     * no earlier than the keyboard's retreat ends, or a pictured dip, which puts it away with its
+     * picture): elsewhere a foot would run on behind a keyboard still in sight. Before the rows
+     * change halves the live keyboard answers, so a keyboard brought up for the arriving half
+     * takes the foot from the frame it is pre-rolled, as it rises in the stack under the rows.
+     */
+    public boolean footKeyboardUp(boolean liveKeyboardUp) {
+        Run run = mRun;
+        if (run.other != null && !run.landed && rowsHoldFoot(run)) return run.otherKeyboardUp;
+        // Landed where the other half's rows stood: the settle's first passes run before the
+        // live keyboard has caught up with the landed page (the Workspace's still reads up for a
+        // pass on Home), so the travelled answer holds until it agrees, for a few passes at most.
+        Boolean held = mLandedFootKeyboard;
+        if (held == null) return liveKeyboardUp;
+        if (held == liveKeyboardUp || ++mLandedFootReads > LANDED_FOOT_READS) {
+            mLandedFootKeyboard = null;
+            return liveKeyboardUp;
+        }
+        return held;
+    }
+
+    /**
+     * The most geometry passes after a landing the travelled foot keyboard holds against a live
+     * keyboard that has not come round to it: the fail-safe, so a keyboard whose change never
+     * lands cannot keep a foot under it.
+     */
+    static final int LANDED_FOOT_READS = 4;
+
+    /** The keyboard the foot held through the landing, until the live one agrees; null none. */
+    @Nullable private Boolean mLandedFootKeyboard;
+    private int mLandedFootReads;
+
+    /**
+     * Whether the foot answers to the other half's keyboard on this run's frame: the stack stands
+     * that half's rows, and the leaving keyboard is below the screen by then.
+     */
+    private static boolean rowsHoldFoot(@NonNull Run run) {
+        if (!run.dockShown) return false;
+        return !run.committedKeyboardUp || leavingKeyboardAwayAtSwap(run);
+    }
+
+    /** Whether the committed half's keyboard is below the screen once the stack changes rows. */
+    private static boolean leavingKeyboardAwayAtSwap(@NonNull Run run) {
+        return (run.pictured && run.wholeStack) || (run.plan == DockPlan.DIP
+            && PlaceChromeTravel.KEYBOARD_HIDE_END <= SeamTravel.DIP_SWAP);
+    }
 
     /** The other half's page the crossing was begun for; null while none runs. */
     @Nullable

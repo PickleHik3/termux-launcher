@@ -14,9 +14,14 @@ import org.junit.Test;
 
 public class LookGridKindSeedTest {
 
-    /** The keyboard's kind looks as the app ships them: Mist on Home, Clear on Display. */
+    /**
+     * The keyboard's kind looks as the app ships them (SurfacePresets.shippedStop): Mist on Home,
+     * Clear on Display, nothing apart on Terminal or Assistant (ADR 0025 reads the Assistant as
+     * the Workspace, so it ships the property's own values).
+     */
     private static final LookGrid.ShippedLooks SHIPPED = (property, element, kind) -> {
-        if (element != Element.KEYBOARD || kind == null || kind == Kind.TERMINAL) return null;
+        if (element != Element.KEYBOARD || kind == null || kind == Kind.TERMINAL
+            || kind == Kind.ASSISTANT) return null;
         boolean home = kind == Kind.HOME;
         switch (property) {
             case FROST: return home ? FrostStops.MIST : FrostStops.CLEAR;
@@ -46,6 +51,9 @@ public class LookGridKindSeedTest {
         assertKind(store, Kind.HOME, 5, 60, 0);
         assertKind(store, Kind.DISPLAY, 2, 10, 0);
         assertFalse(store.contains("look.opacity.keyboard@kind:terminal"));
+        assertFalse(store.contains("look.opacity.keyboard@kind:assistant"));
+        assertFalse(store.contains("look.frost.keyboard@kind:assistant"));
+        assertFalse(store.contains("look.tint.keyboard@kind:assistant"));
         assertFalse(store.contains("look.opacity.dock@kind:home"));
         assertTrue(store.getBoolean(LookGridKindSeed.KEY_SEEDED, false));
     }

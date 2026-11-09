@@ -72,13 +72,13 @@ public class LayoutSizesSharedTest {
     @Test
     public void anUpdateWritesOneDocumentWholeAndLeavesTheOthers() {
         LayoutStore store = store();
-        store.update(LayoutKind.DISPLAY, k -> k.with(PORTRAIT, "status_bar", "top"));
+        store.update(LayoutKind.TERMINAL_MINIMAL, k -> k.with(PORTRAIT, "status_bar", "top"));
         assertEquals(1, file.size());
-        assertEquals("top", store.current().kind(LayoutKind.DISPLAY).portrait()
+        assertEquals("top", store.current().kind(LayoutKind.TERMINAL_MINIMAL).portrait()
             .string("status_bar"));
         assertEquals(store.current().kind(LayoutKind.TERMINAL),
             LayoutsJson.shippedDefault(LayoutKind.TERMINAL));
-        store.update(LayoutKind.DISPLAY, k -> k);
+        store.update(LayoutKind.TERMINAL_MINIMAL, k -> k);
         assertEquals(1, notices);
     }
 

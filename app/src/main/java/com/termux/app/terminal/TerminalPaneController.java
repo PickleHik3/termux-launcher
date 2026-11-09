@@ -207,6 +207,11 @@ public class TerminalPaneController {
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
         void onActivePaneChanged();
+        /**
+         * A touch moved focus to another pane of the window already shown ({@link
+         * PaneFocusNotice.Kind#PANE}): what is keyed off the active view, and the window chips.
+         */
+        default void onActivePaneMoved() { onActivePaneChanged(); }
         /** The set of windows/panes changed; activity should rebuild the drawer. */
         void onTreesChanged();
         /**
@@ -606,7 +611,7 @@ public class TerminalPaneController {
         // scrolled partly into the transcript, which the row-top mapping below carries as is.
         int[] block = mCursorBlockScratch;
         if (view.mRenderer != null
-            && view.mRenderer.copyCursorBlock(emulator.getScreen(), row, column, block)) {
+            && view.mRenderer.copyCursorBlock(emulator.getContent(), row, column, block)) {
             row = block[0];
             column = block[1];
             rows = block[2];
@@ -2275,7 +2280,8 @@ public class TerminalPaneController {
         Leaf leaf = findLeafInWindow(mActiveWindow, session);
         if (leaf != null) {
             // A pane of the window taken: Home's floats give the keyboard back.
-            if (mFocusedHomeFloat != null) {
+            boolean floatReleased = mFocusedHomeFloat != null;
+            if (floatReleased) {
                 mFocusedHomeFloat = null;
                 applyHomeFloatLift();
             }
@@ -2288,7 +2294,11 @@ public class TerminalPaneController {
             updateActiveBorders();
             applyFocusGrowth(true);
             focusActiveView();
-            activePaneChanged();
+            // Every finger that lands on the terminal comes through here, the start of a page
+            // swipe included: the host hears only what its bar does not already show.
+            activePaneChanged(PaneFocusNotice.of(mFocusEventSession, mFocusEventWindow,
+                mFocusEventView, getActiveSession(), mActiveWindow, getActivePaneView(),
+                floatReleased));
         }
     }
 
@@ -2679,13 +2689,17 @@ public class TerminalPaneController {
         // insertion just produced. This is what makes the layout a policy rather than a one-shot.
         reapplyLayoutPolicy(window);
         render();
-        animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
-        // A pane the user (or an agent) opened powers on once it is laid out. Panes restored at
-        // launch are built by the workspace restore, never through here, so they stay still.
+        // A pane the user (or an agent) opened powers on once its picture is visible: after the
+        // divider reveal, whose snapshot covers it while it runs, or on its first draw when there
+        // is no reveal. Panes restored at launch are built by the workspace restore, never
+        // through here, so they stay still.
         PaneContentFrame opened = mPaneFrames.get(newSession);
-        if (opened != null)
-            OneShotPreDrawListener.add(opened,
-                () -> opened.screenEvent(PaneScreenEvent.Kind.POWER_ON));
+        Runnable powerOn = opened == null ? null : () -> {
+            if (opened.isAttachedToWindow()) opened.screenEvent(PaneScreenEvent.Kind.POWER_ON);
+        };
+        boolean revealing = animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session,
+            newSession, powerOn);
+        if (!revealing && opened != null) OneShotPreDrawListener.add(opened, powerOn);
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -2701,12 +2715,23 @@ public class TerminalPaneController {
     /** The pane the last focus wobble looked at, and its window: a wobble needs a change. */
     @Nullable private TerminalSession mFocusEventSession;
     @Nullable private Window mFocusEventWindow;
+    /** The active pane view the host was last told of, beside the session and window above. */
+    @Nullable private TerminalView mFocusEventView;
 
     /**
      * Tells the host the active pane may have changed, and plays the focus wobble on the newly
      * focused pane when focus moved between panes of one window that holds more than one.
      */
     private void activePaneChanged() {
+        activePaneChanged(PaneFocusNotice.Kind.FULL);
+    }
+
+    /**
+     * {@link #activePaneChanged()} told only as much as {@code notice} says changed: nothing for
+     * a finger on the pane the host already shows, the chips alone for another pane of its window.
+     */
+    private void activePaneChanged(@NonNull PaneFocusNotice.Kind notice) {
+        if (notice == PaneFocusNotice.Kind.NONE) return;
         TerminalSession now = getActiveSession();
         Window window = mActiveWindow;
         if (now != null && mFocusEventSession != null && now != mFocusEventSession
@@ -2714,8 +2739,10 @@ public class TerminalPaneController {
             screenEvent(now, PaneScreenEvent.Kind.FOCUS_WOBBLE);
         mFocusEventSession = now;
         mFocusEventWindow = window;
+        mFocusEventView = getActivePaneView();
         refreshPaneDims();
-        mHost.onActivePaneChanged();
+        if (notice == PaneFocusNotice.Kind.PANE) mHost.onActivePaneMoved();
+        else mHost.onActivePaneChanged();
     }
 
     /**
@@ -2735,10 +2762,24 @@ public class TerminalPaneController {
             e.getValue().setDimmed(dimmed.contains(e.getKey()));
     }
 
-    /** Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}). */
-    public void screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
+    /**
+     * Runs {@code r} after {@code delayMs} on the pane host's thread: for a pane held on screen
+     * while its closing event plays. Returns false, posting nothing, when the host is not in a
+     * window, so the caller runs it at once instead of leaving it queued until a re-attach.
+     */
+    public boolean postOnHost(@NonNull Runnable r, long delayMs) {
+        if (!mHostView.isAttachedToWindow()) return false;
+        return mHostView.postDelayed(r, delayMs);
+    }
+
+    /**
+     * Plays {@code kind} on {@code session}'s pane, if it has one ({@link PaneContentFrame#screenEvent}).
+     *
+     * @return whether the event started
+     */
+    public boolean screenEvent(@Nullable TerminalSession session, @NonNull PaneScreenEvent.Kind kind) {
         PaneContentFrame frame = session == null ? null : mPaneFrames.get(session);
-        if (frame != null) frame.screenEvent(kind);
+        return frame != null && frame.screenEvent(kind);
     }
 
     /** Drop a finished shell's pane. Returns one of FINISHED_*. */
@@ -5306,13 +5347,20 @@ public class TerminalPaneController {
      * region the old pane held, and its clip eases toward the old pane's final bounds, revealing
      * the new pane from the shared edge outward. Falls back to the plain entry pop whenever the
      * layout policy re-tiled the old pane somewhere the sweep cannot explain.
+     *
+     * @param shown run once the new pane's picture is no longer covered: when the reveal ends
+     *              (or is cancelled), or on the first draw when it falls back to the entry pop
+     *              there; never run when this returns false
+     * @return false when it fell back to the entry pop at once (no snapshot or origin), so the
+     *         caller shows the pane on its own first draw
      */
-    private void animateSplitReveal(@Nullable PaneSnapshot snapshot, @Nullable Rect origin,
-                                    @NonNull TerminalSession oldSession,
-                                    @Nullable TerminalSession newSession) {
+    private boolean animateSplitReveal(@Nullable PaneSnapshot snapshot, @Nullable Rect origin,
+                                       @NonNull TerminalSession oldSession,
+                                       @Nullable TerminalSession newSession,
+                                       @Nullable Runnable shown) {
         if (snapshot == null || origin == null) {
             animatePaneEntry(newSession);
-            return;
+            return false;
         }
         OneShotPreDrawListener.add(mHostView, () -> {
             Rect settled = boundsInHost(mPaneFrames.get(oldSession));
@@ -5320,6 +5368,7 @@ public class TerminalPaneController {
             if (settled == null || movedEdge == 0) {
                 snapshot.release();
                 animatePaneEntry(newSession);
+                if (shown != null) shown.run();
                 return;
             }
             SplitRevealDrawable reveal = new SplitRevealDrawable(snapshot);
@@ -5349,11 +5398,13 @@ public class TerminalPaneController {
                     mHostView.getOverlay().remove(reveal);
                     snapshot.release();
                     if (mSplitRevealAnimator == a) mSplitRevealAnimator = null;
+                    if (shown != null) shown.run();
                 }
             });
             mSplitRevealAnimator = animator;
             animator.start();
         });
+        return true;
     }
 
     /**
@@ -5773,6 +5824,10 @@ public class TerminalPaneController {
             slab.setLivePicture(null);
             mHost.detachLiveGlass(slab);
         }
+        // The titlebar shows the same picture, so glass on glass reaches it too, at no slot of
+        // its own: the recording reaches up over the strip.
+        container.titlebar().setLiveGlass(slab.livePicture());
+        container.aimLiveGlass(slab);
     }
 
     public void applyPaneGlass() {
@@ -7672,6 +7727,29 @@ public class TerminalPaneController {
 
         @NonNull FloatTitlebarView titlebar() {
             return mTitlebar;
+        }
+
+        private final int[] mSlabAt = new int[2];
+
+        /**
+         * Aims the float's one Live picture at its titlebar: the recording reaches up to the
+         * strip's top and the strip's glass draws it from where it stands. Compares before it
+         * sets, so a layout that moved nothing records nothing.
+         */
+        void aimLiveGlass(@NonNull PaneGlassBackdropView slab) {
+            com.termux.app.chrome.LivePicture picture = slab.livePicture();
+            if (picture == null || !FloatLiveGlass.offsetIn(slab, this, mSlabAt)) return;
+            int originX = mTitlebar.getLeft() - mSlabAt[0];
+            int originY = mTitlebar.getTop() - mSlabAt[1];
+            picture.setReachTop(FloatLiveGlass.reachAbove(mSlabAt[1], mTitlebar.getTop()));
+            picture.aimAt(originX, originY);
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            PaneGlassBackdropView slab = mPaneGlassViews.get(mLeaf.session);
+            if (slab != null) aimLiveGlass(slab);
         }
 
         @Override

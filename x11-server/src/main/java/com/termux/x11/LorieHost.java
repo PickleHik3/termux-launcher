@@ -206,6 +206,11 @@ public class LorieHost extends ContextWrapper {
      */
     public boolean handleKey(@NonNull KeyEvent event) {
         if (callbacks.handleKey(event)) return true;
+        // Back keeps its direct path. Everything else goes through the handler, which declines
+        // volume and media keys it has no action for (false), so the system adjusts the volume;
+        // it ends in the same injector otherwise, so nothing is sent twice.
+        TouchInputHandler h = mInputHandler;
+        if (h != null && event.getKeyCode() != KeyEvent.KEYCODE_BACK) return h.sendKeyEvent(event);
         InputEventSender injector = mInjector;
         return injector != null && injector.sendKeyEvent(event);
     }

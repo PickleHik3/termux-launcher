@@ -111,10 +111,35 @@ public final class AppearanceSurfaceController {
         }
 
         /**
+         * Back, before the picker goes down: true when the page spent it going up a level (a
+         * Live scene's page back to the scenes). False by default.
+         */
+        default boolean consumeBack() {
+            return false;
+        }
+
+        /**
          * Held: the page stays busy, showing its progress and taking no choice, after its apply
          * while the surface waits for the new colours. Nothing by default.
          */
         default void holdBusy(boolean held) {}
+
+        /** The side the page shows (its Photo | Live tab, by name), for a relaunch; null for none. */
+        @Nullable
+        default String shownSide() {
+            return null;
+        }
+
+        /** How far the shown side is scrolled, px, for a relaunch. 0 by default. */
+        default int sideScrollY() {
+            return 0;
+        }
+
+        /**
+         * Shows {@code side} (a name {@link #shownSide} gave) scrolled to {@code scrollY} once it
+         * is laid out: a relaunch's page as the last one stood. Nothing by default.
+         */
+        default void restoreSide(@NonNull String side, int scrollY) {}
     }
 
     /** What the picker asks of the surface. */
@@ -173,6 +198,16 @@ public final class AppearanceSurfaceController {
         void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
                      @Nullable Runnable onSettled);
 
+        /**
+         * {@link #present} with nothing moving: the frame at its pose and the card at its detent
+         * from the first frame, {@code onSettled} run once the frame's first pass has placed them.
+         * A relaunch reopening its carried session. Animated like {@link #present} by default.
+         */
+        default void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                                    @Nullable Runnable onSettled) {
+            present(card, place, onSettled);
+        }
+
         boolean isPresented();
 
         /** Back spent inside the editor: a card put down, a lift cancelled. False otherwise. */
@@ -221,6 +256,23 @@ public final class AppearanceSurfaceController {
 
         /** The next presentation continues {@code session}. Null forgets it. */
         default void adoptSessionNext(@Nullable EditorSession session) {}
+
+        /**
+         * Keeps the card sheet and the bar unseen ({@code veiled}) while the picker rises over
+         * them with the editor's entry, so its cards never show under the rising sheet; shown
+         * again once the sheet covers them, or as the picker goes down. Set before
+         * {@link #present}; the editor's exit clears it. Nothing by default.
+         */
+        default void setChromeVeiled(boolean veiled) {}
+
+        /**
+         * Starts reading the editor's wallpaper ahead of {@link #beginSession}, which takes the
+         * read over (a Wallpaper door's tap, while its menu slides away). Nothing by default.
+         */
+        default void prepareWallpaper() {}
+
+        /** Lets go of a {@link #prepareWallpaper} read no session took. Nothing by default. */
+        default void dropPreparedWallpaper() {}
     }
 
     /** An editor's session, opaque to the surface; only the editor that made it reads it. */
@@ -311,11 +363,29 @@ public final class AppearanceSurfaceController {
     @Nullable private OverviewPage mOverview;
     /** The picker is being built: a second Change waits for it. */
     private boolean mOverviewLoading;
+    /** The picker can draw what it opens on ({@link OverviewPage#whenReady} has answered). */
+    private boolean mOverviewReady;
+    /** A door's presentation waiting for the picker to be ready; null while none waits. */
+    @Nullable private Runnable mOverviewWaiter;
+    /** {@link #showWallpaper} was asked while the picker was being built: it rises once built. */
+    private boolean mShowWhenBuilt;
+    /** A relaunch's reopen: the editor and the picker stand where they were, nothing moving. */
+    private boolean mInPlace;
+    /** Told once the reopened surface is on screen as carried, or will not be; null when done. */
+    @Nullable private Runnable mOnReopened;
     private boolean mWallpaperShown;
     @Nullable private View mScrim;
     private final List<Animator> mRunning = new ArrayList<>();
     /** The surface was opened onto the picker ({@link #resumeWallpaper}): its Done closes. */
     private boolean mPickerIsDoor;
+    /**
+     * A Wallpaper door's picker is being built ahead of the door, the surface still closed
+     * ({@link #prepareWallpaper}): the host view holds it unseen until {@link #resumeWallpaper}
+     * takes it over or {@link #releasePrepared} lets it go.
+     */
+    private boolean mPrepared;
+    /** A relaunch's picker side and scroll, for the picker {@link #reopen} builds; else null. */
+    @Nullable private AppearanceReturnState mCarriedSide;
     /**
      * The picker's Done is applying, or holding for the colours: its destination is the card
      * under it, which a relaunch now carries ({@link #carry}).
@@ -400,19 +470,93 @@ public final class AppearanceSurfaceController {
             return;
         }
         ViewGroup content = mHost.content();
-        if (content == null)
+        if (content == null) {
+            releasePrepared();
             return;
-        beginOpen(content);
+        }
+        // A picker prepared while the door's menu slid away is taken over as it stands: ready,
+        // the entry starts at once.
+        beginOpen(content, true);
         mPickerIsDoor = true;
+        // Built while the editor waits for its wallpaper and its frame, so the sheet rises with
+        // the entry rather than being inflated in the middle of it.
+        buildOverview();
         presentEditor(EditorCard.APPEARANCE, null, true, 1);
     }
 
-    /** Marks the surface open, begins the session, and adds the host view and the scrim. */
-    private void beginOpen(@NonNull ViewGroup content) {
-        mOpen = true;
+    /**
+     * A Wallpaper door was tapped and its menu is sliding away: the picker (and the editor's
+     * wallpaper) start loading now, unseen, so the door's {@link #resumeWallpaper} finds them
+     * ready. What no door takes, {@link #releasePrepared} lets go. Open already, nothing.
+     */
+    public void prepareWallpaper() {
+        if (mOpen || mPrepared)
+            return;
+        ViewGroup content = mHost.content();
+        if (content == null)
+            return;
+        mPrepared = true;
         mToken++;
+        mOverviewReady = false;
+        mOverviewWaiter = null;
+        mShowWhenBuilt = false;
+        hostView(content);
+        mEditor.prepareWallpaper();
+        buildOverview();
+    }
+
+    /** Lets go of a {@link #prepareWallpaper} no door took (its menu closed another way). */
+    public void releasePrepared() {
+        if (!mPrepared)
+            return;
+        mPrepared = false;
+        mToken++;
+        mOverviewLoading = false;
+        mOverviewReady = false;
+        mOverviewWaiter = null;
+        mShowWhenBuilt = false;
+        mEditor.dropPreparedWallpaper();
+        OverviewPage overview = mOverview;
+        mOverview = null;
+        if (overview != null)
+            overview.release();
+        FrameLayout view = mView;
+        mView = null;
+        if (view != null && view.getParent() instanceof ViewGroup)
+            ((ViewGroup) view.getParent()).removeView(view);
+    }
+
+    @VisibleForTesting
+    boolean isPrepared() {
+        return mPrepared;
+    }
+
+    /** {@link #beginOpen(ViewGroup, boolean)}, letting go of anything prepared. */
+    private void beginOpen(@NonNull ViewGroup content) {
+        beginOpen(content, false);
+    }
+
+    /**
+     * Marks the surface open, begins the session, and adds the host view and the scrim;
+     * {@code takePrepared} keeps what {@link #prepareWallpaper} built, else it is let go.
+     */
+    private void beginOpen(@NonNull ViewGroup content, boolean takePrepared) {
+        boolean taken = takePrepared && mPrepared;
+        if (!taken)
+            releasePrepared();
+        mPrepared = false;
+        mOpen = true;
+        if (!taken) {
+            // A prepared picker's build and readiness answer under the token they began with.
+            mToken++;
+            mOverviewReady = false;
+            mOverviewWaiter = null;
+            mShowWhenBuilt = false;
+        }
         mLeaveRemembered = false;
         mPickerIsDoor = false;
+        mInPlace = false;
+        mCarriedSide = null;
         resetHold();
         mEditor.setOnDone(this::onEditorDone);
         mEditor.setPageListener(new PageListener() {
@@ -461,15 +605,72 @@ public final class AppearanceSurfaceController {
             mEditor.awaitFrame(() -> {
                 if (!mOpen || token != mToken)
                     return;
-                mEditor.present(card, place, null);
-                if (!mEditor.isPresented()) {
-                    gaveUp.run();
+                if (!thenWallpaper) {
+                    presentNow(card, place, false, gaveUp);
                     return;
                 }
-                if (thenWallpaper)
-                    showWallpaper();
+                awaitOverview(() -> {
+                    if (mOpen && token == mToken)
+                        presentNow(card, place, true, gaveUp);
+                });
             }, gaveUp);
         });
+    }
+
+    /**
+     * Presents the editor now, the picker rising over it for {@code thenWallpaper}: with the
+     * picker ready, the card sheet and the bar stay unseen under it until it covers them
+     * ({@link WallpaperDoorMotion#veilsChrome}).
+     */
+    private void presentNow(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                            boolean thenWallpaper, @NonNull Runnable gaveUp) {
+        boolean inPlace = mInPlace;
+        boolean veil = !inPlace && WallpaperDoorMotion.veilsChrome(thenWallpaper, mOverviewReady,
+            ReducedMotion.isEnabled(mHost.context()));
+        if (veil)
+            mEditor.setChromeVeiled(true);
+        if (inPlace)
+            // Posted: the picker over it is placed below, in this same message.
+            mEditor.presentInPlace(card, place, () -> mMain.post(this::reopened));
+        else
+            mEditor.present(card, place, null);
+        if (!mEditor.isPresented()) {
+            if (veil)
+                mEditor.setChromeVeiled(false);
+            gaveUp.run();
+            return;
+        }
+        if (thenWallpaper)
+            showWallpaper();
+        // Only the carried state stands in place; the picker raised later rises as usual.
+        mInPlace = false;
+    }
+
+    /** The reopened surface is on screen as carried (or never will be): the activity is told. */
+    private void reopened() {
+        Runnable told = mOnReopened;
+        mOnReopened = null;
+        if (told != null)
+            told.run();
+    }
+
+    /**
+     * Runs {@code ready} once the picker being built can draw, or after
+     * {@link WallpaperDoorMotion#PICKER_WAIT_MS} when it cannot yet; at once when it is ready or
+     * nothing is building it.
+     */
+    private void awaitOverview(@NonNull Runnable ready) {
+        if (mOverviewReady || (mOverview == null && !mOverviewLoading)) {
+            ready.run();
+            return;
+        }
+        mOverviewWaiter = ready;
+        mMain.postDelayed(() -> {
+            if (mOverviewWaiter != ready)
+                return;
+            mOverviewWaiter = null;
+            ready.run();
+        }, WallpaperDoorMotion.PICKER_WAIT_MS);
     }
 
     /** Where the surface stands, for the activity a relaunch builds next; null while closed. */
@@ -489,9 +690,12 @@ public final class AppearanceSurfaceController {
         AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(
             mWallpaperShown && !mReturningToCard);
         out.card(mEditor.shownCard());
+        out.pickerIsDoor(mPickerIsDoor);
         OverviewPage overview = mOverview;
-        if (overview != null)
+        if (overview != null) {
             out.wallpaperSlot(overview.centredSlotName());
+            out.wallpaperSide(overview.shownSide(), overview.sideScrollY());
+        }
         return out.build(mHost.now());
     }
 
@@ -500,13 +704,31 @@ public final class AppearanceSurfaceController {
      * was relaunched: its card up, its session continued. False when it could not open.
      */
     public boolean reopen(@NonNull Relaunch carried) {
+        return reopen(carried, null);
+    }
+
+    /**
+     * {@link #reopen(Relaunch)}, standing in place: the editor at its pose with its card at its
+     * detent and the picker up, nothing growing or rising. {@code onShown} runs once that is on
+     * screen, or once it will not be (the surface closed or never opened); not when this
+     * returns false.
+     */
+    public boolean reopen(@NonNull Relaunch carried, @Nullable Runnable onShown) {
         if (mOpen)
             return false;
         ViewGroup content = mHost.content();
         if (content == null)
             return false;
         beginOpen(content);
+        mInPlace = true;
+        mOnReopened = onShown;
+        // A door's picker stays the door: its Done still closes the editor with it.
+        mPickerIsDoor = carried.where.pickerIsDoor;
         mEditor.adoptSessionNext(carried.editor);
+        if (carried.where.wallpaper) {
+            mCarriedSide = carried.where;
+            buildOverview();
+        }
         presentEditor(carried.where.editorCard(), null,
             carried.where.wallpaper, REOPEN_ATTEMPTS);
         return true;
@@ -520,21 +742,8 @@ public final class AppearanceSurfaceController {
             return;
         OverviewPage overview = mOverview;
         if (overview == null) {
-            if (mOverviewLoading)
-                return;
-            mOverviewLoading = true;
-            final int token = mToken;
-            mHost.createOverview(mNavigator, null, built -> {
-                mOverviewLoading = false;
-                if (!mOpen || token != mToken || mView == null) {
-                    built.release();
-                    return;
-                }
-                mOverview = built;
-                built.root().setVisibility(View.INVISIBLE);
-                addPage(built.root());
-                showWallpaper();
-            });
+            mShowWhenBuilt = true;
+            buildOverview();
             return;
         }
         if (mWallpaperShown)
@@ -544,13 +753,67 @@ public final class AppearanceSurfaceController {
         final View page = overview.root();
         overview.onShown();
         final int token = mToken;
+        final boolean inPlace = mInPlace;
         overview.whenReady(() -> {
             if (!mOpen || token != mToken || !mWallpaperShown)
                 return;
+            mOverviewReady = true;
             page.setVisibility(View.VISIBLE);
             page.setAlpha(1f);
-            rise(page, true, null);
+            if (inPlace) {
+                // A relaunch's reopen: up already, as it stood when the activity went down.
+                page.setTranslationY(0f);
+                return;
+            }
+            // Up, it covers the card sheet and the bar a door's entry kept unseen.
+            rise(page, true, () -> mEditor.setChromeVeiled(false));
         });
+    }
+
+    /**
+     * Builds the picker once, off screen and unseen, and adds it under the host; a door's
+     * presentation waiting for it ({@link #awaitOverview}) goes once it can draw, and a
+     * {@link #showWallpaper} asked meanwhile raises it.
+     */
+    private void buildOverview() {
+        if (mOverview != null || mOverviewLoading)
+            return;
+        mOverviewLoading = true;
+        final int token = mToken;
+        mHost.createOverview(mNavigator, null, built -> {
+            if (!live(token) || mView == null) {
+                built.release();
+                return;
+            }
+            mOverviewLoading = false;
+            mOverview = built;
+            built.root().setVisibility(View.INVISIBLE);
+            addPage(built.root());
+            // A relaunch's picker shows the side it stood on, before it says when it can draw.
+            AppearanceReturnState side = mCarriedSide;
+            mCarriedSide = null;
+            if (side != null && side.wallpaperSide != null)
+                built.restoreSide(side.wallpaperSide, side.wallpaperScrollY);
+            built.whenReady(() -> {
+                if (!live(token) || mOverview != built)
+                    return;
+                mOverviewReady = true;
+                Runnable waiter = mOverviewWaiter;
+                mOverviewWaiter = null;
+                // Posted: the editor opens outside the picker's layout callback.
+                if (waiter != null)
+                    mMain.post(waiter);
+            });
+            if (mShowWhenBuilt) {
+                mShowWhenBuilt = false;
+                showWallpaper();
+            }
+        });
+    }
+
+    /** Whether a callback begun under {@code token} still belongs: the surface open, or prepared. */
+    private boolean live(int token) {
+        return (mOpen || mPrepared) && token == mToken;
     }
 
     /** Puts the picker down; its pending choice stays for Done. */
@@ -559,10 +822,16 @@ public final class AppearanceSurfaceController {
         if (!mWallpaperShown || overview == null)
             return;
         mWallpaperShown = false;
-        setTakesTouches(false);
+        // The page falls over the card sheet and uncovers it as it goes: the host stays drawn
+        // above the sheet until the page is down (dropped to the sheet's Z now, the sheet would
+        // stand over the falling page from its first frame), letting every touch through.
+        letTouchesThrough();
+        // Put down mid-entry, it uncovers the card sheet as it goes.
+        mEditor.setChromeVeiled(false);
         final View page = overview.root();
         rise(page, false, () -> {
             if (!mWallpaperShown) {
+                setTakesTouches(false);
                 page.setVisibility(View.INVISIBLE);
                 overview.onHidden();
             }
@@ -583,6 +852,9 @@ public final class AppearanceSurfaceController {
         if (mCommitting)
             return true;
         if (mWallpaperShown) {
+            OverviewPage overview = mOverview;
+            if (overview != null && overview.consumeBack())
+                return true;
             hideWallpaper();
             return true;
         }
@@ -760,6 +1032,8 @@ public final class AppearanceSurfaceController {
      * Lock slot may not be set yet), and only then does its page let go.
      */
     public void onHostDestroyed() {
+        mOnReopened = null;
+        releasePrepared();
         if (!mOpen)
             return;
         mOpen = false;
@@ -818,7 +1092,7 @@ public final class AppearanceSurfaceController {
         FrameLayout view = mView;
         if (view != null)
             return view;
-        view = new FrameLayout(mHost.context());
+        view = new SurfaceHostView(mHost.context());
         view.setId(R.id.appearance_surface_host);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         content.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -842,6 +1116,8 @@ public final class AppearanceSurfaceController {
         FrameLayout view = mView;
         if (view == null)
             return;
+        if (view instanceof SurfaceHostView)
+            ((SurfaceHostView) view).mPassThrough = false;
         view.setClickable(takes);
         view.setFocusable(takes);
         if (takes)
@@ -849,6 +1125,20 @@ public final class AppearanceSurfaceController {
         // Draw order goes by Z before child order: the card sheet and the editor bar have
         // elevation, so bringToFront alone leaves them over the picker and its Choose photo.
         view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
+    }
+
+    /**
+     * The host keeps its Z over the card sheet and the bar but takes no touch: each goes to what
+     * lies under it, the picker on its way down answering none.
+     */
+    private void letTouchesThrough() {
+        FrameLayout view = mView;
+        if (view == null)
+            return;
+        view.setClickable(false);
+        view.setFocusable(false);
+        if (view instanceof SurfaceHostView)
+            ((SurfaceHostView) view).mPassThrough = true;
     }
 
     /** The highest Z among the host's siblings (the editor's sheet and bar). */
@@ -957,38 +1247,108 @@ public final class AppearanceSurfaceController {
         mEditor.adoptSessionNext(null);
         mOpen = false;
         mToken++;
-        boolean applying = mApplying;
+        final boolean applying = mApplying;
+        boolean pickerShown = mWallpaperShown;
         resetHold();
         mWallpaperShown = false;
         mOverviewLoading = false;
+        mOverviewReady = false;
+        mOverviewWaiter = null;
+        mShowWhenBuilt = false;
+        mCarriedSide = null;
         for (Animator a : new ArrayList<>(mRunning))
             a.cancel();
         mRunning.clear();
-        OverviewPage overview = mOverview;
+        final OverviewPage overview = mOverview;
         mOverview = null;
-        if (overview != null) {
-            overview.onHidden();
-            // An apply still running finishes its other slot first.
-            if (applying)
-                mOrphan = overview;
-            else
-                overview.release();
-        }
-        FrameLayout view = mView;
+        final FrameLayout view = mView;
         mView = null;
-        if (view != null && view.getParent() instanceof ViewGroup)
-            ((ViewGroup) view.getParent()).removeView(view);
+        // The picker over the editor rides down with the editor's exit, the frame growing and
+        // the card sheet falling under it on the same motion; it is taken off once off screen.
+        boolean ride = overview != null && view != null
+            && WallpaperDoorMotion.ridesPickerDown(pickerShown,
+                overview.root().getParent() == view
+                    && overview.root().getVisibility() == View.VISIBLE,
+                ReducedMotion.isEnabled(mHost.context()));
+        // An apply still running finishes its other slot first.
+        if (overview != null && applying)
+            mOrphan = overview;
+        Runnable letGo = () -> {
+            if (overview != null) {
+                overview.onHidden();
+                if (!applying)
+                    overview.release();
+            }
+            if (view != null && view.getParent() instanceof ViewGroup)
+                ((ViewGroup) view.getParent()).removeView(view);
+        };
+        if (ride) {
+            ((SurfaceHostView) view).mLeaving = true;
+            rideDown(overview.root(), letGo);
+        } else {
+            letGo.run();
+        }
         boolean editorWasUp = mEditor.isPresented();
         mEditor.setPageListener(null);
         removeScrim(editorWasUp);
         mCommitting = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
+        mInPlace = false;
+        reopened();
         boolean byUser = mClosingByUser;
         mClosingByUser = false;
         mHost.onClosed();
         if (byUser)
             mHost.onClosedByUser();
+    }
+
+    /**
+     * The picker riding down off screen as the surface closes, on WALLPAPER_PAGE like its
+     * {@link #rise}; {@code end} runs once it is down, or at once if the ride is cut short. Not
+     * one of {@link #mRunning}: the next surface's close must not strand this one's views.
+     */
+    private void rideDown(@NonNull View page, @NonNull Runnable end) {
+        float below = page.getHeight() > 0 ? page.getHeight()
+            : page.getResources().getDisplayMetrics().heightPixels;
+        ValueAnimator animator = ValueAnimator.ofFloat(page.getTranslationY(), below);
+        animator.setDuration(EditorMotion.Use.WALLPAPER_PAGE.durationMs(false));
+        animator.setInterpolator(EditorMotion.Use.WALLPAPER_PAGE.curve(false));
+        animator.addUpdateListener(a -> page.setTranslationY((Float) a.getAnimatedValue()));
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                end.run();
+            }
+        });
+        animator.start();
+    }
+
+    /**
+     * The surface's host: while a closing surface rides the picker down it takes every touch,
+     * so nothing on the leaving page answers one.
+     */
+    private static final class SurfaceHostView extends FrameLayout {
+        boolean mLeaving;
+        /** The picker is falling over the editor: touches pass to what lies under the host. */
+        boolean mPassThrough;
+
+        SurfaceHostView(@NonNull Context context) {
+            super(context);
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
+            return mLeaving || mPassThrough || super.onInterceptTouchEvent(event);
+        }
+
+        @Override
+        @SuppressWarnings("ClickableViewAccessibility")
+        public boolean onTouchEvent(android.view.MotionEvent event) {
+            if (mLeaving)
+                return true;
+            // Unanswered, the down goes on to the views under the host.
+            return !mPassThrough && super.onTouchEvent(event);
+        }
     }
 
     /** Fades {@code view} from {@code from} to {@code to}; {@code end} runs unless cancelled. */

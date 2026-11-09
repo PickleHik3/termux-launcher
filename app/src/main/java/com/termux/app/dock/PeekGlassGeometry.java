@@ -14,7 +14,7 @@ import java.util.Locale;
  * corners are never on screen; the gesture pill draws over it.
  *
  * <p>The icons' reflections fade down the card from the icons' lower edges ({@link Card#mirrorAxisY}),
- * over {@link #REFLECTION_DEPTH_SCALE} of an icon's height and never past the screen's edge.</p>
+ * down to the screen's bottom edge, scaled by {@link #REFLECTION_DEPTH_SCALE}.</p>
  *
  * <p>The card is the same under either Style: while it stands, the dock is placed as it is Docked
  * ({@link DockPlacement}), flush with the screen's bottom edge with the strip under the gesture
@@ -36,8 +36,12 @@ public final class PeekGlassGeometry {
      * Peek glass ({@link #rowSideInsetPx}).
      */
     public static final float ICON_CLEARANCE_DP = 4f;
-    /** How far the reflection runs down the card, as a share of the icon's height. */
-    public static final float REFLECTION_DEPTH_SCALE = 0.6f;
+    /**
+     * How far the reflection runs down the card, as a share of the length from the icons' lower
+     * edge to the card's floor (the screen's bottom edge, or the A–Z row's top on the still
+     * path): 1 reaches the floor, where the fade and the blur finish.
+     */
+    public static final float REFLECTION_DEPTH_SCALE = 1f;
 
     /** The Reflection knob's range and its default: a visible middle value. */
     public static final int REFLECTION_MIN = 0;
@@ -45,9 +49,9 @@ public final class PeekGlassGeometry {
     public static final int REFLECTION_DEFAULT = 50;
     public static final int REFLECTION_STEP = 5;
     /** How strongly the reflection shows at its top edge with the knob at its strongest. */
-    public static final float REFLECTION_MAX_ALPHA = 0.7f;
+    public static final float REFLECTION_MAX_ALPHA = 0.85f;
     /** The blur the reflection reaches at its far end, in dp, with the knob anywhere above 0. */
-    public static final float REFLECTION_MAX_BLUR_DP = 6f;
+    public static final float REFLECTION_MAX_BLUR_DP = 8f;
 
     private PeekGlassGeometry() {}
 
@@ -97,14 +101,33 @@ public final class PeekGlassGeometry {
      * @param hostWidthPx      the host's width
      * @param hostHeightPx     the host's height
      * @param screenWidthPx    the screen's width, the one the card is inset from
-     * @param screenBottomPx   where the screen's bottom edge stands in the host's coordinates:
-     *                         the host's height where nothing stands under it, more where the
-     *                         strip under the gesture pill continues it
+     * @param screenBottomPx   where the screen's bottom edge stands in the host's coordinates, as
+     *                         the host is drawn ({@link #screenBottomInHost}): the host's height
+     *                         where nothing stands under it, more where the strip under the
+     *                         gesture pill continues it, less while a crossing has the host slid
+     *                         down past the screen's edge
      */
     @Nullable
     public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
                                int hostWidthPx, int hostHeightPx, int screenWidthPx,
                                float screenBottomPx, float density) {
+        return compute(iconBoxes, count, hostLeftPx, hostWidthPx, hostHeightPx, screenWidthPx,
+            screenBottomPx, density, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * {@link #compute} with the reflections' fade ended at {@code reflectionFloorPx} (the host's
+     * coordinates) where the A–Z row stands on the card under the icons: the letters keep the
+     * card's glass to themselves, and the reflection's depth, strength and blur scale over the
+     * shorter band as they do over the longer. Infinity for none; at or above the icons' lower
+     * edges the card has no reflection.
+     *
+     * @param reflectionFloorPx the top of the A–Z row standing on the card, or infinity
+     */
+    @Nullable
+    public static Card compute(@NonNull float[] iconBoxes, int count, float hostLeftPx,
+                               int hostWidthPx, int hostHeightPx, int screenWidthPx,
+                               float screenBottomPx, float density, float reflectionFloorPx) {
         if (count <= 0 || hostWidthPx <= 0 || hostHeightPx <= 0 || screenWidthPx <= 0
             || iconBoxes.length < count * 4) return null;
         float[] icons = iconLine(iconBoxes, count);
@@ -115,12 +138,42 @@ public final class PeekGlassGeometry {
         float right = Math.min(hostWidthPx, screenWidthPx - inset - hostLeftPx);
         if (!(right > left)) return null;
         float radius = cornerRadiusPx(right - left, density);
-        float screenBottom = Math.max(hostHeightPx, screenBottomPx);
+        float axis = mirrorAxisY(icons);
+        // The screen's edge as the host is drawn, never above the icons' lower edges. A host laid
+        // out taller than the screen shows of it (a crossing's tail: the Workspace's keyboard room
+        // still laid out, the stack slid down by the travel) ends at the screen's edge too, so the
+        // reflection fades over what shows rather than over room below the screen.
+        float screenBottom = Math.max(axis, screenBottomPx);
         // Past the screen's edge by the radius, so the rounded lower corners are off screen.
         float bottom = screenBottom + radius;
-        float axis = mirrorAxisY(icons);
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis,
-            axis + reflectionDepth(icons, axis, screenBottom));
+            axis + reflectionDepth(axis,
+                Math.min(screenBottom, Float.isNaN(reflectionFloorPx)
+                    ? Float.POSITIVE_INFINITY : reflectionFloorPx)));
+    }
+
+    /**
+     * Whether a card cut again while the chrome travels needs only its own re-cut (the host's
+     * outline, rim and reflection), not a whole chrome pass: it is the card it was above its
+     * floor, the floor alone having moved with the stack's travel. Every travel frame moves it
+     * (the reflection fades to the screen's edge as the host is drawn), and a whole pass for each
+     * cost two 10 ms applies every few frames of a swipe on pong; the landing's pass dresses
+     * the rest once the stack is at rest. A new card, a card gone, or one whose shape changed
+     * still asks for the whole pass.
+     */
+    public static boolean travelRecutsOnly(@Nullable Card was, @Nullable Card now,
+                                           boolean travelling) {
+        return travelling && was != null && was.sameAboveFloor(now);
+    }
+
+    /**
+     * Where the screen's bottom edge stands in the host's coordinates as the host is drawn: the
+     * screen's height, less the host's laid-out top in the window and the translation its
+     * ancestors and it are drawn with (a crossing slides the stack down past where it is laid out).
+     */
+    public static float screenBottomInHost(int screenHeightPx, float hostLayoutTopPx,
+                                           float drawnShiftYPx) {
+        return screenHeightPx - (hostLayoutTopPx + drawnShiftYPx);
     }
 
     /**
@@ -151,9 +204,9 @@ public final class PeekGlassGeometry {
         return Math.max(icons[0], icons[1]);
     }
 
-    /** How far the reflection runs down from {@code axis}: never past {@code floorY}. */
-    private static float reflectionDepth(@NonNull float[] icons, float axis, float floorY) {
-        return Math.max(0f, Math.min(icons[2] * REFLECTION_DEPTH_SCALE, floorY - axis));
+    /** How far the reflection runs down from {@code axis}: the share of the way to {@code floorY}. */
+    private static float reflectionDepth(float axis, float floorY) {
+        return Math.max(0f, (floorY - axis) * REFLECTION_DEPTH_SCALE);
     }
 
     /**
@@ -258,6 +311,18 @@ public final class PeekGlassGeometry {
         public Card offset(float dx, float dy) {
             return new Card(left + dx, top + dy, right + dx, bottom + dy, radiusPx,
                 screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy);
+        }
+
+        /**
+         * Whether {@code other} is this card above its floor: the same sides, top, corners and
+         * mirror line, only the screen's edge (and with it the bottom and the reflection's fade)
+         * standing elsewhere, which is what the stack's travel moves.
+         */
+        public boolean sameAboveFloor(@Nullable Card other) {
+            return other != null && Float.compare(left, other.left) == 0
+                && Float.compare(top, other.top) == 0 && Float.compare(right, other.right) == 0
+                && Float.compare(radiusPx, other.radiusPx) == 0
+                && Float.compare(mirrorAxisY, other.mirrorAxisY) == 0;
         }
 
         @Override

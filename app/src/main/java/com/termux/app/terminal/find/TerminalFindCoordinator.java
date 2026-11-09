@@ -14,7 +14,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.terminal.ClipboardCleanup;
-import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.view.TerminalFindOverlay;
 import com.termux.view.TerminalView;
@@ -279,13 +279,13 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
      */
     @NonNull
     public static List<TerminalFindModel.Line> snapshot(@NonNull TerminalEmulator emulator) {
-        TerminalBuffer screen = emulator.getScreen();
-        int first = -screen.getActiveTranscriptRows();
+        TerminalContent screen = emulator.getContent();
+        int first = -screen.historyRows();
         List<TerminalFindModel.Line> lines = new ArrayList<>(
-            screen.getActiveTranscriptRows() + emulator.mRows);
+            screen.historyRows() + emulator.mRows);
         for (int row = first; row < emulator.mRows; row++) {
             lines.add(new TerminalFindModel.Line(row,
-                screen.getSelectedText(0, row, emulator.mColumns, row, false)));
+                screen.text(0, row, emulator.mColumns, row, false, false)));
         }
         return lines;
     }

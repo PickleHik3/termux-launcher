@@ -151,6 +151,8 @@ public class LayoutUpgradeMatrixTest {
         Layouts layouts = layouts();
         JSONObject expected = load(name + "-expected.json");
         for (LayoutKind kind : LayoutKind.values()) {
+            // A retired document (ADR 0025) is never written or read: the Workspace's is worn.
+            if (kind.retired()) continue;
             JSONObject doc = expected.optJSONObject(kind.key);
             if (doc != null) compare(name + " " + kind.key, layouts.kind(kind), doc);
         }
@@ -160,6 +162,8 @@ public class LayoutUpgradeMatrixTest {
         for (int i = 0; absent != null && i < absent.length(); i++) {
             String path = absent.getString(i);
             String[] parts = path.split("\\.", 3);
+            LayoutKind named = LayoutKind.forKey(parts[0]);
+            if (named != null && named.retired()) continue;
             KindLayout doc = "sizes".equals(parts[0]) ? layouts.sizes().document()
                 : layouts.kind(LayoutKind.forKey(parts[0]));
             assertFalse(name + ": " + path + " should be absent", section(doc, parts[1]).has(parts[2]));
@@ -223,7 +227,13 @@ public class LayoutUpgradeMatrixTest {
         editor.commit();
     }
 
+    /**
+     * Step 17 alone: the shared-chrome fold (ADR 0023 §1) has its own test, so it is marked done
+     * here and the fixtures keep showing what step 17 wrote.
+     */
     private void migrate() {
+        prefs.edit().putBoolean(com.termux.app.place.layout.SharedChromeFold.KEY_MIGRATED, true)
+            .commit();
         new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
     }
 

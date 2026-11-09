@@ -59,6 +59,43 @@ public final class WidgetPaneView extends FrameLayout
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
         /**
+         * A press on the free area while swipe up is the app drawer: the moment to get the drawer's
+         * content ready, so the finger's first move finds it built.
+         */
+        default void onFreeAreaDrawerPressed() { }
+        /**
+         * A swipe up on the free area, set to the drawer, passed the slop: true when the drawer's
+         * live drag took it ({@code claimRawY} is the finger's screen y at the claim, where the
+         * drawer's top edge starts following it 1:1), after which the pane
+         * reports {@link #onFreeAreaDrawerDrag}, then {@link #onFreeAreaDrawerDragEnd} or
+         * {@link #onFreeAreaDrawerDragCancel} and sends no palette swipe. False leaves the
+         * gesture to the discrete swipe.
+         */
+        default boolean onFreeAreaDrawerDragBegin(float claimRawY) { return false; }
+        /** Every move of the drawer's live drag; {@code rawY} is the finger's screen y. */
+        default void onFreeAreaDrawerDrag(float rawY) { }
+        /** The finger let go; {@code velocityYPxPerSec} is positive downward. */
+        default void onFreeAreaDrawerDragEnd(float velocityYPxPerSec) { }
+        /** The stream was cancelled: the drawer eases back to where it was. */
+        default void onFreeAreaDrawerDragCancel() { }
+        /**
+         * A swipe down on the free area passed the slop at ({@code rawX}, {@code rawY}), screen
+         * coordinates, at {@code time} (uptime ms): true when the system shade follows it live,
+         * after which the pane reports {@link #onFreeAreaPullDown}, then
+         * {@link #onFreeAreaPullDownEnd} or {@link #onFreeAreaPullDownCancel} instead of a
+         * palette swipe. False leaves the gesture to the discrete swipe.
+         */
+        default boolean onFreeAreaPullDownBegin(float rawX, float rawY, long time) { return false; }
+        /** Every move of the live pull down. */
+        default void onFreeAreaPullDown(float rawX, float rawY, long time) { }
+        /**
+         * The live pull down let go; {@code releaseWay} is how the swipe reads
+         * ({@link HomeSwipePolicy#release}: positive down, 0 for neither).
+         */
+        default void onFreeAreaPullDownEnd(float rawX, float rawY, long time, int releaseWay) { }
+        /** The live pull down's stream was cancelled. */
+        default void onFreeAreaPullDownCancel() { }
+        /**
          * Two taps in quick succession on the page's free area; sent only while
          * {@link #setExtraGestures} watches for it.
          */
@@ -227,6 +264,13 @@ public final class WidgetPaneView extends FrameLayout
      */
     private boolean verticalCandidate;
     private boolean verticalDragging;
+    /** Swipe up's action on the free area (Settings › Home › Gestures); the drawer drags live. */
+    @NonNull private com.termux.app.launcher.home.HomeGestures.Action swipeUpAction =
+        com.termux.app.launcher.home.HomeGestures.Action.NONE;
+    /** The free-area stream is the app drawer's live drag. */
+    private boolean drawerDragging;
+    /** The palette gesture's stream is a swipe down the system shade follows live. */
+    private boolean shadePulling;
     /**
      * Settings › Home › Gestures: whether a double tap and a two-finger swipe on the free area are
      * watched for. Off (nothing set for them), the page reads taps and second fingers as before.
@@ -417,6 +461,11 @@ public final class WidgetPaneView extends FrameLayout
         if (indicator == value) return;
         indicator = value;
         setPageState(pageCount, currentPage);
+    }
+
+    /** What swipe up on the free area is set to; the drawer follows the finger. */
+    public void setSwipeUpAction(@NonNull com.termux.app.launcher.home.HomeGestures.Action action) {
+        swipeUpAction = action;
     }
 
     /** Whether a double tap and a two-finger swipe on the free area are watched for. */
@@ -950,6 +999,12 @@ public final class WidgetPaneView extends FrameLayout
                 pagingDragging = false;
                 seamDragging = false;
                 verticalDragging = false;
+                drawerDragging = false;
+                if (shadePulling) {
+                    // A stream that ended without reaching this view: let the shade go.
+                    shadePulling = false;
+                    if (listener != null) listener.onFreeAreaPullDownCancel();
+                }
                 // A swipe on a Home float is the float's, except a sideways one on its terminal
                 // when the terminal has no use for it: that one pages as it would beside it.
                 boolean onFloat = pinnedLayerHolds(event);
@@ -974,6 +1029,11 @@ public final class WidgetPaneView extends FrameLayout
                 if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
+                if (verticalCandidate
+                    && swipeUpAction == com.termux.app.launcher.home.HomeGestures.Action.DRAWER
+                    && listener != null) {
+                    listener.onFreeAreaDrawerPressed();
+                }
                 if (pagingTracking || verticalCandidate) {
                     if (pagingVelocity == null) pagingVelocity = VelocityTracker.obtain();
                     pagingVelocity.clear();
@@ -1032,9 +1092,23 @@ public final class WidgetPaneView extends FrameLayout
                 HomeSwipePolicy.Axis axis = HomeSwipePolicy.axis(dx, dy, touchSlop);
                 if (axis == HomeSwipePolicy.Axis.VERTICAL) {
                     pagingTracking = false;
+                    if (verticalCandidate && listener != null
+                        && HomeDrawerDragPolicy.claims(swipeUpAction, dx, dy, touchSlop)
+                        && listener.onFreeAreaDrawerDragBegin(event.getRawY())) {
+                        // Swipe up is the drawer: it follows the finger from this move, which
+                        // is not delivered to onTouchEvent.
+                        drawerDragging = true;
+                        verticalCandidate = false;
+                        listener.onFreeAreaDrawerDrag(event.getRawY());
+                        return true;
+                    }
                     if (verticalCandidate) {
                         // The palette gesture: the grid's long press is cancelled by the claim.
                         verticalDragging = true;
+                        // Swipe down may pull the shade under the finger from this move on.
+                        shadePulling = dy > 0 && listener != null
+                            && listener.onFreeAreaPullDownBegin(event.getRawX(), event.getRawY(),
+                                event.getEventTime());
                         return true;
                     }
                 } else if (axis == HomeSwipePolicy.Axis.HORIZONTAL) {
@@ -1096,7 +1170,8 @@ public final class WidgetPaneView extends FrameLayout
             default:
                 break;
         }
-        return pagingDragging || verticalDragging || twoFingerDragging || pinchClaimed;
+        return pagingDragging || verticalDragging || drawerDragging || twoFingerDragging
+            || pinchClaimed;
     }
 
     /** How far apart the first two fingers are; 0 with fewer. */
@@ -1171,6 +1246,7 @@ public final class WidgetPaneView extends FrameLayout
             return true;
         }
         if (twoFingerDragging) return onTwoFingerTouch(event);
+        if (drawerDragging) return onDrawerTouch(event);
         if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
         if (seamDragging) return onSeamTouch(event);
@@ -1192,6 +1268,32 @@ public final class WidgetPaneView extends FrameLayout
         }
     }
 
+    /** The drawer's live drag after its claim: the plane follows, the lift or the cancel ends it. */
+    private boolean onDrawerTouch(@NonNull MotionEvent event) {
+        if (pagingVelocity != null) pagingVelocity.addMovement(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (listener != null) listener.onFreeAreaDrawerDrag(event.getRawY());
+                return true;
+            case MotionEvent.ACTION_UP: {
+                drawerDragging = false;
+                float velocityY = 0f;
+                if (pagingVelocity != null) {
+                    pagingVelocity.computeCurrentVelocity(1000);
+                    velocityY = pagingVelocity.getYVelocity();
+                }
+                if (listener != null) listener.onFreeAreaDrawerDragEnd(velocityY);
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                drawerDragging = false;
+                if (listener != null) listener.onFreeAreaDrawerDragCancel();
+                return true;
+            default:
+                return true;
+        }
+    }
+
     /**
      * The palette gesture's stream after its claim: nothing moves under the finger, and the lift
      * asks up or down by the wall's keyboard swipe rule ({@link HomeSwipePolicy#release}).
@@ -1199,6 +1301,12 @@ public final class WidgetPaneView extends FrameLayout
     private boolean onVerticalTouch(@NonNull MotionEvent event) {
         if (pagingVelocity != null) pagingVelocity.addMovement(event);
         switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (shadePulling && listener != null) {
+                    listener.onFreeAreaPullDown(event.getRawX(), event.getRawY(),
+                        event.getEventTime());
+                }
+                return true;
             case MotionEvent.ACTION_UP: {
                 verticalDragging = false;
                 verticalCandidate = false;
@@ -1211,12 +1319,25 @@ public final class WidgetPaneView extends FrameLayout
                 int way = HomeSwipePolicy.release(event.getY() - pagingDownY, velocityY,
                     com.termux.app.wall.BorderDrag.KEYBOARD_COMMIT_DP * density,
                     com.termux.app.wall.BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
+                if (shadePulling) {
+                    // The shade had the swipe: it settles by itself, or falls back to opening.
+                    shadePulling = false;
+                    if (listener != null) {
+                        listener.onFreeAreaPullDownEnd(event.getRawX(), event.getRawY(),
+                            event.getEventTime(), way);
+                    }
+                    return true;
+                }
                 if (way != 0 && listener != null) listener.onFreeAreaVerticalSwipe(way < 0);
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
                 verticalDragging = false;
                 verticalCandidate = false;
+                if (shadePulling) {
+                    shadePulling = false;
+                    if (listener != null) listener.onFreeAreaPullDownCancel();
+                }
                 return true;
             default:
                 return true;

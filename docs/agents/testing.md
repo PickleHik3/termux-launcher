@@ -41,8 +41,13 @@ Say which items you verified, on what, and which are reasoned from the code. Wha
 a device check lands in the same commit:
 
 - an item an agent can drive over adb goes on `project-docs/device-checks.md`;
-- one that needs the developer's hand (feel, frame timing, a thumb mid-gesture, a lock screen,
-  taste, Perfetto) goes on `project-docs/developer-checks.md`.
+- one that needs the developer's hand (feel, a thumb mid-gesture that adb cannot reproduce, a lock
+  screen, taste) goes on `project-docs/developer-checks.md`.
+
+Frame timing and Perfetto traces of scripted gestures are agent work: `scripts/perf-frametime.sh`
+and the `device-checker` play the swipes with `adb shell input`, and a Perfetto trace is recorded
+over adb while they run (the launcher's `Wall.*` and `LiveBackdrop.*` sections name the steps).
+On pong, ask the developer before every such run: it drives their phone.
 
 Delete an item once it has been seen. Batched functional checks run through the host's
 `device-checker` agent where there is one; it gets the user-facing summary and the items, never

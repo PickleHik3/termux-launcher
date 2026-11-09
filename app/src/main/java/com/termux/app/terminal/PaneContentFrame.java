@@ -212,13 +212,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     /**
      * Plays a screen event on this pane's CRT picture ({@link RetroEffectBinder#fire}): nothing
      * unless the pane is drawn CRT and the Screen events switch is on.
+     *
+     * @return whether the event started
      */
-    public void screenEvent(@NonNull PaneScreenEvent.Kind kind) {
-        if (!mRetroEffect.style().usesCrt()) return;
+    public boolean screenEvent(@NonNull PaneScreenEvent.Kind kind) {
+        if (!mRetroEffect.style().usesCrt()) return false;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
                 .build(getContext(), false);
-        mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
+        return mRetroEffect.fire(kind, prefs == null || prefs.isTerminalScreenEventsEnabled());
     }
 
     /**
@@ -230,13 +232,16 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         // Null while the super constructor runs: FrameLayout may report visibility that early.
         if (mRetroEffect == null) return;
         boolean on = false;
+        boolean composite = false;
         if (mRetroEffect.style().usesCrt()) {
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
                 com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
                     .build(getContext(), false);
             on = prefs != null && prefs.isIdleAnimationsEnabled();
+            composite = prefs != null && prefs.isTerminalRetroCompositeEnabled();
         }
         mRetroEffect.setAmbient(on);
+        mRetroEffect.setComposite(composite);
     }
 
     /**
@@ -413,11 +418,45 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         return mRetroEffect.style();
     }
 
+    /** The span of the top line left unstroked round the camera ({@link #setTopGap}). */
+    private int mTopGapStartPx;
+    private int mTopGapEndPx;
+    private int mTopGapDepthPx;
+
+    /**
+     * Breaks the rim's top line over {@code [startPx, endPx)} (this frame's own x, from its left),
+     * down {@code depthPx}, where the camera stands over it; {@code endPx <= startPx} restores it.
+     * Only the foreground's stroke is cut: the glass and the outline stay one card. Redraws only
+     * when the span changes.
+     */
+    public void setTopGap(int startPx, int endPx, int depthPx) {
+        if (endPx <= startPx) {
+            startPx = 0;
+            endPx = 0;
+            depthPx = 0;
+        }
+        if (startPx == mTopGapStartPx && endPx == mTopGapEndPx && depthPx == mTopGapDepthPx) return;
+        mTopGapStartPx = startPx;
+        mTopGapEndPx = endPx;
+        mTopGapDepthPx = depthPx;
+        invalidate();
+    }
+
     @Override
     public void onDrawForeground(Canvas canvas) {
         if (mTravelBottomInsetPx > 0)
             fitForegroundToTravelInset();
-        super.onDrawForeground(canvas);
+        if (mTopGapEndPx <= mTopGapStartPx) {
+            super.onDrawForeground(canvas);
+            return;
+        }
+        int save = canvas.save();
+        try {
+            canvas.clipOutRect(mTopGapStartPx, 0, mTopGapEndPx, mTopGapDepthPx);
+            super.onDrawForeground(canvas);
+        } finally {
+            canvas.restoreToCount(save);
+        }
     }
 
     @Override

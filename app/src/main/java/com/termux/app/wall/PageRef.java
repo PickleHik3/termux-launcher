@@ -18,6 +18,8 @@ public final class PageRef {
     @NonNull public static final PageRef HOME = new PageRef(PaneWallPage.WIDGETS, -1);
     /** The Terminal page, with no id said. */
     @NonNull public static final PageRef TERMINAL = new PageRef(PaneWallPage.TERMINAL, -1);
+    /** The Assistant page (ADR 0022): a kind of its own, never read as a window's. */
+    @NonNull public static final PageRef ASSISTANT = new PageRef(PaneWallPage.ASSISTANT, -1);
 
     @NonNull public final PaneWallPage kind;
     /** The page's {@link WallPages} id; -1 while unknown. */
@@ -38,6 +40,7 @@ public final class PageRef {
         if (id < 0) {
             if (kind == PaneWallPage.WIDGETS) return HOME;
             if (kind == PaneWallPage.TERMINAL) return TERMINAL;
+            if (kind == PaneWallPage.ASSISTANT) return ASSISTANT;
         }
         return new PageRef(kind, id);
     }

@@ -51,8 +51,15 @@ public final class TaiManager {
     private static final String INTERNAL_FEATURE_PLAN = "_taiFeaturePlan";
     /** The STT idle-unload setting, carried to the runtime process with every speech request. */
     private static final String INTERNAL_STT_IDLE_MINUTES = "_taiSttIdleUnloadMinutes";
+    /** The speech accelerator setting ({@link SttAccelerator}), carried with every speech request like the idle limit. */
+    private static final String INTERNAL_STT_ACCELERATOR = "_taiSttAccelerator";
     /** Where the app process puts audio for the runtime process; files here are deleted once transcribed. */
     public static final String STT_IPC_DIR = "tai-ipc";
+    /**
+     * On an {@link #sttWarm} request: close any speech graph first, so the load is cold. The voice
+     * benchmark times its loads this way ({@link TaiVoiceBenchRunner}).
+     */
+    static final String STT_COLD_LOAD = "_taiSttColdLoad";
 
     private final Context appContext;
     private final TaiSettings settings;
@@ -2671,6 +2678,7 @@ public final class TaiManager {
             return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
         }
         MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+        if (request.optBoolean(STT_COLD_LOAD, false)) router.closeStt();
         if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
             JSONObject refusal = decideSttLoad(spec);
             if (refusal != null) return refusal;
@@ -3132,11 +3140,31 @@ public final class TaiManager {
         request.put("model", spec.id);
         request.put(INTERNAL_MODEL_SPEC, spec.toJson());
         request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
+        request.put(INTERNAL_STT_ACCELERATOR, sttAcceleratorFor(request, settings.getSttAccelerator(spec.id)));
         return request.toString();
     }
 
+    /**
+     * The processor a speech request runs on: its own {@code accelerator} ({@code auto}, {@code cpu}
+     * or {@code gpu}; the voice benchmark names one per entry), else the setting.
+     */
+    @NonNull
+    static String sttAcceleratorFor(@NonNull JSONObject request, @NonNull String setting) {
+        String asked = request.optString("accelerator", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (SttAccelerator.AUTO.id.equals(asked) || SttAccelerator.CPU.id.equals(asked) || SttAccelerator.GPU.id.equals(asked)) {
+            return asked;
+        }
+        return setting;
+    }
+
+    /** In the runtime process: the STT idle limit and accelerator the app process sent with this request. */
     private void rememberSttIdleLimit(@NonNull JSONObject request) {
-        if (!runtimeProcess || !request.has(INTERNAL_STT_IDLE_MINUTES)) return;
+        if (!runtimeProcess) return;
+        // The speech runtimes read it at their next load; a different ask reloads the graph.
+        if (request.has(INTERNAL_STT_ACCELERATOR)) {
+            SttAccelerator.setRequested(SttAccelerator.parse(request.optString(INTERNAL_STT_ACCELERATOR, null)));
+        }
+        if (!request.has(INTERNAL_STT_IDLE_MINUTES)) return;
         sttIdleLimitMs = java.util.concurrent.TimeUnit.MINUTES.toMillis(Math.max(0, request.optInt(INTERNAL_STT_IDLE_MINUTES, 0)));
     }
 

@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.chrome.Dress;
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.WornDockDesign;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -240,7 +241,7 @@ public class SeamCrossingTest {
             step.stackDressPage = crossing.stackDressPage();
             step.layout = crossing.layout();
             step.stripShare = crossing.designShare(DockStyle.WALL_STRIP,
-                here.dress.dockDesign() == DockStyle.WALL_STRIP ? 1f : 0f);
+                worn(here) == DockStyle.WALL_STRIP ? 1f : 0f);
             step.fieldShare = crossing.searchFieldShare(here.dress.searchField() ? 1f : 0f);
             steps.add(step);
             return step;
@@ -270,6 +271,16 @@ public class SeamCrossingTest {
 
         Step last() {
             return steps.get(steps.size() - 1);
+        }
+
+        /** The Workspace's end of a crossing that started on Home or not. */
+        SeamCrossing.Endpoint window(boolean fromHome) {
+            return fromHome ? there : here;
+        }
+
+        /** Home's end of it. */
+        SeamCrossing.Endpoint home(boolean fromHome) {
+            return fromHome ? here : there;
         }
     }
 
@@ -614,9 +625,14 @@ public class SeamCrossingTest {
         return rows;
     }
 
+    /** The design {@code half}'s slab wears: none where its layout shows no apps row. */
+    private static DockStyle worn(@NonNull SeamCrossing.Endpoint half) {
+        return WornDockDesign.of(half.dress.dockDesign(), half.layout);
+    }
+
     /** The share of a band only {@code design} carries that {@code half}'s dock rests with. */
     private static float restShare(@NonNull SeamCrossing.Endpoint half, @NonNull DockStyle design) {
-        return half.dress.dockDesign() == design ? 1f : 0f;
+        return worn(half) == design ? 1f : 0f;
     }
 
     /**
@@ -1394,12 +1410,14 @@ public class SeamCrossingTest {
 
     @Test
     public void theRowsTheSeamStandsAreLaidOutInTheirOwnHalfsDesign() {
-        // The developer's phone: Home's own layout on Tray with the pinned apps and the index, the
-        // Workspace on Lens beads with the extra keys alone. A row slid in from Home was held to
-        // the Workspace's bead fit for the whole slide (118 px) and grew at the settle (143 px).
+        // The developer's phone: Home's own layout with the pinned apps and the index, the
+        // Workspace with the extra keys alone. A row slid in from Home was held to the
+        // Workspace's bead fit for the whole slide (118 px) and grew at the settle (143 px).
+        // Since round 9 a half with no apps row wears no design (WornDockDesign), whatever it
+        // stores, so the halves differ here by Home's Lens beads against the Workspace's tray.
         for (PaneWallPage from : BOTH) {
             Stored stored = homeLayoutOn();
-            stored.designs.put(HOME_PAGE, DockStyle.GLASS_TRAY);
+            stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
             stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
             boolean fromHome = from == PaneWallPage.WIDGETS;
             Drive drive = fromHome
@@ -1407,8 +1425,8 @@ public class SeamCrossingTest {
                     keysOnlyWindow(), true, false)
                 : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true,
                     PaneWallPage.WIDGETS, home(), false, false);
-            DockStyle committed = fromHome ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS;
-            DockStyle other = fromHome ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+            DockStyle committed = fromHome ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+            DockStyle other = fromHome ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS;
             assertNull("no crossing, no design", drive.crossing.rowsDesign());
             int othersFrames = 0;
             int n = Math.round(1f / SLOW);
@@ -1433,6 +1451,184 @@ public class SeamCrossingTest {
             assertNull(drive.crossing.rowsDesign());
             drive.crossing.end();
         }
+    }
+
+    /**
+     * Pong, round 9: the Workspace stores Lens beads but shows the extra keys alone, Home wears
+     * Peek glass. The crossing's designs are the resolver's for each page at rest, so the
+     * Workspace's is the plain tray in both directions, and what the crossing carries to the
+     * landed page is the design the settle resolves there.
+     */
+    @Test
+    public void aDockOffWorkspaceCrossesWithTheDesignItsSlabWears() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
+            stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = fromHome
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    keysOnlyWindow(), true, false)
+                : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true,
+                    PaneWallPage.WIDGETS, home(), false, false);
+            assertSame(DockStyle.LENS_BEADS, drive.window(fromHome).dress.dockDesign());
+            drive.slow(0f, 1f);
+            // At rest on either page the resolver answers; the crossing holds the same answers.
+            assertSame(from + ": the committed page", worn(drive.here),
+                drive.crossing.committedDesign());
+            assertSame(DockStyle.GLASS_TRAY, worn(drive.window(fromHome)));
+            assertSame(DockStyle.PEEK_GLASS, worn(drive.home(fromHome)));
+            // The rows it lands with wear the landed page's design, the one its settle resolves.
+            assertSame(from + ": landed rows", worn(drive.there), drive.crossing.rowsDesign());
+            assertFalse("never dressed apart", drive.count(s -> s.restyle) > 0);
+            drive.crossing.land();
+            drive.crossing.end();
+        }
+    }
+
+    // ---- The dock's foot under the gesture pill ----
+
+    /**
+     * The developer's crossing: the Workspace with its keyboard up and the extra keys alone, Home
+     * with the pinned apps and the index, keyboard down. {@code liveKeyboard} is what the activity
+     * reads each pass: the Workspace's keyboard until the settle one way, the one pre-rolled for
+     * the Workspace from the first frame the other.
+     */
+    private static Drive footDrive(@NonNull PaneWallPage from) {
+        Stored stored = homeLayoutOn();
+        stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
+        return from == PaneWallPage.WIDGETS
+            ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                keysOnlyWindow(), true, false)
+            : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true, PaneWallPage.WIDGETS,
+                home(), false, false);
+    }
+
+    /** The foot's keyboard over a drive's frames, the live keyboard up throughout. */
+    private static List<Boolean> footKeyboards(@NonNull Drive drive, float... fractions) {
+        List<Boolean> out = new ArrayList<>();
+        Boolean previous = null;
+        for (float fraction : fractions) {
+            Step step = drive.step(fraction);
+            boolean keyboard = drive.crossing.footKeyboardUp(true);
+            // The foot is laid out by the geometry pass, which runs on the seam's relayout
+            // frames: it changes only there, never on a frame of its own.
+            if (previous != null && previous != keyboard)
+                assertTrue("the foot changes on a relayout frame, " + fraction, step.relayout);
+            if (previous != null && previous != keyboard)
+                assertTrue("out of sight, " + fraction, step.dockReveal
+                    <= 2f * SLOW / (1f - 2f * PlaceChromeTravel.LANDING) + EPSILON);
+            previous = keyboard;
+            out.add(keyboard);
+        }
+        return out;
+    }
+
+    private static float[] slowWay(float from, float to) {
+        int n = Math.round(Math.abs(to - from) / SLOW);
+        float[] out = new float[n + 1];
+        for (int i = 0; i <= n; i++) out[i] = from + (to - from) * i / n;
+        return out;
+    }
+
+    @Test
+    public void workspaceToHomeTheRowsArriveWithTheirFootAtTheSwap() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        assertSame(SeamTravel.DockPlan.DIP,
+            SeamTravel.dockPlan(drive.here.layout, drive.there.layout));
+        assertTrue("the Workspace's keyboard holds it first", keyboards.get(1));
+        assertFalse("Home's rows own the foot by the end", keyboards.get(keyboards.size() - 1));
+        // Parity: the settle on Home reads the live keyboard, down there, and finds the same.
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        drive.crossing.land();
+        boolean settled = drive.crossing.footKeyboardUp(drive.there.keyboardUp);
+        assertEquals(travelled, settled);
+        drive.crossing.end();
+    }
+
+    @Test
+    public void homeToWorkspaceTheArrivingKeyboardTakesTheFootAsItIsPreRolled() {
+        Drive drive = footDrive(PaneWallPage.WIDGETS);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        // The keyboard brought up for the Workspace rises in the stack under Home's rows before
+        // the swap, so no foot runs on behind it: the live keyboard answers, as at the settle.
+        for (int i = 1; i < keyboards.size(); i++) assertTrue("at " + i, keyboards.get(i));
+        drive.crossing.land();
+        assertEquals(keyboards.get(keyboards.size() - 1),
+            drive.crossing.footKeyboardUp(drive.there.keyboardUp));
+        drive.crossing.end();
+    }
+
+    @Test
+    public void aSlideThatFallsBackPutsTheFootBackWithTheWorkspacesRows() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        float[] out = slowWay(0f, 0.7f);
+        float[] back = slowWay(0.7f, 0f);
+        float[] way = new float[out.length + back.length];
+        System.arraycopy(out, 0, way, 0, out.length);
+        System.arraycopy(back, 0, way, out.length, back.length);
+        List<Boolean> keyboards = footKeyboards(drive, way);
+        assertTrue("Home's rows had it past the swap", keyboards.contains(false));
+        assertTrue("the Workspace's keyboard again", keyboards.get(keyboards.size() - 1));
+        drive.crossing.land();
+        assertEquals(keyboards.get(keyboards.size() - 1),
+            drive.crossing.footKeyboardUp(drive.here.keyboardUp));
+        drive.crossing.end();
+    }
+
+    /**
+     * Pong round 12: the crossing landed on Home and ended, and the settle's first geometry pass
+     * still read the Workspace's keyboard up, so the foot dropped for a pass before the keyboard's
+     * state caught up. The travelled answer holds through the landing until the live keyboard
+     * agrees, for a few passes at most.
+     */
+    @Test
+    public void theFootHoldsThroughTheLandingUntilTheKeyboardStateLands() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        assertFalse(travelled);
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        // Landed, then ended: the page's commit has run, the keyboard has not yet gone.
+        assertEquals("through the commit", travelled, drive.crossing.footKeyboardUp(true));
+        drive.crossing.end();
+        assertEquals("crossing just ended, keyboard state not yet committed", travelled,
+            drive.crossing.footKeyboardUp(true));
+        // The keyboard's state lands: the live answer, the same, and the hold is gone.
+        assertEquals(travelled, drive.crossing.footKeyboardUp(false));
+        assertTrue("nothing held after", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aKeyboardThatNeverLandsGivesTheFootBackAfterAFewPasses() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        footKeyboards(drive, slowWay(0f, 1f));
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        drive.crossing.end();
+        for (int i = 0; i < SeamCrossing.LANDED_FOOT_READS; i++)
+            assertFalse("held, pass " + i, drive.crossing.footKeyboardUp(true));
+        assertTrue("the fail-safe lets go", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aSlideThatFallsBackHoldsNothingAtItsLanding() {
+        Drive drive = footDrive(PaneWallPage.TERMINAL);
+        float[] out = slowWay(0f, 0.7f);
+        float[] back = slowWay(0.7f, 0.6f);
+        footKeyboards(drive, out);
+        footKeyboards(drive, back);
+        // The wall went back to the Workspace without a frame under the swap to undo it.
+        drive.crossing.land(PaneWallPage.TERMINAL);
+        drive.crossing.end();
+        assertTrue(drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void atRestTheLiveKeyboardAnswers() {
+        SeamCrossing crossing = new SeamCrossing();
+        assertTrue(crossing.footKeyboardUp(true));
+        assertFalse(crossing.footKeyboardUp(false));
     }
 
     @Test

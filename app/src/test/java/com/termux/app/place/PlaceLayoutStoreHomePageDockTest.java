@@ -76,18 +76,19 @@ public class PlaceLayoutStoreHomePageDockTest {
         assertEquals("every Home page wears it", DockStyle.GLASS_TRAY, home(2).dockStyle());
         assertTrue(home(2).searchField());
         assertFalse(home(2).azRowShown(PlaceOrientation.PORTRAIT));
-        assertFalse("the Terminal's layout is untouched",
+        assertTrue("the Terminal reads the one dock (ADR 0023 §1)",
             store.forVariant(LayoutVariant.NORMAL).searchField());
     }
 
     @Test
-    public void aTerminalPageWearsTheTerminalsDockAndHomeKeepsItsOwn() {
+    public void aTerminalPageWearsTheOneDockHomeHolds() {
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(DockStyle.LENS_BEADS);
         PlaceLayoutStore terminal = store.forVariant(LayoutVariant.page(3, PageKind.TERMINAL));
-        assertEquals(DockStyle.LENS_BEADS, terminal.dockStyle());
+        assertEquals("a design picked on the Terminal is Home's too", DockStyle.LENS_BEADS,
+            terminal.dockStyle());
         terminal.setDockStyle(DockStyle.GLASS_TRAY);
         assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertEquals(DockStyle.PEEK_GLASS, store.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

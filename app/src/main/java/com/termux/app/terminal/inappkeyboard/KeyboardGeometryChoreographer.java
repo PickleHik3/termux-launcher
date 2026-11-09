@@ -115,6 +115,15 @@ public final class KeyboardGeometryChoreographer {
         void requestAccessoryRenderSync();
 
         /**
+         * Books the whole chrome apply for the frame this request lands in, before its draw: the
+         * keyboard's surface is dressed there with the rest of the chrome rather than on its own.
+         * Without a frame to ride, the keyboard is dressed at once.
+         */
+        default void requestApplyThisFrame() {
+            applyKeyboardSurfaceState(buildChromeSpec());
+        }
+
+        /**
          * Re-lays out the accessory stack around the keyboard, for {@code reason}, before the next
          * traversal: the reveal gate applies the chrome against that traversal's layout.
          */
@@ -179,6 +188,10 @@ public final class KeyboardGeometryChoreographer {
     // ---- measurement cache
 
     private boolean mHeightDirty = true;
+    /** The bounds the put-away keyboard was last pre-measured against ({@link #prewarmMeasure}). */
+    private boolean mPrewarmed;
+    private int mPrewarmWidthPx;
+    private int mPrewarmHeightPx;
     private int mDesiredHeightPx;
     private int mMeasureWidthPx;
     private int mAvailableHeightPx;
@@ -229,17 +242,8 @@ public final class KeyboardGeometryChoreographer {
         if (mSurface.dressKeyboardHost())
             mHeightDirty = true;
         HostReference floating = mSurface.floatingKeyboardReference();
-        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
-        int width = floating != null ? floating.widthPx
-            : availableRoot != null ? availableRoot.getWidth() : 0;
-        int availableHeight = floating != null ? floating.availableHeightPx
-            : availableRoot != null
-            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
-        DisplayMetrics metrics = mSurface.displayMetrics();
-        if (width <= 0)
-            width = metrics.widthPixels;
-        if (availableHeight <= 0)
-            availableHeight = metrics.heightPixels;
+        int width = boundsWidthPx(floating);
+        int availableHeight = boundsHeightPx(floating);
         mHeightCapReferencePx = availableHeight;
         View attached = mSurface.attachedKeyboardView();
         if (attached instanceof Keyboard2View) {
@@ -273,6 +277,69 @@ public final class KeyboardGeometryChoreographer {
         return mDesiredHeightPx;
     }
 
+    /** The width the keyboard is measured against: the floating frame's, else the content root's. */
+    private int boundsWidthPx(@Nullable HostReference floating) {
+        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
+        int width = floating != null ? floating.widthPx
+            : availableRoot != null ? availableRoot.getWidth() : 0;
+        return width > 0 ? width : mSurface.displayMetrics().widthPixels;
+    }
+
+    /** The height the keyboard is measured against, as {@link #boundsWidthPx}. */
+    private int boundsHeightPx(@Nullable HostReference floating) {
+        View availableRoot = mSurface.findView(R.id.activity_termux_root_relative_layout);
+        int height = floating != null ? floating.availableHeightPx
+            : availableRoot != null
+            ? com.termux.app.place.BottomInsetFrameLayout.roomHeightPx(availableRoot) : 0;
+        return height > 0 ? height : mSurface.displayMetrics().heightPixels;
+    }
+
+    /**
+     * Whether a hidden keyboard's measure is worth doing now: the container is put away (GONE),
+     * it is the stack's (not a floating frame's) and the bounds are not the ones last measured.
+     */
+    static boolean needsPrewarm(boolean containerGone, boolean floating, boolean warm,
+                                int warmWidthPx, int warmHeightPx, int widthPx, int heightPx) {
+        return containerGone && !floating && widthPx > 0 && heightPx > 0
+            && !(warm && warmWidthPx == widthPx && warmHeightPx == heightPx);
+    }
+
+    /**
+     * Measures the put-away keyboard against the bounds it will be shown at, so that the show
+     * the swipe's first frame asks for finds the keys' measure cached by Android's same-spec
+     * cache and lays out nothing from scratch. The keyboard stays GONE (the stack, the insets
+     * and the touches never see it) and the height memo is left as it is: this is the same
+     * measure {@link #measureHeightPx} makes, on the same specs, without its answer being kept.
+     *
+     * @return whether a measure ran
+     */
+    public boolean prewarmMeasure() {
+        View keyboardContainer = mSurface.findView(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null) return false;
+        HostReference floating = mSurface.floatingKeyboardReference();
+        int width = boundsWidthPx(floating);
+        int availableHeight = boundsHeightPx(floating);
+        if (!needsPrewarm(keyboardContainer.getVisibility() == View.GONE, floating != null,
+                mPrewarmed, mPrewarmWidthPx, mPrewarmHeightPx, width, availableHeight)) {
+            return false;
+        }
+        android.os.Trace.beginSection("Keyboard.prewarmMeasure");
+        try {
+            View attached = mSurface.attachedKeyboardView();
+            if (attached instanceof Keyboard2View)
+                ((Keyboard2View) attached).setHeightCapReferencePx(Math.max(0, availableHeight));
+            keyboardContainer.measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(availableHeight, View.MeasureSpec.AT_MOST));
+        } finally {
+            android.os.Trace.endSection();
+        }
+        mPrewarmed = true;
+        mPrewarmWidthPx = width;
+        mPrewarmHeightPx = availableHeight;
+        return true;
+    }
+
     /** The last measured desired height, without re-measuring. */
     public int desiredHeightPx() {
         return mDesiredHeightPx;
@@ -289,6 +356,7 @@ public final class KeyboardGeometryChoreographer {
 
     /** Marks the height stale and forgets the measured value with it. */
     public void discardMeasuredHeight() {
+        mPrewarmed = false;
         mDesiredHeightPx = 0;
         mHeightDirty = true;
     }
@@ -299,6 +367,7 @@ public final class KeyboardGeometryChoreographer {
      * invalidate the key too.
      */
     public void invalidateMeasurement() {
+        mPrewarmed = false;
         mDesiredHeightPx = 0;
         mMeasureWidthPx = 0;
         mAvailableHeightPx = 0;
@@ -441,9 +510,21 @@ public final class KeyboardGeometryChoreographer {
             if (openingFromGone)
                 mSurface.invalidateTransitionCrops();
             mPendingCloseGeometry = false;
+            if (!dressesOnRequest(belowScreen)) {
+                // Held below the screen, nothing of it shows before the frame's own chrome apply,
+                // which dresses the keyboard with the rest of the chrome. Dressing it here as well
+                // cost the travel's first frame 7-12 ms on pong (Chrome.kb.host inside
+                // Keyboard.setContainerVisible), for a dress that apply then made again.
+                if (mPendingOpenReveal) removeOpenPreDrawGate();
+                mPendingOpenReveal = false;
+                keyboardContainer.setVisibility(View.VISIBLE);
+                mSurface.requestApplyThisFrame();
+                if (openingFromGone) mSurface.requestAccessoryRenderSync();
+                return;
+            }
             ChromeSpec state = mSurface.buildChromeSpec();
             boolean backdropReady = mSurface.keyboardBackdropReady(state);
-            boolean deferReveal = !belowScreen && (mPendingOpenReveal
+            boolean deferReveal = (mPendingOpenReveal
                 || shouldDeferReveal(openingFromGone, mSurface.keyboardGlassSurface(),
                     state.blurEnabled, backdropReady));
             if (!deferReveal && mPendingOpenReveal) removeOpenPreDrawGate();
@@ -455,8 +536,6 @@ public final class KeyboardGeometryChoreographer {
             mSurface.applyKeyboardSurfaceState(state);
             if (deferReveal) {
                 installOpenPreDrawGate();
-            } else if (belowScreen && openingFromGone) {
-                mSurface.requestAccessoryRenderSync();
             }
         } else {
             boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;
@@ -470,6 +549,14 @@ public final class KeyboardGeometryChoreographer {
             if (closingToGone)
                 installClosePreDrawCorrection();
         }
+    }
+
+    /**
+     * Whether an open dresses the keyboard's surface inside the request. One the travel brings up
+     * {@code belowScreen} does not: no frame shows it before that frame's chrome apply dresses it.
+     */
+    static boolean dressesOnRequest(boolean belowScreen) {
+        return !belowScreen;
     }
 
     /** Reveals keys in the same UI transaction that installs the destination unified backdrop. */

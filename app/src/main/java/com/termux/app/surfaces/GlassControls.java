@@ -39,6 +39,9 @@ public final class GlassControls {
         return FrostStops.blurDpAt(glass);
     }
 
+    /** The grain the Clear Look ships with: none, so its pair sits off the curve at its blur. */
+    static final int CLEAR_GRAIN = 0;
+
     /** The grain a Glass position writes, in percent: {@code R(2 + 6 t)}, 2 to 8; 0 at Glass 0. */
     public static int grainForGlass(int glass) {
         return FrostStops.grainPercentAt(glass);
@@ -82,6 +85,9 @@ public final class GlassControls {
         if (stored >= GLASS_MIN && stored <= GLASS_MAX && blurForGlass(stored) == blur
             && grainForGlass(stored) == grain)
             return stored;
+        // Clear ships with no grain (generation 6), a pair off the curve; it still reads as Glass 20.
+        if (blur == blurForGlass(CLEAR) && grain == CLEAR_GRAIN)
+            return CLEAR;
         return glassFor(blur, grain);
     }
 

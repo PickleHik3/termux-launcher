@@ -50,7 +50,7 @@ public final class TerminalCard {
             .tier(1, Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
         if (offers.terminalEffect)
             rows.tier(1, Row.EFFECT);
-        rows.tier(1, Row.SPLIT_GAP, Row.MARGIN, Row.MULTIPLEXER, Row.AUTO_TILING,
+        rows.tier(1, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
         com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)

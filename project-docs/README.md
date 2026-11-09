@@ -58,6 +58,7 @@ task-oriented guide for the terminal is
 | | |
 |---|---|
 | [`reference/terminal/terminal-modernization-status.md`](reference/terminal/terminal-modernization-status.md) | Engineering overview of the whole terminal project: what is delivered, the user-file contracts, and links to every owning record. Start here. |
+| [`reference/terminal/ghostty-core-wave3-2026-11-09.md`](reference/terminal/ghostty-core-wave3-2026-11-09.md) | The Fast terminal engine (libghostty-vt): one row interface for both engines, scrollback read on demand, kitty graphics, sixel and fail-safes (ADR 0026). Delivered. |
 | [`reference/terminal/split-panes.md`](reference/terminal/split-panes.md) | Sessions, windows, recursive pane trees, the window strip, single-pane compatibility. |
 | [`reference/terminal/automatic-pane-layouts.md`](reference/terminal/automatic-pane-layouts.md) | The six layout presets, equalize, rotate, move-to-edge. |
 | [`reference/terminal/durable-workspaces.md`](reference/terminal/durable-workspaces.md) | `~/.termux/workspaces/*.json`: the format, atomic storage, safe restore. |

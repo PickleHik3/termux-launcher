@@ -63,6 +63,10 @@ public class GlassControlsMigrationTest {
         grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null,
             com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
+        // Clear's face terms came with generation 6; a store this old has none.
+        preferences.setFancierGlassFaceClarityPercent(0);
+        preferences.setFancierGlassDimPercent(0);
+        preferences.setFancierGlassSizeLensPercent(0);
         switch (id) {
             case "minimal":
                 preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 4);

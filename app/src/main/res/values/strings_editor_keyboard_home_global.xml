@@ -21,7 +21,6 @@
     <string name="editor_section_links">Links</string>
     <string name="editor_section_colours">Colours</string>
     <string name="editor_section_clock_weather">Clock &amp; Weather</string>
-    <string name="editor_row_outer_margin">Outer margin</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
     <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
     <string name="editor_row_refraction_off_lazy">Off while Reduce idle activity is on.</string>

@@ -456,7 +456,7 @@ public class GlassTiltTest {
         assertTrue(agsl.contains("        if (tilted) {\n"
             + "            k = k * (1.0 + kTiltLight * tiltLean);\n"
             + "        }\n"));
-        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
+        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
         assertTrue(agsl.contains(
             "float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;"));

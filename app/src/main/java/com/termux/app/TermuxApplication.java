@@ -78,6 +78,7 @@ public class TermuxApplication extends Application {
             return;
         }
         Context context = getApplicationContext();
+        com.termux.app.terminal.io.ExtraKeyActionLabels.registerIcons();
         // Set crash handler for the app
         TermuxCrashUtils.setDefaultCrashHandler(this);
         // Set log config for the app
@@ -95,6 +96,8 @@ public class TermuxApplication extends Application {
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
         // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
+        // Before any session: whether a crash keeps the Ghostty core off, and memory pressure for it.
+        com.termux.app.terminal.GhosttyFailSafes.install(this);
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
@@ -163,6 +166,10 @@ public class TermuxApplication extends Application {
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()),
                 com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+            com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()));
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);

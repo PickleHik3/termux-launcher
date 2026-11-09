@@ -71,8 +71,8 @@ public class LauncherToolRegistryTest {
         // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
-        // the palette's door to minimal mode.
-        assertEquals(90, registry.getUiTools().size());
+        // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
+        assertEquals(91, registry.getUiTools().size());
     }
 
     @Test
@@ -100,7 +100,8 @@ public class LauncherToolRegistryTest {
     @Test
     public void pageTools_narrateThemselves() {
         // The page slides in; the pill names nothing (it used to read "Go to Widgets" over Home).
-        for (String name : new String[] {"wall.go", "wall.widgets", "wall.terminal", "wall.display"}) {
+        for (String name : new String[] {"wall.go", "wall.widgets", "wall.terminal", "wall.display",
+            "wall.assistant"}) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
             assertEquals(name, LauncherToolRegistry.CATEGORY_WALL, tool.category);

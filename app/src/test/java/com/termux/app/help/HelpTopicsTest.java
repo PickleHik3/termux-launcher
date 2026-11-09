@@ -28,6 +28,9 @@ public class HelpTopicsTest {
         "settings", "scale", "touchpad", "pinned", "border", "keyboard_grabber", "corners");
     private static final List<String> WIDGETS_TARGETS = Arrays.asList("status", "widget", "empty",
         "border", "keyboard_grabber", "corners");
+    /** The Assistant page has no controls of its own yet; only the chrome's targets (ADR 0022). */
+    private static final List<String> ASSISTANT_TARGETS = Arrays.asList("status", "border",
+        "keyboard_grabber", "corners");
 
     /** The forty-nine topics of the guide, by group, in the order the guide lists them. */
     private static final List<String> THE_GUIDE = Arrays.asList(
@@ -47,6 +50,7 @@ public class HelpTopicsTest {
         switch (place) {
             case TERMINAL: return TERMINAL_TARGETS;
             case DISPLAY: return DISPLAY_TARGETS;
+            case ASSISTANT: return ASSISTANT_TARGETS;
             default: return WIDGETS_TARGETS;
         }
     }
@@ -162,7 +166,7 @@ public class HelpTopicsTest {
 
     @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
         HelpTopics.Entry status = HelpTopics.entry("status");
-        assertEquals(3, status.places.size());
+        assertEquals(4, status.places.size());
         for (PaneWallPage place : PaneWallPage.values()) {
             assertTrue(place.name(), status.onPlace(place));
             assertEquals(status, HelpTopics.forTarget(place, "status"));

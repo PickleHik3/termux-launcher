@@ -1285,14 +1285,13 @@ public class PlaceLayoutStoreTest {
         for (LayoutVariant variant : LayoutVariant.values())
             assertEquals(DockStyle.GLASS_TRAY, store.forVariant(variant).dockStyle());
 
+        // One design for every page, held by Home's document (ADR 0023 §1): the last pick wins.
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(DockStyle.LENS_BEADS);
         store.forVariant(LayoutVariant.MINIMAL).setDockStyle(DockStyle.WALL_STRIP);
-        assertEquals("lens_beads", prefs.getString("layout.dock_design", null));
-        assertEquals("wall_strip", prefs.getString("layout.minimal.dock_design", null));
-        assertFalse(prefs.contains("layout.home.dock_design"));
-        assertEquals(DockStyle.LENS_BEADS, store().forVariant(LayoutVariant.NORMAL).dockStyle());
+        assertEquals("wall_strip", prefs.getString("layout.home.dock_design", null));
+        assertEquals(DockStyle.WALL_STRIP, store().forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(DockStyle.WALL_STRIP, store.forVariant(LayoutVariant.MINIMAL).dockStyle());
-        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.HOME).dockStyle());
+        assertEquals(DockStyle.WALL_STRIP, store.forVariant(LayoutVariant.HOME).dockStyle());
         store.setMinimal(true);
         assertEquals("the store follows minimal mode", DockStyle.WALL_STRIP, store.dockStyle());
     }
@@ -1304,8 +1303,8 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.searchField());
 
         store.setSearchField(true);
-        assertTrue(prefs.getBoolean("layout.search_field", false));
         assertTrue(store.searchField());
+        assertTrue(prefs.getBoolean("layout.home.search_field", false));
         for (DockStyle style : DockStyle.CHOICES) {
             store.setDockStyle(style);
             assertEquals(style, store.dockStyle());
@@ -1317,9 +1316,9 @@ public class PlaceLayoutStoreTest {
             DockStyle.CHOICES.get(DockStyle.CHOICES.size() - 1), store.dockStyle());
 
         store.setSearchField(true);
-        assertFalse("another layout's toggle is its own",
+        assertTrue("every layout reads the one toggle",
             store.forVariant(LayoutVariant.HOME).searchField());
-        assertFalse(store.forVariant(LayoutVariant.MINIMAL).searchField());
+        assertTrue(store.forVariant(LayoutVariant.MINIMAL).searchField());
     }
 
     /** The Drawer tile is a toggle of its own beside the design, with any design (#97). */
@@ -1347,9 +1346,9 @@ public class PlaceLayoutStoreTest {
             DockStyle.CHOICES.get(DockStyle.CHOICES.size() - 1), store.dockStyle());
 
         store.setDrawerTile(true);
-        assertFalse("another layout's toggle is its own",
+        assertTrue("every layout reads the one toggle",
             store.forVariant(LayoutVariant.HOME).drawerTile());
-        assertFalse(store.forVariant(LayoutVariant.MINIMAL).drawerTile());
+        assertTrue(store.forVariant(LayoutVariant.MINIMAL).drawerTile());
     }
 
     /** Picking a design writes nothing for the tile: no stray toggle is materialised. */
@@ -1378,18 +1377,15 @@ public class PlaceLayoutStoreTest {
 
         assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
-        assertEquals("glass_tray", prefs.getString("layout.dock_design", null));
-        assertEquals(DockStyle.GLASS_TRAY, normal.dockStyle());
-        assertTrue(normal.drawerTile());
-        assertEquals("the tile stays where it stood", DrawerTilePolicy.Position.END,
-            normal.drawerTilePosition());
+        // Home's dock is every page's (ADR 0023 §1): the Taskbar the Terminal wore is gone.
+        assertEquals(DockStyle.LENS_BEADS, normal.dockStyle());
+        assertFalse(normal.drawerTile());
+        assertEquals(DrawerTilePolicy.Position.END, normal.drawerTilePosition());
         assertFalse("the field is not the tile's", normal.searchField());
 
         PlaceLayoutStore minimal = store.forVariant(LayoutVariant.MINIMAL);
-        assertEquals(DockStyle.GLASS_TRAY, minimal.dockStyle());
-        assertTrue("a layout that never stored the toggle gets it too",
-            prefs.getBoolean("layout.minimal.drawer_tile", false));
-        assertEquals(DrawerTilePolicy.Position.MIDDLE, minimal.drawerTilePosition());
+        assertEquals(DockStyle.LENS_BEADS, minimal.dockStyle());
+        assertEquals(DrawerTilePolicy.Position.END, minimal.drawerTilePosition());
 
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
         assertEquals("another design is left as it was", DockStyle.LENS_BEADS,
@@ -1424,15 +1420,13 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
 
         assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
-        assertEquals("glass_tray", prefs.getString("layout.dock_design", null));
-        assertEquals(DockStyle.GLASS_TRAY, store.forVariant(LayoutVariant.NORMAL).dockStyle());
-        assertTrue(store.forVariant(LayoutVariant.NORMAL).searchField());
-        assertEquals("a layout that never stored the field gets it too", DockStyle.GLASS_TRAY,
-            store.forVariant(LayoutVariant.MINIMAL).dockStyle());
-        assertTrue(prefs.getBoolean("layout.minimal.search_field", false));
-        assertEquals("another design is left as it was", DockStyle.LENS_BEADS,
-            store.forVariant(LayoutVariant.HOME).dockStyle());
-        assertFalse(store.forVariant(LayoutVariant.HOME).searchField());
+        // Home's dock is every page's (ADR 0023 §1): the Prompt line the Terminal wore is gone.
+        for (LayoutVariant variant : new LayoutVariant[]{LayoutVariant.NORMAL,
+            LayoutVariant.MINIMAL, LayoutVariant.HOME}) {
+            assertEquals(variant.toString(), DockStyle.LENS_BEADS,
+                store.forVariant(variant).dockStyle());
+            assertFalse(variant.toString(), store.forVariant(variant).searchField());
+        }
     }
 
     @Test
@@ -1452,11 +1446,11 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore store = store();
         assertEquals(DrawerTilePolicy.Position.START, store.drawerTilePosition());
         store.setDrawerTilePosition(DrawerTilePolicy.Position.END);
-        assertEquals("end", prefs.getString("layout.drawer_tile_position", null));
+        assertEquals("end", prefs.getString("layout.home.drawer_tile_position", null));
         assertEquals(DrawerTilePolicy.Position.END, store().drawerTilePosition());
-        assertEquals(DrawerTilePolicy.Position.START,
+        assertEquals("one place for every layout (ADR 0023 §1)", DrawerTilePolicy.Position.END,
             store.forVariant(LayoutVariant.HOME).drawerTilePosition());
-        prefs.edit().putString("layout.drawer_tile_position", "sideways").commit();
+        prefs.edit().putString("layout.home.drawer_tile_position", "sideways").commit();
         assertEquals(DrawerTilePolicy.Position.START, store.drawerTilePosition());
     }
 
@@ -1466,7 +1460,7 @@ public class PlaceLayoutStoreTest {
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
         assertEquals("never dragged: the start", DrawerTilePolicy.DEFAULT_PLACE,
             store.drawerTilePlace());
-        prefs.edit().putString("layout.drawer_tile_position", "end").commit();
+        prefs.edit().putString("layout.home.drawer_tile_position", "end").commit();
         assertEquals("an anchor stored before columns reads as it",
             DrawerTilePolicy.Place.of(DrawerTilePolicy.Position.END), store.drawerTilePlace());
 
@@ -1474,13 +1468,13 @@ public class PlaceLayoutStoreTest {
         assertEquals(DrawerTilePolicy.Place.at(4), home.drawerTilePlace());
         assertEquals(DrawerTilePolicy.Place.at(4),
             store().forVariant(LayoutVariant.HOME).drawerTilePlace());
-        assertEquals("the Workspace keeps its own",
-            DrawerTilePolicy.Place.of(DrawerTilePolicy.Position.END), store.drawerTilePlace());
+        assertEquals("the Workspace reads Home's", DrawerTilePolicy.Place.at(4),
+            store.drawerTilePlace());
 
         store.setDrawerTileColumn(2);
-        assertEquals("2", prefs.getString("layout.drawer_tile_position", null));
+        assertEquals("2", prefs.getString("layout.home.drawer_tile_position", null));
         assertEquals(DrawerTilePolicy.Place.at(2), store().drawerTilePlace());
-        assertEquals(DrawerTilePolicy.Place.at(4), home.drawerTilePlace());
+        assertEquals(DrawerTilePolicy.Place.at(2), home.drawerTilePlace());
     }
 
     @Test
@@ -1494,12 +1488,12 @@ public class PlaceLayoutStoreTest {
         store.setExtraKeys(PORTRAIT, RowPlacement.HIDDEN);
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         // The status bar is (#90), so where it stands counts.
+        // Where the bar stands is every page's (ADR 0023 §1), so moving it is no difference.
         Slot bar = store.slot(PORTRAIT, Element.STATUS);
         store.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
-        assertTrue("the bar moved on one layout",
+        assertFalse("the bar moved on every layout",
             store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         store.setSlot(PORTRAIT, Element.STATUS, bar);
-        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         // The design is not an arrangement.
         home.setDockStyle(DockStyle.LENS_BEADS);
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
@@ -1609,8 +1603,9 @@ public class PlaceLayoutStoreTest {
             .putString("layout.landscape.status_bar", "bottom")
             .commit();
         PlaceLayoutStore store = store();
-        assertEquals("top", prefs.getString("layout.home.portrait.status_bar", null));
-        assertEquals("bottom", prefs.getString("layout.home.landscape.status_bar", null));
+        // One bar for every page (ADR 0023 §1): Home's, which took the window's at version 10.
+        assertEquals(Edge.TOP, store.statusBarEdge(PlaceOrientation.PORTRAIT));
+        assertEquals(Edge.BOTTOM, store.statusBarEdge(PlaceOrientation.LANDSCAPE));
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(orientation.name(),
                 store.resolve(orientation, PaneWallPage.TERMINAL).slot(Element.STATUS),

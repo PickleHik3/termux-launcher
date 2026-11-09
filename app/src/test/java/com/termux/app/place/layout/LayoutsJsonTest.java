@@ -74,14 +74,18 @@ public class LayoutsJsonTest {
         file.put(LayoutKind.HOME.key, "{not json");
         file.put(LayoutKind.TERMINAL.key,
             LayoutsJson.write(KindLayout.EMPTY.withWide(LayoutsJson.DOCK_DESIGN, "taskbar")));
-        file.put(LayoutKind.DISPLAY.key, "{\"portrait\":{}}");
+        file.put(LayoutKind.TERMINAL_MINIMAL.key, "{\"portrait\":{}}");
+        // A retired document (ADR 0025) is never read, bad or not: no warning for it.
+        file.put(LayoutKind.DISPLAY.key, "{not json");
         List<String> warnings = new ArrayList<>();
         Layouts layouts = LayoutsJson.read(new LayoutsJson.Source() {
             @Override public String read(String key) { return file.get(key); }
             @Override public void warn(String message) { warnings.add(message); }
         });
         assertEquals(LayoutsJson.shippedDefault(LayoutKind.HOME), layouts.kind(LayoutKind.HOME));
-        assertEquals(LayoutsJson.shippedDefault(LayoutKind.DISPLAY),
+        assertEquals(LayoutsJson.shippedDefault(LayoutKind.TERMINAL_MINIMAL),
+            layouts.kind(LayoutKind.TERMINAL_MINIMAL));
+        assertEquals("the Display wears the Workspace's", layouts.kind(LayoutKind.TERMINAL),
             layouts.kind(LayoutKind.DISPLAY));
         assertEquals("taskbar",
             layouts.kind(LayoutKind.TERMINAL).wide().string(LayoutsJson.DOCK_DESIGN));

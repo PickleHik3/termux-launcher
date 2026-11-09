@@ -1,12 +1,13 @@
 package com.termux.app.terminal;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.Random;
 
 /**
  * The ambient parts of a CRT pane, played only under the Idle animations switch (spec decision 4
- * and 10): a gentle flicker and, every 2 to 5 minutes, a short tear
+ * and 10): a gentle flicker and, at the Idle glitch rate ({@link Rate}), a short tear
  * ({@link PaneScreenEvent.Kind#AMBIENT_TEAR}). Pure arithmetic; {@link RetroEffectBinder} runs the
  * low-rate loop and {@link PaneRetroEffect} draws it from {@link RetroUniforms#flicker} and
  * {@link RetroUniforms#time}.
@@ -22,9 +23,34 @@ public final class PaneAmbient {
      * run a whole number of cycles in it, so the wrap never shows as a step.
      */
     public static final float TIME_WRAP_S = 1000f;
-    /** The shortest and longest wait for the next ambient tear. */
+    /** The shortest and longest wait for the next ambient tear at the default, {@link Rate#RARE}. */
     public static final long TEAR_MIN_MS = 2L * 60_000L;
     public static final long TEAR_MAX_MS = 5L * 60_000L;
+
+    /** The Idle glitch rate: how long an idle pane waits between ambient tears. */
+    public enum Rate {
+        RARE("rare", TEAR_MIN_MS, TEAR_MAX_MS),
+        SOMETIMES("sometimes", 30_000L, 90_000L),
+        OFTEN("often", 10_000L, 30_000L);
+
+        /** The stored value ({@code idle_tear_rate}). */
+        @NonNull public final String id;
+        public final long minMs;
+        public final long maxMs;
+
+        Rate(@NonNull String id, long minMs, long maxMs) {
+            this.id = id;
+            this.minMs = minMs;
+            this.maxMs = maxMs;
+        }
+
+        /** The rate stored as {@code id}; {@link #RARE} for null or anything unknown. */
+        @NonNull
+        public static Rate fromId(@Nullable String id) {
+            for (Rate r : values()) if (r.id.equals(id)) return r;
+            return RARE;
+        }
+    }
 
     private PaneAmbient() {}
 
@@ -43,7 +69,12 @@ public final class PaneAmbient {
 
     /** How long until the next ambient tear: uniform in [{@link #TEAR_MIN_MS}, {@link #TEAR_MAX_MS}]. */
     public static long nextTearDelayMs(@NonNull Random random) {
-        return TEAR_MIN_MS + (long) (random.nextDouble() * (TEAR_MAX_MS - TEAR_MIN_MS));
+        return nextTearDelayMs(random, Rate.RARE);
+    }
+
+    /** How long until the next ambient tear at {@code rate}: uniform in its [min, max]. */
+    public static long nextTearDelayMs(@NonNull Random random, @NonNull Rate rate) {
+        return rate.minMs + (long) (random.nextDouble() * (rate.maxMs - rate.minMs));
     }
 
     /** The flicker's depth: {@link #FLICKER_MAX} while the loop plays, 0 otherwise. */

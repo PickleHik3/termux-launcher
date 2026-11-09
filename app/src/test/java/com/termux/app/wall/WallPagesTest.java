@@ -651,4 +651,60 @@ public class WallPagesTest {
         assertEquals(2, wall(PageKind.HOME, PageKind.TERMINAL).terminalTarget().id);
         assertNull(wall(PageKind.HOME, PageKind.DISPLAY).terminalTarget());
     }
+
+    // ---- the Assistant page (ADR 0022) ---------------------------------------------------------
+
+    @Test
+    public void theAssistantPageLandsAfterTheAnchorAndOnlyOneStands() {
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        assertEquals(java.util.Arrays.asList(1, 4, 2, 3), ids(p));
+        assertEquals(PageKind.ASSISTANT, p.assistant().kind);
+        assertEquals(4, p.assistant().id);
+        assertNull(three().assistant());
+        assertEquals(Error.SECOND_ASSISTANT, p.add(PageKind.ASSISTANT, WallPages.END, null).error);
+        assertSame(p, p.add(PageKind.ASSISTANT, 1, null).pages);
+    }
+
+    @Test
+    public void theAssistantPageIsNotSeededAndTakesNoBinding() {
+        assertNull(three().assistant());
+        assertNull(WallPagesMigration.seed("workspace", 0, "home", 2).assistant());
+        assertEquals(Error.BINDING_NOT_DISPLAY,
+            three().add(PageKind.ASSISTANT, 1, "gimp").error);
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        assertEquals(Error.BINDING_NOT_DISPLAY, p.bind(p.assistant().id, "gimp").error);
+    }
+
+    @Test
+    public void startInNamesTheAssistantPageWhileItIsHomeAndChoosingItMakesItHome() {
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        assertEquals("home", p.startIn());
+        WallPages home = ok(p.chooseStartIn(WallRow.START_IN_ASSISTANT));
+        assertEquals(WallRow.START_IN_ASSISTANT, home.startIn());
+        assertEquals(PageKind.ASSISTANT, home.home().kind);
+        // Choosing Home again leaves the Assistant page for a Home page.
+        assertEquals("home", ok(home.chooseStartIn("home")).startIn());
+        // With no Assistant page there is nothing to choose.
+        assertEquals(Error.UNKNOWN_PAGE, three().chooseStartIn(WallRow.START_IN_ASSISTANT).error);
+    }
+
+    @Test
+    public void theAssistantPageIsNamedHasOneStopAndCanBeHome() {
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        assertEquals("Assistant", p.displayName(p.assistant(), null));
+        List<Stop> stops = p.stops(2);
+        int count = 0;
+        for (Stop stop : stops) if (stop.pageId == p.assistant().id) count++;
+        assertEquals(1, count);
+        WallPages home = ok(p.setHome(p.assistant().id));
+        assertEquals(p.assistant().id, home.home().id);
+    }
+
+    @Test
+    public void removingTheAssistantPageNeedsNoConfirmAndAllowsAnotherAfter() {
+        WallPages p = ok(three().add(PageKind.ASSISTANT, 1, null));
+        WallPages gone = ok(p.remove(p.assistant().id, 0, false));
+        assertNull(ok(gone.commitRemoval(p.assistant().id)).assistant());
+        assertTrue(ok(gone.commitRemoval(p.assistant().id)).add(PageKind.ASSISTANT, 1, null).ok());
+    }
 }

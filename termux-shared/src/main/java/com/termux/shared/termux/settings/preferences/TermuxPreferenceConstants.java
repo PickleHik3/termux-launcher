@@ -710,7 +710,7 @@ public final class TermuxPreferenceConstants {
         /**
          * Whose box the status row leaves its camera gap for when it shares the camera's band
          * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
-         * {@link #STATUS_BAR_CUTOUT_CUSTOM} the centre and width below, {@link #STATUS_BAR_CUTOUT_OFF}
+         * {@link #STATUS_BAR_CUTOUT_CUSTOM} Android's shape nudged by the values below, {@link #STATUS_BAR_CUTOUT_OFF}
          * leaves none.
          */
         public static final String KEY_STATUS_BAR_CUTOUT_MODE = "status_bar_cutout_mode";
@@ -719,17 +719,39 @@ public final class TermuxPreferenceConstants {
         public static final String STATUS_BAR_CUTOUT_OFF = "off";
         public static final String DEFAULT_STATUS_BAR_CUTOUT_MODE = STATUS_BAR_CUTOUT_AUTO;
 
-        /** A custom camera gap's centre, in dp from the screen's horizontal centre (left negative). */
-        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
-        public static final int DEFAULT_STATUS_BAR_CUTOUT_CENTER = 0;
-        public static final int MIN_STATUS_BAR_CUTOUT_CENTER = -200;
-        public static final int MAX_STATUS_BAR_CUTOUT_CENTER = 200;
+        /**
+         * The camera gap's nudges on Android's shape, Custom only: sideways in dp (left negative),
+         * down in dp, and size in percent. The margin is the air kept from the camera on each side
+         * and below, for Auto and Custom alike.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_X = "status_bar_cutout_offset_x";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_X = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_X = -200;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_X = 200;
 
-        /** A custom camera gap's full width, in dp. */
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_Y = "status_bar_cutout_offset_y";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_Y = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_Y = -24;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_Y = 24;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_SCALE = "status_bar_cutout_scale";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_SCALE = 100;
+        public static final int MIN_STATUS_BAR_CUTOUT_SCALE = 50;
+        public static final int MAX_STATUS_BAR_CUTOUT_SCALE = 200;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_MARGIN = "status_bar_cutout_margin";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_MARGIN = 4;
+        public static final int MIN_STATUS_BAR_CUTOUT_MARGIN = 0;
+        public static final int MAX_STATUS_BAR_CUTOUT_MARGIN = 24;
+
+        /**
+         * The camera gap's first centre and width (dp from the screen's centre; full width). No
+         * longer read: {@link #KEY_STATUS_BAR_CUTOUT_MIGRATED} says they were turned into the
+         * nudges above, once.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
         public static final String KEY_STATUS_BAR_CUTOUT_WIDTH = "status_bar_cutout_width";
-        public static final int DEFAULT_STATUS_BAR_CUTOUT_WIDTH = 32;
-        public static final int MIN_STATUS_BAR_CUTOUT_WIDTH = 0;
-        public static final int MAX_STATUS_BAR_CUTOUT_WIDTH = 160;
+        public static final String KEY_STATUS_BAR_CUTOUT_MIGRATED = "status_bar_cutout_migrated";
 
         /**
          * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
@@ -760,6 +782,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
 
         /**
+         * Engine for panes opened from now on: standard or ghostty. Standard for every install, new
+         * and existing, so nothing is adopted or migrated.
+         */
+        public static final String KEY_TERMINAL_ENGINE = "terminal_engine";
+        public static final String DEFAULT_TERMINAL_ENGINE = "standard";
+
+        /**
          * Whether CRT panes play their short screen events (bell tear, power on, focus wobble,
          * death static). Default true.
          */
@@ -767,11 +796,25 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERMINAL_SCREEN_EVENTS = true;
 
         /**
+         * Whether CRT panes blend neighbouring pixels sideways like a composite video cable, so
+         * dithering and pixel art read as shades. Default false.
+         */
+        public static final String KEY_TERMINAL_RETRO_COMPOSITE = "terminal_retro_composite";
+        public static final boolean DEFAULT_VALUE_TERMINAL_RETRO_COMPOSITE = false;
+
+        /**
          * Whether CRT panes play their ambient parts (a gentle flicker, a tear every few
          * minutes) while nothing happens. Costs battery. Default false.
          */
         public static final String KEY_IDLE_ANIMATIONS = "idle_animations";
         public static final boolean DEFAULT_VALUE_IDLE_ANIMATIONS = false;
+
+        /**
+         * How often an idle CRT pane plays its ambient tear under Idle animations: "rare" (every
+         * 2 to 5 minutes), "sometimes" (30 to 90 seconds) or "often" (10 to 30 seconds).
+         */
+        public static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
+        public static final String DEFAULT_VALUE_IDLE_TEAR_RATE = "rare";
 
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
@@ -1399,6 +1442,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_LIVE_BLUR = false;
 
         /**
+         * See through: whether a Live glass shows the other Live glass beneath it ("all") or only
+         * what is directly beneath it ("one"), at rest and while swiping. Default "all".
+         */
+        public static final String KEY_GLASS_SEE_THROUGH = "glass_see_through";
+        public static final String VALUE_GLASS_SEE_THROUGH_ALL = "all";
+        public static final String VALUE_GLASS_SEE_THROUGH_ONE = "one";
+        public static final String DEFAULT_VALUE_GLASS_SEE_THROUGH = VALUE_GLASS_SEE_THROUGH_ALL;
+
+        /**
          * Live windows while swiping: the windows beside the one in front are kept ready and
          * slide in live as the wall is dragged between windows. Off, a swipe shows them only
          * once it lands.
@@ -1459,6 +1511,20 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_FANCIER_GLASS_CLARITY = 0;
         public static final int MIN_FANCIER_GLASS_CLARITY = 0;
         public static final int MAX_FANCIER_GLASS_CLARITY = 100;
+
+        /**
+         * Clear's face terms, a Look's own and not a slider (no settings page shows them; each is
+         * a percentage and 0, the default, draws the glass as it always was). Face clarity: how
+         * much of the clearer picture the face shows where one is handed in. Dim: the dark layer
+         * over a bright backdrop and the faint light lift over a dark one. Size lens: larger
+         * surfaces bend and reach more.
+         */
+        public static final String KEY_FANCIER_GLASS_FACE_CLARITY = "fancier_glass_face_clarity";
+        public static final String KEY_FANCIER_GLASS_DIM = "fancier_glass_dim";
+        public static final String KEY_FANCIER_GLASS_SIZE_LENS = "fancier_glass_size_lens";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MIN_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MAX_FANCIER_GLASS_FACE_TERM = 100;
 
         /**
          * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
@@ -1880,6 +1946,45 @@ public final class TermuxPreferenceConstants {
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
+
+        /**
+         * What moves behind the launcher: {@code ""} (a photo), {@code shader:<id>} (a shader under
+         * {@code files/wallpaper/shaders/<id>/}) or {@code video:<name>} (a file under
+         * {@code files/wallpaper/video/}). See {@code WallpaperMotion}.
+         */
+        public static final String KEY_WALLPAPER_MOTION = "wallpaper_motion";
+        public static final String DEFAULT_VALUE_WALLPAPER_MOTION = "";
+
+        /**
+         * Retired with the AGSL scenes: read once at start by {@code WallpaperMotion.Migration},
+         * which clears it and the four keys below.
+         * The live wallpaper scene the launcher drew behind everything: {@code aurora},
+         * {@code contour-waves}, {@code nebula}, {@code bloom}, {@code particles} or {@code coastal-sunset}; empty is none.
+         * An unknown value reads as none (see {@code LiveWallpaperChoice}).
+         */
+        public static final String KEY_LIVE_WALLPAPER_SCENE = "live_wallpaper_scene";
+        public static final String DEFAULT_VALUE_LIVE_WALLPAPER_SCENE = "";
+
+        /** The live scene's speed, 0.25 to 2.0 times. */
+        public static final String KEY_LIVE_WALLPAPER_SPEED = "live_wallpaper_speed";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_SPEED = 1f;
+        public static final float MIN_LIVE_WALLPAPER_SPEED = 0.25f;
+        public static final float MAX_LIVE_WALLPAPER_SPEED = 2f;
+
+        /** The live scene's frame rate in Hz: 15, 30 or 60. */
+        public static final String KEY_LIVE_WALLPAPER_RATE_HZ = "live_wallpaper_rate_hz";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ = 30;
+
+        /** The live scene's density, -1 (sparser) to 1 (denser); only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_DENSITY = "live_wallpaper_density";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY = 0f;
+        public static final float MIN_LIVE_WALLPAPER_DENSITY = -1f;
+        public static final float MAX_LIVE_WALLPAPER_DENSITY = 1f;
+
+        /** The live scene's palette, 0 to 2; only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_PALETTE = "live_wallpaper_palette";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_PALETTE = 0;
+        public static final int MAX_LIVE_WALLPAPER_PALETTE = 2;
 
         /**
          * The launcher wears a picture of its own: the managed exact copy, set from the picker

@@ -299,4 +299,35 @@ public class GlassAnchorTest {
         mAboveWall.setScaleY(0.8f);
         assertEquals(rest, place().toScreen);
     }
+
+    /**
+     * A dock row's ink is measured where the row rests, so a crossing that carries the accessory
+     * stack up from below (its translationY) and sinks the row inside it judges the same rect the
+     * landing does: the toolbar rises in the ink it lands in.
+     */
+    @Test
+    public void aDockRowIsMeasuredWhereItRestsWhileACrossingCarriesTheStack() {
+        FrameLayout stack = new FrameLayout(mActivity);
+        View row = new View(mActivity);
+        stack.addView(row);
+        mAboveWall.addView(stack);
+        stack.layout(0, 1400, 1080, 2160);
+        row.layout(0, 0, 1080, 120);
+        int[] origin = new int[2];
+        int[] root = new int[2];
+        Rect atRest = new Rect();
+        GlassAnchor.layoutRectOnScreen(row, atRest, origin, root);
+        int[] onScreen = new int[2];
+        row.getLocationOnScreen(onScreen);
+        assertEquals(new Rect(onScreen[0], onScreen[1], onScreen[0] + 1080, onScreen[1] + 120),
+            atRest);
+
+        stack.setTranslationY(640f);
+        row.setTranslationY(36f);
+        Rect rising = new Rect();
+        GlassAnchor.layoutRectOnScreen(row, rising, origin, root);
+        assertEquals("the crossing judges the landing's rect", atRest, rising);
+        row.getLocationOnScreen(onScreen);
+        assertFalse("the travel moves the row on screen", onScreen[1] == atRest.top);
+    }
 }

@@ -27,8 +27,11 @@ import java.util.Set;
  * {@code layouts} file, never the flat key, which stays as it was for a downgrade. Everything else
  * passes through to the preferences.
  *
- * <p>The scope names the kind: none is the Terminal's, {@code home.} Home's, {@code display.} the
- * Display's, {@code minimal.} Terminal-minimal's. The four sizes are the one {@code sizes} document
+ * <p>The scope names the kind: none is the Workspace's, {@code home.} Home's, {@code minimal.}
+ * Workspace-minimal's. The retired scopes {@code display.} and {@code assistant.} (and their
+ * {@code place.dress.*} spellings) are the Workspace's too (ADR 0025): Terminal, Display and
+ * Assistant pages wear one document. Each place's remembered keyboard stays its own: the
+ * Terminal's in the document, the Display's and the Assistant's in their flat keys. The four sizes are the one {@code sizes} document
  * whatever the scope, and the widget grid is Home's whatever the scope: the cross-layout rules of
  * before (linked keys, grid key, dock rule, page fallback) are the shape of the data now.
  *
@@ -85,9 +88,8 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.TERMINAL,
             LayoutsJson.KEYBOARD_OPEN)))
             return new Route(LayoutKind.TERMINAL, null, LayoutsJson.KEYBOARD_OPEN);
-        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.DISPLAY,
-            LayoutsJson.KEYBOARD_OPEN)))
-            return new Route(LayoutKind.DISPLAY, null, LayoutsJson.KEYBOARD_OPEN);
+        // The Display's and the Assistant's remembered keyboard are their places' own, not the
+        // layout's: their documents are retired (ADR 0025), so they stay in the flat keys.
         return null;
     }
 
@@ -95,10 +97,11 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     private static Route routeLayout(@NonNull String rest) {
         LayoutKind kind = LayoutKind.TERMINAL;
         for (LayoutKind k : new LayoutKind[]{LayoutKind.HOME, LayoutKind.TERMINAL_MINIMAL,
-            LayoutKind.DISPLAY}) {
+            LayoutKind.DISPLAY, LayoutKind.ASSISTANT}) {
             String scope = scopeOf(k);
             if (rest.startsWith(scope)) {
-                kind = k;
+                // A retired scope's keys are the Workspace's (ADR 0025).
+                kind = k.live();
                 rest = rest.substring(scope.length());
                 break;
             }
@@ -114,9 +117,16 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
         if (rest.indexOf('.') >= 0) return null;
         if (orientation == null) {
+            // The dock's design, search field and drawer tile are one value for every page (ADR
+            // 0023 §1): held by Home, whatever scope asks.
+            if (LayoutsJson.SHARED_WIDE_FIELDS.contains(rest))
+                return new Route(LayoutKind.HOME, null, rest);
             return LayoutsJson.WIDE_FIELDS.contains(rest)
                 && !LayoutsJson.KEYBOARD_OPEN.equals(rest) ? new Route(kind, null, rest) : null;
         }
+        // The status bar's edge and compact rest likewise (ADR 0023 §1).
+        if (LayoutsJson.SHARED_ORIENTATION_FIELDS.contains(rest))
+            return new Route(LayoutKind.HOME, orientation, rest);
         if (LayoutsJson.SIZE_FIELDS.contains(rest)) return new Route(null, orientation, rest);
         if (LayoutsJson.GRID_FIELDS.contains(rest))
             return new Route(LayoutKind.HOME, orientation, rest);
@@ -132,8 +142,9 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         LayoutKind kind = LayoutKind.forKey(parts[0]);
         if (kind == null || kind == LayoutKind.TERMINAL_MINIMAL) return null;
         for (PlaceOrientation o : PlaceOrientation.values()) {
+            // A Display or Assistant page shows what the Workspace shows (ADR 0025).
             if (o.storageValue().equals(parts[1]))
-                return new Route(kind, o, LayoutsJson.DRESS_PREFIX + parts[2]);
+                return new Route(kind.live(), o, LayoutsJson.DRESS_PREFIX + parts[2]);
         }
         return null;
     }
@@ -145,6 +156,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
             case HOME: return LayoutVariant.HOME.keyScope();
             case TERMINAL_MINIMAL: return LayoutVariant.MINIMAL.keyScope();
             case DISPLAY: return LayoutVariant.DISPLAY.keyScope();
+            case ASSISTANT: return LayoutVariant.ASSISTANT.keyScope();
             default: return LayoutVariant.NORMAL.keyScope();
         }
     }
@@ -202,16 +214,20 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
         Layouts layouts = store.current();
         for (LayoutKind kind : LayoutKind.values()) {
+            // A retired kind's keys read the Workspace's document, listed once under its own.
+            if (kind.retired()) continue;
             KindLayout layout = layouts.kind(kind);
             String scope = LAYOUT + scopeOf(kind);
             for (String field : layout.wide().keys()) {
                 if (LayoutsJson.KEYBOARD_OPEN.equals(field)) {
-                    if (kind == LayoutKind.TERMINAL || kind == LayoutKind.DISPLAY)
-                        all.put(PlaceLayoutStore.memoryKey(kind == LayoutKind.TERMINAL
-                                ? com.termux.app.wall.PaneWallPage.TERMINAL
-                                : com.termux.app.wall.PaneWallPage.DISPLAY, field),
+                    if (kind == LayoutKind.TERMINAL)
+                        all.put(PlaceLayoutStore.memoryKey(
+                                com.termux.app.wall.PaneWallPage.TERMINAL, field),
                             layout.wide().get(field));
                 } else if (LayoutsJson.WIDE_FIELDS.contains(field)) {
+                    // Shared fields read from Home alone: another kind's stale copy is not shown.
+                    if (kind != LayoutKind.HOME && LayoutsJson.SHARED_WIDE_FIELDS.contains(field))
+                        continue;
                     all.put(scope + field, layout.wide().get(field));
                 }
             }
@@ -226,7 +242,10 @@ final class LayoutDocumentPrefs implements SharedPreferences {
                     } else if (LayoutsJson.GRID_FIELDS.contains(field)) {
                         if (kind == LayoutKind.HOME)
                             all.put(scope + o.storageValue() + "." + field, value);
-                    } else if (LayoutsJson.ORIENTATION_FIELDS.contains(field)) {
+                    } else if (LayoutsJson.ORIENTATION_FIELDS.contains(field)
+                        || LayoutsJson.STATUS_EDGE.equals(field)) {
+                        if (kind != LayoutKind.HOME
+                            && LayoutsJson.SHARED_ORIENTATION_FIELDS.contains(field)) continue;
                         all.put(scope + o.storageValue() + "." + field, value);
                     }
                 }

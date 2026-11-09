@@ -10,6 +10,7 @@ import com.termux.app.dock.DockRows;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
 import com.termux.app.wall.PageRef;
+import com.termux.app.wall.PaneWallPage;
 
 /**
  * Stack layout (ADR 0011): the whole bottom stack as a pure function of one snapshot. The dock's
@@ -127,7 +128,7 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.isHome());
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.kind);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -224,11 +225,12 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx, boolean homePage) {
+             int imeLiftPx, @NonNull PaneWallPage rowsPage) {
             // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
-            boolean peekCardStands = DockPlacement.peekCardStands(
+            // Read for the page whose rows the stack stands, as the activity dresses the dock.
+            boolean peekCardStands = DockPlacement.peekCardStandsOn(rowsPage,
                 DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
-                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0, homePage);
+                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
             lifted = toolbarShown || keyboardShown;
@@ -343,7 +345,7 @@ public final class StackLayout {
         DockGeometry.Half half = in.dock.half(in.page);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.page));
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.isHome());
+            in.imeLiftPx, in.page.kind);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
@@ -364,7 +366,7 @@ public final class StackLayout {
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.page);
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.isHome());
+            in.imeLiftPx, in.page.kind);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);

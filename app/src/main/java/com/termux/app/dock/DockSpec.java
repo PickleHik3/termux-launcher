@@ -25,7 +25,7 @@ import com.termux.app.chrome.GlassRefraction;
 public final class DockSpec {
 
     /** The kind of page in front (ADR 0018 §3). */
-    public enum PageKind { HOME, TERMINAL, DISPLAY }
+    public enum PageKind { HOME, TERMINAL, DISPLAY, ASSISTANT }
 
     /** What the card's bottom edge meets. */
     public enum Base {

@@ -70,7 +70,7 @@ import java.util.WeakHashMap;
  * ignored.
  */
 public final class PaneWallLayout extends ViewGroup
-        implements com.termux.app.chrome.LiveBackdrop.Container {
+        implements com.termux.app.chrome.LiveBackdrop.Wall {
 
     // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
     // starts where the finger let go and at the finger's own speed, so the release has no seam,
@@ -2781,9 +2781,26 @@ public final class PaneWallLayout extends ViewGroup
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
-        drawBorderGlow(canvas);
         mGrabberDrawnOffsetPx = mOffsetPx;
         mGrabberDrawnSink = mSink;
+        drawDecor(canvas);
+    }
+
+    /** Live blur's page layer: the glow and the grabbers, as {@link #dispatchDraw} draws them now. */
+    @Override
+    public void drawDecorForBackdrop(@NonNull android.graphics.Canvas canvas) {
+        drawDecor(canvas);
+    }
+
+    /** Live blur holds the pages in a layer of their own while the wall is anywhere but at rest. */
+    @Override
+    public boolean isMovingForBackdrop() {
+        return isMoving();
+    }
+
+    /** Everything the wall draws over its pages: the border glow, then the grabbers. */
+    private void drawDecor(@NonNull android.graphics.Canvas canvas) {
+        drawBorderGlow(canvas);
         boolean bottom = isGrabberShown();
         boolean top = isStatusGrabberShown();
         if (!bottom && !top) return;
@@ -3250,7 +3267,13 @@ public final class PaneWallLayout extends ViewGroup
             @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
             @Override public void onAnimationEnd(Animator animation) {
                 if (mSlide == animation) mSlide = null;
-                if (!mCancelled) settleImmediately();
+                if (mCancelled) return;
+                mSettleEndsSlide = true;
+                try {
+                    settleImmediately();
+                } finally {
+                    mSettleEndsSlide = false;
+                }
             }
         });
         mSlide = slide;
@@ -3265,6 +3288,18 @@ public final class PaneWallLayout extends ViewGroup
         ValueAnimator slide = mSlide;
         mSlide = null;
         if (slide != null) slide.cancel();
+    }
+
+    /** Set while a slide's own last frame settles the wall (its animator ended, not cancelled). */
+    private boolean mSettleEndsSlide;
+
+    /**
+     * Whether the settle being reported is the last frame of a slide: the frame the page lands
+     * in, drawn as the slide's last step. A listener may leave what does not show in it for just
+     * after that frame (LandedFrameSettle). False for a settle with no slide behind it.
+     */
+    public boolean settleEndsSlide() {
+        return mSettleEndsSlide;
     }
 
     private void settleImmediately() {
@@ -3587,8 +3622,9 @@ public final class PaneWallLayout extends ViewGroup
      * display window's frame the opening (the margin less the terminal's own air); and a Home page
      * none, since it has no frame and its grid's rim is Home's Margin.
      */
-    private int frameMarginPx(@NonNull View child, int marginPx) {
-        return PaneWallPolicy.pageInsetPx(pageKindOf(child), marginPx, mTerminalFrameAirPx);
+    private int frameMarginPx(@NonNull View child, int marginPx, boolean side) {
+        return PaneWallPolicy.pageInsetPx(pageKindOf(child), marginPx, mTerminalFrameAirPx, side,
+            getResources().getDisplayMetrics().density);
     }
 
     /**
@@ -3694,12 +3730,12 @@ public final class PaneWallLayout extends ViewGroup
             // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
             if (!isLaidOutNow(child)) continue;
             int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
-                - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
-                - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
+                - getPaddingRight() - frameMarginPx(child, margins.leftMargin, true)
+                - frameMarginPx(child, margins.rightMargin, true)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
                 - getPaddingBottom() - pageTopInsetPx(child) - pageBottomInsetPx(child)
-                - frameMarginPx(child, margins.topMargin)
-                - frameMarginPx(child, margins.bottomMargin)), MeasureSpec.EXACTLY);
+                - frameMarginPx(child, margins.topMargin, false)
+                - frameMarginPx(child, margins.bottomMargin, false)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
         }
     }
@@ -3716,13 +3752,13 @@ public final class PaneWallLayout extends ViewGroup
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (!isLaidOutNow(child)) continue;
-            int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin);
+            int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin, true);
             int top = getPaddingTop() + pageTopInsetPx(child)
-                + frameMarginPx(child, margins.topMargin);
+                + frameMarginPx(child, margins.topMargin, false);
             int right = Math.max(left, r - l - getPaddingRight()
-                - frameMarginPx(child, margins.rightMargin));
+                - frameMarginPx(child, margins.rightMargin, true));
             int bottom = Math.max(top, b - t - getPaddingBottom() - pageBottomInsetPx(child)
-                - frameMarginPx(child, margins.bottomMargin));
+                - frameMarginPx(child, margins.bottomMargin, false));
             // A page that came on screen during this pass was not measured by it.
             if (child.getMeasuredWidth() != right - left || child.getMeasuredHeight() != bottom - top) {
                 child.measure(MeasureSpec.makeMeasureSpec(right - left, MeasureSpec.EXACTLY),

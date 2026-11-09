@@ -104,6 +104,27 @@ public class TerminalPreferencesFragmentTest {
         assertTrue(io.getBoolean("compatibility_mode", false));
     }
 
+    @Test
+    public void theTerminalEngineRowIsOnCompatibilityAndShowsOnlyWhereGhosttyCanRun() {
+        boolean available = com.termux.terminal.TerminalEngine.isAvailable();
+        TerminalClipboardPreferencesFragment fragment = launch(TerminalClipboardPreferencesFragment.class);
+        androidx.preference.ListPreference row = fragment.findPreference("terminal_engine");
+        assertTrue(row != null);
+        assertEquals("Standard (Termux)", row.getEntries()[0].toString());
+        assertEquals("Fast (LibGhostty)", row.getEntries()[1].toString());
+        assertEquals("standard", row.getEntryValues()[0].toString());
+        assertEquals("ghostty", row.getEntryValues()[1].toString());
+        assertEquals("every install starts on Standard", "standard",
+            TerminalViewPreferencesDataStore.getInstance(RuntimeEnvironment.getApplication())
+                .getString("terminal_engine", null));
+        assertEquals("hidden unless the library loads", available, row.isVisible());
+        boolean searchable = false;
+        for (com.termux.app.fragments.settings.SettingsSearchIndex.Entry entry :
+            com.termux.app.fragments.settings.SettingsSearchIndex.build(RuntimeEnvironment.getApplication()).entries())
+            searchable |= "terminal_engine".equals(entry.key);
+        assertEquals("search finds it exactly when the row shows", available, searchable);
+    }
+
     private static String activityTitle(Fragment fragment) {
         return fragment.getActivity() == null ? null : fragment.getActivity().getTitle().toString();
     }

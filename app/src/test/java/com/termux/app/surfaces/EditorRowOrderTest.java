@@ -49,9 +49,10 @@ public class EditorRowOrderTest {
         for (Row row : new Row[] {Row.DOCK_TYPE, Row.STATUS_POSITION, Row.FORM, Row.STYLE,
                 Row.DESIGN, Row.DOCK_STYLE, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.THEME})
             assertEquals(row.name(), Group.LOOK, EditorRows.groupOf(row));
-        assertEquals("the Dock opens on its Type", Row.DOCK_TYPE,
+        // The Dock's Type and the Status bar's Position are the Global card's (ADR 0023 §1).
+        assertEquals("the Dock opens on its icon size", Row.HOME_ICON_SIZE,
             EditorRows.rows(EditorCard.DOCK, OFFERS[0]).get(0).row);
-        assertEquals("the Status bar opens on its Position", Row.STATUS_POSITION,
+        assertEquals("the Status bar opens on its indicators", Row.STATUS_INDICATORS,
             EditorRows.rows(EditorCard.STATUS, OFFERS[0]).get(0).row);
         assertEquals("the Keyboard opens on its Form", Row.FORM,
             EditorRows.rows(EditorCard.KEYBOARD, OFFERS[0]).get(0).row);
