@@ -7043,11 +7043,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneWallController.goToPageId(id, animate && isVisible());
             }
             @Override public void showAdded(@NonNull Runnable undo) {
-                View anchor = mPaneWallController.assistantView();
-                if (anchor == null) anchor = findViewById(android.R.id.content);
-                if (anchor == null) return;
-                com.google.android.material.snackbar.Snackbar.make(anchor,
-                        R.string.assistant_page_added, 4000)
+                // Made from the activity's content, not from the sliding page: the parent walk from
+                // the fresh page view settles inside the wall, clipped or under the chrome.
+                View root = findViewById(android.R.id.content);
+                if (root == null) return;
+                com.google.android.material.snackbar.Snackbar bar =
+                    com.google.android.material.snackbar.Snackbar.make(root,
+                        R.string.assistant_page_added, 4000);
+                View chrome = findViewById(R.id.accessory_stack_container);
+                if (chrome == null || chrome.getVisibility() != View.VISIBLE
+                        || !chrome.isLaidOut() || chrome.getHeight() <= 0) {
+                    chrome = getExtraKeysView();
+                    if (chrome != null && (chrome.getVisibility() != View.VISIBLE
+                            || !chrome.isLaidOut() || chrome.getHeight() <= 0)) chrome = null;
+                }
+                if (chrome != null) bar.setAnchorView(chrome);
+                bar
                     .setAction(R.string.page_overview_undo, v -> undo.run()).show();
             }
         });
