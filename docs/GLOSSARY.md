@@ -366,8 +366,8 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
 **Terminal engine**:
 What reads a pane's output and keeps its screen and history: **Standard** (the Java core Termux
-has always had) or **Fast** (libghostty-vt, Ghostty's terminal library, about 15 times quicker on
-heavy output). Chosen on Settings › Terminal › Clipboard & compatibility for panes opened after the
+has always had) or **Fast** (libghostty-vt, Ghostty's terminal library, about 20 times quicker at
+reading heavy output). Chosen on Settings › Terminal › Clipboard & compatibility for panes opened after the
 change; offered only in builds that carry the library. A native crash with a Fast pane open turns
 Fast off for new panes until the app is updated. In code a `TerminalContent` behind
 `TerminalSession.chooseEngine` (ADR 0026); `debug.tl.terminal_core` overrides it for testing.

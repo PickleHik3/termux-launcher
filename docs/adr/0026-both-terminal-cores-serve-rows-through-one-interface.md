@@ -81,7 +81,7 @@ We decided:
 
 Accepted after the wave 3 pong session (`project-docs/device-checks.md`, results in the developer's
 `~/reports/ghostty-core-2026-11-09/w3`). With the history copy gone, parsing a 13 MB transcript runs at
-340 MB/s on the Ghostty core (the Java core 14–18 MB/s); the per-turn screen copy costs 0.6 ms at
-worst, and the main thread's p90 delay during a flood fell from 36 ms to 1.6 ms. Full-screen redraw
+300–340 MB/s on the Ghostty core (the Java core 14–18 MB/s); the per-turn screen copy costs 0.6 ms
+at worst, and the main thread's p90 frame delay during a flood is 1.6 ms (Java 8.4 ms). Full-screen redraw
 stays drawing-bound and equal on both cores. Both cores serve every reader through
 `TerminalContent`; the engine is a user setting ("Terminal engine", Standard by default).

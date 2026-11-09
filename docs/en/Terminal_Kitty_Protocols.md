@@ -377,9 +377,22 @@ Builds that carry libghostty-vt (Ghostty's terminal library) offer **Settings �
 Clipboard & compatibility → Terminal engine**:
 
 - **Standard (Termux)**, the default, is the Java engine Termux has always used.
-- **Fast (LibGhostty)** reads output with libghostty-vt. On pong it parses heavy output about 15
-  times quicker (a 13 MB `cat` shows in about 1 s instead of 5), keeps scrollback compressed when
-  idle, and holds the screen still while a program draws a frame (synchronized output, mode 2026).
+- **Fast (LibGhostty)** reads output with libghostty-vt. It handles heavy output much faster,
+  keeps scrollback compressed when idle, and holds the screen still while a program draws a frame
+  (synchronized output, mode 2026).
+
+Measured on a Nothing Phone 2 (120 Hz):
+
+| | Standard | Fast |
+|---|---|---|
+| Reading output (13 MB of mixed text, nothing drawn) | 14–18 MB/s | 300–340 MB/s |
+| `cat` of 200,000 lines on screen | about 5 s | about 1 s |
+| Main thread's frame delay during that `cat` (p90) | 8.4 ms | 1.6 ms |
+| Full-screen redraw, btop, typing while output streams | same | same |
+| An animated kitty image: frames over twice the budget in 10 s | 15 | 30 |
+
+Drawing is shared, so screens that redraw everything cost the same on both; Fast pays off when
+programs print a lot.
 
 The choice applies to panes you open after changing it; open panes keep their engine. Drawing,
 fonts, links, copy, prompt jumps, kitty images and keyboard are the same on both. Where Fast differs:
