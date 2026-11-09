@@ -94,6 +94,7 @@ public class ExtraKeyEligibilityTest {
             LauncherToolRegistry.TOOL_WALL_WIDGETS,
             LauncherToolRegistry.TOOL_WALL_TERMINAL,
             LauncherToolRegistry.TOOL_WALL_DISPLAY,
+            LauncherToolRegistry.TOOL_WALL_ASSISTANT,
         }) {
             for (PaneWallPage place : PaneWallPage.values())
                 assertTrue(tool + " on " + place, ExtraKeyEligibility.isUsable(key(tool), place));
@@ -193,6 +194,11 @@ public class ExtraKeyEligibilityTest {
             ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_TERMINAL)));
         assertSame(PaneWallPage.DISPLAY,
             ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_DISPLAY)));
+        assertSame(PaneWallPage.ASSISTANT,
+            ExtraKeyEligibility.placeSwitchTarget(key(LauncherToolRegistry.TOOL_WALL_ASSISTANT)));
+        // The Assistant key adds the page when the wall has none, so it is never drawn dead.
+        assertTrue(ExtraKeyEligibility.isUsable(key(LauncherToolRegistry.TOOL_WALL_ASSISTANT),
+            PaneWallPage.WIDGETS, java.util.Arrays.asList(PaneWallPage.WIDGETS)));
         // wall.go counts only when it says where it is going.
         assertSame(PaneWallPage.DISPLAY, ExtraKeyEligibility.placeSwitchTarget(
             key(LauncherToolRegistry.TOOL_WALL_GO) + ":place=display"));
@@ -272,9 +278,9 @@ public class ExtraKeyEligibilityTest {
         }
         // window.move and its left/right pair are multiplexing, beside window.select, and so are
         // pane.consume and pane.expel.
-        assertEquals(101, declared);
+        assertEquals(102, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(31), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(32), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(46), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

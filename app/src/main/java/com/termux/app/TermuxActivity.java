@@ -36982,6 +36982,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 openDisplayWindow(true);
                 return true;
             }
+            // The Assistant key: the page when the wall has one, else the entry adds it (Undo).
+            if ("assistant".equalsIgnoreCase(page.trim())) {
+                if (mPaneWallController == null) return false;
+                openAssistant();
+                return true;
+            }
             // Go to Terminal means a terminal: on the display window, the terminal window behind
             // it comes in front (a fresh shell when there is none).
             if ("terminal".equalsIgnoreCase(page.trim())) bringTerminalWindowInFront();

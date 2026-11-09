@@ -89,6 +89,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_WALL_WIDGETS = "wall.widgets";
     public static final String TOOL_WALL_TERMINAL = "wall.terminal";
     public static final String TOOL_WALL_DISPLAY = "wall.display";
+    public static final String TOOL_WALL_ASSISTANT = "wall.assistant";
     public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_SPLIT = "pane.split";
     /** Panes opened and driven through the local API (agents, scripts); see AgentPaneRegistry. */
@@ -354,6 +355,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WALL_WIDGETS:
             case TOOL_WALL_TERMINAL:
             case TOOL_WALL_DISPLAY:
+            case TOOL_WALL_ASSISTANT:
             case TOOL_MOUSE_TOGGLE:
             case TOOL_PANE_TOGGLE_FLOAT:
             case TOOL_PANE_OPEN:
@@ -687,9 +689,11 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_WALL_WIDGETS:
                 case TOOL_WALL_TERMINAL:
+                case TOOL_WALL_ASSISTANT:
                 case TOOL_WALL_DISPLAY: {
                     String page = TOOL_WALL_WIDGETS.equals(toolName) ? "widgets"
-                        : TOOL_WALL_DISPLAY.equals(toolName) ? "display" : "terminal";
+                        : TOOL_WALL_DISPLAY.equals(toolName) ? "display"
+                        : TOOL_WALL_ASSISTANT.equals(toolName) ? "assistant" : "terminal";
                     if (!host.goToWallPage(page)) {
                         return error(400, "bad_request", "That place is not on this install's wall");
                     }

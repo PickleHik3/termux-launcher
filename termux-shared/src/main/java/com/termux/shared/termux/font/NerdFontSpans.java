@@ -1,12 +1,18 @@
 package com.termux.shared.termux.font;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.style.MetricAffectingSpan;
+import android.text.style.ReplacementSpan;
+import android.util.SparseIntArray;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -32,7 +38,61 @@ public final class NerdFontSpans {
     @Nullable private static volatile Typeface sTypeface;
     private static volatile boolean sLoadFailed;
 
+    /**
+     * Code points that stand for a drawable rather than a font glyph (an icon the symbols face
+     * lacks). Registered once at startup by the app; read on the UI thread when a label is set.
+     */
+    private static final SparseIntArray sDrawableSymbols = new SparseIntArray();
+
     private NerdFontSpans() {}
+
+    /**
+     * Makes {@code codePoint} (keep it outside the Nerd Font ranges, e.g. plane 16) draw as the
+     * drawable wherever a label goes through {@link #span}: sized to the text and tinted with the
+     * text's current colour, so it follows the key ink and the pressed state like a font glyph.
+     */
+    public static void registerDrawableSymbol(int codePoint, @DrawableRes int drawableRes) {
+        synchronized (sDrawableSymbols) {
+            sDrawableSymbols.put(codePoint, drawableRes);
+        }
+    }
+
+    private static int drawableFor(int codePoint) {
+        synchronized (sDrawableSymbols) {
+            return sDrawableSymbols.get(codePoint, 0);
+        }
+    }
+
+    /** {@code spanned} with a tinted-drawable span over every registered code point of the label. */
+    private static void spanDrawables(@NonNull Context context, @NonNull CharSequence label,
+                                      @NonNull SpannableString spanned) {
+        int length = label.length();
+        int index = 0;
+        while (index < length) {
+            int codePoint = Character.codePointAt(label, index);
+            int count = Character.charCount(codePoint);
+            int res = drawableFor(codePoint);
+            if (res != 0) {
+                Drawable drawable = context.getDrawable(res);
+                if (drawable != null) {
+                    spanned.setSpan(new TintedDrawableSpan(drawable.mutate()), index, index + count,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            }
+            index += count;
+        }
+    }
+
+    private static boolean hasDrawableSymbol(@NonNull CharSequence label) {
+        int length = label.length();
+        int index = 0;
+        while (index < length) {
+            int codePoint = Character.codePointAt(label, index);
+            if (drawableFor(codePoint) != 0) return true;
+            index += Character.charCount(codePoint);
+        }
+        return false;
+    }
 
     /** The bundled symbols face, or null when the asset is missing (e.g. bare-module tests). */
     @Nullable
@@ -90,11 +150,14 @@ public final class NerdFontSpans {
             }
             index += Character.charCount(codePoint);
         }
-        if (!hasSymbol) return label;
-        Typeface typeface = typeface(context);
-        if (typeface == null) return label;
+        boolean hasDrawable = hasDrawableSymbol(label);
+        if (!hasSymbol && !hasDrawable) return label;
+        Typeface typeface = hasSymbol ? typeface(context) : null;
+        if (typeface == null && !hasDrawable) return label;
 
         SpannableString spanned = new SpannableString(label);
+        if (hasDrawable) spanDrawables(context, label, spanned);
+        if (typeface == null) return spanned;
         int runStart = -1;
         index = 0;
         while (index < length) {
@@ -144,6 +207,45 @@ public final class NerdFontSpans {
         if (runStart >= 0)
             editable.setSpan(new SymbolTypefaceSpan(typeface), runStart, length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    /**
+     * Draws a drawable in place of one code point: a square the size of the text, centred on the
+     * capital height, filled with the paint's colour so it follows the text colour and its state.
+     * The tint is only re-applied when the colour changes, so a draw allocates nothing.
+     */
+    static final class TintedDrawableSpan extends ReplacementSpan {
+
+        @NonNull private final Drawable mDrawable;
+        private int mTint;
+        private boolean mTinted;
+
+        TintedDrawableSpan(@NonNull Drawable drawable) {
+            mDrawable = drawable;
+        }
+
+        @Override public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
+                                     @Nullable Paint.FontMetricsInt fm) {
+            return Math.round(paint.getTextSize());
+        }
+
+        @Override public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end,
+                                   float x, int top, int y, int bottom, @NonNull Paint paint) {
+            int size = Math.round(paint.getTextSize());
+            int color = paint.getColor();
+            if (!mTinted || color != mTint) {
+                mDrawable.setTint(color | 0xFF000000);
+                mTint = color;
+                mTinted = true;
+            }
+            mDrawable.setAlpha(color >>> 24);
+            // The middle of a capital sits about 0.36 em above the baseline, which is where the
+            // Nerd glyphs centre their icons.
+            int centre = Math.round(y - 0.36f * size);
+            int left = Math.round(x);
+            mDrawable.setBounds(left, centre - size / 2, left + size, centre - size / 2 + size);
+            mDrawable.draw(canvas);
+        }
     }
 
     /**

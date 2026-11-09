@@ -193,6 +193,7 @@ not.
 | `wall.widgets` | Go to Home | | |
 | `wall.terminal` | Go to Terminal | | |
 | `wall.display` | Go to Display | | |
+| `wall.assistant` | Go to Assistant | | |
 
 ### Appearance
 
