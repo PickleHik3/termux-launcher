@@ -18,16 +18,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
-- **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
-  800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends
-  on its own; the hint reads "GIF converted to video · 800×1412 · 5 s · N MB · hardware decoded";
-  the stored file under files/wallpaper/video/ is an .mp4 and the GIF is gone; the MP4's size; the
-  launcher process CPU near idle (was about 50% of one core with the GIF; `dumpsys cpuinfo`); the
-  loop seam (end to start) has no hitch, flash or black frame; it is cover-cropped like a video.
-  A one-frame GIF stays a still. `debug.tl.video_file` on a .gif runs the same conversion.
-  Fallback (force a failure): the GIF still plays, its hint says "decodes on the CPU", and its
-  frames still update with the hardware canvas (a frozen frame means updateTexImage ran before the
-  render thread posted the buffer).
+- **GIF import converts to video (11-09, perf/gif-wallpaper).** Seen on pong 11-09 with the
+  developer's 32 MB 800x1412 5 s GIF: the stored file is a 3.2 MB HEVC .mp4, the GIF is gone, the
+  hint reads "GIF converted to video · 800×1412 · 5 s · 3 MB · hardware decoded", it plays through
+  the Qualcomm decoder with 0 dropped frames, and the launcher fell from about 50-65% of one core
+  (scene thread 42%) to 44% (scene thread 17%, RenderThread 18%, main 8%); the rest is the fixed
+  30 Hz scene loop plus the 15 Hz glass pass. Still owed · pong: the conversion time by the clock
+  (the log puts it under 15 s); the loop seam (end to start) has no hitch, flash or black frame;
+  it is cover-cropped like a video. Emulator: a one-frame GIF stays a still; `debug.tl.video_file`
+  on a .gif runs the same conversion; fallback (force a failure): the GIF still plays, its hint
+  says "decodes on the CPU", and its frames still update with the hardware canvas (a frozen frame
+  means updateTexImage ran before the render thread posted the buffer).
 
 - **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
   shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout

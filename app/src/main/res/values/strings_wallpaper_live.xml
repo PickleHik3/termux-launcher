@@ -41,7 +41,7 @@
     <string name="shader_delete_no">Cancel</string>
 
     <string name="video_heading">Video</string>
-    <string name="video_format_hint">Best: an H.265 MP4 at the screen\'s size or smaller, 24–30 fps, a 5–15 s seamless loop, under 20 MB. H.264 also works. GIFs decode on the CPU and use more battery.</string>
+    <string name="video_format_hint">Best: an H.265 MP4 at the screen\'s size or smaller, 24–30 fps, a 5–15 s seamless loop, under 20 MB. H.264 also works. A GIF is converted to a video when you choose it.</string>
     <string name="video_choose">Choose video or GIF</string>
     <string name="video_in_use">In use: %1$s</string>
     <string name="video_copying">Copying…</string>
