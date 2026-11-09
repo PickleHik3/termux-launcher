@@ -109,4 +109,52 @@ public class VideoProgressLogicTest {
         l.finish(true);
         assertFalse(l.busy());
     }
+
+    private static final String PREP = "Preparing %1$d fps version\u2026 %2$d%%";
+
+    @Test
+    public void preparingShowsTheRateAndPercentAndKeepsRatesUsable() {
+        VideoProgressLogic l = new VideoProgressLogic();
+        l.startPreparing(15);
+        assertTrue(l.busy());
+        assertTrue(l.preparing());
+        assertFalse(l.indeterminate());
+        assertEquals("Preparing 15 fps version\u2026 0%", l.label(COPY, CONV, APPLY, PREP));
+        assertTrue(l.onProgress(0.42f, 1000));
+        assertEquals("Preparing 15 fps version\u2026 42%", l.label(COPY, CONV, APPLY, PREP));
+        l.finish(true);
+        assertFalse(l.busy());
+        assertFalse(l.preparing());
+    }
+
+    @Test
+    public void importOfAVideoReadsPreparingAndAGifKeepsConverting() {
+        VideoProgressLogic l = new VideoProgressLogic();
+        l.start();
+        l.setImportRate(30);
+        l.onProgress(0.5f, 0);
+        assertFalse(l.preparing());
+        assertEquals("Preparing 30 fps version\u2026 50%", l.label(COPY, CONV, APPLY, PREP));
+        l.start();
+        l.setImportRate(0);
+        l.onProgress(0.5f, 0);
+        assertEquals("Converting GIF to video\u2026 50%", l.label(COPY, CONV, APPLY, PREP));
+    }
+
+    @Test
+    public void copyingStaysCopyingEvenWithARate() {
+        VideoProgressLogic l = new VideoProgressLogic();
+        l.start();
+        l.setImportRate(60);
+        assertEquals(COPY, l.label(COPY, CONV, APPLY, PREP));
+    }
+
+    @Test
+    public void startAfterPreparingClearsIt() {
+        VideoProgressLogic l = new VideoProgressLogic();
+        l.startPreparing(15);
+        l.start();
+        assertFalse(l.preparing());
+        assertTrue(l.indeterminate());
+    }
 }

@@ -24691,6 +24691,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.chrome.scene.VideoImport.Result r = com.termux.app.chrome.scene.VideoImport.importFile(c, u, p::onProgress);
                         return new com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result(r.ok, r.name, r.hint, r.error);
                     }
+
+                    @Override
+                    public com.termux.app.chrome.scene.VideoVariants.State state(android.content.Context c) {
+                        return com.termux.app.chrome.scene.VideoVariants.state(c);
+                    }
+
+                    @Override
+                    public com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result prepareRate(android.content.Context c, int hz,
+                            com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Progress p,
+                            java.util.concurrent.atomic.AtomicBoolean cancel) {
+                        com.termux.app.chrome.scene.VideoVariants.Result r =
+                            com.termux.app.chrome.scene.VideoVariants.prepare(c, hz, p::onProgress, cancel);
+                        return new com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result(r.ok, null, null, r.error);
+                    }
                 });
                 final com.termux.app.surfaces.WallpaperSheet shell =
                     new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,

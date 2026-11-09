@@ -31,6 +31,8 @@ import com.termux.app.chrome.scene.ShaderCheck;
 import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderExamples;
 import com.termux.app.chrome.scene.ShaderStore;
+import com.termux.app.chrome.scene.VideoImport;
+import com.termux.app.chrome.scene.VideoVariants;
 import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -42,6 +44,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -91,6 +94,22 @@ public final class WallpaperLiveHost {
         @NonNull
         Result importFile(@NonNull Context context, @NonNull Uri uri);
 
+        /** What versions the stored video has, or null when none is stored or this source has none. Off the main thread. */
+        @Nullable
+        default VideoVariants.State state(@NonNull Context context) {
+            return null;
+        }
+
+        /**
+         * Makes the version for {@code hz} from the stored video, blocking, reporting a fraction;
+         * {@code cancel} set true stops it. Only {@link Result#ok} and {@link Result#error} are set.
+         */
+        @NonNull
+        default Result prepareRate(@NonNull Context context, int hz, @NonNull Progress progress,
+                                   @NonNull AtomicBoolean cancel) {
+            return new Result(false, null, null, "Video arrives in the next build");
+        }
+
         /**
          * The same, reporting a GIF's conversion as a fraction above 0 up to 1, from the calling
          * (import) thread. Sources without progress keep the plain import.
@@ -125,6 +144,13 @@ public final class WallpaperLiveHost {
     }
 
     private enum Page { LIST, EDITOR, VIDEO }
+
+    /** The rate whose version is being made (0: none); main thread. */
+    private int mPrepRate;
+    /** Stops the running preparation when set; replaced per preparation. */
+    @NonNull private AtomicBoolean mPrepCancel = new AtomicBoolean();
+    /** Bumped per preparation so a superseded one does not touch the page. */
+    private int mPrepToken;
 
     private final Context mContext;
     private final WallpaperPickerPage mPicker;
@@ -245,6 +271,7 @@ public final class WallpaperLiveHost {
                 @Override public void onRate(int hz) {
                     SharedPreferences prefs = prefs();
                     if (prefs != null) ShaderStore.writeVideoRate(prefs, hz);
+                    onVideoRate(hz);
                 }
             });
             for (View page : new View[] {mList.root(), mEditor.root(), mVideo.root()}) {
@@ -462,6 +489,120 @@ public final class WallpaperLiveHost {
         mVideo.setHint(stored.kind == WallpaperMotion.Kind.VIDEO && stored.id != null
             ? videoStatus(stored.id, prefs == null ? null : prefs.getString(KEY_VIDEO_HINT, null)) : null);
         goTo(Page.VIDEO, false);
+        if (mPrepRate > 0) mVideo.startPreparing(mPrepRate);
+        refreshVideoState(true);
+    }
+
+    /** Reads the clip's versions off the main thread, then draws the rate row and status, and resumes a missing version. */
+    private void refreshVideoState(boolean resume) {
+        if (mVideo == null) return;
+        final Context app = mContext.getApplicationContext();
+        final VideoSource source = mVideoSource;
+        IO.execute(() -> {
+            VideoVariants.State st = null;
+            try {
+                st = source.state(app);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Reading the video versions failed", e);
+            }
+            final VideoVariants.State state = st;
+            mRoot.post(() -> {
+                if (mReleased || mVideo == null) return;
+                applyVideoState(state);
+                SharedPreferences prefs = prefs();
+                int rate = prefs == null ? 30 : ShaderStore.readVideoRate(prefs);
+                if (resume && state != null && mPrepRate == 0 && readStored().kind == WallpaperMotion.Kind.VIDEO
+                    && VideoRateLogic.startsPrepare(state.fps, state.gif, state.ready, rate)) {
+                    startPrepare(rate);
+                }
+            });
+        });
+    }
+
+    /** Draws the rate row for the clip and appends the made version to the status line. */
+    private void applyVideoState(@Nullable VideoVariants.State state) {
+        if (mVideo == null) return;
+        mVideo.setClip(state);
+        SharedPreferences prefs = prefs();
+        if (prefs != null) mVideo.selectRate(ShaderStore.readVideoRate(prefs));
+        WallpaperMotion stored = readStored();
+        if (state == null || prefs == null || stored.kind != WallpaperMotion.Kind.VIDEO || stored.id == null) return;
+        String suffix = VideoRateLogic.statusSuffix(state.fps, state.gif, state.ready, state.sizeBytes,
+            ShaderStore.readVideoRate(prefs), mContext.getString(R.string.video_version_suffix));
+        if (suffix == null) return;
+        mVideo.setHint(videoStatus(stored.id, prefs.getString(KEY_VIDEO_HINT, null)) + " \u00b7 " + suffix);
+    }
+
+    /** A rate pill was tapped (the draw rate is already written): make that version when it is missing. */
+    private void onVideoRate(int hz) {
+        if (mVideo == null || mReleased) return;
+        final Context app = mContext.getApplicationContext();
+        final VideoSource source = mVideoSource;
+        IO.execute(() -> {
+            VideoVariants.State st = null;
+            try {
+                st = source.state(app);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Reading the video versions failed", e);
+            }
+            final VideoVariants.State state = st;
+            mRoot.post(() -> {
+                if (mReleased || mVideo == null) return;
+                boolean wants = state != null && VideoRateLogic.startsPrepare(state.fps, state.gif, state.ready, hz);
+                if (wants) {
+                    if (mPrepRate != hz) startPrepare(hz);
+                } else if (mPrepRate > 0) {
+                    mPrepCancel.set(true);
+                    mPrepRate = 0;
+                    mPrepToken++;
+                    mVideo.endPreparing();
+                }
+                if (state != null) applyVideoState(state);
+            });
+        });
+    }
+
+    /** Makes the version for hz on its own thread, with the bar; a running one is stopped first. */
+    private void startPrepare(final int hz) {
+        if (mVideo == null || mReleased) return;
+        mPrepCancel.set(true);
+        final AtomicBoolean cancel = new AtomicBoolean();
+        mPrepCancel = cancel;
+        mPrepRate = hz;
+        final int token = ++mPrepToken;
+        mVideo.setHint(null);
+        mVideo.startPreparing(hz);
+        final Context app = mContext.getApplicationContext();
+        final VideoSource source = mVideoSource;
+        Thread t = new Thread(() -> {
+            VideoSource.Result result;
+            try {
+                result = source.prepareRate(app, hz, fraction -> mRoot.post(() -> {
+                    if (!mReleased && mVideo != null && token == mPrepToken) mVideo.onImportProgress(fraction);
+                }), cancel);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Preparing the video version failed", e);
+                result = new VideoSource.Result(false, null, null, null);
+            }
+            final VideoSource.Result done = result;
+            mRoot.post(() -> {
+                if (mReleased || mVideo == null || token != mPrepToken) return;
+                mPrepRate = 0;
+                mVideo.endPreparing();
+                if (!done.ok) {
+                    mVideo.setHint(done.error != null ? done.error : mContext.getString(R.string.video_failed));
+                    return;
+                }
+                SharedPreferences prefs = prefs();
+                WallpaperMotion stored = readStored();
+                if (prefs != null && stored.kind == WallpaperMotion.Kind.VIDEO && stored.id != null) {
+                    mVideo.setHint(videoStatus(stored.id, prefs.getString(KEY_VIDEO_HINT, null)));
+                }
+                refreshVideoState(false);
+            });
+        }, "WallpaperVideoPrepare");
+        t.setDaemon(true);
+        t.start();
     }
 
     private void showList() {
@@ -748,11 +889,20 @@ public final class WallpaperLiveHost {
 
     private void onVideoPicked(@Nullable Uri uri) {
         if (uri == null || mReleased || mVideo == null) return;
+        mPrepCancel.set(true);
+        mPrepRate = 0;
+        mPrepToken++;
         mVideo.startImport();
         mVideo.setHint(null);
         final Context app = mContext.getApplicationContext();
         final VideoSource source = mVideoSource;
+        final SharedPreferences ratePrefs = prefs();
+        final int rate = ratePrefs == null ? 30 : ShaderStore.readVideoRate(ratePrefs);
         IO.execute(() -> {
+            final boolean gif = VideoImport.isGif(displayName(app, uri));
+            mRoot.post(() -> {
+                if (!mReleased && mVideo != null) mVideo.setImportRate(gif ? 0 : rate);
+            });
             VideoSource.Result result;
             try {
                 result = source.importFile(app, uri, fraction -> mRoot.post(() -> {
@@ -775,6 +925,7 @@ public final class WallpaperLiveHost {
                 mVideo.endImport();
                 mVideo.setHint(videoStatus(done.name, done.hint));
                 useMotion(WallpaperMotion.video(done.name));
+                refreshVideoState(false);
             });
         });
     }

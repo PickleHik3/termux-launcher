@@ -89,6 +89,16 @@
             android:id="@+id/video_knob_rate"
             layout="@layout/preference_segmented_pill" />
 
+        <TextView
+            android:id="@+id/video_rate_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/video_back_to_photo"
             style="@style/Widget.Material3.Button.TextButton"
