@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.GridLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -12,7 +13,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.chip.Chip;
 import com.termux.R;
 import com.termux.app.chrome.scene.SceneThumbView;
 import com.termux.app.chrome.scene.ShaderStore;
@@ -25,9 +25,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The Shader half of the wallpaper picker: the saved shaders in two columns, each a
- * phone-proportioned {@link SceneThumbView} with its name under it and "In use" on the one that
- * is, then New shader, and Back to photo while a video or a shader is in use. Tapping a shader
+ * The Shader half of the wallpaper picker: the saved shaders in three columns, each a
+ * phone-proportioned {@link SceneThumbView} with its name under it and a border on the one in
+ * use, then New shader, and Back to photo while a video or a shader is in use. Tapping a shader
  * opens the editor ({@link Listener#onOpen}). The shaders are read off the main thread.
  */
 public final class ShaderListPage {
@@ -60,6 +60,8 @@ public final class ShaderListPage {
             this.texture = texture;
         }
     }
+
+    private static final int COLUMNS = 3;
 
     private final Context mContext;
     private final Listener mListener;
@@ -148,6 +150,17 @@ public final class ShaderListPage {
         LayoutInflater inflater = LayoutInflater.from(mContext);
         mGrid.removeAllViews();
         mTiles.clear();
+        // Three phone-aspect columns at explicit widths: a weighted column measures its tile before
+        // the grid has a width, and the frame then takes the whole page.
+        int gridW = mGrid.getWidth();
+        if (gridW <= 0) {
+            gridW = mContext.getResources().getDisplayMetrics().widthPixels
+                - 2 * mContext.getResources().getDimensionPixelSize(R.dimen.settings_gutter);
+        }
+        final int tileW = Math.max(1, gridW / COLUMNS);
+        final float radius = 16f * mContext.getResources().getDisplayMetrics().density;
+        final int accent = com.google.android.material.color.MaterialColors.getColor(mContext,
+            androidx.appcompat.R.attr.colorPrimary, 0);
         for (Loaded l : loaded) {
             final String id = l.entry.id;
             View tile = inflater.inflate(R.layout.live_scene_tile, mGrid, false);
@@ -156,14 +169,23 @@ public final class ShaderListPage {
             TextView name = tile.findViewById(R.id.live_scene_name);
             name.setText(l.entry.name);
             boolean inUse = LiveSceneLogic.inUse(stored, id);
-            Chip badge = tile.findViewById(R.id.live_scene_in_use);
-            badge.setVisibility(inUse ? View.VISIBLE : View.GONE);
+            // In use: a border round the thumbnail (the chip is too wide for a third of the page).
+            tile.findViewById(R.id.live_scene_in_use).setVisibility(View.GONE);
+            LiveAspectFrame frame = tile.findViewById(R.id.live_scene_frame);
+            if (inUse) {
+                android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+                ring.setCornerRadius(radius);
+                ring.setStroke(Math.round(2f * mContext.getResources().getDisplayMetrics().density), accent);
+                frame.setForeground(ring);
+            } else {
+                frame.setForeground(null);
+            }
             tile.setContentDescription(inUse ? l.entry.name + ", " + mContext.getString(R.string.live_in_use)
                 : l.entry.name);
             tile.setOnClickListener(v -> mListener.onOpen(id));
-            GridLayout.LayoutParams lp = new GridLayout.LayoutParams(
-                GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f));
-            lp.width = 0;
+            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+            lp.width = tileW;
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             mGrid.addView(tile, lp);
             mTiles.add(tile);
         }

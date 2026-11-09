@@ -574,13 +574,21 @@ public final class WallpaperLiveHost {
                 setBusy(false);
                 mPhotoStale = true;
                 if (result == LiveWallpaperApplier.Result.SET) mListener.onSystemWallpaperChanged();
-                IO.execute(() -> ShaderStore.delete(app, id));
-                showList();
+                deleteThenShowList(app, id);
             });
         } else {
-            IO.execute(() -> ShaderStore.delete(app, id));
-            showList();
+            deleteThenShowList(app, id);
         }
+    }
+
+    /** The folder is gone before the list reads again, so the deleted shader does not come back as a tile. */
+    private void deleteThenShowList(@NonNull Context app, @NonNull String id) {
+        IO.execute(() -> {
+            ShaderStore.delete(app, id);
+            mRoot.post(() -> {
+                if (!mReleased) showList();
+            });
+        });
     }
 
     private void setBusy(boolean busy) {

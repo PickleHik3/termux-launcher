@@ -28,26 +28,27 @@
             android:textAppearance="?attr/textAppearanceTitleMedium"
             android:textColor="?attr/colorOnSurface" />
 
-        <GridLayout
-            android:id="@+id/shader_list_grid"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:columnCount="2" />
-
         <com.google.android.material.button.MaterialButton
             android:id="@+id/shader_new"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp"
             android:ellipsize="end"
             android:maxLines="1"
             android:minHeight="48dp"
             android:text="@string/shader_new" />
 
+        <GridLayout
+            android:id="@+id/shader_list_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="3" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/shader_list_back_to_photo"
             style="@style/Widget.Material3.Button.TextButton"
+            android:layout_marginTop="8dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
