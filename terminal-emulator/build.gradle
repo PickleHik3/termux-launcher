@@ -80,6 +80,9 @@ tasks.withType(JavaCompile) {
 dependencies {
     implementation "androidx.annotation:annotation:1.9.0"
     testImplementation "junit:junit:4.13.2"
+    // Real ICU break rules for the differential tests of GraphemeClusterer; the android.jar stubs
+    // used by local JVM tests have none. Test only: nothing ships.
+    testImplementation "com.ibm.icu:icu4j:75.1"
 }
 
 task sourceJar(type: Jar) {

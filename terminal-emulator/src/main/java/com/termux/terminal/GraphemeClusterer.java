@@ -9,16 +9,36 @@ final class GraphemeClusterer {
 
     private static final int MAX_CLUSTER_UTF16_UNITS = 64;
 
+    /**
+     * The current cluster's text. While {@link #mClusterIsLoneAscii} is set it is stale and the
+     * cluster is the single code point {@link #mFirstCodePoint} instead.
+     */
     private final StringBuilder mCluster = new StringBuilder();
     private BreakIterator mIterator;
     private boolean mIcuUnavailable;
     private int mFirstCodePoint = -1;
     private int mLastCodePoint = -1;
 
+    /**
+     * The cluster is one printable ASCII code point that has not been copied into
+     * {@link #mCluster}. Plain text starts a new cluster for almost every character, so the
+     * copy is made only when a non-ASCII code point arrives that might join it.
+     */
+    private boolean mClusterIsLoneAscii;
+
+    GraphemeClusterer() {
+    }
+
+    /** For tests: decide breaks with this iterator instead of Android ICU. */
+    GraphemeClusterer(BreakIterator iterator) {
+        mIterator = iterator;
+    }
+
     /** Accept a code point and return whether it extends the preceding accepted grapheme. */
     boolean accept(int codePoint, boolean precedingCellIsCurrent) {
-        if (!precedingCellIsCurrent || mCluster.length() == 0
-            || mCluster.length() + Character.charCount(codePoint) > MAX_CLUSTER_UTF16_UNITS) {
+        int clusterLength = mClusterIsLoneAscii ? 1 : mCluster.length();
+        if (!precedingCellIsCurrent || clusterLength == 0
+            || clusterLength + Character.charCount(codePoint) > MAX_CLUSTER_UTF16_UNITS) {
             resetTo(codePoint);
             return false;
         }
@@ -29,6 +49,11 @@ final class GraphemeClusterer {
             return false;
         }
 
+        if (mClusterIsLoneAscii) {
+            mCluster.setLength(0);
+            mCluster.append((char) mFirstCodePoint);
+            mClusterIsLoneAscii = false;
+        }
         int oldLength = mCluster.length();
         mCluster.appendCodePoint(codePoint);
         boolean joins = isSingleGrapheme();
@@ -46,12 +71,18 @@ final class GraphemeClusterer {
 
     void reset() {
         mCluster.setLength(0);
+        mClusterIsLoneAscii = false;
         mFirstCodePoint = mLastCodePoint = -1;
     }
 
     private void resetTo(int codePoint) {
-        mCluster.setLength(0);
-        mCluster.appendCodePoint(codePoint);
+        if (codePoint >= 0x20 && codePoint < 0x7F) {
+            mClusterIsLoneAscii = true;
+        } else {
+            mCluster.setLength(0);
+            mCluster.appendCodePoint(codePoint);
+            mClusterIsLoneAscii = false;
+        }
         mFirstCodePoint = mLastCodePoint = codePoint;
     }
 
