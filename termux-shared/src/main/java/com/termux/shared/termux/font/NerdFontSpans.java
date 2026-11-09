@@ -217,6 +217,11 @@ public final class NerdFontSpans {
     static final class TintedDrawableSpan extends ReplacementSpan {
 
         @NonNull private final Drawable mDrawable;
+        /**
+         * The vectors keep about 2/24 padding on each side, so a 1 em box drew the glyph body
+         * visibly smaller than the Nerd icons beside it; 1.2 em brings the body to about 1 em.
+         */
+        private static final float DRAWABLE_SCALE = 1.2f;
         private int mTint;
         private boolean mTinted;
 
@@ -226,12 +231,12 @@ public final class NerdFontSpans {
 
         @Override public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
                                      @Nullable Paint.FontMetricsInt fm) {
-            return Math.round(paint.getTextSize());
+            return Math.round(paint.getTextSize() * DRAWABLE_SCALE);
         }
 
         @Override public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end,
                                    float x, int top, int y, int bottom, @NonNull Paint paint) {
-            int size = Math.round(paint.getTextSize());
+            int size = Math.round(paint.getTextSize() * DRAWABLE_SCALE);
             int color = paint.getColor();
             if (!mTinted || color != mTint) {
                 mDrawable.setTint(color | 0xFF000000);
@@ -241,7 +246,7 @@ public final class NerdFontSpans {
             mDrawable.setAlpha(color >>> 24);
             // The middle of a capital sits about 0.36 em above the baseline, which is where the
             // Nerd glyphs centre their icons.
-            int centre = Math.round(y - 0.36f * size);
+            int centre = Math.round(y - 0.36f * paint.getTextSize());
             int left = Math.round(x);
             mDrawable.setBounds(left, centre - size / 2, left + size, centre - size / 2 + size);
             mDrawable.draw(canvas);

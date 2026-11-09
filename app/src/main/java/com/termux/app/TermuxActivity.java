@@ -7043,12 +7043,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneWallController.goToPageId(id, animate && isVisible());
             }
             @Override public void showAdded(@NonNull Runnable undo) {
-                View anchor = mPaneWallController.assistantView();
-                if (anchor == null) anchor = findViewById(android.R.id.content);
-                if (anchor == null) return;
-                com.google.android.material.snackbar.Snackbar.make(anchor,
-                        R.string.assistant_page_added, 4000)
-                    .setAction(R.string.page_overview_undo, v -> undo.run()).show();
+                // Made from the activity's content, not from the sliding page: the parent walk from
+                // the fresh page view settles inside the wall, clipped or under the chrome.
+                View root = findViewById(android.R.id.content);
+                if (root == null) return;
+                com.google.android.material.snackbar.Snackbar bar =
+                    com.google.android.material.snackbar.Snackbar.make(root,
+                        R.string.assistant_page_added, 4000);
+                // Kept just above whichever bottom chrome stands highest, every frame: the chrome
+                // grows and moves as the page lands and the keyboard comes up, and the bar's own
+                // anchor keeps the first position. Fade, so the bar's translation is ours.
+                bar.setAnimationMode(
+                    com.google.android.material.snackbar.BaseTransientBottomBar.ANIMATION_MODE_FADE);
+                final View barView = bar.getView();
+                final View[] chrome = { getExtraKeysView(),
+                    findViewById(R.id.accessory_stack_container) };
+                final int gap = Math.round(8 * getResources().getDisplayMetrics().density);
+                final int[] at = new int[2];
+                final android.view.ViewTreeObserver.OnPreDrawListener follow = () -> {
+                    if (!barView.isLaidOut()) return true;
+                    int top = Integer.MAX_VALUE;
+                    for (View c : chrome) {
+                        if (c == null || !c.isShown() || c.getHeight() <= 0) continue;
+                        c.getLocationOnScreen(at);
+                        top = Math.min(top, at[1]);
+                    }
+                    barView.getLocationOnScreen(at);
+                    float natural = at[1] - barView.getTranslationY() + barView.getHeight();
+                    float want = top == Integer.MAX_VALUE ? 0f
+                        : Math.min(0f, top - gap - natural);
+                    if (barView.getTranslationY() != want) barView.setTranslationY(want);
+                    return true;
+                };
+                root.getViewTreeObserver().addOnPreDrawListener(follow);
+                bar.addCallback(new com.google.android.material.snackbar.BaseTransientBottomBar
+                        .BaseCallback<com.google.android.material.snackbar.Snackbar>() {
+                    @Override public void onDismissed(
+                            com.google.android.material.snackbar.Snackbar sb, int event) {
+                        root.getViewTreeObserver().removeOnPreDrawListener(follow);
+                    }
+                });
+                bar.setAction(R.string.page_overview_undo, v -> undo.run()).show();
             }
         });
     }
@@ -31125,7 +31160,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void addDisplay(int row) {
                     // A lasting unbound Display page, after the current page: a drawer launch's
                     // temporary page is made lasting instead (its app stays on it), and one
-                    // already on the wall is used. The display starts on it.
+                    // already on the wall is used. The display starts on it only with the
+                    // autostart setting on; else the page shows its Start button.
                     final int after = linuxRouteFromPageId();
                     com.termux.app.wall.WallPages.Result added =
                         wallPagesStore().edit(pages -> pages.addDisplayPage(after));
@@ -31133,7 +31169,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTemporaryDisplaySawApp = false;
                     mTemporaryDisplayStartedByLaunch = false;
                     if (mPaneWallController != null) mPaneWallController.refreshPages();
-                    openDisplayWindow(true, added.ok() && added.page != null ? added.page.id : -1);
+                    openDisplayWindow(mPreferences != null
+                            && mPreferences.isX11DisplayAutostartEnabled(),
+                        added.ok() && added.page != null ? added.page.id : -1);
                 }
                 @Override @Nullable public TerminalSession windowSession(int row) {
                     if (mPaneController == null) return null;
