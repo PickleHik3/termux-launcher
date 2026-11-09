@@ -40,6 +40,8 @@ public final class ShaderInputs {
     @NonNull public final float[] colors = new float[9];
     /** iChannelResolution: (w, h, 1) per channel, zero for an empty one. */
     @NonNull public final float[] channelResolution = new float[ShaderPrelude.CHANNELS * 3];
+    /** The video passthrough's texture transform (a SurfaceTexture's matrix), column-major; identity until a frame. */
+    @NonNull public final float[] texMatrix = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 
     private long mLastMs = NONE;
     @NonNull private final Calendar mCalendar = Calendar.getInstance();

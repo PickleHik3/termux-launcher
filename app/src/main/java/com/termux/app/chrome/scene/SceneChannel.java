@@ -30,6 +30,14 @@ public interface SceneChannel {
     /** Once per drawn frame: brings the texture up to date; true when a new frame arrived. */
     boolean update(long frameTimeNanos);
 
+    /**
+     * Writes the latest frame's texture-coordinate transform (a SurfaceTexture's matrix) into
+     * {@code out16}; false (and {@code out16} untouched) for a channel that has none.
+     */
+    default boolean transform(@androidx.annotation.NonNull float[] out16) {
+        return false;
+    }
+
     /** The content's size in pixels; 0 until known. */
     int width();
 

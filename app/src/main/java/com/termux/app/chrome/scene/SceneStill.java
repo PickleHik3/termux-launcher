@@ -43,8 +43,8 @@ public final class SceneStill {
     }
 
     /**
-     * The still of the active choice ({@link ShaderStore#readMotion}): null when it is not a stored
-     * shader, the device cannot run shaders (below API 29), or the shader does not build.
+     * The still of the active choice ({@link ShaderStore#readMotion}): for a video or GIF a frame
+     * through {@link VideoStill}; null when it is neither a stored shader nor a video, the device cannot run shaders (below API 29), or the shader does not build.
      *
      * @throws IllegalStateException when the GPU could not draw it
      */
@@ -54,6 +54,11 @@ public final class SceneStill {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
         if (prefs == null) return null;
         WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
+        if (motion.kind == WallpaperMotion.Kind.VIDEO && motion.id != null
+            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            File video = VideoImport.file(context, motion.id);
+            return video.isFile() ? VideoStill.render(video, widthPx, heightPx) : null;
+        }
         if (motion.kind != WallpaperMotion.Kind.SHADER || motion.id == null) return null;
         String source = ShaderStore.readText(ShaderStore.sourceFile(context, motion.id));
         if (source == null) return null;

@@ -69,6 +69,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
 
     private static final DebugChoice SHADER_FILE =
         new DebugChoice(SceneFramePolicy.PROP_SHADER_FILE, "", DebugSwitch.SYSTEM_PROPERTIES);
+    private static final DebugChoice VIDEO_FILE =
+        new DebugChoice(SceneFramePolicy.PROP_VIDEO_FILE, "", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice RATE =
         new DebugChoice(SceneFramePolicy.PROP_RATE, "", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS =
@@ -96,6 +98,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @Nullable private ShaderStore.Meta mMeta;
     /** The debug file a layer gave up on: not tried again until the property changes. */
     @Nullable private String mDebugGaveUp;
+    /** The debug video path being or last imported, and the name it was stored under once done. */
+    @Nullable private String mDebugVideoPath;
+    @Nullable private String mDebugVideoName;
     /** The current gesture began over the keyboard: its moves are typing, not the scene's. */
     private boolean mGestureOverKeys;
     @Nullable private SharedPreferences mStore;
@@ -288,11 +293,44 @@ public final class SceneController implements LatencyProbe.CommitListener {
             return new SceneLayerView.Spec("file:" + path, new File(path), null,
                 ShaderSafety.Quality.HALF, true);
         }
+        String videoPath = VIDEO_FILE.get(now);
+        if (videoPath != null && !videoPath.trim().isEmpty()) {
+            videoPath = videoPath.trim();
+            if (videoPath.equals(mDebugGaveUp)) return null;
+            if (!videoPath.equals(mDebugVideoPath)) importDebugVideo(videoPath);
+            String name = mDebugVideoName;
+            if (name == null) return null;
+            return new SceneLayerView.Spec("vfile:" + videoPath + ":" + name,
+                VideoImport.file(mActivity, name), true);
+        }
+        mDebugVideoPath = null;
+        mDebugVideoName = null;
         mDebugGaveUp = null;
+        if (mMotion.kind == WallpaperMotion.Kind.VIDEO && mMotion.id != null) {
+            File video = VideoImport.file(mActivity, mMotion.id);
+            return video.isFile() ? new SceneLayerView.Spec(mMotion.format(), video, false) : null;
+        }
         if (mMotion.kind != WallpaperMotion.Kind.SHADER || mMotion.id == null || mMeta == null) return null;
         File channel0 = ShaderStore.textureFile(mActivity, mMotion.id, mMeta);
         return new SceneLayerView.Spec(mMotion.format(), ShaderStore.sourceFile(mActivity, mMotion.id),
             channel0, mMeta.quality, false);
+    }
+
+    /** Copies the debug file in on a worker thread, then polls again on main; a file that cannot be imported is given up on. */
+    private void importDebugVideo(@NonNull String path) {
+        mDebugVideoPath = path;
+        mDebugVideoName = null;
+        Activity activity = mActivity;
+        new Thread(() -> {
+            VideoImport.Result r = VideoImport.importFile(activity, android.net.Uri.fromFile(new File(path)));
+            if (r.ok) Log.i(TAG, "debug video " + path + ": " + r.hint);
+            else Log.w(TAG, "debug video " + path + " not imported: " + r.error);
+            activity.runOnUiThread(() -> {
+                if (!path.equals(mDebugVideoPath)) return;
+                if (r.ok) mDebugVideoName = r.name; else mDebugGaveUp = path;
+                poll();
+            });
+        }, "DebugVideoImport").start();
     }
 
     private void poll() {
@@ -346,7 +384,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private void onLayerReverted(@NonNull SceneLayerView.Spec spec, @NonNull String reason) {
         Log.w(TAG, "shader " + spec.key + " stopped: " + reason);
         if (spec.debugFile) {
-            mDebugGaveUp = spec.source.getPath();
+            mDebugGaveUp = spec.video != null ? mDebugVideoPath : spec.source.getPath();
             removeLayer();
             return;
         }
