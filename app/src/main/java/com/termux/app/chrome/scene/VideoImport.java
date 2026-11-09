@@ -23,6 +23,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Copies a picked video or GIF into {@code files/wallpaper/video/} (SAF grants do not survive
@@ -36,6 +37,7 @@ public final class VideoImport {
     static final long MAX_BYTES = 150L * 1000L * 1000L;
     private static final String TAG = "VideoImport";
     private static final String STAGED = "import.tmp";
+    private static final String CONVERTED = "convert.tmp";
     private static final int MAX_NAME = 100;
 
     private VideoImport() {}
@@ -115,6 +117,17 @@ public final class VideoImport {
     @WorkerThread
     @NonNull
     public static Result importFile(@NonNull Context context, @NonNull Uri uri) {
+        return importFile(context, uri, null);
+    }
+
+    /**
+     * As above; an animated GIF is converted to an MP4 (a few seconds), reporting the fraction done
+     * to {@code progress} on this thread. A conversion that fails keeps the GIF.
+     */
+    @WorkerThread
+    @NonNull
+    public static Result importFile(@NonNull Context context, @NonNull Uri uri,
+                                    @Nullable GifToVideo.Progress progress) {
         Context app = context.getApplicationContext();
         String display = null;
         long declared = -1L;
@@ -149,7 +162,8 @@ public final class VideoImport {
         }
         boolean gif = "image/gif".equals(mime) || isGif(display) || sniffGif(staged);
         String name = safeName(display, gif ? "image/gif" : mime);
-        VideoHint.Fields fields = gif ? gifFields(staged) : videoFields(staged, app);
+        VideoHint.GifInfo gifInfo = gif ? gifInfo(staged) : null;
+        VideoHint.Fields fields = gif ? gifFields(gifInfo) : videoFields(staged, app);
         if (!gif && fields.width <= 0) {
             //noinspection ResultOfMethodCallIgnored
             staged.delete();
@@ -161,17 +175,39 @@ public final class VideoImport {
             return Result.failure("That file is not a GIF.");
         }
         fields.sizeBytes = staged.length();
+        File source = staged;
+        File converted = new File(dir, CONVERTED);
+        if (gif && gifInfo != null && VideoHint.isAnimated(gifInfo.frames)) {
+            int maxSide = Math.min(VideoChannel.GIF_MAX_SIDE_PX, screenLongSide(app));
+            GifToVideo.Output out = GifToVideo.convert(staged, converted, maxSide, fields.durationMs, progress,
+                new AtomicBoolean());
+            if (out != null) {
+                VideoHint.Fields v = new VideoHint.Fields();
+                v.convertedFromGif = true;
+                v.mime = out.mime;
+                v.width = out.width;
+                v.height = out.height;
+                v.durationMs = out.durationMs;
+                v.sizeBytes = out.file.length();
+                v.hardware = hardwareDecoder(out.mime);
+                fields = v;
+                source = converted;
+                name = mp4Name(name);
+                //noinspection ResultOfMethodCallIgnored
+                staged.delete();
+            }
+        }
         File target = new File(dir, name);
         File[] old = dir.listFiles();
         if (old != null) {
             for (File f : old) {
                 //noinspection ResultOfMethodCallIgnored
-                if (!f.equals(staged)) f.delete();
+                if (!f.equals(source)) f.delete();
             }
         }
-        if (!staged.renameTo(target)) {
+        if (!source.renameTo(target)) {
             //noinspection ResultOfMethodCallIgnored
-            staged.delete();
+            source.delete();
             return Result.failure("Could not keep that file.");
         }
         return Result.success(name, VideoHint.describe(fields));
@@ -201,19 +237,38 @@ public final class VideoImport {
         }
     }
 
+    /** The stored GIF's name with {@code .mp4} in place of its extension. */
     @NonNull
-    private static VideoHint.Fields gifFields(@NonNull File file) {
-        VideoHint.Fields f = new VideoHint.Fields();
-        f.mime = "image/gif";
+    static String mp4Name(@NonNull String gifName) {
+        String base = isGif(gifName) ? gifName.substring(0, gifName.length() - 4) : gifName;
+        if (base.isEmpty()) base = "video";
+        String name = base + ".mp4";
+        return WallpaperMotion.safeName(name) ? name : "video.mp4";
+    }
+
+    private static int screenLongSide(@NonNull Context context) {
+        android.util.DisplayMetrics m = context.getResources().getDisplayMetrics();
+        return Math.max(2, Math.max(m.widthPixels, m.heightPixels));
+    }
+
+    @Nullable
+    private static VideoHint.GifInfo gifInfo(@NonNull File file) {
         try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
-            VideoHint.GifInfo info = VideoHint.GifInfo.read(in);
-            if (info != null) {
-                f.width = info.width;
-                f.height = info.height;
-                f.durationMs = info.durationMs;
-            }
+            return VideoHint.GifInfo.read(in);
         } catch (IOException e) {
             Log.w(TAG, "could not read the GIF header", e);
+            return null;
+        }
+    }
+
+    @NonNull
+    private static VideoHint.Fields gifFields(@Nullable VideoHint.GifInfo info) {
+        VideoHint.Fields f = new VideoHint.Fields();
+        f.mime = "image/gif";
+        if (info != null) {
+            f.width = info.width;
+            f.height = info.height;
+            f.durationMs = info.durationMs;
         }
         return f;
     }

@@ -66,7 +66,7 @@ final class VideoChannel implements SceneChannel {
 
     // GIF.
     @Nullable private AnimatedImageDrawable mDrawable;
-    private boolean mGifDue;
+    @NonNull private final GifFlow mGifFlow = new GifFlow();
     private int mGifW, mGifH;
 
     VideoChannel(@NonNull File file) {
@@ -91,7 +91,9 @@ final class VideoChannel implements SceneChannel {
         mHandler = new Handler(looper != null ? looper : Looper.getMainLooper());
         SurfaceTexture st = new SurfaceTexture(mTexture);
         mSurfaceTexture = st;
-        if (!mGif) {
+        if (mGif) {
+            st.setOnFrameAvailableListener(t -> mGifFlow.onFrameAvailable(), mHandler);
+        } else {
             st.setOnFrameAvailableListener(t -> mPending.incrementAndGet(), mHandler);
         }
         mSurface = new Surface(st);
@@ -175,7 +177,7 @@ final class VideoChannel implements SceneChannel {
             mHeight = mGifH;
             st.setDefaultBufferSize(mGifW, mGifH);
             mStill = d;
-            mGifDue = true;
+            mGifFlow.markDue();
             return;
         }
         AnimatedImageDrawable a = (AnimatedImageDrawable) d;
@@ -190,7 +192,7 @@ final class VideoChannel implements SceneChannel {
         // invalidateSelf) to be drawn again when its next frame is due: the callback marks that.
         a.setCallback(mGifCallback);
         mDrawable = a;
-        mGifDue = true;
+        mGifFlow.markDue();
         a.start();
     }
 
@@ -199,7 +201,7 @@ final class VideoChannel implements SceneChannel {
     private final Drawable.Callback mGifCallback = new Drawable.Callback() {
         @Override
         public void invalidateDrawable(@NonNull Drawable who) {
-            mGifDue = true;
+            mGifFlow.markDue();
         }
 
         @Override
@@ -215,31 +217,54 @@ final class VideoChannel implements SceneChannel {
         }
     };
 
+    private boolean mSoftwareCanvas;
+
+    /** A hardware canvas (no CPU copy of the frame); the software one once the hardware one has thrown. */
+    @NonNull
+    private Canvas lockCanvas(@NonNull Surface surface) {
+        if (!mSoftwareCanvas) {
+            try {
+                return surface.lockHardwareCanvas();
+            } catch (IllegalStateException | IllegalArgumentException | Surface.OutOfResourcesException e) {
+                Log.w(TAG, "hardware canvas unavailable, drawing the GIF in software", e);
+                mSoftwareCanvas = true;
+            }
+        }
+        return surface.lockCanvas(null);
+    }
+
     /** Draws the GIF's current frame into the surface and takes it into the texture. */
     private void drawGif() {
         Surface surface = mSurface;
         SurfaceTexture st = mSurfaceTexture;
         Drawable d = mDrawable != null ? mDrawable : mStill;
         if (surface == null || st == null || d == null) return;
-        mGifDue = false;
         Canvas canvas = null;
         try {
-            canvas = surface.lockCanvas(null);
+            canvas = lockCanvas(surface);
             canvas.drawColor(0, PorterDuff.Mode.CLEAR);
             d.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
             d.draw(canvas);
         } catch (IllegalArgumentException | IllegalStateException | Surface.OutOfResourcesException e) {
             Log.w(TAG, "could not draw the GIF frame", e);
+            mGifFlow.drawFailed();
             return;
         } finally {
             if (canvas != null) surface.unlockCanvasAndPost(canvas);
         }
         if (d == mStill) mStill = null;   // a still is drawn once
+        // The buffer arrives later (the hardware canvas renders asynchronously): update() takes it in.
+        mGifFlow.posted();
+    }
+
+    private void takeGifFrame(@NonNull SurfaceTexture st) {
         try {
             st.updateTexImage();
             st.getTransformMatrix(mTransform);
         } catch (RuntimeException e) {
             Log.w(TAG, "could not take in the GIF frame", e);
+        } finally {
+            mGifFlow.taken();
         }
     }
 
@@ -257,7 +282,7 @@ final class VideoChannel implements SceneChannel {
 
     /** True when a frame is waiting: drawing the scene now would show something new. */
     boolean frameWaiting() {
-        return mGif ? mGifDue : mPending.get() > 0;
+        return mGif ? mGifFlow.waiting() : mPending.get() > 0;
     }
 
     /** The player or the decoder broke: the layer should go back to photo. */
@@ -270,9 +295,12 @@ final class VideoChannel implements SceneChannel {
         SurfaceTexture st = mSurfaceTexture;
         if (st == null) return false;
         if (mGif) {
-            if (!mGifDue) return false;
-            drawGif();
-            return true;
+            if (mGifFlow.shouldTake()) {
+                takeGifFrame(st);
+                return true;
+            }
+            if (mGifFlow.shouldDraw()) drawGif();
+            return false;
         }
         int n = Math.min(mPending.getAndSet(0), MAX_DRAIN);
         if (n <= 0) return false;
@@ -332,7 +360,7 @@ final class VideoChannel implements SceneChannel {
         AnimatedImageDrawable a = mDrawable;
         if (a != null && !a.isRunning()) {
             a.start();
-            mGifDue = true;
+            mGifFlow.markDue();
         }
     }
 

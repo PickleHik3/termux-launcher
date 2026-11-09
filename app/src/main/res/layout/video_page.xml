@@ -49,6 +49,30 @@
             android:minHeight="48dp"
             android:text="@string/video_choose" />
 
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/video_progress"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginStart="@dimen/settings_gutter"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/video_progress_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingTop="4dp"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/video_hint"
             android:layout_width="match_parent"
@@ -64,16 +88,6 @@
         <include
             android:id="@+id/video_knob_rate"
             layout="@layout/preference_segmented_pill" />
-
-        <com.google.android.material.progressindicator.LinearProgressIndicator
-            android:id="@+id/video_progress"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginStart="@dimen/settings_gutter"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="@dimen/settings_gutter"
-            android:indeterminate="true"
-            android:visibility="invisible" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/video_back_to_photo"

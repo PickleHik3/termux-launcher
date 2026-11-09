@@ -24644,9 +24644,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new com.termux.app.chrome.wallpaper.WallpaperLiveHost(TermuxActivity.this, picker,
                         () -> applyHomeWallpaperInPlace(true));
                 liveHost.setHeldReasonSource(() -> mScene == null ? null : mScene.heldReason());
-                liveHost.setVideoSource((c, u) -> {
-                    com.termux.app.chrome.scene.VideoImport.Result r = com.termux.app.chrome.scene.VideoImport.importFile(c, u);
-                    return new com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result(r.ok, r.name, r.hint, r.error);
+                liveHost.setVideoSource(new com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource() {
+                    @Override
+                    public com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result importFile(android.content.Context c, android.net.Uri u) {
+                        return importFile(c, u, f -> { });
+                    }
+
+                    @Override
+                    public com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result importFile(android.content.Context c, android.net.Uri u,
+                            com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Progress p) {
+                        com.termux.app.chrome.scene.VideoImport.Result r = com.termux.app.chrome.scene.VideoImport.importFile(c, u, p::onProgress);
+                        return new com.termux.app.chrome.wallpaper.WallpaperLiveHost.VideoSource.Result(r.ok, r.name, r.hint, r.error);
+                    }
                 });
                 final com.termux.app.surfaces.WallpaperSheet shell =
                     new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,
