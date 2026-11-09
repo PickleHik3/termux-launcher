@@ -207,6 +207,11 @@ static size_t history_rows(Core* c) {
     return n;
 }
 
+static void set_history_limit(Core* c, jint lines) {
+    size_t line_limit = lines > 0 ? (size_t) lines : 1;
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &line_limit);
+}
+
 // Pin the top row of the active area, so the next sync can tell how many rows went to history.
 static void pin_top(Core* c) {
     GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
@@ -288,12 +293,12 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*) on_pwd);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
-    // History here only has to outlast one write: the Java buffer keeps the transcript. Rows are
-    // the limit; bytes are unlimited so a styled burst cannot prune rows the next sync still needs.
+    // History only has to hold what the next sync copies into the Java transcript; Java picks the
+    // row limit (GhosttyCore.historyLimit). Bytes are unlimited so a styled burst cannot prune rows
+    // the next sync still needs.
     size_t no_byte_limit = SIZE_MAX;
-    size_t line_limit = scrollback_lines > 0 ? (size_t) scrollback_lines : 1;
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &no_byte_limit);
-    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &line_limit);
+    set_history_limit(c, scrollback_lines);
     // No images in this mode: refuse kitty graphics rather than store pixels nobody draws.
     uint64_t no_images = 0;
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &no_images);
@@ -336,17 +341,24 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
     Core* c = core_of(h);
     if (c == NULL || data == NULL || offset < 0 || length <= 0) return;
     if ((jlong) offset + length > (*env)->GetArrayLength(env, data)) return;
-    // Copied out in slices rather than pinned, because callbacks call into Java.
-    uint8_t buf[4096];
+    // One vt_write for the whole range. Not a critical section: callbacks call into Java while the
+    // elements are held, which GetByteArrayElements allows and GetPrimitiveArrayCritical does not.
+    jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
+    if (bytes == NULL) { clear_exception(env); return; }
     c->env = env;
-    while (length > 0) {
-        jint n = length < (jint) sizeof(buf) ? length : (jint) sizeof(buf);
-        (*env)->GetByteArrayRegion(env, data, offset, n, (jbyte*) buf);
-        ghostty_terminal_vt_write(c->term, buf, (size_t) n);
-        offset += n;
-        length -= n;
-    }
+    ghostty_terminal_vt_write(c->term, (const uint8_t*) bytes + offset, (size_t) length);
     c->env = NULL;
+    (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+}
+
+// The row limit of the primary screen's history; lowering it prunes at once.
+JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetHistoryLimit(
+    JNIEnv* env, jclass cls, jlong h, jint lines) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return;
+    set_history_limit(c, lines);
 }
 
 JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeResize(
@@ -453,14 +465,24 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     long scrolled = 0;
     if (screen == GHOSTTY_TERMINAL_SCREEN_PRIMARY && screen == c->last_screen) {
         GhosttyPointCoordinate p;
-        if (c->top_set && ghostty_tracked_grid_ref_point(c->top, GHOSTTY_POINT_TAG_SCREEN, &p) == GHOSTTY_SUCCESS)
+        GhosttyResult where = c->top_set
+            ? ghostty_tracked_grid_ref_point(c->top, GHOSTTY_POINT_TAG_SCREEN, &p)
+            : GHOSTTY_INVALID_VALUE;
+        if (where == GHOSTTY_SUCCESS)
             scrolled = (long) history - (long) p.y;
+        else if (where == GHOSTTY_NO_VALUE)
+            // The pinned row is gone: its page was pruned (or erased), and every older row with
+            // it, so every row history holds now arrived since the last sync.
+            scrolled = (long) history;
         else
             scrolled = (long) history - (long) c->last_history;
         if (scrolled < 0) scrolled = 0;
         if ((size_t) scrolled > history) scrolled = (long) history;
     }
-    pin_top(c);
+    // Re-pin only on the primary screen: a pin left there while the alternate screen is up still
+    // counts the rows a write scrolled off before switching, and the sync after the switch back
+    // copies them.
+    if (screen == GHOSTTY_TERMINAL_SCREEN_PRIMARY || c->last_screen != GHOSTTY_TERMINAL_SCREEN_PRIMARY) pin_top(c);
 
     if (ghostty_render_state_update(c->render, c->term) != GHOSTTY_SUCCESS) return JNI_FALSE;
     GhosttyRenderStateDirty dirty = GHOSTTY_RENDER_STATE_DIRTY_FULL;
@@ -553,13 +575,18 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryR
     memset(row, 0, sizeof(jint) * (size_t) cols * CELL_INTS);
     int used = 0;
     bool wrap = false;
-    for (int x = 0; x < cols; x++) {
-        GhosttyGridRef ref = {0};
-        GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_HISTORY, .value = {.coordinate = {.x = (uint16_t) x, .y = (uint32_t) y}}};
-        if (ghostty_terminal_grid_ref(c->term, p, &ref) != GHOSTTY_SUCCESS) {
-            if (x == 0) return -1;
-            break;
-        }
+    // Look the row up once: a grid ref is a page and a cell within it, and every page holds rows
+    // of the terminal's full width, so the row's other cells differ only in x.
+    GhosttyGridRef row_ref = {0};
+    GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_HISTORY, .value = {.coordinate = {.x = 0, .y = (uint32_t) y}}};
+    if (ghostty_terminal_grid_ref(c->term, p, &row_ref) != GHOSTTY_SUCCESS) return -1;
+    // The terminal's own width bounds x, in case it ever differs from ours (a failed resize).
+    uint16_t term_cols = 0;
+    if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_COLS, &term_cols) != GHOSTTY_SUCCESS) return -1;
+    int width = term_cols < cols ? term_cols : cols;
+    for (int x = 0; x < width; x++) {
+        GhosttyGridRef ref = row_ref;
+        ref.x = (uint16_t) x;
         GhosttyCell raw = 0;
         GhosttyStyle style;
         ghostty_style_default(&style);

@@ -655,7 +655,8 @@ public final class TerminalSession extends TerminalOutput {
     int mLastTurnBytes;
 
     /**
-     * Parse at most one slice of waiting shell output, without telling the client. Main thread only.
+     * Parse at most one slice of waiting shell output, without telling the client or, with the
+     * Ghostty core, mirroring it (see {@link #flushBatchedOutput()}). Main thread only.
      *
      * @return the bytes parsed, 0 when nothing was waiting
      */
@@ -668,12 +669,27 @@ public final class TerminalSession extends TerminalOutput {
         Trace.beginSection("Terminal.append");
         mAppendingProcessOutput = true;
         try {
-            mEmulator.append(mReceiveBuffer, bytesRead);
+            mEmulator.appendBatched(mReceiveBuffer, bytesRead);
         } finally {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
         return bytesRead;
+    }
+
+    /**
+     * Bring the emulator up to date with the slices parsed since the last call: with the Ghostty
+     * core this copies its screen and the rows it scrolled off into the Java buffers, once per turn
+     * however many slices it took. Nothing to do with the Java core.
+     */
+    private void flushBatchedOutput() {
+        if (!mEmulator.isGhosttyCoreActive()) return;
+        Trace.beginSection("Terminal.mirror");
+        try {
+            mEmulator.flushBatchedOutput();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /**
@@ -685,6 +701,7 @@ public final class TerminalSession extends TerminalOutput {
     boolean drainProcessOutputSlice() {
         int bytesRead = appendProcessOutputSlice();
         if (bytesRead <= 0) return false;
+        flushBatchedOutput();
         LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
@@ -709,6 +726,7 @@ public final class TerminalSession extends TerminalOutput {
         } while (more && mNanoClock.getAsLong() - start < DRAIN_BUDGET_NANOS);
         mLastTurnBytes = total;
         if (total > 0) {
+            flushBatchedOutput();
             LatencyProbe.outputArrived();
             notifyScreenUpdate();
         }

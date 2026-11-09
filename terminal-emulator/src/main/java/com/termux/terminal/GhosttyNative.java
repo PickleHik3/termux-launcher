@@ -141,7 +141,11 @@ final class GhosttyNative {
     /** 259 colours, 0xRRGGBB: the palette, then foreground, background and cursor. */
     static native void nativeSetColors(long handle, int[] colors);
 
+    /** Parse {@code length} bytes from {@code offset} in one go. */
     static native void nativeWrite(long handle, byte[] data, int offset, int length);
+
+    /** The most rows of history the primary screen keeps; Ghostty prunes in whole pages. */
+    static native void nativeSetHistoryLimit(long handle, int rows);
 
     static native void nativeResize(long handle, int columns, int rows, int cellWidthPixels, int cellHeightPixels);
 
@@ -154,7 +158,7 @@ final class GhosttyNative {
      */
     static native boolean nativeSync(long handle, int[] state, int[] screen, int[] dirty, int[] extra);
 
-    /** Read history row {@code y} (0 is the oldest kept). Valid until the next write. */
+    /** Read history row {@code y} (0 is the oldest kept). Valid between a sync and the next write. */
     static native int nativeReadHistoryRow(long handle, int y, int[] cells, int[] extra);
 
     /** The current 259 colours as 0xAARRGGBB. */

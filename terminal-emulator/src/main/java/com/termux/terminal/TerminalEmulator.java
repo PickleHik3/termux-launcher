@@ -1049,6 +1049,8 @@ public final class TerminalEmulator {
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
+        // Output the Ghostty core has parsed but not yet mirrored belongs to the old size.
+        flushBatchedOutput();
         boolean cellSizeChanged = mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels;
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
@@ -1094,6 +1096,7 @@ public final class TerminalEmulator {
     private void resizeGhostty() {
         if (mGhostty == null) return;
         try {
+            mGhostty.setHistoryLimit(GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
             mGhostty.resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels);
             applyGhosttyState();
         } catch (RuntimeException e) {
@@ -1438,11 +1441,39 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        appendBatched(buffer, length);
+        flushBatchedOutput();
+    }
+
+    /**
+     * {@link #append}, except that with the Ghostty core the emulator's buffers, cursor and modes
+     * catch up only at the next {@link #flushBatchedOutput()}. The session parses a turn of shell
+     * output this way and flushes once before telling the client, so the mirror runs once per turn
+     * rather than once per read. With the Java core this is {@link #append}.
+     */
+    void appendBatched(byte[] buffer, int length) {
+        if (mGhostty != null) {
+            writeGhostty(buffer, length);
+            return;
+        }
         int startRow = mCursorRow, startCol = mCursorCol;
-        if (mGhostty != null)
-            appendGhostty(buffer, length);
-        else
-            appendInternal(buffer, length);
+        appendInternal(buffer, length);
+        if (mCursorRow != startRow || mCursorCol != startCol)
+            mCursorPositionChangedAtMillis = mClock.nowMillis();
+    }
+
+    /**
+     * Bring the buffers up to date with output {@link #appendBatched} handed to the Ghostty core.
+     * Does nothing with the Java core, or when nothing is waiting.
+     */
+    public void flushBatchedOutput() {
+        if (!mGhosttyPending) return;
+        int startRow = mCursorRow, startCol = mCursorCol;
+        try {
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+        }
         if (mCursorRow != startRow || mCursorCol != startCol)
             mCursorPositionChangedAtMillis = mClock.nowMillis();
     }
@@ -1484,6 +1515,8 @@ public final class TerminalEmulator {
     private int mGhosttyKeyboardFlags;
     /** Whether Ghostty had synchronized output (mode 2026) on at the last sync. */
     private boolean mGhosttySyncHeld;
+    /** Whether output went to the Ghostty core since the last sync. */
+    private boolean mGhosttyPending;
 
     /** The DEC private mode bits Ghostty answers for, as {Ghostty bit, our bit} pairs. */
     private static final int[][] GHOSTTY_MODE_BITS = {
@@ -1512,7 +1545,8 @@ public final class TerminalEmulator {
         if (mGhostty != null) return true;
         int[] colors = new int[TextStyle.NUM_INDEXED_COLORS];
         for (int i = 0; i < colors.length; i++) colors[i] = mColors.mCurrentColors[i] & 0xffffff;
-        GhosttyCore core = GhosttyCore.create(mColumns, mRows, mCellWidthPixels, mCellHeightPixels, colors);
+        GhosttyCore core = GhosttyCore.create(mColumns, mRows, mCellWidthPixels, mCellHeightPixels, colors,
+            GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
         if (core == null) return false;
         mGhostty = core;
         mGhosttyCursorShape = -1;
@@ -1538,6 +1572,7 @@ public final class TerminalEmulator {
     public void releaseGhosttyCore() {
         GhosttyCore core = mGhostty;
         mGhostty = null;
+        mGhosttyPending = false;
         if (core != null) core.release();
     }
 
@@ -1546,22 +1581,19 @@ public final class TerminalEmulator {
         return mGhostty == null ? null : mGhostty.memoryUsage();
     }
 
-    private void appendGhostty(byte[] buffer, int length) {
-        // In slices, so the rows one write scrolls off never outrun the library's short history.
-        int offset = 0;
+    /**
+     * Hand the bytes to Ghostty in one write. Nothing is mirrored here: however many rows the
+     * write scrolls off, the library's history holds every one the transcript can keep (see
+     * {@link GhosttyCore#historyLimit}) until the next sync copies them.
+     */
+    private void writeGhostty(byte[] buffer, int length) {
+        if (length <= 0) return;
         try {
-            for (; offset < length && mGhostty != null; offset += GhosttyCore.WRITE_SLICE_BYTES) {
-                mGhostty.write(buffer, offset, Math.min(GhosttyCore.WRITE_SLICE_BYTES, length - offset));
-                applyGhosttyState();
-            }
+            mGhostty.write(buffer, 0, length);
+            mGhosttyPending = true;
         } catch (RuntimeException e) {
+            // The write may have been parsed in part; later output goes to the Java parser.
             ghosttyFailed(e);
-            // The slice that failed went to Ghostty; the rest goes to the Java parser.
-            offset += GhosttyCore.WRITE_SLICE_BYTES;
-            if (offset < length) {
-                byte[] rest = Arrays.copyOfRange(buffer, offset, length);
-                appendInternal(rest, rest.length);
-            }
         }
     }
 
@@ -1573,6 +1605,7 @@ public final class TerminalEmulator {
 
     /** Copy what the last Ghostty writes changed into this emulator, then deliver their effects. */
     private void applyGhosttyState() {
+        mGhosttyPending = false;
         GhosttyCore core = mGhostty;
         if (core == null || !core.sync()) return;
         int[] state = core.state();

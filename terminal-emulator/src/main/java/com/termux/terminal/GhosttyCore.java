@@ -20,12 +20,12 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     static final String CORE_GHOSTTY = "ghostty";
 
     /**
-     * Bytes written between two syncs. The library's history only has to hold the rows one slice
-     * can scroll off, since the Java transcript keeps the scrollback; a byte scrolls at most one row.
+     * Bytes one Ghostty page takes at most, to bound how many rows a page holds. Its standard page
+     * (215 x 215 cells plus style and grapheme tables) is under this; wider styles trade rows away.
      */
-    static final int WRITE_SLICE_BYTES = 1024;
-    /** Rows of history the library keeps: a slice's worth with room to spare. */
-    static final int HISTORY_ROWS = 2 * WRITE_SLICE_BYTES;
+    static final int PAGE_BYTES_BOUND = 512 * 1024;
+    /** Bytes a page spends per row: an 8-byte row header and 8 bytes per cell. */
+    private static final int ROW_HEADER_BYTES = 8, CELL_BYTES = 8;
     /** Extra code points one history row can carry. */
     static final int HISTORY_EXTRA_CAPACITY = 1024;
 
@@ -48,14 +48,36 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         return CORE_GHOSTTY.equals(reader.read(CORE_PROPERTY));
     }
 
+    /** The most rows one Ghostty page of {@code columns} columns can hold. */
+    static int pageRowsBound(int columns) {
+        return PAGE_BYTES_BOUND / (ROW_HEADER_BYTES + CELL_BYTES * Math.max(1, columns)) + 1;
+    }
+
+    /**
+     * Rows of history the library keeps for a Java transcript of {@code transcriptRows} rows.
+     *
+     * <p>A sync copies the rows that scrolled off since the last one into the transcript, which
+     * keeps the newest {@code transcriptRows} of them at most, so that is all history must still
+     * hold at the sync, however much was written in between. Ghostty prunes whole pages once
+     * history passes its limit, so after pruning it holds more than the limit minus one page: one
+     * page of margin keeps every row the transcript can take. When pruning took rows the sync has
+     * not seen, the native sync counts everything in history as new and the transcript is
+     * rewritten from it whole.
+     */
+    static int historyLimit(int transcriptRows, int columns) {
+        return transcriptRows + pageRowsBound(columns);
+    }
+
     /**
      * A terminal of this size with {@code colors} (the 259 0xAARRGGBB colours of
-     * {@link TerminalColors}) as its defaults, or null when the library is missing or refuses.
+     * {@link TerminalColors}) as its defaults, keeping {@code historyRows} of history (see
+     * {@link #historyLimit}), or null when the library is missing or refuses.
      */
-    static GhosttyCore create(int columns, int rows, int cellWidthPixels, int cellHeightPixels, int[] colors) {
+    static GhosttyCore create(int columns, int rows, int cellWidthPixels, int cellHeightPixels, int[] colors,
+                              int historyRows) {
         if (!GhosttyNative.isAvailable()) return null;
         GhosttyCore core = new GhosttyCore();
-        long handle = GhosttyNative.nativeCreate(columns, rows, cellWidthPixels, cellHeightPixels, HISTORY_ROWS, core);
+        long handle = GhosttyNative.nativeCreate(columns, rows, cellWidthPixels, cellHeightPixels, historyRows, core);
         if (handle == 0) return null;
         core.mHandle = handle;
         core.allocate(columns, rows);
@@ -83,8 +105,13 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (handle != 0) GhosttyNative.nativeFree(handle);
     }
 
+    /** Parse the bytes. The Java buffers see the result only after the next {@link #sync()}. */
     void write(byte[] data, int offset, int length) {
         if (mHandle != 0) GhosttyNative.nativeWrite(mHandle, data, offset, length);
+    }
+
+    void setHistoryLimit(int rows) {
+        if (mHandle != 0) GhosttyNative.nativeSetHistoryLimit(mHandle, rows);
     }
 
     void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {

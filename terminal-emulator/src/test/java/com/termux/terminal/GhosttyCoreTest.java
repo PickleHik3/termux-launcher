@@ -1,5 +1,7 @@
 package com.termux.terminal;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * The emulator running on the real libghostty-vt, built for this machine. Runs only in builds made
  * with {@code -Pghostty=true}, which build the host library and point the tests at it; elsewhere
@@ -13,6 +15,31 @@ public class GhosttyCoreTest extends TerminalTestCase {
         withTerminalSized(columns, rows);
         assertTrue("library failed to load: " + GhosttyNative.loadError(), mTerminal.useGhosttyCore());
         return true;
+    }
+
+    /** Like {@link #ghostty}, with a transcript of {@code transcriptRows} rows. */
+    private boolean ghostty(int columns, int rows, int transcriptRows) {
+        if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return false;
+        mTerminal = new TerminalEmulator(mOutput, false, columns, rows, INITIAL_CELL_WIDTH_PIXELS,
+            INITIAL_CELL_HEIGHT_PIXELS, transcriptRows, null);
+        assertTrue("library failed to load: " + GhosttyNative.loadError(), mTerminal.useGhosttyCore());
+        return true;
+    }
+
+    /** Numbered lines {@code from} to {@code to - 1}, each ending in CR LF. */
+    private static String numberedLines(int from, int to) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < to; i++) sb.append(i).append("\r\n");
+        return sb.toString();
+    }
+
+    /** Transcript row -1 is {@code newest}, -2 the number before it, back to row {@code -count}. */
+    private void assertTranscriptCountsDownFrom(int newest, int count, int columns) {
+        for (int i = 1; i <= count; i++) {
+            StringBuilder line = new StringBuilder(Integer.toString(newest - i + 1));
+            while (line.length() < columns) line.append(' ');
+            assertLineIs(-i, line.toString());
+        }
     }
 
     public void testTextReachesTheJavaBuffer() {
@@ -37,7 +64,7 @@ public class GhosttyCoreTest extends TerminalTestCase {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 3000; i++) sb.append(i).append("\r\n");
         enterString(sb.toString());
-        // Thousands of rows, across many write slices: the newest ones must be in order.
+        // Thousands of rows in one write: the newest ones must be in order.
         assertLinesAre("2998  ", "2999  ", "      ");
         assertLineIs(-1, "2997  ");
         assertLineIs(-6, "2992  ");
@@ -115,6 +142,80 @@ public class GhosttyCoreTest extends TerminalTestCase {
         assertEquals(3, mTerminal.mColumns);
         assertLineIs(0, "abc");
         assertLineIs(1, "def");
+    }
+
+    public void testOneWriteLongerThanAPageLandsWholeAndInOrder() {
+        // 6000 rows in one append, more than the 2048 rows the library used to keep: every row
+        // must come through the library's history at the one sync.
+        if (!ghostty(6, 3, 10000)) return;
+        enterString(numberedLines(0, 6000));
+        assertEquals(6000 - 2, mTerminal.getScreen().getActiveTranscriptRows());
+        assertLinesAre("5998  ", "5999  ", "      ");
+        assertTranscriptCountsDownFrom(5997, 5998, 6);
+    }
+
+    public void testWriteThatOutrunsTheHistoryLimitRewritesTheTranscript() {
+        // A 100-row transcript, history already at its limit, then 50000 rows in one write:
+        // Ghostty prunes the page holding the row the last sync pinned, so how much history grew
+        // says nothing, and the whole transcript comes from what history still holds.
+        if (!ghostty(8, 3, 100)) return;
+        enterString(numberedLines(0, 20000));
+        enterString(numberedLines(100000, 150000));
+        int capacity = 100 - 3;
+        assertEquals(capacity, mTerminal.getScreen().getActiveTranscriptRows());
+        assertLinesAre("149998  ", "149999  ", "        ");
+        assertTranscriptCountsDownFrom(149997, capacity, 8);
+    }
+
+    public void testBatchedOutputWaitsForTheFlush() {
+        if (!ghostty(6, 3, 1000)) return;
+        byte[] first = numberedLines(0, 40).getBytes(StandardCharsets.UTF_8);
+        byte[] second = numberedLines(40, 90).getBytes(StandardCharsets.UTF_8);
+        mTerminal.appendBatched(first, first.length);
+        mTerminal.appendBatched(second, second.length);
+        // Parsed by Ghostty, not yet mirrored.
+        assertLineIs(0, "      ");
+        assertEquals(0, mTerminal.getCursorRow());
+        mTerminal.flushBatchedOutput();
+        assertLinesAre("88    ", "89    ", "      ");
+        assertEquals(2, mTerminal.getCursorRow());
+        assertTranscriptCountsDownFrom(87, 88, 6);
+    }
+
+    public void testRowsScrolledBeforeTheAlternateScreenReachTheTranscript() {
+        // One write scrolls rows off and enters the alternate screen; they reach the transcript
+        // once the program leaves it.
+        if (!ghostty(6, 3, 1000)) return;
+        enterString(numberedLines(0, 10) + "\033[?1049h\033[Halt");
+        assertTrue(mTerminal.isAlternateBufferActive());
+        enterString("\033[?1049l");
+        assertFalse(mTerminal.isAlternateBufferActive());
+        assertLinesAre("8     ", "9     ", "      ");
+        assertTranscriptCountsDownFrom(7, 8, 6);
+    }
+
+    public void testPageRowsBoundCoversTheLibrary() {
+        // With a limit of one row Ghostty keeps about one page of history, so the most history
+        // ever seen is a page's rows: the margin historyLimit adds must cover it.
+        if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return;
+        byte[] chunk = numberedLines(0, 100).getBytes(StandardCharsets.UTF_8);
+        for (int columns : new int[]{6, 52, 200}) {
+            GhosttyCore core = GhosttyCore.create(columns, 3, 0, 0, null, 1);
+            assertNotNull(core);
+            try {
+                int most = 0;
+                for (int i = 0; i < 300; i++) {
+                    core.write(chunk, 0, chunk.length);
+                    assertTrue(core.sync());
+                    most = Math.max(most, core.state()[GhosttyNative.STATE_HISTORY]);
+                }
+                assertTrue("history never pruned at " + columns + " columns", most < 300 * 100 - 3);
+                assertTrue(columns + " columns: a page held " + most + " rows, bound " + GhosttyCore.pageRowsBound(columns),
+                    GhosttyCore.pageRowsBound(columns) >= most);
+            } finally {
+                core.release();
+            }
+        }
     }
 
     public void testReleasedCoreHandsOverToTheJavaParser() {
