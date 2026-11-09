@@ -77,7 +77,8 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
                               int historyRows) {
         if (!GhosttyNative.isAvailable()) return null;
         GhosttyCore core = new GhosttyCore();
-        long handle = GhosttyNative.nativeCreate(columns, rows, cellWidthPixels, cellHeightPixels, historyRows, core);
+        long handle = GhosttyNative.nativeCreate(columns, rows, cellWidthPixels, cellHeightPixels, historyRows, core,
+            TerminalEmulator.xtVersionName().getBytes(StandardCharsets.UTF_8));
         if (handle == 0) return null;
         core.mHandle = handle;
         core.allocate(columns, rows);

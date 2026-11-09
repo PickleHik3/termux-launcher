@@ -83,6 +83,8 @@ typedef struct {
     jobject sink;      // global ref to the GhosttyNative.Sink
     jmethodID on_reply;
     jmethodID on_clipboard;
+    uint8_t* xtversion;  // our XTVERSION name, owned here for the terminal's life
+    size_t xtversion_len;
     uint16_t cols, rows;
     uint32_t cell_w, cell_h;
     int events;
@@ -181,6 +183,16 @@ static void on_clipboard_write(GhosttyTerminal t, void* ud, const GhosttyClipboa
     if (w != NULL && w->reply != NULL) w->reply(w, &reply);
 }
 
+// XTVERSION: answer with the name Java gave at creation. The bytes live in Core until core_free,
+// longer than the callback requires; no JNI call here, since callbacks fire inside vt_write.
+static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
+    (void) t;
+    Core* c = (Core*) ud;
+    GhosttyString s = {.ptr = NULL, .len = 0};
+    if (c != NULL && c->xtversion != NULL) { s.ptr = c->xtversion; s.len = c->xtversion_len; }
+    return s;
+}
+
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
     if (c->top) ghostty_tracked_grid_ref_free(c->top);
@@ -189,6 +201,7 @@ static void core_free(Core* c, JNIEnv* env) {
     if (c->render) ghostty_render_state_free(c->render);
     if (c->term) ghostty_terminal_free(c->term);
     if (c->sink != NULL && env != NULL) (*env)->DeleteGlobalRef(env, c->sink);
+    free(c->xtversion);
     free(c->row_buf);
     free(c->dirty_buf);
     free(c->extra_buf);
@@ -256,7 +269,7 @@ static jint pack_attrs(const GhosttyStyle* style, GhosttyCellWide wide, uint32_t
 
 JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     JNIEnv* env, jclass cls, jint cols, jint rows, jint cell_w, jint cell_h, jint scrollback_lines,
-    jobject sink) {
+    jobject sink, jbyteArray xtversion) {
     (void) cls;
     if (cols < 1 || rows < 1 || cols > 0xffff || rows > 0xffff || sink == NULL) return 0;
     Core* c = calloc(1, sizeof(Core));
@@ -270,6 +283,15 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     c->on_reply = (*env)->GetMethodID(env, sink_class, "onPtyReply", "([B)V");
     c->on_clipboard = (*env)->GetMethodID(env, sink_class, "onClipboardWrite", "([B)V");
     if (c->on_reply == NULL || c->on_clipboard == NULL) { clear_exception(env); free(c); return 0; }
+    if (xtversion != NULL) {
+        jsize n = (*env)->GetArrayLength(env, xtversion);
+        if (n > 0) {
+            c->xtversion = malloc((size_t) n);
+            if (c->xtversion == NULL) { free(c); return 0; }
+            (*env)->GetByteArrayRegion(env, xtversion, 0, n, (jbyte*) c->xtversion);
+            c->xtversion_len = (size_t) n;
+        }
+    }
     c->sink = (*env)->NewGlobalRef(env, sink);
 
     if (ghostty_terminal_new(NULL, &c->term, (uint16_t) cols, (uint16_t) rows) != GHOSTTY_SUCCESS
@@ -291,6 +313,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_BELL, (const void*) on_bell);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*) on_title);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*) on_pwd);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
     // History only has to hold what the next sync copies into the Java transcript; Java picks the

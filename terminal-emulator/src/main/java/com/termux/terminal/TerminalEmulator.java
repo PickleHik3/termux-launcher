@@ -834,6 +834,11 @@ public final class TerminalEmulator {
             ? "termux-launcher" : "termux-launcher(" + appVersionName + ")";
     }
 
+    /** The XTVERSION answer both cores give; Ghostty panes copy it into native memory at creation. */
+    static String xtVersionName() {
+        return sXtVersionName;
+    }
+
     public void setCellSize(int w, int h) {
         cellW = w;
         cellH = h;

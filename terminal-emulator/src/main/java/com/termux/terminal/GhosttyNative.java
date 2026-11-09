@@ -137,7 +137,7 @@ final class GhosttyNative {
     }
 
     static native long nativeCreate(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                                    int historyRows, Sink sink);
+                                    int historyRows, Sink sink, byte[] xtVersion);
 
     static native void nativeFree(long handle);
 

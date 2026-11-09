@@ -255,4 +255,20 @@ public class GhosttyCoreTest extends TerminalTestCase {
         enterString("c");
         assertLineIs(0, "abc  ");
     }
+
+    public void testXtVersionIsOurNameOnBothCores() {
+        TerminalEmulator.setXtVersion("x.y");
+        try {
+            String expected = "\033P>|termux-launcher(x.y)\033\\";
+            withTerminalSized(10, 3);
+            assertEnteringStringGivesResponse("\033[>q", expected);
+            if (!ghostty(10, 3)) return;
+            enterString("\033[>q");
+            String reply = mOutput.getOutputAndClear();
+            assertEquals(expected, reply);
+            assertFalse(reply.toLowerCase().contains("ghostty"));
+        } finally {
+            TerminalEmulator.setXtVersion(null);
+        }
+    }
 }
