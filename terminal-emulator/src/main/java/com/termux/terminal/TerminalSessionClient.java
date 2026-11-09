@@ -84,6 +84,19 @@ public interface TerminalSessionClient {
     default void onPointerShapeChanged(@NonNull TerminalSession session, @Nullable String shape) {
     }
 
+    /** Whether the Terminal engine setting asks for Ghostty. Read once per new session. */
+    default boolean prefersGhosttyEngine() {
+        return false;
+    }
+
+    /**
+     * Hook for the Ghostty crash guard: true when it has switched the Ghostty core off, so new
+     * sessions use Standard whatever the setting says. Nothing turns it off yet.
+     */
+    default boolean isGhosttyEngineBlocked() {
+        return false;
+    }
+
     void onColorsChanged(@NonNull TerminalSession session);
 
     void onTerminalCursorStateChange(boolean state);

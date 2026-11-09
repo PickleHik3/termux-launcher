@@ -220,6 +220,7 @@ public final class SettingsRowIcons {
         // Terminal
         key(R.drawable.ic_ms_cleaning_services, "terminal_clipboard_cleanup");
         key(R.drawable.ic_ms_height, "terminal_margin_adjustment", "in_app_keyboard_floating_height");
+        key(R.drawable.ic_ms_speed, "terminal_engine");
         key(R.drawable.ic_ms_view_quilt, "terminal_sub_windows");
         key(R.drawable.ic_ms_toolbar, "status_bar");
         key(R.drawable.ic_ms_text_fields, "terminal_sub_text");

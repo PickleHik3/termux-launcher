@@ -392,7 +392,7 @@ public final class SettingsTree {
                     case "terminal_retro_effect": case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
                     case "terminal_osc52_clipboard_read_enabled": case "terminal_clipboard_cleanup":
-                    case "terminal_margin_adjustment":
+                    case "terminal_margin_adjustment": case "terminal_engine":
                         return "TerminalClipboardPreferencesFragment";
                     case "top_pane_clock_am_pm": case "status_widget_cpu": case "status_widget_ram":
                     case "status_widget_media": case "status_widget_weather":

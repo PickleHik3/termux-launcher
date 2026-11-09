@@ -736,6 +736,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     @Override
+    public boolean prefersGhosttyEngine() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences != null
+            && com.termux.terminal.TerminalEngine.isGhosttyPreference(preferences.getTerminalEngine());
+    }
+
+    @Override
     public Integer getTerminalCursorStyle() {
         return mHost.properties().getTerminalCursorStyle();
     }

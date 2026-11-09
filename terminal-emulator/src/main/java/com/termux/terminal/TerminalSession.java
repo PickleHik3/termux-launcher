@@ -193,7 +193,13 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void initializeEmulator(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         mEmulator = new TerminalEmulator(this, mBoldWithBright, columns, rows, cellWidthPixels, cellHeightPixels, mTranscriptRows, mClient);
-        if (GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES)) useGhosttyCoreOrLog();
+        // Ghostty when the Terminal engine setting or the debug property asks for it (either is
+        // enough), the library loads and the crash guard allows it; see TerminalEngine.
+        boolean preferred = mClient != null && mClient.prefersGhosttyEngine();
+        boolean property = GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES);
+        if ((preferred || property) && TerminalEngine.useGhostty(preferred, property,
+            GhosttyNative.isAvailable(), mClient != null && mClient.isGhosttyEngineBlocked()))
+            useGhosttyCoreOrLog();
 
         int[] processId = new int[1];
         mTerminalFileDescriptor = JNI.createSubprocess(mShellPath, mCwd, mArgs, mEnv, processId, rows, columns, cellWidthPixels, cellHeightPixels);

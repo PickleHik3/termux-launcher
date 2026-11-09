@@ -44,6 +44,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (events != null) events.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         androidx.preference.Preference composite = findPreference("terminal_retro_composite");
         if (composite != null) composite.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        androidx.preference.Preference engine = findPreference("terminal_engine");
+        if (engine != null) engine.setVisible(com.termux.terminal.TerminalEngine.isAvailable());
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
             SettingsEditorDoors.openEditor(this, row,
@@ -91,7 +93,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         }
 
         private static boolean isViewStringKey(String key) {
-            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key);
+            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key)
+                || "terminal_engine".equals(key);
         }
 
         @Override public void putString(String key, @Nullable String value) {
