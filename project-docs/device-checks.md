@@ -36,10 +36,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   bottom of a pane, mode 2026 hold, trim with an image on screen, links in scrollback, prompt jumps,
   OSC 99 notifications, the Terminal engine row in light and dark, the crash guard (force-stop keeps
   Fast on, a native crash turns it off, an update turns it back on), an idle Fast pane (6 frames in
-  30 s). Still owed · pong, Fast engine: a sixel taller than the pane and one at the right edge;
-  `clear` and `printf '\e[2J'` with a sixel on screen; `printf '\e[c'` answers `?62;4;22c`. Drop
-  build: Settings › Terminal › Clipboard & compatibility shows Terminal engine (the library is in
-  the APK).
+  30 s). Sixel against a real Standard baseline (11-09, the setting on Standard, not the property):
+  top, bottom, taller than the pane, cut at the right edge, `clear` and `\e[2J` all match; DA1 is
+  `?62;4;22` on Fast and `?64;1;2;4;6;9;15;18;21;22` on Standard. Fast draws a sixel taller than the
+  pane up into the pane's top padding by a few pixels where Standard stops at the first row
+  (cosmetic). Still owed · drop build: Settings › Terminal › Clipboard & compatibility shows
+  Terminal engine (the library is in the APK).
 
 - **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
   shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
