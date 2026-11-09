@@ -1,13 +1,13 @@
 package com.termux.app.chrome.scene;
 
 /**
- * Pure rules of the wallpaper scene prototype: how the three debug properties read, and the
- * ambient frame-skip gate the layer's Choreographer callback asks on every vsync.
+ * Pure rules of the moving wallpaper's layer: how the debug properties read, and the frame-skip
+ * gate the layer's Choreographer callback asks on every vsync.
  *
- * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour}, {@code filament}, {@code contour-waves}, {@code nebula}, {@code bloom}, {@code aurora}, {@code coastal-sunset} or
- * {@code particles} the scene of that name.
- * {@code debug.tl.scene_rate}: ambient frames per second when nothing is happening, {@code 30}
- * (default), {@code 90}, or {@code 0} for no ambient motion. {@code debug.tl.scene_glass}:
+ * <p>{@code debug.tl.shader_file}: an absolute path; when set, that file runs as the active shader
+ * (over the user's choice) and is reloaded when its time stamp moves.
+ * {@code debug.tl.scene_rate}: frames per second, overriding the shader's rate: {@code 15},
+ * {@code 30}, {@code 60}, {@code 90} (every vsync), or {@code 0} for no motion. {@code debug.tl.scene_glass}:
  * {@code lowres} (default) or {@code still}. {@code debug.tl.scene_glass_rate}: the low-res
  * pass's frames per second, half the scene's ambient rate by default (15 at 30, 45 at 90, 0 when
  * the scene is still), 0 for none. {@code debug.tl.scene_glass_div}: the low-res pass's divisor of the
@@ -15,7 +15,7 @@ package com.termux.app.chrome.scene;
  */
 public final class SceneFramePolicy {
 
-    public static final String PROP_SCENE = "debug.tl.scene";
+    public static final String PROP_SHADER_FILE = "debug.tl.shader_file";
     public static final String PROP_RATE = "debug.tl.scene_rate";
     public static final String PROP_GLASS = "debug.tl.scene_glass";
     public static final String PROP_GLASS_RATE = "debug.tl.scene_glass_rate";
@@ -29,10 +29,6 @@ public final class SceneFramePolicy {
     static final long SLACK_NS = 4_000_000L;
 
     private SceneFramePolicy() {}
-
-    public static boolean sceneOn(String value) {
-        return ScenePrograms.isKind(value);
-    }
 
     /** 0, 15, 30, 60 or 90 (anything else reads as 30), the ambient rate in Hz. */
     public static int parseRate(String value) {
@@ -52,8 +48,8 @@ public final class SceneFramePolicy {
     static final int THERMAL_SEVERE = 3;
 
     /**
-     * Whether the scene stops animating and holds its t = 0 frame: battery saver is on, or the
-     * device's thermal status is severe or worse. When neither holds, it resumes from t = 0.
+     * Whether the scene stops animating and holds its last frame: battery saver is on, or the
+     * device's thermal status is severe or worse. When neither holds, it goes on from where it stopped.
      */
     public static boolean holdAtStill(boolean powerSaveMode, int thermalStatus) {
         return powerSaveMode || thermalStatus >= THERMAL_SEVERE;

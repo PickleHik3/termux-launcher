@@ -115,25 +115,15 @@ public final class LiveSceneLogic {
         return Math.max(1, Math.min(Math.round(280f * density), Math.round(screenHeightPx * 0.34f)));
     }
 
-    /** The scene's name. */
+    /** The scene's name. The AGSL scenes are gone; wave C replaces this page with the shader editor. */
     @StringRes
     public static int nameRes(@Nullable String kind) {
-        if ("aurora".equals(kind)) return R.string.live_scene_aurora;
-        if ("contour-waves".equals(kind)) return R.string.live_scene_contour_waves;
-        if ("nebula".equals(kind)) return R.string.live_scene_nebula;
-        if ("bloom".equals(kind)) return R.string.live_scene_bloom;
-        if ("coastal-sunset".equals(kind)) return R.string.live_scene_coastal_sunset;
-        return R.string.live_scene_particles;
+        return R.string.wallpaper_kind_live;
     }
 
-    /** One fact about the scene. */
+    /** One fact about the scene; see {@link #nameRes}. */
     @StringRes
     public static int descRes(@Nullable String kind) {
-        if ("aurora".equals(kind)) return R.string.live_scene_aurora_desc;
-        if ("contour-waves".equals(kind)) return R.string.live_scene_contour_waves_desc;
-        if ("nebula".equals(kind)) return R.string.live_scene_nebula_desc;
-        if ("bloom".equals(kind)) return R.string.live_scene_bloom_desc;
-        if ("coastal-sunset".equals(kind)) return R.string.live_scene_coastal_sunset_desc;
-        return R.string.live_scene_particles_desc;
+        return R.string.live_scenes_heading;
     }
 }

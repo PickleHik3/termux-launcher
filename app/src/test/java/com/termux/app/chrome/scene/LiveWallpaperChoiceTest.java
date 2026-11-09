@@ -1,9 +1,7 @@
 package com.termux.app.chrome.scene;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -12,18 +10,13 @@ import org.junit.Test;
 public class LiveWallpaperChoiceTest {
 
     @Test
-    public void parseSceneAcceptsOnlyUserFacingKinds() {
-        for (String kind : new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles", "coastal-sunset"}) {
-            assertEquals(kind, LiveWallpaperChoice.parseScene(kind));
+    public void everySceneNameReadsAsNoneNowTheScenesAreGone() {
+        for (String kind : new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles",
+            "coastal-sunset", "contour", "filament", "", "off"}) {
+            assertNull(kind, LiveWallpaperChoice.parseScene(kind));
         }
-        assertEquals("nebula", LiveWallpaperChoice.parseScene("  nebula "));
         assertNull(LiveWallpaperChoice.parseScene(null));
-        assertNull(LiveWallpaperChoice.parseScene(""));
-        assertNull(LiveWallpaperChoice.parseScene("off"));
-        assertNull(LiveWallpaperChoice.parseScene("nope"));
-        // Debug-only kinds are not a user choice.
-        assertNull(LiveWallpaperChoice.parseScene("contour"));
-        assertNull(LiveWallpaperChoice.parseScene("filament"));
+        assertEquals(0, LiveWallpaperChoice.USER_KINDS.length);
     }
 
     @Test
@@ -82,41 +75,27 @@ public class LiveWallpaperChoiceTest {
     public void withersKeepTheOtherFields() {
         LiveWallpaperChoice c = LiveWallpaperChoice.none().withScene("aurora").withSpeed(1.5f)
             .withRateHz(60).withDensity(0.5f).withPalette(2);
-        assertEquals("aurora", c.scene);
+        assertNull(c.scene);
         assertEquals(1.5f, c.speed, 0f);
         assertEquals(60, c.rateHz);
         assertEquals(0.5f, c.density, 0f);
         assertEquals(2, c.palette);
-        assertEquals(c, new LiveWallpaperChoice("aurora", 1.5f, 60, 0.5f, 2));
+        assertEquals(c, new LiveWallpaperChoice(null, 1.5f, 60, 0.5f, 2));
     }
 
     @Test
-    public void supportStartsAtApi33() {
-        assertFalse(LiveWallpaperChoice.isSupported(32));
-        assertTrue(LiveWallpaperChoice.isSupported(33));
+    public void supportStartsAtApi29() {
+        assertFalse(LiveWallpaperChoice.isSupported(28));
+        assertTrue(LiveWallpaperChoice.isSupported(29));
         assertTrue(LiveWallpaperChoice.isSupported(35));
     }
 
     @Test
-    public void onlyAuroraAndParticlesHaveDensityAndPalette() {
-        for (String kind : LiveWallpaperChoice.USER_KINDS) {
-            boolean has = kind.equals("aurora") || kind.equals("particles");
-            assertEquals(kind, has, LiveWallpaperChoice.supportsDensity(kind));
-            assertEquals(kind, has, LiveWallpaperChoice.supportsPalette(kind));
-            assertEquals(kind, has ? 3 : 0, LiveWallpaperChoice.paletteNames(kind).length);
-        }
-        assertFalse(LiveWallpaperChoice.supportsDensity(null));
+    public void noKindHasDensityOrPalette() {
+        assertFalse(LiveWallpaperChoice.supportsDensity("aurora"));
+        assertFalse(LiveWallpaperChoice.supportsPalette("particles"));
+        assertEquals(0, LiveWallpaperChoice.paletteNames("aurora").length);
         assertEquals(0, LiveWallpaperChoice.paletteNames(null).length);
-    }
-
-    @Test
-    public void paletteNamesAreDistinctPerScene() {
-        int[] aurora = LiveWallpaperChoice.paletteNames("aurora");
-        int[] particles = LiveWallpaperChoice.paletteNames("particles");
-        java.util.HashSet<Integer> all = new java.util.HashSet<>();
-        for (int id : aurora) all.add(id);
-        for (int id : particles) all.add(id);
-        assertEquals(6, all.size());
     }
 
     @Test
@@ -124,8 +103,5 @@ public class LiveWallpaperChoiceTest {
         for (String key : LiveWallpaperChoice.KEYS) assertTrue(LiveWallpaperChoice.isChoiceKey(key));
         assertFalse(LiveWallpaperChoice.isChoiceKey("wallpaper_lock_choice"));
         assertFalse(LiveWallpaperChoice.isChoiceKey(null));
-        assertNotNull(LiveWallpaperChoice.USER_KINDS);
-        assertArrayEquals(new String[] {"aurora", "contour-waves", "nebula", "bloom", "particles", "coastal-sunset"},
-            LiveWallpaperChoice.USER_KINDS);
     }
 }

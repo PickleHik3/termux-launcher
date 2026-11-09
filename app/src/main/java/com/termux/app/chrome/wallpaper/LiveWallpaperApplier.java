@@ -92,7 +92,7 @@ public final class LiveWallpaperApplier {
             int[] still = LiveSceneLogic.stillSize(size[0], size[1]);
             Bitmap bitmap;
             try {
-                bitmap = SceneStill.render(app, choice.scene, choice, still[0], still[1]);
+                bitmap = SceneStill.renderActive(app, still[0], still[1]);
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Drawing the scene still failed", e);
                 return Result.STILL_FAILED;
@@ -162,6 +162,17 @@ public final class LiveWallpaperApplier {
             return;
         }
         LiveWallpaperChoice.none().write(prefs);
+        GeneratedWallpaperApplier.onWorker(() -> post(cb, restore(app)));
+    }
+
+    /**
+     * The migration off the AGSL scenes ({@code WallpaperMotion.Migration}): the caller has already
+     * cleared the old keys; this puts the remembered photos back, as {@link #backToPhoto} does,
+     * without writing the choice.
+     */
+    @MainThread
+    public static void putBackRememberedPhoto(@NonNull Context ctx, @Nullable Callback cb) {
+        final Context app = ctx.getApplicationContext();
         GeneratedWallpaperApplier.onWorker(() -> post(cb, restore(app)));
     }
 

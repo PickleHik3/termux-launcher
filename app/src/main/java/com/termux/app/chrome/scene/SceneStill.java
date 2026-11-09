@@ -2,34 +2,28 @@ package com.termux.app.chrome.scene;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.ColorSpace;
-import android.graphics.HardwareRenderer;
-import android.graphics.Paint;
-import android.graphics.PixelFormat;
-import android.graphics.RecordingCanvas;
-import android.graphics.RenderNode;
-import android.hardware.HardwareBuffer;
-import android.media.Image;
-import android.media.ImageReader;
 import android.os.Build;
-import android.os.SystemClock;
 import android.os.Trace;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
+
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import java.io.File;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
- * The still of a live scene: its t = 0 frame at the user's knobs, as a software ARGB_8888 bitmap
- * that {@code WallpaperManager.setBitmap} accepts (Home and Lock show it). Drawn by a one-off
- * {@link HardwareRenderer} into an {@link ImageReader}, the way {@code WallpaperGpuBlur} bakes;
- * callable from any thread (not the one that must stay responsive: the GPU wait can take a while).
- * Nothing is kept: every renderer, reader, image and buffer is released before it returns.
+ * The still of a shader: its frame at {@code iTime = 0}, rendered offscreen on a context of its
+ * own (FBO + {@code glReadPixels}) as a software ARGB_8888 bitmap that
+ * {@code WallpaperManager.setBitmap} accepts (Home and Lock show it). Call on a worker thread: the
+ * GPU wait can take a while. Nothing is kept: the context, its textures and the read buffer are
+ * let go before it returns. The launcher uniforms (colours, keyboard, page) are at their defaults.
  */
 public final class SceneStill {
 
-    /** How long the frame may take to reach the reader before the render counts as failed. */
-    private static final long IMAGE_WAIT_MS = 2000L;
-    private static final long IMAGE_POLL_MS = 2L;
     /** The longest side, in pixels, a still is rendered at (GPU texture limits and memory). */
     static final int MAX_SIDE_PX = 4096;
 
@@ -49,95 +43,76 @@ public final class SceneStill {
     }
 
     /**
-     * @param kind one of the scene kinds (see {@link LiveWallpaperChoice#USER_KINDS})
-     * @param choice the knobs: density and palette apply where the scene has them (speed has no
-     *               meaning at t = 0)
-     * @return a mutable software ARGB_8888 bitmap, or null when the device cannot render scenes
-     *         (below API 33), the kind is unknown, or the thread was interrupted
-     * @throws IllegalStateException when the GPU did not deliver the frame
+     * The still of the active choice ({@link ShaderStore#readMotion}): null when it is not a stored
+     * shader, the device cannot run shaders (below API 29), or the shader does not build.
+     *
+     * @throws IllegalStateException when the GPU could not draw it
      */
+    @WorkerThread
     @Nullable
-    public static Bitmap render(@NonNull Context context, @NonNull String kind,
-                                @NonNull LiveWallpaperChoice choice, int widthPx, int heightPx) {
-        if (!LiveWallpaperChoice.isSupported() || !ScenePrograms.isKind(kind)) return null;
-        return renderApi33(context, kind, choice, widthPx, heightPx);
+    public static Bitmap renderActive(@NonNull Context context, int widthPx, int heightPx) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+        if (prefs == null) return null;
+        WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
+        if (motion.kind != WallpaperMotion.Kind.SHADER || motion.id == null) return null;
+        String source = ShaderStore.readText(ShaderStore.sourceFile(context, motion.id));
+        if (source == null) return null;
+        ShaderStore.Meta meta = ShaderStore.readMeta(context, motion.id);
+        return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx);
     }
 
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    /**
+     * @param channel0 the iChannel0 image, or null for none
+     * @return a mutable software ARGB_8888 bitmap, or null below API 29 or when the shader does not build
+     * @throws IllegalStateException when the GPU could not draw it
+     */
+    @WorkerThread
     @Nullable
-    private static Bitmap renderApi33(@NonNull Context context, @NonNull String kind,
-                                      @NonNull LiveWallpaperChoice choice, int widthPx, int heightPx) {
+    public static Bitmap render(@NonNull String source, @Nullable File channel0, int widthPx, int heightPx) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
         int[] size = fitSize(widthPx, heightPx);
         int width = size[0], height = size[1];
         Trace.beginSection("Scene.still");
-        ImageReader reader = null;
-        HardwareRenderer renderer = null;
-        RenderNode node = null;
-        Image image = null;
-        HardwareBuffer buffer = null;
-        Bitmap wrapped = null;
-        SceneArtwork artwork = null;
+        SceneGl gl = null;
         try {
-            artwork = new SceneArtwork(context, SceneArtwork.COASTAL_SUNSET_ASSET);
-            SceneProgram program = ScenePrograms.factory(kind, new FilamentSource(), artwork).create(1f);
-            program.setSize(width, height, context.getResources().getDisplayMetrics().density);
-            program.setKnobs(choice.speed, choice.density, choice.palette);
-            program.restart();
-            program.setTime(0L);
-
-            reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 1,
-                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE | HardwareBuffer.USAGE_GPU_COLOR_OUTPUT);
-            node = new RenderNode("SceneStill");
-            node.setPosition(0, 0, width, height);
-            Paint paint = new Paint();
-            paint.setAntiAlias(false);
-            paint.setShader(program.shader());
-            RecordingCanvas canvas = node.beginRecording(width, height);
             try {
-                canvas.drawRect(0f, 0f, width, height, paint);
-            } finally {
-                node.endRecording();
+                gl = new SceneGl();
+            } catch (SceneEgl.EglException e) {
+                throw new IllegalStateException(e.getMessage(), e);
             }
-
-            renderer = new HardwareRenderer();
-            renderer.setOpaque(true);
-            renderer.setSurface(reader.getSurface());
-            renderer.setContentRoot(node);
-            int sync = renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw();
-            if ((sync & (HardwareRenderer.SYNC_FRAME_DROPPED
-                | HardwareRenderer.SYNC_CONTEXT_IS_STOPPED
-                | HardwareRenderer.SYNC_LOST_SURFACE_REWARD_IF_FOUND)) != 0) {
-                throw new IllegalStateException("scene still not drawn, sync result " + sync);
+            try {
+                gl.setShader(GlShader.build(source));
+            } catch (GlShader.CompileException e) {
+                return null;
             }
-
-            long deadline = SystemClock.uptimeMillis() + IMAGE_WAIT_MS;
-            while ((image = reader.acquireNextImage()) == null) {
-                if (SystemClock.uptimeMillis() >= deadline) {
-                    throw new IllegalStateException("no scene still within " + IMAGE_WAIT_MS + " ms");
-                }
-                try {
-                    Thread.sleep(IMAGE_POLL_MS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return null;
-                }
-            }
-            buffer = image.getHardwareBuffer();
-            if (buffer == null) throw new IllegalStateException("scene still has no hardware buffer");
-            wrapped = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
-            if (wrapped == null) throw new IllegalStateException("could not wrap the scene still's buffer");
-            Bitmap result = wrapped.copy(Bitmap.Config.ARGB_8888, true);
-            if (result == null) throw new IllegalStateException("could not copy the scene still to software");
-            return result;
+            if (channel0 != null) gl.setChannel(0, new ImageChannel(channel0));
+            ShaderInputs in = new ShaderInputs();
+            in.setDate(System.currentTimeMillis());
+            gl.renderScene(in, width, height, 0L);
+            ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
+            gl.readScene(pixels);
+            if (gl.outOfMemory()) throw new IllegalStateException("out of graphics memory drawing the still");
+            return toBitmap(pixels, width, height);
         } finally {
-            if (wrapped != null) wrapped.recycle();
-            if (buffer != null) buffer.close();
-            if (image != null) image.close();
-            if (renderer != null) renderer.destroy();
-            if (node != null) node.discardDisplayList();
-            if (reader != null) reader.close();
-            if (artwork != null) artwork.release();
+            if (gl != null) gl.release();
             Trace.endSection();
         }
+    }
+
+    /** GL rows are bottom first: flipped into a top-first bitmap, alpha forced opaque. */
+    @NonNull
+    private static Bitmap toBitmap(@NonNull ByteBuffer glPixels, int width, int height) {
+        int row = width * 4;
+        byte[] src = new byte[row * height];
+        glPixels.position(0);
+        glPixels.get(src);
+        byte[] dst = new byte[src.length];
+        for (int y = 0; y < height; y++) {
+            System.arraycopy(src, (height - 1 - y) * row, dst, y * row, row);
+        }
+        for (int i = 3; i < dst.length; i += 4) dst[i] = (byte) 0xff;
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(dst));
+        return bitmap;
     }
 }

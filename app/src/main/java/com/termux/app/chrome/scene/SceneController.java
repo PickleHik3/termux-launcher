@@ -6,28 +6,36 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.color.MaterialColors;
+import com.termux.R;
+import com.termux.app.chrome.wallpaper.LiveWallpaperApplier;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.terminal.DebugChoice;
 import com.termux.terminal.DebugSwitch;
 import com.termux.terminal.LatencyProbe;
 import com.termux.view.TerminalView;
 
+import java.io.File;
 import java.util.List;
 
 /**
- * Owns the wallpaper scene prototype's layer for one activity and feeds it the launcher's events.
- * Debug properties only (see {@link SceneFramePolicy}); with {@code debug.tl.scene} unset every
- * entry point is a field read, and no view exists.
+ * Owns the moving wallpaper's layer for one activity and feeds it the launcher's events. The
+ * choice is {@link TERMUX_APP#KEY_WALLPAPER_MOTION} ({@link WallpaperMotion}); with a photo chosen
+ * and {@code debug.tl.shader_file} unset every entry point is a field read, and no view exists.
  *
  * <p>The layer is a SurfaceView inserted into the terminal root container directly above the
  * wallpaper backdrop and below everything else the container holds (panes, chrome, widgets), sized
@@ -36,8 +44,14 @@ import java.util.List;
  * backdrop, the root's background) is cleared there and the scene replaces the system-wallpaper
  * show-through, while everything drawn after it composites over the scene as it did over the
  * wallpaper.</p>
+ *
+ * <p>At start: a stored AGSL Live scene is migrated once ({@link WallpaperMotion.Migration}), and
+ * a pending marker left by an apply that never drew {@link ShaderSafety#PENDING_CLEAR_MS} (the
+ * process died) reverts to photo before any surface is made. Video (wave B) has no layer yet.</p>
  */
 public final class SceneController implements LatencyProbe.CommitListener {
+
+    private static final String TAG = "SceneController";
 
     /** What the controller needs from the activity. */
     public interface Host {
@@ -49,12 +63,12 @@ public final class SceneController implements LatencyProbe.CommitListener {
 
         boolean lazyMode();
 
-        /** The preferences the live wallpaper choice is stored in, or null before they exist. */
+        /** The preferences the wallpaper choice is stored in, or null before they exist. */
         @Nullable TermuxAppSharedPreferences preferences();
     }
 
-    private static final DebugChoice SCENE =
-        new DebugChoice(SceneFramePolicy.PROP_SCENE, "off", DebugSwitch.SYSTEM_PROPERTIES);
+    private static final DebugChoice SHADER_FILE =
+        new DebugChoice(SceneFramePolicy.PROP_SHADER_FILE, "", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice RATE =
         new DebugChoice(SceneFramePolicy.PROP_RATE, "", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS =
@@ -65,22 +79,29 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private static final DebugChoice TRACE_INVAL =
         new DebugChoice("debug.tl.scene_trace_inval", "0", DebugSwitch.SYSTEM_PROPERTIES);
 
+    /** The pending marker is a crash sign only when found as the process starts. */
+    private static boolean sPendingChecked;
+
     @NonNull private final Activity mActivity;
     @NonNull private final FrameLayout mContainer;
     @Nullable private final View mBackdrop;
     @NonNull private final Host mHost;
-    @NonNull private final float[] mCursor = new float[2];
     @NonNull private final int[] mLoc = new int[2];
     @Nullable private SceneLayerView mLayer;
-    @Nullable private String mWindowName;
     private boolean mAttached;
     @Nullable private SceneInvalTrace mInvalTrace;
     /** The persisted choice as of the last attach or {@link #refresh}; read here, never per touch. */
-    @NonNull private LiveWallpaperChoice mChoice = LiveWallpaperChoice.none();
+    @NonNull private WallpaperMotion mMotion = WallpaperMotion.photo();
+    /** The stored shader's settings, read when the choice changes. */
+    @Nullable private ShaderStore.Meta mMeta;
+    /** The debug file a layer gave up on: not tried again until the property changes. */
+    @Nullable private String mDebugGaveUp;
+    /** The current gesture began over the keyboard: its moves are typing, not the scene's. */
+    private boolean mGestureOverKeys;
     @Nullable private SharedPreferences mStore;
     private final SharedPreferences.OnSharedPreferenceChangeListener mChoiceListener =
         (prefs, key) -> {
-            if (LiveWallpaperChoice.isChoiceKey(key)) refresh();
+            if (TERMUX_APP.KEY_WALLPAPER_MOTION.equals(key)) refresh();
         };
     private boolean mPowerWatched;
     private boolean mPowerHold;
@@ -102,19 +123,26 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mHost = host;
     }
 
+    /** Shaders need OpenGL ES 3 and {@code Bitmap.wrapHardwareBuffer} for the glass: API 29 and later. */
+    public static boolean isSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+
     /** From onStart. */
     public void attach() {
         mAttached = true;
         LatencyProbe.setCommitListener(this);
         listenForChoice();
+        migrateLiveScene();
         readChoice();
+        checkPending();
         poll();
     }
 
     /**
-     * Re-reads the persisted choice and applies it now: a different scene switches the layer, the
-     * same scene takes the new knobs in place. Cheap when nothing changed. Triggered by this
-     * controller's own preference listener (while attached); a caller may also call it directly.
+     * Re-reads the persisted choice and applies it now: a different shader switches the layer, the
+     * same shader takes the new rate and quality in place. Cheap when nothing changed. Triggered by
+     * this controller's own preference listener (while attached); a caller may also call it directly.
      */
     public void refresh() {
         if (!mAttached) return;
@@ -122,14 +150,52 @@ public final class SceneController implements LatencyProbe.CommitListener {
         poll();
     }
 
-    private void readChoice() {
+    @Nullable
+    private SharedPreferences store() {
         TermuxAppSharedPreferences prefs = mHost.preferences();
-        mChoice = prefs == null ? LiveWallpaperChoice.none() : LiveWallpaperChoice.read(prefs);
+        return prefs == null ? null : prefs.getSharedPreferences();
+    }
+
+    private void readChoice() {
+        SharedPreferences store = store();
+        WallpaperMotion motion = store == null ? WallpaperMotion.photo() : ShaderStore.readMotion(store);
+        if (motion.kind == WallpaperMotion.Kind.SHADER && motion.id != null
+            && (!motion.equals(mMotion) || mMeta == null)) {
+            mMeta = ShaderStore.readMeta(mActivity, motion.id);
+        } else if (motion.kind != WallpaperMotion.Kind.SHADER) {
+            mMeta = null;
+        }
+        mMotion = motion;
+    }
+
+    /** The one-time move off the AGSL scenes: clear the old keys, put the remembered photo back. */
+    private void migrateLiveScene() {
+        SharedPreferences store = store();
+        if (store == null) return;
+        String old = store.getString(TERMUX_APP.KEY_LIVE_WALLPAPER_SCENE, null);
+        if (WallpaperMotion.Migration.plan(old) != WallpaperMotion.Migration.Plan.CLEAR_AND_RESTORE_PHOTO) return;
+        Log.i(TAG, "Live scene " + old + " is gone: clearing its keys and putting the photo back");
+        SharedPreferences.Editor edit = store.edit();
+        for (String key : WallpaperMotion.Migration.OLD_KEYS) edit.remove(key);
+        edit.apply();
+        LiveWallpaperApplier.putBackRememberedPhoto(mActivity, null);
+    }
+
+    /** Once per process: a marker means the last apply never drew 3 s, so go back to photo. */
+    private void checkPending() {
+        if (sPendingChecked) return;
+        sPendingChecked = true;
+        if (!ShaderStore.hasPending(mActivity)) return;
+        if (!mMotion.moves()) {
+            ShaderStore.clearPending(mActivity);
+            return;
+        }
+        Log.w(TAG, "pending marker found at start: " + mMotion + " never ran 3 s, back to photo");
+        revertToPhoto();
     }
 
     private void listenForChoice() {
-        TermuxAppSharedPreferences prefs = mHost.preferences();
-        SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        SharedPreferences store = store();
         if (store == mStore) return;
         unlistenForChoice();
         if (store == null) return;
@@ -151,15 +217,30 @@ public final class SceneController implements LatencyProbe.CommitListener {
         removeLayer();
     }
 
-    /** Every window touch; a touch-down also re-reads the properties (at most once a second). */
+    /** Every window touch: the pointer for {@code iMouse}; a touch-down also re-reads the properties (at most once a second). */
     public void onWindowTouch(@NonNull MotionEvent ev) {
-        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
-        poll();
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            poll();
+            // Taps on the keyboard and the extra keys are typing, and the scene does not see typing.
+            mGestureOverKeys = overKeys(mActivity.getWindow().getDecorView(), ev.getRawX(), ev.getRawY());
+        }
         SceneLayerView layer = mLayer;
-        if (layer == null) return;
-        // Taps on the keyboard and the extra keys are typing, and scenes do not react to typing.
-        if (overKeys(mActivity.getWindow().getDecorView(), ev.getRawX(), ev.getRawY())) return;
-        layer.touchDown(ev.getRawX(), ev.getRawY());
+        if (layer == null || mGestureOverKeys) return;
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                layer.touchDown(ev.getRawX(), ev.getRawY());
+                break;
+            case MotionEvent.ACTION_MOVE:
+                layer.touchMove(ev.getRawX(), ev.getRawY());
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                layer.touchUp(ev.getRawX(), ev.getRawY());
+                break;
+            default:
+                break;
+        }
     }
 
     /** Whether a shown keyboard or extra-keys view lies under the screen point. */
@@ -180,19 +261,16 @@ public final class SceneController implements LatencyProbe.CommitListener {
         return false;
     }
 
-    /** A terminal bell from {@code pane}. */
-    public void onBell(@Nullable TerminalView pane) {
-        SceneLayerView layer = mLayer;
-        if (layer == null || pane == null || pane.getWidth() <= 0) return;
-        pane.getLocationOnScreen(mLoc);
-        float hw = pane.getWidth() / 2f, hh = pane.getHeight() / 2f;
-        layer.bell(mLoc[0] + hw, mLoc[1] + hh, hw, hh);
-    }
+    /** A terminal bell. The shader contract has no bell input; kept for the activity's call site. */
+    public void onBell(@Nullable TerminalView pane) {}
+
+    /** The focused window's chip text. The shader contract has no window name; kept for the activity's call site. */
+    public void onFocusedWindow(@Nullable String label) {}
 
     /**
-     * A key was committed. Scenes do not react to typing (the keyboard, the echo and the trail
-     * already move with every key); instead the scene holds still while typing goes on, so it
-     * costs nothing on the render thread exactly when latency matters.
+     * A key was committed. The scene does not react to typing (the keyboard, the echo and the trail
+     * already move with every key); instead it holds still while typing goes on, so it costs
+     * nothing on the render thread exactly when latency matters.
      */
     @Override
     public void onCommit() {
@@ -200,60 +278,90 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (layer != null) layer.holdForTyping();
     }
 
+    /** What should run now: the debug file, else the stored shader, else nothing. */
+    @Nullable
+    private SceneLayerView.Spec currentSpec(long now) {
+        String path = SHADER_FILE.get(now);
+        if (path != null && !path.trim().isEmpty()) {
+            path = path.trim();
+            if (path.equals(mDebugGaveUp)) return null;
+            return new SceneLayerView.Spec("file:" + path, new File(path), null,
+                ShaderSafety.Quality.HALF, true);
+        }
+        mDebugGaveUp = null;
+        if (mMotion.kind != WallpaperMotion.Kind.SHADER || mMotion.id == null || mMeta == null) return null;
+        File channel0 = ShaderStore.textureFile(mActivity, mMotion.id, mMeta);
+        return new SceneLayerView.Spec(mMotion.format(), ShaderStore.sourceFile(mActivity, mMotion.id),
+            channel0, mMeta.quality, false);
+    }
+
     private void poll() {
         if (!mAttached) return;
         long now = SystemClock.uptimeMillis();
-        // A set debug property overrides the user's choice; without one the choice decides.
-        String prop = SCENE.get(now);
-        String value = SceneFramePolicy.sceneOn(prop) ? prop : mChoice.effectiveScene();
-        boolean on = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            && SceneFramePolicy.sceneOn(value);
-        // A different scene is a different layer: the property switches it on the next poll.
-        if (mLayer != null && (!on || !mLayer.kind().equals(value))) removeLayer();
-        if (on && mLayer == null) installLayer(value);
+        SceneLayerView.Spec spec = isSupported() ? currentSpec(now) : null;
+        // A different shader is a different layer.
+        if (mLayer != null && (spec == null || !mLayer.key().equals(spec.key))) removeLayer();
+        if (spec != null && mLayer == null) installLayer(spec);
         SceneLayerView layer = mLayer;
-        if (layer == null) return;
+        if (layer == null || spec == null) return;
         String rateProp = RATE.get(now);
+        int choiceRate = spec.debugFile || mMeta == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mMeta.rateHz;
         int sceneRate = rateProp == null || rateProp.isEmpty()
-            ? mChoice.rateHz : SceneFramePolicy.parseRate(rateProp);
+            ? choiceRate : SceneFramePolicy.parseRate(rateProp);
         layer.setRateHz(sceneRate);
-        layer.setKnobs(mChoice.speed, mChoice.density, mChoice.palette);
+        layer.setQuality(spec.quality);
         layer.setPowerHold(mPowerHold);
         layer.setGlassLowRes(SceneFramePolicy.glassLowRes(GLASS.get(now)));
         layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now), sceneRate));
     }
 
-    private void installLayer(@NonNull String kind) {
-        SceneLayerView layer = new SceneLayerView(mActivity, kind, this::paneRects, mHost::lazyMode);
+    private void installLayer(@NonNull SceneLayerView.Spec spec) {
+        SceneLayerView layer = new SceneLayerView(mActivity, spec, mHost::lazyMode,
+            reason -> onLayerReverted(spec, reason));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, 0);
         int index = mBackdrop == null ? 0 : mContainer.indexOfChild(mBackdrop) + 1;
         mLayer = layer;
         watchPower();
         layer.setPowerHold(mPowerHold);
+        pushLook(layer);
         mContainer.addView(layer, Math.max(0, index), lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
         installInvalTrace(layer);
-        pushWindowName(layer);
     }
 
-    /**
-     * The focused window's chip text changed (Filament spells it). Cheap and idempotent: the
-     * activity calls it on every window-chip refresh, and only a different name goes further.
-     */
-    public void onFocusedWindow(@Nullable String label) {
-        String name = FilamentLayout.clean(label);
-        if (name.equals(mWindowName)) return;
-        mWindowName = name;
-        SceneLayerView layer = mLayer;
-        if (layer != null) pushWindowName(layer);
+    /** {@code tlDark} and {@code tlColor0..2} from the activity's Material roles (the scheme writes them when it is on). */
+    private void pushLook(@NonNull SceneLayerView layer) {
+        boolean dark = (mActivity.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        int accent = MaterialColors.getColor(mActivity, androidx.appcompat.R.attr.colorPrimary, 0xff6750a4);
+        int surface = MaterialColors.getColor(mActivity, com.google.android.material.R.attr.colorSurface,
+            dark ? 0xff141218 : 0xfffef7ff);
+        int onSurface = MaterialColors.getColor(mActivity, com.google.android.material.R.attr.colorOnSurface,
+            dark ? 0xffe6e0e9 : 0xff1d1b20);
+        layer.setLook(dark, accent, surface, onSurface);
     }
 
-    private void pushWindowName(@NonNull SceneLayerView layer) {
-        TerminalView pane = mHost.focusedPane();
-        android.graphics.Typeface face =
-            pane == null || pane.mRenderer == null ? null : pane.mRenderer.getTypeface();
-        layer.setWindowName(mWindowName, face);
+    /** The layer cannot go on (a second lost context, no ES 3, a stored shader that no longer builds). */
+    private void onLayerReverted(@NonNull SceneLayerView.Spec spec, @NonNull String reason) {
+        Log.w(TAG, "shader " + spec.key + " stopped: " + reason);
+        if (spec.debugFile) {
+            mDebugGaveUp = spec.source.getPath();
+            removeLayer();
+            return;
+        }
+        revertToPhoto();
+    }
+
+    /** Back to photo with a one-line notice; the preference listener removes the layer. */
+    private void revertToPhoto() {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        if (prefs != null) ShaderStore.apply(mActivity, prefs.getSharedPreferences(), WallpaperMotion.photo());
+        else ShaderStore.clearPending(mActivity);
+        mMotion = WallpaperMotion.photo();
+        mMeta = null;
+        removeLayer();
+        Toast.makeText(mActivity, R.string.wallpaper_motion_reverted, Toast.LENGTH_SHORT).show();
     }
 
     @Nullable private java.util.List<android.view.ViewGroup.LayoutParams> mInvalTraceParams;
@@ -314,14 +422,25 @@ public final class SceneController implements LatencyProbe.CommitListener {
         LiveSceneFrame.clear();
     }
 
+    /** The running layer's hold reason for the detail page ({@link ShaderSafety#REASON_TOO_HEAVY}), or null. */
+    @Nullable
+    public String heldReason() {
+        SceneLayerView layer = mLayer;
+        return layer == null ? null : layer.heldReason();
+    }
+
     // ---- Battery saver and heat -----------------------------------------------------------------
 
     /** While a layer exists: listens for battery saver and thermal changes (SceneFramePolicy.holdAtStill decides). */
     private void watchPower() {
-        if (mPowerWatched || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        if (mPowerWatched || !isSupported()) return;
         mPowerWatched = true;
-        mActivity.registerReceiver(mPowerReceiver,
-            new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), Context.RECEIVER_NOT_EXPORTED);
+        IntentFilter filter = new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            mActivity.registerReceiver(mPowerReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            mActivity.registerReceiver(mPowerReceiver, filter);
+        }
         PowerManager pm = mActivity.getSystemService(PowerManager.class);
         if (pm != null) {
             mThermalListener = status -> updatePowerHold();
@@ -371,23 +490,5 @@ public final class SceneController implements LatencyProbe.CommitListener {
         lp.leftMargin = left;
         lp.topMargin = top;
         layer.setLayoutParams(lp);
-    }
-
-    /** The open panes' screen rects as (cx, cy, hw, hh); read a few times a second. */
-    private int paneRects(@NonNull float[] out) {
-        List<TerminalView> panes = mHost.paneViews();
-        int n = 0;
-        for (int i = 0; i < panes.size() && n < SceneEvents.MAX_BASINS; i++) {
-            TerminalView v = panes.get(i);
-            if (v == null || !v.isShown() || v.getWidth() <= 0) continue;
-            v.getLocationOnScreen(mLoc);
-            float hw = v.getWidth() / 2f, hh = v.getHeight() / 2f;
-            out[n * 4] = mLoc[0] + hw;
-            out[n * 4 + 1] = mLoc[1] + hh;
-            out[n * 4 + 2] = hw;
-            out[n * 4 + 3] = hh;
-            n++;
-        }
-        return n;
     }
 }

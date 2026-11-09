@@ -9,49 +9,42 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The pure parts of the scene thread's handoff: the event ring and the image ledger. */
+/** The pure parts of the scene thread's handoff: the pointer ring and the image ledger. */
 public class SceneHandoffTest {
 
-    private final float[] hills = new float[SceneEvents.MAX_HILLS * 4];
-    private final float[] sparks = new float[SceneEvents.MAX_SPARKS * 4];
-    private final float[] pulseRect = new float[SceneEvents.MAX_PULSES * 4];
-    private final float[] pulseT = new float[SceneEvents.MAX_PULSES * 2];
-    private final float[] basins = new float[SceneEvents.MAX_BASINS * 4];
+    private final float[] mouse = new float[4];
 
     @Test public void ringDeliversEveryKindInOrder() {
         SceneEventRing ring = new SceneEventRing();
-        SceneEvents events = new SceneEvents();
+        SceneTouch touch = new SceneTouch();
         assertTrue(ring.isEmpty());
-        assertTrue(ring.push(SceneEventRing.HILL, 10f, 20f, 0f, 0f, 1000L));
-        assertTrue(ring.push(SceneEventRing.SPARK, 30f, 40f, 0f, 0f, 1100L));
-        assertTrue(ring.push(SceneEventRing.PULSE, 50f, 60f, 7f, 8f, 1200L));
+        assertTrue(ring.push(SceneEventRing.DOWN, 10f, 20f));
+        assertTrue(ring.push(SceneEventRing.MOVE, 30f, 40f));
+        assertTrue(ring.push(SceneEventRing.UP, 50f, 60f));
         assertFalse(ring.isEmpty());
-        assertEquals(3, ring.drainInto(events));
+        assertEquals(3, ring.drainInto(touch));
         assertTrue(ring.isEmpty());
-        assertEquals(0, ring.drainInto(events));
-        events.fill(1300L, 1f, hills, sparks, pulseRect, pulseT, basins);
-        assertEquals(10f, hills[0], 0f);
-        assertEquals(20f, hills[1], 0f);
-        assertTrue(hills[2] > 0f);
-        assertEquals(30f, sparks[0], 0f);
-        assertTrue(sparks[3] > 0f);
-        assertEquals(50f, pulseRect[0], 0f);
-        assertEquals(8f, pulseRect[3], 0f);
-        assertTrue(pulseT[1] > 0f);
+        assertEquals(0, ring.drainInto(touch));
+        // View 100 tall at scale 1: y flips; up keeps the last position, z goes negative.
+        touch.fill(mouse, 100f, 1f);
+        assertEquals(50f, mouse[0], 0f);
+        assertEquals(40f, mouse[1], 0f);
+        assertEquals(-10f, mouse[2], 0f);
+        assertEquals(80f, mouse[3], 0f);
     }
 
     @Test public void fullRingDropsTheNewRecordAndFreesSlotsOnDrain() {
         SceneEventRing ring = new SceneEventRing();
         for (int i = 0; i < SceneEventRing.CAPACITY; i++) {
-            assertTrue(ring.push(SceneEventRing.HILL, i, 0f, 0f, 0f, 1000L + i));
+            assertTrue(ring.push(SceneEventRing.MOVE, i, 0f));
         }
-        assertFalse(ring.push(SceneEventRing.HILL, 99f, 0f, 0f, 0f, 2000L));
-        assertEquals(SceneEventRing.CAPACITY, ring.drainInto(new SceneEvents()));
-        assertTrue(ring.push(SceneEventRing.SPARK, 1f, 1f, 0f, 0f, 3000L));
+        assertFalse(ring.push(SceneEventRing.MOVE, 99f, 0f));
+        assertEquals(SceneEventRing.CAPACITY, ring.drainInto(new SceneTouch()));
+        assertTrue(ring.push(SceneEventRing.DOWN, 1f, 1f));
         // The indices wrapped past the capacity once; the record still arrives.
-        SceneEvents events = new SceneEvents();
-        assertEquals(1, ring.drainInto(events));
-        assertTrue(events.active(3100L));
+        SceneTouch touch = new SceneTouch();
+        assertEquals(1, ring.drainInto(touch));
+        assertTrue(touch.isDown());
     }
 
     @Test public void ringSurvivesAProducerAndAConsumerRacing() throws Exception {
@@ -60,14 +53,14 @@ public class SceneHandoffTest {
         final int[] accepted = {0};
         Thread producer = new Thread(() -> {
             for (int i = 0; i < total; i++) {
-                if (ring.push(SceneEventRing.HILL, i, 0f, 0f, 0f, i)) accepted[0]++;
+                if (ring.push(SceneEventRing.MOVE, i, 0f)) accepted[0]++;
                 else Thread.yield();
             }
         });
-        SceneEvents events = new SceneEvents();
+        SceneTouch touch = new SceneTouch();
         producer.start();
         int taken = 0;
-        while (producer.isAlive() || !ring.isEmpty()) taken += ring.drainInto(events);
+        while (producer.isAlive() || !ring.isEmpty()) taken += ring.drainInto(touch);
         producer.join();
         assertEquals(accepted[0], taken);
     }

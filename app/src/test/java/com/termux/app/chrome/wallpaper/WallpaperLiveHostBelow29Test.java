@@ -21,11 +21,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
-/** Below Android 13 Live is not offered at all: no Photo | Live row, and the picker is the Photo page alone. */
+/** Below Android 10 (API 29) moving wallpapers are not offered at all: no Photo | Live row, and the picker is the Photo page alone. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-public class WallpaperLiveHostBelow33Test {
+public class WallpaperLiveHostBelow29Test {
 
     @Test
     public void liveIsNotOffered() {

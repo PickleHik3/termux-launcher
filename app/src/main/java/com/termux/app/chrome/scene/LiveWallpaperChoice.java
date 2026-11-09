@@ -6,23 +6,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
-import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
- * The user's live wallpaper choice: a scene (or none) and its four knobs. Immutable and pure;
+ * The retired Live picker's choice: a scene (or none) and its four knobs. Immutable and pure;
  * {@link #read} and {@link #write} go through the persisted preferences, which clamp on read.
- * {@code contour} and {@code filament} are debug-only and never a user choice.
+ * The AGSL scenes are deleted (spec shader-video-wallpapers-2026-11-09), so there are no kinds and
+ * every choice reads as none; the class stays only so the picker compiles until wave C replaces it
+ * with {@link WallpaperMotion}.
  */
 public final class LiveWallpaperChoice {
 
-    /** The user-facing kinds, in the order the picker shows them. */
+    /** The user-facing kinds, in the order the picker shows them: none since the scenes went. */
     @NonNull
-    public static final String[] USER_KINDS = {
-        ScenePrograms.AURORA, ScenePrograms.CONTOUR_WAVES, ScenePrograms.NEBULA,
-        ScenePrograms.BLOOM, ScenePrograms.PARTICLES, ScenePrograms.COASTAL_SUNSET,
-    };
+    public static final String[] USER_KINDS = {};
 
     public static final float MIN_SPEED = TERMUX_APP.MIN_LIVE_WALLPAPER_SPEED;
     public static final float MAX_SPEED = TERMUX_APP.MAX_LIVE_WALLPAPER_SPEED;
@@ -113,13 +111,13 @@ public final class LiveWallpaperChoice {
 
     // ---- Support and per-scene capabilities -----------------------------------------------------
 
-    /** Scenes need AGSL: API 33 and later. Below it nothing installs. */
+    /** Moving wallpapers need OpenGL ES 3 and hardware-buffer bitmaps: API 29 and later. Below it nothing installs. */
     public static boolean isSupported() {
         return isSupported(Build.VERSION.SDK_INT);
     }
 
     static boolean isSupported(int sdkInt) {
-        return sdkInt >= Build.VERSION_CODES.TIRAMISU;
+        return sdkInt >= Build.VERSION_CODES.Q;
     }
 
     /** The scene to draw: {@link #scene} on a supported device, null otherwise or with none chosen. */
@@ -129,24 +127,16 @@ public final class LiveWallpaperChoice {
     }
 
     public static boolean supportsDensity(@Nullable String kind) {
-        return ScenePrograms.AURORA.equals(kind) || ScenePrograms.PARTICLES.equals(kind);
+        return false;
     }
 
     public static boolean supportsPalette(@Nullable String kind) {
-        return ScenePrograms.AURORA.equals(kind) || ScenePrograms.PARTICLES.equals(kind);
+        return false;
     }
 
-    /** The palette names of {@code kind} in palette order, as string resource ids; empty for a scene without palettes. */
+    /** The palette names of {@code kind}: none since the scenes went. */
     @NonNull
     public static @StringRes int[] paletteNames(@Nullable String kind) {
-        if (ScenePrograms.AURORA.equals(kind)) {
-            return new int[] {R.string.live_palette_aurora_natural,
-                R.string.live_palette_aurora_purple_pink, R.string.live_palette_aurora_high_red};
-        }
-        if (ScenePrograms.PARTICLES.equals(kind)) {
-            return new int[] {R.string.live_palette_particles_cool,
-                R.string.live_palette_particles_warm, R.string.live_palette_particles_mono};
-        }
         return new int[0];
     }
 
