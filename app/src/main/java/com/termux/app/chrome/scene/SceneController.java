@@ -111,7 +111,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
      * The video's rate in Hz (15, 30 or 60), written by the picker (feat/gl-picker's
      * {@code ShaderStore.KEY_VIDEO_RATE}; one literal until the branches meet).
      */
-    static final String KEY_VIDEO_RATE = "wallpaper_video_rate_hz";
+    static final String KEY_VIDEO_RATE = ShaderStore.KEY_VIDEO_RATE;
     private int mVideoRateHz = SceneFramePolicy.DEFAULT_RATE_HZ;
     /** The debug file a layer gave up on: not tried again until the property changes. */
     @Nullable private String mDebugGaveUp;
