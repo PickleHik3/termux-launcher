@@ -140,6 +140,23 @@ public class WallpaperLiveHostTest {
     }
 
     @Test
+    public void theVideoPageOpensWithTheStoredStatusLine() {
+        ShaderStore.apply(mActivity, mStore, WallpaperMotion.video("127.gif"));
+        mStore.edit().putString("wallpaper_video_hint", "GIF 320x320").commit();
+        WallpaperLiveHost host = open(true);
+        host.video().show(WallpaperMotion.video("127.gif"), 30);
+        host.video().setHint("In use: 127.gif\nGIF 320x320");
+        host.video().setBusy(false);
+        assertEquals(View.VISIBLE, host.video().hintLine().getVisibility());
+        assertEquals("In use: 127.gif\nGIF 320x320", host.video().hintLine().getText().toString());
+        MaterialButtonToggleGroup group = host.root().findViewById(R.id.segmented_pill_track);
+        group.check(R.id.segmented_pill_default);
+        group.check(R.id.segmented_pill_capsule);
+        assertEquals(View.VISIBLE, host.video().hintLine().getVisibility());
+        assertTrue(host.video().hintLine().getText().toString().startsWith("In use: 127.gif"));
+    }
+
+    @Test
     public void theVideoPage_hasTheFormatLineAndBackToPhotoOnlyWhileInUse() {
         WallpaperLiveHost host = open(true);
         host.video().show(WallpaperMotion.photo(), 30);
