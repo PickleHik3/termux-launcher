@@ -29,6 +29,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   frames still update with the hardware canvas (a frozen frame means updateTexImage ran before the
   render thread posted the buffer).
 
+- **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
+  shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
+  waited in `SurfaceSyncGroup` for the scene SurfaceView's first buffer, which came only after the EGL
+  setup and the shader compile or player prepare. The surface now posts one cleared buffer (the system
+  wallpaper's primary colour, else black) right after the EGL context exists. Emulator after the fix:
+  video 4/4 clean starts, shader 2/3 (the one ANR was a render-thread wait with the host at load 35).
+  On pong: ten cold starts each with a shader and a video stored (`am force-stop com.termux`, Home),
+  no ANR, the first visible frame is a flat colour at most for a blink, then the scene · pong.
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
   guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and
