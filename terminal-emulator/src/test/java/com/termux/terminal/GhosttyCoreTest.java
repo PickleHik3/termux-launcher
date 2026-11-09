@@ -59,6 +59,35 @@ public class GhosttyCoreTest extends TerminalTestCase {
         assertLineIs(-1, "2    ");
     }
 
+    public void testScrolledRowsAdvanceTheScrollCounters() {
+        if (!ghostty(5, 3)) return;
+        mTerminal.clearScrollCounter();
+        long eventsBefore = mTerminal.scrollEventCount();
+        enterString(numberedLines(1, 8)); // 7 line feeds on 3 rows scroll 5 rows
+        int counter = mTerminal.getScrollCounter();
+        long events = mTerminal.scrollEventCount() - eventsBefore;
+        assertEquals(5, counter);
+        assertEquals(5, events);
+        // The Java core reports the same for the same input.
+        withTerminalSized(5, 3);
+        mTerminal.clearScrollCounter();
+        long javaBefore = mTerminal.scrollEventCount();
+        enterString(numberedLines(1, 8));
+        assertEquals(mTerminal.getScrollCounter(), counter);
+        assertEquals(mTerminal.scrollEventCount() - javaBefore, events);
+        // A second burst adds to the counter until the view clears it.
+        mTerminal.clearScrollCounter();
+        assertEquals(0, mTerminal.getScrollCounter());
+    }
+
+    public void testScrollCountersFollowAcrossSeparateSyncs() {
+        if (!ghostty(5, 3)) return;
+        mTerminal.clearScrollCounter();
+        enterString(numberedLines(1, 6)); // 3 rows scrolled
+        enterString(numberedLines(6, 9)); // 3 more
+        assertEquals(6, mTerminal.getScrollCounter());
+    }
+
     public void testLongBurstKeepsTheNewestTranscriptRows() {
         if (!ghostty(6, 3)) return;
         StringBuilder sb = new StringBuilder();

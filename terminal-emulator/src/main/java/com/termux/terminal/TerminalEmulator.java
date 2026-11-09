@@ -1628,9 +1628,17 @@ public final class TerminalEmulator {
         }
         if (state[GhosttyNative.STATE_COLS] == mColumns && state[GhosttyNative.STATE_ROWS] == mRows
             && mScreen.mColumns == mColumns && mScreen.mScreenRows == mRows) {
-            if (mScreen == mMainBuffer)
-                GhosttyMirror.scrollIntoTranscript(mMainBuffer, mColumns, mRows, state[GhosttyNative.STATE_SCROLLED],
+            if (mScreen == mMainBuffer) {
+                int scrolled = state[GhosttyNative.STATE_SCROLLED];
+                GhosttyMirror.scrollIntoTranscript(mMainBuffer, mColumns, mRows, scrolled,
                     state[GhosttyNative.STATE_HISTORY], core, core.historyCells(), core.historyExtra());
+                // The mirror scrolls the buffer directly, so the counters the Java core bumps per
+                // line (a scrolled-back view and a selection follow them) move here, by the same rows.
+                if (scrolled > 0) {
+                    mScrollCounter += scrolled;
+                    mScrollEventCount += scrolled;
+                }
+            }
             GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra());
         }
         mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
