@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A connected group's inner corners (Material 3 Expressive connected button group): 8dp,
+     4dp while pressed, and fully round on the chosen button. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:state_checkable="true" android:state_pressed="true" app:cornerSize="4dp" />
+    <item android:state_checked="true" app:cornerSize="50%" />
+    <item app:cornerSize="8dp" />
+</selector>

@@ -212,6 +212,15 @@ public final class PrivilegedLaneBinding {
         return current;
     }
 
+    /**
+     * The service when it is bound and alive right now, else null; never binds or waits, so a
+     * touch handler can ask (the Home pull-down drives the shade through it).
+     */
+    @Nullable
+    public IPrivilegedLane boundLane() {
+        return liveLane();
+    }
+
     @Nullable
     private IPrivilegedLane liveLane() {
         synchronized (lock) {

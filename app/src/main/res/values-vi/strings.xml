@@ -72,7 +72,6 @@
     <string name="termux_plugin_error_notifications_enabled_title">Thông báo lỗi plugin</string>
     <string name="termux_plugin_error_notifications_enabled_off">Tắt đèn flash và thông báo lỗi plugin.</string>
     <string name="termux_crash_report_notifications_enabled_off">Tắt thông báo cho các báo cáo sự cố.</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Vẻ bề ngoài</string>
     <string name="donate_preference_title">Donate</string>
     <string name="title_share_selected_text">Văn bản đầu cuối</string>
     <string name="error_display_over_other_apps_permission_not_granted_to_start_terminal">&TERMUX_APP_NAME; yêu cầu quyền \"Hiển thị trên các ứng dụng khác\" để bắt đầu các phiên cuối từ nền trên Android &gt;= 10. Cấp quyền này từ Cài đặt -&gt; Ứng dụng -&gt; &TERMUX_APP_NAME; -&gt; Trình độ cao</string>

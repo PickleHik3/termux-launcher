@@ -81,6 +81,5 @@
     <string name="termux_terminal_view_key_logging_enabled_off">Günlükler, terminal görünüm anahtarları için girişlere sahip olmayacaktır. (Varsayılan)</string>
     <string name="termux_plugin_error_notifications_enabled_off">Eklenti hataları için flaşları ve bildirimleri devre dışı bırakın.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Eklenti hataları için flaşları ve bildirimleri göster. (Varsayılan)</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Görünüm</string>
     <string name="donate_preference_title">Bağış Yap</string>
 </resources>

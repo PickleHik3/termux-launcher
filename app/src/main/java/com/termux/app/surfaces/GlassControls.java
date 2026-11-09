@@ -2,6 +2,8 @@ package com.termux.app.surfaces;
 
 import androidx.annotation.NonNull;
 
+import com.termux.shared.termux.settings.preferences.FrostStops;
+
 /**
  * The Custom row's Glass slider, as pure functions.
  *
@@ -11,8 +13,8 @@ import androidx.annotation.NonNull;
  * fast at the frosted one, which is where the eye tells blur apart; grain follows in step so a
  * frosted face keeps its tooth and never reaches the sand above about 40. The shipped Looks sit on
  * the curve: Clear at {@link #CLEAR}, Tint at {@link #TINT}, Mist at {@link #MIST}. Solid's
- * blur 0 and grain 0 are off it (no frost at all, the cheapest glass), and the slider still moves
- * from there: its first step writes the curve.</p>
+ * blur 0 and grain 0 are Glass 0 itself (no frost at all, the cheapest glass, and with Opacity 0 a
+ * fully transparent surface); position 1 is where the curve starts, at blur 4 and grain 2.</p>
  *
  * <p>The storage keeps blur and grain, which every renderer reads, and the position the slider
  * was left at, which it reads back while the pair is still that position's ({@link #readBack});
@@ -24,24 +26,25 @@ public final class GlassControls {
     private GlassControls() {}
 
     /** The Glass slider's range. */
-    public static final int GLASS_MIN = 0;
-    public static final int GLASS_MAX = 100;
+    public static final int GLASS_MIN = FrostStops.POSITION_MIN;
+    public static final int GLASS_MAX = FrostStops.POSITION_MAX;
 
     /** The shipped Looks' Glass positions. */
-    public static final int CLEAR = 20;
-    public static final int TINT = 40;
-    public static final int MIST = 75;
+    public static final int CLEAR = FrostStops.positionOf(FrostStops.CLEAR);
+    public static final int TINT = FrostStops.positionOf(FrostStops.TINT);
+    public static final int MIST = FrostStops.positionOf(FrostStops.MIST);
 
-    /** The blur a Glass position writes, in dp: {@code R(4 + 32 t^1.5)}, 4 to 36. */
+    /** The blur a Glass position writes, in dp: {@code R(4 + 32 t^1.5)}, 4 to 36; 0 at Glass 0. */
     public static int blurForGlass(int glass) {
-        double t = clampGlass(glass) / 100d;
-        return (int) Math.round(4d + 32d * Math.pow(t, 1.5d));
+        return FrostStops.blurDpAt(glass);
     }
 
-    /** The grain a Glass position writes, in percent: {@code R(2 + 6 t)}, 2 to 8. */
+    /** The grain the Clear Look ships with: none, so its pair sits off the curve at its blur. */
+    static final int CLEAR_GRAIN = 0;
+
+    /** The grain a Glass position writes, in percent: {@code R(2 + 6 t)}, 2 to 8; 0 at Glass 0. */
     public static int grainForGlass(int glass) {
-        double t = clampGlass(glass) / 100d;
-        return (int) Math.round(2d + 6d * t);
+        return FrostStops.grainPercentAt(glass);
     }
 
     /**
@@ -82,6 +85,9 @@ public final class GlassControls {
         if (stored >= GLASS_MIN && stored <= GLASS_MAX && blurForGlass(stored) == blur
             && grainForGlass(stored) == grain)
             return stored;
+        // Clear ships with no grain (generation 6), a pair off the curve; it still reads as Glass 20.
+        if (blur == blurForGlass(CLEAR) && grain == CLEAR_GRAIN)
+            return CLEAR;
         return glassFor(blur, grain);
     }
 
@@ -92,8 +98,9 @@ public final class GlassControls {
     }
 
     /**
-     * The pair a stored one is migrated to: itself where blur is 0 (no frost, Solid's, which
-     * the curve cannot hold), else the nearest Glass position's pair.
+     * The pair a stored one is migrated to: itself where blur is 0 (no frost, which Glass 0
+     * writes only with grain 0; a hand-set grain over no blur is kept), else the nearest Glass
+     * position's pair.
      *
      * @return {@code {blur, grain}}
      */
@@ -114,7 +121,8 @@ public final class GlassControls {
         if (blur <= 0) return blur;
         int best = -1;
         int bestError = Integer.MAX_VALUE;
-        for (int g = GLASS_MIN; g <= GLASS_MAX; g++) {
+        // Position 0 is no blur: a blur that is wanted never lands on it.
+        for (int g = GLASS_MIN + 1; g <= GLASS_MAX; g++) {
             if (grainForGlass(g) != grain) continue;
             int error = Math.abs(blurForGlass(g) - blur);
             if (error < bestError) {
@@ -123,9 +131,5 @@ public final class GlassControls {
             }
         }
         return best >= 0 ? blurForGlass(best) : snapped(blur, grain)[0];
-    }
-
-    private static int clampGlass(int glass) {
-        return Math.max(GLASS_MIN, Math.min(GLASS_MAX, glass));
     }
 }

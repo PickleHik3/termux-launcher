@@ -55,13 +55,14 @@ EXTRA=("$@")
 printf '%s' "$VERSION" | grep -qE '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-pre\.[1-9][0-9]*$' \
     || die "version must be X.Y.Z-pre.N (got '$VERSION')"
 
-# The device checks still owed (project-docs/device-checks.md): shown, not gated, so a drop never
-# ships an unseen item unknowingly. Items are the "- " lines under its two headings.
-CHECKS="project-docs/device-checks.md"
-if [ -f "$CHECKS" ] && grep -q '^- ' "$CHECKS"; then
-    echo "cut-prerelease: device checks still owed ($CHECKS):" >&2
-    grep '^- ' "$CHECKS" | cut -c1-120 | sed 's/^/    /' >&2
-fi
+# The checks still owed (agent-drivable, then the developer's): shown, not gated, so a drop never
+# ships an unseen item unknowingly. Items are the "- " lines of each file.
+for CHECKS in project-docs/device-checks.md project-docs/developer-checks.md; do
+    if [ -f "$CHECKS" ] && grep -q '^- ' "$CHECKS"; then
+        echo "cut-prerelease: checks still owed ($CHECKS):" >&2
+        grep '^- ' "$CHECKS" | cut -c1-120 | sed 's/^/    /' >&2
+    fi
+done
 
 # The plain tag last: its publish fires the Discord post that links the other two.
 EDITIONS=(nix vaj termux)

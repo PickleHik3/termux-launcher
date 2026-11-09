@@ -6,6 +6,7 @@ buildscript {
     dependencies {
         classpath "com.android.tools.build:gradle:8.13.2"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.22"
+        classpath "io.github.takahirom.roborazzi:roborazzi-gradle-plugin:1.43.0"
     }
 }
 

@@ -31,9 +31,20 @@ final class WallpaperSlotPlan {
     /** The stored state, as {@link WallpaperSlots#read} has it. */
     static final class Inputs {
         @NonNull final WallpaperSlots.Choice lock;
+        /**
+         * The lock screen really shows the Home slot's picture. False while Home is the launcher's
+         * app-only picture: the stored Same as Home still has a Home set to the phone take the lock
+         * screen along, but a Lock apply of Same as Home has a picture to copy there.
+         */
+        final boolean lockShowsHome;
 
         Inputs(@NonNull WallpaperSlots.Choice lock) {
+            this(lock, true);
+        }
+
+        Inputs(@NonNull WallpaperSlots.Choice lock, boolean lockShowsHome) {
             this.lock = lock;
+            this.lockShowsHome = lockShowsHome;
         }
     }
 
@@ -102,7 +113,7 @@ final class WallpaperSlotPlan {
             return new WallpaperSlotPlan(Kind.RECORD_ONLY, 0, TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO, false);
         }
         String record = lockValue(choice);
-        if (in.lock.sameAsHome) {
+        if (in.lock.sameAsHome && in.lockShowsHome) {
             // Already Same as Home: the photo set put it there with FLAG_LOCK (Apply's lock-follows step).
             return new WallpaperSlotPlan(Kind.RECORD_ONLY, 0, record, false);
         }

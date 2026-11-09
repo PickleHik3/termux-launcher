@@ -1,6 +1,8 @@
 plugins {
     id "com.android.application"
 }
+apply plugin: "io.github.takahirom.roborazzi"
+
 
 ext {
     // The packageVariant defines the bootstrap variant that will be included in the app APK.
@@ -9,7 +11,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
-    litertLmVersion = "0.18.0"
+    litertLmVersion = "0.19.0"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -40,10 +42,7 @@ android {
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // libtai_xnnpack.so (com.termux.ai.TaiXnnpackDelegate): a JNI shim that dlopens the
-        // already-loaded libtensorflowlite_jni.so and calls its exported XNNPACK delegate C API
-        // directly, so Whisper inference gets a real multi-threaded XNNPACK pthreadpool (see
-        // WhisperSttRuntime).
+        // libtai_xnnpack.so: small JNI helpers (TaiGpuProbe, TaiNativeLog, TaiTensorRead).
         externalNativeBuild {
             ndkBuild {
                 cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
@@ -166,6 +165,16 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+            all {
+                // Robolectric keeps every sandbox (one android-all class loader per SDK, graphics
+                // mode, looper mode and shadow set) for the life of the worker, and the suite uses
+                // about fourteen. A fresh worker every 150 classes lets them go.
+                forkEvery = 150
+                // Six test workers at 2g each run the suite on six cores instead of one; the
+                // machine keeps room for other builds alongside.
+                maxParallelForks = 6
+                maxHeapSize = "2g"
+            }
         }
     }
 
@@ -225,7 +234,9 @@ dependencies {
     // Renders hicolor/scalable SVG icons a Linux app ships when it has no PNG (LinuxAppIcons).
     implementation "com.caverock:androidsvg-aar:1.4"
     implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
-    implementation "com.google.ai.edge.litert:litert:1.4.2"
+    implementation "com.google.ai.edge.litert:litert:2.3.2"
+    // The GPU accelerator (libLiteRtClGlAccelerator.so) CompiledModel loads for Accelerator.GPU.
+    implementation "com.google.ai.edge.litert:litert-gpu:2.3.2"
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")
@@ -239,6 +250,10 @@ dependencies {
     implementation "com.jakewharton:process-phoenix:3.0.0"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.robolectric:robolectric:4.13"
+    testImplementation "io.github.takahirom.roborazzi:roborazzi:1.43.0"
+    // Compile-only: Java overload resolution of RoborazziKt.captureRoboImage loads the Compose
+    // SemanticsNodeInteraction overload's type. Nothing of Compose runs.
+    testCompileOnly "androidx.compose.ui:ui-test:1.7.8"
     testImplementation "org.json:json:20240303"
     testImplementation "androidx.test:core:1.6.1"
     androidTestImplementation "androidx.test:runner:1.6.2"
@@ -276,6 +291,20 @@ tasks.register("verifyReleaseHardening") {
     }
 }
 
+// Every variant: BuildConfig.LITERT_VERSION is the LiteRT the build really resolved, read from the
+// dependency graph so a version bump needs no second edit here. The STT bench (src/debug SttBench)
+// reports it, and TaiTensorRead uses the native slice read only on the version it was verified on.
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.buildConfigFields.put("LITERT_VERSION", provider {
+            def litert = configurations.getByName("${variant.name}RuntimeClasspath").incoming.resolutionResult
+                .allComponents.collect { it.moduleVersion }
+                .find { it.group == "com.google.ai.edge.litert" && it.name == "litert" }
+            new com.android.build.api.variant.BuildConfigField("String", "\"${litert ? litert.version : 'unknown'}\"", "LiteRT as resolved")
+        })
+    }
+}
+
 // Native code reaches Java members by name, so anything R8 strips from a library that carries .so
 // files is a JNI abort at runtime, not a build error: 1.0.0 shipped LiteRT-LM without the
 // SamplerConfig getters only its native code calls, and every local chat aborted. A library that
@@ -285,6 +314,12 @@ tasks.register("verifyReleaseHardening") {
 // under it — fails the build. Fix it with a -keep in proguard-rules.pro, or, once the stripped
 // code is checked and nothing native reaches it, a waiver below.
 def r8NativeWaivers = [:] // "group:artifact": "why what R8 strips from it is safe"
+// Libraries whose consumer rules do not cover what their native code reaches, so they are checked
+// as if they shipped none. LiteRT's rules keep only @UsedByReflection, while liblitert_jni builds
+// TensorType, TensorType$Layout, TensorBufferRequirements and LiteRtException through
+// constructors no Java code calls; 2.0.0-pre.1 staging dropped them and every speech model
+// aborted tai_runtime with "Failed to get constructor".
+def r8NativeRulesIncomplete = ["com.google.ai.edge.litert:litert-api"]
 def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, its own JNI
 ["release", "staging"].each { variantName ->
     tasks.matching { it.name == "minify${variantName.capitalize()}WithR8" }.configureEach { minify ->
@@ -301,7 +336,9 @@ def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, 
                 def id = artifact.id.componentIdentifier
                 if (!(id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier)) return
                 if (r8NativeWaivers.containsKey("${id.group}:${id.module}".toString())) return
-                nativeClassesWithoutKeepRules(artifact.file).each { owners[it] = id.displayName }
+                def coordinate = "${id.group}:${id.module}".toString()
+                nativeClassesWithoutKeepRules(artifact.file, r8NativeRulesIncomplete.contains(coordinate))
+                    .each { owners[it] = id.displayName }
             }
             def ownerOf = { String cls ->
                 owners[cls] ?: r8NativeAppPackages.find { cls.startsWith(it + ".") }
@@ -334,15 +371,15 @@ def r8NativeAppPackages = ["com.alibaba.mnnllm"] // the MNN bridge: app source, 
 
 // The classes of an AAR that carries native libraries and ships no consumer keep rules (none in
 // proguard.txt, none under META-INF/proguard or META-INF/com.android.tools in its jars); empty
-// for every other AAR.
-def nativeClassesWithoutKeepRules(File aar) {
+// for every other AAR. ignoreRules checks an AAR whose shipped rules are known to fall short.
+def nativeClassesWithoutKeepRules(File aar, boolean ignoreRules = false) {
     def hasRule = { String text -> text.readLines().any { def t = it.trim(); t && !t.startsWith("#") } }
     def zip = new java.util.zip.ZipFile(aar)
     try {
         def entries = zip.entries().toList()
         if (!entries.any { it.name ==~ /jni\/.+\.so/ }) return []
         def rules = entries.find { it.name == "proguard.txt" }
-        if (rules && hasRule(zip.getInputStream(rules).getText("UTF-8"))) return []
+        if (!ignoreRules && rules && hasRule(zip.getInputStream(rules).getText("UTF-8"))) return []
         def classes = []
         for (def jar : entries.findAll { it.name == "classes.jar" || it.name ==~ /libs\/[^\/]+\.jar/ }) {
             def input = new java.util.zip.ZipInputStream(zip.getInputStream(jar))
@@ -352,7 +389,7 @@ def nativeClassesWithoutKeepRules(File aar) {
                 if (entry.directory) continue
                 if (name.startsWith("META-INF/proguard/") || name.startsWith("META-INF/com.android.tools/")) {
                     // readAllBytes stops at the end of this entry; the stream moves on to the next.
-                    if (hasRule(new String(input.readAllBytes(), "UTF-8"))) return []
+                    if (!ignoreRules && hasRule(new String(input.readAllBytes(), "UTF-8"))) return []
                 } else if (name.endsWith(".class") && !name.endsWith("module-info.class")) {
                     classes << name[0..-7].replace("/", ".")
                 }
@@ -497,14 +534,50 @@ def sha256Hex(File file) {
     hex.toString()
 }
 
+// Settings > General > About > What's new shows this build's release notes. They ship as two small
+// text files: the newest few releases from project-docs/release-notes.md, and the pre-release
+// channel's rolling list with its HTML comments dropped. WhatsNewNotes picks the right part at run
+// time from the build's versionName.
+tasks.register("bundleReleaseNotes") {
+    description = "Copies the newest release notes into build/generated/whatsnew/assets/whatsnew."
+    group = "build setup"
+
+    def stableFile = rootProject.file("project-docs/release-notes.md")
+    def rollingFile = rootProject.file("project-docs/prerelease-notes.md")
+    def outDir = file("$buildDir/generated/whatsnew/assets/whatsnew")
+    inputs.files(stableFile, rollingFile).optional()
+    outputs.dir(outDir)
+
+    doLast {
+        outDir.mkdirs()
+        def kept = []
+        def sections = 0
+        if (stableFile.isFile()) {
+            for (line in stableFile.readLines("UTF-8")) {
+                if (line.startsWith("## v")) sections++
+                if (sections > 4) break
+                if (sections > 0) kept << line
+            }
+        }
+        new File(outDir, "release-notes.md").setText(kept.join("\n") + "\n", "UTF-8")
+        def rolling = rollingFile.isFile() ? rollingFile.getText("UTF-8") : ""
+        new File(outDir, "prerelease-notes.md")
+            .setText(rolling.replaceAll(/(?s)<!--.*?-->/, "").trim() + "\n", "UTF-8")
+    }
+}
+
 android.sourceSets.all { sourceSet ->
     sourceSet.assets.srcDir("$buildDir/generated/tlstore/assets")
+    sourceSet.assets.srcDir("$buildDir/generated/whatsnew/assets")
 }
 
 afterEvaluate {
     tasks.matching {
         it.name ==~ /merge.*Assets/ || it.name.toLowerCase(java.util.Locale.ROOT).contains("lint")
-    }.configureEach { it.dependsOn(tasks.named("fetchTlstore")) }
+    }.configureEach {
+        it.dependsOn(tasks.named("fetchTlstore"))
+        it.dependsOn(tasks.named("bundleReleaseNotes"))
+    }
 }
 
 def validateVersionName(String versionName) {

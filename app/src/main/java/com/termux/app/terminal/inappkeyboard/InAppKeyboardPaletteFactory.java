@@ -44,7 +44,14 @@ public final class InAppKeyboardPaletteFactory {
         String normalizedVariant = variant == null ? "system" : variant;
         if ("dock".equals(normalizedVariant))
             return createGlass(context, "system");
-        SourceRoles roles = resolve(context);
+        return create(resolve(context), isNightMode(context), normalizedVariant,
+            context.getResources().getDisplayMetrics().density);
+    }
+
+    /** {@link #create(Context, String)} on roles, a night flag and a density already read. */
+    @NonNull
+    private static Theme.Palette create(@NonNull SourceRoles roles, boolean night,
+                                        @NonNull String normalizedVariant, float density) {
 
         // The whitest/most-elevated container tier is named oppositely across the two M3
         // schemes: dark elevates by lightening (surfaceContainerHighest is the lightest
@@ -52,7 +59,6 @@ public final class InAppKeyboardPaletteFactory {
         // lightest, "white-ish" tier there is surfaceContainerLowest). "system" tracks whichever
         // scheme is actually active; "light"/"dark" force the opposite mode by bending these
         // same starting points toward that mode's canonical luminance below.
-        boolean night = isNightMode(context);
         int keyboard = night ? roles.surfaceContainer : roles.surfaceContainerLow;
         int key = night ? roles.surfaceContainerHighest : roles.surfaceContainerLowest;
         int function = roles.surfaceContainerHigh;
@@ -114,7 +120,6 @@ public final class InAppKeyboardPaletteFactory {
         int pressedLabel = ColorUtils.blendARGB(activated, activatedLabel, 130f / 255f);
         int lockedLabel = ensureContrast(roles.secondary, activated);
 
-        float density = context.getResources().getDisplayMetrics().density;
         return new Theme.Palette(
             opaque(keyboard), key, action, space, activated,
             label, subLabel, activatedLabel, pressedLabel, lockedLabel,
@@ -191,13 +196,29 @@ public final class InAppKeyboardPaletteFactory {
     }
 
     /**
+     * The glass the keyboard's keys stand on under {@code look}: the dock's glass base, tinted by
+     * the Look's obsidian surface when it has one. {@link #createGlass} builds on it.
+     */
+    @ColorInt
+    public static int resolveGlassBase(@NonNull Context context, @NonNull GlassLook look) {
+        int glassBase = resolveDockGlassBaseColor(context);
+        return look.obsidianTint ? surfaceTinted(look, glassBase) : glassBase;
+    }
+
+    /**
      * Glass base color of the launcher dock — must stay in sync with
      * {@code TermuxActivity#resolveAccessoryGlassBaseColor()}.
      */
     @ColorInt
     public static int resolveDockGlassBaseColor(@NonNull Context context) {
         // Same scheme gate as TermuxActivity#resolveAccessoryGlassBaseColor(): the Material You
-        // neutral is only the right base while the chrome is on wallpaper colours.
+        // neutral is only the right base while the chrome is on wallpaper colours. Under an
+        // app-only picture the framework neutral is the phone's wallpaper's, so the theme's own
+        // surface stands in for it, as the activity's glass base reads it.
+        if (isNightMode(context) && com.termux.app.theme.AppOnlyWallpaperColors.isActive(context)) {
+            return MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorSurface, 0xFF1C1B1F);
+        }
         if (isNightMode(context)
                 && !com.termux.app.theme.LauncherSchemeTheme.isSchemeChromeActive(context)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -312,11 +333,37 @@ public final class InAppKeyboardPaletteFactory {
     public static Theme.Palette createGlass(@NonNull Context context, String variant,
                                             @NonNull GlassLook look, @NonNull int[] faces,
                                             int keyOpacityPercent, int tone) {
-        String normalizedVariant = variant == null || "dock".equals(variant)
-            ? "system" : variant;
-        Theme.Palette base = create(context, normalizedVariant);
-        boolean night = isNightMode(context);
-        int glassBase = resolveDockGlassBaseColor(context);
+        return createGlass(glassInputs(context, variant, look, faces, keyOpacityPercent, tone));
+    }
+
+    /**
+     * Everything {@link #createGlass(Context, String, GlassLook, int[], int, int)} reads, the
+     * context's part resolved to values: the night bit of the configuration's uiMode, the display
+     * density, the glass base (which carries the scheme-chrome and app-only wallpaper gates and the
+     * system neutral) and every Material role the palette is built from. A theme, night-mode,
+     * Material You, scheme or Look change moves one of them, so a memo keyed on it is never stale.
+     */
+    @NonNull
+    public static GlassInputs glassInputs(@NonNull Context context, String variant,
+                                          @NonNull GlassLook look, @NonNull int[] faces,
+                                          int keyOpacityPercent, int tone) {
+        return new GlassInputs(variant, look, faces, keyOpacityPercent, tone,
+            isNightMode(context), context.getResources().getDisplayMetrics().density,
+            resolveGlassBase(context, look), resolve(context).values());
+    }
+
+    /** The glass palette for {@code in}: pure, it reads nothing but the inputs. */
+    @NonNull
+    public static Theme.Palette createGlass(@NonNull GlassInputs in) {
+        String normalizedVariant = in.variant;
+        GlassLook look = in.look;
+        int[] faces = in.faces;
+        int keyOpacityPercent = in.keyOpacityPercent;
+        int tone = in.tone;
+        float density = in.density;
+        Theme.Palette base = create(SourceRoles.of(in.roles), in.night, normalizedVariant, density);
+        boolean night = in.night;
+        int glassBase = in.glassBase;
         int baseKey = base.keyBackground;
         int baseSpace = base.spaceBarBackground;
         int baseFunction = base.functionKeyBackground;
@@ -324,7 +371,6 @@ public final class InAppKeyboardPaletteFactory {
         int baseSubLabel = base.subLabelColor;
         int baseFunctionLabel = base.functionLabelColor;
         if (look.obsidianTint) {
-            glassBase = surfaceTinted(look, glassBase);
             night = ColorUtils.calculateLuminance(glassBase) < 0.5d;
             baseKey = chipOn(glassBase, KEY_LIFT);
             baseSpace = baseKey;
@@ -402,7 +448,6 @@ public final class InAppKeyboardPaletteFactory {
             ? ColorUtils.setAlphaComponent(Color.BLACK, 48)
             : ColorUtils.setAlphaComponent(Color.WHITE, 64);
 
-        float density = context.getResources().getDisplayMetrics().density;
         return new Theme.Palette(
             Color.TRANSPARENT, key, action, space, activated,
             label, subLabel, activatedLabel, pressedLabel, lockedLabel,
@@ -798,10 +843,115 @@ public final class InAppKeyboardPaletteFactory {
         }
 
         int signature() {
-            return sourceRoleSignature(surface, surfaceContainerHigh, secondaryContainer,
+            return sourceRoleSignature(values());
+        }
+
+        /** The roles in constructor order; {@link #of} reads them back. */
+        @NonNull
+        int[] values() {
+            return new int[] {surface, surfaceContainerHigh, secondaryContainer,
                 surfaceContainerHighest, primaryContainer, onSurface, onSurfaceVariant,
                 primary, secondary, outlineVariant, surfaceContainer, surfaceContainerLow,
-                surfaceContainerLowest, onPrimary, onPrimaryContainer);
+                surfaceContainerLowest, onPrimary, onPrimaryContainer};
+        }
+
+        @NonNull
+        static SourceRoles of(@NonNull int[] v) {
+            return new SourceRoles(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9],
+                v[10], v[11], v[12], v[13], v[14]);
+        }
+    }
+
+    /** How many Material roles a {@link GlassInputs} carries. */
+    static final int ROLE_COUNT = 15;
+
+    /**
+     * A value key for one glass palette: what {@link #createGlass(GlassInputs)} reads and nothing
+     * else, compared by value (the faces and roles by their ints), so two applies with nothing
+     * moved build the palette once.
+     */
+    public static final class GlassInputs {
+        @NonNull final String variant;
+        @NonNull final GlassLook look;
+        @NonNull final int[] faces;
+        final int keyOpacityPercent;
+        final int tone;
+        final boolean night;
+        final float density;
+        @ColorInt final int glassBase;
+        @NonNull final int[] roles;
+        private final int mHash;
+
+        GlassInputs(String variant, @NonNull GlassLook look, @NonNull int[] faces,
+                    int keyOpacityPercent, int tone, boolean night, float density,
+                    @ColorInt int glassBase, @NonNull int[] roles) {
+            if (roles.length != ROLE_COUNT)
+                throw new IllegalArgumentException("roles: " + roles.length);
+            this.variant = variant == null || "dock".equals(variant) ? "system" : variant;
+            this.look = look;
+            this.faces = faces.clone();
+            this.keyOpacityPercent = keyOpacityPercent;
+            this.tone = tone;
+            this.night = night;
+            this.density = density;
+            this.glassBase = glassBase;
+            this.roles = roles.clone();
+            int h = this.variant.hashCode();
+            h = 31 * h + look.hashCode();
+            h = 31 * h + java.util.Arrays.hashCode(this.faces);
+            h = 31 * h + keyOpacityPercent;
+            h = 31 * h + tone;
+            h = 31 * h + (night ? 1 : 0);
+            h = 31 * h + Float.floatToIntBits(density);
+            h = 31 * h + glassBase;
+            h = 31 * h + java.util.Arrays.hashCode(this.roles);
+            mHash = h;
+        }
+
+        @Override public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof GlassInputs)) return false;
+            GlassInputs that = (GlassInputs) other;
+            return mHash == that.mHash && keyOpacityPercent == that.keyOpacityPercent
+                && tone == that.tone && night == that.night
+                && Float.compare(density, that.density) == 0 && glassBase == that.glassBase
+                && variant.equals(that.variant) && look.equals(that.look)
+                && java.util.Arrays.equals(faces, that.faces)
+                && java.util.Arrays.equals(roles, that.roles);
+        }
+
+        @Override public int hashCode() {
+            return mHash;
+        }
+    }
+
+    /**
+     * The last few glass palettes built, by their {@link GlassInputs}: a swipe between Home and
+     * Workspace alternates the faces under the keyboard, so more than one entry is kept. Palettes
+     * hold no pixels; a handful of them is a few hundred bytes. Main thread only.
+     */
+    static final class GlassMemo {
+        private final java.util.LinkedHashMap<GlassInputs, Theme.Palette> mEntries;
+
+        GlassMemo(final int capacity) {
+            mEntries = new java.util.LinkedHashMap<GlassInputs, Theme.Palette>(capacity + 1,
+                1f, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        java.util.Map.Entry<GlassInputs, Theme.Palette> eldest) {
+                    return size() > capacity;
+                }
+            };
+        }
+
+        /** The palette held for {@code in}, or null when it has to be built. */
+        @androidx.annotation.Nullable
+        Theme.Palette get(@NonNull GlassInputs in) {
+            return mEntries.get(in);
+        }
+
+        void put(@NonNull GlassInputs in, @NonNull Theme.Palette palette) {
+            mEntries.put(in, palette);
         }
     }
 }

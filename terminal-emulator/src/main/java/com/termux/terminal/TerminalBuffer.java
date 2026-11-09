@@ -17,9 +17,13 @@ import androidx.annotation.Nullable;
  * <p>
  * See {@link #externalToInternalRow(int)} for how to map from logical screen rows to array indices.
  */
-public final class TerminalBuffer {
+public final class TerminalBuffer implements TerminalContent {
 
     private TerminalSessionClient mClient;
+
+    /** The emulator's scroll count, shared with its other buffer; null for a buffer on its own. */
+    @Nullable
+    private ScrollCount mScrolls;
 
     TerminalRow[] mLines;
 
@@ -79,6 +83,61 @@ public final class TerminalBuffer {
         return mClient;
     }
 
+    void setScrollCount(@Nullable ScrollCount scrolls) {
+        mScrolls = scrolls;
+    }
+
+    // --- TerminalContent: the Java core serves readers straight from this buffer ---------------
+
+    @Override
+    public int columns() {
+        return mColumns;
+    }
+
+    @Override
+    public int screenRows() {
+        return mScreenRows;
+    }
+
+    @Override
+    public int historyRows() {
+        return mActiveTranscriptRows;
+    }
+
+    @Override
+    public long firstRowIndex() {
+        return (mScrolls == null ? 0 : mScrolls.total) - mActiveTranscriptRows;
+    }
+
+    @Override
+    public int takeScrolledRows() {
+        return mScrolls == null ? 0 : mScrolls.take();
+    }
+
+    @NonNull
+    @Override
+    public TerminalRow row(int externalRow) {
+        return allocateFullLineIfNecessary(externalToInternalRow(externalRow));
+    }
+
+    @NonNull
+    @Override
+    public String text(int x1, int y1, int x2, int y2, boolean joinWrapped, boolean joinFullLines) {
+        return getSelectedText(x1, y1, x2, y2, joinWrapped, joinFullLines);
+    }
+
+    @Nullable
+    @Override
+    public TextBlock textBlockAt(int column, int externalRow) {
+        return getTextBlockAt(externalRow, column);
+    }
+
+    @NonNull
+    @Override
+    public String textBlockText(@NonNull TextBlock block) {
+        return getTextBlockText(block);
+    }
+
     public String getTranscriptText() {
         return getSelectedText(0, -getActiveTranscriptRows(), mColumns, mScreenRows).trim();
     }
@@ -100,14 +159,24 @@ public final class TerminalBuffer {
     }
 
     public String getSelectedText(int selX1, int selY1, int selX2, int selY2, boolean joinBackLines, boolean joinFullLines) {
+        return selectedText(this, selX1, selY1, selX2, selY2, joinBackLines, joinFullLines);
+    }
+
+    /**
+     * The text of a selection, read row by row from {@code content}: the one implementation of
+     * {@link TerminalContent#text} for both cores, so they copy, find and transcribe alike.
+     */
+    static String selectedText(TerminalContent content, int selX1, int selY1, int selX2, int selY2,
+                               boolean joinBackLines, boolean joinFullLines) {
         final StringBuilder builder = new StringBuilder();
-        final int columns = mColumns;
+        final int columns = content.columns();
+        final int screenRows = content.screenRows();
         // A text sizing block is one unit: touching any of its cells copies its text, once.
         Set<Long> blocksTaken = null;
-        if (selY1 < -getActiveTranscriptRows())
-            selY1 = -getActiveTranscriptRows();
-        if (selY2 >= mScreenRows)
-            selY2 = mScreenRows - 1;
+        if (selY1 < -content.historyRows())
+            selY1 = -content.historyRows();
+        if (selY2 >= screenRows)
+            selY2 = screenRows - 1;
         for (int row = selY1; row <= selY2; row++) {
             int x1 = (row == selY1) ? selX1 : 0;
             int x2;
@@ -118,12 +187,12 @@ public final class TerminalBuffer {
             } else {
                 x2 = columns;
             }
-            TerminalRow lineObject = mLines[externalToInternalRow(row)];
-            if (lineObject != null && lineObject.hasTextSizes()) {
+            TerminalRow lineObject = content.row(row);
+            if (lineObject.hasTextSizes()) {
                 if (blocksTaken == null) blocksTaken = new HashSet<>();
                 StringBuilder rowText = new StringBuilder();
-                appendRowWithTextBlocks(rowText, row, lineObject, x1, x2, blocksTaken);
-                boolean blockRowWrap = getLineWrap(row);
+                appendRowWithTextBlocks(content, rowText, row, lineObject, x1, x2, blocksTaken);
+                boolean blockRowWrap = lineObject.mLineWrap;
                 int lastPrinting = -1;
                 if (blockRowWrap && x2 == columns) {
                     lastPrinting = rowText.length() - 1;
@@ -134,12 +203,12 @@ public final class TerminalBuffer {
                 if (lastPrinting >= 0) builder.append(rowText, 0, lastPrinting + 1);
                 boolean blockRowFillsWidth = lastPrinting == rowText.length() - 1;
                 if ((!joinBackLines || !blockRowWrap) && (!joinFullLines || !blockRowFillsWidth)
-                    && row < selY2 && row < mScreenRows - 1)
+                    && row < selY2 && row < screenRows - 1)
                     builder.append('\n');
                 continue;
             }
             int x1Index = lineObject.findStartOfColumn(x1);
-            int x2Index = (x2 < mColumns) ? lineObject.findStartOfColumn(x2) : lineObject.getSpaceUsed();
+            int x2Index = (x2 < columns) ? lineObject.findStartOfColumn(x2) : lineObject.getSpaceUsed();
             if (x2Index == x1Index) {
                 // Selected the start of a wide character.
                 x2Index = lineObject.findStartOfColumn(x2 + 1);
@@ -147,7 +216,7 @@ public final class TerminalBuffer {
             char[] line = lineObject.mText;
             int lastPrintingCharIndex = -1;
             int i;
-            boolean rowLineWrap = getLineWrap(row);
+            boolean rowLineWrap = lineObject.mLineWrap;
             if (rowLineWrap && x2 == columns) {
                 // If the line was wrapped, we shouldn't lose trailing space:
                 lastPrintingCharIndex = x2Index - 1;
@@ -162,7 +231,7 @@ public final class TerminalBuffer {
             if (lastPrintingCharIndex != -1 && len > 0)
                 builder.append(line, x1Index, len);
             boolean lineFillsWidth = lastPrintingCharIndex == x2Index - 1;
-            if ((!joinBackLines || !rowLineWrap) && (!joinFullLines || !lineFillsWidth) && row < selY2 && row < mScreenRows - 1)
+            if ((!joinBackLines || !rowLineWrap) && (!joinFullLines || !lineFillsWidth) && row < selY2 && row < screenRows - 1)
                 builder.append('\n');
         }
         return builder.toString();
@@ -172,15 +241,16 @@ public final class TerminalBuffer {
      * The selected part of a row that carries text sizing blocks. A block contributes its text
      * once, at the first of its cells the selection reaches; its other cells contribute nothing.
      */
-    private void appendRowWithTextBlocks(StringBuilder out, int row, TerminalRow line,
-                                         int x1, int x2, Set<Long> blocksTaken) {
+    private static void appendRowWithTextBlocks(TerminalContent content, StringBuilder out, int row,
+                                                TerminalRow line, int x1, int x2, Set<Long> blocksTaken) {
+        final int columns = content.columns();
         final int spaceUsed = line.getSpaceUsed();
-        int[] cellStart = new int[mColumns];
-        int[] cellEnd = new int[mColumns];
+        int[] cellStart = new int[columns];
+        int[] cellEnd = new int[columns];
         Arrays.fill(cellStart, -1);
         int column = 0;
         int index = 0;
-        while (index < spaceUsed && column < mColumns) {
+        while (index < spaceUsed && column < columns) {
             int start = index;
             index += Character.isHighSurrogate(line.mText[index]) ? 2 : 1;
             int width = line.getDisplayWidthAt(start);
@@ -190,11 +260,11 @@ public final class TerminalBuffer {
             cellEnd[column] = index;
             column += Math.max(1, width);
         }
-        for (int c = Math.max(0, x1); c < x2 && c < mColumns; c++) {
+        for (int c = Math.max(0, x1); c < x2 && c < columns; c++) {
             if (line.getTextSizeRecord(c) != 0) {
-                TextBlock block = getTextBlockAt(row, c);
+                TextBlock block = content.textBlockAt(c, row);
                 if (block != null && blocksTaken.add(((long) block.row << 32) | (long) block.column))
-                    out.append(getTextBlockText(block));
+                    out.append(content.textBlockText(block));
                 continue;
             }
             if (cellStart[c] >= 0) out.append(line.mText, cellStart[c], cellEnd[c] - cellStart[c]);
@@ -272,7 +342,7 @@ public final class TerminalBuffer {
         if (line == null) return 0;
         if (line.hasTextSizes()) {
             StringBuilder contributed = new StringBuilder();
-            appendRowWithTextBlocks(contributed, row, line, 0, x2, blocksTaken);
+            appendRowWithTextBlocks(this, contributed, row, line, 0, x2, blocksTaken);
             return contributed.length();
         }
         int x2Index = (x2 < mColumns) ? line.findStartOfColumn(x2) : line.getSpaceUsed();
@@ -316,7 +386,7 @@ public final class TerminalBuffer {
     }
 
     public void setLineWrap(int row) {
-        mLines[externalToInternalRow(row)].mLineWrap = true;
+        mLines[externalToInternalRow(row)].setLineWrap(true);
     }
 
     public boolean getLineWrap(int row) {
@@ -324,19 +394,7 @@ public final class TerminalBuffer {
     }
 
     public void clearLineWrap(int row) {
-        mLines[externalToInternalRow(row)].mLineWrap = false;
-    }
-
-    /**
-     * Resize the screen which this transcript backs. Currently, this only works if the number of columns does not
-     * change or the rows expand (that is, it only works when shrinking the number of rows).
-     *
-     * @param newColumns The number of columns the screen should have.
-     * @param newRows    The number of rows the screen should have.
-     * @param cursor     An int[2] containing the (column, row) cursor location.
-     */
-    public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor, long currentStyle, boolean altScreen) {
-        resize(newColumns, newRows, newTotalRows, cursor, currentStyle, altScreen, false);
+        mLines[externalToInternalRow(row)].setLineWrap(false);
     }
 
     /**
@@ -352,11 +410,9 @@ public final class TerminalBuffer {
      * which is exactly as tall as the screen — takes the slow path, which copies the rows
      * top-aligned, so that answers 0.
      *
-     * @param cursorRow          the cursor's external row before the resize
-     * @param keepCursorAtBottom as for {@link #resize}, already narrowed by the caller to a cursor
-     *                           near the bottom edge
+     * @param cursorRow the cursor's external row before the resize
      */
-    public int predictRowsOnlyResizeShift(int newRows, int cursorRow, boolean keepCursorAtBottom) {
+    public int predictRowsOnlyResizeShift(int newRows, int cursorRow) {
         if (newRows > mTotalRows) return 0;
         int shiftDownOfTopRow = mScreenRows - newRows;
         if (shiftDownOfTopRow > 0 && shiftDownOfTopRow < mScreenRows) {
@@ -369,19 +425,55 @@ public final class TerminalBuffer {
                         break;
                 }
             }
-        } else if (shiftDownOfTopRow < 0 && !keepCursorAtBottom) {
+        } else if (shiftDownOfTopRow < 0) {
+            // Growth moves down only as far as the transcript goes (see resize).
             shiftDownOfTopRow = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
         }
         return -shiftDownOfTopRow;
     }
 
     /**
-     * Resize with an optional bottom anchor. The anchored form exposes transcript rows (or blank
-     * rows when history is exhausted) above the old screen so the cursor retains its distance from
-     * the bottom edge as rows are added.
+     * Resize a screen that keeps no transcript (the alternate screen) the way kitty does
+     * ({@code resize_screen_buffer_without_rewrap}): rows 0..min(old, new) stay where they are,
+     * top-anchored; columns are cut or padded on the right and rows at the bottom; nothing
+     * reflows and nothing rotates, so a full-screen program's frame reads in order until it
+     * repaints. Pictures stay on their rows, fitted to the new columns; those on cut rows go with
+     * them. The cursor is clamped into the new screen.
+     */
+    public void resizeWithoutRewrap(int newColumns, int newRows, int[] cursor, long currentStyle) {
+        TerminalRow[] lines = new TerminalRow[newRows];
+        int keep = Math.min(mScreenRows, newRows);
+        for (int r = 0; r < keep; r++) {
+            TerminalRow old = mLines[externalToInternalRow(r)];
+            if (old == null) lines[r] = new TerminalRow(newColumns, currentStyle);
+            else if (newColumns == mColumns) lines[r] = old;
+            else lines[r] = old.resizedTo(newColumns, currentStyle);
+        }
+        for (int r = keep; r < mScreenRows; r++) {
+            TerminalRow old = mLines[externalToInternalRow(r)];
+            if (old != null) old.dropKittyPlacements();
+        }
+        for (int r = keep; r < newRows; r++) lines[r] = new TerminalRow(newColumns, currentStyle);
+        mLines = lines;
+        mTotalRows = newRows;
+        mScreenRows = newRows;
+        mScreenFirstRow = 0;
+        mActiveTranscriptRows = 0;
+        mColumns = newColumns;
+        cursor[0] = Math.max(0, Math.min(cursor[0], newColumns - 1));
+        cursor[1] = Math.max(0, Math.min(cursor[1], newRows - 1));
+    }
+
+    /**
+     * Resize the screen which this transcript backs. Currently, this only works if the number of columns does not
+     * change or the rows expand (that is, it only works when shrinking the number of rows).
+     *
+     * @param newColumns The number of columns the screen should have.
+     * @param newRows    The number of rows the screen should have.
+     * @param cursor     An int[2] containing the (column, row) cursor location.
      */
     public void resize(int newColumns, int newRows, int newTotalRows, int[] cursor,
-                       long currentStyle, boolean altScreen, boolean keepCursorAtBottom) {
+                       long currentStyle, boolean altScreen) {
         // newRows > mTotalRows should not normally happen since mTotalRows is TRANSCRIPT_ROWS (10000):
         if (newColumns == mColumns && newRows <= mTotalRows) {
             // Fast resize where just the rows changed.
@@ -398,23 +490,16 @@ public final class TerminalBuffer {
                     }
                 }
             } else if (shiftDownOfTopRow < 0) {
-                if (keepCursorAtBottom) {
-                    int rowsAdded = -shiftDownOfTopRow;
-                    // Existing transcript fills the first new rows. Any remaining rows are clean
-                    // padding above the old screen rather than below its cursor.
-                    for (int i = mActiveTranscriptRows + 1; i <= rowsAdded; i++) {
-                        int internalRow = (mScreenFirstRow - i) % mTotalRows;
-                        if (internalRow < 0) internalRow += mTotalRows;
-                        allocateFullLineIfNecessary(internalRow).clear(currentStyle);
-                    }
-                } else {
-                    // Negative shift down = expanding. Only move screen up if there is transcript to show:
-                    int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
-                    if (shiftDownOfTopRow != actualShift) {
-                        // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
-                        for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
-                        shiftDownOfTopRow = actualShift;
-                    }
+                // Negative shift down = expanding. Only move screen up if there is transcript to show.
+                // The bottom anchor used to pad blank rows above the old screen once the
+                // transcript ran out, which left a blank band over a short session's output when
+                // the pane grew (the keyboard lowering, a float restored): the anchor is honoured
+                // only as far as there is history to pull down, the rest go below like any growth.
+                int actualShift = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
+                if (shiftDownOfTopRow != actualShift) {
+                    // The new lines revealed by the resizing are not all from the transcript. Blank the below ones.
+                    for (int i = 0; i < actualShift - shiftDownOfTopRow; i++) allocateFullLineIfNecessary((mScreenFirstRow + mScreenRows + i) % mTotalRows).clear(currentStyle);
+                    shiftDownOfTopRow = actualShift;
                 }
             }
             mScreenFirstRow += shiftDownOfTopRow;
@@ -472,8 +557,7 @@ public final class TerminalBuffer {
                 if (oldLine.mKittyPlacements != null) {
                     // Pictures ride along with the row their top-left cell was on. The new row is
                     // where this old row's text starts; later scrolling moves it by reference.
-                    java.util.ArrayList<KittyPlacement> carried = oldLine.mKittyPlacements;
-                    oldLine.mKittyPlacements = null;
+                    java.util.ArrayList<KittyPlacement> carried = oldLine.takeKittyPlacements();
                     TerminalRow target = allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow));
                     for (KittyPlacement placement : carried) {
                         placement.fitToColumns(mColumns);
@@ -805,7 +889,7 @@ public final class TerminalBuffer {
     }
 
     public void setShellIntegrationMark(int externalRow, byte mark) {
-        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark = mark;
+        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).setShellIntegrationMark(mark);
     }
 
     /**
@@ -1108,9 +1192,20 @@ public final class TerminalBuffer {
                     effect &= ~bits;
                 }
                 // Rewrite only the effect, so that the underline style of these cells survives DECCARA.
-                line.mStyle[x] = TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect);
+                line.setStyleAt(x, TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect));
             }
         }
+    }
+
+    /**
+     * Give an empty transcript {@code count} blank rows directly above the screen, for a caller that
+     * fills them: the Ghostty core handing its history over when it is released.
+     */
+    void openEmptyTranscript(int count) {
+        if (mActiveTranscriptRows != 0) throw new IllegalStateException("transcript not empty");
+        count = Math.max(0, Math.min(count, mTotalRows - mScreenRows));
+        mActiveTranscriptRows = count;
+        for (int y = -count; y < 0; y++) mLines[externalToInternalRow(y)] = new TerminalRow(mColumns, TextStyle.NORMAL);
     }
 
     public void clearTranscript() {

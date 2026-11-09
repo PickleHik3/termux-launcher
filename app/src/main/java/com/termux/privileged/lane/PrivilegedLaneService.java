@@ -1,12 +1,15 @@
 package com.termux.privileged.lane;
 
 import android.content.Context;
+import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
 import android.util.Log;
+import android.view.InputEvent;
+import android.view.MotionEvent;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -17,6 +20,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -49,7 +53,7 @@ public final class PrivilegedLaneService extends IPrivilegedLane.Stub {
     private static final String TAG = "PrivilegedLaneService";
 
     /** Bump when the service's behaviour changes: Shizuku restarts a bound service whose version differs. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     static final String ROOT_DIR = "/data/local/tmp/tl";
     static final String BIN_DIR = ROOT_DIR + "/bin";
@@ -102,6 +106,40 @@ public final class PrivilegedLaneService extends IPrivilegedLane.Stub {
     @Override
     public int uid() {
         return Process.myUid();
+    }
+
+    /** {@code InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_RESULT}. */
+    private static final int INJECT_MODE_WAIT_FOR_RESULT = 1;
+    private Object inputManager;
+    private Method injectInputEvent;
+    private Method setDisplayId;
+
+    @Override
+    public boolean injectMotion(MotionEvent event, int displayId) {
+        if (event == null) return false;
+        try {
+            synchronized (this) {
+                if (inputManager == null) {
+                    // The input service's binder interface, as the shell's `input` command uses
+                    // it; this process is app_process, so hidden API rules do not apply here.
+                    IBinder binder = (IBinder) Class.forName("android.os.ServiceManager")
+                        .getMethod("getService", String.class).invoke(null, "input");
+                    Class<?> stub = Class.forName("android.hardware.input.IInputManager$Stub");
+                    inputManager = stub.getMethod("asInterface", IBinder.class).invoke(null, binder);
+                    injectInputEvent = Class.forName("android.hardware.input.IInputManager")
+                        .getMethod("injectInputEvent", InputEvent.class, int.class);
+                    setDisplayId = MotionEvent.class.getMethod("setDisplayId", int.class);
+                }
+            }
+            if (displayId >= 0) setDisplayId.invoke(event, displayId);
+            Object placed = injectInputEvent.invoke(inputManager, event, INJECT_MODE_WAIT_FOR_RESULT);
+            return Boolean.TRUE.equals(placed);
+        } catch (Throwable t) {
+            Log.w(TAG, "injectMotion failed", t);
+            return false;
+        } finally {
+            event.recycle();
+        }
     }
 
     @Override

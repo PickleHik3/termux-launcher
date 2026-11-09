@@ -42,7 +42,67 @@ public class X11LinuxAppRunnerTest {
 
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
-            + "export TU_DEBUG=noconform\ncd \"$HOME\"\nexec firefox --new-window\n", script);
+            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
+            + "cd \"$HOME\"\n"
+            + "exec firefox --new-window\n", script);
+    }
+
+    @Test public void anAppInThePrefixMeetsFcitx5OnTheDisplaysBusWhenBothAreThere() {
+        String script = X11LinuxAppRunner.script(app("gedit"), ":1", Collections.emptyList());
+        String fcitx5 = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
+            + "/fcitx5";
+        String bus = com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
+            + "/termux-x11-im-bus-1";
+        // fcitx5 installed, its helper's bus up for this display and the helper that made it
+        // still alive: the toolkits load fcitx5's module and find it on the same bus. Anything
+        // less and the app runs exactly as before.
+        String block = "if [ -x '" + fcitx5 + "' ] && [ -S '" + bus + "' ]"
+            + " && { read -r termux_x11_im_pid < '" + bus + ".pid'; } 2>/dev/null"
+            + " && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n"
+            + "export GTK_IM_MODULE=fcitx\n"
+            + "export QT_IM_MODULE=fcitx\n"
+            + "export XMODIFIERS=@im=fcitx\n"
+            + "export DBUS_SESSION_BUS_ADDRESS='unix:path=" + bus + "'\n"
+            + "fi\n";
+        assertTrue(script.contains(block));
+        assertTrue("set before the app runs", script.indexOf(block) < script.indexOf("exec "));
+        assertEquals("the helper and the runner name the same bus", bus,
+            X11CliInstaller.imBusPath(":1"));
+        assertEquals("each display has its own", bus.substring(0, bus.length() - 1) + "0",
+            X11CliInstaller.imBusPath(":0"));
+    }
+
+    @Test public void aContainerAppAndADesktopAreNotGivenTheInputMethod() {
+        // The helper's fcitx5 is the prefix's; a container has neither it nor its modules.
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "gedit",
+            "gedit", "gedit", "", "", "", false);
+        assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
+            .contains("IM_MODULE"));
+        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains("IM_MODULE"));
+    }
+
+    @Test public void noScriptStartsASoundServerOfItsOwn() {
+        // The launcher runs one server for everything (LauncherSound) and hands its address to
+        // the app's task like to every shell; a distro finds it through its own drop-in.
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "chromium",
+            "chromium", "chromium", "", "", "", false);
+        for (String script : new String[]{
+                X11LinuxAppRunner.script(app("chromium"), ":1", Collections.emptyList()),
+                X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList()),
+                X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+                    Collections.emptyList(), null),
+                X11LinuxAppRunner.sessionScript(session(debian, "xfce", "startxfce4", "XFCE"),
+                    ":1", Collections.emptyList(), null)}) {
+            assertFalse(script, script.contains("pulseaudio"));
+            assertFalse(script, script.contains("PULSE_"));
+            assertFalse(script, script.contains("pactl"));
+        }
+        assertFalse(String.join(" ", ProotDistro.FORWARDED_ENV).contains("PULSE"));
     }
 
     @Test public void theNoSandboxOverloadAppendsTheFlagToTheAppsOwnCommand() {
@@ -81,6 +141,87 @@ public class X11LinuxAppRunnerTest {
         assertTrue(X11LinuxAppRunner.installedEnv(X11GpuProbe.evaluate(emulator)).isEmpty());
     }
 
+    private static X11GpuProbe.Inputs adrenoWithTurnipAndVirgl() {
+        X11GpuProbe.Inputs adreno = new X11GpuProbe.Inputs();
+        adreno.kgsl = true;
+        adreno.mesaDri = true;
+        adreno.virglServer = true;
+        adreno.icdFiles = Collections.singletonList("freedreno_icd.aarch64.json");
+        return adreno;
+    }
+
+    @Test public void aPickedInstalledProfileIsUsedOverTheRanking() {
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adrenoWithTurnipAndVirgl());
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", false);
+        assertEquals(X11GpuProbe.Profile.VIRGL, choice.profile);
+        assertTrue(choice.env.contains("GALLIUM_DRIVER=virpipe"));
+        assertFalse(choice.fellBack);
+
+        assertEquals("virgl's server comes with the pick", "virgl_test_server_android", choice.server);
+
+        X11LinuxAppRunner.GpuChoice auto = X11LinuxAppRunner.installedEnv(gpu, X11GpuProfileStore.AUTO, false);
+        assertEquals("auto keeps the ranking", X11GpuProbe.Profile.TURNIP_ZINK, auto.profile);
+        assertEquals(null, auto.server);
+    }
+
+    @Test public void aProfilesServerIsStartedOnceAndDetachedBeforeTheApp() {
+        assertEquals("", X11LinuxAppRunner.gpuServerBlock(null));
+        assertEquals("if ! pgrep -f 'virgl_test_server_android' >/dev/null 2>&1; then\n"
+            + "(virgl_test_server_android --angle-gl >/dev/null 2>&1 &)\n"
+            + "sleep 1\n"
+            + "fi\n", X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android --angle-gl"));
+    }
+
+    @Test public void aPickThatIsNotInstalledDrawsInSoftwareAndSaysSo() {
+        X11GpuProbe.Inputs adreno = adrenoWithTurnipAndVirgl();
+        adreno.virglServer = false;
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adreno);
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", false);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, choice.profile);
+        assertTrue(choice.fellBack);
+        assertEquals(gpu.software().env, choice.env);
+
+        X11LinuxAppRunner.GpuChoice notForThisGpu = X11LinuxAppRunner.installedEnv(gpu, "virgl-angle", false);
+        assertTrue("a profile this GPU has no row for falls back too", notForThisGpu.fellBack);
+    }
+
+    @Test public void anAppsSoftwareSwitchWinsOverThePick() {
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adrenoWithTurnipAndVirgl());
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", true);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, choice.profile);
+        assertFalse(choice.fellBack);
+        assertTrue(choice.env.contains("GALLIUM_DRIVER=llvmpipe"));
+        assertFalse("no virgl driver reaches the app", X11LinuxAppRunner.usesVirgl(choice.env));
+    }
+
+    @Test public void onAKnownFreezeGpuAutoDrawsInSoftwareEvenWithVirglInstalled() {
+        X11GpuProbe.Inputs mali = new X11GpuProbe.Inputs();
+        mali.eglVendor = "mali";
+        mali.glRenderer = "Mali-G52 MC2";
+        mali.virglServer = true;
+        mali.angle = true;
+        mali.mesaDri = true;
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(mali);
+
+        X11LinuxAppRunner.GpuChoice auto = X11LinuxAppRunner.installedEnv(gpu, X11GpuProfileStore.AUTO, false);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, auto.profile);
+        assertTrue(auto.env.contains("LIBGL_ALWAYS_SOFTWARE=1"));
+        assertFalse(X11LinuxAppRunner.usesVirgl(auto.env));
+        assertTrue("the exports for a shell are software's too", gpu.toEnv().contains("LIBGL_ALWAYS_SOFTWARE=1"));
+
+        X11LinuxAppRunner.GpuChoice chosen = X11LinuxAppRunner.installedEnv(gpu, "virgl-angle", false);
+        assertEquals("the user may still choose it, warned", X11GpuProbe.Profile.VIRGL_ANGLE, chosen.profile);
+    }
+
+    @Test public void anElectronRetryUnderVirglAlsoDisablesTheGpu() {
+        String virgl = X11LinuxAppRunner.script(app("code-oss"), ":1",
+            Arrays.asList("GALLIUM_DRIVER=virpipe"), true);
+        assertTrue(virgl, virgl.endsWith("exec code-oss --no-sandbox --disable-gpu\n"));
+        String software = X11LinuxAppRunner.script(app("code-oss"), ":1",
+            Arrays.asList("GALLIUM_DRIVER=llvmpipe"), true);
+        assertTrue(software, software.endsWith("exec code-oss --no-sandbox\n"));
+    }
+
     // --- whole desktop sessions ---------------------------------------------------------------
 
     @Test public void aDesktopGetsTheSessionEnvironmentAnAppDoesNot() {
@@ -96,9 +237,9 @@ public class X11LinuxAppRunnerTest {
             + "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
-        // An app's own script is untouched by any of it.
+        // An app's own script exports none of it.
         assertFalse(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
-            .contains("XDG_"));
+            .contains("export XDG_"));
     }
 
     @Test public void aDesktopThatNamesNoDesktopNamesIsToldNothingAboutItself() {

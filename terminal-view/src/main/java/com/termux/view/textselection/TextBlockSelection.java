@@ -3,6 +3,7 @@ package com.termux.view.textselection;
 import androidx.annotation.Nullable;
 
 import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 
 /**
  * D5 of the kitty text sizing spec: a block is one selection unit. Touching any part of a block
@@ -35,9 +36,9 @@ final class TextBlockSelection {
      *     buffer's external coordinates.
      * @return whether anything moved.
      */
-    static boolean snap(TerminalBuffer screen, int[] selection) {
-        final TerminalBuffer.TextBlock start = screen.getTextBlockAt(selection[1], selection[0]);
-        final TerminalBuffer.TextBlock end = screen.getTextBlockAt(selection[3], selection[2]);
+    static boolean snap(TerminalContent screen, int[] selection) {
+        final TerminalBuffer.TextBlock start = screen.textBlockAt(selection[0], selection[1]);
+        final TerminalBuffer.TextBlock end = screen.textBlockAt(selection[2], selection[3]);
         if (start == null && end == null) return false;
         // Four corners: where each end begins and where it ends, its block's run when it has one.
         final int startFirstRow = firstRow(start, selection[1]);

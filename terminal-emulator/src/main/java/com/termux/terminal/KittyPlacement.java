@@ -29,6 +29,11 @@ public final class KittyPlacement {
     final long placementId;
 
     int z;
+    /**
+     * Which pass draws it: one of the LAYER_* values, or -1 to follow kitty's z rule (the Java
+     * core: under the text when z is negative). The Ghostty core names the layer itself.
+     */
+    int layer = -1;
     int column;
     /** The row the top-left cell is on; null once that row was erased or the placement deleted. */
     TerminalRow anchor;
@@ -57,6 +62,21 @@ public final class KittyPlacement {
     public long getImageId() { return imageId; }
     public long getPlacementId() { return placementId; }
     public int getZ() { return z; }
+
+    /** Drawn after the pane background and before the cell backgrounds. */
+    public static final int LAYER_BELOW_BACKGROUND = 0;
+    /** Drawn after the cell backgrounds and before the text. */
+    public static final int LAYER_BELOW_TEXT = 1;
+    /** Drawn over the text. */
+    public static final int LAYER_ABOVE_TEXT = 2;
+    /** One row of a Unicode placeholder image, which its row draws; never a layer pass. */
+    static final int LAYER_PLACEHOLDER = 3;
+
+    /** The pass that draws this placement. */
+    public int getLayer() {
+        if (layer >= 0) return layer;
+        return z < 0 ? LAYER_BELOW_TEXT : LAYER_ABOVE_TEXT;
+    }
     public int getColumn() { return column; }
     /** The external row of the anchor as of the last collection (negative in the scrollback). */
     public int getRow() { return row; }

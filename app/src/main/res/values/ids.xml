@@ -1,8 +1,23 @@
 <resources>
     <item name="help_split_divider" type="id" />
+    <!-- The decor view's tag holding the panels' backdrop source (PanelBackdrop.install). -->
+    <item name="panel_backdrop_source" type="id" />
+    <!-- The Appearance editor header ⋮ menu's Reset item. -->
+    <item name="editor_header_reset" type="id" />
 
     <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
     <item name="tai_centre_list" type="id" />
+
+    <!-- The Graphics acceleration page, built in code like the benchmark's Home. -->
+    <item name="x11_gpu_list" type="id" />
+    <item name="x11_gpu_text" type="id" />
+    <item name="x11_gpu_action" type="id" />
+    <item name="x11_gpu_title" type="id" />
+    <item name="x11_gpu_status" type="id" />
+    <item name="x11_gpu_detail" type="id" />
+    <item name="x11_gpu_radio" type="id" />
+    <item name="x11_gpu_pill" type="id" />
+    <item name="x11_gpu_rows" type="id" />
 
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->
@@ -33,4 +48,7 @@
     <item name="appearance_surface_host" type="id" />
     <!-- An app icon view's pending background render: which request it is waiting on, and its fade. -->
     <item name="launcher_icon_request" type="id" />
+    <!-- Edit pages' accessibility actions on the Terminal grip: move the Terminal page one page. -->
+    <item name="page_overview_action_move_terminal_left" type="id" />
+    <item name="page_overview_action_move_terminal_right" type="id" />
 </resources>

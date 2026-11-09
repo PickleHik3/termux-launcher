@@ -1,0 +1,80 @@
+package com.termux.app.surfaces;
+
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.app.wall.PaneWallPage;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import com.termux.app.surfaces.EditorRows.Kind;
+import com.termux.app.surfaces.EditorRows.Row;
+import com.termux.app.surfaces.EditorRows.Spec;
+
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * The two screens' cards (editor-redesign §1, §2): the new Workspace card, Home's twin, and the
+ * Match rows that replace Home's Own layout switch.
+ */
+public class EditorScreenCardsTest {
+
+    private static final EditorRows.Offers ALL = new EditorRows.Offers(true, true);
+
+    @Test
+    public void theWorkspaceCardHoldsItsLookItsGlassAndGlobal() {
+        // ADR 0017 (fb44e0fb2): the card wears the shared glass rows without a Glass heading,
+        // Colour and Corners beside Tint, Grain and Rim under More before its Elements list.
+        // Overhaul §2: Appearance (open first) closing on Minimal layout, then Layout.
+        // Rows in group order (2026-11-04): the Look, sliders, toggles, then Tint colour.
+        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
+            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM,
+            Row.CONTRAST, Row.MINIMAL, Row.TINT_HUE), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
+        assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS),
+            EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
+    }
+
+    @Test
+    public void theMatchRowsAndTheOwnLayoutSwitchAreGone() {
+        // ADR 0015 §6: copy-to-the-other-half retired with the halves.
+        for (Row row : Row.values()) {
+            assertFalse("the Own layout switch is gone", row.name().equals("OWN_LAYOUT"));
+            assertFalse(row + ": the Match rows are gone", row.name().startsWith("MATCH_"));
+        }
+    }
+
+    @Test
+    public void theWorkspaceCardsLookAndGlassAreTheWorkspaceHalfsWhateverTheFrameShows() {
+        for (PaneWallPage frame : PaneWallPage.values()) {
+            for (Row row : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT})
+                assertEquals(row + " with the frame on " + frame, TermuxAppSharedPreferences.PAGE_WALL,
+                    EditorRows.pageFor(EditorCard.WORKSPACE, row));
+            assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.WORKSPACE, Row.LINK_GLOBAL));
+        }
+    }
+
+    @Test
+    public void theWorkspaceCardStandsOnTheWorkspaceAndIsNamedByItsKey() {
+        assertTrue(EditorCard.WORKSPACE.standsOn(PaneWallPage.TERMINAL));
+        assertFalse(EditorCard.WORKSPACE.standsOn(PaneWallPage.WIDGETS));
+        assertFalse("the screens meet through Match, not the menu's Copy",
+            EditorCard.WORKSPACE.perHalf());
+        assertNull(EditorCard.WORKSPACE.slot);
+        assertEquals(EditorCard.WORKSPACE, EditorCard.forKey("workspace"));
+        assertEquals(EditorCard.HOME, EditorCard.forScreen(PaneWallPage.WIDGETS));
+        assertEquals(EditorCard.WORKSPACE, EditorCard.forScreen(PaneWallPage.TERMINAL));
+        assertFalse("its glass is the Base itself",
+            EditorRows.marksOwnValue(EditorCard.WORKSPACE, Row.FROST));
+    }
+
+    private static List<Row> rowsOf(EditorCard card) {
+        List<Row> out = new ArrayList<>();
+        for (Spec spec : EditorRows.rows(card, ALL))
+            out.add(spec.row);
+        return out;
+    }
+}

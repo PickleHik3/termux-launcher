@@ -34,6 +34,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
+import com.termux.launcherctl.LauncherCtlStartPolicy;
 import com.termux.privileged.lane.PrivilegedLaneServer;
 
 import java.util.Properties;
@@ -77,6 +78,7 @@ public class TermuxApplication extends Application {
             return;
         }
         Context context = getApplicationContext();
+        com.termux.app.terminal.io.ExtraKeyActionLabels.registerIcons();
         // Set crash handler for the app
         TermuxCrashUtils.setDefaultCrashHandler(this);
         // Set log config for the app
@@ -94,14 +96,80 @@ public class TermuxApplication extends Application {
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
         // Terminal name and version reported to applications via XTVERSION ("CSI > 0 q")
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
+        // Before any session: whether a crash keeps the Ghostty core off, and memory pressure for it.
+        com.termux.app.terminal.GhosttyFailSafes.install(this);
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
+        // Read before the wall migration stores its version: an earlier build ran it already.
+        boolean wallMigrationStoredBefore = false;
         if (surfacePreferences != null) {
-            surfacePreferences.migrateSurfaceInheritance();
+            // Decided once, before any migration below writes a bookkeeping key: a first run holds
+            // only the log level, and every later check would otherwise see it as an upgrade.
+            final boolean freshInstall = surfacePreferences.isFreshInstall();
+            // An install from before the wall rework takes Start in from its usage mode, once.
+            android.content.SharedPreferences nudgeStore = surfacePreferences.getSharedPreferences();
+            wallMigrationStoredBefore = nudgeStore != null && nudgeStore.contains(
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_WALL_MIGRATION_VERSION);
+            WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
+            // The wall's pages are seeded from Start in, the default Home page, Use as and the
+            // widget repository's page count, once; the count is read before anything changes it.
+            com.termux.app.wall.WallPagesMigration.migrateIfNeeded(
+                surfacePreferences.getSharedPreferences(),
+                () -> com.termux.app.launcher.widget.LauncherWidgetRepository.create(context)
+                    .pageCount(),
+                com.termux.app.wall.WallPagesStore.open(context));
+            // The look's halves became pages (ADR 0015 §6): tell the preferences which page the
+            // Workspace is, then fold the old half keys into wall values and Terminal-page
+            // overrides, once, before any look migration or activity reads a look.
+            com.termux.app.wall.WallPages.Page terminalPage =
+                com.termux.app.wall.WallPagesStore.open(context).current().terminal();
+            int terminalId = terminalPage == null ? -1 : terminalPage.id;
+            surfacePreferences.getSharedPreferences().edit().putInt(
+                com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
+                terminalId).apply();
+            TermuxAppSharedPreferences.setTerminalPageId(terminalId);
+            // With no Terminal page the Workspace's differing values have nowhere to go; the
+            // upgrade still runs and records its version.
+            com.termux.app.look.HalfLookUpgrade.run(
+                new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
+                terminalId, -1);
+            // The Display page the wall upgrade created starts with the Terminal page's look.
+            com.termux.app.wall.WallPagesMigration.copyLookToUpgradedDisplay(
+                surfacePreferences.getSharedPreferences(),
+                new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
+                terminalId);
+            // Every look value moves into the one grid (ADR 0017), once, before the glass
+            // controls' start-up work reads and writes looks through it.
+            com.termux.app.wall.WallPagesStore wallStore =
+                com.termux.app.wall.WallPagesStore.open(context);
+            java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
+            for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
+                lookPageIds.add(page.id);
+            surfacePreferences.migrateLookGrid(lookPageIds, freshInstall);
+            // Every grid reads a page's kind from the wall and a kind's shipped look from the
+            // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
+            com.termux.shared.termux.settings.preferences.LookGrid.install(
+                new com.termux.app.wall.WallLookKinds(wallStore),
+                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+            com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()), freshInstall);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
-            com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
+            com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
+                freshInstall);
+            // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
+            // installs alike (ADR 0018 §3); after every freshness check above.
+            com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()),
+                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
+            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+            com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
+                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                    surfacePreferences.getSharedPreferences()));
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
@@ -109,6 +177,9 @@ public class TermuxApplication extends Application {
         TermuxShellManager shellManager = TermuxShellManager.init(context);
         // Set NightMode.APP_NIGHT_MODE
         TermuxThemeUtils.setAppNightMode(properties.getNightMode());
+        // The upgrade nudge (appearance overhaul §6) is decided once, after the migrations.
+        com.termux.app.setup.GlassResetNudgeCard.decideAtStart(context, surfacePreferences,
+            properties.getNightMode(), wallMigrationStoredBefore);
         // Check and create termux files directory. If failed to access it like in case of secondary
         // user or external sd card installation, then don't run files directory related code
         Error error = TermuxFileUtils.isTermuxFilesDirectoryAccessible(this, true, true);
@@ -129,6 +200,13 @@ public class TermuxApplication extends Application {
         // The privileged lane's socket (@<package>.priv): catalog tools that run as shell through
         // Shizuku. It starts whether or not Shizuku is there, so a client always gets an answer.
         PrivilegedLaneServer.getInstance().start(context);
+        // Any revival of the main process (a package update brings it back as a service or
+        // notification-listener host) binds the API; the activity's own call stays as a no-op
+        // repeat. The start runs on the server's executor, not here.
+        if (LauncherCtlStartPolicy.startsAtApplicationStart(currentProcessName(context),
+            context.getPackageName())) {
+            LauncherCtlApiServer.getInstance().ensureStartedAsync(context);
+        }
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {
@@ -204,8 +282,10 @@ public class TermuxApplication extends Application {
         Configuration effectiveConfig = withPinnedNightMode(newConfig);
         ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
-            Context themedContext = new ContextThemeWrapper(configuredContext,
-                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            // In the app-only picture's colours while the launcher wears them (ADR 0011).
+            Context themedContext = com.termux.app.theme.AppOnlyWallpaperColors.wrap(
+                new ContextThemeWrapper(configuredContext,
+                    R.style.Theme_TermuxActivity_DayNight_NoActionBar));
             // No pane can be measured from here: the active palette stands on the ground the
             // activity last measured, so a flip does not undo a wallpaper's polarity.
             return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level);
@@ -248,12 +328,17 @@ public class TermuxApplication extends Application {
     }
 
     private boolean isTaiRuntimeProcess(Context context) {
+        String processName = currentProcessName(context);
+        return processName != null && processName.endsWith(":tai_runtime");
+    }
+
+    private String currentProcessName(Context context) {
         // Application.getProcessName() answers locally; the running-processes query is a binder
         // call into the system server, kept only for the releases without it.
         String processName = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
             ? Application.getProcessName() : null;
         if (processName == null)
             processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
-        return processName != null && processName.endsWith(":tai_runtime");
+        return processName;
     }
 }

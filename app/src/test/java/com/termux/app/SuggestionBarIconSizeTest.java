@@ -9,6 +9,8 @@ import android.widget.FrameLayout;
 
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.DockSurfaceSpec;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -21,9 +23,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * One pinned icon is a share of the row's own band, never of the host the row was lent to. Off the
- * dock that host is a plank standing in an edge stack, and a plank measured before it was sized is
- * a whole content column deep — which is how a single icon came to be drawn across the terminal.
+ * The row draws exactly the icon the dock hands it, and works none out of its own (#135): not a
+ * share of its band, not a share of the host it was lent to, not one held to its own width. A row
+ * handed no size draws no icons rather than guess one.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
@@ -48,52 +50,50 @@ public class SuggestionBarIconSizeTest {
         return metrics.density;
     }
 
-    @Test
-    public void aHostTallerThanARowDoesNotGiveATallerIcon() {
-        SuggestionBarView bar = inHostOf(1234);
-        bar.setDockRowHeightHintPx(0);
-        int ceiling = DockLayoutPolicy.maxRowBandPx(density());
-        assertTrue("an icon the height of the terminal: " + bar.iconSizePx(),
-            bar.iconSizePx() <= ceiling);
-    }
-
-    @Test
-    public void theRowsOwnBandIsTheAnswerWhateverTheHostIs() {
-        SuggestionBarView tall = inHostOf(1234);
-        tall.setDockRowHeightHintPx(140);
-        SuggestionBarView row = inHostOf(140);
-        row.setDockRowHeightHintPx(140);
-        assertTrue("the band decides, not the host",
-            tall.iconSizePx() == row.iconSizePx());
-        assertTrue(tall.iconSizePx() <= 140);
-    }
-
-    /**
-     * The box the dock hands over is the band less its air, which is the icon itself. A lone row
-     * fills the whole of it, so a row told only the box draws the icon the dock would hand it.
-     */
-    @Test
-    public void aLoneRowsBoxIsItsIconBeforeTheDockHandsTheIconOver() {
+    /** A lone row on Lens beads, seven slots across a 1058 px host: one the slot fit binds. */
+    private static DockLayout dock() {
         float density = density();
-        DockLayout lone = DockLayoutPolicy.compute(DockLayoutPolicy.DockInputs.builder()
+        return DockLayoutPolicy.compute(DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(true)
             .appsRowEnabledPref(true)
             .appsRowAlone(true)
             .appsRowPageStripShown(true)
+            .surface(DockSurfaceSpec.forStyle(DockStyle.LENS_BEADS))
             .density(density)
-            .barHeightScale(2.18f)
+            .barHeightScale(DockLayoutPolicy.maxUsefulScale(false))
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
+            .rowWidthPx(1058)
+            .slotCount(7)
             .build());
-        SuggestionBarView bar = inHostOf(lone.appsRowBandPx);
-        bar.setDockRowHeightHintPx(lone.appsRowBandHintPx);
-        assertEquals(lone.appsRowIconPx, bar.iconSizePx());
     }
 
     @Test
-    public void aRailIconIsTheRailsFixedSizeWhateverTheColumnIs() {
+    public void aRowHandedNoSizeHasNoIcon() {
+        SuggestionBarView bar = inHostOf(1234);
+        assertEquals("no size, no icon, whatever the host is", 0, bar.iconSizePx());
+        bar.setDockRowHeightHintPx(140);
+        assertEquals("a band is not an icon", 0, bar.iconSizePx());
+    }
+
+    @Test
+    public void theRowDrawsExactlyTheSlotIconItIsHanded() {
+        DockLayout dock = dock();
+        assertTrue(dock.slotIconPx > 0);
+        SuggestionBarView tall = inHostOf(1234);
+        tall.setDockLayout(dock);
+        SuggestionBarView row = inHostOf(dock.appsRowBandPx);
+        row.setDockLayout(dock);
+        assertEquals("the host does not decide", dock.slotIconPx, tall.iconSizePx());
+        assertEquals(dock.slotIconPx, row.iconSizePx());
+    }
+
+    @Test
+    public void aRailIconIsTheLayoutsRailIconWhateverTheColumnIs() {
+        DockLayout dock = dock();
         SuggestionBarView rail = inHostOf(2000);
         rail.setVerticalForm(true);
-        rail.setDockRowHeightHintPx(0);
-        assertTrue(rail.iconSizePx() == DockLayoutPolicy.railIconSizePx(density()));
+        rail.setDockLayout(dock);
+        assertEquals(dock.railIconSizePx, rail.iconSizePx());
+        assertEquals(DockLayoutPolicy.railIconSizePx(density()), rail.iconSizePx());
     }
 }

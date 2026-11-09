@@ -7,8 +7,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourGesture;
-import com.termux.app.tour.TourRun;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
@@ -30,6 +28,9 @@ public class HelpTopicsTest {
         "settings", "scale", "touchpad", "pinned", "border", "keyboard_grabber", "corners");
     private static final List<String> WIDGETS_TARGETS = Arrays.asList("status", "widget", "empty",
         "border", "keyboard_grabber", "corners");
+    /** The Assistant page has no controls of its own yet; only the chrome's targets (ADR 0022). */
+    private static final List<String> ASSISTANT_TARGETS = Arrays.asList("status", "border",
+        "keyboard_grabber", "corners");
 
     /** The forty-nine topics of the guide, by group, in the order the guide lists them. */
     private static final List<String> THE_GUIDE = Arrays.asList(
@@ -49,6 +50,7 @@ public class HelpTopicsTest {
         switch (place) {
             case TERMINAL: return TERMINAL_TARGETS;
             case DISPLAY: return DISPLAY_TARGETS;
+            case ASSISTANT: return ASSISTANT_TARGETS;
             default: return WIDGETS_TARGETS;
         }
     }
@@ -164,7 +166,7 @@ public class HelpTopicsTest {
 
     @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
         HelpTopics.Entry status = HelpTopics.entry("status");
-        assertEquals(3, status.places.size());
+        assertEquals(4, status.places.size());
         for (PaneWallPage place : PaneWallPage.values()) {
             assertTrue(place.name(), status.onPlace(place));
             assertEquals(status, HelpTopics.forTarget(place, "status"));
@@ -228,20 +230,17 @@ public class HelpTopicsTest {
         }
         assertEquals(new HashSet<>(Arrays.asList("dock", "status", "space", "az", "places",
             "keyboard_swipe")), withGesture);
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
         // The status bar does not page any more; its swipe is the fold, down from the top border.
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
-        assertEquals(TourGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
-        assertEquals(TourGesture.SCRUB, HelpTopics.entry("az").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
+        assertEquals(HelpGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
+        assertEquals(HelpGesture.SCRUB, HelpTopics.entry("az").gesture);
     }
 
-    @Test public void everyPracticeIdNamesALessonTheRunActuallyHas() {
-        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
-        for (String lessonId : HelpTopics.LESSON_IDS) {
-            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
-        }
+    @Test public void everyPracticeIdIsOneOfTheLessonIds() {
+        assertEquals(6, HelpTopics.LESSON_IDS.size());
         Set<String> used = new HashSet<>();
         for (HelpTopics.Entry entry : HelpTopics.all()) {
             if (entry.lessonId == null) continue;
@@ -253,7 +252,7 @@ public class HelpTopicsTest {
 
     @Test public void theSixLessonsAreReachedFromTheTopicsThatTeachThem() {
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
-        assertEquals(HelpTopics.LESSON_BORDER_DRAG, HelpTopics.entry("places").lessonId);
+        assertEquals(HelpTopics.LESSON_PAGE_SWIPE, HelpTopics.entry("places").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard_swipe").lessonId);
         assertEquals(HelpTopics.LESSON_STATUS_SWIPE, HelpTopics.entry("status").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);

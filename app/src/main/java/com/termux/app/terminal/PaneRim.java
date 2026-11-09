@@ -6,6 +6,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -19,6 +21,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * One frame's border, rendered from what {@link PaneBorderStyle} decided: the shared glass rim,
@@ -59,7 +62,22 @@ public final class PaneRim {
         int attention = MaterialColors.getColor(context,
             androidx.appcompat.R.attr.colorError,
             ContextCompat.getColor(context, R.color.termux_error));
-        return new PaneBorderStyle.Palette(focus, attention);
+        PaneBorderColours.Roles roles = new PaneBorderColours.Roles(
+            lineColour(context),
+            focus,
+            MaterialColors.getColor(context, com.google.android.material.R.attr.colorSecondary, 0),
+            MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary, 0));
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+        if (prefs == null) return new PaneBorderStyle.Palette(focus, attention);
+        return PaneBorderColours.palette(
+            PaneBorderColours.ColourChoice.fromId(prefs.getTerminalPaneBorderColour(),
+                prefs.getTerminalPaneBorderCustom(), PaneBorderColours.Mode.OUTLINE),
+            PaneBorderColours.ColourChoice.fromId(prefs.getTerminalPaneFocusColour(),
+                prefs.getTerminalPaneFocusCustom(), PaneBorderColours.Mode.PRIMARY),
+            prefs.getTerminalPaneGlow(),
+            PaneBorderColours.ColourChoice.fromId(prefs.getTerminalPaneGlowColour(),
+                prefs.getTerminalPaneGlowCustom(), PaneBorderColours.Mode.SAME_AS_BORDER),
+            roles, attention);
     }
 
     /** How long a border of a new kind fades in. */
@@ -68,6 +86,8 @@ public final class PaneRim {
     private Drawable mDrawable;
     private PaneBorderStyle.Kind mKind;
     private int mColour;
+    private boolean mGlow;
+    private int mGlowColour;
     private boolean mGlass;
     private boolean mGradientRim;
     private boolean mDocked;
@@ -75,6 +95,9 @@ public final class PaneRim {
     /** The slab whose own edge the resting rim yields to, or null; see {@link #slabEdgeOf}. */
     @Nullable private SlabEdge mSlab;
     private float mRadiusPx;
+    /** Frame-source counter for the idle audit: paneRim. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("paneRim");
+
     private ValueAnimator mAnimator;
     /** The alpha the kind asks for, before the wall's travel takes its share. */
     private int mBaseAlpha = 255;
@@ -119,6 +142,7 @@ public final class PaneRim {
 
         boolean reusable = mDrawable != null && frame.getForeground() == mDrawable
             && mKind == decision.kind && mColour == decision.colour && mGlass == glass
+            && mGlow == decision.glow && mGlowColour == decision.glowColour
             && mRadiusPx == radius && mGradientRim == gradientRim && mDocked == docked
             && mOpeningLine == openingLine && mSlab == slab;
         if (reusable) {
@@ -132,6 +156,8 @@ public final class PaneRim {
         releaseDrawable();
         mKind = decision.kind;
         mColour = decision.colour;
+        mGlow = decision.glow;
+        mGlowColour = decision.glowColour;
         mGlass = glass;
         mGradientRim = gradientRim;
         mDocked = docked;
@@ -162,12 +188,24 @@ public final class PaneRim {
                 // SharedRim with no style to build from is that line. Over a glass slab the rim
                 // yields to the slab's own edge whenever its program draws one.
                 if (docked) {
-                    mDrawable = new PaneDividerEdges(frame, lineColour(frame.getContext()), density);
+                    mDrawable = new PaneDividerEdges(frame, decision.colour != PaneBorderStyle.NO_COLOUR
+                        ? decision.colour : lineColour(frame.getContext()), density);
                 } else {
+                    // A pane wearing the CRT bezel is framed by it: the resting rim would be a
+                    // second outline a few px outside the solid band, so it draws nothing while
+                    // the bezel is worn (asked on every draw; the frame redraws when it changes).
                     mDrawable = new SharedRim(frame.getContext(), openingLine ? null : style, radius,
-                        density, openingLine ? null : slab);
+                        density, openingLine ? null : slab, decision.colour,
+                        frame instanceof PaneContentFrame
+                            ? ((PaneContentFrame) frame)::bezelWorn : null);
                 }
                 break;
+        }
+        // A steady glow rides over the rim and the focus border; the attention border has its own.
+        if (decision.glow && decision.kind != PaneBorderStyle.Kind.ATTENTION && !docked) {
+            PaneAttentionGlow steady = new PaneAttentionGlow(density, radius, decision.glowColour);
+            steady.setPulsing(false);
+            mDrawable = new Layered(mDrawable, steady);
         }
         frame.setForeground(mDrawable);
         setBaseAlpha(255);
@@ -223,7 +261,7 @@ public final class PaneRim {
      * The plain line's colour: the theme's outline role (so light, dark, black and the scheme's
      * chrome each resolve their own) at the divider's strength. Also the Docked opening's line.
      */
-    static int lineColour(@NonNull Context context) {
+    public static int lineColour(@NonNull Context context) {
         return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOutline,
             ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
@@ -271,7 +309,10 @@ public final class PaneRim {
 
     private void releaseDrawable() {
         if (mDrawable instanceof PaneAttentionGlow) ((PaneAttentionGlow) mDrawable).release();
-        if (mDrawable instanceof SharedRim && mSlab != null) mSlab.setOnEdgeChanged(null);
+        if (mDrawable instanceof Layered) ((Layered) mDrawable).release();
+        if (mSlab != null && (mDrawable instanceof SharedRim
+            || mDrawable instanceof Layered && ((Layered) mDrawable).mBase instanceof SharedRim))
+            mSlab.setOnEdgeChanged(null);
         mDrawable = null;
         mKind = null;
     }
@@ -282,7 +323,10 @@ public final class PaneRim {
         ValueAnimator animator = ValueAnimator.ofInt(0, 255);
         animator.setDuration(FADE_MS);
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
-        animator.addUpdateListener(a -> setBaseAlpha((int) a.getAnimatedValue()));
+        animator.addUpdateListener(a -> {
+            FRAMES.tick();
+            setBaseAlpha((int) a.getAnimatedValue());
+        });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(android.animation.Animator animation) {
@@ -302,35 +346,56 @@ public final class PaneRim {
      * Over a slab whose program draws the edge ({@link SlabEdge#drawsEdge}) it draws nothing, asked
      * on every draw and redrawn when the slab says it changed: the frame still carries its border,
      * so the decision and its reuse read as for any rim, and a slab that goes plain gets it back.
+     * Likewise under a frame that says it is {@code framed} on its own (a pane wearing the CRT
+     * bezel, {@link PaneContentFrame#bezelWorn}): the solid band is the pane's outline then.
      */
     private static final class SharedRim extends Drawable {
         private final PaneSurfaceStyle mStyle;
         private final float mRequestedRadiusPx;
         private final float mDensity;
         private final int mFallbackColour;
+        /** The border colour tinting whatever rim is drawn, or NO_COLOUR for the rim's own. */
+        private final int mTint;
         /** The slab whose own edge this rim yields to, or null for none. */
         @Nullable private final SlabEdge mSlab;
+        /** Whether the frame draws its own outline right now (the bezel), or null for never. */
+        @Nullable private final java.util.function.BooleanSupplier mFramed;
         private Drawable mInner;
         private float mInnerRadiusPx = -1f;
         private int mAlpha = 255;
 
         SharedRim(@NonNull Context context, @Nullable PaneSurfaceStyle style, float radiusPx,
-                  float density, @Nullable SlabEdge slab) {
+                  float density, @Nullable SlabEdge slab, int tint,
+                  @Nullable java.util.function.BooleanSupplier framed) {
             mStyle = style;
+            mTint = tint;
             mRequestedRadiusPx = radiusPx;
             mDensity = density;
-            mFallbackColour = lineColour(context);
+            mFallbackColour = tint != PaneBorderStyle.NO_COLOUR ? tint : lineColour(context);
             mSlab = slab;
+            mFramed = framed;
             if (slab != null) slab.setOnEdgeChanged(this::invalidateSelf);
         }
 
         @Override
         protected void onBoundsChange(@NonNull Rect bounds) {
+            android.os.Trace.beginSection("Pane.rim.resize");
+            try {
+                onBoundsChangeImpl(bounds);
+            } finally {
+                android.os.Trace.endSection();
+            }
+        }
+
+        private void onBoundsChangeImpl(@NonNull Rect bounds) {
             float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, bounds.width(),
                 bounds.height());
             if (mInner == null || radius != mInnerRadiusPx) {
                 Drawable built = mStyle == null ? null : mStyle.paneRimDrawable(radius);
                 mInner = built != null ? built : stroke(radius, mFallbackColour, mDensity);
+                if (built != null && mTint != PaneBorderStyle.NO_COLOUR) {
+                    mInner.setColorFilter(new PorterDuffColorFilter(mTint, PorterDuff.Mode.SRC_IN));
+                }
                 mInnerRadiusPx = radius;
                 mInner.setAlpha(mAlpha);
             }
@@ -340,6 +405,7 @@ public final class PaneRim {
         @Override
         public void draw(@NonNull Canvas canvas) {
             if (mSlab != null && mSlab.drawsEdge()) return;
+            if (mFramed != null && mFramed.getAsBoolean()) return;
             if (mInner != null) mInner.draw(canvas);
         }
 
@@ -351,6 +417,48 @@ public final class PaneRim {
 
         @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
             if (mInner != null) mInner.setColorFilter(colorFilter);
+        }
+
+        @Override public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    /** A border and a steady glow over it, one drawable so the frame's alpha reaches both. */
+    private static final class Layered extends Drawable {
+        final Drawable mBase;
+        private final PaneAttentionGlow mGlow;
+
+        Layered(@NonNull Drawable base, @NonNull PaneAttentionGlow glow) {
+            mBase = base;
+            mGlow = glow;
+        }
+
+        void release() {
+            mGlow.release();
+        }
+
+        @Override
+        protected void onBoundsChange(@NonNull Rect bounds) {
+            mBase.setBounds(bounds);
+            mGlow.setBounds(bounds);
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            mGlow.draw(canvas);
+            mBase.draw(canvas);
+        }
+
+        @Override public void setAlpha(int alpha) {
+            mBase.setAlpha(alpha);
+            mGlow.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mBase.setColorFilter(colorFilter);
+            mGlow.setColorFilter(colorFilter);
         }
 
         @Override public int getOpacity() {

@@ -15,6 +15,8 @@ public final class SessionBrowserModel {
         @Nullable public final String foreground;
         /** What the AI coding agent in this pane is doing, or null when it is not running one. */
         @Nullable public final AgentStatus.State agentState;
+        /** Whether the pane floats over its window rather than sitting in its tiling. */
+        public final boolean floating;
 
         public Pane(@Nullable String cwd, @Nullable String foreground) {
             this(cwd, foreground, null);
@@ -22,9 +24,15 @@ public final class SessionBrowserModel {
 
         public Pane(@Nullable String cwd, @Nullable String foreground,
                     @Nullable AgentStatus.State agentState) {
+            this(cwd, foreground, agentState, false);
+        }
+
+        public Pane(@Nullable String cwd, @Nullable String foreground,
+                    @Nullable AgentStatus.State agentState, boolean floating) {
             this.cwd = emptyToNull(cwd);
             this.foreground = emptyToNull(foreground);
             this.agentState = agentState;
+            this.floating = floating;
         }
     }
 
@@ -63,6 +71,14 @@ public final class SessionBrowserModel {
             this.activePane = activePane;
             this.panes = Collections.unmodifiableList(new ArrayList<>(panes));
             this.label = emptyToNull(label);
+        }
+
+        /**
+         * Whether this window is a Home float: its only pane floats. A tiled window with a float
+         * over it is still a tiled window.
+         */
+        public boolean isFloat() {
+            return panes.size() == 1 && panes.get(0).floating;
         }
     }
 

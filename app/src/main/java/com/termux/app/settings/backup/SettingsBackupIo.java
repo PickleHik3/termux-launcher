@@ -126,6 +126,8 @@ public final class SettingsBackupIo {
         prefs.put(Store.AI, app.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE));
         prefs.put(Store.FONTS, app.getSharedPreferences(FontSettings.PREFS_NAME, Context.MODE_PRIVATE));
         prefs.put(Store.PRIVILEGED, app.getSharedPreferences(PrivilegedPolicyStore.PREFS_NAME, Context.MODE_PRIVATE));
+        prefs.put(Store.WALL_PAGES, app.getSharedPreferences(
+            com.termux.app.wall.WallPagesStore.PREFS, Context.MODE_PRIVATE));
         Map<Root, File> roots = new EnumMap<>(Root.class);
         roots.put(Root.TERMUX, TermuxConstants.TERMUX_DATA_HOME_DIR);
         roots.put(Root.CONFIG, TermuxConstants.TERMUX_CONFIG_HOME_DIR);

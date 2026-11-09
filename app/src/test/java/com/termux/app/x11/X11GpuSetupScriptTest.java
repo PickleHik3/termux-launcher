@@ -20,7 +20,7 @@ public class X11GpuSetupScriptTest {
 
     @Test public void testDisplayIsHeadlessSoTheLauncherNeverAdoptsIt() throws Exception {
         String s = script();
-        assertTrue(s.contains("TERMUX_X11_HEADLESS=1 termux-x11"));
+        assertTrue(s.contains("TERMUX_X11_HEADLESS=1 TERMUX_X11_IM=0 termux-x11 \"$TEST_DISPLAY\""));
         assertFalse(s.contains("is already running; using it"));
     }
 
@@ -60,7 +60,9 @@ public class X11GpuSetupScriptTest {
         int start = s.indexOf("repack_wrapper() {");
         int end = s.indexOf("\n}\n", start) + 3;
         File dir = Files.createTempDirectory("repack").toFile();
+        // The script's repack reads its paths and names from these globals.
         String body = "set -e\nd=" + dir.getAbsolutePath() + "\n"
+            + "WRAPPER_DIR=$d; WRAPPER_PKG=vulkan-wrapper-android; WRAPPER_VERSION=25.0.0-3\n"
             + "src=$d/src; mkdir -p \"$src/data/usr/lib\"; echo so > \"$src/data/usr/lib/libvulkan_wrapper.so\"\n"
             + "printf 'pkgname = vulkan-wrapper-android\\npkgver = 25.0.0\\narch = aarch64\\n' > \"$src/.PKGINFO\"\n"
             + "echo b > \"$src/.BUILDINFO\"; echo m > \"$src/.MTREE\"\n"

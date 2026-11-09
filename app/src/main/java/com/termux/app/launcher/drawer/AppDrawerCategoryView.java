@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -91,6 +92,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     @NonNull private Part streamPart = Part.OUTSIDE;
     private boolean streamFinalized;
     private float downRawY;
+    /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
+    private int bottomInset;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -306,14 +309,41 @@ public final class AppDrawerCategoryView extends ViewGroup
         // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
         // the plane rather than as a list that scrolls. One row gap of overscroll says the
         // difference, and the tiles still paint into it while dragging.
-        int bottom = Math.max(0, Math.round(metrics.itemGapPx + metrics.itemBottomGapPx));
-        overview.setPadding(horizontal, 0, horizontal, bottom);
+        overview.setPadding(horizontal, 0, horizontal, overviewBottomPaddingPx());
         overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
         tileAdapter.setMetrics(metrics);
         detailAdapter.setMetrics(metrics);
         requestLayout();
+    }
+
+    /**
+     * Ends the last overview card and the opened category's last row {@code bottomInsetPx} above
+     * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
+     * padding gives back. Not per frame.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == bottomInset) return;
+        bottomInset = inset;
+        int detail = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset,
+            AppDrawerGridMetrics.ROW_BOTTOM_DP * getResources().getDisplayMetrics().density);
+        if (detailList.getPaddingBottom() != detail) {
+            detailList.setPadding(0, 0, 0, detail);
+            detailList.setClipToPadding(false);
+        }
+        int overviewBottom = overviewBottomPaddingPx();
+        if (overview.getPaddingBottom() != overviewBottom) {
+            overview.setPadding(overview.getPaddingLeft(), 0, overview.getPaddingRight(),
+                overviewBottom);
+        }
+    }
+
+    private int overviewBottomPaddingPx() {
+        AppDrawerCategoryGridMetrics current = metrics;
+        return AppDrawerContentInsetPolicy.listBottomPaddingPx(bottomInset,
+            current == null ? 0f : current.itemBottomGapPx);
     }
 
     public void submitBuckets(@NonNull List<AppDrawerCategoryBucket> newBuckets) {
@@ -640,7 +670,8 @@ public final class AppDrawerCategoryView extends ViewGroup
             return false;
         gesturePolicy.finishOnce();
         boolean commit = !cancelled && AppDrawerCommitPolicy.decide(expansion.progress(),
-            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING)
+            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING,
+            getResources().getDisplayMetrics().density)
             == AppDrawerCommitPolicy.Decision.COMMIT_CLOSE;
         expansion.finishCollapseDrag(commit);
         expansionSpring.value = expansion.progress();
@@ -783,6 +814,26 @@ public final class AppDrawerCategoryView extends ViewGroup
         if (expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW && !buckets.isEmpty())
             return overview;
         return null;
+    }
+    /**
+     * The app a finger at this view's local ({@code x}, {@code y}) is on: a row of the open
+     * category, or one of a tile's launch icons. Null anywhere else.
+     */
+    @Nullable public LauncherAppEntry appEntryAt(float x, float y) {
+        RecyclerView active = activeRecyclerView();
+        if (active == null || getVisibility() != VISIBLE) return null;
+        float localX = x - active.getLeft();
+        float localY = y - active.getTop();
+        View child = active.findChildViewUnder(localX, localY);
+        if (child == null) return null;
+        if (active == detailList) {
+            int position = active.getChildAdapterPosition(child);
+            List<LauncherAppEntry> entries = detailAdapter.entries();
+            return position >= 0 && position < entries.size() ? entries.get(position) : null;
+        }
+        if (!(child instanceof AppDrawerCategoryTileView)) return null;
+        return ((AppDrawerCategoryTileView) child).launchEntryAt(
+            localX - child.getLeft(), localY - child.getTop());
     }
     public boolean isOverview() {
         return expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW;

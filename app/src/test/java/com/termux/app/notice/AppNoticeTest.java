@@ -154,6 +154,25 @@ public class AppNoticeTest {
     }
 
     /**
+     * A read-out leaves in one frame, not through the fade: on pong the fade redrew the whole
+     * page for 16 frames after every divider drag (ADR 0019 follow-up B).
+     */
+    @Test
+    public void aClearedReadoutGoesAtOnceWithoutAFade() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNotice.readout(activity, "80×12 · 80×20", 10_000L);
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        assertEquals(View.VISIBLE, host.getVisibility());
+
+        AppNotice.clearReadout(activity);
+        assertEquals(null, host.activeItem());
+        assertEquals(View.GONE, host.getVisibility());
+        assertEquals(1f, host.getAlpha(), 0f);
+        assertEquals(0f, host.getTranslationY(), 0f);
+    }
+
+    /**
      * The preset-applied confirmation is a notice with an Undo, replacing a snackbar that landed
      * on the keyboard and could not be swiped away. Two things have to survive: the hold is long
      * enough to decide (a confirmation's few seconds are not), and the chip's node says what the

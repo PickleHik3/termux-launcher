@@ -17,7 +17,7 @@ public interface PaneSurfaceStyle {
     /**
      * True while the border preference is on: every place's frame wears a line — the slab's lit
      * rim on glass, the plain stroke otherwise — in every mode, so the border drag that pages the
-     * wall ({@code wall/BorderDrag}) has the same target on the Widgets and Display pages as on
+     * wall ({@code wall/BorderDrag}) has the same target on the Widgets page and the display window as on
      * the terminal. Off, the pages wear a rim only as part of their glass.
      */
     default boolean paneBorderEnabled() { return false; }
@@ -40,6 +40,43 @@ public interface PaneSurfaceStyle {
      */
     default int paneGlassVeil(@NonNull android.graphics.Rect rootRect) {
         return android.graphics.Color.TRANSPARENT;
+    }
+    /**
+     * The even-out matrix a terminal pane laid out at {@code rootRect} draws its frame through,
+     * ahead of {@link #paneGlassFrostFilter()} ({@code ChromeInk#evenOutMatrix}); null when the
+     * stage is off or the pane needs none. Asked right after {@link #paneGlassVeil}, which is what
+     * measures the pane.
+     */
+    @androidx.annotation.Nullable
+    default android.graphics.ColorMatrix paneGlassEvenOut(@NonNull android.graphics.Rect rootRect) {
+        return null;
+    }
+    /**
+     * {@link #paneGlassVeil(android.graphics.Rect)} for the pane {@code key} names (its slab): the
+     * pane's one answer is kept under the key, so another pane over or beside it never evicts it.
+     */
+    default int paneGlassVeil(@NonNull android.graphics.Rect rootRect, @NonNull Object key) {
+        return paneGlassVeil(rootRect);
+    }
+    /** {@link #paneGlassEvenOut(android.graphics.Rect)} for the pane {@code key} names. */
+    @androidx.annotation.Nullable
+    default android.graphics.ColorMatrix paneGlassEvenOut(@NonNull android.graphics.Rect rootRect,
+                                                          @NonNull Object key) {
+        return paneGlassEvenOut(rootRect);
+    }
+    /** The pane {@code key} names detached ({@code true}) or came back: it stops or resumes counting. */
+    default void paneGlassPark(@NonNull Object key, boolean parked) {
+    }
+    /** The pane {@code key} names is gone (detached, or no longer measured): drop its answer. */
+    default void paneGlassForget(@NonNull Object key) {
+    }
+    /**
+     * A token that changes whenever what {@link #paneGlassEvenOut} answers may have changed
+     * without any pane moving (the Debugging switch, the Contrast level, a re-measure). A laid-out
+     * pane polls it in onDraw, a plain int compare, and re-asks when it moved.
+     */
+    default int paneGlassGeneration() {
+        return 0;
     }
     /** Film grain layer for one pane, or null while grain is off. */
     @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
@@ -138,4 +175,12 @@ public interface PaneSurfaceStyle {
      * recycled while a slab holds it, as for the frame itself.
      */
     @Nullable default android.graphics.Bitmap paneGlassClearFrame() { return null; }
+
+    /**
+     * The Look's own glass, Base's values rather than this surface's, which Home's widgets wear
+     * whatever a detached surface does; null where nothing supplies one. Carried here so it rides
+     * the pass that dresses the wall's pages, and so a Look change re-dresses them
+     * ({@link PaneStyleKey}).
+     */
+    @Nullable default com.termux.app.chrome.LookGlassStyle lookGlass() { return null; }
 }

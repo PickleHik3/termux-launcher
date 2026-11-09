@@ -13,7 +13,7 @@ import com.termux.shared.logger.Logger;
 /**
  * How a display server announces itself. {@code termux-x11 :0} starts the server in its own
  * process, which broadcasts a Binder the moment an X client knocks on the port; this hands it to
- * the {@link X11DisplayHostController} that owns the Display page.
+ * the {@link X11DisplayHostController} that owns the display window.
  *
  * <p>Declared in the manifest, never exported, and guarded by a signature-level permission. The
  * server process runs under the launcher's own uid and signature, so it holds that permission; a
@@ -31,6 +31,32 @@ public final class X11DisplayReceiver extends BroadcastReceiver {
     @Nullable private static X11DisplayHostController controller;
     /** The last announcement nobody was there to take. */
     @Nullable private static Bundle pendingAnnouncement;
+
+    /**
+     * Told when a server announces itself and no controller is there to take it: a display started
+     * from a shell, or by Start with the launcher. The display window opens on demand (ADR 0008),
+     * so the activity builds its controller then, and the controller takes the kept announcement.
+     */
+    public interface UnclaimedListener {
+        void onUnclaimedAnnouncement();
+    }
+
+    @Nullable private static UnclaimedListener unclaimedListener;
+
+    /** The activity that opens the display window; null takes it out. */
+    public static void setUnclaimedListener(@Nullable UnclaimedListener listener) {
+        unclaimedListener = listener;
+    }
+
+    /** Take {@code listener} out, if it is still the one set; a newer activity's stays. */
+    public static void clearUnclaimedListener(@NonNull UnclaimedListener listener) {
+        if (unclaimedListener == listener) unclaimedListener = null;
+    }
+
+    /** Whether an announcement is waiting for a controller. */
+    public static boolean hasKeptAnnouncement() {
+        return pendingAnnouncement != null;
+    }
 
     /** The controller that owns the page now. */
     static void register(@NonNull X11DisplayHostController value) {
@@ -74,6 +100,8 @@ public final class X11DisplayReceiver extends BroadcastReceiver {
             // keeps knocking every second anyway, so nothing is lost if this is stale by then.
             Logger.logVerbose(LOG_TAG, "A display server announced itself with no page attached");
             pendingAnnouncement = bundle;
+            UnclaimedListener listener = unclaimedListener;
+            if (listener != null) listener.onUnclaimedAnnouncement();
             return;
         }
         host.onServerAnnounced(bundle);

@@ -43,6 +43,7 @@ import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
+import com.termux.ai.TaiSpeechGpuAdvice;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiReadAloud;
@@ -560,7 +561,10 @@ public class TaiModelCentreFragment extends Fragment
         }
         row.pillPrimary = get.suggested ? getString(R.string.tai_fn_pill_suggested) : "";
         List<String> lines = new ArrayList<>();
-        String fit = TaiFunctionRows.fitLine(get.fit, labels);
+        boolean gpuModel = group == TaiFunctionRows.Group.SPEECH && TaiSpeechActions.isGpuModel(entry.modelId);
+        TaiSpeechGpuAdvice.Advice gpuAdvice = gpuModel ? TaiSpeechGpuAdvice.forContext(context, entry.modelId) : null;
+        // The GPU model's line is its own advice, not the tier's "made for bigger phones".
+        String fit = gpuModel ? "" : TaiFunctionRows.fitLine(get.fit, labels);
         if (!fit.isEmpty()) lines.add(fit);
         String forLine = TaiFunctionRows.forLine(env, get.item.info, labels);
         if (!forLine.isEmpty()) lines.add(forLine);
@@ -573,6 +577,10 @@ public class TaiModelCentreFragment extends Fragment
         if (error != null) {
             row.note = error;
             row.noteIsError = true;
+        } else if (gpuAdvice != null) {
+            row.note = TaiSpeechActions.gpuAdviceLine(context, gpuAdvice, false);
+            row.dimmed = gpuAdvice == TaiSpeechGpuAdvice.Advice.NO_GPU;
+            if (gpuAdvice == TaiSpeechGpuAdvice.Advice.RECOMMENDED) row.pillPrimary = getString(R.string.speech_gpu_advice_recommended);
         } else if (TaiModelCatalog.PARAKEET_TDT_V3_ID.equals(entry.modelId)) {
             String warning = TaiSpeechActions.parakeetRamWarning(context, deviceMemory(context));
             row.note = warning == null ? "" : warning;
@@ -817,9 +825,43 @@ public class TaiModelCentreFragment extends Fragment
      */
     @NonNull
     static String centreName(@NonNull String modelId, @Nullable String displayName, @Nullable String path, boolean speech) {
-        if (!speech) return displayName == null || displayName.isEmpty() ? modelId : displayName;
+        if (!speech) return readableName(modelId, displayName);
         String plain = TaiSpeechModels.plainName(modelId, displayName, path);
         return TaiSpeechActions.isWhisper(modelId) ? "Whisper " + plain : plain;
+    }
+
+    /**
+     * A chat model's name: its display name, or, when that is empty or just the id (an imported
+     * model is named after its id), the id read as words: split on - and _, known acronyms
+     * restored, a trailing backend word in brackets ("mobilemoe-s-sft-mnn" is "MobileMoE S SFT (MNN)").
+     * Other words are title-cased; nothing is hidden or merged.
+     */
+    @NonNull
+    static String readableName(@NonNull String modelId, @Nullable String displayName) {
+        String name = displayName == null ? "" : displayName.trim();
+        if (!name.isEmpty() && !name.equalsIgnoreCase(modelId)) return name;
+        String[] words = modelId.trim().split("[-_\\s]+");
+        StringBuilder out = new StringBuilder();
+        String backend = null;
+        for (int i = 0; i < words.length; i++) {
+            String word = words[i];
+            if (word.isEmpty()) continue;
+            String lower = word.toLowerCase(java.util.Locale.ROOT);
+            if (i == words.length - 1 && i > 0 && (lower.equals("mnn") || lower.equals("gguf") || lower.equals("litert"))) {
+                backend = lower.equals("litert") ? "LiteRT" : lower.toUpperCase(java.util.Locale.ROOT);
+                continue;
+            }
+            if (out.length() > 0) out.append(' ');
+            switch (lower) {
+                case "mobilemoe": out.append("MobileMoE"); break;
+                case "sft": case "llm": case "moe": case "it": case "lm": out.append(lower.toUpperCase(java.util.Locale.ROOT)); break;
+                default:
+                    out.append(word.length() == 1 ? word.toUpperCase(java.util.Locale.ROOT)
+                        : Character.toUpperCase(word.charAt(0)) + word.substring(1));
+            }
+        }
+        if (backend != null) out.append(out.length() > 0 ? " (" + backend + ")" : backend);
+        return out.length() == 0 ? modelId : out.toString();
     }
 
     /** The row's backend pill text ("LiteRT", "MNN"), or "" for a backend this build does not name. */
@@ -1470,11 +1512,11 @@ public class TaiModelCentreFragment extends Fragment
         return warning == null || warning.isEmpty() ? plain : plain + "\n\n" + warning;
     }
 
-    /** The voice picker lives with the speech settings (Keyboard > Voice input > Speech model). */
+    /** The voice picker lives with the speech settings (Voice input > Speech model). */
     private void openVoiceSettings() {
         if (getActivity() instanceof SettingsActivity) {
-            ((SettingsActivity) getActivity()).openScreen(SpeechModelPreferencesFragment.class,
-                R.string.settings_keyboard_voice_model_title, null);
+            ((SettingsActivity) getActivity()).openScreen(KeyboardVoicePreferencesFragment.class,
+                R.string.settings_keyboard_sub_voice_title, null);
         }
     }
 

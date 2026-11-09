@@ -274,6 +274,96 @@ public class WindowForegroundResolverTest {
         assertFalse(resolver.get(10).isWorkingAsOf(1100L, 500L));
     }
 
+    /** A /proc the test lays out; a missing path reads as refused or gone, as on a device. */
+    private static final class FakeProc implements WindowForegroundResolver.ProcSource {
+        final java.util.Map<String, String> files = new java.util.HashMap<>();
+        final java.util.List<Integer> listed = new java.util.ArrayList<>();
+
+        FakeProc process(int pid, String comm, int pgrp, int tpgid, long utime, long stime,
+                         String cmdline) {
+            files.put("/proc/" + pid + "/stat", pid + " (" + comm + ") S 1 " + pgrp + " " + pgrp
+                + " 34816 " + tpgid + " 4194560 100 0 0 0 " + utime + " " + stime
+                + " 0 0 20 0 1 0 12345\n");
+            if (cmdline != null) files.put("/proc/" + pid + "/cmdline", cmdline);
+            listed.add(pid);
+            return this;
+        }
+
+        @Override public String read(String path) {
+            return files.get(path);
+        }
+
+        @Override public int[] pids() {
+            int[] out = new int[listed.size()];
+            for (int i = 0; i < out.length; i++) out[i] = listed.get(i);
+            return out;
+        }
+    }
+
+    @Test
+    public void theDirectReadPrintsWhatTheScriptPrints() {
+        FakeProc proc = new FakeProc()
+            // An idle shell: it is its own terminal's foreground group.
+            .process(10, "bash", 10, 10, 5, 5, "bash\0")
+            // A shell running a wrapper script whose child does the work.
+            .process(20, "bash", 20, 500, 1, 1, "bash\0")
+            .process(500, "sh", 500, 500, 0, 0, "sh\0build.sh\0")
+            .process(501, "make (job)", 500, 500, 30, 10, "make\0")
+            // Someone else's group, not asked about.
+            .process(900, "other", 900, 900, 99, 99, "other\0");
+
+        WindowForegroundResolver.DirectRead read = WindowForegroundResolver.readDirect(
+            Arrays.asList(10, 20, 30, -1), proc);
+
+        assertTrue(read.complete);
+        assertEquals("10|idle|\n"
+            + "20|fg|500|sh\tbuild.sh\n"
+            + "30|x|\n"
+            + "g|500|0\n"
+            + "g|500|40\n", read.output);
+    }
+
+    @Test
+    public void aDirectReadingLabelsThePaneLikeThePrivilegedOne() {
+        FakeProc proc = new FakeProc()
+            .process(20, "bash", 20, 700, 1, 1, "bash\0")
+            .process(700, "nvim", 700, 700, 3, 1, "nvim\0config.toml\0");
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+
+        resolver.applyOutput(WindowForegroundResolver.readDirect(
+            Collections.singletonList(20), proc).output, Collections.singletonList(20), 1000L);
+
+        WindowForegroundResolver.ForegroundInfo info = resolver.get(20);
+        assertNotNull(info);
+        assertEquals("nvim", info.processName);
+        assertEquals("config.toml", info.openFile);
+        assertEquals(700, info.foregroundPid);
+    }
+
+    @Test
+    public void aForegroundTheAppCannotSeeMakesTheReadingIncomplete() {
+        // su's foreground runs as root; hidepid hides its /proc entry from the app.
+        FakeProc proc = new FakeProc().process(20, "bash", 20, 800, 1, 1, "bash\0");
+
+        WindowForegroundResolver.DirectRead read = WindowForegroundResolver.readDirect(
+            Collections.singletonList(20), proc);
+
+        assertFalse(read.complete);
+        assertEquals("20|fg|800|\n", read.output);
+    }
+
+    @Test
+    public void onlyAnIncompleteReadingFallsBackToThePrivilegedBackendAndNotOftenerThanItsFloor() {
+        assertEquals(WindowForegroundResolver.Route.DIRECT,
+            WindowForegroundResolver.route(true, 0L));
+        assertEquals(WindowForegroundResolver.Route.WAIT,
+            WindowForegroundResolver.route(false, 1500L));
+        assertEquals(WindowForegroundResolver.Route.PRIVILEGED,
+            WindowForegroundResolver.route(false, WindowForegroundResolver.PRIVILEGED_MIN_INTERVAL_MS));
+        assertEquals(WindowForegroundResolver.Route.PRIVILEGED,
+            WindowForegroundResolver.route(false, Long.MAX_VALUE / 2));
+    }
+
     @Test
     public void unwrapLaneNamesTheRelayedTool() {
         assertEquals("btop", WindowForegroundResolver.unwrapLane("tl-priv", new String[]{"tl-priv", "run",

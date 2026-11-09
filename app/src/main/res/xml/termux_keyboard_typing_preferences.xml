@@ -19,13 +19,8 @@
             app:title="@string/settings_keyboard_tap_correction_reset_title" />
     </PreferenceCategory>
 
+    <!-- Vibration lives on General only. -->
     <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">
-        <Preference
-            app:key="keyboard_typing_vibration_link"
-            app:persistent="false"
-            app:title="@string/settings_keyboard_vibration_link_title"
-            app:summary="@string/settings_keyboard_vibration_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
         <SwitchPreferenceCompat
             app:key="in_app_keyboard_key_sound_enabled"
             app:summary="@string/termux_in_app_keyboard_key_sound_summary"

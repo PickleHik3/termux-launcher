@@ -13,7 +13,7 @@ import com.termux.app.wall.PaneControlsView;
 import java.util.function.BooleanSupplier;
 
 /**
- * The corner tab's minimal-mode button, which the terminal's panes and the Display page both
+ * The corner tab's minimal-mode button, which the terminal's panes and the display window both
  * carry. No font has a glyph that reads as "give this place the whole screen" and its way back,
  * so the button is a pair of vector marks drawn the way the tiling button draws its own: four
  * corners pointing out while the place is normal, pointing in once it is minimal. The mark reads

@@ -5,7 +5,6 @@ import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
-import com.github.mmin18.widget.RealtimeBlurView;
 import com.termux.R;
 
 import org.junit.Test;
@@ -26,15 +25,16 @@ public class WidgetPaneGlassIntegrationTest {
         activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         ViewGroup root = (ViewGroup) LayoutInflater.from(activity)
             .inflate(R.layout.activity_termux, null);
-        WidgetPaneView pane = root.findViewById(R.id.widget_pane);
-        assertEquals(0, count(pane, RealtimeBlurView.class));
-        assertNotNull(root.findViewById(R.id.terminal_window_bar_blur));
+        // The widget pane is not in this layout (it was only ever counted as absent): the whole
+        // layout holds no capturing blur view, the pane included wherever it is added.
+        assertEquals(0, countBlurViews(root));
         assertNotNull(root.findViewById(R.id.terminal_window_bar_wallpaper_backdrop));
     }
-    private static int count(android.view.View view, Class<?> type) {
-        int result = type.isInstance(view) ? 1 : 0;
+    /** Views that blur by capturing the window, by name: none is left in the app. */
+    private static int countBlurViews(android.view.View view) {
+        int result = view.getClass().getSimpleName().contains("Blur") ? 1 : 0;
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++)
-            result += count(((ViewGroup) view).getChildAt(i), type);
+            result += countBlurViews(((ViewGroup) view).getChildAt(i));
         return result;
     }
 }

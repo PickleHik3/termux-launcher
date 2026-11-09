@@ -9,6 +9,7 @@ import com.termux.R;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
  * Human wording for what a key does, shared by the editor page, the key sheet and the picker so
@@ -57,6 +58,18 @@ public final class ExtraKeyActionLabels {
     }
 
     /**
+     * The Assistant key's cap: a plane-16 private-use code point (outside every Nerd Font range)
+     * that {@link NerdFontSpans} draws as {@code ic_wall_assistant}; see {@link #registerIcons}.
+     */
+    public static final String ASSISTANT_ICON = "\uDBFF\uDF00";
+
+    /** Registers the code points that draw as drawables. Called once from the Application. */
+    public static void registerIcons() {
+        NerdFontSpans.registerDrawableSymbol(ASSISTANT_ICON.codePointAt(0),
+            R.drawable.ic_wall_assistant);
+    }
+
+    /**
      * The glyph a tool's key cap draws when the tool has one worth a cap: the wall's places wear
      * the marks the status bar gives them, and the Dictate key a microphone. Null for everything else, where the title seeds the cap.
      */
@@ -66,6 +79,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_WALL_WIDGETS: return "\uf015";
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return "\uf120";
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return ASSISTANT_ICON;
             case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
             case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
             case LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER: return "\uDB80\uDC3B"; // nf-md-apps

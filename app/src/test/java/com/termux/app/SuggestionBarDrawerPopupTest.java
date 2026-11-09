@@ -69,6 +69,8 @@ public class SuggestionBarDrawerPopupTest {
         controller = Robolectric.buildActivity(Activity.class).setup();
         activity = controller.get();
         row = new SuggestionBarView(activity, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         activity.setContentView(row, new ViewGroup.LayoutParams(720, 160));
         idle();
     }
@@ -91,7 +93,7 @@ public class SuggestionBarDrawerPopupTest {
         assertEquals(fromDock, fromDrawer);
         assertTrue("expected the unpinned shape, got " + fromDrawer, fromDrawer.contains("Pin"));
         assertTrue("expected the unpinned shape, got " + fromDrawer,
-            fromDrawer.contains("Change app icon"));
+            fromDrawer.contains("Change icon"));
     }
 
     @Test
@@ -106,7 +108,7 @@ public class SuggestionBarDrawerPopupTest {
         assertEquals(fromDock, fromDrawer);
         assertTrue("expected the pinned shape, got " + fromDrawer, fromDrawer.contains("Unpin"));
         assertTrue("expected the pinned shape, got " + fromDrawer,
-            fromDrawer.contains("Change dock icon"));
+            fromDrawer.contains("Change icon"));
     }
 
     // -------------------------------------------------------------------- placement

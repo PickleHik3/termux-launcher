@@ -142,6 +142,26 @@ public final class AzScrubRowView extends AppCompatTextView {
      */
     private boolean letterTicksSuspended;
 
+    /**
+     * Hears the letter beads' lift ({@link com.termux.app.dock.AzBeadRow}): where the finger is
+     * along the row ({@code fingerAlongPx}, the view's own x; NaN for none) and the lift's share
+     * now, 0 at rest, 1 held, a little under 0 at the spring's overshoot. Called only on a change.
+     */
+    public interface BeadLiftListener {
+        void onBeadLift(float fingerAlongPx, float strength);
+    }
+
+    /** Whether each letter stands on a bead of its own that lifts under the finger. */
+    private boolean beadLift;
+    @Nullable private BeadLiftListener beadLiftListener;
+    /** The lift's share now (the spring's), and the finger it is centred on (NaN for none). */
+    private float beadLiftStrength;
+    private float beadFingerAlong = Float.NaN;
+    private float beadPublishedStrength;
+    private float beadPublishedAlong = Float.NaN;
+    @Nullable private ValueAnimator beadSpring;
+    private float beadSpringFrom, beadSpringTo;
+
     public AzScrubRowView(Context context) {
         super(context);
         init();
@@ -294,6 +314,104 @@ public final class AzScrubRowView extends AppCompatTextView {
         return AzLetterTrack.indexAt(alongPx, letterTrackLengthPx(), visibleLetters.length);
     }
 
+    /** How many letters the row shows (the ☆ key and # included). */
+    public int letterCount() {
+        return visibleLetters.length;
+    }
+
+    /** One letter's slot along the row, px. */
+    public float letterPitchPx() {
+        return letterSlotSizePx();
+    }
+
+    /** Letter {@code index}'s centre along the row, px from its start. */
+    public float letterCenterPx(int index) {
+        return letterCenterAlongPx(index);
+    }
+
+    /**
+     * Stands each letter on a bead of its own (the dock's Lens beads with the row under the
+     * icons) that rises with its letter under the finger, or lets go. {@code listener} hears the
+     * lift so the dock's glass draws the beads where the letters are.
+     */
+    public void setBeadLift(boolean on, @Nullable BeadLiftListener listener) {
+        beadLiftListener = on ? listener : null;
+        if (beadLift == on) return;
+        beadLift = on;
+        stopBeadSpring();
+        beadLiftStrength = 0f;
+        beadFingerAlong = Float.NaN;
+        beadPublishedStrength = 0f;
+        beadPublishedAlong = Float.NaN;
+        invalidate();
+    }
+
+    /** Whether the letters stand on lifting beads ({@link #setBeadLift}). */
+    public boolean beadLift() {
+        return beadLift;
+    }
+
+    /** Springs the beads' lift toward {@code target} (1 held, 0 at rest) from where it is now. */
+    private void springBeadLiftTo(float target) {
+        if (!beadLift) return;
+        stopBeadSpring();
+        if (!isAttachedToWindow() || beadLiftStrength == target) {
+            settleBeadLift(target);
+            return;
+        }
+        beadSpringFrom = beadLiftStrength;
+        beadSpringTo = target;
+        ValueAnimator spring = ValueAnimator.ofFloat(0f, com.termux.app.dock.AzBeadRow.SPRING_MS);
+        spring.setDuration(com.termux.app.dock.AzBeadRow.SPRING_MS);
+        spring.setInterpolator(null);
+        spring.addUpdateListener(animation -> {
+            beadLiftStrength = com.termux.app.dock.AzBeadRow.spring(beadSpringFrom, beadSpringTo,
+                (float) animation.getAnimatedValue());
+            publishBeadLift();
+            invalidate();
+        });
+        spring.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean cancelled;
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                cancelled = true;
+            }
+
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (!cancelled) settleBeadLift(beadSpringTo);
+            }
+        });
+        beadSpring = spring;
+        spring.start();
+    }
+
+    private void settleBeadLift(float target) {
+        beadLiftStrength = target;
+        if (target == 0f) beadFingerAlong = Float.NaN;
+        publishBeadLift();
+        invalidate();
+    }
+
+    private void stopBeadSpring() {
+        ValueAnimator spring = beadSpring;
+        beadSpring = null;
+        if (spring != null) spring.cancel();
+    }
+
+    /** Tells the listener where the lift is, when it moved. */
+    private void publishBeadLift() {
+        BeadLiftListener listener = beadLiftListener;
+        if (listener == null) return;
+        float along = beadLiftStrength == 0f ? Float.NaN : beadFingerAlong;
+        if (Float.compare(along, beadPublishedAlong) == 0
+            && Float.compare(beadLiftStrength, beadPublishedStrength) == 0) return;
+        beadPublishedAlong = along;
+        beadPublishedStrength = beadLiftStrength;
+        listener.onBeadLift(along, beadLiftStrength);
+    }
+
     /** The frame that turns this bar's own touch points into the canonical bottom-bar ones. */
     @NonNull
     private AzBarFrame localFrame() {
@@ -375,13 +493,19 @@ public final class AzScrubRowView extends AppCompatTextView {
             boolean activeFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
                 ? (hasInlineFocus && i == activeIndex)
                 : (waveStrength > 0.01f && i == activeIndex);
-            if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
+            boolean onBead = beadLift && !isVerticalBar();
+            if (onBead) {
+                // Each letter rides its bead: the bead's own lift, so glyph and glass never part.
+                waveLift = com.termux.app.dock.AzBeadRow.liftPx(along, beadFingerAlong, slot,
+                    dp(com.termux.app.dock.AzBeadRow.LIFT_PEAK_DP) * beadLiftStrength);
+            } else if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
                 waveLift *= 1.2f;
                 waveLift = Math.max(waveLift, dp(6));
             }
+            // On a bead the glyph swells less, so it stays inside its small lens.
             float scale = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
                 ? (activeFocus ? 1.14f : 1f)
-                : (1f + (0.34f * envelope * waveStrength));
+                : (1f + ((onBead ? 0.12f : 0.34f) * envelope * waveStrength));
             letterPaint.setTextSize(baseTextSize * scale);
             applyLetterWeight(envelope, activeFocus);
             float baseline = letterDrawBaseline(along, waveLift);
@@ -453,7 +577,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             }
             visibleLetters = LETTERS;
             visibleGlyphs = buildGlyphStrings(visibleLetters);
-            invalidate();
+            onLettersChanged();
             return;
         }
         LinkedHashSet<Character> normalized = new LinkedHashSet<>();
@@ -470,7 +594,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             }
             visibleLetters = LETTERS;
             visibleGlyphs = buildGlyphStrings(visibleLetters);
-            invalidate();
+            onLettersChanged();
             return;
         }
         char[] out = new char[normalized.size() + 1];
@@ -496,7 +620,16 @@ public final class AzScrubRowView extends AppCompatTextView {
         }
         visibleLetters = nextVisibleLetters;
         visibleGlyphs = buildGlyphStrings(visibleLetters);
+        onLettersChanged();
+    }
+
+    /**
+     * The letters shown changed: drawn again, and on beads laid out again so the dock reads the
+     * row's slots afresh (its layout listener hands the beads their new count and pitch).
+     */
+    private void onLettersChanged() {
         invalidate();
+        if (beadLift) requestLayout();
     }
 
     public void setInteractionAccentColor(int color) {
@@ -676,9 +809,45 @@ public final class AzScrubRowView extends AppCompatTextView {
         return true;
     }
 
+    /** The letters' opacity while no finger is on them: the Dock card's Faint, else full. */
+    private float restingAlpha = 1f;
+    private static final long LETTERS_FADE_IN_MS = 120L;
+    private static final long LETTERS_FADE_OUT_MS = 240L;
+
+    /**
+     * The letters' opacity at rest ({@code AzShowMode#restingAlpha}): Faint keeps them at about
+     * a third, still scrubbable, and a finger on them brings them to full for the scrub.
+     */
+    public void setRestingAlpha(float alpha) {
+        float clamped = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (restingAlpha == clamped) return;
+        restingAlpha = clamped;
+        if (activeLetterIndex < 0) {
+            animate().cancel();
+            setAlpha(clamped);
+        }
+    }
+
+    private void fadeLettersTo(float alpha, long durationMs) {
+        if (getAlpha() == alpha) return;
+        animate().cancel();
+        if (!isAttachedToWindow()) {
+            setAlpha(alpha);
+            return;
+        }
+        animate().alpha(alpha).setDuration(durationMs).start();
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
+        int fadeAction = event.getActionMasked();
+        if (fadeAction == MotionEvent.ACTION_DOWN) {
+            fadeLettersTo(1f, LETTERS_FADE_IN_MS);
+        } else if (fadeAction == MotionEvent.ACTION_UP
+            || fadeAction == MotionEvent.ACTION_CANCEL) {
+            fadeLettersTo(restingAlpha, LETTERS_FADE_OUT_MS);
+        }
         // Read in the canonical frame the gesture is written in: "along" the letters, and "away"
         // from the bar, whichever screen axes those are on this edge. A bottom bar is the frame
         // itself, so this is the identity there.
@@ -709,6 +878,8 @@ public final class AzScrubRowView extends AppCompatTextView {
                 activeLetterIndex = indexOfVisibleLetter(letter);
                 lastHapticLetterIndex = activeLetterIndex;
                 waveStrength = 1f;
+                beadFingerAlong = along;
+                springBeadLiftTo(1f);
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     lockedInlineLetter = null;
                 }
@@ -734,6 +905,8 @@ public final class AzScrubRowView extends AppCompatTextView {
                     lastHapticLetterIndex, nextHapticLetterIndex);
                 lastHapticLetterIndex = nextHapticLetterIndex;
                 activeTouchAlong = along;
+                beadFingerAlong = along;
+                publishBeadLift();
                 waveStrength = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.92f : 1f;
                 updateInteractionLayerOffset();
                 invalidate();
@@ -755,6 +928,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                         event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.UP);
                 }
                 suppressUpScrub = false;
+                springBeadLiftTo(0f);
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     activeLetterIndex = -1;
                     animateWaveRelease();
@@ -771,6 +945,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 lastHapticLetterIndex = -1;
                 suppressUpScrub = false;
                 callback.onCancel();
+                springBeadLiftTo(0f);
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     activeLetterIndex = -1;
                     animateWaveRelease();
@@ -854,6 +1029,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         super.onDetachedFromWindow();
         stopSettleAnimation();
         stopShimmer();
+        stopBeadSpring();
+        if (beadLiftStrength != 0f) settleBeadLift(0f);
     }
 
     private void stopSettleAnimation() {

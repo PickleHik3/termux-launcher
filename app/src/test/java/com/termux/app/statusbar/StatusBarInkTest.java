@@ -232,16 +232,14 @@ public class StatusBarInkTest {
             int toned = OnGlass.resolveBare(surface, LIGHT_PRIMARY,
                 OnGlass.TARGET_LARGE_TEXT * 1.04d).ink;
             for (float presence = 0f; presence <= 1.001f; presence += .05f) {
-                for (boolean stopped : new boolean[] {false, true}) {
-                    float ink = StatusBarLensMetrics.glyphInkFor(presence, stopped);
-                    int alpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * ink);
-                    int glyph = StatusBarInk.inkAtAlpha(surface, toned, alpha,
-                        OnGlass.TARGET_LARGE_TEXT);
-                    double ratio = StatusBarInk.shownRatio(glyph, surface);
-                    assertTrue("the place mark at " + hex(glass) + ", presence " + presence
-                            + ", ink " + ink + " (was 1.11): " + ratio,
-                        ratio >= OnGlass.TARGET_LARGE_TEXT);
-                }
+                float ink = StatusBarLensMetrics.glyphInkFor(presence);
+                int alpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * ink);
+                int glyph = StatusBarInk.inkAtAlpha(surface, toned, alpha,
+                    OnGlass.TARGET_LARGE_TEXT);
+                double ratio = StatusBarInk.shownRatio(glyph, surface);
+                assertTrue("the place mark at " + hex(glass) + ", presence " + presence
+                        + ", ink " + ink + " (was 1.11): " + ratio,
+                    ratio >= OnGlass.TARGET_LARGE_TEXT);
             }
         }
     }

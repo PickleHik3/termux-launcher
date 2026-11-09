@@ -1,0 +1,113 @@
+package com.termux.app.place;
+
+/**
+ * The one owner of the navigation inset at the screen's bottom (ADR 0018 §1, D3, D8): how much of
+ * it the content keeps clear and how much the dock's surface takes.
+ *
+ * <p>The root no longer pads its children by the navigation inset. With the system keyboard
+ * visible it fits the window exactly as before (nothing reaches under the keyboard, D8). With it
+ * away the root pads nothing at the bottom and the content container keeps the band clear for
+ * every child but the stack's layout, which reaches the screen's bottom edge; in it the dock's
+ * surface alone continues down into the band while the dock stands on the edge with the in-app
+ * keyboard down ({@code dockFoot}). Everything the stack's rows and the keyboard stand on stays
+ * where it was: {@link #rowsBottomFromScreenBottomPx} is the same with or without the foot.
+ */
+public final class BottomInsets {
+
+    /** The root's own bottom padding. */
+    public final int rootPaddingPx;
+    /** The band the content container keeps clear below every child but the stack's layout. */
+    public final int keptPx;
+    /** The stack container's bottom margin, the height added to it, and its bottom padding. */
+    public final int stackMarginPx;
+    public final int stackExtraHeightPx;
+    public final int stackPaddingPx;
+    /** The bottom margin of the keyboard column, which the rows stand above. */
+    public final int keyboardColumnMarginPx;
+    /** The dock surface's foot: how far it runs below the rows' bottom. */
+    public final int dockFootPx;
+
+    private BottomInsets(int rootPaddingPx, int keptPx, int stackMarginPx,
+                         int stackExtraHeightPx, int stackPaddingPx, int keyboardColumnMarginPx,
+                         int dockFootPx) {
+        this.rootPaddingPx = rootPaddingPx;
+        this.keptPx = keptPx;
+        this.stackMarginPx = stackMarginPx;
+        this.stackExtraHeightPx = stackExtraHeightPx;
+        this.stackPaddingPx = stackPaddingPx;
+        this.keyboardColumnMarginPx = keyboardColumnMarginPx;
+        this.dockFootPx = dockFootPx;
+    }
+
+    /**
+     * The root's bottom padding for the legacy fit {@code fitPx} the window gives it, the bars'
+     * own bottom inset {@code restPx}, and the system keyboard visible or not.
+     */
+    public static int rootPaddingPx(boolean imeVisible, int fitPx, int restPx) {
+        if (imeVisible) return Math.max(0, fitPx);
+        return Math.max(0, fitPx - Math.max(0, restPx));
+    }
+
+    /** What the content keeps clear below itself: the part of the fit the root no longer pads. */
+    public static int keptPx(boolean imeVisible, int fitPx, int restPx) {
+        return Math.max(0, fitPx) - rootPaddingPx(imeVisible, fitPx, restPx);
+    }
+
+    /**
+     * The stack's placement for the fit, the stack pass's own margin and flush padding, and the
+     * dock owning the foot or not ({@code DockSpec#foot}).
+     */
+    public static BottomInsets of(boolean imeVisible, int fitPx, int restPx, boolean dockFoot,
+                                  int stackPassMarginPx, int flushPaddingPx) {
+        return forKept(rootPaddingPx(imeVisible, fitPx, restPx), keptPx(imeVisible, fitPx, restPx),
+            dockFoot, stackPassMarginPx, flushPaddingPx);
+    }
+
+    /** {@link #of} for a root padding and a kept band already worked out from the insets. */
+    public static BottomInsets forKept(int root, int kept, boolean dockFoot,
+                                       int stackPassMarginPx, int flushPaddingPx) {
+        int flush = Math.max(0, flushPaddingPx);
+        int margin = Math.max(0, stackPassMarginPx);
+        if (!dockFoot || kept <= 0) return new BottomInsets(root, kept, margin + kept, 0, flush, 0, 0);
+        return new BottomInsets(root, kept, margin, kept, 0, flush + kept, flush + kept);
+    }
+
+    /**
+     * How far a Home page's content column reaches below where it stands with the keyboard down
+     * and no band kept, for the system keyboard's take on the root {@code systemImeTakePx}
+     * ({@link KeyboardOverlayPolicy#systemImeTakePx}) and the band kept {@code keptPx}. The column
+     * hangs above the accessory stack, which stands on the kept band (by its margin, or by its
+     * foot's height), and the root's padding grows by the take plus the band whenever the system
+     * keyboard comes up ({@link #rootPaddingPx}): both moves have to be answered together, or the
+     * frame between this inset dispatch and the stack's pass lays the grid out a band short
+     * (keyboard up) or a band tall (keyboard down). Only its change between two dispatches is
+     * meaningful.
+     */
+    public static int homeContentReachPx(int systemImeTakePx, int keptPx) {
+        return Math.max(0, systemImeTakePx) - Math.max(0, keptPx);
+    }
+
+    /**
+     * How much of the in-app keyboard's bottom is cut while the wall's travel has the accessory
+     * stack {@code travelPx} below where it is laid out: whatever has slid past the keyboard
+     * column's laid-out bottom, which stands {@code belowKeyboardPx} under the keyboard (the bands
+     * under it, their air, the column's padding) and {@link #stackPaddingPx} above the stack's
+     * own laid-out bottom. The stack's clip cuts at its own bottom, which with the dock's foot
+     * reaches the screen's edge; the column stands the foot's band higher
+     * ({@link #keyboardColumnMarginPx}), so a keyboard slid down off a crossing to a keyboard-down
+     * page would show its top row in that band under the gesture pill. Without a foot the column
+     * margin is 0 and this cuts exactly where the stack's clip does. {@code keyboardSharePx} is
+     * the keyboard's own share, which hides it behind bands held up under it; the larger cut wins.
+     */
+    public static int keyboardTravelHiddenPx(float travelPx, float keyboardSharePx,
+                                             int belowKeyboardPx, int stackPaddingPx) {
+        float slidPast = Math.max(0f, travelPx) - Math.max(0, belowKeyboardPx)
+            - Math.max(0, stackPaddingPx);
+        return Math.round(Math.max(Math.max(0f, keyboardSharePx), slidPast));
+    }
+
+    /** Where the rows' bottom stands above the screen's bottom edge: the parity number. */
+    public int rowsBottomFromScreenBottomPx() {
+        return rootPaddingPx + stackMarginPx + stackPaddingPx + keyboardColumnMarginPx;
+    }
+}

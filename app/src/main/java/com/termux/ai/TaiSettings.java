@@ -55,6 +55,11 @@ public final class TaiSettings {
     public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
+    /**
+     * Where speech-to-text runs, before it was chosen per model: auto, cpu or gpu ({@link SttAccelerator}).
+     * Still read as the fallback for a model with no pick of its own ({@link #sttAcceleratorKey}).
+     */
+    public static final String KEY_STT_ACCELERATOR = "tai_stt_accelerator";
     public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
     /** Speech output: the voice (one of {@link TaiTtsVoices#VOICES}) and the speed (a float, 1.0 = the voice's own pace). */
     public static final String KEY_TTS_VOICE = "tai_tts_voice";
@@ -432,6 +437,40 @@ public final class TaiSettings {
     public int getSttIdleUnloadMinutes() {
         int value = preferences.getInt(KEY_STT_IDLE_UNLOAD_MINUTES, DEFAULT_STT_IDLE_UNLOAD_MINUTES);
         return Math.max(0, value);
+    }
+
+    /**
+     * {@code auto}, {@code cpu} or {@code gpu}: where speech-to-text runs for {@code modelId}. The
+     * model's own pick wins; a model with none follows the one global value older builds stored
+     * ({@link #KEY_STT_ACCELERATOR}); with neither it is auto.
+     */
+    @NonNull
+    public String getSttAccelerator(@Nullable String modelId) {
+        String own = modelId == null || modelId.isEmpty() ? null : preferences.getString(sttAcceleratorKey(modelId), null);
+        return resolveSttAccelerator(own, preferences.getString(KEY_STT_ACCELERATOR, null));
+    }
+
+    /** Stores where speech-to-text runs for {@code modelId} only; other models keep theirs. */
+    public void setSttAccelerator(@NonNull String modelId, @Nullable String accelerator) {
+        if (modelId.isEmpty()) return;
+        preferences.edit().putString(sttAcceleratorKey(modelId), resolveSttAccelerator(accelerator, null)).apply();
+    }
+
+    /** The preference key one speech model's accelerator is stored under. */
+    @NonNull
+    public static String sttAcceleratorKey(@NonNull String modelId) {
+        return KEY_STT_ACCELERATOR + "." + modelId;
+    }
+
+    /**
+     * The accelerator id a speech model runs on: {@code perModel} when the model has one stored,
+     * else {@code global} (the pre-per-model setting), else auto. The Interpreter path is the
+     * bench's, never a setting, so a stored {@code interp} reads as auto.
+     */
+    @NonNull
+    public static String resolveSttAccelerator(@Nullable String perModel, @Nullable String global) {
+        SttAccelerator chosen = SttAccelerator.parse(perModel != null ? perModel : global);
+        return chosen == SttAccelerator.INTERPRETER ? SttAccelerator.AUTO.id : chosen.id;
     }
 
     public void setSttIdleUnloadMinutes(int minutes) {

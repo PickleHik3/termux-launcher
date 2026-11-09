@@ -45,6 +45,7 @@ public final class SurfaceDirtyLedger {
     public enum FrostRect {
         TOP_PANE_STATUS,
         TOP_PANE_WINDOW_BAR,
+        TOP_PANE_WINDOW_BAR_SIDE,
         COMMAND_PALETTE,
         TERMINAL_SHEET,
         APP_DRAWER,

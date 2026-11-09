@@ -7,7 +7,7 @@ setting; see [Keyboard](Keyboard.md#size-and-look).
 
 ## Install a font from the app
 
-The picker is called **Terminal fonts**. Open it from **Settings → Appearance → Terminal fonts**,
+The picker is called **Terminal fonts**. Open it from **Settings → Terminal → Text & display → Terminal fonts**,
 from the [command palette](Command_Palette_And_Actions.md) (**Terminal fonts**), or by searching
 Settings for "fonts".
 

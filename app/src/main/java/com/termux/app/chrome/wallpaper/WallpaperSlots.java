@@ -39,6 +39,11 @@ import java.util.List;
  * Lock slot shows the system's picture ({@code wallpaper/slots/lock-system.png}) and Home applies
  * leave the lock screen alone. The stored choice changes only when the user applies a Lock choice.</p>
  *
+ * <p>While the launcher is not the home app, the picker can set the Home slot's photo for the
+ * launcher alone ({@link #applyAppOnly}, {@code wallpaper_app_only}): the exact copy becomes the
+ * launcher's picture and Android's wallpapers stay as they are. Any Home set to the phone ends it.
+ * A Lock slot that is Same as Home then shows the phone's own lock picture.</p>
+ *
  * <p>Photos, all under the app's private files: a cropped photo waits in
  * {@code wallpaper/pending/<timestamp>.png} until the picker page closes; the Home slot's picture
  * is the managed exact copy ({@code managed-wallpaper/system-wallpaper-exact.png}); the Lock
@@ -85,17 +90,38 @@ public final class WallpaperSlots {
     public static final class State {
         @NonNull public final Choice home;
         @NonNull public final Choice lock;
-        /** Another app set the lock screen's wallpaper; {@link #lock} then shows the system's picture. */
+        /**
+         * The lock screen shows a picture that is not the launcher's: another app set it, or
+         * {@link #lockUnderAppOnly}. {@link #lock} then shows the system's picture.
+         */
         public final boolean lockElsewhere;
+        /**
+         * {@link #home} is the launcher's app-only picture ({@code wallpaper_app_only}, its copy on
+         * disk): the launcher wears it, Android's home screen does not have it.
+         */
+        public final boolean appOnly;
+        /**
+         * The stored Lock slot is Same as Home while Home is app-only, so the lock screen still
+         * shows the phone's own picture, and {@link #lock} shows that. A Home set to the phone
+         * still takes the lock screen along ({@link WallpaperSlotPlan.Inputs#lockShowsHome}).
+         */
+        public final boolean lockUnderAppOnly;
 
         public State(@NonNull Choice home, @NonNull Choice lock) {
             this(home, lock, false);
         }
 
         public State(@NonNull Choice home, @NonNull Choice lock, boolean lockElsewhere) {
+            this(home, lock, lockElsewhere, false, false);
+        }
+
+        public State(@NonNull Choice home, @NonNull Choice lock, boolean lockElsewhere,
+                     boolean appOnly, boolean lockUnderAppOnly) {
             this.home = home;
             this.lock = lock;
             this.lockElsewhere = lockElsewhere;
+            this.appOnly = appOnly;
+            this.lockUnderAppOnly = lockUnderAppOnly;
         }
     }
 
@@ -111,30 +137,58 @@ public final class WallpaperSlots {
         Context app = ctx.getApplicationContext();
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
         String lock = prefs == null ? TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE : prefs.getWallpaperLockChoice();
-        // Home's photo is the managed exact copy while the system still shows it; Lock's is its
-        // own kept copy.
+        // Home's photo is the managed exact copy while the system still shows it, or while it is
+        // the launcher's app-only picture (the launcher shows it on its own home screen); Lock's
+        // is its own kept copy.
         File homePhoto = null;
+        boolean appOnly = false;
         if (prefs != null) {
+            appOnly = WallpaperPictureReader.appOnlyPictureOnDisk(app, prefs);
             int stored = prefs.getManagedWallpaperSystemId();
             File exact = WallpaperPictureReader.managedWallpaperExactFile(app);
-            if (stored > 0 && stored == ManagedWallpaper.currentSystemWallpaperId(app) && exact.isFile()) {
+            if (appOnly || (stored > 0 && stored == ManagedWallpaper.currentSystemWallpaperId(app)
+                    && exact.isFile())) {
                 homePhoto = exact;
             }
         }
         File lockCopy = lockPhotoFile(app);
         State state = stateFrom(lock, homePhoto, lockCopy.isFile() ? lockCopy : null);
+        if (appOnly) state = new State(state.home, state.lock, false, true, false);
         // A caller on the main thread gets the stored Lock slot only: no lock query or file copy on a frame.
         if (prefs == null || android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return state;
         int storedLockId = prefs.getManagedWallpaperLockId();
         int currentLockId = ManagedWallpaper.currentLockWallpaperId(app);
-        if (isLockElsewhere(storedLockId, currentLockId)) {
+        boolean elsewhere = isLockElsewhere(storedLockId, currentLockId);
+        // Same as Home under an app-only Home: the lock screen never got Home's picture, so the
+        // Lock card shows the phone's own, as for a lock set elsewhere.
+        boolean underAppOnly = !elsewhere && appOnly && state.lock.sameAsHome;
+        if (elsewhere || underAppOnly) {
             File outside = systemLockPicture(app);
-            Logger.logInfo(LOG_TAG, "Lock screen wallpaper was set elsewhere"
+            Logger.logInfo(LOG_TAG, (elsewhere ? "Lock screen wallpaper was set elsewhere"
+                    : "Lock screen keeps the phone's wallpaper under the app-only Home")
                 + (outside == null ? "; its picture could not be read" : ""));
-            return new State(state.home, outside != null ? Choice.photo(outside) : Choice.photo(), true);
+            return new State(state.home, outside != null ? Choice.photo(outside) : Choice.photo(), true,
+                appOnly, underAppOnly);
         }
         if (needsLockBaseline(storedLockId, currentLockId)) prefs.setManagedWallpaperLockId(currentLockId);
         return state;
+    }
+
+    /** Whether this package answers the phone's Home intent right now. A package-manager call: off the main thread. */
+    @WorkerThread
+    public static boolean launcherIsHomeApp(@NonNull Context ctx) {
+        try {
+            android.content.Intent home = new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_HOME);
+            android.content.pm.ResolveInfo resolved = ctx.getPackageManager()
+                .resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+            return resolved != null && resolved.activityInfo != null
+                && ctx.getPackageName().equals(resolved.activityInfo.packageName);
+        } catch (RuntimeException e) {
+            Logger.logWarn(LOG_TAG, "Reading the home app failed: " + e.getMessage());
+            // Unknown: the picker keeps the phone's Home and Lock pair, as it always had.
+            return true;
+        }
     }
 
     /**
@@ -282,6 +336,65 @@ public final class WallpaperSlots {
             Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the recent photo failed", e);
         }
         return null;
+    }
+
+    /**
+     * Sets {@code choice}'s picture as the launcher's own wallpaper only: Android's home and lock
+     * screens keep theirs. On a worker through {@link #applyAppOnlyNow}; a choice with no picture
+     * fails with {@code not_found}.
+     */
+    public static void applyAppOnly(@NonNull Activity activity, @NonNull Choice choice,
+                                    @Nullable Callback cb) {
+        Context app = activity.getApplicationContext();
+        GeneratedWallpaperApplier.Callback done = cb == null ? null : cb::onDone;
+        final File photo = choice.photoFile;
+        if (!choice.photo || photo == null) {
+            GeneratedWallpaperApplier.post(done, false, "not_found");
+            return;
+        }
+        Logger.logInfo(LOG_TAG, "Photo " + photo.getName() + " to the launcher only");
+        GeneratedWallpaperApplier.onWorker(() -> {
+            String error = applyAppOnlyNow(app, photo);
+            GeneratedWallpaperApplier.post(done, error == null, error);
+        });
+    }
+
+    /**
+     * Makes {@code picture} the launcher's app-only wallpaper: the managed exact copy, marked
+     * app-only ({@link ManagedWallpaper#applyAppOnly}), and a recent photo. No WallpaperManager
+     * set. Blocking; call it off the main thread.
+     *
+     * @return null on success, else {@code not_found}, {@code stage_failed} or {@code wallpaper_failed}
+     */
+    @WorkerThread
+    @Nullable
+    public static String applyAppOnlyNow(@NonNull Context ctx, @NonNull File picture) {
+        Context app = ctx.getApplicationContext();
+        if (!picture.isFile()) return "not_found";
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
+        if (prefs == null) return "wallpaper_failed";
+        Uri staged = ManagedWallpaper.stageSource(app, picture);
+        if (staged == null) return "stage_failed";
+        if (!ManagedWallpaper.applyAppOnly(app, staged, prefs)) return "wallpaper_failed";
+        Logger.logInfo(LOG_TAG, "Home slot: the launcher's own photo");
+        try {
+            recents(app).add(picture, System.currentTimeMillis());
+        } catch (IOException | RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the recent photo failed", e);
+        }
+        return null;
+    }
+
+    /** The picker's remembered "Also set as phone wallpaper"; false when the preferences cannot be read. */
+    public static boolean alsoSetPhone(@NonNull Context ctx) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(ctx.getApplicationContext(), false);
+        return prefs != null && prefs.isWallpaperAlsoSetPhone();
+    }
+
+    /** Remembers the picker's "Also set as phone wallpaper". */
+    public static void setAlsoSetPhone(@NonNull Context ctx, boolean on) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(ctx.getApplicationContext(), false);
+        if (prefs != null) prefs.setWallpaperAlsoSetPhone(on);
     }
 
     /** The recent photos, newest first (reads a small index). */
@@ -618,7 +731,14 @@ public final class WallpaperSlots {
 
     @NonNull
     private static WallpaperSlotPlan.Inputs inputs(@NonNull Context ctx) {
-        return new WallpaperSlotPlan.Inputs(read(ctx).lock);
+        return inputsFor(read(ctx));
+    }
+
+    /** The plan's view of {@code state}: a Lock that is Same as Home under an app-only Home still follows Home. */
+    @NonNull
+    static WallpaperSlotPlan.Inputs inputsFor(@NonNull State state) {
+        if (state.lockUnderAppOnly) return new WallpaperSlotPlan.Inputs(Choice.sameAsHome(), false);
+        return new WallpaperSlotPlan.Inputs(state.lock);
     }
 
     private static void execute(@NonNull Context app, @NonNull WallpaperSlotPlan plan, @Nullable Callback cb) {

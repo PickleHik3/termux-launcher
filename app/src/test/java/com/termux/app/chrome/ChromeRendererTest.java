@@ -499,4 +499,101 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
         assertFalse(chrome.isFrostHeldForFirstFrame());
     }
+
+    /**
+     * Across the seam, the ink measuring a band's new dress inside the frame's commit asked for a
+     * second whole apply before the draw (24 ms of a drag frame on pong). While the even-out is
+     * held for the crossing, that request is the post-layout pass that follows: two applies, not
+     * three.
+     */
+    @Test
+    public void anApplyAskedInsideACommitWhileTravellingFoldsIntoTheRenderPass() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;   // the commit's apply asks once
+        chrome.holdEvenOut();
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        mainLooper().idle();
+
+        assertEquals("the frame's commit, then the render pass it folded into",
+            2, surfaces.applied.size());
+        assertEquals("the second apply is the render pass", 1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** At rest nothing changes: an apply asked inside a commit books a commit of its own. */
+    @Test
+    public void anApplyAskedInsideACommitAtRestStillBooksACommit() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("two commits", 2, surfaces.applied.size());
+        assertEquals("neither is the render pass", 0, surfaces.invariantsEnforced);
+    }
+
+    /** An apply asked outside a commit, even mid-crossing, is a commit as ever. */
+    @Test
+    public void anApplyAskedOutsideACommitWhileTravellingIsACommit() {
+        chrome.holdEvenOut();
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(0, surfaces.invariantsEnforced);
+    }
+
+    /**
+     * A top-pane frost asked for while the frame's commit is booked goes with that commit: cut
+     * once, after its apply, instead of now and again once the apply has moved the bands.
+     */
+    @Test
+    public void aFrostAskedWhileACommitIsBookedRunsOnceAfterItsApply() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("nothing is cut before the commit", 0, surfaces.terminalGlassFrostUpdates);
+
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals("one cut, with the commit", 1, surfaces.terminalGlassFrostUpdates);
+        // With nothing booked, a frost runs when it is asked for, as before.
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals(2, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** A commit whose apply cut the frost itself owes no second one. */
+    @Test
+    public void aFrostTheCommitsApplyCutsIsNotCutAgain() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_TOP_PANE_FROST;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(1, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** Tearing the chrome down drops the owed frost with the commit. */
+    @Test
+    public void cancellingTheCommitDropsTheFrostItOwed() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.cancelPendingWork();
+        mainLooper().idle();
+
+        assertEquals(0, surfaces.applied.size());
+        assertEquals(0, surfaces.terminalGlassFrostUpdates);
+    }
 }

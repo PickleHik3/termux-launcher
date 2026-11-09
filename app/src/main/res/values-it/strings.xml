@@ -13,7 +13,6 @@
     <string name="error_run_command_service_mandatory_extra_missing">Parametro obbligatorio mancante per RunCommandService: \"%1$s\"</string>
     <string name="termux_plugin_error_notifications_enabled_on">Mostra avvisi e notifiche per gli errori del plugin. (Predefinito)</string>
     <string name="error_termux_service_start_failed_general">Impossibile avviare TermuxService. Controlla logcat per il messaggio di eccezione.</string>
-    <string name="termux_style_preferences_title">Aspetto di &TERMUX_APP_NAME;</string>
     <string name="action_reset_terminal">Resetta</string>
     <string name="action_create_named_session_confirm">Crea</string>
     <string name="termux_debugging_preferences_title">Debug</string>

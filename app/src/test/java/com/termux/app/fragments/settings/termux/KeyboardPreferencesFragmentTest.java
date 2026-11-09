@@ -114,18 +114,25 @@ public class KeyboardPreferencesFragmentTest {
 
         KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
-        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_pick"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_accelerator"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_idle_unload"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_details"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level"));
-        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_mic_sensitivity"));
+        KeyboardPreferencesFragment fineTuning = launch(KeyboardVoiceDetailsPreferencesFragment.class);
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_mic_sensitivity"));
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_pause_ms"));
+        assertNotNull(fineTuning.getPreferenceScreen().findPreference("keyboard_voice_silence_timeout_ms"));
     }
 
     @Test
-    public void theCleanupModelRowShowsAutomaticByDefault() {
+    public void theCleanupRowsAreOnThePage() {
         KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
-        Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
-        assertNotNull(polishModel);
-        assertEquals("Automatic", polishModel.getSummary().toString());
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_accelerator"));
+        assertTrue(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level")
+            instanceof com.termux.app.fragments.settings.SegmentedPillPreference);
     }
 
     @Test
@@ -200,8 +207,8 @@ public class KeyboardPreferencesFragmentTest {
     }
 
     /**
-     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page,
-     * extra keys and the vibration shortcut stay usable.
+     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page and
+     * extra keys stay usable.
      */
     @Test
     public void switchingTheInputMethodDisablesOnlyTheBuiltInKeyboardLinks() {
@@ -212,7 +219,7 @@ public class KeyboardPreferencesFragmentTest {
         assertNotNull(method);
         String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
         String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
-            "extra_keys_text_all_caps", "keyboard_vibration_link"};
+            "extra_keys_text_all_caps"};
         assertEnabled(fragment, true, builtInOnly);
         assertEnabled(fragment, true, always);
         for (String value : new String[] {"android", "none"}) {
@@ -234,7 +241,9 @@ public class KeyboardPreferencesFragmentTest {
             try {
                 assertEnabled(launch(KeyboardVoicePreferencesFragment.class), true,
                     "keyboard_voice_engine", "keyboard_voice_polish", "keyboard_voice_sounds",
-                    "keyboard_voice_model", "keyboard_voice_pause_ms");
+                    "speech_model_pick", "keyboard_voice_details");
+                assertEnabled(launch(KeyboardVoiceDetailsPreferencesFragment.class), true,
+                    "keyboard_voice_pause_ms");
                 assertEnabled(launch(KeyboardHardwarePreferencesFragment.class), true,
                     "in_app_keyboard_hide_on_hardware", "pass_ctrl_space_to_android");
             } finally {

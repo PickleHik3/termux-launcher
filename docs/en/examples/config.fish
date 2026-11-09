@@ -2,7 +2,7 @@
 # every install or update (after a timestamped .bak), so keep only what the
 # launcher integration itself needs here: PATH, the wallpaper Material palette
 # and its per-prompt refresh, and the clear/cursor helpers. The prompt itself
-# comes from Settings › Look, not from this file.
+# comes from Appearance, not from this file.
 #
 # YOUR OWN SETTINGS GO IN ~/.config/fish/conf.d/personal.fish (installed once
 # from the conf.d-personal.fish example and never overwritten). Editor, aliases,
@@ -117,4 +117,4 @@ if status is-interactive
 end
 
 # The oh-my-posh prompt and the Neovim colour scheme are set up from Settings
-# › Look's "Tools that follow the terminal colours" now, not from this file.
+# Appearance's "Tools that follow the terminal colours" now, not from this file.

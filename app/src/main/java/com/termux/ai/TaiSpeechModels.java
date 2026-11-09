@@ -259,6 +259,12 @@ public final class TaiSpeechModels {
 
     // ---- naming ----
 
+    /** Whether the catalog says this model needs the GPU at full float precision (and never the CPU on its own). */
+    public static boolean needsGpuFp32(@Nullable String modelId) {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
+        return entry != null && entry.gpuPrecisionFp32;
+    }
+
     /** The engine a model runs on, for a row's summary: "Whisper" or "Parakeet". */
     @NonNull
     public static String engineLabel(@NonNull TaiModelSpec spec) {
@@ -286,7 +292,7 @@ public final class TaiSpeechModels {
 
     @NonNull
     public static String plainName(@NonNull String modelId, @Nullable String displayName, @Nullable String path) {
-        String size = sizeWord(modelId);
+        String size = needsGpuFp32(modelId) ? "Base GPU" : sizeWord(modelId);
         String head = size != null ? size : (displayName == null || displayName.trim().isEmpty() ? modelId : displayName.trim());
         return head + " · " + (isEnglishOnly(modelId, path) ? "English" : "Many languages");
     }

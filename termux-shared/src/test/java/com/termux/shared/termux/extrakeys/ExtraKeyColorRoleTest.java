@@ -170,4 +170,14 @@ public class ExtraKeyColorRoleTest {
         assertEquals(role.token, labelAttr, role.labelAttr());
         assertTrue(role.token, role.backgroundAttr() != 0 && role.labelAttr() != 0);
     }
+
+    @Test
+    public void placeSwitchesWithoutAColourTakeADistinctDefaultRole() {
+        assertSame(ExtraKeyColorRole.PRIMARY, ExtraKeyColorRole.defaultForPlaceSwitch("tool:wall.widgets"));
+        assertSame(ExtraKeyColorRole.SECONDARY, ExtraKeyColorRole.defaultForPlaceSwitch("tool:wall.terminal"));
+        assertSame(ExtraKeyColorRole.TERTIARY, ExtraKeyColorRole.defaultForPlaceSwitch("wall.display"));
+        assertSame(ExtraKeyColorRole.ERROR, ExtraKeyColorRole.defaultForPlaceSwitch("tool:wall.assistant"));
+        assertNull(ExtraKeyColorRole.defaultForPlaceSwitch("tool:pane.split"));
+        assertNull(ExtraKeyColorRole.defaultForPlaceSwitch(null));
+    }
 }

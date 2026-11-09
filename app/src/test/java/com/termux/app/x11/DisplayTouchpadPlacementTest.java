@@ -4,22 +4,35 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Rect;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.ConscryptMode;
 
 /**
  * Where the touchpad stands in the keyboard frame: the whole of it, or the seat a key would take
- * in a split keyboard's parting.
+ * in a split keyboard's parting — and the switch on it that flips this orientation's keyboard
+ * mode.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = 28, application = Application.class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 public class DisplayTouchpadPlacementTest {
 
     /** 160dp at 2x. */
@@ -151,5 +164,63 @@ public class DisplayTouchpadPlacementTest {
         assertFalse(DisplayTouchpadPlacement.describes(null, gapParams));
         assertFalse(DisplayTouchpadPlacement.describes(
             new ViewGroup.LayoutParams(MIN_GAP_PX, 500), gapParams));
+    }
+
+    // ------------------------------------------------------------------ the keyboard mode switch
+
+    private static PlaceLayoutStore store() {
+        Application app = RuntimeEnvironment.getApplication();
+        SharedPreferences prefs = app.getSharedPreferences("display-touchpad-placement-test",
+            Context.MODE_PRIVATE);
+        prefs.edit().clear().commit();
+        return new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+    }
+
+    /**
+     * The switch writes the one stored mode the Layout editor reads, for the orientation on
+     * screen only, and a second tap puts it back.
+     */
+    @Test
+    public void theSwitchFlipsAndSavesThisOrientationsKeyboardModeOnly() {
+        PlaceLayoutStore store = store();
+        // Set both explicitly: what an unset orientation falls back to is not this switch's call.
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE, KeyboardMode.RESIZE);
+
+        assertEquals(KeyboardMode.OVERLAY,
+            DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT));
+        assertEquals(KeyboardMode.OVERLAY, store.keyboardMode(PlaceOrientation.PORTRAIT));
+        assertEquals("what the Layout editor resolves", KeyboardMode.OVERLAY,
+            store.resolve(PlaceOrientation.PORTRAIT).keyboardMode);
+        assertEquals("the other orientation keeps its own", KeyboardMode.RESIZE,
+            store.keyboardMode(PlaceOrientation.LANDSCAPE));
+
+        assertEquals(KeyboardMode.RESIZE,
+            DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT));
+        assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.PORTRAIT));
+    }
+
+    @Test
+    public void theSwitchFlipsAStoredOverlayToResize() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE, KeyboardMode.OVERLAY);
+
+        assertEquals(KeyboardMode.RESIZE,
+            DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.LANDSCAPE));
+        assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
+        // The switch saves what it shows: a fresh store over the same preferences reads it back.
+        assertEquals(KeyboardMode.RESIZE,
+            new PlaceLayoutStore(new TermuxAppSharedPreferences(RuntimeEnvironment.getApplication(),
+                RuntimeEnvironment.getApplication().getSharedPreferences(
+                    "display-touchpad-placement-test", Context.MODE_PRIVATE), null))
+                .keyboardMode(PlaceOrientation.LANDSCAPE));
+    }
+
+    /** A floating keyboard floats over the display whatever is stored, so there is nothing to switch. */
+    @Test
+    public void theSwitchIsOfferedWhereverTheModeDecidesSomething() {
+        assertTrue(DisplayTouchpadPlacement.offersModeSwitch(KeyboardForm.DOCKED));
+        assertTrue(DisplayTouchpadPlacement.offersModeSwitch(KeyboardForm.SPLIT));
+        assertFalse(DisplayTouchpadPlacement.offersModeSwitch(KeyboardForm.FLOATING));
     }
 }

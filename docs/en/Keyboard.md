@@ -39,7 +39,7 @@ away, since nothing there takes typing. On the Display place its keys go to the 
   it until you tap it again.
 - Latch **Ctrl** and **Alt** together and the keys that carry a launcher shortcut light up,
   coloured by what they do, with a short legend in the top-right corner. Pressing a lit key runs
-  that shortcut. With **Settings → Terminal → Sessions and panes → Shortcut hints** off, only the
+  that shortcut. With **Settings → Terminal → Windows & panes → Shortcut hints** off, only the
   **?** key lights instead. See [Keyboard shortcuts](Keyboard_Shortcuts.md).
 - An upper-case letter counts as Shift in a shortcut, so `Ctrl+Alt+r` and `Ctrl+Alt+R` are
   different shortcuts.
@@ -90,7 +90,7 @@ While the clipboard holds a picture, the paste key shows a photo instead, and pa
 picture as a file. A screenshot taken in the last half hour, after your last copy, is offered the
 same way: paste puts it in once, then the key goes back to the clipboard. Paste with a modifier
 (plain paste) always takes the clipboard. Offering screenshots needs the storage permission
-(**Settings → Permissions & services → Files and media**, or `termux-setup-storage`).
+(**Settings → General → Permissions & services → Files and media**, or `termux-setup-storage`).
 
 ## Docked, floating or split
 
@@ -129,9 +129,11 @@ each set separately for portrait and landscape:
 
 - **Height**: in **Appearance → Layout**, drag the keyboard's top edge. The handle on the bottom
   of the keys sets the padding under the last row. Both are kept per orientation.
-- **Surface**: in **Appearance → Look**, choose **Custom** and tap the keyboard for **Blur**,
-  **Grain**, **Opacity**, **Tint**, **Radius** and **Spacing**, plus a **Keyboard theme** button.
-  **Key radius** also sits beside the type chips in **Appearance → Layout**.
+- **Surface**: in **Appearance → Look**, tap the keyboard for its glass rows (**Frost**,
+  **Opacity**, **Tint**, **Colour**, **Corners**, **Depth** and **Edge**), **Key opacity**, **Key
+  corners** and **Key spacing**, plus a **Keyboard theme** button. **Frost** moves the blur and
+  the grain together; **Grain** by itself sits under **More**. **Key corners** also sit beside
+  the type chips in **Appearance → Layout**.
 - **Keyboard theme** ("Colors and typeface") holds a live preview, one chip group (**Key fill**,
   **Border**, **Label**, **Corner labels**, **Bottom label**, **Background**), a set of swatches
   you tap or drag across keys to paint them, **Edit colors** / **Save colors**, **Reset to theme**
@@ -140,9 +142,8 @@ each set separately for portrait and landscape:
   internal storage; **Use system default** goes back. With a custom font the space bar's icons
   keep the bundled symbols font.
 
-The Keyboard theme page is also in **Settings → Appearance** under **Keyboard look**, beside
-**Surface style**; **Look and feel settings** in the palette opens the same page. See
-[Look and themes](Look_And_Themes.md).
+The Keyboard theme page is also in **Settings → Keyboard**, beside **Appearance**, which opens the
+Appearance editor. See [Look and themes](Look_And_Themes.md).
 
 ## Typing and feedback
 
@@ -150,10 +151,11 @@ The Keyboard theme page is also in **Settings → Appearance** under **Keyboard 
 
 - **Adaptive touch accuracy** ("Adjust key detection to your typing."), off by default, and
   **Reset learned taps**.
-- **Vibration** links to **Settings → App behavior**, where **Allow vibration**, **Keyboard
-  vibration** and **Launcher vibration** live.
 - **Key sound** uses the system touch-sound volume.
 - **Key preview** ("Show the pressed key above your finger."), on by default.
+
+Keyboard vibration is in **Settings → General → Vibration**, beside **Allow vibration** and
+**Launcher vibration**.
 
 ## Hardware keyboards
 
@@ -163,7 +165,7 @@ The Keyboard theme page is also in **Settings → Appearance** under **Keyboard 
 - **Android language shortcut**: "Ctrl+Space switches Android keyboard languages. Off sends it to
   the terminal." Off by default.
 
-If the Android keyboard covers terminal content, try **Settings → Terminal → Compatibility →
+If the Android keyboard covers terminal content, try **Settings → Terminal → Clipboard & compatibility →
 Keyboard resize workaround**; turn it off if it causes gaps or jumpy resizing.
 
 ## Your own layout

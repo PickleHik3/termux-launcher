@@ -37,6 +37,7 @@ public class SurfacePresetsGlassTest {
             context.getSharedPreferences("surface-presets-glass-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -81,15 +82,16 @@ public class SurfacePresetsGlassTest {
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
         // Clear, Mist and Tint sit on the Depth curve at 90, 80 and 70, each bend one and a half
         // bands; light 10 is stored for older builds only, the hairline is fixed in the program.
-        // Blur and grain are each Look's point on the Glass curve: Clear 20, Tint 40, Mist 75.
-        assertRecipe(preset("minimal"), 7, 10, 3, 27, 18, 10, 40, 76);
+        // Blur and grain are each Look's point on the Glass curve: Clear 20 (but with no grain since
+        // generation 6, off the curve), Tint 40, Mist 75.
+        assertRecipe(preset("minimal"), 7, 10, 0, 27, 18, 10, 40, 76);
         assertRecipe(preset("stock"), 12, 46, 4, 21, 14, 10, 0, 0);
         assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0, 0, 0);
         assertRecipe(preset("frost"), 25, 60, 7, 24, 16, 10, 0, 0);
         // Tint is the scheme's ink at the Material blend (35); no Look names the old family.
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME,
             preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
-        assertEquals(35, preset("stock").values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+        assertEquals(35, preset("stock").values.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
 
         // Leaving Mist for Tint hands rim and motion back.
         SurfacePresets.apply(preferences, preset("frost"));
@@ -191,12 +193,13 @@ public class SurfacePresetsGlassTest {
     private static void assertRecipe(SurfacePresets.Preset preset, int blur, int opacity,
                                      int grain, int bend, int edgeWidth, int edgeLight,
                                      int dispersion, int clarity) {
-        assertEquals(preset.id, blur, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
-        assertEquals(preset.id, opacity, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
-        assertEquals(preset.id, grain, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertEquals(preset.id, com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(blur),
+            preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
+        assertEquals(preset.id, opacity, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)));
+        assertEquals(preset.id, grain, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)));
         // Corners and margins are Layout's (2026-10-01).
         assertFalse(preset.id,
-            preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+            preset.values.containsKey(SurfacePresets.cellKey(null, SurfaceProperty.CORNER_RADIUS)));
         assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
         assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
         assertEquals(preset.id, bend, preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
@@ -214,7 +217,13 @@ public class SurfacePresetsGlassTest {
     @Test
     public void aFreshInstallOpensExactlyOnClear() {
         // The store is empty, as on a first run; adoption writes the shipped look into it.
-        preferences.migrateSurfaceInheritance();
+        // (The fixture's Terminal page id is a stored key, so it is taken out for the first run
+        // and given back after adoption.)
+        preferences.getSharedPreferences().edit()
+            .remove(com.termux.shared.termux.settings.preferences.PageLookKeys
+                .KEY_TERMINAL_PAGE_ID).commit();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
         for (String id : new String[] {"frost", "stock", "solid"})
             assertFalse(id, SurfacePresets.matches(preferences, preset(id)));
@@ -242,7 +251,8 @@ public class SurfacePresetsGlassTest {
         String old = "{\"format_version\":1,\"surface_base_blur\":21,\"surface_material\":\"glass\"}";
         Map<String, Object> look = SurfacePresets.deserialize(old);
         assertNotNull(look);
-        assertEquals(21, look.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(21),
+            look.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, look.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, look.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC,
@@ -263,5 +273,11 @@ public class SurfacePresetsGlassTest {
         preferences.setSurfaceGlassMotion("bouncy");
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION, preferences.getSurfaceGlassMotion());
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

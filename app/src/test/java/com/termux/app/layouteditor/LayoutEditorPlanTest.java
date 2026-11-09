@@ -58,7 +58,7 @@ public class LayoutEditorPlanTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("layout-editor-plan-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        places = com.termux.app.place.KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null))));
     }
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {
@@ -93,9 +93,9 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_edge", null));
         assertNull("landscape untouched",
-            prefs.getString("layout.landscape.status_bar", null));
+            prefs.getString("layout.landscape.status_edge", null));
 
         plan.showOrientation(LANDSCAPE);
         assertEquals("the phone is still in portrait, so only the layout canvas moves",
@@ -184,7 +184,8 @@ public class LayoutEditorPlanTest {
         assertEquals(LANDSCAPE, plan.shownOrientation());
         assertTrue(plan.liveFollows());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.LEFT));
-        assertEquals("left", prefs.getString("layout.landscape.status_bar", null));
+        assertEquals("the bar's edge is one value for every page (ADR 0023 §1)", "left",
+            prefs.getString("layout.landscape.status_edge", null));
     }
 
     @Test
@@ -235,7 +236,7 @@ public class LayoutEditorPlanTest {
         plan.showPlace(PaneWallPage.WIDGETS);
         assertEquals(PaneWallPage.WIDGETS, plan.place());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
-        assertEquals("bottom", prefs.getString("layout.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.portrait.status_edge", null));
 
         plan.revert();
         assertFalse(plan.isDirty());
@@ -398,6 +399,42 @@ public class LayoutEditorPlanTest {
     }
 
     @Test
+    public void theWallStripsHandleShowsOnlyOnItsDesign_andWritesTheShownOrientation() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertFalse("the tray has no Strip row", plan.showsWallStrip());
+        plan.setDockStyle(com.termux.app.dock.DockStyle.WALL_STRIP);
+        assertTrue(plan.showsWallStrip());
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            plan.wallStripHeightDp());
+
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setWallStripHeightDp(100));
+        assertEquals(100, places.wallStripHeightDp(PORTRAIT));
+        assertEquals(100, plan.wallStripHeightDp());
+
+        plan.showOrientation(LANDSCAPE);
+        assertEquals(LayoutEditorPlan.Drop.MINIATURE, plan.setWallStripHeightDp(64));
+        assertEquals(64, places.wallStripHeightDp(LANDSCAPE));
+        assertEquals("portrait's row untouched", 100, places.wallStripHeightDp(PORTRAIT));
+    }
+
+    @Test
+    public void theWallStripsRowHeightIsAnUnsavedChangeAndTheRevertPutsItBack() {
+        places.setWallStripHeightDp(PORTRAIT, 96);
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertFalse(plan.isDirty());
+
+        plan.setWallStripHeightDp(120);
+        assertTrue("a size is as unsaved as a moved bar", plan.isDirty());
+        plan.setWallStripHeightDp(96);
+        assertFalse("dragged back to where it stood", plan.isDirty());
+        plan.setWallStripHeightDp(60);
+
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertEquals(96, places.wallStripHeightDp(PORTRAIT));
+    }
+
+    @Test
     public void theOtherOrientationIsSaidOnlyWhileTheToggleHasLeftTheOneThePhoneIsIn() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
         assertFalse("the editor opens on what the phone is in", plan.warnsOtherOrientation());
@@ -444,5 +481,30 @@ public class LayoutEditorPlanTest {
         assertEquals(LayoutVariant.NORMAL, plan.variant());
         places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         assertFalse("the minimal layout is not this session's to lose", plan.isDirty());
+    }
+
+    /**
+     * Opening the editor and discarding writes no keyboard mode: the revert puts back what the
+     * layout stored, and portrait stored none, so the display keeps reading the default.
+     */
+    @Test
+    public void aDiscardedVisitWritesNoKeyboardMode() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        plan.drop(Bar.STATUS_BAR, null);
+        assertTrue(plan.isDirty());
+
+        plan.revert();
+
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertFalse(prefs.contains("layout.landscape.keyboard_mode"));
+        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+        assertFalse(plan.isDirty());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

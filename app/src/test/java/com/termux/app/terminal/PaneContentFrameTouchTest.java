@@ -41,6 +41,8 @@ public class PaneContentFrameTouchTest {
     private PaneContentFrame mFrame;
     private RecordingContent mContent;
     private int mInset;
+    /** How far the content starts below the frame's top: the trimmed vertical gap. */
+    private int mTop;
 
     @Before
     public void setUp() {
@@ -54,9 +56,12 @@ public class PaneContentFrameTouchTest {
         mFrame.measure(View.MeasureSpec.makeMeasureSpec(FRAME_WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(FRAME_HEIGHT, View.MeasureSpec.EXACTLY));
         mFrame.layout(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        mInset = PaneShape.contentInsetForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT);
+        float radius = PaneShape.radiusForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT);
+        mTop = PaneShape.verticalInsetPx(radius, 0);
+        mInset = PaneShape.sideInsetPx(radius, mTop);
         assertTrue("the shape has to owe a clearance for there to be a band to test", mInset > 0);
         assertEquals(mInset, mContent.getLeft());
+        assertEquals(mTop, mContent.getTop());
     }
 
     @Test
@@ -70,7 +75,7 @@ public class PaneContentFrameTouchTest {
             touch.x < 0f);
         assertEquals("nothing is re-centred: the point only moves into the child's space",
             3f - mInset, touch.x, 0.001f);
-        assertEquals(200f - mInset, touch.y, 0.001f);
+        assertEquals(200f - mTop, touch.y, 0.001f);
     }
 
     @Test
@@ -92,7 +97,7 @@ public class PaneContentFrameTouchTest {
             1, mContent.events.size());
         Touch touch = mContent.events.get(0);
         assertEquals(100f - mInset, touch.x, 0.001f);
-        assertEquals(200f - mInset, touch.y, 0.001f);
+        assertEquals(200f - mTop, touch.y, 0.001f);
     }
 
     @Test
@@ -105,8 +110,8 @@ public class PaneContentFrameTouchTest {
         assertEquals(MotionEvent.ACTION_DOWN, mContent.events.get(0).action);
         assertEquals(MotionEvent.ACTION_MOVE, mContent.events.get(1).action);
         assertEquals(MotionEvent.ACTION_UP, mContent.events.get(2).action);
-        assertEquals(260f - mInset, mContent.events.get(1).y, 0.001f);
-        assertEquals(300f - mInset, mContent.events.get(2).y, 0.001f);
+        assertEquals(260f - mTop, mContent.events.get(1).y, 0.001f);
+        assertEquals(300f - mTop, mContent.events.get(2).y, 0.001f);
 
         // And the next gesture is judged on its own landing, not on the last one's.
         mContent.events.clear();

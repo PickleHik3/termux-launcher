@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
  *
  * <p>Sync is on exactly while there is something to sync with: the page is attached, the view is
  * connected to a running server, and the user has left clipboard sharing on. Window focus has no
- * say — the Display page lives on the pane wall, whose window never changes focus, which is why
+ * say — the display window lives on the pane wall, whose window never changes focus, which is why
  * upstream's focus-driven registration never fired.
  *
  * <p>All policy, no views. The transitions are what the caller acts on: arming registers a

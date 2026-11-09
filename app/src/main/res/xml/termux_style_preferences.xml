@@ -9,16 +9,6 @@
         app:title="@string/settings_appearance_surface_title"
         app:summary="@string/settings_appearance_surface_summary" />
 
-    <PreferenceCategory app:title="@string/settings_fonts_header">
-        <Preference
-            app:key="terminal_fonts"
-            app:icon="@drawable/ic_symbol_terminal"
-            app:persistent="false"
-            app:title="@string/termux_fonts_preferences_title"
-            app:summary="@string/termux_fonts_preferences_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_theme_header">
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="theme_mode"
@@ -52,30 +42,10 @@
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
-            app:key="wallpaper_parallax"
-            app:title="@string/settings_wallpaper_parallax_title"
-            app:summary="@string/settings_wallpaper_parallax_summary"
-            android:defaultValue="true" />
-        <com.termux.app.fragments.settings.SliderPreference
-            app:key="wallpaper_render_zoom"
-            app:title="@string/settings_wallpaper_alignment_title"
-            app:summary="@string/settings_wallpaper_alignment_summary"
-            app:showSeekBarValue="true"
-            app:min="90"
-            android:max="120"
-            android:defaultValue="100" />
-    </PreferenceCategory>
-
-    <!-- Fancier Glass needs Android 13: the fragment hides this category below it. -->
-    <PreferenceCategory
-        app:key="look_glass"
-        app:title="@string/settings_fancier_glass_header"
-        app:isPreferenceVisible="false">
-        <SwitchPreferenceCompat
-            app:key="fancier_glass_motion_light"
-            app:title="@string/settings_motion_light_title"
-            app:summary="@string/settings_motion_light_summary"
-            android:defaultValue="true" />
+            app:key="widgets_on_glass"
+            app:title="@string/settings_widgets_on_glass_title"
+            app:summary="@string/settings_widgets_on_glass_summary"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_icon_appearance_header">
@@ -94,23 +64,6 @@
             app:icon="@drawable/ic_symbol_grid_view"
             app:title="@string/settings_pinned_icon_pack_title"
             app:summary="@string/termux_app_launcher_pinned_icon_pack_summary" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_appearance" app:title="@string/settings_keyboard_look_header">
-        <Preference
-            app:key="customize_keyboard_surface"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/settings_look_appearance_editor_title"
-            app:summary="@string/settings_look_appearance_editor_summary" />
-        <Preference
-            app:key="in_app_keyboard_color_scheme_editor"
-            app:icon="@drawable/ic_symbol_palette"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
-            app:summary="@string/keyboard_theme_summary"
-            app:title="@string/keyboard_theme_title" />
-        <!-- Bottom padding left for the Layout editor (spec §6): the keyboard's bottom handle on
-             the layout canvas writes the same chin, per orientation. -->
     </PreferenceCategory>
 
 </PreferenceScreen>

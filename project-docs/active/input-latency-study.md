@@ -719,6 +719,269 @@ sanction the record-off-thread/draw-on-thread split that would be needed.
 backlog's GL item, for the recorded reason: the chrome composites over the terminal, the wall
 translates it, and the draw cost that motivated it is a cache problem.
 
+## Baseline on pong (2026-10-22)
+
+Measured on pong (Nothing Phone 2, 90 Hz) with staging `1.1.0-pre.6+dev.84f71ccab`, which carries the
+round-1 telemetry of [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md).
+The developer typed a paragraph and a few commands in a bare terminal pane. Each run is a 40 s
+Perfetto trace (atrace `view gfx input sched freq` for `com.termux`, frametimeline). Run 1 used the
+gated inline echo redraw (`debug.tl.echo_inline` unset). Run 2 used the old post path
+(`debug.tl.echo_inline 0`). Terminal effect was off in both.
+
+| Stage | Run 1 inline (191 keys), p50 / p90 / max ms | Run 2 post (205 keys), p50 / p90 / max ms |
+|---|---|---|
+| Finger rest (`Keyboard.down` → `Keyboard.commit`) | 74.2 / 95.4 / 141.8 | 75.7 / 99.1 / 124.6 |
+| Commit → PTY write (`Terminal.write`) | 0.4 / 0.4 / 6.7 | 0.4 / 0.5 / 1.2 |
+| Write → output parsed on main (shell echo round trip) | 7.5 / 10.2 / 16.6 | 7.6 / 10.6 / 14.4 |
+| Commit → echo drawn (`KeyToEcho`) | 19.2 / 23.1 / 46.5 | 17.4 / 21.9 / 31.0 |
+| Echo drawn → frame presented (frametimeline) | 15.5 / 18.0 / 19.9 | 15.9 / 18.7 / 21.1 |
+| App frames / flagged janky | 2919 / 2900 (2879 Buffer Stuffing) | 3009 / 2977 |
+
+Findings:
+
+- **The gated inline redraw gains nothing.** The two runs are within noise. While typing, the app
+  already draws every vsync, so the echo waits for the next traversal whichever path invalidates
+  it. Rank 2 of the research is disproved on this device.
+- **Typing keeps the window drawing at 90 fps.** Frames continue about 250 ms after each touch
+  (`Keyboard2View` press ramp 60 ms + release fade 150 ms, plus the finger rest). At about 5 keys a
+  second this joins into one stream: about 3.7 ms of main-thread traversal per frame, about 29% of the
+  run. In the one 2 s window without keys, the app drew 5 frames, so this is not an idle leak.
+- **Drawn → presented takes about 16 ms, more than one 11.1 ms vsync.** Nearly every frame is
+  flagged Buffer Stuffing: the continuous stream keeps a frame queued ahead, so the echo frame
+  presents about one vsync later than it could **(inference: likely cause, not yet proven)**.
+- From finger-up to the character on screen is about 35 ms. From finger-down it is about 109 ms, of
+  which the finger rest is about 74 ms (commit stays on release, spec decision 2).
+
+**Run 3, Terminal effect on** (inline echo, 195 keys): commit → echo drawn 17.1 / 20.7 ms (p50 / p90;
+max 361.5 ms was one command's output, not an echo). Echo drawn → presented rose to
+**20.5 / 24.8 / 25.7 ms**, about 5 ms more than with the effect off. App frames: 2852, of which only 19
+were App Deadline Missed, so the effect does not drop frames. It delays presentation by about half a
+vsync, which fits the `RenderEffect`'s GPU pass **(inference)**. `Effect.retro.refresh` ran 28,570
+times, about 10 per frame, at 0.02 ms each: cheap, but redundant.
+
+**Idle, 20 s at rest on a terminal pane** (no input): 6 app frames, in pairs about 6 s apart. No
+`frames.*` counter fired, so the 6 s source is not one of the instrumented loops **(unverified which)**.
+At rest the launcher is effectively idle.
+
+Owed: identify the 6 s idle wake; test whether stopping the press-fade stream, or limiting it to the
+key's own bounds, removes the Buffer Stuffing and the extra vsync. Spec decision 6 (redraw Terminal
+effect as a Paint overlay) was gated on missed frames; it misses none, but it adds about 5 ms to
+presentation, so that is the developer's call.
+
+### Press highlight experiment (2026-10-22, `d4a47f503`)
+
+Same method, Terminal effect off, inline echo removed. Each run used one `debug.tl.press_fx` mode:
+`legacy` (the default until `overlay` became it), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
+re-recorded while a press animates), and `nofade` (the highlight clears at commit).
+
+| Mode (keys) | Commit → drawn p50 / p90 | Drawn → presented p50 / p90 | Main `Record View#draw` avg | Traversal avg | Frames (per key) |
+|---|---|---|---|---|---|
+| legacy (139) | 17.1 / 22.1 | 15.6 / 19.8 | 2.35 ms | 3.52 ms | 2700 (19.4) |
+| overlay (134) | 18.2 / 22.6 | **13.5 / 15.4** | **1.19 ms** | **2.33 ms** | 2075 (15.5) |
+| nofade (168) | 17.7 / 24.1 | 13.3 / 17.1 | 1.59 ms | 2.73 ms | 2759 (16.4) |
+
+- `overlay` halves the main thread's per-frame draw, cuts traversal by a third, and brings drawn →
+  presented down about 2 ms (p90 about 4 ms). Commit → drawn moved within noise (the shell round
+  trip was 1 ms slower in that run). The developer saw no visual difference and felt the presses
+  were "a bit snappier".
+- Buffer Stuffing stays on nearly every frame in all three modes, so the press stream is **not** its
+  cause; the remaining extra vsync before presentation has another source **(unverified)**.
+- `nofade` gains about the same as `overlay` but changes the look and missed more app deadlines (45).
+
+### Buffer Stuffing analysis (2026-10-22, `tl-overlay.pftrace`, 2075 app frames)
+
+- **Earlier "drawn → presented" was drawn → buffer ready.** An app surface frame's actual end in
+  `actual_frame_timeline_slice` is when its acquire fence signals, not the present. Joined to the
+  display frame by `display_frame_token`, app vsync start → present is **42.5 ms** (p10 42.1, p90 42.7)
+  on Buffer Stuffing frames and 31.5 ms on the 7 frames that were not stuffed: one vsync (11.1 ms) apart.
+- **Stuffing here is a real standing queue, not an artefact.** AOSP `SurfaceFrame::classifyJankLocked`
+  flags it when the frame's predicted end is at or before the layer's last latch time. Counters agree:
+  `BufferTX` 2 on 1.9k of 2.1k samples, `QueuedBuffer` 3–4, buffer ready → SF wake 11.4 ms p50 (2.3 ms
+  on non-stuffed frames). RenderThread `dequeueBuffer` averaged 0.17 ms, so the app never blocks.
+- **Likely origin (inference):** 11 of 12 bursts start with an App Deadline Missed frame (ready 16 ms
+  after start against 9–15 ms predicted; RenderThread draw 9.7 ms against 4–5 ms steady, cold clocks).
+  It misses its SF slot, and every later frame, though on time, queues behind it. At one frame per
+  vsync the queue never drains; only gaps of 3+ vsyncs ended it (3 of 3 such frames were not stuffed).
+- **Platform offsets:** `VsyncWorkDuration-app` 16.2 ms and `-sf` 16.1 ms at 90 Hz, so even a perfect
+  frame is on glass about 31 ms after its vsync start. HWC composites the layer (`gpu_composition` 0,
+  `hasClientComposition` 0), and the wallpaper-backed window is not the cause.
+- Scripts: `~/.cache/tl-latency/queueing/`.
+
+### Touch-down hint experiment (2026-10-22, `faadb42e3`)
+
+Synthetic typing over adb (a device-side `input tap` loop: about 5 keys a second, zero finger
+rest, 14 words typed and deleted with 1 s pauses), run once with `debug.tl.touch_hint` 0 and once
+with 1. The press highlight was on the overlay default.
+
+| Hint | Commit → drawn p50 / p90 / max | Drawn → buffer ready p50 / p90 | Stuffed frames | Bursts with a late first frame |
+|---|---|---|---|---|
+| 0 | 18.0 / 24.8 / 39.8 | 11.1 / 12.3 | 1018 / 2472 (41%) | 16 / 51 |
+| 1 | 17.3 / 20.7 / 27.5 | 10.8 / 12.4 | 717 / 2491 (29%) | 14 / 61 |
+
+**The hint never reached the system.** Logcat: `perf_hint: createSessionUsingConfig: PerformanceHint
+cannot create session. PowerHintSessions are not supported!`. Pong's power HAL has no ADPF hint
+sessions, so mode 1 only added the `TouchHint.loadUp` trace section. The difference between the rows
+is run-to-run variation, with 51 against 61 bursts. The seed theory is still neither confirmed nor
+refuted on this device.
+
+Synthetic typing stuffs far fewer frames (29-41%) than the developer's typing did (about 99%). Its 1 s
+pauses split the input into many short bursts, which drain the queue, and that fits the analysis
+above: the stuffing persists while frames run back to back. The remaining lever on pong is fix 2
+there: less GPU time per frame, so a burst's first frame meets its deadline.
+
+### Contour scene prototype (2026-10-22, `b9245fc18`)
+
+Synthetic typing (same script with the coordinates updated for the dockless Home layout). The
+Contour prototype was drawn as an opaque view with a hardware layer inside the launcher window, above
+the wallpaper backdrop. Glass was not wired to it: the low-res pass was rendered for its cost only.
+
+| Run | Frames/s | Stuffed | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | RenderThread DrawFrame avg |
+|---|---|---|---|---|---|
+| Scene off | 62 | 14% | 17.7 / 20.7 | 9.9 / 10.8 | 6.05 ms |
+| Contour, ambient 30 | 86 | 97% | 16.8 / 20.8 | 19.8 / 25.9 | 9.68 ms |
+| Contour, ambient 90 | 89 | 100% | 16.1 / 18.3 | 25.2 / 26.4 | 11.08 ms |
+| Contour 30 + low-res pass | 84 | 97% | 17.4 / 24.5 | 19.8 / 20.9 | 4.66 ms (two renderers) |
+
+- The scene adds about 10-15 ms of GPU per frame before the buffer is ready, which is about one more
+  vsync per typed character, and it brings back near-total Buffer Stuffing.
+- **Cause (inference from the design plus the RenderThread numbers):** the scene is a view in the
+  launcher's own window, so each scene frame is a whole-window frame. HWUI repaints the entire
+  window on the GPU, including every glass surface's refraction shader, the keyboard and the chrome.
+  The scene's own CPU record is cheap (`Scene.contour.draw` 0.09-0.16 ms avg).
+- While typing, the reactions (hills relax over about 1 s) keep the scene at full rate, so 30 and 90
+  ambient differ little here. The ambient gate is untested at rest.
+- Direction: draw the scene on its own surface behind the window (a `SurfaceView` placed below the
+  window, as a wallpaper is), so scene frames cost only the scene. The window repaints only when the
+  UI changes or when glass's low-res texture updates, at the glass rate. Re-measure Contour that way
+  before building Filament.
+
+### Contour on its own surface (2026-10-23, `c4c1ee67b`)
+
+The scene now draws into a `SurfaceView` below the window through its own `HardwareRenderer`. At rest
+its frame loop sleeps until the next ambient frame (`postFrameCallbackDelayed`) instead of waking
+every vsync. The first surface build (`d0a9a07cd`) still showed a window traversal per scene frame,
+600 in 20 s at rest. After the frame-loop change, the `TLSceneInval` recorder showed 60 scene draws
+against 2 window draws per 2 s (the clock widget), so the repaint is gone. Its exact cause in the
+earlier build is **unverified**. Same synthetic typing as before:
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Window frames/s |
+|---|---|---|---|---|
+| Scene off | 17.0 / 20.5 | 9.7 / 10.6 | 18% | 62 |
+| Contour, ambient 30 | 17.6 / 21.9 | 11.2 / 16.2 | 16% | 61 |
+| Contour, ambient 90 | 17.0 / 20.2 | 11.2 / 13.6 | 7% | 62 |
+| Contour 30 + low-res pass at 15 | 17.4 / 20.8 | 11.5 / 13.9 | 12% | 62 |
+
+At rest with the scene on (20 s): 7 window traversals, 449 scene draws, 453 `doFrame`.
+
+- **Contour fits.** About +1.5 ms p50 to buffer-ready (p90 +3 to +5 ms) and no Buffer Stuffing,
+  against +10 to 15 ms and 97% stuffing in the window. The window draws only for its own reasons.
+- `Scene.contour.draw` now costs about 1 ms of main thread per scene frame on average (max about 11
+  ms), because `syncAndDraw` blocks for the sync. At 90 Hz that is up to about 9% of the main thread,
+  and a spike can delay an echo. Driving the scene from its own thread is the next refinement.
+- The low-res pass at 15 fps adds about 1.1 ms per pass and is not visible in buffer-ready.
+
+### Glass reading the scene (2026-10-23, `d83078bcf`)
+
+Glass sampled the scene's low-res pass, published at 15 fps. This build still had per-key sparks.
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 | Stuffed | Deadline missed | Main traversal avg |
+|---|---|---|---|---|---|
+| Scene off | 16.4 / 20.7 | 10.2 | 16% | 46 | 1.71 ms |
+| Contour 30 + glass live | 15.7 / 24.5 | 14.9 | 67% | 210 | 9.48 ms |
+| Contour 90 + glass live | 15.8 / 23.8 | 14.9 | 63% | 210 | 9.58 ms |
+
+- **Over budget.** The main thread's traversal averages about 9.5 ms against 1.7 ms. That brings back
+  deadline misses and stuffing. The scene's own surface stays cheap.
+- **Where the 9.5 ms goes (traces `s4-off`, `s4-g30`, analysed 2026-10-23).** Not re-recording and
+  not the publish. `Record View#draw()` is 0.71 ms against 0.70 ms, and the whole `Scene.glass.publish`
+  main runnable is 0.18 ms average (540 in 40 s). The difference is `postAndWait`, the UI thread's
+  wait on the RenderThread: 8.38 ms against 0.61 ms, on all 2377 frames, and 8.2 ms on frames with no
+  publish in the 20 ms before (8.7 ms with one). With the scene off, or on with the low-res pass
+  published but not read (`s3-c30low`: 0.93 ms), the UI thread is released after the sync while the
+  RenderThread draws (window `DrawFrames` about 6 ms, unchanged). While glass reads the live frame,
+  every window frame holds the UI thread to the end of its `DrawFrames` (2376 of 2376). The RenderThread
+  work is not longer (window `DrawFrames` 5.97 ms against 6.28 ms); only the early unblock is lost. The
+  trace does not name the native reason, so the cause is open: the discriminator is a live
+  hardware-buffer-backed bitmap shader in the glass draw against the still frame's software bitmap.
+- On `SceneThread`, `Scene.contour.draw` rose to about 2.1 ms average and `Scene.contour.lowres` to
+  about 2 ms, against about 1 ms before, probably because the sparks were live.
+- Crash found on the same build: a software canvas (a RealtimeBlurView capture) drew the hardware
+  bitmap. Fixed in `fa2cce7c7`.
+
+### Software copy for glass (2026-10-23, `ecf749c04`)
+
+`debug.tl.scene_glass_copy soft` copies each low-res frame into a 135x301 software bitmap before glass
+samples it. `hw` hands glass the hardware buffer. Contour at ambient 30, glass at 15 fps, synthetic
+typing.
+
+| Run | `postAndWait` avg | Main traversal avg | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|---|
+| Scene off | 0.65 ms | 1.96 ms | 10.1 / 11.3 | 31% | 98 |
+| Glass live, soft | 2.43 ms | 3.66 ms | 12.9 / 17.7 | 84% | 242 |
+| Glass live, hw | 7.39 ms | 8.66 ms | 12.2 / 14.8 | 81% | 242 |
+
+- The software copy removes most of the hardware-bitmap stall on the UI thread (7.4 to 2.4 ms).
+- The queueing stays. The scene, its low-res pass and the window all render on HWUI's single
+  RenderThread (4,125 against 2,466 `DrawFrame`s), and AGSL has no other renderer.
+- Decision (developer, 2026-10-23): the scene and its glass pass **hold still while typing**, and
+  resume 1.5 s after the last key (`749d21d2a`).
+
+**Re-measured with the hold** (same synthetic typing; its 1 s word pauses stay inside the hold):
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | `postAndWait` avg | Scene draws |
+|---|---|---|---|---|---|
+| Scene off | 17.8 / 21.3 | 10.0 / 11.5 | 29% | 0.59 ms | 0 |
+| Contour + glass live, held | 16.5 / 21.5 | 10.1 / 11.4 | 25% | 0.63 ms | 17 |
+
+While typing, a scene with glass reading it now costs the same as no scene. Not measured here: the
+scene and glass cost while the scene moves at rest, with nobody typing (battery, not latency).
+
+### Filament, first version (2026-10-23, `ded288161`)
+
+Static nixie bench, glass live (soft copy), typing hold on, synthetic typing:
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|
+| Scene off | 17.6 / 20.8 | 9.7 / 10.9 | 17% | 89 |
+| Filament + glass, typing | 17.8 / 21.0 | 10.2 / 11.1 | 24% | 105 |
+
+At rest, 15 s untouched: `Scene.contour.draw` 339 times at 3.17 ms average (about 22/s),
+`Scene.contour.lowres` 170 times at 2.37 ms, `Scene.glass.publish` on the scene thread 4.69 ms
+average (the GPU readback of the software copy), and 170 window traversals (the glass repaint at
+the glass rate). That is roughly 12% of one core while a scene drifts with nobody touching. It is a
+battery cost, not latency. The readback is the first thing to make cheaper: copy less often, or
+reuse bitmaps.
+
+### Filament, flying tubes (2026-10-23, `8786a8d64`)
+
+12 nixie and neon tubes drifting at three depths, glass live (soft copy), typing hold on.
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|
+| Flying Filament + glass, typing | 16.8 / 20.6 | 10.3 / 11.3 | 29% | 124 |
+
+Typing matches the scene-off runs. At rest, 15 s untouched: `Scene.contour.draw` 3.80 ms (about
+22/s), `Scene.contour.lowres` 2.92 ms (about 11/s), and `Scene.glass.publish` on the scene thread
+**9.79 ms** (about 11/s), which is the blocking GPU readback (`Bitmap.copy` from the hardware frame)
+for the glass's software copy. Together that is roughly a fifth of a core, mostly waiting, plus GPU
+time. It is a battery cost on Home. Next: a lower default glass rate and a reused bitmap pool.
+
+### Non-blocking glass copy (2026-10-23, `8f303c274`)
+
+The low-res pass now renders into a CPU-readable ImageReader (`GPU_COLOR_OUTPUT | CPU_READ_OFTEN`).
+Each image reaches the listener already rendered, and is copied into one of 3 reused software
+bitmaps. The default glass rate is 8 fps. Flying Filament, 15 s, passive trace (4 touch events
+happened during it, so the scene ran its reactions part of the time):
+
+| Scene thread, per call | Before (`908476aa6`) | Now |
+|---|---|---|
+| `Scene.glass.publish` | 9.79 ms, about 11/s | 1.92 ms, about 7.4/s (`Scene.glass.copy` 1.55 ms of it) |
+| `Scene.contour.lowres` | 2.92 ms | 1.13 ms |
+| `Scene.contour.draw` | 3.80 ms | 1.12 ms |
+
+No fallback warning in logcat. The scene thread's total time at rest falls from about a fifth of a
+core to about 7%.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.

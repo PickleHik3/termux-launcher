@@ -1,0 +1,4 @@
+# sha256  file   (the converted 16 kHz mono PCM16 WAVs the bench runs on; checked by fetch-clips.sh)
+2a4f43a0f9d12e4a3f53153734c9142ea5b194cd11237b80f7b00815a858ea34  stt-3s-jfk.wav
+d7d4e74b8a333ed02186008bc109a1b1a19d16da668bd56e785d80d69a16a72f  stt-11s-jfk.wav
+38db1edbdf756bc059c3ee74412b0f1aaa99db9692e6cbb7c9181702f2a4303f  stt-45s-bush.wav

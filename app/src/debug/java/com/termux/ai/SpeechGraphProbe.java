@@ -37,10 +37,7 @@ public final class SpeechGraphProbe {
         int runs = args.length > 2 ? Integer.parseInt(args[2]) : 30;
         long rssBefore = rssKb();
         long t0 = System.nanoTime();
-        TaiXnnpackDelegate delegate = TaiXnnpackDelegate.create(threads);
-        Interpreter.Options options = delegate != null
-            ? new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(false).addDelegate(delegate)
-            : new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
+        Interpreter.Options options = new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
         Interpreter interpreter;
         try {
             interpreter = new Interpreter(model, options);
@@ -49,8 +46,8 @@ public final class SpeechGraphProbe {
             return;
         }
         long loadMs = (System.nanoTime() - t0) / 1_000_000L;
-        System.out.println(String.format(Locale.ROOT, "loaded in %d ms, xnnpack shim %s, threads %d, rss +%d MB",
-            loadMs, delegate != null ? "yes" : "no (stock XNNPACK)", threads, (rssKb() - rssBefore) / 1024));
+        System.out.println(String.format(Locale.ROOT, "loaded in %d ms, stock XNNPACK, threads %d, rss +%d MB",
+            loadMs, threads, (rssKb() - rssBefore) / 1024));
         StringBuilder keys = new StringBuilder();
         for (String key : interpreter.getSignatureKeys()) keys.append(key).append(' ');
         System.out.println("signatures: " + keys.toString().trim());
@@ -79,7 +76,6 @@ public final class SpeechGraphProbe {
         System.out.println(String.format(Locale.ROOT, "decode_1 (mean of %d) %d ms", runs, decode1Ms));
         System.out.println("peak rss " + rssKb() / 1024 + " MB");
         interpreter.close();
-        if (delegate != null) delegate.close();
     }
 
     private static long timeDecode(Interpreter interpreter, String signature, float[][][] encoded, int[][] tokens,

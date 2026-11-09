@@ -13,7 +13,7 @@ label above a key shows what that is.
 |---|---|---|
 | Keyboard | Show or hide the keyboard | **Next keyboard type** (docked, floating, split) |
 | Mouse | **Mouse mode** on or off | |
-| Widgets | **Go to Widgets** | |
+| Home | **Go to Home** | |
 | Terminal | **Go to Terminal** | |
 | Display | **Go to Display** | |
 | New pane | **New pane** | **New window** |
@@ -28,8 +28,9 @@ In **Appearance → Layout** the row can be moved to any edge, dropped into the 
 keyboard, or hidden by dragging it onto the eye-off button. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-The row follows you from place to place, but a key that cannot act where you are goes faint and
-stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
+The wall is the list of pages in the order Edit pages arranged them. Two Display pages may sit next
+to each other. The row shows a go-to key for each page kind the wall has: Widgets, Terminal and
+Display. A key that cannot act on the page you are on goes faint and stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
 typing keys, the modifiers, **PASTE** and **SCROLL** are dimmed.
 
 ## Edit the row
@@ -54,8 +55,7 @@ later.
 
 Launcher actions not on the shipped row can be added this way too. For example, **App drawer**
 ("Open the app drawer.", with an apps-grid icon) is in the launcher group of the action search. It
-opens the app drawer from the apps row's current edge, and does nothing while **Settings → Apps →
-Swipe down for app drawer** is off. Do not confuse it with `app.open_drawer` (**Open sessions**),
+opens the app drawer from the apps row's current edge. Do not confuse it with `app.open_drawer` (**Open sessions**),
 which opens the sessions drawer.
 
 Next to the editor row, **Uppercase key labels** ("Show ESC, TAB and other labels in capitals.")
@@ -123,7 +123,7 @@ extra-keys = [[ \
 
 Names and values are trimmed and separated by commas; there is no quoting inside a `tool:` string,
 so prefer a package name for `app.launch`. Pane and window actions do nothing while
-**Settings → Terminal → Sessions and panes → Split-pane controls** is off. Every action id and its
+**Settings → Terminal → Windows & panes → Split-pane controls** is off. Every action id and its
 arguments are listed in [Command palette and actions](Command_Palette_And_Actions.md).
 
 ### Macros for shell programs
