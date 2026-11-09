@@ -42,6 +42,9 @@ public final class VideoPage {
     private final MaterialButton mBack;
     private final LinearProgressIndicator mProgress;
     private final TextView mProgressLabel;
+    private final TextView mRateNote;
+    /** Per rate pill: the clip can play at it; all true until the clip's state is read. */
+    private final boolean[] mAvailable = {true, true, true};
     private final VideoProgressLogic mLogic = new VideoProgressLogic();
     private boolean mBinding;
 
@@ -53,6 +56,7 @@ public final class VideoPage {
         mBack = mRoot.findViewById(R.id.video_back_to_photo);
         mProgress = mRoot.findViewById(R.id.video_progress);
         mProgressLabel = mRoot.findViewById(R.id.video_progress_label);
+        mRateNote = mRoot.findViewById(R.id.video_rate_note);
 
         View rateRow = mRoot.findViewById(R.id.video_knob_rate);
         ((TextView) rateRow.findViewById(android.R.id.title)).setText(R.string.live_knob_frame_rate);
@@ -81,6 +85,49 @@ public final class VideoPage {
     @NonNull
     public View root() {
         return mRoot;
+    }
+
+    /** Checks the pill for rateHz (the draw rate in use) without telling the host. */
+    public void selectRate(int rateHz) {
+        mBinding = true;
+        try {
+            for (int i = 0; i < mRate.getChildCount(); i++) {
+                View b = mRate.getChildAt(i);
+                if (b.getTag() instanceof Integer && (Integer) b.getTag() == rateHz) mRate.check(b.getId());
+            }
+        } finally {
+            mBinding = false;
+        }
+    }
+
+    /** Disables the rates above the clip's own and says why in one line; null state clears both. */
+    public void setClip(@Nullable com.termux.app.chrome.scene.VideoVariants.State state) {
+        float fps = state == null ? 0f : state.fps;
+        boolean[] on = state == null ? new boolean[] {true, true, true} : VideoRateLogic.enabled(fps);
+        System.arraycopy(on, 0, mAvailable, 0, mAvailable.length);
+        boolean reason = state != null && VideoRateLogic.showsReason(fps);
+        mRateNote.setText(reason ? mRoot.getContext().getString(R.string.video_rate_reason,
+            VideoRateLogic.clipFps(fps)) : "");
+        mRateNote.setVisibility(reason ? View.VISIBLE : View.GONE);
+        render();
+    }
+
+    /** A version for hz is being made from the stored clip; the rate pills stay usable. */
+    public void startPreparing(int hz) {
+        mLogic.startPreparing(hz);
+        render();
+    }
+
+    /** The version ended (made, failed or replaced); the host then sets the hint. */
+    public void endPreparing() {
+        mLogic.finish(true);
+        render();
+    }
+
+    /** An import began for a video (rateHz) or a GIF (0); sets the bar's wording. */
+    public void setImportRate(int rateHz) {
+        mLogic.setImportRate(rateHz);
+        render();
     }
 
     /** Opens the page with the rate set and Back to photo only while a motion is in use. */
@@ -151,12 +198,19 @@ public final class VideoPage {
             }
             mProgressLabel.setText(mLogic.label(mRoot.getContext().getString(R.string.video_copying),
                 mRoot.getContext().getString(R.string.video_converting),
-                mRoot.getContext().getString(R.string.video_applying)));
+                mRoot.getContext().getString(R.string.video_applying),
+                mRoot.getContext().getString(R.string.video_preparing)));
         }
         mChoose.setEnabled(!busy);
         mBack.setEnabled(!busy);
-        mRate.setEnabled(!busy);
-        for (int i = 0; i < mRate.getChildCount(); i++) mRate.getChildAt(i).setEnabled(!busy);
+        boolean rates = !busy || mLogic.preparing();
+        mRate.setEnabled(rates);
+        for (int i = 0; i < mRate.getChildCount(); i++) {
+            View b = mRate.getChildAt(i);
+            int idx = b.getTag() instanceof Integer
+                ? com.termux.app.chrome.scene.VideoVariantRules.rateIndex((Integer) b.getTag()) : -1;
+            b.setEnabled(rates && (idx < 0 || mAvailable[idx]));
+        }
     }
 
     // --- tests ---
