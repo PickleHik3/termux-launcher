@@ -43,6 +43,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   Java no worse than its baseline (18.2 ms tui p50, 50 btop frames over 2x budget). Ghostty: btop and
   vim redraw without torn frames; a held program that never releases (`printf '\e[?2026h'; sleep 2`,
   then type) gets its screen back within 150 ms; the cursor does not blink off mid-redraw in vim.
+  Wave 3 slice 5 (exp/ghostty-slice5, kitty graphics on Ghostty): both cores, `kitten icat` of a PNG
+  and an RGB image, an image under text (`z=-1`) and one under cell backgrounds
+  (`z=-1073741825`, shows only under default-background cells), a tmux Unicode-placeholder image,
+  a looping GIF via `kitten icat` (plays; stops ticking when the pane is swiped away or the screen
+  is off; no redraws once it stops), the protocol sheet's `a=q` probes (same replies on both cores),
+  `CSI > q` on Ghostty ends in ` (libghostty-vt 1.0)`; `frames kitty ghostty` against
+  `frames kitty java`, and PSS after `kitten icat` of a large image then `clear` (bitmap freed two
+  frames after it leaves the screen). Known gap: an image scrolled wholly into history is not drawn.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame

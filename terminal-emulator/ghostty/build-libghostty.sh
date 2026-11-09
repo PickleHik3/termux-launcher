@@ -45,6 +45,10 @@ if [ ! -f "$SRC/LIB_VERSION" ] || [ ! -d "$DEPS" ]; then
     tar -xzf "$CACHE/dl/libghostty-vt-$VERSION-deps.tar.gz" -C "$CACHE/src"
 fi
 
+# Wuffs' single-file C release, for the PNG decoder's declarations.
+WUFFS_C=$(dirname "$(ls "$DEPS"/*/release/c/wuffs-v0.4.c 2>/dev/null | head -1)")
+[ -f "$WUFFS_C/wuffs-v0.4.c" ] || { echo "wuffs-v0.4.c not found under $DEPS" >&2; exit 1; }
+
 find_ndk() {
     if [ -n "${ANDROID_NDK_HOME:-}" ]; then echo "$ANDROID_NDK_HOME"; return; fi
     local sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}
@@ -80,25 +84,33 @@ for ABI in "$@"; do
         echo "$WANT" > "$STAMP"
     fi
     # The shim: relinked when it or the library is newer than the last output.
-    if [ -f "$SHIM" ] && [ "$SHIM" -nt "$HERE/ghostty_jni.c" ] && [ "$SHIM" -nt "$STAMP" ]; then
+    if [ -f "$SHIM" ] && [ "$SHIM" -nt "$HERE/ghostty_jni.c" ] && [ "$SHIM" -nt "$HERE/ghostty_png.c" ] \
+        && [ "$SHIM" -nt "$STAMP" ]; then
         continue
     fi
 
     mkdir -p "$DEST"
+    # The PNG decoder calls the Wuffs already inside libghostty-vt.a; its header is in the deps
+    # tarball. Compiled on its own without warnings, since the Wuffs header is not ours to fix.
+    PNG_OBJ=$(mktemp --suffix=.o "$CACHE/ghostty_png.XXXXXX")
     if [ "$ABI" = host ]; then
         JAVA_HOME=${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")}
+        cc -c -fPIC -O2 -w -std=c11 -I"$PREFIX/include" -I"$WUFFS_C" -o "$PNG_OBJ" "$HERE/ghostty_png.c"
         cc -shared -fPIC -O2 -Wall -Wextra -Werror -std=c11 \
             -I"$PREFIX/include" -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/linux" \
-            -o "$DEST/libtermux-ghostty.so" "$HERE/ghostty_jni.c" "$PREFIX/lib/libghostty-vt.a" \
+            -o "$DEST/libtermux-ghostty.so" "$HERE/ghostty_jni.c" "$PNG_OBJ" "$PREFIX/lib/libghostty-vt.a" \
             -lm -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,--no-undefined
     else
         TOOLS="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+        "$TOOLS/clang" --target="$CLANG_TARGET" -c -fPIC -Os -w -std=c11 \
+            -I"$PREFIX/include" -I"$WUFFS_C" -o "$PNG_OBJ" "$HERE/ghostty_png.c"
         "$TOOLS/clang" --target="$CLANG_TARGET" -shared -fPIC -Os -Wall -Wextra -Werror -std=c11 \
             -I"$PREFIX/include" \
-            -o "$DEST/libtermux-ghostty.so" "$HERE/ghostty_jni.c" "$PREFIX/lib/libghostty-vt.a" \
+            -o "$DEST/libtermux-ghostty.so" "$HERE/ghostty_jni.c" "$PNG_OBJ" "$PREFIX/lib/libghostty-vt.a" \
             -lm -llog -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,--no-undefined \
             -Wl,-z,max-page-size=16384
         "$TOOLS/llvm-strip" --strip-unneeded "$DEST/libtermux-ghostty.so"
     fi
+    rm -f "$PNG_OBJ"
     echo "$WANT" > "$STAMP"
 done

@@ -260,17 +260,17 @@ public class GhosttyCoreTest extends TerminalTestCase {
         assertLineIs(0, "abc  ");
     }
 
-    public void testXtVersionIsOurNameOnBothCores() {
+    public void testXtVersionIsOurNameWithTheLibraryOnGhostty() {
         TerminalEmulator.setXtVersion("x.y");
         try {
-            String expected = "\033P>|termux-launcher(x.y)\033\\";
             withTerminalSized(10, 3);
-            assertEnteringStringGivesResponse("\033[>q", expected);
+            assertEnteringStringGivesResponse("\033[>q", "\033P>|termux-launcher(x.y)\033\\");
             if (!ghostty(10, 3)) return;
-            enterString("\033[>q");
-            String reply = mOutput.getOutputAndClear();
-            assertEquals(expected, reply);
-            assertFalse(reply.toLowerCase().contains("ghostty"));
+            // Ghostty draws kitty images, so programs matching "ghostty" may pick them.
+            assertEnteringStringGivesResponse("\033[>q", "\033P>|termux-launcher(x.y) (libghostty-vt 1.0)\033\\");
+            // DA1 still claims no sixel.
+            enterString("\033[c");
+            assertFalse(mOutput.getOutputAndClear().matches(".*[;?]4[;c].*"));
         } finally {
             TerminalEmulator.setXtVersion(null);
         }

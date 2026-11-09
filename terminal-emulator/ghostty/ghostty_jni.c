@@ -17,6 +17,8 @@
 
 #include <ghostty/vt.h>
 
+#include "ghostty_png.h"
+
 #ifdef __ANDROID__
 #include <android/log.h>
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, "GhosttyCore", __VA_ARGS__)
@@ -107,7 +109,11 @@ typedef struct {
     long snap_scrolled;  // rows that left the screen since the last sync handed them to Java
     uint16_t snap_cx, snap_cy;
     bool snap_visible;
+    struct KittyState* kitty;  // kitty graphics, set up by nativeKittySetup; see the end of this file
 } Core;
+
+static void kitty_free(Core* c);
+static void kitty_write(Core* c, const uint8_t* data, size_t len);
 
 // Extra code points (combining marks, ZWJ sequences) one sync can carry; matches
 // GhosttyNative.EXTRA_CAPACITY. A cluster past the cap keeps its first code point.
@@ -224,6 +230,7 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
 
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
+    kitty_free(c);
     if (c->top) ghostty_tracked_grid_ref_free(c->top);
     if (c->bottom) ghostty_tracked_grid_ref_free(c->bottom);
     if (c->row_cells) ghostty_render_state_row_cells_free(c->row_cells);
@@ -363,7 +370,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     size_t no_byte_limit = SIZE_MAX;
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &no_byte_limit);
     set_history_limit(c, scrollback_lines);
-    // No images in this mode: refuse kitty graphics rather than store pixels nobody draws.
+    // Images stay off until GhosttyCore turns them on with its limits (nativeKittySetup).
     uint64_t no_images = 0;
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &no_images);
     if (c->cell_w > 0 && c->cell_h > 0)
@@ -410,7 +417,7 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
     jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
     if (bytes == NULL) { clear_exception(env); return; }
     c->env = env;
-    ghostty_terminal_vt_write(c->term, (const uint8_t*) bytes + offset, (size_t) length);
+    kitty_write(c, (const uint8_t*) bytes + offset, (size_t) length);
     c->env = NULL;
     (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
 }
@@ -798,4 +805,433 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeCompress(
                                                : GHOSTTY_TERMINAL_COMPRESSION_MODE_INCREMENTAL;
     if (ghostty_terminal_compress(c->term, mode, &result) != GHOSTTY_SUCCESS) return -1;
     return (jint) result;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Kitty graphics. Ghostty stores, decodes, places and animates images; Java keeps bitmaps only for
+// the images on screen (GhosttyImages, GhosttyImageCache). Like the rest of this file, everything
+// runs on the session's thread between writes, and an image handle or pixel pointer is looked up
+// and copied out within the one entry point that uses it (guides/images.md, Lifetime).
+
+// The PNG decoder is process-wide and not thread-safe, so it goes in when the library loads,
+// before any terminal exists.
+JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+    (void) vm;
+    (void) reserved;
+    ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG, (const void*) ghostty_png_decode);
+    return JNI_VERSION_1_6;
+}
+
+// The longest control header (the part of a kitty APC before ';') the query watch reads.
+#define KQ_HEADER_MAX 256
+// The largest query the Java core answers; a longer one is left to Ghostty.
+#define KQ_QUERY_MAX (64 * 1024)
+enum { KQ_GROUND, KQ_HEADER, KQ_QUERY };
+
+// Ints per placement in nativeKittyPlacements; mirrored by GhosttyNative.KP_*.
+enum {
+    KP_IMAGE_ID = 0, KP_KIND, KP_LAYER, KP_Z, KP_COL, KP_ROW, KP_GRID_COLS, KP_GRID_ROWS,
+    KP_OFFSET_X, KP_OFFSET_Y, KP_WIDTH, KP_HEIGHT, KP_SRC_X, KP_SRC_Y, KP_SRC_W, KP_SRC_H,
+    KP_PLACEMENT_ID, KP_INTS,
+};
+
+// Ints per virtual placement in nativeKittyVirtualPlacements; mirrored by GhosttyNative.KV_*.
+enum { KV_IMAGE_ID = 0, KV_PLACEMENT_ID, KV_COLUMNS, KV_ROWS, KV_SRC_X, KV_SRC_Y, KV_SRC_W, KV_SRC_H, KV_INTS };
+
+typedef struct KittyState {
+    GhosttyRenderStateImageIterator images;
+    GhosttyKittyGraphicsPlacementIterator placements;
+    jmethodID on_query;
+    // The query watch: a kitty query (a=q) is answered by the Java core's own code, so both cores
+    // give the same bytes, including for the media and formats this one refuses.
+    int watch;
+    uint8_t* held;  // the current APC's content, held back from Ghostty until we know what it is
+    size_t held_len, held_cap;
+} KittyState;
+
+static void kitty_free(Core* c) {
+    KittyState* k = c->kitty;
+    if (k == NULL) return;
+    if (k->images) ghostty_render_state_image_iterator_free(k->images);
+    if (k->placements) ghostty_kitty_graphics_placement_iterator_free(k->placements);
+    free(k->held);
+    free(k);
+    c->kitty = NULL;
+}
+
+static bool kq_hold(KittyState* k, uint8_t b) {
+    if (k->held_len == k->held_cap) {
+        size_t cap = k->held_cap == 0 ? 64 : k->held_cap * 2;
+        if (cap > KQ_QUERY_MAX) cap = KQ_QUERY_MAX;
+        if (cap <= k->held_len) return false;
+        uint8_t* grown = realloc(k->held, cap);
+        if (grown == NULL) return false;
+        k->held = grown;
+        k->held_cap = cap;
+    }
+    k->held[k->held_len++] = b;
+    return true;
+}
+
+// Give Ghostty what was held back; it carries on with the APC as if nothing had stopped it.
+static void kq_release(Core* c) {
+    KittyState* k = c->kitty;
+    if (k->held_len > 0) ghostty_terminal_vt_write(c->term, k->held, k->held_len);
+    k->held_len = 0;
+    k->watch = KQ_GROUND;
+}
+
+// Whether a held control header ("G" then key=value pairs) is a kitty query.
+static bool kq_is_query(const uint8_t* h, size_t n) {
+    if (n < 1 || h[0] != 'G') return false;
+    size_t i = 1;
+    while (i < n) {
+        size_t end = i;
+        while (end < n && h[end] != ',') end++;
+        if (end - i == 3 && h[i] == 'a' && h[i + 1] == '=' && h[i + 2] == 'q') return true;
+        i = end + 1;
+    }
+    return false;
+}
+
+static void kq_answer(Core* c) {
+    KittyState* k = c->kitty;
+    JNIEnv* env = c->env;
+    if (env != NULL && c->sink != NULL && k->held_len > 0) {
+        jbyteArray arr = (*env)->NewByteArray(env, (jsize) k->held_len);
+        if (arr == NULL) {
+            clear_exception(env);
+        } else {
+            (*env)->SetByteArrayRegion(env, arr, 0, (jsize) k->held_len, (const jbyte*) k->held);
+            (*env)->CallVoidMethod(env, c->sink, k->on_query, arr);
+            clear_exception(env);
+            (*env)->DeleteLocalRef(env, arr);
+        }
+    }
+    k->held_len = 0;
+}
+
+// vt_write with the query watch in front. Ghostty stops at each APC introducer; the APC's control
+// header is then held back until it shows whether this is a query. Anything else is released to
+// Ghostty unchanged. A query is kept from Ghostty entirely: it gets only the terminator, an empty
+// APC it ignores, and the Java core answers (through GhosttyCore.onKittyQuery, called here between
+// writes, never from a library callback). The header can span writes; what is held stays here.
+static void kitty_write(Core* c, const uint8_t* data, size_t len) {
+    KittyState* k = c->kitty;
+    if (k == NULL || k->on_query == NULL) {
+        ghostty_terminal_vt_write(c->term, data, len);
+        return;
+    }
+    size_t i = 0;
+    while (i < len) {
+        if (k->watch == KQ_GROUND) {
+            GhosttyTerminalWriteStop stop = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
+            GhosttyResult r = ghostty_terminal_vt_write_until(c->term, data + i, len - i,
+                GHOSTTY_TERMINAL_BOUNDARY_APC_START, &stop);
+            if (r == GHOSTTY_INVALID_VALUE) {
+                ghostty_terminal_vt_write(c->term, data + i, len - i);
+                return;
+            }
+            i += stop.consumed;
+            if (r != GHOSTTY_SUCCESS) return;
+            if ((stop.reached & GHOSTTY_TERMINAL_BOUNDARY_APC_START) && stop.kind == GHOSTTY_TERMINAL_STRING_KIND_APC) {
+                k->watch = KQ_HEADER;
+                k->held_len = 0;
+            }
+            continue;
+        }
+        uint8_t b = data[i];
+        bool content = b >= 0x20 && b < 0x7f;
+        if (k->watch == KQ_HEADER) {
+            if (content && b != ';' && k->held_len < KQ_HEADER_MAX) {
+                if (kq_hold(k, b)) i++; else kq_release(c);
+                continue;
+            }
+            if ((b == ';' || b == 0x1b || b == 0x9c) && kq_is_query(k->held, k->held_len)) {
+                k->watch = KQ_QUERY;
+                if (b == ';') {
+                    if (kq_hold(k, b)) i++; else kq_release(c);
+                }
+                continue;
+            }
+            kq_release(c);
+            continue;
+        }
+        // KQ_QUERY: hold the payload up to the terminator.
+        if (content) {
+            if (k->held_len < KQ_QUERY_MAX && kq_hold(k, b)) i++; else kq_release(c);
+            continue;
+        }
+        if (b == 0x1b || b == 0x9c) {
+            kq_answer(c);
+            k->watch = KQ_GROUND;
+        } else {
+            kq_release(c);  // CAN, SUB or another control byte: Ghostty decides what it means
+        }
+    }
+}
+
+// Turn images on: Ghostty's store per screen is storage_limit bytes (KittyImageStore's, so both
+// cores keep the same), direct and file media as the Java core takes them, temp files from
+// temp_dir (UTF-8, may be null), and no shared memory, which Android does not have.
+JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittySetup(
+    JNIEnv* env, jclass cls, jlong h, jlong storage_limit, jbyteArray temp_dir) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return JNI_FALSE;
+    if (c->kitty == NULL) {
+        KittyState* k = calloc(1, sizeof(KittyState));
+        if (k == NULL) return JNI_FALSE;
+        c->kitty = k;
+        if (ghostty_render_state_image_iterator_new(NULL, &k->images) != GHOSTTY_SUCCESS
+            || ghostty_kitty_graphics_placement_iterator_new(NULL, &k->placements) != GHOSTTY_SUCCESS) {
+            kitty_free(c);
+            return JNI_FALSE;
+        }
+        jclass sink_class = (*env)->GetObjectClass(env, c->sink);
+        k->on_query = (*env)->GetMethodID(env, sink_class, "onKittyQuery", "([B)V");
+        if (k->on_query == NULL) clear_exception(env);
+    }
+    uint64_t limit = storage_limit > 0 ? (uint64_t) storage_limit : 0;
+    if (ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &limit) != GHOSTTY_SUCCESS)
+        return JNI_FALSE;
+    bool on = true;
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &on);
+    if (temp_dir != NULL) {
+        jsize n = (*env)->GetArrayLength(env, temp_dir);
+        uint8_t dir[1024];
+        if (n > 0 && n <= (jsize) sizeof(dir)) {
+            (*env)->GetByteArrayRegion(env, temp_dir, 0, n, (jbyte*) dir);
+            GhosttyString s = {.ptr = dir, .len = (size_t) n};
+            ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE, &s);
+        }
+    }
+    return JNI_TRUE;
+}
+
+static GhosttyKittyGraphics kitty_graphics(Core* c) {
+    GhosttyKittyGraphics g = NULL;
+    if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &g) != GHOSTTY_SUCCESS) return NULL;
+    return g;
+}
+
+// Once per drawn frame: out[0] the render state's placements generation (from the last sync),
+// out[1] when the next animation frame is due (ms on the caller's clock) or -1, out[2] the active
+// storage's generation. Animations advance only when tick is set.
+JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyFrame(
+    JNIEnv* env, jclass cls, jlong h, jlong now_ms, jboolean tick, jlongArray out) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || out == NULL || (*env)->GetArrayLength(env, out) < 3) return JNI_FALSE;
+    jlong v[3] = {0, -1, 0};
+    uint64_t placements = 0;
+    if (ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_IMAGE_PLACEMENTS_GENERATION, &placements) == GHOSTTY_SUCCESS)
+        v[0] = (jlong) placements;
+    GhosttyKittyGraphics g = kitty_graphics(c);
+    if (g != NULL) {
+        uint64_t next = 0;
+        if (tick && now_ms >= 0 && ghostty_kitty_graphics_animation_tick(g, (uint64_t) now_ms, &next) == GHOSTTY_SUCCESS)
+            v[1] = (jlong) next;
+        uint64_t storage = 0;
+        if (ghostty_kitty_graphics_get(g, GHOSTTY_KITTY_GRAPHICS_DATA_GENERATION, &storage) == GHOSTTY_SUCCESS)
+            v[2] = (jlong) storage;
+    }
+    (*env)->SetLongArrayRegion(env, out, 0, 3, v);
+    return JNI_TRUE;
+}
+
+// The render state's image list from the last sync, KP_INTS ints per Kitty placement while out has
+// room. Returns how many there are, so a caller with too small an array can grow it and ask again.
+JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyPlacements(
+    JNIEnv* env, jclass cls, jlong h, jintArray out) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->kitty == NULL || out == NULL) return 0;
+    KittyState* k = c->kitty;
+    if (ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &k->images) != GHOSTTY_SUCCESS)
+        return 0;
+    jsize cap = (*env)->GetArrayLength(env, out) / KP_INTS;
+    jint n = 0;
+    while (ghostty_render_state_image_iterator_next(k->images)) {
+        GhosttyImageProtocol protocol = GHOSTTY_IMAGE_PROTOCOL_KITTY;
+        GhosttyImageLayer layer = GHOSTTY_IMAGE_LAYER_ABOVE_TEXT;
+        GhosttyRenderStateKittyPlacementKind kind = GHOSTTY_RENDER_STATE_KITTY_PLACEMENT_KIND_FIXED;
+        uint32_t image_id = 0, grid_cols = 0, grid_rows = 0, off_x = 0, off_y = 0, width = 0, height = 0;
+        uint32_t src_x = 0, src_y = 0, src_w = 0, src_h = 0, placement_id = 0;
+        int32_t z = 0, col = 0, row = 0;
+        GhosttyRenderStateImageData keys[] = {
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_PROTOCOL, GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_ID,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_LAYER, GHOSTTY_RENDER_STATE_IMAGE_DATA_Z,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_COL, GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_ROW,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_COLS, GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_ROWS,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_X, GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_Y,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_WIDTH, GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_HEIGHT,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_X, GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_Y,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_WIDTH, GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_HEIGHT,
+        };
+        void* values[] = {
+            &protocol, &image_id, &layer, &z, &col, &row, &grid_cols, &grid_rows, &off_x, &off_y,
+            &width, &height, &src_x, &src_y, &src_w, &src_h,
+        };
+        if (ghostty_render_state_image_get_multi(k->images, sizeof(keys) / sizeof(keys[0]), keys, values, NULL) != GHOSTTY_SUCCESS
+            || protocol != GHOSTTY_IMAGE_PROTOCOL_KITTY) continue;
+        ghostty_render_state_image_get(k->images, GHOSTTY_RENDER_STATE_IMAGE_DATA_KITTY_KIND, &kind);
+        ghostty_render_state_image_get(k->images, GHOSTTY_RENDER_STATE_IMAGE_DATA_KITTY_PLACEMENT_ID, &placement_id);
+        if (n < cap) {
+            jint p[KP_INTS];
+            p[KP_IMAGE_ID] = (jint) image_id;
+            p[KP_KIND] = (jint) kind;
+            p[KP_LAYER] = (jint) layer;
+            p[KP_Z] = z;
+            p[KP_COL] = col;
+            p[KP_ROW] = row;
+            p[KP_GRID_COLS] = (jint) grid_cols;
+            p[KP_GRID_ROWS] = (jint) grid_rows;
+            p[KP_OFFSET_X] = (jint) off_x;
+            p[KP_OFFSET_Y] = (jint) off_y;
+            p[KP_WIDTH] = (jint) width;
+            p[KP_HEIGHT] = (jint) height;
+            p[KP_SRC_X] = (jint) src_x;
+            p[KP_SRC_Y] = (jint) src_y;
+            p[KP_SRC_W] = (jint) src_w;
+            p[KP_SRC_H] = (jint) src_h;
+            p[KP_PLACEMENT_ID] = (jint) placement_id;
+            (*env)->SetIntArrayRegion(env, out, n * KP_INTS, KP_INTS, p);
+        }
+        n++;
+    }
+    return n;
+}
+
+// The active screen's virtual placements (the ones Unicode placeholder cells show), KV_INTS ints
+// each while out has room. Returns how many there are.
+JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyVirtualPlacements(
+    JNIEnv* env, jclass cls, jlong h, jintArray out) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->kitty == NULL || out == NULL) return 0;
+    KittyState* k = c->kitty;
+    GhosttyKittyGraphics g = kitty_graphics(c);
+    if (g == NULL || ghostty_kitty_graphics_get(g, GHOSTTY_KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR, &k->placements) != GHOSTTY_SUCCESS)
+        return 0;
+    jsize cap = (*env)->GetArrayLength(env, out) / KV_INTS;
+    jint n = 0;
+    while (ghostty_kitty_graphics_placement_next(k->placements)) {
+        bool is_virtual = false;
+        ghostty_kitty_graphics_placement_get(k->placements, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL, &is_virtual);
+        if (!is_virtual) continue;
+        uint32_t image_id = 0, placement_id = 0, columns = 0, rows = 0, src_x = 0, src_y = 0, src_w = 0, src_h = 0;
+        GhosttyKittyGraphicsPlacementData keys[] = {
+            GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IMAGE_ID, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_PLACEMENT_ID,
+            GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_COLUMNS, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_ROWS,
+            GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_SOURCE_X, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_SOURCE_Y,
+            GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_SOURCE_WIDTH, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_SOURCE_HEIGHT,
+        };
+        void* values[] = {&image_id, &placement_id, &columns, &rows, &src_x, &src_y, &src_w, &src_h};
+        if (ghostty_kitty_graphics_placement_get_multi(k->placements, sizeof(keys) / sizeof(keys[0]), keys, values, NULL) != GHOSTTY_SUCCESS)
+            continue;
+        if (n < cap) {
+            jint v[KV_INTS] = {(jint) image_id, (jint) placement_id, (jint) columns, (jint) rows,
+                               (jint) src_x, (jint) src_y, (jint) src_w, (jint) src_h};
+            (*env)->SetIntArrayRegion(env, out, n * KV_INTS, KV_INTS, v);
+        }
+        n++;
+    }
+    return n;
+}
+
+static GhosttyKittyGraphicsImage kitty_image(Core* c, jint image_id) {
+    GhosttyKittyGraphics g = kitty_graphics(c);
+    return g == NULL ? NULL : ghostty_kitty_graphics_image(g, (uint32_t) image_id);
+}
+
+// An image's width, height and generation in out[0..2], when its pixels are there.
+JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyImageInfo(
+    JNIEnv* env, jclass cls, jlong h, jint image_id, jlongArray out) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || out == NULL || (*env)->GetArrayLength(env, out) < 3) return JNI_FALSE;
+    GhosttyKittyGraphicsImage image = kitty_image(c, image_id);
+    if (image == NULL) return JNI_FALSE;
+    uint32_t width = 0, height = 0;
+    uint64_t generation = 0;
+    GhosttyString pixels = {0};
+    if (ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS, &pixels) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_WIDTH, &width) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_HEIGHT, &height) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION, &generation) != GHOSTTY_SUCCESS
+        || width == 0 || height == 0)
+        return JNI_FALSE;
+    jlong v[3] = {(jlong) width, (jlong) height, (jlong) generation};
+    (*env)->SetLongArrayRegion(env, out, 0, 3, v);
+    return JNI_TRUE;
+}
+
+// Copy rows [first_row, first_row + rows) of an image into argb as straight (not premultiplied)
+// 0xAARRGGBB, the form Bitmap.setPixels takes. Returns the rows copied, or -1 when the image is
+// gone or no longer at that generation (an animation frame or a retransmission replaced it).
+JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyImageCopy(
+    JNIEnv* env, jclass cls, jlong h, jint image_id, jlong generation, jint first_row, jint rows, jintArray argb) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || argb == NULL || first_row < 0 || rows <= 0) return -1;
+    GhosttyKittyGraphicsImage image = kitty_image(c, image_id);
+    if (image == NULL) return -1;
+    uint32_t width = 0, height = 0;
+    uint64_t current = 0;
+    GhosttyKittyImageFormat format = GHOSTTY_KITTY_IMAGE_FORMAT_RGBA;
+    GhosttyString pixels = {0};
+    if (ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION, &current) != GHOSTTY_SUCCESS
+        || (jlong) current != generation
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_WIDTH, &width) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_HEIGHT, &height) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_FORMAT, &format) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS, &pixels) != GHOSTTY_SUCCESS)
+        return -1;
+    size_t bpp;
+    switch (format) {
+        case GHOSTTY_KITTY_IMAGE_FORMAT_RGB: bpp = 3; break;
+        case GHOSTTY_KITTY_IMAGE_FORMAT_RGBA: bpp = 4; break;
+        case GHOSTTY_KITTY_IMAGE_FORMAT_GRAY_ALPHA: bpp = 2; break;
+        case GHOSTTY_KITTY_IMAGE_FORMAT_GRAY: bpp = 1; break;
+        default: return -1;
+    }
+    if ((uint32_t) first_row >= height) return 0;
+    uint32_t count = (uint32_t) rows;
+    if (count > height - (uint32_t) first_row) count = height - (uint32_t) first_row;
+    if ((size_t) (*env)->GetArrayLength(env, argb) < (size_t) count * width) return -1;
+    if (pixels.ptr == NULL || pixels.len < (size_t) width * height * bpp) return -1;
+    jint* dst = (*env)->GetPrimitiveArrayCritical(env, argb, NULL);
+    if (dst == NULL) { clear_exception(env); return -1; }
+    const uint8_t* src = pixels.ptr + (size_t) first_row * width * bpp;
+    size_t n = (size_t) count * width;
+    for (size_t i = 0; i < n; i++, src += bpp) {
+        uint32_t r, g, b, a;
+        switch (bpp) {
+            case 4: r = src[0]; g = src[1]; b = src[2]; a = src[3]; break;
+            case 3: r = src[0]; g = src[1]; b = src[2]; a = 255; break;
+            case 2: r = g = b = src[0]; a = src[1]; break;
+            default: r = g = b = src[0]; a = 255; break;
+        }
+        dst[i] = (jint) ((a << 24) | (r << 16) | (g << 8) | b);
+    }
+    (*env)->ReleasePrimitiveArrayCritical(env, argb, dst, 0);
+    return (jint) count;
+}
+
+// An image's generation, or 0 when it is not stored or has no pixels yet.
+JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittyImageGeneration(
+    JNIEnv* env, jclass cls, jlong h, jint image_id) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return 0;
+    GhosttyKittyGraphicsImage image = kitty_image(c, image_id);
+    if (image == NULL) return 0;
+    uint64_t generation = 0;
+    GhosttyString pixels = {0};
+    if (ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS, &pixels) != GHOSTTY_SUCCESS
+        || ghostty_kitty_graphics_image_get(image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION, &generation) != GHOSTTY_SUCCESS)
+        return 0;
+    return (jlong) generation;
 }

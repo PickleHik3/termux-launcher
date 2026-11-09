@@ -93,6 +93,12 @@ final class GhosttyNative {
 
         /** UTF-8 text a program put on the clipboard (OSC 52). */
         void onClipboardWrite(byte[] data);
+
+        /**
+         * A kitty graphics query ({@code a=q}), the APC content from its {@code G}, kept from Ghostty
+         * so the Java core's code answers it. Called between writes, never from a library callback.
+         */
+        void onKittyQuery(byte[] apc);
     }
 
     /**
@@ -200,4 +206,54 @@ final class GhosttyNative {
      * COMPRESS_* result, or -1 on error. For measuring only.
      */
     static native int nativeCompress(long handle, boolean full);
+
+    // Kitty graphics; see the matching section of ghostty_jni.c.
+
+    /** Ints per placement in {@link #nativeKittyPlacements}; the layout matches ghostty_jni.c. */
+    static final int KP_IMAGE_ID = 0, KP_KIND = 1, KP_LAYER = 2, KP_Z = 3, KP_COL = 4, KP_ROW = 5,
+        KP_GRID_COLS = 6, KP_GRID_ROWS = 7, KP_OFFSET_X = 8, KP_OFFSET_Y = 9, KP_WIDTH = 10,
+        KP_HEIGHT = 11, KP_SRC_X = 12, KP_SRC_Y = 13, KP_SRC_W = 14, KP_SRC_H = 15,
+        KP_PLACEMENT_ID = 16, KP_INTS = 17;
+
+    /** {@link #KP_KIND}: one row of placeholder cells, placed relative to another, or at a cell. */
+    static final int KIND_VIRTUAL = 0, KIND_RELATIVE = 1, KIND_FIXED = 2;
+
+    /** Ints per virtual placement in {@link #nativeKittyVirtualPlacements}. */
+    static final int KV_IMAGE_ID = 0, KV_PLACEMENT_ID = 1, KV_COLUMNS = 2, KV_ROWS = 3, KV_SRC_X = 4,
+        KV_SRC_Y = 5, KV_SRC_W = 6, KV_SRC_H = 7, KV_INTS = 8;
+
+    /** Slots of {@link #nativeKittyFrame}. */
+    static final int FRAME_PLACEMENTS_GENERATION = 0, FRAME_NEXT_DUE = 1, FRAME_STORAGE_GENERATION = 2,
+        FRAME_SLOTS = 3;
+
+    /**
+     * Turn kitty graphics on: {@code storageLimit} bytes per screen, file media, temp files from
+     * {@code tempDir} (UTF-8, or null). Images are off until this is called.
+     */
+    static native boolean nativeKittySetup(long handle, long storageLimit, byte[] tempDir);
+
+    /**
+     * Once per drawn frame: fill {@code out} (FRAME_*). Animations advance to {@code nowMillis} only
+     * when {@code tick}; the next due time is on the same clock, or -1 when nothing plays.
+     */
+    static native boolean nativeKittyFrame(long handle, long nowMillis, boolean tick, long[] out);
+
+    /** The image list of the last sync, {@link #KP_INTS} ints each; returns how many there are. */
+    static native int nativeKittyPlacements(long handle, int[] out);
+
+    /** The active screen's virtual placements, {@link #KV_INTS} ints each; returns how many. */
+    static native int nativeKittyVirtualPlacements(long handle, int[] out);
+
+    /** An image's width, height and generation, when its pixels are stored. */
+    static native boolean nativeKittyImageInfo(long handle, int imageId, long[] out);
+
+    /**
+     * Rows of an image as straight 0xAARRGGBB; the rows copied, or -1 when the image is gone or
+     * no longer at {@code generation}.
+     */
+    static native int nativeKittyImageCopy(long handle, int imageId, long generation, int firstRow, int rows,
+                                           int[] argb);
+
+    /** An image's generation, 0 when it is not stored. */
+    static native long nativeKittyImageGeneration(long handle, int imageId);
 }

@@ -829,7 +829,10 @@ public final class TerminalEmulator {
             ? "termux-launcher" : "termux-launcher(" + appVersionName + ")";
     }
 
-    /** The XTVERSION answer both cores give; Ghostty panes copy it into native memory at creation. */
+    /**
+     * Our XTVERSION name. Ghostty panes answer it with GhosttyCore.XTVERSION_SUFFIX after it, copied
+     * into native memory at creation.
+     */
     static String xtVersionName() {
         return sXtVersionName;
     }
@@ -1525,14 +1528,16 @@ public final class TerminalEmulator {
     // Experimental libghostty-vt core, chosen per session with debug.tl.terminal_core=ghostty.
     // Ghostty parses; the screen rows each sync changed are copied into this emulator's buffer, and
     // cursor and mode bits into its fields. History stays in Ghostty: readers reach it through
-    // getContent() (GhosttyContent), and the Java transcript stays empty. Kitty graphics, sixel,
-    // iTerm2 images, text sizing, kitty notifications, prompt marks and the fork's own modes (7727,
-    // 5523) are not handled in this mode.
+    // getContent() (GhosttyContent), and the Java transcript stays empty. Kitty graphics are
+    // Ghostty's, drawn through GhosttyImages. Sixel, iTerm2 images, text sizing, kitty
+    // notifications, prompt marks and the fork's own modes (7727, 5523) are not handled in this mode.
 
     /** The Ghostty core parsing this session's output, or null for the Java parser. */
     private GhosttyCore mGhostty;
     /** Its rows as readers see them; null exactly when {@link #mGhostty} is. */
     private GhosttyContent mGhosttyContent;
+    /** Its kitty images as the renderer asks for them; null exactly when {@link #mGhostty} is. */
+    private GhosttyImages mGhosttyImages;
     /** Colours read back from the Ghostty core, reused. */
     private final int[] mGhosttyColors = new int[TextStyle.NUM_INDEXED_COLORS];
     /** The cursor shape Ghostty reported last; only a change made by the program moves ours. */
@@ -1579,6 +1584,8 @@ public final class TerminalEmulator {
         if (core == null) return false;
         mGhostty = core;
         mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls);
+        mGhosttyImages = new GhosttyImages(core, mSession, TerminalEmulator::monotonicMillis,
+            GhosttyImages.bitmapCache(core));
         mMainBuffer.clearTranscript();
         mGhosttyCursorShape = -1;
         try {
@@ -1605,6 +1612,8 @@ public final class TerminalEmulator {
         GhosttyContent content = mGhosttyContent;
         mGhostty = null;
         mGhosttyContent = null;
+        if (mGhosttyImages != null) mGhosttyImages.release();
+        mGhosttyImages = null;
         if (core == null) return;
         try {
             // Output parsed since the last sync would move history under the rows handed over.
@@ -5435,6 +5444,7 @@ public final class TerminalEmulator {
     /** Resolve the stored image and virtual placement referenced by a U+10EEEE cell. */
     public boolean getKittyImagePlaceholder(long imageId, long placementId,
                                             KittyImagePlaceholder out) {
+        if (mGhosttyImages != null) return mGhosttyImages.placeholder(imageId, placementId, out);
         return mKittyGraphics.getPlaceholder(imageId, placementId, out);
     }
 
@@ -5444,6 +5454,7 @@ public final class TerminalEmulator {
      * about an id whose image had not arrived yet sees the answer move when it does.
      */
     public long getKittyImageGeneration(long imageId) {
+        if (mGhosttyImages != null) return mGhosttyImages.imageGeneration(imageId);
         return mKittyGraphics.imageGeneration(imageId);
     }
 
@@ -5453,6 +5464,7 @@ public final class TerminalEmulator {
      * the renderer compares moves when they do; this is what tells it something did.
      */
     public long getKittyPlacementGeneration() {
+        if (mGhosttyImages != null) return mGhosttyImages.placementsGeneration();
         return mKittyPlacementGeneration;
     }
 
@@ -5538,6 +5550,11 @@ public final class TerminalEmulator {
      * {@code topRow} of the current screen, for the renderer to draw over the cells.
      */
     public void collectKittyPlacements(int topRow, int rowCount, java.util.List<KittyPlacement> out) {
+        // The renderer asks once per drawn frame, which is when the Ghostty core ticks animations.
+        if (mGhosttyImages != null) {
+            mGhosttyImages.collect(topRow, rowCount, mCellWidthPixels, mCellHeightPixels, out);
+            return;
+        }
         mScreen.collectVisibleKittyPlacements(topRow, rowCount, out);
     }
 
@@ -5588,11 +5605,13 @@ public final class TerminalEmulator {
      * while it is not. Frames and playback position are kept either way; only the ticking stops.
      */
     public void setKittyAnimationsVisible(boolean visible) {
+        if (mGhosttyImages != null) mGhosttyImages.setVisible(visible);
         mKittyGraphics.setAnimationsVisible(visible);
     }
 
     /** Release every kitty graphics resource, including the pending animation tick. */
     public void shutdownKittyGraphics() {
+        if (mGhosttyImages != null) mGhosttyImages.release();
         mKittyGraphics.shutdown();
     }
 
@@ -5602,6 +5621,8 @@ public final class TerminalEmulator {
      * blank and no session is lost.
      */
     public void dropKittyAnimationFrames() {
+        // The Ghostty core keeps no frames here, only bitmaps of what is on screen: drop those.
+        if (mGhosttyImages != null) mGhosttyImages.trim();
         mKittyGraphics.dropAllAnimationFrames();
     }
 

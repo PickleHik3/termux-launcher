@@ -95,7 +95,7 @@ if ((project.findProperty('ghostty') ?: 'false').toString() == 'true') {
     def ndkVersionName = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
 
     def buildGhostty = tasks.register('buildGhostty', Exec) {
-        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'))
+        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'), file('ghostty/ghostty_png.c'), file('ghostty/ghostty_png.h'))
         outputs.dir(ghosttyJniLibs)
         environment 'NDK_VERSION', ndkVersionName
         commandLine 'bash', ghosttyScript.absolutePath, ghosttyJniLibs.absolutePath, 'arm64-v8a', 'x86_64'
@@ -105,7 +105,7 @@ if ((project.findProperty('ghostty') ?: 'false').toString() == 'true') {
 
     // The same library for this machine, so JVM tests can drive the real thing.
     def buildGhosttyHost = tasks.register('buildGhosttyHost', Exec) {
-        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'))
+        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'), file('ghostty/ghostty_png.c'), file('ghostty/ghostty_png.h'))
         outputs.dir(ghosttyHostLib)
         commandLine 'bash', ghosttyScript.absolutePath, ghosttyHostLib.absolutePath, 'host'
     }
