@@ -75,6 +75,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   light and dark. Crash guard: force-stop with a Ghostty pane open keeps it on; `kill -SEGV` turns it
   off (new panes log `ghostty off after a crash`); reinstalling the rebuilt APK turns it back on.
   Idle Ghostty pane: 6 frames in 30 s. Nothing left owed; the progress ring was removed on purpose.
+  Wave 3 slice 8 (exp/ghostty-slice8, sixel on Ghostty): both cores, `look ghostty` against `look
+  java` on the sixel section, then `img2sixel` or `chafa -f sixel` of a photo and of a small icon:
+  the image sits at the prompt's cursor, the prompt comes back on the row below it in the column it
+  started in, and it scrolls away with the text, goes on `clear` and on `printf '\e[2J'`; a sixel
+  taller than the pane scrolls the pane as on Java; one started at the right edge is cut at the
+  edge. `printf '\e[c'` answers `?62;4;22c` on Ghostty (Java keeps its longer list). Also a
+  `chafa -f kitty` image still draws and a kitty query still gets its answer (the DCS watch sits
+  beside the APC one) · pong.
 
 - **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
   800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends

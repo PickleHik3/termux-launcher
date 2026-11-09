@@ -268,9 +268,9 @@ public class GhosttyCoreTest extends TerminalTestCase {
             if (!ghostty(10, 3)) return;
             // Ghostty draws kitty images, so programs matching "ghostty" may pick them.
             assertEnteringStringGivesResponse("\033[>q", "\033P>|termux-launcher(x.y) (libghostty-vt 1.0)\033\\");
-            // DA1 still claims no sixel.
+            // DA1 claims sixel, which this core now draws (GhosttySixelTest), and still no more.
             enterString("\033[c");
-            assertFalse(mOutput.getOutputAndClear().matches(".*[;?]4[;c].*"));
+            assertEquals("\033[?62;4;22c", mOutput.getOutputAndClear());
         } finally {
             TerminalEmulator.setXtVersion(null);
         }

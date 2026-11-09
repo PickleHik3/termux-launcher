@@ -39,6 +39,8 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     private int[] mHistoryCells;
     /** Separate from {@link #mExtra}, which still holds the screen rows' extras while history is read. */
     private final int[] mHistoryExtra = new int[HISTORY_EXTRA_CAPACITY];
+    /** The sixel being read, if any; made on the first one. */
+    private GhosttySixel mSixel;
     private final ByteArrayOutputStream mReplies = new ByteArrayOutputStream();
     private final ArrayList<String> mClipboard = new ArrayList<>();
     /** Events since the last delivery, oldest first; at most {@link #MAX_EVENTS}. */
@@ -166,6 +168,7 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     }
 
     void reset() {
+        if (mSixel != null) mSixel.abort();
         if (mHandle != 0) GhosttyNative.nativeReset(mHandle);
     }
 
@@ -497,6 +500,27 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (apc == null) return;
         if (mQueryAnswerer == null) mQueryAnswerer = new KittyGraphicsProtocol(null, mQueryReplies);
         mQueryAnswerer.accept(new String(apc, StandardCharsets.ISO_8859_1));
+    }
+
+    @Override
+    public void onSixel(int op, byte[] data) {
+        if (mSixel == null) mSixel = new GhosttySixel(null);
+        switch (op) {
+            case 0:
+                mSixel.begin();
+                break;
+            case 1:
+                if (data != null) mSixel.feed(data, data.length);
+                break;
+            default:
+                mSixel.abort();
+                break;
+        }
+    }
+
+    @Override
+    public int[] onSixelEnd(int cursorX, int columns, int cellW, int cellH, int[] meta) {
+        return mSixel == null ? null : mSixel.end(cursorX, columns, cellW, cellH, meta);
     }
 
     /** See {@link GhosttyNative#nativeKittyFrame}. */
