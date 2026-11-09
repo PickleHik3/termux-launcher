@@ -126,3 +126,20 @@ the developer judges the look from a contact sheet. Not before v1 lands.
 - **D. Pong:** power and heat for a light, a medium and a heavy shader at Half/30, one HEVC
   1080p30 clip and one GIF, against the 11-05 baseline (no scene 1.27 W, Aurora 1.2 W, Particles
   2.0 W); the crash guard and the context-loss revert exercised once on purpose.
+
+## Round 2 (2026-11-09, afternoon)
+Measured on pong with a 32 MB 800x1412 GIF as the wallpaper: the launcher held about 50-70% of one
+core (scene thread 42%, render thread 16%), GPU busy 13%, 462 MB PSS with a 289 MB native heap.
+Decided and built:
+- **GIFs convert to MP4 at import** (`GifToVideo`: ImageDecoder → MediaCodec through a hardware
+  canvas, one loop, H.264 or hardware HEVC, about 6 Mbps per 1080p) and play through the hardware
+  decoder; the CPU GIF path stays as the fallback and now uses a hardware canvas. Hint: "GIF
+  converted to video · 320×320 · 4 s · 73 KB · hardware decoded". Imported videos are not converted.
+- **The Video page shows progress**: Copying… (indeterminate) → Converting GIF to video… NN% →
+  Setting wallpaper… → the In use line; controls disabled meanwhile.
+- **Bundled examples**: Plasma, Aurora, Drift (the look's colours), Caustics, Starfield under an
+  Examples group on the Shader page; opening one and applying saves a user copy. Thumbnails and the
+  still use the look's colours (`ShaderLook`).
+- **Kind glyphs**: Codex-drawn photo/video/shader glyphs on the Photo | Video | Shader pills
+  (`ic_wallpaper_kind_*`, tinted like the label; the selected pill shows its glyph, not a check).
+Emulator-checked; pong checks owed in device-checks.md (conversion time and CPU with the 32 MB GIF).

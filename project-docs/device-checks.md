@@ -68,6 +68,25 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   `adb install -r` of the same APK turns it back on; `am force-stop` with a Ghostty pane open does
   not turn it off (API 30+).
 
+- **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
+  800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends
+  on its own; the hint reads "GIF converted to video · 800×1412 · 5 s · N MB · hardware decoded";
+  the stored file under files/wallpaper/video/ is an .mp4 and the GIF is gone; the MP4's size; the
+  launcher process CPU near idle (was about 50% of one core with the GIF; `dumpsys cpuinfo`); the
+  loop seam (end to start) has no hitch, flash or black frame; it is cover-cropped like a video.
+  A one-frame GIF stays a still. `debug.tl.video_file` on a .gif runs the same conversion.
+  Fallback (force a failure): the GIF still plays, its hint says "decodes on the CPU", and its
+  frames still update with the hardware canvas (a frozen frame means updateTexImage ran before the
+  render thread posted the buffer).
+
+- **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
+  shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
+  waited in `SurfaceSyncGroup` for the scene SurfaceView's first buffer, which came only after the EGL
+  setup and the shader compile or player prepare. The surface now posts one cleared buffer (the system
+  wallpaper's primary colour, else black) right after the EGL context exists. Emulator after the fix:
+  video 4/4 clean starts, shader 2/3 (the one ANR was a render-thread wait with the host at load 35).
+  On pong: ten cold starts each with a shader and a video stored (`am force-stop com.termux`, Home),
+  no ANR, the first visible frame is a flat colour at most for a blink, then the scene · pong.
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
   guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and
@@ -937,4 +956,22 @@ longer counted as an error. Owed:
   over Home; rest there first so Home's page (and the dock's, on its second page) turns, then let
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
-  Undo brings it back) and back on its own slot (nothing moves) · pong.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **The Workspace is Terminal, Display and Assistant pages (11-09, feat/workspace-family,
+  ADR 0025).** With an Assistant page and a Display page on the wall: the Assistant page wears
+  what a terminal page wears (status bar, extra keys, dock rows as set; the window bar without
+  window chips). Type in the composer with the soft keyboard up and with the in-app keyboard up:
+  the composer and its send button are never under the extra keys, the dock or a keyboard. Swipe
+  Terminal ↔ Assistant ↔ Display ten times: no chrome moves or redraws at landing. Swipe Home ↔
+  Assistant: the same crossing as Home ↔ Terminal. Open Appearance and Layout from a long-press on
+  the Assistant page's chrome: the title says "Workspace layout", the Where chip "Workspace
+  pages", and a change made there shows on the terminal and the Display page. Upgrade an install
+  that had its own Display layout: the Display page now wears the terminal's. Minimal mode on: the
+  Assistant page wears the minimal layout · emulator.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **Example shaders (11-09, feat/shader-examples).** Wallpaper picker, Shader kind: under your shaders an "Examples" heading and five tiles (Plasma, Aurora, Drift, Caustics, Starfield), none with an In use border, each with a moving thumbnail like the saved ones; with no saved shaders the heading is still there. At font scale 1.3 the heading and tile names stay on one line. Tap Aurora: the editor shows its name and code, Quality Half, Rate 30, the line "Example. Apply saves a copy you can edit.", and no Delete. Apply: the wallpaper moves, the list shows a saved "Aurora" tile with the border and the Aurora example is still under Examples. Open Aurora again and Apply: a second saved shader, "Aurora 2". Edit and delete the saved copy: the example is unchanged. Back out of an example without Apply: nothing new in the list. Look at each example running: Drift takes the look's colours and shifts a little with Home pages; Caustics brightens near a touch; Starfield is light with dark off and dark with it on; none drops frames at Half and 30 fps · emulator, then pong.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **Wallpaper kind pills carry glyphs (feat/kind-glyphs).** 2026-11-09 · Open the Wallpaper
+  picker: Photo, Video and Shader each show a glyph left of the label, in the label's colour
+  (checked and unchecked). Light, dark and the launcher's scheme theme; font scale 1.3: the three
+  segments still fit one line, no clipped label. Dock style and the editor's Quality and Frame
+  rate rows are still text-only (a check mark on the selected one, as before) · pong.
+
+- **Video import shows progress (feat/video-progress).** 2026-11-09 · Wallpaper picker, Video: choose an animated GIF. Under "Choose video or GIF" a bar appears with "Copying…", then fills with "Converting GIF to video… NN%" rising to 100; Choose, the rate pills and Back to photo are greyed meanwhile; then the bar goes and the line shows "In use: name" with its hint. Choose a plain MP4: a brief "Copying…", then the same final state. Pick a broken file: the bar goes and the error line shows, controls back. Rotate or leave mid-import: no crash; reopen later and the final state is shown. Font scale 1.3: the label stays on one line · pong.

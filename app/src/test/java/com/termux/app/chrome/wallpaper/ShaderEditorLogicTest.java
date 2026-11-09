@@ -70,4 +70,48 @@ public class ShaderEditorLogicTest {
         assertFalse(ShaderEditorLogic.showsTooHeavy(null));
         assertFalse(ShaderEditorLogic.showsTooHeavy("battery_saver"));
     }
+
+    @Test
+    public void anExampleAlwaysSavesACopy() {
+        assertTrue(ShaderEditorLogic.savesAsCopy(true, true));
+        assertTrue(ShaderEditorLogic.savesAsCopy(true, false));
+        assertTrue(ShaderEditorLogic.savesAsCopy(false, true));
+        assertFalse("a saved shader updates in place", ShaderEditorLogic.savesAsCopy(false, false));
+    }
+
+    @Test
+    public void uniqueName_keepsAFreeNameAndNumbersATakenOne() {
+        assertEquals("Plasma", ShaderEditorLogic.uniqueName("Plasma", Arrays.asList("Aurora")));
+        assertEquals("Plasma 2", ShaderEditorLogic.uniqueName("Plasma", Arrays.asList("plasma")));
+        assertEquals("Plasma 3",
+            ShaderEditorLogic.uniqueName("Plasma", Arrays.asList("Plasma", "Plasma 2")));
+    }
+
+    @Test
+    public void uniqueName_staysWithinTheNameLimit() {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < ShaderEditorLogic.MAX_NAME; i++) b.append('a');
+        String full = b.toString();
+        String got = ShaderEditorLogic.uniqueName(full, Arrays.asList(full));
+        assertTrue(got.length() <= ShaderEditorLogic.MAX_NAME);
+        assertTrue(got.endsWith(" 2"));
+    }
+
+    @Test
+    public void listOrder_isUserShadersThenTheExamplesHeadingAndExamples() {
+        List<ShaderEditorLogic.Slot> s = ShaderEditorLogic.listOrder(2, 3);
+        assertEquals(6, s.size());
+        assertEquals(ShaderEditorLogic.Slot.USER, s.get(0).kind);
+        assertEquals(1, s.get(1).index);
+        assertEquals(ShaderEditorLogic.Slot.EXAMPLES_HEADING, s.get(2).kind);
+        assertEquals(ShaderEditorLogic.Slot.EXAMPLE, s.get(3).kind);
+        assertEquals(2, s.get(5).index);
+    }
+
+    @Test
+    public void listOrder_hasNoHeadingWithoutExamples() {
+        assertEquals(2, ShaderEditorLogic.listOrder(2, 0).size());
+        assertEquals(0, ShaderEditorLogic.listOrder(0, 0).size());
+        assertEquals(ShaderEditorLogic.Slot.EXAMPLES_HEADING, ShaderEditorLogic.listOrder(0, 1).get(0).kind);
+    }
 }

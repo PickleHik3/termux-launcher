@@ -2,6 +2,7 @@ package com.termux.app.chrome.wallpaper;
 
 import android.content.Context;
 import android.view.LayoutInflater;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -11,6 +12,7 @@ import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 import com.termux.app.chrome.scene.WallpaperMotion;
 
@@ -38,7 +40,9 @@ public final class VideoPage {
     private final MaterialButtonToggleGroup mRate;
     private final MaterialButton mChoose;
     private final MaterialButton mBack;
-    private final View mProgress;
+    private final LinearProgressIndicator mProgress;
+    private final TextView mProgressLabel;
+    private final VideoProgressLogic mLogic = new VideoProgressLogic();
     private boolean mBinding;
 
     public VideoPage(@NonNull Context context, @NonNull Actions actions) {
@@ -48,6 +52,7 @@ public final class VideoPage {
         mChoose = mRoot.findViewById(R.id.video_choose);
         mBack = mRoot.findViewById(R.id.video_back_to_photo);
         mProgress = mRoot.findViewById(R.id.video_progress);
+        mProgressLabel = mRoot.findViewById(R.id.video_progress_label);
 
         View rateRow = mRoot.findViewById(R.id.video_knob_rate);
         ((TextView) rateRow.findViewById(android.R.id.title)).setText(R.string.live_knob_frame_rate);
@@ -105,11 +110,53 @@ public final class VideoPage {
         mBack.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
-    /** Working: the buttons wait and the bar shows. */
+    /** The host is setting the wallpaper: the buttons wait and the bar shows "Setting wallpaper…". */
     public void setBusy(boolean busy) {
-        mProgress.setVisibility(busy ? View.VISIBLE : View.INVISIBLE);
+        if (busy) mLogic.startApplying();
+        else mLogic.finish(true);
+        render();
+    }
+
+    /** An import began: indeterminate "Copying…" until the first progress arrives. */
+    public void startImport() {
+        mLogic.start();
+        render();
+    }
+
+    /** A conversion fraction (0 to 1) from the import; main thread. */
+    public void onImportProgress(float fraction) {
+        if (mLogic.onProgress(fraction, SystemClock.uptimeMillis())) render();
+    }
+
+    /** The import ended; the host then sets the hint. */
+    public void endImport() {
+        mLogic.finish(true);
+        render();
+    }
+
+    private void render() {
+        boolean busy = mLogic.busy();
+        mProgress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        mProgressLabel.setVisibility(busy ? View.VISIBLE : View.GONE);
+        if (busy) {
+            if (mLogic.indeterminate()) {
+                mProgress.setIndeterminate(true);
+            } else {
+                if (mProgress.isIndeterminate()) {
+                    mProgress.setVisibility(View.INVISIBLE);
+                    mProgress.setIndeterminate(false);
+                    mProgress.setVisibility(View.VISIBLE);
+                }
+                mProgress.setProgressCompat(mLogic.percent(), false);
+            }
+            mProgressLabel.setText(mLogic.label(mRoot.getContext().getString(R.string.video_copying),
+                mRoot.getContext().getString(R.string.video_converting),
+                mRoot.getContext().getString(R.string.video_applying)));
+        }
         mChoose.setEnabled(!busy);
         mBack.setEnabled(!busy);
+        mRate.setEnabled(!busy);
+        for (int i = 0; i < mRate.getChildCount(); i++) mRate.getChildAt(i).setEnabled(!busy);
     }
 
     // --- tests ---

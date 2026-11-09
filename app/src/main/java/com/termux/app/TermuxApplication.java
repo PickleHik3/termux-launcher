@@ -78,6 +78,7 @@ public class TermuxApplication extends Application {
             return;
         }
         Context context = getApplicationContext();
+        com.termux.app.terminal.io.ExtraKeyActionLabels.registerIcons();
         // Set crash handler for the app
         TermuxCrashUtils.setDefaultCrashHandler(this);
         // Set log config for the app

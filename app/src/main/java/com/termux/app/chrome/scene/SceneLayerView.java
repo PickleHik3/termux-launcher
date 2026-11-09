@@ -699,16 +699,35 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
         // ---- GL lifecycle ---------------------------------------------------------------------
 
-        /** Makes the context, the window surface and the program; false (and a revert) when it cannot. */
+        /**
+         * Makes the context, the window surface and the program; false (and a revert) when it cannot.
+         *
+         * <p>Order matters for the window's first frame: the first layout's sync waits for this
+         * surface's first buffer, so the window surface is made and one cleared buffer swapped
+         * ({@link #postFirstBuffer}) right after the EGL context exists, before the pipeline, the
+         * shader compile or the video prepare, which take seconds on a CPU-rendered GL. The real
+         * first frame still draws as soon as the program exists ({@code mSurfaceBlank}).</p>
+         */
         private boolean bringUpGl() {
+            boolean fresh = false;
             if (mGl == null) {
+                SceneEgl egl;
                 try {
-                    mGl = new SceneGl();
+                    egl = new SceneEgl();
                 } catch (SceneEgl.EglException e) {
                     Log.e(TAG, "no OpenGL ES 3 context: " + e.getMessage());
                     giveUp(REVERT_NO_GLES3);
                     return false;
                 }
+                mWindow = makeWindow(egl);
+                if (mWindow != null) postFirstBuffer(egl, mWindow);
+                mGl = new SceneGl(egl);
+                fresh = true;
+            } else if (mWindow == null) {
+                mWindow = makeWindow(mGl.egl);
+                if (mWindow != null) postFirstBuffer(mGl.egl, mWindow);
+            }
+            if (fresh) {
                 mSeenLookGen = -1;
                 if (mSpec.video != null) {
                     loadVideo();
@@ -718,12 +737,52 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 }
                 mChannelsPaused = false;
             }
-            android.view.Surface surface = mSurfaceObj;
-            if (mWindow == null && surface != null && surface.isValid()) {
-                mWindow = mGl.egl.windowSurface(surface);
-                if (mWindow == null) Log.w(TAG, "EGL refused the scene surface");
-            }
             return mWindow != null;
+        }
+
+        @Nullable
+        private EGLSurface makeWindow(@NonNull SceneEgl egl) {
+            android.view.Surface surface = mSurfaceObj;
+            if (surface == null || !surface.isValid()) return null;
+            EGLSurface window = egl.windowSurface(surface);
+            if (window == null) Log.w(TAG, "EGL refused the scene surface");
+            return window;
+        }
+
+        /**
+         * One cleared buffer on the new window surface, so the window's sync never waits on the slow
+         * work after it. The colour is the system wallpaper's primary colour: before this the layer
+         * showed nothing and the window's hole showed that wallpaper (the still, in home-app mode),
+         * and the surface is opaque, so a transparent clear would read as black. Black when the
+         * colours are not known.
+         */
+        private void postFirstBuffer(@NonNull SceneEgl egl, @NonNull EGLSurface window) {
+            Trace.beginSection("Scene.firstBuffer");
+            try {
+                if (!egl.makeCurrent(window)) return;
+                int argb = SceneFirstBuffer.colour(wallpaperPrimary());
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+                GLES20.glClearColor(((argb >> 16) & 0xff) / 255f, ((argb >> 8) & 0xff) / 255f,
+                    (argb & 0xff) / 255f, 1f);
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                egl.swap(window);
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        /** The system wallpaper's primary colour (ARGB), or null; a cached system value, read once per surface. */
+        @Nullable
+        private Integer wallpaperPrimary() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null;
+            try {
+                android.app.WallpaperManager wm = android.app.WallpaperManager.getInstance(mAppContext);
+                android.app.WallpaperColors colors = wm == null ? null
+                    : wm.getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM);
+                return colors == null ? null : colors.getPrimaryColor().toArgb();
+            } catch (RuntimeException e) {
+                return null;
+            }
         }
 
         private void startWatching() {

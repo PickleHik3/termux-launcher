@@ -12,6 +12,7 @@ import androidx.annotation.WorkerThread;
 
 import com.termux.app.chrome.ManagedWallpaper;
 import com.termux.app.chrome.scene.SceneStill;
+import com.termux.app.chrome.scene.ShaderLook;
 import com.termux.app.chrome.scene.ShaderStore;
 import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.logger.Logger;
@@ -70,6 +71,8 @@ public final class LiveWallpaperApplier {
     public static void useMotion(@NonNull Context ctx, @NonNull WallpaperMotion motion,
                                 boolean launcherIsHomeApp, boolean alsoPhone, @Nullable Callback cb) {
         final Context app = ctx.getApplicationContext();
+        // Resolved here, where the caller's (activity) theme is at hand; the application context lacks the roles.
+        final ShaderLook look = ShaderLook.resolve(ctx);
         final TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
         if (prefs == null || !motion.moves()) {
             post(cb, Result.FAILED);
@@ -81,19 +84,19 @@ public final class LiveWallpaperApplier {
             post(cb, Result.IN_APP_ONLY);
             return;
         }
-        GeneratedWallpaperApplier.onWorker(() -> post(cb, setStill(app, prefs, motion)));
+        GeneratedWallpaperApplier.onWorker(() -> post(cb, setStill(app, prefs, motion, look)));
     }
 
     @WorkerThread
     @NonNull
     private static Result setStill(@NonNull Context app, @NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull WallpaperMotion motion) {
+                                   @NonNull WallpaperMotion motion, @NonNull ShaderLook look) {
         try {
             int[] size = ManagedWallpaper.portraitSize(app);
             int[] still = LiveSceneLogic.stillSize(size[0], size[1]);
             Bitmap bitmap;
             try {
-                bitmap = SceneStill.renderActive(app, still[0], still[1]);
+                bitmap = SceneStill.renderActive(app, still[0], still[1], look);
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Drawing the scene still failed", e);
                 return Result.STILL_FAILED;

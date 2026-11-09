@@ -45,10 +45,13 @@ public final class ShaderEditorPage {
         /** The texture the shader was saved with, to remove when it changed. */
         @Nullable public final String savedTexture;
         public final boolean isNew;
+        /** Opened from a bundled example: Apply saves a copy under {@link #id}, a fresh one. */
+        public final boolean isExample;
 
         Draft(@NonNull String id, @NonNull String name, @NonNull String source,
               @NonNull ShaderSafety.Quality quality, int rateHz, @Nullable String texture,
-              @Nullable String savedTexture, boolean isNew) {
+              @Nullable String savedTexture, boolean isNew, boolean isExample) {
+            this.isExample = isExample;
             this.id = id;
             this.name = name;
             this.source = source;
@@ -57,6 +60,12 @@ public final class ShaderEditorPage {
             this.texture = texture;
             this.savedTexture = savedTexture;
             this.isNew = isNew;
+        }
+
+        /** The same draft under another name. */
+        @NonNull
+        Draft withName(@NonNull String other) {
+            return new Draft(id, other, source, quality, rateHz, texture, savedTexture, isNew, isExample);
         }
     }
 
@@ -88,6 +97,7 @@ public final class ShaderEditorPage {
     private final TextInputEditText mCode;
     private final TextView mErrors;
     private final TextView mTooHeavy;
+    private final TextView mDescription;
     private final MaterialButtonToggleGroup mQuality;
     private final MaterialButtonToggleGroup mRate;
     private final TextView mTextureLabel;
@@ -104,6 +114,8 @@ public final class ShaderEditorPage {
 
     @NonNull private String mId = "";
     private boolean mIsNew = true;
+    /** The open text is a bundled example: nothing of it is saved until Apply, as a copy. */
+    private boolean mIsExample;
     @NonNull private ShaderSafety.Quality mQualityValue = ShaderSafety.Quality.HALF;
     private int mRateValue = 30;
     @Nullable private String mTexture;
@@ -125,6 +137,7 @@ public final class ShaderEditorPage {
         mTextureChoose = mRoot.findViewById(R.id.shader_texture_choose);
         mAlsoRow = mRoot.findViewById(R.id.live_also_row);
         mAlso = mRoot.findViewById(R.id.live_also_switch);
+        mDescription = mRoot.findViewById(R.id.shader_description);
         mProgress = mRoot.findViewById(R.id.shader_progress);
         mApply = mRoot.findViewById(R.id.shader_apply);
         mBack = mRoot.findViewById(R.id.live_back_to_photo);
@@ -211,17 +224,33 @@ public final class ShaderEditorPage {
      */
     public void show(@Nullable String id, @Nullable ShaderStore.Meta meta, @Nullable String source,
                      boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
+        show(id, meta, source, false, motionInUse, alsoPhone, heldReason);
+    }
+
+    /**
+     * Opens a bundled example: its name, text and knobs, as a new shader (a fresh id) that is
+     * read-only until Apply saves it as a copy. No Delete, and the note says so.
+     */
+    public void showExample(@NonNull ShaderStore.Meta meta, @NonNull String source,
+                            boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
+        show(null, meta, source, true, motionInUse, alsoPhone, heldReason);
+    }
+
+    private void show(@Nullable String id, @Nullable ShaderStore.Meta meta, @Nullable String source,
+                      boolean example, boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
         mBinding = true;
         try {
             mIsNew = id == null;
+            mIsExample = example;
             mId = id == null ? ShaderStore.newId() : id;
-            ShaderStore.Meta m = meta == null || mIsNew
+            ShaderStore.Meta m = meta == null || (mIsNew && !example)
                 ? ShaderStore.Meta.defaults(mContext.getString(R.string.shader_default_name)) : meta;
-            mName.setText(mIsNew ? "" : m.name);
-            mCode.setText(mIsNew || source == null ? "" : source);
+            mName.setText(mIsNew && !example ? "" : m.name);
+            mCode.setText((mIsNew && !example) || source == null ? "" : source);
+            mDescription.setText(example ? R.string.shader_example_note : R.string.shader_description);
             mQualityValue = m.quality;
             mRateValue = m.rateHz;
-            mTexture = m.texture;
+            mTexture = example ? null : m.texture;
             mSavedTexture = mIsNew ? null : m.texture;
             checkByTag(mQuality, mQualityValue);
             checkByTag(mRate, Integer.valueOf(mRateValue));
@@ -252,7 +281,8 @@ public final class ShaderEditorPage {
     @NonNull
     public Draft draft() {
         String name = ShaderEditorLogic.nameOrDefault(textOf(mName), mContext.getString(R.string.shader_default_name));
-        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mIsNew);
+        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mIsNew,
+            mIsExample);
     }
 
     @NonNull

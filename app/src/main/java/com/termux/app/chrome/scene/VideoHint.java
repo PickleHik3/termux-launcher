@@ -26,6 +26,13 @@ public final class VideoHint {
         public long sizeBytes;
         /** True when a hardware decoder exists for the mime, false when only software ones do, null when unknown. */
         @Nullable public Boolean hardware;
+        /** True for a GIF that was converted to a video: described as a video of the GIF. */
+        public boolean convertedFromGif;
+    }
+
+    /** A GIF with more than one frame moves; a single frame stays a still. */
+    public static boolean isAnimated(int frames) {
+        return frames > 1;
     }
 
     /** The hint, parts joined with a middle dot; fields that are missing are left out. */
@@ -33,6 +40,16 @@ public final class VideoHint {
     public static String describe(@NonNull Fields f) {
         boolean gif = "image/gif".equals(f.mime);
         StringBuilder out = new StringBuilder();
+        if (f.convertedFromGif) {
+            append(out, "GIF converted to video");
+            if (f.width > 0 && f.height > 0) append(out, f.width + "×" + f.height);
+            if (f.durationMs > 0L) append(out, duration(f.durationMs));
+            if (f.sizeBytes > 0L) append(out, size(f.sizeBytes));
+            if (f.hardware != null) {
+                append(out, f.hardware ? "hardware decoded" : "software decoded on this phone, expect more battery");
+            }
+            return out.toString();
+        }
         append(out, codecName(f.mime));
         if (f.width > 0 && f.height > 0) append(out, f.width + "×" + f.height);
         if (!gif && f.frameRate > 0f) append(out, rate(f.frameRate) + " fps");
@@ -108,11 +125,14 @@ public final class VideoHint {
     public static final class GifInfo {
         public final int width, height;
         public final long durationMs;
+        /** Image frames counted in the file. */
+        public final int frames;
 
-        GifInfo(int width, int height, long durationMs) {
+        GifInfo(int width, int height, long durationMs, int frames) {
             this.width = width;
             this.height = height;
             this.durationMs = durationMs;
+            this.frames = frames;
         }
 
         /** Null when the stream is not a GIF. A truncated file gives what was read so far. */
@@ -127,6 +147,7 @@ public final class VideoHint {
             if ((flags & 0x80) != 0) skipFully(in, 3L * (1 << ((flags & 7) + 1)));
             long delayCs = 0;
             int pendingDelay = 0;
+            int frames = 0;
             while (true) {
                 int block = in.read();
                 if (block < 0 || block == 0x3b) break;
@@ -151,11 +172,12 @@ public final class VideoHint {
                     // A delay under 2 cs plays as 10 cs, as browsers and the platform decoder do.
                     delayCs += pendingDelay < 2 ? 10 : pendingDelay;
                     pendingDelay = 0;
+                    frames++;
                 } else {
                     break;
                 }
             }
-            return new GifInfo(w, h, delayCs * 10L);
+            return new GifInfo(w, h, delayCs * 10L, frames);
         }
 
         private static boolean skipSubBlocks(@NonNull InputStream in) throws IOException {

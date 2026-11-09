@@ -8,7 +8,8 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Every layout at one moment (ADR 0020 §5): the four kind documents and the shared sizes. Read
+ * Every layout at one moment (ADR 0020 §5): the kind documents and the shared sizes. A retired
+ * kind (ADR 0025) reads and writes the Workspace's document. Read
  * once from the {@code layouts} file and never changed in place, so no reader holds a
  * half-written layout; a reader takes {@link LayoutStore#current()} per pass.
  */
@@ -32,9 +33,10 @@ public final class Layouts {
         return new Layouts(new EnumMap<>(LayoutKind.class), Sizes.EMPTY);
     }
 
+    /** {@code kind}'s document; a retired kind's is the Workspace's (ADR 0025). */
     @NonNull
     public KindLayout kind(@NonNull LayoutKind kind) {
-        return mKinds.get(kind);
+        return mKinds.get(kind.live());
     }
 
     /** What a page of {@code kind} wears, minimal mode being {@code minimal}. */
@@ -50,9 +52,10 @@ public final class Layouts {
 
     @NonNull
     public Layouts withKind(@NonNull LayoutKind kind, @NonNull KindLayout layout) {
-        if (layout.equals(mKinds.get(kind))) return this;
+        LayoutKind live = kind.live();
+        if (layout.equals(mKinds.get(live))) return this;
         EnumMap<LayoutKind, KindLayout> copy = new EnumMap<>(mKinds);
-        copy.put(kind, layout);
+        copy.put(live, layout);
         return new Layouts(copy, mSizes);
     }
 

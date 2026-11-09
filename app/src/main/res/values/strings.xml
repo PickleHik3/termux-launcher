@@ -2380,6 +2380,7 @@
     <string name="tool_wall_widgets">Go to Home</string>
     <string name="tool_wall_terminal">Go to Terminal</string>
     <string name="tool_wall_display">Go to Display</string>
+    <string name="tool_wall_assistant">Go to Assistant</string>
     <string name="tool_wall_go">Go to place</string>
     <string name="tool_mouse_toggle">Mouse mode</string>
     <!-- The size in cells a pane drag will give its panes (ADR 0019): a divider's two panes, top/left first; a floating pane. -->
@@ -2479,6 +2480,7 @@
     <string name="tool_desc_wall_widgets">Show the Home pages.</string>
     <string name="tool_desc_wall_terminal">Show the terminal.</string>
     <string name="tool_desc_wall_display">Show the Linux display.</string>
+    <string name="tool_desc_wall_assistant">Show the Assistant page, adding it when the wall has none.</string>
     <string name="tool_desc_wall_go">Show a chosen place, or the one to the left or right.</string>
     <string name="tool_desc_mouse_toggle">Touches become mouse clicks in the terminal, and a touchpad takes the keyboard\'s place on the display.</string>
     <string name="tool_desc_pane_next_layout">Cycle this window to the next automatic pane layout and keep it applied as panes are added or closed.</string>
@@ -2938,6 +2940,7 @@
     <string name="help_key_widgets">Home</string>
     <string name="help_key_terminal">Terminal</string>
     <string name="help_key_display">Display</string>
+    <string name="help_key_assistant">Assistant</string>
     <string name="help_key_split">Split</string>
     <string name="help_key_window">new window</string>
     <string name="help_key_sessions">Sessions</string>

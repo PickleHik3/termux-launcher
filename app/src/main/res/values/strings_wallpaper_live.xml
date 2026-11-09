@@ -8,6 +8,8 @@
     <string name="wallpaper_kind_label">Wallpaper kind</string>
 
     <string name="shader_list_heading">Shaders</string>
+    <string name="shader_examples_heading">Examples</string>
+    <string name="shader_example_note">Example. Apply saves a copy you can edit.</string>
     <string name="shader_new">New shader</string>
     <string name="shader_default_name">Shader</string>
     <string name="live_in_use">In use</string>
@@ -42,6 +44,9 @@
     <string name="video_format_hint">Best: an H.265 MP4 at the screen\'s size or smaller, 24–30 fps, a 5–15 s seamless loop, under 20 MB. H.264 also works. GIFs decode on the CPU and use more battery.</string>
     <string name="video_choose">Choose video or GIF</string>
     <string name="video_in_use">In use: %1$s</string>
+    <string name="video_copying">Copying…</string>
+    <string name="video_converting">Converting GIF to video… %1$d%%</string>
+    <string name="video_applying">Setting wallpaper…</string>
     <string name="video_failed">Could not use that file.</string>
 
     <string name="live_knob_frame_rate">Frame rate</string>

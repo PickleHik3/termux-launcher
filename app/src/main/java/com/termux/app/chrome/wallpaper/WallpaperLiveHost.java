@@ -29,6 +29,7 @@ import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.scene.LiveWallpaperChoice;
 import com.termux.app.chrome.scene.ShaderCheck;
 import com.termux.app.chrome.scene.ShaderErrors;
+import com.termux.app.chrome.scene.ShaderExamples;
 import com.termux.app.chrome.scene.ShaderStore;
 import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.shared.logger.Logger;
@@ -89,6 +90,20 @@ public final class WallpaperLiveHost {
 
         @NonNull
         Result importFile(@NonNull Context context, @NonNull Uri uri);
+
+        /**
+         * The same, reporting a GIF's conversion as a fraction above 0 up to 1, from the calling
+         * (import) thread. Sources without progress keep the plain import.
+         */
+        @NonNull
+        default Result importFile(@NonNull Context context, @NonNull Uri uri, @NonNull Progress progress) {
+            return importFile(context, uri);
+        }
+
+        /** Conversion progress. */
+        interface Progress {
+            void onProgress(float fraction);
+        }
 
         /** How an import ended. */
         final class Result {
@@ -163,6 +178,10 @@ public final class WallpaperLiveHost {
             mList = new ShaderListPage(context, new ShaderListPage.Listener() {
                 @Override public void onOpen(@NonNull String id) {
                     openShader(id);
+                }
+
+                @Override public void onOpenExample(@NonNull String slug) {
+                    openExample(slug);
                 }
 
                 @Override public void onNew() {
@@ -308,6 +327,13 @@ public final class WallpaperLiveHost {
         photo.setText(R.string.wallpaper_kind_photo);
         video.setText(R.string.wallpaper_kind_video);
         shader.setText(R.string.wallpaper_kind_shader);
+        // The segment style already tints icons with the same selector as the label, so the
+        // glyphs follow checked / unchecked and the theme. 18dp + 4dp is the style's own size:
+        // at font scale 1.3 "Shader" (about 57dp) plus 24dp padding fits a ~110dp segment.
+        float density = context.getResources().getDisplayMetrics().density;
+        setKindGlyph(photo, R.drawable.ic_wallpaper_kind_photo, density);
+        setKindGlyph(video, R.drawable.ic_wallpaper_kind_video, density);
+        setKindGlyph(shader, R.drawable.ic_wallpaper_kind_shader, density);
         shader.setVisibility(View.VISIBLE);
         ((ViewGroup.MarginLayoutParams) group.getLayoutParams()).topMargin = 0;
         group.setContentDescription(context.getString(R.string.wallpaper_kind_label));
@@ -320,6 +346,15 @@ public final class WallpaperLiveHost {
                 : checkedId == videoId ? LiveSceneLogic.Kind.VIDEO : LiveSceneLogic.Kind.SHADER);
         });
         return row;
+    }
+
+    private static void setKindGlyph(@NonNull MaterialButton button, int drawableRes, float density) {
+        button.setIconResource(drawableRes);
+        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        button.setIconSize(Math.round(18 * density));
+        button.setIconPadding(Math.round(4 * density));
+        button.setSingleLine(true);
+        button.setEllipsize(android.text.TextUtils.TruncateAt.END);
     }
 
     /**
@@ -453,6 +488,18 @@ public final class WallpaperLiveHost {
         goTo(Page.EDITOR, true);
     }
 
+    /** A bundled example in the editor; nothing is saved until Apply, which saves a copy. */
+    private void openExample(@NonNull String slug) {
+        if (mList == null || mEditor == null || mReleased) return;
+        ShaderExamples.Example example = ShaderExamples.find(mContext, slug);
+        if (example == null || example.source == null) return;
+        mEditor.showExample(example.meta(), example.source, LiveSceneLogic.showsBackToPhoto(readStored()),
+            mPicker.alsoPhone().isChecked(), heldReason());
+        mEditorSaved = false;
+        mListScrollY = mList.scrollY();
+        goTo(Page.EDITOR, true);
+    }
+
     /** The editor goes without applying: a new shader's folder, or a texture picked and not saved, is dropped. */
     private void discardEditor() {
         if (mEditor == null || mEditorSaved) return;
@@ -491,7 +538,11 @@ public final class WallpaperLiveHost {
                 });
                 return;
             }
-            boolean saved = saveShader(app, draft);
+            // An example is never edited in place: Apply saves a copy (draft.id is a fresh id),
+            // its name made different from every saved shader's.
+            final ShaderEditorPage.Draft toSave = ShaderEditorLogic.savesAsCopy(draft.isExample, draft.isNew)
+                && draft.isExample ? withUniqueName(app, draft) : draft;
+            boolean saved = saveShader(app, toSave);
             mRoot.post(() -> {
                 if (mReleased || mEditor == null) return;
                 if (!saved) {
@@ -504,6 +555,14 @@ public final class WallpaperLiveHost {
                 useMotion(WallpaperMotion.shader(draft.id));
             });
         });
+    }
+
+    @NonNull
+    private static ShaderEditorPage.Draft withUniqueName(@NonNull Context app, @NonNull ShaderEditorPage.Draft d) {
+        List<String> names = new java.util.ArrayList<>();
+        for (ShaderStore.Entry e : ShaderStore.list(app)) names.add(e.name);
+        String unique = ShaderEditorLogic.uniqueName(d.name, names);
+        return unique.equals(d.name) ? d : d.withName(unique);
     }
 
     private static boolean saveShader(@NonNull Context app, @NonNull ShaderEditorPage.Draft d) {
@@ -689,14 +748,16 @@ public final class WallpaperLiveHost {
 
     private void onVideoPicked(@Nullable Uri uri) {
         if (uri == null || mReleased || mVideo == null) return;
-        mVideo.setBusy(true);
+        mVideo.startImport();
         mVideo.setHint(null);
         final Context app = mContext.getApplicationContext();
         final VideoSource source = mVideoSource;
         IO.execute(() -> {
             VideoSource.Result result;
             try {
-                result = source.importFile(app, uri);
+                result = source.importFile(app, uri, fraction -> mRoot.post(() -> {
+                    if (!mReleased && mVideo != null) mVideo.onImportProgress(fraction);
+                }));
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Importing the video failed", e);
                 result = new VideoSource.Result(false, null, null, null);
@@ -705,12 +766,13 @@ public final class WallpaperLiveHost {
             mRoot.post(() -> {
                 if (mReleased || mVideo == null) return;
                 if (!done.ok || done.name == null) {
-                    mVideo.setBusy(false);
+                    mVideo.endImport();
                     mVideo.setHint(done.error != null ? done.error : mContext.getString(R.string.video_failed));
                     return;
                 }
                 SharedPreferences prefs = prefs();
                 if (prefs != null) prefs.edit().putString(KEY_VIDEO_HINT, done.hint == null ? "" : done.hint).apply();
+                mVideo.endImport();
                 mVideo.setHint(videoStatus(done.name, done.hint));
                 useMotion(WallpaperMotion.video(done.name));
             });

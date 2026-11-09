@@ -25,7 +25,10 @@ public final class LayoutOverride {
 
     private LayoutOverride() {}
 
-    /** The two page kinds a Customization write lands on; the Workspace is Terminal and Display. */
+    /**
+     * The two sides a Customization write lands on; the Workspace is Terminal, Display and
+     * Assistant pages, which wear one layout (ADR 0025).
+     */
     public enum Side { HOME, WORKSPACE }
 
     /** What the switch shows, and the summary under the element's name. */
@@ -84,15 +87,12 @@ public final class LayoutOverride {
         return new Decision(true, moving.iterator().next(), moving);
     }
 
-    /** The layouts a write to {@code sides} lands on: Home's, the Workspace's normal and Display. */
+    /** The layouts a write to {@code sides} lands on: Home's, and the Workspace's normal one. */
     @NonNull
     public static List<LayoutVariant> variantsOf(@NonNull Set<Side> sides) {
-        List<LayoutVariant> out = new ArrayList<>(3);
+        List<LayoutVariant> out = new ArrayList<>(2);
         if (sides.contains(Side.HOME)) out.add(LayoutVariant.HOME);
-        if (sides.contains(Side.WORKSPACE)) {
-            out.add(LayoutVariant.NORMAL);
-            out.add(LayoutVariant.DISPLAY);
-        }
+        if (sides.contains(Side.WORKSPACE)) out.add(LayoutVariant.NORMAL);
         return out;
     }
 }

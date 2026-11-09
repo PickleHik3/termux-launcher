@@ -112,6 +112,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WALL_WIDGETS, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_TERMINAL, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_DISPLAY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_WALL_ASSISTANT, Band.LAUNCHER);
         // The keyboard is the launcher's, not the terminal's: a widget's own text field needs one
         // as much as a shell does.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, Band.LAUNCHER);
@@ -242,7 +243,8 @@ public final class ExtraKeyEligibility {
         if (!isUsable(keyValue, place)) return false;
         if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
         PaneWallPage target = placeSwitchTarget(keyValue);
-        return target == null || pages.contains(target);
+        // The Assistant key stays live with no page: it adds the page (AssistantEntry).
+        return target == null || target == PaneWallPage.ASSISTANT || pages.contains(target);
     }
 
     /**
@@ -313,6 +315,7 @@ public final class ExtraKeyEligibility {
             case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PaneWallPage.ASSISTANT;
             case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
             default: return null;
         }
