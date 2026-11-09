@@ -1,5 +1,10 @@
 # libghostty-vt core, wave 3: one content interface, no history copy (2026-11-09)
 
+Status (2026-11-09): delivered. Slices 0–6 and 8 are built and merged into `v2-redesign`; slice 7
+(parsing off the UI thread) was not built, since the measurements did not call for it. The engine
+is the user setting Settings › Terminal › Clipboard & compatibility › Terminal engine, and drops are
+built with `-Pghostty=true`. Pong results: `project-docs/device-checks.md`.
+
 Decision: ADR 0026. Research: `project-docs/reference/terminal/libghostty-vt-research-2026-11-07.md`
 and `gpu-text-rendering-android-research-2026-11-09.md` (main checkout, untracked). Ghostty headers
 and guides at `vt-1.0.0`: `include/ghostty/vt/*.h`, `dist/doxygen/pages/guides/*.md`.

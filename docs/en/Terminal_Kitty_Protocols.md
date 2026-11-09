@@ -395,7 +395,7 @@ Drawing is shared, so screens that redraw everything cost the same on both; Fast
 programs print a lot.
 
 The choice applies to panes you open after changing it; open panes keep their engine. Drawing,
-fonts, links, copy, prompt jumps, kitty images and keyboard are the same on both. Where Fast differs:
+fonts, links, copy, prompt jumps, kitty images, sixel and keyboard are the same on both. Where Fast differs:
 
 - Emoji follow Ghostty's widths: an emoji with VS16 (❤️) and a flag take two cells, and programs can
   see this through mode 2027.

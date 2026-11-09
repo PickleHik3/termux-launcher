@@ -82,7 +82,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   taller than the pane scrolls the pane as on Java; one started at the right edge is cut at the
   edge. `printf '\e[c'` answers `?62;4;22c` on Ghostty (Java keeps its longer list). Also a
   `chafa -f kitty` image still draws and a kitty query still gets its answer (the DCS watch sits
-  beside the APC one) · pong.
+  beside the APC one) · pong. **Done on pong 11-09 (dcd2a8331):** `img2sixel` and `chafa -f sixel`
+  at the top and at the bottom of a pane match the Java core (placement, cursor row and column,
+  scroll); `kitten icat` still draws. **Still owed:** a sixel taller than the pane, one at the right
+  edge, `clear` and `\e[2J` with a sixel on screen, DA1 on the device.
 
 - **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
   800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends
