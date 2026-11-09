@@ -747,7 +747,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             handler.postDelayed(mWatch, WATCH_MS);
         }
 
-                /** The passthrough program with the video file as channel 0; a program that will not build goes back to photo. */
+        /** The passthrough program with the video file as channel 0; a program that will not build goes back to photo. */
         private void loadVideo() {
             SceneGl gl = mGl;
             File file = mSpec.video;
