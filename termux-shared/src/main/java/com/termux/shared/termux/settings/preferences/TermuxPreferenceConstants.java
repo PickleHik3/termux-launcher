@@ -1941,7 +1941,17 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
 
         /**
-         * The live wallpaper scene the launcher draws behind everything: {@code aurora},
+         * What moves behind the launcher: {@code ""} (a photo), {@code shader:<id>} (a shader under
+         * {@code files/wallpaper/shaders/<id>/}) or {@code video:<name>} (a file under
+         * {@code files/wallpaper/video/}). See {@code WallpaperMotion}.
+         */
+        public static final String KEY_WALLPAPER_MOTION = "wallpaper_motion";
+        public static final String DEFAULT_VALUE_WALLPAPER_MOTION = "";
+
+        /**
+         * Retired with the AGSL scenes: read once at start by {@code WallpaperMotion.Migration},
+         * which clears it and the four keys below.
+         * The live wallpaper scene the launcher drew behind everything: {@code aurora},
          * {@code contour-waves}, {@code nebula}, {@code bloom}, {@code particles} or {@code coastal-sunset}; empty is none.
          * An unknown value reads as none (see {@code LiveWallpaperChoice}).
          */
