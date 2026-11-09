@@ -782,6 +782,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
 
         /**
+         * Engine for panes opened from now on: standard or ghostty. Standard for every install, new
+         * and existing, so nothing is adopted or migrated.
+         */
+        public static final String KEY_TERMINAL_ENGINE = "terminal_engine";
+        public static final String DEFAULT_TERMINAL_ENGINE = "standard";
+
+        /**
          * Whether CRT panes play their short screen events (bell tear, power on, focus wobble,
          * death static). Default true.
          */

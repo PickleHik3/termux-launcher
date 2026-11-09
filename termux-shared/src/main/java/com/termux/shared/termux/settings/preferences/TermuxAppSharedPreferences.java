@@ -1270,6 +1270,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE, value, false);
     }
 
+    public String getTerminalEngine() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_ENGINE, TERMUX_APP.DEFAULT_TERMINAL_ENGINE, true);
+    }
+
+    public void setTerminalEngine(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_ENGINE, value, false);
+    }
+
     public String getTerminalRetroEffect() {
         return SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT, true);
