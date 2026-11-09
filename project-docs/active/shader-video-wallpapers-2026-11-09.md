@@ -143,3 +143,29 @@ Decided and built:
 - **Kind glyphs**: Codex-drawn photo/video/shader glyphs on the Photo | Video | Shader pills
   (`ic_wallpaper_kind_*`, tinted like the label; the selected pill shows its glyph, not a check).
 Emulator-checked; pong checks owed in device-checks.md (conversion time and CPU with the 32 MB GIF).
+
+## Round 3 (2026-11-09, evening): frame-rate versions
+Measured on pong after round 2 went on (2.0.0-pre.1): the converted GIF (800x1412 HEVC at the
+GIF's 40 fps) and a native 1080x1920 H.264 60 fps clip cost the launcher the same, 41-44% of one
+core at the default 30 Hz (scene thread 17%, RenderThread 16-18%, main 8%), SurfaceFlinger 19-20%,
+GPU 15-17%. The hardware codec service was the one line that followed the clip: 11% for the 40 fps
+file, 16% for the 60 fps one. At the 15 Hz pill the launcher fell to 27-31%, GPU to 7-10%, the UI
+redraw (the glass pass) from 14.5 to 8 fps, but the codec stayed at 16% because the file is decoded
+at its own rate whatever the scene draws. Decided (developer):
+- **One file per rate.** The stored video gets a re-encoded MP4 per picker rate (15/30/60) so the
+  decoder runs at the draw rate. Import makes the version for the rate selected at that moment,
+  inside the import progress bar; a later tap on another rate makes that version then, with the
+  same bar ("Preparing N fps version… P%"); the draw rate switches at once and the source plays
+  meanwhile. Default stays 30.
+- **Pruning.** The untouched source is kept next to the versions; once every rate the clip can
+  offer has its own file, the source is deleted (for a video the original-tier file is a hard link
+  to the source, so nothing is lost; for a GIF every rate is an encode and the GIF goes last).
+  A new import or Back to photo removes everything.
+- **Rates a clip cannot reach are greyed** with "Clip is N fps": the lowest rate at or above the
+  clip's frame rate plays the untouched file; frames are never invented. A stored rate above the
+  clip's tier is clamped at import.
+- **The note on the Video page** says a GIF is converted (631103a8e); it had still warned that GIFs
+  decode on the CPU.
+Built as two seams against a committed contract (`VideoVariantRules`, `VideoVariants`, 107f19968):
+engine (`VideoTranscode` decoder→encoder-surface frame dropper, storage, prune, scene swap on
+`wallpaper_video_variant_rev`) and picker UI.
