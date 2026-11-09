@@ -12,7 +12,7 @@
 #   ghostty-core-bench.sh DEV parse  [RUNS] [COLS ROWS]     # parse the transcript in-process, nothing drawn (default 3, 52 45)
 #   ghostty-core-bench.sh DEV frames java|ghostty WORKLOAD  # per-frame timing (gfxinfo framestats) and per-thread CPU
 #       WORKLOAD: flood (cat the transcript), tui (full-screen redraw at ~60 fps for 10 s),
-#       type (keystrokes every 250 ms while lines stream), kitty (an animated image for 10 s; Java core only),
+#       type (keystrokes every 250 ms while lines stream), kitty (an animated image for 10 s),
 #       btop (btop or htop for 12 s, if installed). Summaries come from framestats-summary.py.
 #
 # `parse` runs com.termux.terminal.TerminalParseBench in its own app_process (as the app user, the
@@ -213,7 +213,6 @@ parse)
     ;;
 frames)
     WORK=${4:?workload: flood, tui, type, kitty or btop}
-    [ "$WORK" = kitty ] && [ "$CORE" != java ] && { echo "kitty graphics are off in the Ghostty core; use java" >&2; exit 2; }
     gate; PID0=$(ad adb shell pidof "$PKG" | tr -d '\r'); CRASH0=$(ad adb shell logcat -d -b crash 2>/dev/null | grep -c "$PKG" || true)
     open_pane
     timeout 2 tail -f /dev/null || true
