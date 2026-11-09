@@ -52,6 +52,11 @@ final class VideoChannel implements SceneChannel {
     private volatile boolean mFailed;
     /** The transform of the latest frame, reused; identity until the first one. */
     @NonNull private final float[] mTransform = new float[16];
+    @NonNull private final float[] mRect = new float[4];
+    @NonNull private final float[] mPoint = new float[2];
+    /** The container's rotation in degrees (video only), and the frame's own size as decoded. */
+    private int mRotation;
+    private int mRawW, mRawH;
 
     // Video.
     @Nullable private MediaPlayer mPlayer;
@@ -108,14 +113,11 @@ final class VideoChannel implements SceneChannel {
         mp.setSurface(mSurface);
         mp.setLooping(true);
         mp.setVolume(0f, 0f);
-        mp.setOnVideoSizeChangedListener((p, w, h) -> {
-            mWidth = w;
-            mHeight = h;
-        });
+        mRotation = readRotation();
+        mp.setOnVideoSizeChangedListener((p, w, h) -> setFrameSize(w, h));
         mp.setOnPreparedListener(p -> {
             mPrepared = true;
-            mWidth = p.getVideoWidth();
-            mHeight = p.getVideoHeight();
+            setFrameSize(p.getVideoWidth(), p.getVideoHeight());
             if (mWantPlay) p.start();
         });
         mp.setOnErrorListener((p, what, extra) -> {
@@ -124,6 +126,34 @@ final class VideoChannel implements SceneChannel {
             return true;
         });
         mp.prepareAsync();
+    }
+
+    /** The decoded frame's size; the size shown is turned by the container's rotation. */
+    private void setFrameSize(int w, int h) {
+        mRawW = w;
+        mRawH = h;
+        boolean turned = mRotation == 90 || mRotation == 270;
+        mWidth = turned ? h : w;
+        mHeight = turned ? w : h;
+    }
+
+    /** The container's rotation (0, 90, 180 or 270); MediaPlayer's size and the surface matrix do not apply it. */
+    private int readRotation() {
+        android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
+        try {
+            r.setDataSource(mFile.getPath());
+            String s = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            int deg = s == null ? 0 : Integer.parseInt(s.trim());
+            return ((deg % 360) + 360) % 360;
+        } catch (RuntimeException e) {
+            return 0;
+        } finally {
+            try {
+                r.release();
+            } catch (java.io.IOException ignored) {
+                // Nothing left to free.
+            }
+        }
     }
 
     // ---- GIF -------------------------------------------------------------------------------
@@ -257,8 +287,9 @@ final class VideoChannel implements SceneChannel {
     }
 
     @Override
-    public boolean transform(@NonNull float[] out16) {
-        System.arraycopy(mTransform, 0, out16, 0, 16);
+    public boolean transform(@NonNull float[] out16, int targetW, int targetH) {
+        VideoCrop.fill(out16, mTransform, mWidth, mHeight, mGif ? 0 : mRotation, targetW, targetH,
+            mRect, mPoint);
         return true;
     }
 

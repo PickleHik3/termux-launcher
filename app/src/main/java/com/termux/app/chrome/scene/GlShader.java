@@ -40,20 +40,12 @@ final class GlShader {
     private static final String PASSTHROUGH_FS = "#version 300 es\n"
         + "#extension GL_OES_EGL_image_external_essl3 : require\n"
         + "precision highp float;\n"
-        + "uniform vec3 iResolution;\n"
-        + "uniform vec3 iChannelResolution[4];\n"
+        + "uniform vec2 uTarget;\n"
         + "uniform mat4 uTexMatrix;\n"
         + "uniform samplerExternalOES iChannel0;\n"
         + "out vec4 tlFragColor;\n"
         + "void main() {\n"
-        + "  vec2 uv = gl_FragCoord.xy / iResolution.xy;\n"
-        + "  vec2 media = iChannelResolution[0].xy;\n"
-        + "  if (media.x > 0.0 && media.y > 0.0) {\n"
-        + "    float screenAspect = iResolution.x / iResolution.y;\n"
-        + "    float mediaAspect = media.x / media.y;\n"
-        + "    if (screenAspect > mediaAspect) uv.y = 0.5 + (uv.y - 0.5) * (mediaAspect / screenAspect);\n"
-        + "    else uv.x = 0.5 + (uv.x - 0.5) * (screenAspect / mediaAspect);\n"
-        + "  }\n"
+        + "  vec2 uv = gl_FragCoord.xy / uTarget;\n"
         + "  vec2 tc = (uTexMatrix * vec4(uv, 0.0, 1.0)).xy;\n"
         + "  tlFragColor = vec4(texture(iChannel0, tc).rgb, 1.0);\n"
         + "}\n";
@@ -65,6 +57,7 @@ final class GlShader {
 
     /** Location of {@code uTexMatrix}; -1 for a user shader. */
     private int mTexMatrixLoc = -1;
+    private int mTargetLoc = -1;
 
     private GlShader(int program, @NonNull ShaderPrelude.Built built) {
         this.program = program;
@@ -101,6 +94,7 @@ final class GlShader {
         GlShader shader = new GlShader(program, built);
         shader.readUniforms();
         shader.mTexMatrixLoc = GLES20.glGetUniformLocation(program, "uTexMatrix");
+        shader.mTargetLoc = GLES20.glGetUniformLocation(program, "uTarget");
         return shader;
     }
 
@@ -199,6 +193,7 @@ final class GlShader {
     void apply(@NonNull ShaderInputs in) {
         GLES20.glUseProgram(program);
         if (mTexMatrixLoc >= 0) GLES20.glUniformMatrix4fv(mTexMatrixLoc, 1, false, in.texMatrix, 0);
+        if (mTargetLoc >= 0) GLES20.glUniform2f(mTargetLoc, in.width, in.height);
         int[] l = mLoc;
         float t = (float) in.timeSec;
         if (l[ShaderPrelude.I_RESOLUTION] >= 0) GLES20.glUniform3f(l[ShaderPrelude.I_RESOLUTION], in.width, in.height, 1f);

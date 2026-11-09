@@ -31,10 +31,12 @@ public interface SceneChannel {
     boolean update(long frameTimeNanos);
 
     /**
-     * Writes the latest frame's texture-coordinate transform (a SurfaceTexture's matrix) into
-     * {@code out16}; false (and {@code out16} untouched) for a channel that has none.
+     * Writes the matrix that maps a target pixel's uv (0..1, origin bottom-left) to this channel's
+     * texture coordinate, with the content centre-cropped to cover a {@code targetW} x
+     * {@code targetH} target and its rotation undone; false (and {@code out16} untouched) for a
+     * channel that has none.
      */
-    default boolean transform(@androidx.annotation.NonNull float[] out16) {
+    default boolean transform(@androidx.annotation.NonNull float[] out16, int targetW, int targetH) {
         return false;
     }
 
