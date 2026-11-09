@@ -743,3 +743,54 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeCompress(
     if (ghostty_terminal_compress(c->term, mode, &result) != GHOSTTY_SUCCESS) return -1;
     return (jint) result;
 }
+
+// ---- Fail-safes and memory (wave 3 slice 6) ----
+
+// The extras a replay restores: everything that shapes what the pane shows and how keys and the
+// mouse are reported, except the palette, which the Java emulator already holds (theme colours plus
+// any OSC 4 a program sent, copied back at each sync).
+#define REPLAY_EXTRAS (GHOSTTY_FORMATTER_EXTRAS_ALL & ~GHOSTTY_FORMATTER_EXTRA_PALETTE)
+
+// The active screen and up to max_history rows of history above it, as VT a Java emulator of the
+// same size can replay to show the same text, colours and cursor. Null when the formatter fails.
+// Rows stay rows (no unwrapping) and blank rows are kept, so the replay ends with the screen in
+// place and the cursor restored by the formatter's CUP.
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeFormatReplay(
+    JNIEnv* env, jclass cls, jlong h, jint max_history) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || max_history < 0) return NULL;
+    GhosttyFormatter f = NULL;
+    if (ghostty_formatter_terminal_new(NULL, &f, c->term) != GHOSTTY_SUCCESS) return NULL;
+    jbyteArray out = NULL;
+    uint8_t* buf = NULL;
+    size_t len = 0;
+    GhosttyFormatterFormat emit = GHOSTTY_FORMATTER_FORMAT_VT;
+    bool no = false;
+    GhosttyFormatterExtras extras = REPLAY_EXTRAS;
+    size_t history = current_screen(c) == GHOSTTY_TERMINAL_SCREEN_PRIMARY ? history_rows(c) : 0;
+    size_t keep = (size_t) max_history < history ? (size_t) max_history : history;
+    GhosttyPoint start = keep > 0
+        ? (GhosttyPoint) {.tag = GHOSTTY_POINT_TAG_HISTORY, .value = {.coordinate = {.x = 0, .y = (uint32_t) (history - keep)}}}
+        : (GhosttyPoint) {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
+    GhosttyPoint end = {.tag = GHOSTTY_POINT_TAG_ACTIVE,
+                        .value = {.coordinate = {.x = (uint16_t) (c->cols - 1), .y = (uint32_t) (c->rows - 1)}}};
+    GhosttySelection sel = {0};
+    if (ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_EMIT, &emit) == GHOSTTY_SUCCESS
+        && ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_UNWRAP, &no) == GHOSTTY_SUCCESS
+        && ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_TRIM, &no) == GHOSTTY_SUCCESS
+        && ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_EXTRAS, &extras) == GHOSTTY_SUCCESS
+        && ghostty_terminal_grid_ref(c->term, start, &sel.start) == GHOSTTY_SUCCESS
+        && ghostty_terminal_grid_ref(c->term, end, &sel.end) == GHOSTTY_SUCCESS
+        && ghostty_formatter_set(f, GHOSTTY_FORMATTER_OPT_SELECTION, &sel) == GHOSTTY_SUCCESS
+        && ghostty_formatter_format_alloc(f, NULL, &buf, &len) == GHOSTTY_SUCCESS
+        && len < (1u << 30)) {
+        out = (*env)->NewByteArray(env, (jsize) len);
+        if (out == NULL) clear_exception(env);
+        else if (len > 0) (*env)->SetByteArrayRegion(env, out, 0, (jsize) len, (const jbyte*) buf);
+    }
+    ghostty_free(NULL, buf, len);
+    ghostty_formatter_free(f);
+    return out;
+}
+

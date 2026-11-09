@@ -193,4 +193,13 @@ final class GhosttyNative {
      * COMPRESS_* result, or -1 on error. For measuring only.
      */
     static native int nativeCompress(long handle, boolean full);
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /**
+     * The active screen and up to {@code historyRows} rows of history above it as VT bytes, for a
+     * Java emulator of the same size to replay: text, styles, modes and the cursor. Null when the
+     * formatter fails.
+     */
+    static native byte[] nativeFormatReplay(long handle, int historyRows);
 }

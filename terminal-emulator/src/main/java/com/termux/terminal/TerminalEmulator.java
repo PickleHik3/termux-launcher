@@ -1636,10 +1636,73 @@ public final class TerminalEmulator {
         }
     }
 
-    /** The mirror failed: drop the Ghostty core for this session and carry on with the Java parser. */
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** Screens of history a replay carries above the screen (spec §9: screen rows x 4). */
+    static final int REPLAY_HISTORY_SCREENS = 4;
+
+    /** The line a pane starts with when its Ghostty screen could not be kept. */
+    static final String REPLAY_FAILED_NOTICE = "[Terminal reset after an error. Earlier output could not be kept.]\r\n";
+
+    /**
+     * A Ghostty error (a failed sync, write, resize or reset): carry on with the Java parser by
+     * replay. The Java buffers hold no copy of Ghostty's history and may be behind its screen, so
+     * Ghostty formats its screen and the last {@link #REPLAY_HISTORY_SCREENS} screens of history as
+     * VT, the core is freed, and the bytes go through a fresh Java core of the same size. Text,
+     * colours, modes and the cursor survive; images do not. If the formatter fails too, the Java
+     * core starts empty with {@link #REPLAY_FAILED_NOTICE}.
+     */
     private void ghosttyFailed(RuntimeException e) {
-        Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core", e);
-        releaseGhosttyCore();
+        Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty failed, replaying its screen into the Java core", e);
+        GhosttyCore core = mGhostty;
+        mGhostty = null;
+        mGhosttyContent = null;
+        mGhosttyPending = false;
+        if (core == null) return;
+        boolean alternate = mScreen == mAltBuffer;
+        byte[] replay = null;
+        try {
+            replay = core.formatReplay(mRows * REPLAY_HISTORY_SCREENS);
+        } catch (RuntimeException formatFailure) {
+            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty screen could not be formatted", formatFailure);
+        } finally {
+            core.release();
+        }
+        startFreshJavaCore();
+        if (replay != null) {
+            // The formatter writes the screen that is up; an alternate screen goes back where it was.
+            if (alternate) appendBytes("\033[?1049h");
+            appendInternal(replay, replay.length);
+        } else {
+            appendBytes(REPLAY_FAILED_NOTICE);
+        }
+        mCursorPositionChangedAtMillis = mClock.nowMillis();
+        mSession.onScreenChanged();
+    }
+
+    /** Back to a just-created Java core of the current size, keeping the colours and the title. */
+    private void startFreshJavaCore() {
+        int[] colors = mColors.mCurrentColors.clone();
+        mScreen = mMainBuffer;
+        reset();
+        System.arraycopy(colors, 0, mColors.mCurrentColors, 0, colors.length);
+        mSession.onColorsChanged();
+        mMainBuffer.clearTranscript();
+        mMainBuffer.blockSet(0, 0, mColumns, mRows, ' ', TextStyle.NORMAL);
+        mAltBuffer.blockSet(0, 0, mColumns, mRows, ' ', TextStyle.NORMAL);
+        mCursorRow = mCursorCol = 0;
+    }
+
+    private void appendBytes(String text) {
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        appendInternal(bytes, bytes.length);
+    }
+
+    /** For tests: make the Ghostty core's next sync fail as a Ghostty error would. */
+    void failNextGhosttySyncForTests(RuntimeException failure, boolean formatterFailsToo) {
+        if (mGhostty == null) return;
+        mGhostty.failNextSyncForTests(failure);
+        if (formatterFailsToo) mGhostty.breakFormatterForTests();
     }
 
     /** Copy what the last Ghostty writes changed into this emulator, then deliver their effects. */

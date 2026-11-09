@@ -122,9 +122,20 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (mHandle != 0) GhosttyNative.nativeReset(mHandle);
     }
 
-    /** Read the terminal's state and changed rows; false when there is nothing to read. */
+    /**
+     * Read the terminal's state and changed rows; false once released. A live terminal that cannot
+     * be read is a Ghostty error and throws, so the emulator falls back to the Java core.
+     */
     boolean sync() {
-        return mHandle != 0 && GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra);
+        if (mHandle == 0) return false;
+        RuntimeException injected = mFailNextSync;
+        if (injected != null) {
+            mFailNextSync = null;
+            throw injected;
+        }
+        if (!GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra))
+            throw new IllegalStateException("ghostty: the render state could not be read");
+        return true;
     }
 
     int[] state() {
@@ -185,6 +196,32 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     /** Compress history (see {@link GhosttyNative#nativeCompress}); -1 when released. For measuring. */
     int compress(boolean full) {
         return mHandle == 0 ? -1 : GhosttyNative.nativeCompress(mHandle, full);
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** For tests: the next {@link #sync()} throws this, as a Ghostty error mid-stream would. */
+    private RuntimeException mFailNextSync;
+
+    /**
+     * The screen and up to {@code historyRows} history rows as VT for a Java emulator to replay
+     * (see {@link GhosttyNative#nativeFormatReplay}), or null when the formatter fails.
+     */
+    byte[] formatReplay(int historyRows) {
+        if (mHandle == 0 || mFormatterBrokenForTests) return null;
+        return GhosttyNative.nativeFormatReplay(mHandle, historyRows);
+    }
+
+    /** For tests: make the next sync fail as a Ghostty error would. */
+    void failNextSyncForTests(RuntimeException failure) {
+        mFailNextSync = failure;
+    }
+
+    /** For tests: the formatter fails too. */
+    private boolean mFormatterBrokenForTests;
+
+    void breakFormatterForTests() {
+        mFormatterBrokenForTests = true;
     }
 
     @Override
