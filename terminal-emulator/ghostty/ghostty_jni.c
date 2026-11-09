@@ -37,12 +37,29 @@ enum {
 // Indices of the int[] state block filled by nativeSync; mirrored by GhosttyNative.STATE_*.
 enum {
     ST_COLS = 0, ST_ROWS, ST_CURSOR_X, ST_CURSOR_Y, ST_FLAGS, ST_SCROLLED, ST_HISTORY,
-    ST_MODES, ST_KITTY_FLAGS, ST_CURSOR_STYLE, ST_COUNT,
+    ST_MODES, ST_KITTY_FLAGS, ST_CURSOR_STYLE, ST_MOUSE_SHAPE, ST_COUNT,
 };
 
 // Set in a row's result (nativeSync's dirty[] entry, nativeReadHistoryRow's return) when the row
 // soft-wraps into the next; the low bits are the row's count of extra code points.
 #define ROW_WRAPPED (1 << 24)
+// Set in a row's result when OSC 133 marked it as the first line of a shell prompt.
+#define ROW_PROMPT (1 << 25)
+
+// Link runs handed to Java (GhosttyNative.LINK_*): links[0] is the run count, then per run its row,
+// first column, end column (exclusive), and the offset and length of its URI in the byte array.
+enum { LINK_Y = 0, LINK_X0, LINK_X1, LINK_URI_OFFSET, LINK_URI_LENGTH, LINK_INTS };
+// The longest URI kept; a longer link reads as plain text, as the Java core's pool refuses it.
+#define URI_CAP 8192
+
+// Events handed to Java during a write (GhosttyNative.EVENT_*), in the order they happened.
+enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY_NOTIFICATION = 4 };
+// EVENT_PROMPT's second value when the shell reported no exit code.
+#define NO_EXIT_CODE INT32_MIN
+
+// The OSC strings the sniffer keeps (99 and 66), at most this many bytes after "NN;"; a longer one
+// is dropped whole, like the Java core drops an OSC past MAX_STRING_SEQUENCE_LENGTH.
+#define OSC_CAP (16 * 1024)
 
 // ST_FLAGS bits.
 enum {
@@ -84,6 +101,7 @@ typedef struct {
     jobject sink;      // global ref to the GhosttyNative.Sink
     jmethodID on_reply;
     jmethodID on_clipboard;
+    jmethodID on_event;
     uint8_t* xtversion;  // our XTVERSION name, owned here for the terminal's life
     size_t xtversion_len;
     uint16_t cols, rows;
@@ -96,6 +114,24 @@ typedef struct {
     jint* dirty_buf;
     uint32_t* extra_buf;
     int buf_cols, buf_rows;
+    // The URI of the cell being read, of the run it may extend and of the run written last: three
+    // URI_CAP slices of one allocation, made on the first link.
+    uint8_t* uri_buf;
+    uint8_t* run_uri;
+    uint8_t* last_uri;
+    // OSC sniffer (see sniff_write): the string being read, its first three bytes, and whether it
+    // is one we keep (99 or 66). osc_body holds what follows "NN;".
+    bool osc_active, osc_skip, osc_overflow;
+    uint8_t osc_head[3];
+    int osc_head_len;
+    uint8_t* osc_body;
+    size_t osc_body_len;
+    // OSC 66 text waiting for the stream to reach ground before it is written as plain text.
+    uint8_t* text_buf;
+    size_t text_len;
+    // An OSC 9;4 report held until the sniffer has seen its string (see on_progress).
+    bool progress_pending;
+    int progress_state, progress_value;
 } Core;
 
 // Extra code points (combining marks, ZWJ sequences) one sync can carry; matches
@@ -194,6 +230,62 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
     return s;
 }
 
+static jbyteArray byte_array(JNIEnv* env, const uint8_t* data, size_t len) {
+    if (len > (1u << 24)) len = 0;
+    jbyteArray arr = (*env)->NewByteArray(env, (jsize) len);
+    if (arr == NULL) { clear_exception(env); return NULL; }
+    if (len > 0) (*env)->SetByteArrayRegion(env, arr, 0, (jsize) len, (const jbyte*) data);
+    return arr;
+}
+
+// Hand one event to Java, which only records it (GhosttyCore.onEvent) and acts after the write.
+static void send_event(Core* c, int kind, int a, int b, const uint8_t* first, size_t first_len,
+                       const uint8_t* second, size_t second_len) {
+    if (c == NULL || c->env == NULL || c->sink == NULL) return;
+    JNIEnv* env = c->env;
+    jbyteArray one = first != NULL ? byte_array(env, first, first_len) : NULL;
+    jbyteArray two = second != NULL ? byte_array(env, second, second_len) : NULL;
+    (*env)->CallVoidMethod(env, c->sink, c->on_event, (jint) kind, (jint) a, (jint) b, one, two);
+    clear_exception(env);
+    if (one != NULL) (*env)->DeleteLocalRef(env, one);
+    if (two != NULL) (*env)->DeleteLocalRef(env, two);
+}
+
+// OSC 133: the step and, on command end, the exit code. Prompt rows are read from the rows.
+static void on_semantic_prompt(GhosttyTerminal t, void* ud, const GhosttyTerminalSemanticPrompt* e) {
+    (void) t;
+    if (e == NULL) return;
+    int code = e->kind == GHOSTTY_SEMANTIC_PROMPT_COMMAND_END && e->has_exit_code ? (int) e->exit_code : NO_EXIT_CODE;
+    send_event(ud, EVENT_PROMPT, (int) e->kind, code, NULL, 0, NULL, 0);
+}
+
+// OSC 9;4: state 0-4 as the Java core numbers them, percent -1 when omitted. The library reads
+// "9;4;1" without a percentage as 0 where the Java core keeps the last value, so the report waits
+// for the sniffer, which sees the string end right after this callback (osc_end), and goes out
+// from there.
+static void on_progress(GhosttyTerminal t, void* ud, const GhosttyTerminalProgressReport* r) {
+    (void) t;
+    Core* c = ud;
+    if (c == NULL || r == NULL) return;
+    c->progress_pending = true;
+    c->progress_state = (int) r->state;
+    c->progress_value = (int) r->progress;
+}
+
+static void send_progress(Core* c, bool percent_omitted) {
+    if (!c->progress_pending) return;
+    c->progress_pending = false;
+    send_event(c, EVENT_PROGRESS, c->progress_state, percent_omitted ? -1 : c->progress_value, NULL, 0, NULL, 0);
+}
+
+// OSC 9 and OSC 777: an empty title means the protocol had none.
+static void on_desktop_notification(GhosttyTerminal t, void* ud, const GhosttyTerminalDesktopNotification* n) {
+    (void) t;
+    if (n == NULL) return;
+    send_event(ud, EVENT_NOTIFICATION, 0, 0, n->title.ptr != NULL ? n->title.ptr : (const uint8_t*) "",
+               n->title.len, n->body.ptr != NULL ? n->body.ptr : (const uint8_t*) "", n->body.len);
+}
+
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
     if (c->top) ghostty_tracked_grid_ref_free(c->top);
@@ -207,6 +299,9 @@ static void core_free(Core* c, JNIEnv* env) {
     free(c->row_buf);
     free(c->dirty_buf);
     free(c->extra_buf);
+    free(c->uri_buf);
+    free(c->osc_body);
+    free(c->text_buf);
     free(c);
 }
 
@@ -288,7 +383,8 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     jclass sink_class = (*env)->GetObjectClass(env, sink);
     c->on_reply = (*env)->GetMethodID(env, sink_class, "onPtyReply", "([B)V");
     c->on_clipboard = (*env)->GetMethodID(env, sink_class, "onClipboardWrite", "([B)V");
-    if (c->on_reply == NULL || c->on_clipboard == NULL) { clear_exception(env); free(c); return 0; }
+    c->on_event = (*env)->GetMethodID(env, sink_class, "onEvent", "(III[B[B)V");
+    if (c->on_reply == NULL || c->on_clipboard == NULL || c->on_event == NULL) { clear_exception(env); free(c); return 0; }
     if (xtversion != NULL) {
         jsize n = (*env)->GetArrayLength(env, xtversion);
         if (n > 0) {
@@ -328,6 +424,9 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT, (const void*) on_semantic_prompt);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, (const void*) on_progress);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*) on_desktop_notification);
     // History only has to hold what the next sync copies into the Java transcript; Java picks the
     // row limit (GhosttyCore.historyLimit). Bytes are unlimited so a styled burst cannot prune rows
     // the next sync still needs.
@@ -370,6 +469,126 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetColors(
     c->palette_known = false;
 }
 
+// The OSC sniffer. libghostty-vt parses and drops two OSC strings the Java core acts on: OSC 99
+// (kitty notifications), handed to Java whole, and OSC 66 (text sizing), whose text is written back
+// as plain text so a program that did not probe loses the size but not the words. It also reads
+// OSC 9;4 to tell "9;4;1" from "9;4;1;0" (see on_progress). Every byte still
+// goes through the library, in order, through vt_write_until stopping at OSC boundaries: the
+// library's own parser says where a string starts and ends, so a string split across writes, a
+// UTF-8 sequence split across writes and a CAN or SUB inside a string behave exactly as one
+// vt_write would. Only the kept strings' bytes are copied, and at most OSC_CAP of each.
+
+static void osc_begin(Core* c) {
+    c->osc_active = true;
+    c->osc_skip = false;
+    c->osc_overflow = false;
+    c->osc_head_len = 0;
+    c->osc_body_len = 0;
+}
+
+static void osc_append(Core* c, const uint8_t* p, size_t n) {
+    if (!c->osc_active || c->osc_skip) return;
+    while (n > 0 && c->osc_head_len < 3) {
+        c->osc_head[c->osc_head_len++] = *p++;
+        n--;
+        if (c->osc_head_len == 3 && memcmp(c->osc_head, "99;", 3) != 0 && memcmp(c->osc_head, "66;", 3) != 0
+            && memcmp(c->osc_head, "9;4", 3) != 0) {
+            c->osc_skip = true;
+            return;
+        }
+    }
+    if (n == 0 || c->osc_overflow) return;
+    if (c->osc_body == NULL && (c->osc_body = malloc(OSC_CAP)) == NULL) { c->osc_skip = true; return; }
+    if (n > OSC_CAP - c->osc_body_len) { c->osc_overflow = true; return; }
+    memcpy(c->osc_body + c->osc_body_len, p, n);
+    c->osc_body_len += n;
+}
+
+// OSC 66 is "66 ; metadata ; text": queue the text, without control bytes, for the next ground.
+// Text that is only spaces is not written: it carries no words, and it is what a probe sends
+// (CR, OSC 66 w=2 with one space, then a cursor report), so the probe sees the cursor stay put, as
+// on a terminal without text sizing.
+static void queue_sized_text(Core* c) {
+    const uint8_t* text = memchr(c->osc_body, ';', c->osc_body_len);
+    if (text == NULL) return;
+    text++;
+    size_t len = c->osc_body_len - (size_t) (text - c->osc_body);
+    bool words = false;
+    for (size_t i = 0; i < len && !words; i++) words = text[i] > ' ' && text[i] != 0x7f;
+    if (!words) return;
+    if (c->text_buf == NULL && (c->text_buf = malloc(OSC_CAP)) == NULL) return;
+    for (size_t i = 0; i < len && c->text_len < OSC_CAP; i++) {
+        if (text[i] < ' ' || text[i] == 0x7f) continue;
+        c->text_buf[c->text_len++] = text[i];
+    }
+}
+
+static void osc_end(Core* c, GhosttyTerminalStringEnd end) {
+    bool kept = c->osc_active && !c->osc_skip && !c->osc_overflow && c->osc_head_len == 3
+        && end != GHOSTTY_TERMINAL_STRING_END_CANCELLED;
+    c->osc_active = false;
+    if (!kept) {
+        send_progress(c, false);
+        return;
+    }
+    if (memcmp(c->osc_head, "9;4", 3) == 0)
+        send_progress(c, c->osc_body_len == 2 && memcmp(c->osc_body, ";1", 2) == 0);
+    else if (memcmp(c->osc_head, "99;", 3) == 0)
+        send_event(c, EVENT_KITTY_NOTIFICATION, 0, 0, c->osc_body != NULL ? c->osc_body : (const uint8_t*) "",
+                   c->osc_body_len, NULL, 0);
+    else if (c->osc_body_len > 0)
+        queue_sized_text(c);
+}
+
+static void write_sized_text(Core* c) {
+    size_t n = c->text_len;
+    c->text_len = 0;
+    ghostty_terminal_vt_write(c->term, c->text_buf, n);
+}
+
+static void sniff_write(Core* c, const uint8_t* data, size_t len) {
+    size_t off = 0;
+    for (;;) {
+        if (off >= len) {
+            send_progress(c, false);
+            // A string that ended on the last byte: its text goes in now if the stream is at ground
+            // (BEL), or after the next write's first byte completes ESC \.
+            if (c->text_len == 0) return;
+            GhosttyTerminalWriteStop at = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
+            if (ghostty_terminal_vt_write_until(c->term, data, 0, GHOSTTY_TERMINAL_BOUNDARY_GROUND, &at) == GHOSTTY_SUCCESS
+                && (at.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND))
+                write_sized_text(c);
+            return;
+        }
+        uint32_t want = GHOSTTY_TERMINAL_BOUNDARY_OSC_START | GHOSTTY_TERMINAL_BOUNDARY_OSC_END;
+        if (c->text_len > 0) want |= GHOSTTY_TERMINAL_BOUNDARY_GROUND;
+        GhosttyTerminalWriteStop stop = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
+        GhosttyResult r = ghostty_terminal_vt_write_until(c->term, data + off, len - off, want, &stop);
+        if (r == GHOSTTY_NO_VALUE) {
+            osc_append(c, data + off, len - off);
+            off = len;
+            continue;
+        }
+        if (r != GHOSTTY_SUCCESS) {
+            // Never lose output: hand the rest over unsniffed.
+            ghostty_terminal_vt_write(c->term, data + off, len - off);
+            send_progress(c, false);
+            return;
+        }
+        size_t used = stop.consumed;
+        if (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_OSC_END) {
+            // The ending byte (BEL, ESC of ESC \, CAN or SUB) is not content.
+            if (used > 0) osc_append(c, data + off, used - 1);
+            osc_end(c, stop.end);
+        } else {
+            osc_append(c, data + off, used);
+        }
+        if (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_OSC_START) osc_begin(c);
+        off += used;
+        if ((stop.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND) && c->text_len > 0) write_sized_text(c);
+    }
+}
+
 JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
     JNIEnv* env, jclass cls, jlong h, jbyteArray data, jint offset, jint length) {
     (void) cls;
@@ -381,7 +600,7 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeWrite(
     jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
     if (bytes == NULL) { clear_exception(env); return; }
     c->env = env;
-    ghostty_terminal_vt_write(c->term, (const uint8_t*) bytes + offset, (size_t) length);
+    sniff_write(c, (const uint8_t*) bytes + offset, (size_t) length);
     c->env = NULL;
     (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
 }
@@ -477,12 +696,99 @@ static int copy_render_row(Core* c, jint* cells, int cols, uint32_t* extra, int 
     return used;
 }
 
+// Where one sync or row read puts its link runs (see LINK_*); count includes runs already written.
+typedef struct {
+    jintArray runs;
+    jbyteArray uris;
+    int run_cap, uri_cap;
+    int count, uri_used;
+    int last_offset, last_len;  // the URI written last, which the next run often repeats
+} LinkOut;
+
+static void link_out_init(JNIEnv* env, LinkOut* out, jintArray runs, jbyteArray uris) {
+    memset(out, 0, sizeof(*out));
+    out->last_offset = -1;
+    if (runs == NULL || uris == NULL) return;
+    out->runs = runs;
+    out->uris = uris;
+    out->run_cap = ((*env)->GetArrayLength(env, runs) - 1) / LINK_INTS;
+    out->uri_cap = (*env)->GetArrayLength(env, uris);
+    if (out->run_cap < 0) out->run_cap = 0;
+}
+
+static void link_out_finish(JNIEnv* env, LinkOut* out) {
+    if (out->runs == NULL || (*env)->GetArrayLength(env, out->runs) < 1) return;
+    jint count = out->count;
+    (*env)->SetIntArrayRegion(env, out->runs, 0, 1, &count);
+}
+
+// One run of cells [x0, x1) of row y sharing the URI in run_uri. A run whose URI is the one written
+// last (a link that wraps onto the next row) shares its bytes.
+static void emit_link(JNIEnv* env, Core* c, LinkOut* out, int y, int x0, int x1, size_t len) {
+    if (out->count >= out->run_cap) return;
+    int offset = -1;
+    if (out->last_offset >= 0 && (size_t) out->last_len == len
+        && memcmp(c->last_uri, c->run_uri, len) == 0) {
+        offset = out->last_offset;
+    } else {
+        if ((size_t) out->uri_cap - (size_t) out->uri_used < len) return;
+        offset = out->uri_used;
+        (*env)->SetByteArrayRegion(env, out->uris, offset, (jsize) len, (const jbyte*) c->run_uri);
+        out->uri_used += (int) len;
+        out->last_offset = offset;
+        out->last_len = (int) len;
+        memcpy(c->last_uri, c->run_uri, len);
+    }
+    jint run[LINK_INTS] = {y, x0, x1, offset, (jint) len};
+    (*env)->SetIntArrayRegion(env, out->runs, 1 + out->count * LINK_INTS, LINK_INTS, run);
+    out->count++;
+}
+
+// The OSC 8 links of one row, as runs of cells sharing a URI. row_ref is the row's first cell.
+static void read_links(JNIEnv* env, Core* c, LinkOut* out, const GhosttyGridRef* row_ref, int width, int y) {
+    if (out->runs == NULL) return;
+    if (c->uri_buf == NULL) c->uri_buf = malloc(3 * URI_CAP);
+    if (c->uri_buf == NULL) return;
+    c->run_uri = c->uri_buf + URI_CAP;
+    c->last_uri = c->uri_buf + 2 * URI_CAP;
+    int start = -1;
+    size_t run_len = 0;
+    for (int x = 0; x <= width; x++) {
+        size_t n = 0;
+        if (x < width) {
+            GhosttyGridRef ref = *row_ref;
+            ref.x = (uint16_t) x;
+            GhosttyCell raw = 0;
+            bool has = false;
+            if (ghostty_grid_ref_cell(&ref, &raw) == GHOSTTY_SUCCESS)
+                ghostty_cell_get(raw, GHOSTTY_CELL_DATA_HAS_HYPERLINK, &has);
+            if (has && ghostty_grid_ref_hyperlink_uri(&ref, c->uri_buf, URI_CAP, &n) != GHOSTTY_SUCCESS) n = 0;
+        }
+        if (start >= 0 && n == run_len && memcmp(c->uri_buf, c->run_uri, n) == 0) continue;
+        if (start >= 0) emit_link(env, c, out, y, start, x, run_len);
+        start = -1;
+        if (n > 0) {
+            memcpy(c->run_uri, c->uri_buf, n);
+            run_len = n;
+            start = x;
+        }
+    }
+}
+
+// Whether a row is the first line of a shell prompt (OSC 133 A), as ROW_PROMPT.
+static int prompt_bit(GhosttyRow row) {
+    GhosttyRowSemanticPrompt semantic = GHOSTTY_ROW_SEMANTIC_NONE;
+    ghostty_row_get(row, GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, &semantic);
+    return semantic == GHOSTTY_ROW_SEMANTIC_PROMPT ? ROW_PROMPT : 0;
+}
+
 // Bring Java up to date after writes: fills state[] (see ST_*), and for every row that changed
 // since the last sync writes its cells to screen[y * cols * CELL_INTS] and its extra code points to
-// extra[], with dirty[y] = number of extras for the row (| ROW_WRAPPED), or -1 when it did not change.
+// extra[], with dirty[y] = number of extras for the row (| ROW_WRAPPED | ROW_PROMPT), or -1 when it
+// did not change. The changed rows' links go to links/uris (see LINK_*).
 JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     JNIEnv* env, jclass cls, jlong h, jintArray state_out, jintArray screen_out, jintArray dirty_out,
-    jintArray extra_out) {
+    jintArray extra_out, jintArray links_out, jbyteArray uris_out) {
     (void) cls;
     Core* c = core_of(h);
     if (c == NULL || state_out == NULL || screen_out == NULL || dirty_out == NULL || extra_out == NULL) return JNI_FALSE;
@@ -547,6 +853,8 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE, &visible);
     uint8_t kitty = 0;
     ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, &kitty);
+    GhosttyMouseShape mouse = GHOSTTY_MOUSE_SHAPE_TEXT;
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MOUSE_SHAPE, &mouse);
 
     int flags = c->events;
     c->events = 0;
@@ -564,6 +872,7 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     st[ST_MODES] = read_modes(c);
     st[ST_KITTY_FLAGS] = kitty;
     st[ST_CURSOR_STYLE] = (jint) cursor.visual_style;
+    st[ST_MOUSE_SHAPE] = (jint) mouse;
     (*env)->SetIntArrayRegion(env, state_out, 0, ST_COUNT, st);
 
     // Rows: copy each changed row into the reusable row buffer, then into the Java arrays.
@@ -572,6 +881,8 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     jint* dirty_rows = c->dirty_buf;
     for (int y = 0; y < rows; y++) dirty_rows[y] = -1;
     int extra_used = 0;
+    LinkOut links;
+    link_out_init(env, &links, links_out, uris_out);
     if (dirty != GHOSTTY_RENDER_STATE_DIRTY_FALSE
         && ghostty_render_state_get(c->render, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &c->row_iter) == GHOSTTY_SUCCESS) {
         int y = 0;
@@ -583,11 +894,22 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
                 if (n >= 0) {
                     (*env)->SetIntArrayRegion(env, screen_out, y * cols * CELL_INTS, cols * CELL_INTS, row_cells);
                     GhosttyRow raw_row = 0;
-                    bool wrap = false;
-                    if (ghostty_render_state_row_get(c->row_iter, GHOSTTY_RENDER_STATE_ROW_DATA_RAW, &raw_row) == GHOSTTY_SUCCESS)
+                    bool wrap = false, linked = false;
+                    int prompt = 0;
+                    if (ghostty_render_state_row_get(c->row_iter, GHOSTTY_RENDER_STATE_ROW_DATA_RAW, &raw_row) == GHOSTTY_SUCCESS) {
                         ghostty_row_get(raw_row, GHOSTTY_ROW_DATA_WRAP, &wrap);
-                    dirty_rows[y] = n | (wrap ? ROW_WRAPPED : 0);
+                        ghostty_row_get(raw_row, GHOSTTY_ROW_DATA_HYPERLINK, &linked);
+                        prompt = prompt_bit(raw_row);
+                    }
+                    dirty_rows[y] = n | (wrap ? ROW_WRAPPED : 0) | prompt;
                     extra_used += n;
+                    if (linked) {
+                        // The viewport is never scrolled, so render row y is active row y.
+                        GhosttyGridRef row_ref = {0};
+                        GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = (uint32_t) y}}};
+                        if (ghostty_terminal_grid_ref(c->term, p, &row_ref) == GHOSTTY_SUCCESS)
+                            read_links(env, c, &links, &row_ref, cols, y);
+                    }
                 }
                 bool clean = false;
                 ghostty_render_state_row_set(c->row_iter, GHOSTTY_RENDER_STATE_ROW_OPT_DIRTY, &clean);
@@ -597,15 +919,19 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeSync(
     }
     (*env)->SetIntArrayRegion(env, dirty_out, 0, rows, dirty_rows);
     if (extra_used > 0) (*env)->SetIntArrayRegion(env, extra_out, 0, extra_used, (const jint*) extra);
+    link_out_finish(env, &links);
     GhosttyRenderStateDirty clean_state = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
     ghostty_render_state_set(c->render, GHOSTTY_RENDER_STATE_OPT_DIRTY, &clean_state);
     return JNI_TRUE;
 }
 
 // Read one history row (0 = oldest) cell by cell into cells/extra, when a reader asks for it (Java
-// keeps no copy of history). Only valid between a sync and the next write. Returns the number of extra code points (| ROW_WRAPPED), or -1 if the row is gone.
+// keeps no copy of history). Only valid between a sync and the next write. Returns the number of
+// extra code points (| ROW_WRAPPED | ROW_PROMPT), or -1 if the row is gone. Its links go to
+// links/uris (see LINK_*), as row 0.
 JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryRow(
-    JNIEnv* env, jclass cls, jlong h, jint y, jintArray cells_out, jintArray extra_out) {
+    JNIEnv* env, jclass cls, jlong h, jint y, jintArray cells_out, jintArray extra_out, jintArray links_out,
+    jbyteArray uris_out) {
     (void) cls;
     Core* c = core_of(h);
     if (c == NULL || y < 0 || cells_out == NULL || extra_out == NULL) return -1;
@@ -617,7 +943,10 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryR
     uint32_t* extra = c->extra_buf;
     memset(row, 0, sizeof(jint) * (size_t) cols * CELL_INTS);
     int used = 0;
-    bool wrap = false;
+    bool wrap = false, linked = false;
+    int prompt = 0;
+    LinkOut links;
+    link_out_init(env, &links, links_out, uris_out);
     // Look the row up once: a grid ref is a page and a cell within it, and every page holds rows
     // of the terminal's full width, so the row's other cells differ only in x.
     GhosttyGridRef row_ref = {0};
@@ -650,12 +979,39 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeReadHistoryR
         cell[CELL_UNDERLINE] = pack_color(style.underline_color);
         if (x == 0) {
             GhosttyRow r = 0;
-            if (ghostty_grid_ref_row(&ref, &r) == GHOSTTY_SUCCESS) ghostty_row_get(r, GHOSTTY_ROW_DATA_WRAP, &wrap);
+            if (ghostty_grid_ref_row(&ref, &r) == GHOSTTY_SUCCESS) {
+                ghostty_row_get(r, GHOSTTY_ROW_DATA_WRAP, &wrap);
+                ghostty_row_get(r, GHOSTTY_ROW_DATA_HYPERLINK, &linked);
+                prompt = prompt_bit(r);
+            }
         }
     }
     (*env)->SetIntArrayRegion(env, cells_out, 0, cols * CELL_INTS, row);
     if (used > 0) (*env)->SetIntArrayRegion(env, extra_out, 0, used, (const jint*) extra);
-    return used | (wrap ? ROW_WRAPPED : 0);
+    if (linked) read_links(env, c, &links, &row_ref, width, 0);
+    link_out_finish(env, &links);
+    return used | (wrap ? ROW_WRAPPED : 0) | prompt;
+}
+
+// The first history row from `from` towards `to` (both inclusive, 0 = oldest kept) that starts a
+// shell prompt, or -1. Reads only each row's prompt flag, not its cells, so a jump through a long
+// history costs one row lookup per row. Valid between a sync and the next write.
+JNIEXPORT jint JNICALL Java_com_termux_terminal_GhosttyNative_nativeFindPromptRow(
+    JNIEnv* env, jclass cls, jlong h, jint from, jint to) {
+    (void) env;
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || from < 0 || to < 0) return -1;
+    int step = to >= from ? 1 : -1;
+    for (jint y = from;; y += step) {
+        GhosttyGridRef ref = {0};
+        GhosttyPoint p = {.tag = GHOSTTY_POINT_TAG_HISTORY, .value = {.coordinate = {.x = 0, .y = (uint32_t) y}}};
+        GhosttyRow r = 0;
+        if (ghostty_terminal_grid_ref(c->term, p, &ref) == GHOSTTY_SUCCESS
+            && ghostty_grid_ref_row(&ref, &r) == GHOSTTY_SUCCESS && prompt_bit(r) != 0)
+            return y;
+        if (y == to) return -1;
+    }
 }
 
 // The current palette, foreground, background and cursor colour as 0xRRGGBB (259 entries).

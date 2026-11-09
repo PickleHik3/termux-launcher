@@ -54,8 +54,18 @@ final class GhosttyMirror {
      */
     static int applyRow(TerminalRow row, int columns, int[] cells, int cellOffset, int[] extra,
                         int extraOffset, int rowResult) {
+        return applyRow(row, columns, cells, cellOffset, extra, extraOffset, rowResult, null);
+    }
+
+    /**
+     * {@link #applyRow(TerminalRow, int, int[], int, int[], int, int)} with each cell's OSC 8 link
+     * id from {@code linkIds} (null: no links), and the row's OSC 133 prompt mark from the result.
+     */
+    static int applyRow(TerminalRow row, int columns, int[] cells, int cellOffset, int[] extra,
+                        int extraOffset, int rowResult, int[] linkIds) {
         row.clear(TextStyle.NORMAL);
         row.mLineWrap = (rowResult & GhosttyNative.ROW_WRAPPED) != 0;
+        if ((rowResult & GhosttyNative.ROW_PROMPT) != 0) row.mShellIntegrationMark = TerminalRow.MARK_PROMPT_START;
         int extraIndex = extraOffset;
         for (int x = 0; x < columns; x++) {
             int base = cellOffset + x * GhosttyNative.CELL_INTS;
@@ -68,21 +78,23 @@ final class GhosttyMirror {
             }
             long style = GhosttyStyle.toTextStyle(attrs, cells[base + GhosttyNative.CELL_FG],
                 cells[base + GhosttyNative.CELL_BG]);
+            int link = linkIds == null ? TerminalHyperlinks.NO_LINK : linkIds[x];
             int codePoint = cells[base + GhosttyNative.CELL_CODEPOINT];
             if (codePoint <= 0 || codePoint > Character.MAX_CODE_POINT || wide == GhosttyNative.WIDE_SPACER_HEAD) {
-                // Empty, but it may still carry a background colour.
-                if (style != TextStyle.NORMAL) row.setChar(x, ' ', style);
+                // Empty, but it may still carry a background colour or a link.
+                if (style != TextStyle.NORMAL || link != TerminalHyperlinks.NO_LINK)
+                    row.setChar(x, ' ', style, TextStyle.DECORATION_COLOR_DEFAULT, link);
                 extraIndex += extras;
                 continue;
             }
             // A wide character in the last column cannot fit; leave the cell blank rather than throw.
             if (WcWidth.width(codePoint) == 2 && x == columns - 1) {
-                row.setChar(x, ' ', style);
+                row.setChar(x, ' ', style, TextStyle.DECORATION_COLOR_DEFAULT, link);
                 extraIndex += extras;
                 continue;
             }
             row.setChar(x, codePoint, style,
-                GhosttyStyle.decorationColor(cells[base + GhosttyNative.CELL_UNDERLINE]), 0);
+                GhosttyStyle.decorationColor(cells[base + GhosttyNative.CELL_UNDERLINE]), link);
             for (int i = 0; i < extras; i++, extraIndex++) {
                 if (extraIndex >= extra.length) break;
                 int extraCodePoint = extra[extraIndex];
@@ -103,6 +115,16 @@ final class GhosttyMirror {
      * @param dirty per screen row, the row result or -1 when the row did not change
      */
     static void applyScreen(TerminalBuffer buffer, int columns, int rows, int[] screen, int[] dirty, int[] extra) {
+        applyScreen(buffer, columns, rows, screen, dirty, extra, null, null, null);
+    }
+
+    /**
+     * {@link #applyScreen(TerminalBuffer, int, int, int[], int[], int[])} with the changed rows' OSC
+     * 8 links, from the runs and URIs the sync wrote ({@code links} null: none).
+     */
+    static void applyScreen(TerminalBuffer buffer, int columns, int rows, int[] screen, int[] dirty, int[] extra,
+                            GhosttyLinks links, int[] linkRuns, byte[] linkUris) {
+        if (links != null) links.begin();
         Stats stats = GhosttyMirror.stats;
         long start = stats == null ? 0 : System.nanoTime();
         int copied = 0;
@@ -112,7 +134,8 @@ final class GhosttyMirror {
             if (result < 0) continue;
             copied++;
             TerminalRow row = buffer.allocateFullLineIfNecessary(buffer.externalToInternalRow(y));
-            applyRow(row, columns, screen, y * columns * GhosttyNative.CELL_INTS, extra, extraOffset, result);
+            int[] linkIds = links == null ? null : links.cellIds(linkRuns, linkUris, y, columns);
+            applyRow(row, columns, screen, y * columns * GhosttyNative.CELL_INTS, extra, extraOffset, result, linkIds);
             extraOffset += result & GhosttyNative.ROW_EXTRA_MASK;
         }
         if (stats != null) {
