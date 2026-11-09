@@ -75,6 +75,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     /** How often the debug shader file's time stamp is looked at. */
     private static final long WATCH_MS = 1000L;
     private static final long BATTERY_MS = 30_000L;
+    /** "Never": a time field compared as {@code now - field} must not start at Long.MIN_VALUE (it overflows). */
+    private static final long NONE_MS = Long.MIN_VALUE;
 
     /** Why the layer asks to go back to photo. */
     public static final String REVERT_CONTEXT_LOST = "context_lost";
@@ -419,8 +421,15 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @Nullable private ShaderSafety.Quality mSeenQuality;
         private int mSeenLookGen = -1;
         private long mSourceMtime = Long.MIN_VALUE;
-        private long mWatchAtMs = Long.MIN_VALUE;
-        private long mBatteryAtMs = Long.MIN_VALUE;
+        /** Uptime of the last battery read; NONE until the first frame reads it. */
+        private long mBatteryAtMs = NONE_MS;
+        /**
+         * Debug route: the file's time stamp is looked at every {@link #WATCH_MS} on this thread's
+         * handler, apart from the frame loop, so a change is seen while no program draws or the
+         * scene is held. A change rebuilds and draws one frame.
+         */
+        private final Runnable mWatch = this::watchSource;
+        private boolean mWatching;
         private long mFirstDrawMs = Long.MIN_VALUE;
         private boolean mPendingCleared;
         private boolean mGaveUp;
@@ -481,13 +490,6 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             if (mLookGen != mSeenLookGen) {
                 mSeenLookGen = mLookGen;
                 mSurfaceBlank = true;
-            }
-            if (mSpec.debugFile && nowMs - mWatchAtMs >= WATCH_MS) {
-                mWatchAtMs = nowMs;
-                if (mSpec.source.lastModified() != mSourceMtime) {
-                    loadShader();
-                    mSurfaceBlank = true;
-                }
             }
             boolean moving = motion && !held && !powerHold && !heavyHold;
             long period = moving ? mPeriodNs : Long.MAX_VALUE;
@@ -602,7 +604,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             mIn.pointers[1] = mIn.touch[1];
             mIn.pointers[2] = 0f;
             mIn.setDate(System.currentTimeMillis());
-            if (nowMs - mBatteryAtMs >= BATTERY_MS) {
+            if (mBatteryAtMs == NONE_MS || nowMs - mBatteryAtMs >= BATTERY_MS) {
                 mBatteryAtMs = nowMs;
                 BatteryManager bm = mAppContext.getSystemService(BatteryManager.class);
                 int pct = bm == null ? -1 : bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
@@ -694,7 +696,31 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             return mWindow != null;
         }
 
-        /** (Re)reads the source file and builds the program; on failure the old one is dropped. */
+        private void startWatching() {
+            if (!mSpec.debugFile || mWatching) return;
+            mWatching = true;
+            handler.postDelayed(mWatch, WATCH_MS);
+        }
+
+        private void stopWatching() {
+            mWatching = false;
+            handler.removeCallbacks(mWatch);
+        }
+
+        private void watchSource() {
+            if (!mWatching) return;
+            if (mGl != null && mSpec.source.lastModified() != mSourceMtime) {
+                loadShader();
+                mSurfaceBlank = true;
+                start();
+            }
+            handler.postDelayed(mWatch, WATCH_MS);
+        }
+
+        /**
+         * (Re)reads the source file and builds the program. A stored shader that fails is dropped
+         * and reverts; the debug route logs the errors and keeps the last good program.
+         */
         private void loadShader() {
             SceneGl gl = mGl;
             if (gl == null) return;
@@ -702,8 +728,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             String text = ShaderStore.readText(mSpec.source);
             if (text == null) {
                 Log.e(TAG, "cannot read the shader file " + mSpec.source);
-                gl.setShader(null);
-                if (!mSpec.debugFile) giveUp(REVERT_COMPILE);
+                // The debug route keeps the last good program; a stored shader cannot go on.
+                if (!mSpec.debugFile) {
+                    gl.setShader(null);
+                    giveUp(REVERT_COMPILE);
+                }
                 return;
             }
             gl.egl.makeCurrentOffscreen();
@@ -713,8 +742,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 Log.i(TAG, "shader built (" + gl.shader().built.flavour + ") from " + mSpec.source.getName());
             } catch (GlShader.CompileException e) {
                 Log.e(TAG, "shader does not build:\n" + e.getMessage());
-                gl.setShader(null);
-                if (!mSpec.debugFile) giveUp(REVERT_COMPILE);
+                if (mSpec.debugFile) {
+                    if (gl.shader() != null) Log.i(TAG, "keeping the last good shader");
+                } else {
+                    gl.setShader(null);
+                    giveUp(REVERT_COMPILE);
+                }
             }
         }
 
@@ -756,6 +789,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 mSurfaceObj = surface;
                 mSurfaceReady = bringUpGl();
                 mSurfaceBlank = true;
+                startWatching();
             } finally {
                 Trace.endSection();
             }
@@ -780,6 +814,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             Trace.beginSection("Scene.surface");
             try {
                 mSurfaceReady = false;
+                stopWatching();
                 if (mChoreographer != null) mChoreographer.removeFrameCallback(mFrame);
                 mPosted = false;
                 goIdle();
