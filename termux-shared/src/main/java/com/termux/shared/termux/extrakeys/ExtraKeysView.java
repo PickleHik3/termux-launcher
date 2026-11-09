@@ -1271,9 +1271,11 @@ public final class ExtraKeysView extends GridLayout {
     @Nullable
     private ExtraKeyColorRole roleFor(@NonNull MaterialButton button,
                                       @Nullable ExtraKeyButton info) {
-        if (mPreviewRoles.containsKey(button))
-            return mPreviewRoles.get(button);
-        return info == null ? null : info.getColor();
+        ExtraKeyColorRole role = mPreviewRoles.containsKey(button)
+            ? mPreviewRoles.get(button) : info == null ? null : info.getColor();
+        if (role == null && info != null && placeFocusOf(info) != PlaceFocus.NOT_A_PLACE)
+            return ExtraKeyColorRole.defaultForPlaceSwitch(info.getKey());
+        return role;
     }
 
     /** {@code {background, label}} for a role, resolved from the theme once and then remembered. */
