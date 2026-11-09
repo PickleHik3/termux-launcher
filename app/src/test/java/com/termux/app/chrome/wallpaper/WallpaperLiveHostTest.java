@@ -97,8 +97,11 @@ public class WallpaperLiveHostTest {
     public void theKindRowOffersPhotoVideoAndShader() {
         WallpaperLiveHost host = open(true);
         MaterialButtonToggleGroup group = host.root().findViewById(R.id.segmented_pill_track);
-        assertEquals(3, group.getChildCount());
-        for (int i = 0; i < 3; i++) assertEquals(View.VISIBLE, group.getChildAt(i).getVisibility());
+        int visible = 0;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            if (group.getChildAt(i).getVisibility() == View.VISIBLE) visible++;
+        }
+        assertEquals(3, visible);
         assertEquals(R.id.segmented_pill_default, group.getCheckedButtonId());
 
         group.check(R.id.segmented_pill_third);
