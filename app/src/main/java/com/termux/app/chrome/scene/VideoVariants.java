@@ -50,6 +50,8 @@ public final class VideoVariants {
         public final float fps;
         /** True when the source is a GIF (no playable original; every rate is an encode). */
         public final boolean gif;
+        /** False for a one-frame GIF, which stays a still and is never encoded. */
+        public final boolean animated;
         /** Per {@link VideoVariantRules#RATES} index: a file for that rate exists and is complete. */
         @NonNull public final boolean[] ready;
         /** Per rate index: that file's size in bytes, 0 when absent. */
@@ -61,9 +63,15 @@ public final class VideoVariants {
 
         public State(@NonNull String name, float fps, boolean gif, @NonNull boolean[] ready,
                      @NonNull long[] sizeBytes, boolean hasOriginal, @NonNull String hint) {
+            this(name, fps, gif, true, ready, sizeBytes, hasOriginal, hint);
+        }
+
+        public State(@NonNull String name, float fps, boolean gif, boolean animated, @NonNull boolean[] ready,
+                     @NonNull long[] sizeBytes, boolean hasOriginal, @NonNull String hint) {
             this.name = name;
             this.fps = fps;
             this.gif = gif;
+            this.animated = animated;
             this.ready = ready;
             this.sizeBytes = sizeBytes;
             this.hasOriginal = hasOriginal;
@@ -88,6 +96,7 @@ public final class VideoVariants {
 
         /** True when choosing this rate starts an encode (available, not ready, and wants one). */
         public boolean wantsPrepare(int rateHz) {
+            if (gif && !animated) return false;
             return VideoVariantRules.needsEncode(fps, gif, rateHz) && !isReady(rateHz);
         }
     }
@@ -124,7 +133,7 @@ public final class VideoVariants {
             ready[i] = f.isFile() && f.length() > 0L;
             sizes[i] = ready[i] ? f.length() : 0L;
         }
-        return new State(meta.name, meta.fps, meta.gif, ready, sizes, findOriginal(dir) != null, meta.hint);
+        return new State(meta.name, meta.fps, meta.gif, meta.animated, ready, sizes, findOriginal(dir) != null, meta.hint);
     }
 
     /**
