@@ -108,6 +108,17 @@ public final class TerminalRow {
     private int[] mTextSizes;
 
     /**
+     * Where the last {@link #locateColumn} found a cell: the cell that starts at column
+     * {@code mHintColumn} has its code point at {@code mText[mHintIndex]}, and nothing before that
+     * index has changed since. Text is written left to right, so the next write usually starts its
+     * walk here instead of at column 0. Every change to {@link #mText} or {@link #mCharWidths}
+     * happens in {@link #setChar}, at or after the index its own walk just recorded, or in
+     * {@link #clear} and {@link #widenCell}, which put the hint back to the start of the row.
+     */
+    private int mHintColumn;
+    private int mHintIndex;
+
+    /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
@@ -351,6 +362,7 @@ public final class TerminalRow {
         Arrays.fill(mCharWidths, (byte) 1);
         Arrays.fill(mStyle, style);
         mSpaceUsed = mColumns;
+        mHintColumn = mHintIndex = 0;
         mHasNonOneWidthOrSurrogateChars = false;
         mHasBitmap = false;
         // Erasing a row drops its links and decoration colors, as they belong to the erased text.
@@ -457,11 +469,61 @@ public final class TerminalRow {
         System.arraycopy(mCharWidths, nextEnd, mCharWidths, nextStart, mSpaceUsed - nextEnd);
         mSpaceUsed -= removed;
         mCharWidths[start] = 2;
+        // The cell after this one is gone, so a hint that points at it no longer does.
+        mHintColumn = mHintIndex = 0;
         mStyle[column + 1] = mStyle[column];
         setDecorationColor(column + 1, getDecorationColor(column));
         setHyperlinkId(column + 1, getHyperlinkId(column));
         mHasNonOneWidthOrSurrogateChars = true;
         return true;
+    }
+
+    /**
+     * Walk the row once to the cell covering {@code column}. The result is the index in
+     * {@link #mText} of the code point stored for that cell, shifted left one bit, with bit 0 set
+     * when the column is the right half of a double-width character. Zero-width code points
+     * belong to the cell before them. Returns -1 when the row's cells end before the column. The
+     * walk starts at {@link #mHintColumn} when that is not past the column, and leaves the hint at
+     * the cell it found.
+     */
+    private int locateColumn(int column) {
+        final char[] text = mText;
+        final byte[] widths = mCharWidths;
+        final int used = mSpaceUsed;
+        int currentColumn = 0;
+        int index = 0;
+        if (mHintColumn <= column) {
+            currentColumn = mHintColumn;
+            index = mHintIndex;
+        }
+        for (; index < used; ) {
+            int width = widths[index];
+            if (width > 0) {
+                if (currentColumn + width > column) {
+                    mHintColumn = currentColumn;
+                    mHintIndex = index;
+                    return (index << 1) | (currentColumn < column ? 1 : 0);
+                }
+                currentColumn += width;
+            }
+            index += Character.isHighSurrogate(text[index]) ? 2 : 1;
+        }
+        mHintColumn = mHintIndex = 0;
+        return -1;
+    }
+
+    /** What {@link #locateColumn} answers, from the separate scans, for a row it cannot walk. */
+    private int scanForColumn(int column) {
+        return (findStartOfColumn(column) << 1)
+            | ((column > 0 && wideDisplayCharacterStartingAt(column - 1)) ? 1 : 0);
+    }
+
+    /** Index just past the cell stored at {@code startIndex} and its zero-width code points. */
+    private int endOfColumnText(int startIndex) {
+        int index = startIndex + (Character.isHighSurrogate(mText[startIndex]) ? 2 : 1);
+        while (index < mSpaceUsed && mCharWidths[index] <= 0)
+            index += Character.isHighSurrogate(mText[index]) ? 2 : 1;
+        return index;
     }
 
     private void setChar(int columnToSet, int codePoint, long style, int decorationColor,
@@ -490,27 +552,66 @@ public final class TerminalRow {
             }
         }
         final boolean newIsCombining = newCodePointDisplayWidth <= 0;
-        boolean wasExtraColForWideChar = (columnToSet > 0) && wideDisplayCharacterStartingAt(columnToSet - 1);
+        // One walk from the start of the row finds the cell under the column. The width of that
+        // cell, whether the column is the right half of a wide character, the wide character that
+        // may start in the next column and where this cell's text ends all come from it. Only a
+        // write that first blanks a neighbouring wide character moves the text and walks again.
+        int located = locateColumn(columnToSet);
+        boolean walked = located >= 0;
+        if (!walked) {
+            // The row's cells end before this column, which a well formed row never does. Keep
+            // the answers the separate scans would give.
+            located = scanForColumn(columnToSet);
+        }
+        boolean wasExtraColForWideChar = (located & 1) != 0;
         if (newIsCombining) {
             // When standing at second half of wide character and inserting combining:
-            if (wasExtraColForWideChar)
+            if (wasExtraColForWideChar) {
                 columnToSet--;
+                if (!walked)
+                    located = scanForColumn(columnToSet);
+            }
         } else {
+            boolean textMoved = false;
             // Check if we are overwriting the second half of a wide character starting at the previous column:
-            if (wasExtraColForWideChar)
+            if (wasExtraColForWideChar) {
                 setChar(columnToSet - 1, ' ', style);
+                textMoved = true;
+            }
             // Check if we are overwriting the first half of a wide character starting at the next column:
-            boolean overwritingWideCharInNextColumn = newCodePointDisplayWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1);
-            if (overwritingWideCharInNextColumn)
-                setChar(columnToSet + 1, ' ', style);
+            if (newCodePointDisplayWidth == 2) {
+                boolean overwritingWideCharInNextColumn;
+                if (textMoved || !walked) {
+                    overwritingWideCharInNextColumn = wideDisplayCharacterStartingAt(columnToSet + 1);
+                } else {
+                    // The next cell starts where this one's text ends, unless this cell is itself
+                    // wide and takes the next column.
+                    int startIndex = located >> 1;
+                    int nextStartIndex = endOfColumnText(startIndex);
+                    overwritingWideCharInNextColumn = mCharWidths[startIndex] == 1
+                        && nextStartIndex < mSpaceUsed && mCharWidths[nextStartIndex] == 2;
+                }
+                if (overwritingWideCharInNextColumn) {
+                    setChar(columnToSet + 1, ' ', style);
+                    textMoved = true;
+                }
+            }
+            if (textMoved) {
+                located = locateColumn(columnToSet);
+                walked = located >= 0;
+                if (!walked)
+                    located = scanForColumn(columnToSet);
+            }
         }
         char[] text = mText;
-        final int oldStartOfColumnIndex = findStartOfColumn(columnToSet);
+        final int oldStartOfColumnIndex = located >> 1;
         final int oldCodePointDisplayWidth = mCharWidths[oldStartOfColumnIndex];
         // Get the number of elements in the mText array this column uses now
         int oldCharactersUsedForColumn;
         if (columnToSet + oldCodePointDisplayWidth < mColumns) {
-            int oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth);
+            int oldEndOfColumnIndex = walked
+                ? endOfColumnText(oldStartOfColumnIndex)
+                : findStartOfColumn(columnToSet + oldCodePointDisplayWidth);
             oldCharactersUsedForColumn = oldEndOfColumnIndex - oldStartOfColumnIndex;
         } else {
             // Last character.
