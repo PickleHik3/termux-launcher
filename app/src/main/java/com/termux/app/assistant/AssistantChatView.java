@@ -10,6 +10,7 @@ import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -67,6 +68,11 @@ final class AssistantChatView extends LinearLayout {
     private final ImageButton jump;
     private final AssistantNoticeView notice;
     private final AssistantComposer composer;
+    private final LinearLayout answerStatus;
+    private final ProgressBar answerSpinner;
+    private final TextView answerStatusText;
+    private AssistantModelPresenter.Stage answerStage = AssistantModelPresenter.Stage.NONE;
+    private String answerModelName = "";
     private AssistantUi.Palette palette;
     @Nullable private Listener listener;
     private AssistantModelPresenter.Chip chipState = AssistantModelPresenter.Chip.NO_MODEL;
@@ -165,6 +171,23 @@ final class AssistantChatView extends LinearLayout {
         LayoutParams np = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         np.setMargins(inset, 0, inset, inset);
         addView(notice, np);
+        answerStatus = new LinearLayout(context);
+        answerStatus.setOrientation(LinearLayout.HORIZONTAL);
+        answerStatus.setGravity(Gravity.CENTER_VERTICAL);
+        answerSpinner = new ProgressBar(context);
+        answerSpinner.setIndeterminate(true);
+        int spin = AssistantUi.dp(context, 14);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(spin, spin);
+        sp.setMarginEnd(AssistantUi.dp(context, 8));
+        answerStatus.addView(answerSpinner, sp);
+        answerStatusText = AssistantUi.text(context);
+        answerStatusText.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        answerStatus.addView(answerStatusText, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        answerStatus.setVisibility(GONE);
+        LayoutParams ap = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ap.setMargins(inset * 2, 0, inset * 2, AssistantUi.dp(context, 6));
+        addView(answerStatus, ap);
         composer = new AssistantComposer(context, palette);
         LayoutParams cp = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         cp.setMargins(inset, 0, inset, inset);
@@ -204,6 +227,27 @@ final class AssistantChatView extends LinearLayout {
 
     @NonNull AssistantNoticeView notice() { return notice; }
 
+    /** The one line above the composer naming the stage of an answer in progress; gone when there is none. */
+    void setAnswerStatus(@NonNull AssistantModelPresenter.Stage stage, @NonNull String modelName) {
+        boolean sameName = stage != AssistantModelPresenter.Stage.LOADING_MODEL || answerModelName.equals(modelName);
+        if (stage == answerStage && sameName) return;
+        answerStage = stage;
+        answerModelName = modelName;
+        if (stage == AssistantModelPresenter.Stage.NONE) {
+            AssistantUi.setVisible(answerStatus, false);
+            return;
+        }
+        Context c = getContext();
+        String line;
+        switch (stage) {
+            case LOADING_MODEL: line = c.getString(R.string.assistant_status_loading, modelName); break;
+            case THINKING: line = c.getString(R.string.assistant_status_thinking); break;
+            default: line = c.getString(R.string.assistant_status_responding); break;
+        }
+        AssistantUi.setText(answerStatusText, line);
+        AssistantUi.setVisible(answerStatus, true);
+    }
+
     void applyPalette(@NonNull AssistantUi.Palette p) {
         palette = p;
         AssistantUi.tint(chatsButton, p.onSurface);
@@ -222,6 +266,8 @@ final class AssistantChatView extends LinearLayout {
         adapter.setPalette(p);
         composer.applyPalette(p);
         notice.setPalette(p);
+        AssistantUi.bodySmall(answerStatusText, p.onSurfaceVariant);
+        answerSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(p.primary));
         applyChip();
         setRecent(recent);
     }

@@ -17,6 +17,9 @@
     <string name="assistant_stop">Stop</string>
     <string name="assistant_dictate">Dictate</string>
     <string name="assistant_you">You: %1$s</string>
+    <string name="assistant_status_loading">Loading %1$s</string>
+    <string name="assistant_status_thinking">Thinking</string>
+    <string name="assistant_status_responding">Responding</string>
     <string name="assistant_working">Working on it</string>
     <string name="assistant_waiting">Waiting for the model</string>
     <string name="assistant_stopped">Stopped</string>

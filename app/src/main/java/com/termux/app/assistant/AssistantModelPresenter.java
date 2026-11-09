@@ -16,7 +16,17 @@ public final class AssistantModelPresenter {
     /** Failures the status does not hold: remembered by the page from the action that failed. */
     public enum Failure { NONE, DOWNLOAD_FAILED, NO_SPACE, NO_MEMORY }
 
+    /** Where an answer in progress is: the stage the status line above the composer names. */
+    public enum Stage { NONE, LOADING_MODEL, THINKING, RESPONDING }
+
     private AssistantModelPresenter() {
+    }
+
+    @NonNull
+    public static Stage stage(boolean generating, boolean liveTextEmpty, @NonNull AssistantModelStatus.Kind kind) {
+        if (!generating) return Stage.NONE;
+        if (!liveTextEmpty) return Stage.RESPONDING;
+        return kind == AssistantModelStatus.Kind.READY ? Stage.THINKING : Stage.LOADING_MODEL;
     }
 
     @NonNull

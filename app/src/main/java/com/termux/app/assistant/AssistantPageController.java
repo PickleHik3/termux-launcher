@@ -269,11 +269,24 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         chatView.composer().setGenerating(engine.isGenerating());
         updateChip();
         updateNotice();
+        updateAnswerStatus();
         // An answer the store still calls streaming that nobody is writing: read it as the store has it.
         if (generating == 0L && !messages.isEmpty() && AssistantMessage.STATE_STREAMING
             .equals(messages.get(messages.size() - 1).state) && !renderScheduled) {
             reload();
         }
+    }
+
+    /** The status line above the composer: loading, thinking or responding while an answer is in progress. */
+    private void updateAnswerStatus() {
+        long id = engine.generatingMessageId();
+        String live = id == 0L ? null : engine.liveText(id);
+        AssistantModelStatus.Snapshot snap = snapshot;
+        AssistantModelStatus.Kind kind = snap == null ? AssistantModelStatus.Kind.NONE : snap.defaultModel.state.kind;
+        AssistantModelPresenter.Stage stage = AssistantModelPresenter.stage(engine.isGenerating(),
+            live == null || live.isEmpty(), kind);
+        String name = snap == null ? "" : context.getString(AssistantModelPresenter.fullName(snap.defaultModel.modelId));
+        chatView.setAnswerStatus(stage, name);
     }
 
     private boolean containsMessage(long id) {
@@ -634,6 +647,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         if (sheet != null) sheet.refresh();
         updateChip();
         updateNotice();
+        updateAnswerStatus();
         engine.setModelReady(AssistantModelPresenter.canAnswer(next));
     }
 

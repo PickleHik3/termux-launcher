@@ -129,4 +129,31 @@ public class AssistantChatViewTest {
         composer.setGenerating(false);
         assertEquals(0, sent.size());
     }
+
+    @Test
+    public void answerStatusShowsTheStageAndHidesWhenNone() {
+        Context context = themed();
+        AssistantUi.Palette palette = AssistantUi.Palette.read(new View(context));
+        AssistantChatView chat = new AssistantChatView(context, palette, NO_ACTIONS);
+        chat.setAnswerStatus(AssistantModelPresenter.Stage.LOADING_MODEL, "Gemma 3n E2B");
+        layout(chat, 1080, 2000);
+        assertEquals("Loading Gemma 3n E2B", visibleText(chat, "Loading Gemma 3n E2B"));
+        chat.setAnswerStatus(AssistantModelPresenter.Stage.THINKING, "Gemma 3n E2B");
+        assertEquals("Thinking", visibleText(chat, "Thinking"));
+        chat.setAnswerStatus(AssistantModelPresenter.Stage.NONE, "Gemma 3n E2B");
+        assertEquals(null, visibleText(chat, "Thinking"));
+    }
+
+    private static String visibleText(View root, String wanted) {
+        if (root.getVisibility() != View.VISIBLE) return null;
+        if (root instanceof TextView && wanted.contentEquals(((TextView) root).getText())) return wanted;
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) root;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                String r = visibleText(g.getChildAt(i), wanted);
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
 }
