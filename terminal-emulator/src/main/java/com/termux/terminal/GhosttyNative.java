@@ -269,7 +269,7 @@ final class GhosttyNative {
 
     /**
      * Compress history: one bounded step, or every eligible page when {@code full}. Returns a
-     * COMPRESS_* result, or -1 on error. For measuring only.
+     * COMPRESS_* result, or -1 on error.
      */
     static native int nativeCompress(long handle, boolean full);
 
@@ -322,4 +322,19 @@ final class GhosttyNative {
 
     /** An image's generation, 0 when it is not stored. */
     static native long nativeKittyImageGeneration(long handle, int imageId);
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /**
+     * The active screen and up to {@code historyRows} rows of history above it as VT bytes, for a
+     * Java emulator of the same size to replay: text, styles, modes and the cursor. Null when the
+     * formatter fails.
+     */
+    static native byte[] nativeFormatReplay(long handle, int historyRows);
+
+    /** The most bytes of history the primary screen keeps; Ghostty prunes in whole pages. */
+    static native void nativeSetHistoryByteLimit(long handle, long bytes);
+
+    /** The compression activity token, compared for equality only; -1 on error. */
+    static native long nativeCompressionActivity(long handle);
 }

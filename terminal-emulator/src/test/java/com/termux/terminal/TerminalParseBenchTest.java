@@ -74,7 +74,14 @@ public class TerminalParseBenchTest extends TestCase {
                 assertNotNull(line, field(line, "scrollback_read_ms"));
                 assertNull(GhosttyMirror.stats);
             }
-            if (ghostty) assertNotNull(line, field(line, "resident_bytes"));
+            if (ghostty) {
+                assertNotNull(line, field(line, "resident_bytes"));
+                // Memory after the idle compress a pane gets once output stops.
+                assertNotNull(line, field(line, "after_idle_compress"));
+                String idle = field(line, "idle_compress");
+                assertTrue(line, "\"complete\"".equals(idle) || "\"unsupported\"".equals(idle));
+                assertTrue(line, Integer.parseInt(field(line, "idle_compress_steps")) >= 1);
+            }
         }
         assertNotNull(javaTail);
         assertTrue(javaTail, javaTail.endsWith("003002 the quick brown fox jumps over the lazy dog 0123456789 abcdefghij\""));

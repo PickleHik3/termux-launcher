@@ -115,6 +115,9 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         core.mHandle = handle;
         core.setUpKittyGraphics();
         core.allocate(columns, rows);
+        core.mHistoryRowLimit = historyRows;
+        core.applyHistoryByteLimit();
+        GhosttyMemory.register(core);
         if (colors != null && colors.length >= TextStyle.NUM_INDEXED_COLORS)
             GhosttyNative.nativeSetColors(handle, colors);
         return core;
@@ -136,22 +139,30 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     void release() {
         long handle = mHandle;
         mHandle = 0;
-        if (handle != 0) GhosttyNative.nativeFree(handle);
+        if (handle == 0) return;
+        GhosttyNative.nativeFree(handle);
+        GhosttyCrashGuard.onCoreReleased(GhosttyMemory.unregister(this));
     }
 
     /** Parse the bytes. The Java buffers see the result only after the next {@link #sync()}. */
     void write(byte[] data, int offset, int length) {
-        if (mHandle != 0) GhosttyNative.nativeWrite(mHandle, data, offset, length);
+        if (mHandle == 0) return;
+        GhosttyCrashGuard.beforeWrite();
+        GhosttyNative.nativeWrite(mHandle, data, offset, length);
     }
 
     void setHistoryLimit(int rows) {
-        if (mHandle != 0) GhosttyNative.nativeSetHistoryLimit(mHandle, rows);
+        if (mHandle == 0) return;
+        GhosttyNative.nativeSetHistoryLimit(mHandle, rows);
+        mHistoryRowLimit = rows;
+        applyHistoryByteLimit();
     }
 
     void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         if (mHandle == 0) return;
         GhosttyNative.nativeResize(mHandle, columns, rows, cellWidthPixels, cellHeightPixels);
         if (columns != mColumns || rows != mRows) allocate(columns, rows);
+        applyHistoryByteLimit();
     }
 
     void reset() {
@@ -163,9 +174,20 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (mHandle != 0) GhosttyNative.nativeEndHold(mHandle);
     }
 
-    /** Read the terminal's state and changed rows; false when there is nothing to read. */
+    /**
+     * Read the terminal's state and changed rows; false once released. A live terminal that cannot
+     * be read is a Ghostty error and throws, so the emulator falls back to the Java core.
+     */
     boolean sync() {
-        return mHandle != 0 && GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra, mLinkRuns, mLinkUris);
+        if (mHandle == 0) return false;
+        RuntimeException injected = mFailNextSync;
+        if (injected != null) {
+            mFailNextSync = null;
+            throw injected;
+        }
+        if (!GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra, mLinkRuns, mLinkUris))
+            throw new IllegalStateException("ghostty: the render state could not be read");
+        return true;
     }
 
     /** OSC 8 link runs the last sync or history row read wrote. */
@@ -244,6 +266,78 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     /** Compress history (see {@link GhosttyNative#nativeCompress}); -1 when released. For measuring. */
     int compress(boolean full) {
         return mHandle == 0 ? -1 : GhosttyNative.nativeCompress(mHandle, full);
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /**
+     * Bytes of history per row Ghostty may keep, as {@link #pageRowsBound} counts them; with the
+     * row limit (transcript plus one page) this caps a styled flood at what plain rows would take.
+     */
+    static long historyByteLimit(int historyRows, int columns) {
+        return (long) Math.max(1, historyRows) * (ROW_HEADER_BYTES + (long) CELL_BYTES * Math.max(1, columns));
+    }
+
+    /** The row limit last given, which the byte limit follows. */
+    private int mHistoryRowLimit;
+    /** The compression activity token when the last idle pass completed; -1 for none yet. */
+    private long mCompressedActivity = -1;
+    /** Set when the library says compressing cannot free memory here; nothing is tried again. */
+    private boolean mCompressionUnsupported;
+    /** For tests: the next {@link #sync()} throws this, as a Ghostty error mid-stream would. */
+    private RuntimeException mFailNextSync;
+
+    private void applyHistoryByteLimit() {
+        if (mHandle != 0 && mHistoryRowLimit > 0)
+            GhosttyNative.nativeSetHistoryByteLimit(mHandle, historyByteLimit(mHistoryRowLimit, mColumns));
+    }
+
+    /**
+     * The screen and up to {@code historyRows} history rows as VT for a Java emulator to replay
+     * (see {@link GhosttyNative#nativeFormatReplay}), or null when the formatter fails.
+     */
+    byte[] formatReplay(int historyRows) {
+        if (mHandle == 0 || mFormatterBrokenForTests) return null;
+        return GhosttyNative.nativeFormatReplay(mHandle, historyRows);
+    }
+
+    /**
+     * One incremental compression step for an idle pane. A pass that completed is not repeated
+     * until the library's activity token moves, so an idle edge after typing costs one native call.
+     */
+    int compressIdleStep() {
+        if (mHandle == 0) return -1;
+        if (mCompressionUnsupported) return GhosttyNative.COMPRESS_UNSUPPORTED;
+        long activity = GhosttyNative.nativeCompressionActivity(mHandle);
+        if (activity >= 0 && activity == mCompressedActivity) return GhosttyNative.COMPRESS_COMPLETE;
+        int result = GhosttyNative.nativeCompress(mHandle, false);
+        if (result == GhosttyNative.COMPRESS_COMPLETE) mCompressedActivity = GhosttyNative.nativeCompressionActivity(mHandle);
+        else if (result == GhosttyNative.COMPRESS_UNSUPPORTED) mCompressionUnsupported = true;
+        return result;
+    }
+
+    /**
+     * Compress every eligible page now, for memory pressure. True when a pass ran; compression
+     * never changes what the terminal holds, so a failed pass leaves the pane as it was.
+     */
+    boolean compressFully() {
+        if (mHandle == 0 || mCompressionUnsupported) return false;
+        int result = GhosttyNative.nativeCompress(mHandle, true);
+        if (result == GhosttyNative.COMPRESS_UNSUPPORTED) mCompressionUnsupported = true;
+        if (result == GhosttyNative.COMPRESS_COMPLETE) mCompressedActivity = GhosttyNative.nativeCompressionActivity(mHandle);
+        return result == GhosttyNative.COMPRESS_COMPLETE || result == GhosttyNative.COMPRESS_PENDING;
+    }
+
+    /** For tests: make the next sync fail as a Ghostty error would. */
+    void failNextSyncForTests(RuntimeException failure) {
+        mFailNextSync = failure;
+    }
+
+    /** For tests: the formatter fails too. */
+    private boolean mFormatterBrokenForTests;
+
+    void breakFormatterForTests() {
+        mFormatterBrokenForTests = true;
     }
 
     @Override

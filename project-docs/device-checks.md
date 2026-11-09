@@ -58,6 +58,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   it; `printf '\e]9;4;1;40\a'` then `\e]9;4;3\a` then `\e]9;4;0\a` (pill ring follows); `printf
   '\e]9;hi\a'`, `'\e]777;notify;T;B\a'` and a kitty `\e]99;;Done\e\\` each post one notification;
   `printf '\e]66;s=2;Big\a\n'` prints "Big" at normal size; tlstore still reports no text sizing.
+  Wave 3 slice 6 (exp/ghostty-slice6, fail-safes and memory): `ghostty-core-bench.sh pong parse`
+  shows `idle_compress` complete and `after_idle_compress` resident well under the run's (about
+  0.44 of 1.59 MB); `dumpsys meminfo` PSS after a flood, 1 s idle, and after closing the pane;
+  `am send-trim-memory <pkg> BACKGROUND` with Ghostty panes open logs nothing and keeps every pane
+  scrollable; with output stopped, `dumpsys gfxinfo` over 30 s shows no frames from an idle Ghostty
+  pane. Crash guard: open a Ghostty pane, `run-as <pkg> kill -SEGV <pid>`; after the relaunch,
+  logcat says `ghostty turned off for new panes` and new panes log `ghostty off after a crash`;
+  `adb install -r` of the same APK turns it back on; `am force-stop` with a Ghostty pane open does
+  not turn it off (API 30+).
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame

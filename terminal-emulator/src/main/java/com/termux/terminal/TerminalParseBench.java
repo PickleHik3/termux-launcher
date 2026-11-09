@@ -246,9 +246,26 @@ public final class TerminalParseBench {
         }
     }
 
-    /** Memory after the run, then a full compression pass and memory again. */
+    /**
+     * Memory after the run; then the idle compress a pane gets 250 ms after output stops
+     * (incremental steps, as {@link GhosttyIdleCompressor} chains them) and memory again; then a
+     * full compression pass, as on {@code onTrimMemory}, and memory again.
+     */
     private static String ghosttyMemory(GhosttyCore core) {
         Json json = memory(core.memoryUsage());
+        int steps = 0, step;
+        long idleStart = System.nanoTime();
+        do {
+            step = core.compressIdleStep();
+            steps++;
+        } while (step == GhosttyNative.COMPRESS_PENDING && steps < GhosttyIdleCompressor.MAX_STEPS);
+        long idleNanos = System.nanoTime() - idleStart;
+        json.put("idle_compress", step == GhosttyNative.COMPRESS_UNSUPPORTED ? "unsupported"
+                : step == GhosttyNative.COMPRESS_PENDING ? "pending"
+                : step == GhosttyNative.COMPRESS_COMPLETE ? "complete" : "error")
+            .put("idle_compress_steps", steps)
+            .put("idle_compress_ms", round(idleNanos / 1e6))
+            .putRaw("after_idle_compress", memory(core.memoryUsage()).toString());
         long start = System.nanoTime();
         int result = core.compress(true);
         long nanos = System.nanoTime() - start;
