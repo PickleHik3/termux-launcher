@@ -72,8 +72,9 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   895d46ad6), tmux placeholders, 2026 hold, trim with an image (`RUNNING_CRITICAL`: `BACKGROUND` is
   refused for the foreground launcher), OSC 8 in history (Copy/Open; `file://` Copy only), prompt
   jumps both ways, OSC 99 notifications (OSC 9 and 777 post nothing on either core), engine row in
-  light and dark. **Still owed:** the crash guard (`kill -SEGV`), 30 s idle gfxinfo, and the
-  progress ring (OSC 9;4 during a running command showed no ring on either core in a titled window).
+  light and dark. Crash guard: force-stop with a Ghostty pane open keeps it on; `kill -SEGV` turns it
+  off (new panes log `ghostty off after a crash`); reinstalling the rebuilt APK turns it back on.
+  Idle Ghostty pane: 6 frames in 30 s. Nothing left owed; the progress ring was removed on purpose.
 
 - **GIF import converts to video (11-09, perf/gif-wallpaper).** Import the developer's 32 MB
   800x1412 5 s GIF again (Video, Choose video or GIF) · pong: the conversion time and that it ends
