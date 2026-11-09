@@ -55,7 +55,7 @@ final class GhosttyMirror {
     static int applyRow(TerminalRow row, int columns, int[] cells, int cellOffset, int[] extra,
                         int extraOffset, int rowResult) {
         row.clear(TextStyle.NORMAL);
-        row.mLineWrap = (rowResult & GhosttyNative.ROW_WRAPPED) != 0;
+        row.setLineWrap((rowResult & GhosttyNative.ROW_WRAPPED) != 0);
         int extraIndex = extraOffset;
         for (int x = 0; x < columns; x++) {
             int base = cellOffset + x * GhosttyNative.CELL_INTS;

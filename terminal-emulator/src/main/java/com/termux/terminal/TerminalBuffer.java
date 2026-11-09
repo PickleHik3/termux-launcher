@@ -386,7 +386,7 @@ public final class TerminalBuffer implements TerminalContent {
     }
 
     public void setLineWrap(int row) {
-        mLines[externalToInternalRow(row)].mLineWrap = true;
+        mLines[externalToInternalRow(row)].setLineWrap(true);
     }
 
     public boolean getLineWrap(int row) {
@@ -394,7 +394,7 @@ public final class TerminalBuffer implements TerminalContent {
     }
 
     public void clearLineWrap(int row) {
-        mLines[externalToInternalRow(row)].mLineWrap = false;
+        mLines[externalToInternalRow(row)].setLineWrap(false);
     }
 
     /**
@@ -557,8 +557,7 @@ public final class TerminalBuffer implements TerminalContent {
                 if (oldLine.mKittyPlacements != null) {
                     // Pictures ride along with the row their top-left cell was on. The new row is
                     // where this old row's text starts; later scrolling moves it by reference.
-                    java.util.ArrayList<KittyPlacement> carried = oldLine.mKittyPlacements;
-                    oldLine.mKittyPlacements = null;
+                    java.util.ArrayList<KittyPlacement> carried = oldLine.takeKittyPlacements();
                     TerminalRow target = allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow));
                     for (KittyPlacement placement : carried) {
                         placement.fitToColumns(mColumns);
@@ -890,7 +889,7 @@ public final class TerminalBuffer implements TerminalContent {
     }
 
     public void setShellIntegrationMark(int externalRow, byte mark) {
-        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).mShellIntegrationMark = mark;
+        allocateFullLineIfNecessary(externalToInternalRow(externalRow)).setShellIntegrationMark(mark);
     }
 
     /**
@@ -1193,7 +1192,7 @@ public final class TerminalBuffer implements TerminalContent {
                     effect &= ~bits;
                 }
                 // Rewrite only the effect, so that the underline style of these cells survives DECCARA.
-                line.mStyle[x] = TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect);
+                line.setStyleAt(x, TextStyle.withColorsAndEffect(currentStyle, foreColor, backColor, effect));
             }
         }
     }
