@@ -26,7 +26,7 @@ h2{font-size:15px;margin:28px 0 10px;color:var(--dim);font-weight:500}
   <div class="field"><b>Atmosphere</b><div class="seg" id="atm"></div></div>
   <div class="field"><b>Motion</b><div class="seg" id="motion"></div></div>
   <p class="sentence" id="sentence"></p>
-  <div class="row"><button class="play" id="play">Pause</button><span id="status">Loading…</span></div>
+  <div class="row"><button class="play" id="shuffle">Shuffle</button> <button class="play" id="play">Pause</button><span id="status">Loading…</span></div>
   <h2>This place's atmospheres (stills)</h2>
   <div class="strip" id="strip"></div>
  </div>
@@ -34,7 +34,7 @@ h2{font-size:15px;margin:28px 0 10px;color:var(--dim);font-weight:500}
 <script>
 const V = '?v=' + (document.currentScript.dataset.v || Date.now());
 const w = new Worker('worker.js' + V);
-let state = { place: 'coastal-meadow', atm: 'golden-hour', motion: 'gentle-breeze' }, playing = true, words, places, scene, nextId = 0;
+let state = { place: 'coastal-meadow', atm: 'golden-hour', motion: 'gentle' }, playing = true, words, places, scene, nextId = 0;
 const pending = new Map();
 w.onmessage = ({ data }) => {
   if (data.hello) return boot(data);
@@ -77,6 +77,17 @@ async function frame() {
   const ms = performance.now() - start;   // round trip, so WebGL's async work is counted too
   if (!d.error) { avg = avg ? avg * 0.9 + ms * 0.1 : ms; status(`${mode} · ${avg.toFixed(0)} ms a frame (${Math.min(60, 1000 / avg).toFixed(0)} fps max here)`); }
 }
+// Shuffle: a random place, one of that place's atmospheres, a random motion; never the same three words twice in a row.
+async function shuffle() {
+  const pick = a => a[Math.floor(Math.random() * a.length)], before = JSON.stringify(state);
+  do {
+    state.place = pick(Object.keys(places)); await enter();
+    state.atm = pick(Object.keys(scene.atmospheres)); state.motion = pick(Object.keys(words.motions));
+  } while (JSON.stringify(state) === before);
+  seg(document.getElementById('atm'), atmsOf(), 'atm'); seg(document.getElementById('motion'), words.motions, 'motion');
+  sentence(); strip(); if (!playing) frame();
+}
+document.getElementById('shuffle').onclick = shuffle;
 function loop() { if (playing && !document.hidden) frame(); setTimeout(loop, 66); }   // ~15 fps target
 document.getElementById('play').onclick = e => { playing = !playing; e.target.textContent = playing ? 'Pause' : 'Play'; };
 async function boot(info) { words = info.words; places = info.places; mode = info.gl ? 'WebGL' : 'Software'; await enter(); seg(document.getElementById('motion'), words.motions, 'motion'); sentence(); strip(); loop(); }

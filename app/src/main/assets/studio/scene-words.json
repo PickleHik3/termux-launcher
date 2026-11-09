@@ -26,25 +26,26 @@
     }
   },
   "_atmosphere_codes": "each scene maps its atmospheres to a shader grade: 0 as painted, 1 misty dawn, 2 night, 3 fog only, 4 deep water",
+  "_motion_note": "Motion is how much the scene moves, whatever moves there: grass and trees, water, clouds, fish, bubbles, lights",
   "motions": {
-    "almost-still": {
-      "label": "Almost Still",
+    "still": {
+      "label": "Still",
       "sway": 1.5,
       "water": 0.6,
       "cloud": 2.5,
       "gust": 0.0,
       "life": 0.4
     },
-    "gentle-breeze": {
-      "label": "Gentle Breeze",
+    "gentle": {
+      "label": "Gentle",
       "sway": 3.5,
       "water": 1.3,
       "cloud": 7,
       "gust": 0.35,
       "life": 1.0
     },
-    "strong-wind": {
-      "label": "Strong Wind",
+    "lively": {
+      "label": "Lively",
       "sway": 6.5,
       "water": 2.2,
       "cloud": 16,

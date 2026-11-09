@@ -230,7 +230,9 @@ half4 main(float2 fc) {
         float m = noise(float2(p.x * 0.004 + uTime * 0.02, p.y * 0.018)) * 0.7
                 + noise(float2(p.x * 0.011 - uTime * 0.03, p.y * 0.04)) * 0.3;
         float band = smoothstep(uHorizon - 140.0, uHorizon + 10.0, p.y) * smoothstep(uHorizon + 520.0, uHorizon + 120.0, p.y);
-        mist = clamp(m * band * 1.1 * min(mistAmt, 1.0), 0.0, 0.75);
+        // wisps, not a flat sheet: the noise is cut into banks with clear gaps between them
+        float wisp = smoothstep(0.22, 0.72, m);
+        mist = clamp(wisp * band * min(mistAmt, 1.0), 0.0, 0.6);
     }
 
     float t = clamp(p.y / max(uHorizon, 1.0), 0.0, 1.0);   // 0 top of sky, 1 horizon
@@ -242,7 +244,9 @@ half4 main(float2 fc) {
         col = mix(c, float3(0.05, 0.22, 0.38) + l * float3(0.2, 0.45, 0.55), 0.55) * mix(1.0, 0.7, p.y / uArt.y);
     } else if (uAtm > 2.5) {
         // Fog only: the art as painted under drifting fog.
-        col = mix(c, float3(0.40, 0.45, 0.56), clamp(mist * 1.3, 0.0, 0.8));
+        // The fog takes the light of what it covers (lit windows glow through it) and stays dark.
+        float3 fogc = float3(0.27, 0.31, 0.42) + c * 0.30;
+        col = mix(c, fogc, clamp(mist * 1.4, 0.0, 0.7));
     } else if (uAtm > 1.5) {
         // Night: everything goes to moonlit blue by brightness, the sky is repainted.
         float l = luma(c);
@@ -260,12 +264,17 @@ half4 main(float2 fc) {
         col = mix(col, float3(0.25, 0.3, 0.42), mist * 0.6);
     } else if (uAtm > 0.5) {
         // Misty dawn: cool, lifted, softer; pale rose sky; mist banks.
+        // Keep the painted colour and contrast; cool it a little and let distance, not a white
+        // wash, do the softening (aerial haze grows toward the horizon, the foreground stays crisp).
         float l = luma(c);
-        col = mix(c, float3(l) * float3(0.86, 0.92, 1.04) + 0.08, 0.5);
-        float3 skyc = mix(float3(0.62, 0.70, 0.82), float3(0.96, 0.84, 0.82), pow(t, 1.6));
-        skyc = mix(skyc, float3(1.0, 0.93, 0.92), cloud * 0.7);
-        col = mix(col, skyc, sky);
-        col = mix(col, float3(0.93, 0.92, 0.95), mist);
+        col = mix(c, float3(l) * float3(0.88, 0.94, 1.06), 0.22);
+        float3 hazec = float3(0.70, 0.73, 0.82);
+        float far = smoothstep(uHorizon + 600.0, uHorizon - 60.0, p.y);
+        col = mix(col, hazec, far * 0.32);
+        float3 skyc = mix(float3(0.55, 0.63, 0.78), float3(0.90, 0.78, 0.76), pow(t, 1.6));
+        skyc = mix(skyc, float3(0.97, 0.88, 0.86), cloud * 0.6);
+        col = mix(col, mix(c, skyc, 0.7), sky);
+        col = mix(col, float3(0.80, 0.82, 0.88), mist * 0.85);
     } else {
         // As painted, plus a warm glint on open water toward the light and any scene mist.
         float path = exp(-abs(p.x - uArt.x * 0.55) / (60.0 + 220.0 * depth));
