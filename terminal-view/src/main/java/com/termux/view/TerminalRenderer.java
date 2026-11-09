@@ -13,6 +13,7 @@ import android.os.Trace;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.terminal.KittyImagePlaceholder;
+import com.termux.terminal.KittyPlacement;
 import com.termux.terminal.KittyUnicodePlaceholder;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalContent;
@@ -1160,6 +1161,7 @@ public final class TerminalRenderer {
         // neighbouring cell's fill instead of being clipped by it. Cell backgrounds are exactly
         // cell-aligned on screen (the per-run scale matrix cancels out for rectangles), so this
         // pass needs no font configuration or shaping.
+        paintKittyLayerBelowBackgrounds(canvas, topRow, horizontalOffset);
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
             cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
@@ -1202,6 +1204,17 @@ public final class TerminalRenderer {
         if (mKittyLayer.isEmpty()) return;
         mKittyLayer.paint(mKittyLayerTarget.into(canvas), underText, topRow, mFontWidth,
             mFontLineSpacing, mFontLineSpacingAndAscent, horizontalOffset);
+        mKittyLayerTarget.into(null);
+    }
+
+    /**
+     * The kitty layer under the cell backgrounds (the Ghostty core names it; the Java core puts
+     * nothing there), over the pane's own background.
+     */
+    private void paintKittyLayerBelowBackgrounds(Canvas canvas, int topRow, float horizontalOffset) {
+        if (mKittyLayer.isEmpty()) return;
+        mKittyLayer.paintLayer(mKittyLayerTarget.into(canvas), KittyPlacement.LAYER_BELOW_BACKGROUND, topRow,
+            mFontWidth, mFontLineSpacing, mFontLineSpacingAndAscent, horizontalOffset);
         mKittyLayerTarget.into(null);
     }
 
@@ -1390,6 +1403,7 @@ public final class TerminalRenderer {
             }
             recorded++;
         }
+        paintKittyLayerBelowBackgrounds(canvas, topRow, horizontalOffset);
         for (int index = 0; index < visibleRows; index++)
             canvas.drawRenderNode(nodes.background(index));
         paintKittyLayer(canvas, true, topRow, horizontalOffset);

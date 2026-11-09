@@ -38,6 +38,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   below the cursor into history, the Java core drops them); exit the shell and scroll the finished
   pane back. Then `ghostty-core-bench.sh pong parse`: `mirror_history_ms` 0, `scrollback_us_per_row`
   near 3.5, `mirror_max_ms` under 8.3 ms.
+  Wave 3 slice 5 (exp/ghostty-slice5, kitty graphics on Ghostty): both cores, `kitten icat` of a PNG
+  and an RGB image, an image under text (`z=-1`) and one under cell backgrounds
+  (`z=-1073741825`, shows only under default-background cells), a tmux Unicode-placeholder image,
+  a looping GIF via `kitten icat` (plays; stops ticking when the pane is swiped away or the screen
+  is off; no redraws once it stops), the protocol sheet's `a=q` probes (same replies on both cores),
+  `CSI > q` on Ghostty ends in ` (libghostty-vt 1.0)`; `frames kitty ghostty` against
+  `frames kitty java`, and PSS after `kitten icat` of a large image then `clear` (bitmap freed two
+  frames after it leaves the screen). Known gap: an image scrolled wholly into history is not drawn.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
