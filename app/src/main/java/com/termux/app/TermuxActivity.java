@@ -7058,23 +7058,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             || !chrome.isLaidOut() || chrome.getHeight() <= 0)) chrome = null;
                 }
                 if (chrome != null) bar.setAnchorView(chrome);
-                android.util.Log.i("TLSNACK", "show anchor=" + chrome + " root=" + root
-                    + " parentOf=" + bar.getView().getParent());
-                bar.addCallback(new com.google.android.material.snackbar.BaseTransientBottomBar.BaseCallback<com.google.android.material.snackbar.Snackbar>() {
-                    @Override public void onShown(com.google.android.material.snackbar.Snackbar sb) {
-                        View v = sb.getView();
-                        android.util.Log.i("TLSNACK", "shown parent=" + v.getParent() + " y=" + v.getY()
-                            + " h=" + v.getHeight() + " z=" + v.getZ() + " vis=" + v.getVisibility());
-                    }
-                    @Override public void onDismissed(com.google.android.material.snackbar.Snackbar sb, int ev) {
-                        android.util.Log.i("TLSNACK", "dismissed ev=" + ev);
-                    }
-                });
-                try {
-                    bar.setAction(R.string.page_overview_undo, v -> undo.run()).show();
-                } catch (RuntimeException e) {
-                    android.util.Log.e("TLSNACK", "show failed", e);
-                }
+                bar
+                    .setAction(R.string.page_overview_undo, v -> undo.run()).show();
             }
         });
     }
