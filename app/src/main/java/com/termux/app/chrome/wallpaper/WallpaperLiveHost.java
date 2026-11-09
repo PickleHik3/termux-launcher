@@ -202,6 +202,14 @@ public final class WallpaperLiveHost {
             mRoot.addView(buildKindRow(context), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             mList = new ShaderListPage(context, new ShaderListPage.Listener() {
+                @Override public void onPick(@NonNull String id) {
+                    pickShader(id);
+                }
+
+                @Override public void onPickExample(@NonNull String slug) {
+                    pickExample(slug);
+                }
+
                 @Override public void onOpen(@NonNull String id) {
                     openShader(id);
                 }
@@ -220,7 +228,7 @@ public final class WallpaperLiveHost {
             });
             mEditor = new ShaderEditorPage(context, mHomeApp, new ShaderEditorPage.Actions() {
                 @Override public void onApply(@NonNull ShaderEditorPage.Draft draft) {
-                    applyShader(draft);
+                    applyShader(draft, null);
                 }
 
                 @Override public void onBackToPhoto() {
@@ -623,7 +631,7 @@ public final class WallpaperLiveHost {
             source = ShaderStore.readText(ShaderStore.sourceFile(mContext, id));
         }
         mEditor.show(id, meta, source, LiveSceneLogic.showsBackToPhoto(readStored()),
-            mPicker.alsoPhone().isChecked(), heldReason());
+            mPicker.alsoPhone().isChecked(), heldReason(), LiveSceneLogic.inUse(readStored(), id));
         mEditorSaved = id != null;
         mListScrollY = mList.scrollY();
         goTo(Page.EDITOR, true);
@@ -665,17 +673,48 @@ public final class WallpaperLiveHost {
 
     // --- Apply, Back to photo ---
 
-    private void applyShader(@NonNull ShaderEditorPage.Draft draft) {
+    /** A tap on a saved shader's tile: applies it as it is saved; errors open its editor. */
+    private void pickShader(@NonNull String id) {
+        if (mList == null || mEditor == null || mReleased) return;
+        ShaderStore.Meta meta = ShaderStore.readMeta(mContext, id);
+        String source = ShaderStore.readText(ShaderStore.sourceFile(mContext, id));
+        if (source == null || source.trim().isEmpty()) {
+            openShader(id);
+            return;
+        }
+        applyShader(new ShaderEditorPage.Draft(id, meta.name, source, meta.quality, meta.rateHz, meta.texture,
+            meta.texture, false, false), id);
+    }
+
+    /** A tap on an example's tile: applies a copy of it, as Apply does from its editor. */
+    private void pickExample(@NonNull String slug) {
+        if (mList == null || mEditor == null || mReleased) return;
+        ShaderExamples.Example example = ShaderExamples.find(mContext, slug);
+        if (example == null || example.source == null) return;
+        ShaderStore.Meta meta = example.meta();
+        applyShader(new ShaderEditorPage.Draft(ShaderStore.newId(), meta.name, example.source, meta.quality,
+            meta.rateHz, null, null, true, true), slug);
+    }
+
+    /**
+     * @param listKey set when the tap came from a tile (the shader's id, or the example's slug): on
+     *                errors that shader's editor opens to show them
+     */
+    private void applyShader(@NonNull ShaderEditorPage.Draft draft, @Nullable String listKey) {
         if (mEditor == null || mReleased) return;
-        mEditor.setBusy(true);
+        setBusy(true);
         final Context app = mContext.getApplicationContext();
         IO.execute(() -> {
             List<ShaderErrors.Error> errors = ShaderCheck.run(draft.source);
             if (ShaderEditorLogic.applyDecision(errors) == ShaderEditorLogic.Decision.STAY) {
                 mRoot.post(() -> {
                     if (mReleased || mEditor == null) return;
+                    setBusy(false);
+                    if (listKey != null) {
+                        if (draft.isExample) openExample(listKey);
+                        else openShader(listKey);
+                    }
                     mEditor.showErrors(errors);
-                    mEditor.setBusy(false);
                 });
                 return;
             }
@@ -687,7 +726,7 @@ public final class WallpaperLiveHost {
             mRoot.post(() -> {
                 if (mReleased || mEditor == null) return;
                 if (!saved) {
-                    mEditor.setBusy(false);
+                    setBusy(false);
                     toast(R.string.wallpaper_picker_apply_failed);
                     return;
                 }
@@ -747,6 +786,7 @@ public final class WallpaperLiveHost {
             if (mVideo != null) mVideo.setBackToPhotoVisible(true);
             // A shader that is on goes back to the list, where "In use" confirms it; a message stays on its page.
             if (!LiveSceneLogic.staysOnScenePage(result) && mPage == Page.EDITOR) showList();
+            else if (mPage == Page.LIST && mList != null) mList.bind(readStored());
         });
     }
 
@@ -797,6 +837,7 @@ public final class WallpaperLiveHost {
 
     private void setBusy(boolean busy) {
         if (mEditor != null) mEditor.setBusy(busy);
+        if (mList != null) mList.setBusy(busy);
         if (mVideo != null) mVideo.setBusy(busy);
     }
 

@@ -106,6 +106,19 @@ public final class ShaderEditorLogic {
         return out;
     }
 
+    /**
+     * Whether Apply has something to do: a new shader or an example always has; a saved one when
+     * it is not the one in use, or when its text or knobs differ from what is saved.
+     */
+    public static boolean canApply(@NonNull ShaderEditorPage.Draft d, @Nullable String savedSource,
+                                   @Nullable com.termux.app.chrome.scene.ShaderStore.Meta savedMeta,
+                                   boolean inUse) {
+        if (d.isNew || d.isExample || !inUse || savedSource == null || savedMeta == null) return true;
+        return !d.source.equals(savedSource) || !d.name.equals(savedMeta.name)
+            || d.quality != savedMeta.quality || d.rateHz != savedMeta.rateHz
+            || !java.util.Objects.equals(d.texture, savedMeta.texture);
+    }
+
     /** Whether "Too heavy at this quality" shows above the knobs. */
     public static boolean showsTooHeavy(@Nullable String heldReason) {
         return ShaderSafety.REASON_TOO_HEAVY.equals(heldReason);

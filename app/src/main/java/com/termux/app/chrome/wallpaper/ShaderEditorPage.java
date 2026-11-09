@@ -120,6 +120,12 @@ public final class ShaderEditorPage {
     private int mRateValue = 30;
     @Nullable private String mTexture;
     @Nullable private String mSavedTexture;
+    /** What is saved for the open shader, and whether it is the one in use, for {@link #updateApply}. */
+    @Nullable private String mSavedSource;
+    @Nullable private ShaderStore.Meta mSavedMeta;
+    private boolean mInUse;
+    /** The page is working: Apply waits whatever the draft says. */
+    private boolean mBusy;
     /** Knobs are being set from code: their listeners stay quiet. */
     private boolean mBinding;
 
@@ -146,6 +152,17 @@ public final class ShaderEditorPage {
         mImport = mRoot.findViewById(R.id.shader_import);
 
         mCode.setHorizontallyScrolling(true);
+        android.text.TextWatcher watcher = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+
+            @Override public void afterTextChanged(android.text.Editable s) {
+                if (!mBinding) updateApply();
+            }
+        };
+        mCode.addTextChangedListener(watcher);
+        mName.addTextChangedListener(watcher);
 
         View qualityRow = mRoot.findViewById(R.id.shader_knob_quality);
         ((TextView) qualityRow.findViewById(android.R.id.title)).setText(R.string.shader_knob_quality);
@@ -166,6 +183,7 @@ public final class ShaderEditorPage {
             View b = group.findViewById(checkedId);
             if (b != null && b.getTag() instanceof ShaderSafety.Quality) {
                 mQualityValue = (ShaderSafety.Quality) b.getTag();
+                updateApply();
             }
         });
 
@@ -186,7 +204,10 @@ public final class ShaderEditorPage {
         mRate.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (mBinding || !isChecked) return;
             View b = group.findViewById(checkedId);
-            if (b != null && b.getTag() instanceof Integer) mRateValue = (Integer) b.getTag();
+            if (b != null && b.getTag() instanceof Integer) {
+                mRateValue = (Integer) b.getTag();
+                updateApply();
+            }
         });
 
         mPaste.setOnClickListener(v -> paste());
@@ -196,6 +217,7 @@ public final class ShaderEditorPage {
             // The file goes on Apply (or with the folder, for a shader never saved).
             mTexture = null;
             bindTexture();
+            updateApply();
         });
         mApply.setOnClickListener(v -> apply());
         mBack.setOnClickListener(v -> mActions.onBackToPhoto());
@@ -223,8 +245,8 @@ public final class ShaderEditorPage {
      * @param source the saved text (ignored for a new shader)
      */
     public void show(@Nullable String id, @Nullable ShaderStore.Meta meta, @Nullable String source,
-                     boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
-        show(id, meta, source, false, motionInUse, alsoPhone, heldReason);
+                     boolean motionInUse, boolean alsoPhone, @Nullable String heldReason, boolean inUse) {
+        show(id, meta, source, false, motionInUse, alsoPhone, heldReason, inUse);
     }
 
     /**
@@ -233,11 +255,12 @@ public final class ShaderEditorPage {
      */
     public void showExample(@NonNull ShaderStore.Meta meta, @NonNull String source,
                             boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
-        show(null, meta, source, true, motionInUse, alsoPhone, heldReason);
+        show(null, meta, source, true, motionInUse, alsoPhone, heldReason, false);
     }
 
     private void show(@Nullable String id, @Nullable ShaderStore.Meta meta, @Nullable String source,
-                      boolean example, boolean motionInUse, boolean alsoPhone, @Nullable String heldReason) {
+                      boolean example, boolean motionInUse, boolean alsoPhone, @Nullable String heldReason,
+                      boolean inUse) {
         mBinding = true;
         try {
             mIsNew = id == null;
@@ -252,6 +275,9 @@ public final class ShaderEditorPage {
             mRateValue = m.rateHz;
             mTexture = example ? null : m.texture;
             mSavedTexture = mIsNew ? null : m.texture;
+            mSavedMeta = mIsNew ? null : meta;
+            mSavedSource = mIsNew ? null : source;
+            mInUse = inUse;
             checkByTag(mQuality, mQualityValue);
             checkByTag(mRate, Integer.valueOf(mRateValue));
             bindTexture();
@@ -304,12 +330,14 @@ public final class ShaderEditorPage {
     public void setSource(@NonNull String text) {
         mCode.setText(text);
         showErrors(null);
+        updateApply();
     }
 
     /** The texture the draft uses; null for none. */
     public void setTexture(@Nullable String name) {
         mTexture = name;
         bindTexture();
+        updateApply();
     }
 
     /** Shows up to three errors on the strip; none hides it. */
@@ -337,12 +365,18 @@ public final class ShaderEditorPage {
     /** Working: the buttons wait and the bar shows. */
     public void setBusy(boolean busy) {
         mProgress.setVisibility(busy ? View.VISIBLE : View.INVISIBLE);
-        mApply.setEnabled(!busy);
+        mBusy = busy;
+        updateApply();
         mBack.setEnabled(!busy);
         mDelete.setEnabled(!busy);
         mAlso.setEnabled(!busy);
         mPaste.setEnabled(!busy);
         mImport.setEnabled(!busy);
+    }
+
+    /** Apply is on when there is something to apply and the page is not working. */
+    private void updateApply() {
+        mApply.setEnabled(!mBusy && ShaderEditorLogic.canApply(draft(), mSavedSource, mSavedMeta, mInUse));
     }
 
     private void apply() {

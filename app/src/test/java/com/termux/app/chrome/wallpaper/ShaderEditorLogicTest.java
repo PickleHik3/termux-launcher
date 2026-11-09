@@ -114,4 +114,46 @@ public class ShaderEditorLogicTest {
         assertEquals(0, ShaderEditorLogic.listOrder(0, 0).size());
         assertEquals(ShaderEditorLogic.Slot.EXAMPLES_HEADING, ShaderEditorLogic.listOrder(0, 1).get(0).kind);
     }
+
+    private static ShaderEditorPage.Draft draft(String src, String name, ShaderSafety.Quality q, int hz,
+                                                String tex, boolean isNew, boolean isExample) {
+        return new ShaderEditorPage.Draft("id", name, src, q, hz, tex, tex, isNew, isExample);
+    }
+
+    private static final com.termux.app.chrome.scene.ShaderStore.Meta SAVED =
+        new com.termux.app.chrome.scene.ShaderStore.Meta("Aurora", ShaderSafety.Quality.HALF, 30, null);
+
+    @Test
+    public void canApply_newAndExampleAlways() {
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("", "Shader", ShaderSafety.Quality.HALF, 30, null, true, false), null, null, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.HALF, 30, null, true, true), null, null, true));
+    }
+
+    @Test
+    public void canApply_savedNotInUseAlways() {
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.HALF, 30, null, false, false), "a", SAVED, false));
+    }
+
+    @Test
+    public void canApply_savedInUseUnchangedIsOff() {
+        assertFalse(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.HALF, 30, null, false, false), "a", SAVED, true));
+    }
+
+    @Test
+    public void canApply_savedInUseAnyChangeTurnsItOn() {
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("b", "Aurora", ShaderSafety.Quality.HALF, 30, null, false, false), "a", SAVED, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Other", ShaderSafety.Quality.HALF, 30, null, false, false), "a", SAVED, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.FULL, 30, null, false, false), "a", SAVED, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.HALF, 60, null, false, false), "a", SAVED, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            draft("a", "Aurora", ShaderSafety.Quality.HALF, 30, "t.png", false, false), "a", SAVED, true));
+    }
 }
