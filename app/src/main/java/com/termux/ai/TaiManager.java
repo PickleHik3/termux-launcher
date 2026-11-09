@@ -51,8 +51,15 @@ public final class TaiManager {
     private static final String INTERNAL_FEATURE_PLAN = "_taiFeaturePlan";
     /** The STT idle-unload setting, carried to the runtime process with every speech request. */
     private static final String INTERNAL_STT_IDLE_MINUTES = "_taiSttIdleUnloadMinutes";
+    /** The speech accelerator setting ({@link SttAccelerator}), carried with every speech request like the idle limit. */
+    private static final String INTERNAL_STT_ACCELERATOR = "_taiSttAccelerator";
     /** Where the app process puts audio for the runtime process; files here are deleted once transcribed. */
     public static final String STT_IPC_DIR = "tai-ipc";
+    /**
+     * On an {@link #sttWarm} request: close any speech graph first, so the load is cold. The voice
+     * benchmark times its loads this way ({@link TaiVoiceBenchRunner}).
+     */
+    static final String STT_COLD_LOAD = "_taiSttColdLoad";
 
     private final Context appContext;
     private final TaiSettings settings;
@@ -1598,8 +1605,9 @@ public final class TaiManager {
             TaiLoadMeter sampler = TaiLoadMeter.start(appContext);
             BenchmarkInfo info;
             try {
-                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, params.prefillTokens,
-                    params.decodeTokens, cacheDir.getAbsolutePath(), BENCHMARK_PROMPT);
+                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, null, null,
+                    params.prefillTokens, params.decodeTokens, cacheDir.getAbsolutePath(),
+                    Contents.Companion.of(BENCHMARK_PROMPT), null, null, null);
             } catch (Throwable t) {
                 sampler.stop();
                 String message = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
@@ -2670,6 +2678,7 @@ public final class TaiManager {
             return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
         }
         MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+        if (request.optBoolean(STT_COLD_LOAD, false)) router.closeStt();
         if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
             JSONObject refusal = decideSttLoad(spec);
             if (refusal != null) return refusal;
@@ -2742,7 +2751,8 @@ public final class TaiManager {
      */
     private void closeVoiceIfItsGroupIsTight(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) {
         try {
-            long hold = TaiLoadBudget.floorBytes(false, gateConditions());
+            long hold = TaiLoadBudget.floorBytes(false, gateConditions(),
+                TaiDeviceCapabilities.detect(appContext).physicalMemoryBytes);
             long available = TaiMemInfo.read(appContext).availBytes;
             boolean tight = hold > 0L && available > 0L && available < hold;
             List<TaiResidency.Entry> residents = router.residency().snapshot();
@@ -3130,11 +3140,31 @@ public final class TaiManager {
         request.put("model", spec.id);
         request.put(INTERNAL_MODEL_SPEC, spec.toJson());
         request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
+        request.put(INTERNAL_STT_ACCELERATOR, sttAcceleratorFor(request, settings.getSttAccelerator(spec.id)));
         return request.toString();
     }
 
+    /**
+     * The processor a speech request runs on: its own {@code accelerator} ({@code auto}, {@code cpu}
+     * or {@code gpu}; the voice benchmark names one per entry), else the setting.
+     */
+    @NonNull
+    static String sttAcceleratorFor(@NonNull JSONObject request, @NonNull String setting) {
+        String asked = request.optString("accelerator", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (SttAccelerator.AUTO.id.equals(asked) || SttAccelerator.CPU.id.equals(asked) || SttAccelerator.GPU.id.equals(asked)) {
+            return asked;
+        }
+        return setting;
+    }
+
+    /** In the runtime process: the STT idle limit and accelerator the app process sent with this request. */
     private void rememberSttIdleLimit(@NonNull JSONObject request) {
-        if (!runtimeProcess || !request.has(INTERNAL_STT_IDLE_MINUTES)) return;
+        if (!runtimeProcess) return;
+        // The speech runtimes read it at their next load; a different ask reloads the graph.
+        if (request.has(INTERNAL_STT_ACCELERATOR)) {
+            SttAccelerator.setRequested(SttAccelerator.parse(request.optString(INTERNAL_STT_ACCELERATOR, null)));
+        }
+        if (!request.has(INTERNAL_STT_IDLE_MINUTES)) return;
         sttIdleLimitMs = java.util.concurrent.TimeUnit.MINUTES.toMillis(Math.max(0, request.optInt(INTERNAL_STT_IDLE_MINUTES, 0)));
     }
 
@@ -3387,10 +3417,15 @@ public final class TaiManager {
             || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
         String crashedAccelerator = null;
         int crashedContext = 0;
+        boolean lowMemoryCrash = false;
+        long crashAgeMs = 0L;
         JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
         if (marker != null && spec.id.equals(marker.optString("modelId"))) {
             crashedAccelerator = TaiLoadPreflight.normalizeAccelerator(marker.optString("accelerator", null));
             crashedContext = marker.optInt("contextWindow", 0);
+            lowMemoryCrash = TaiRuntimeExitReason.LOW_MEMORY.equals(marker.optString("exitReason", null));
+            long startedAtMs = marker.optLong("startedAtMs", 0L);
+            crashAgeMs = startedAtMs > 0L ? Math.max(0L, System.currentTimeMillis() - startedAtMs) : 0L;
         }
         // A load the runtime's watch stopped for memory left no crash marker; for a little while an
         // automatic load does not go straight back to the accelerator it was stopped on.
@@ -3415,7 +3450,8 @@ public final class TaiManager {
             .withKvBytesPerToken(kvBytesPerToken(spec))
             .withGpuless(!device.supportsAccelerator("gpu"))
             .withHeldBack(heldBack, Math.max(0L, System.currentTimeMillis() - stoppedAtMs))
-            .withExplicitAccelerator(!"auto".equals(preflight.requestedAccelerator)));
+            .withExplicitAccelerator(!"auto".equals(preflight.requestedAccelerator))
+            .withLowMemoryCrash(lowMemoryCrash, crashAgeMs));
         if (!plan.fits) {
             // The figures are the rung the ladder refused (accelerator, window, estimate), the floor
             // it kept and the free memory it compared against, the resident chat model credited.
@@ -3986,6 +4022,7 @@ public final class TaiManager {
         json.put("neededFreeBytes", plan.neededFreeBytes());
         json.put("measured", plan.measured);
         json.put("overcommitted", plan.overcommitted);
+        json.put("retriedAfterLowMemory", plan.retriedAfterLowMemory);
         JSONArray evicted = new JSONArray();
         for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
         json.put("evicted", evicted);

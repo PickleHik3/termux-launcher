@@ -133,7 +133,8 @@ public class GlassRefractionTest {
             "uRadius", "uBand", "uStrength", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
-            "uKeyLight", "uLiveClarity",
+            "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf",
+            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -150,6 +151,92 @@ public class GlassRefractionTest {
             "lobe"}) {
             assertFalse(gone + " is gone", Pattern.compile("\\b" + gone + "\\b").matcher(GlassRefraction.AGSL).find());
         }
+    }
+
+    @Test
+    public void lensBeadsAreEachTheirOwnSurface() {
+        String agsl = GlassRefraction.AGSL;
+        // The nearest bead is the surface: a circle about it, its rect, its rim and its normal.
+        assertTrue(agsl.contains("bool beads = uBead.y > 0.0;"));
+        assertTrue(agsl.contains("center = float2(nearestBead(fragCoord.x), uBead.x);"));
+        assertTrue(agsl.contains("float inside = -sdRoundRect(p, b, cr);"));
+        assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));"));
+        // A pixel clear of every bead reads nothing; a bead's outline is anti-aliased.
+        assertTrue(agsl.contains("if (beads && inside < -1.0) {"));
+        assertTrue(agsl.contains("col = col * half(clamp(inside + 0.5, 0.0, 1.0));"));
+        // No loop and no array: one compare a slot.
+        assertFalse(agsl.contains("for ("));
+        assertFalse(Pattern.compile("uniform \\w+ \\w+\\[").matcher(agsl).find());
+        assertEquals(GlassRefraction.BEAD_SLOTS, count(agsl, "if (d < bd)") + 1);
+        assertTrue(agsl.contains("const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";"));
+    }
+
+    @Test
+    public void theSearchFieldsCapsuleIsOneMoreBeadShape() {
+        String agsl = GlassRefraction.AGSL;
+        // A stadium from its rect, read only under beads, and only where it is set.
+        assertTrue(agsl.contains("if (uBeadCap.z > uBeadCap.x) {"));
+        assertTrue(agsl.contains("float capR = min(capB.x, capB.y);"));
+        // A pixel is the capsule's where it stands deeper in it than in its nearest bead, so the
+        // melt's swelling beads take it over; one more distance, no pass and no sample of its own.
+        assertTrue(agsl.contains(
+            "if (sdRoundRect(fragCoord - capC, capB, capR) < sdRoundRect(fragCoord - center, b, cr)) {"));
+        // Its rim band is held by its own corner, as a bead's is by its radius.
+        assertTrue(agsl.contains("kBeadBandShare * cr)"));
+    }
+
+    @Test
+    public void theProgramReadsTwelveBeads() {
+        String agsl = GlassRefraction.AGSL;
+        // Twelve slots: a swipe carries the neighbouring page's beads in beside a full row.
+        assertTrue(agsl.contains("if (d < bd) { bd = d; bx = uBeadXC.w; }"));
+        // Every slot beyond the beads given is parked, never nearer than a real bead.
+        float[] twelve = new float[12];
+        for (int i = 0; i < twelve.length; i++) twelve[i] = 50f + i * 100f;
+        float[] slots = GlassRefraction.beadSlots(twelve, 14);
+        assertEquals(1150f, slots[11], 0f);
+        assertEquals(1150f, GlassRefraction.nearestBeadX(5000f, slots), 0f);
+    }
+
+    @Test
+    public void theNearestBeadIsTheOneWhoseCentreIsClosest() {
+        float[] centers = {100f, 300f, 500f};
+        assertEquals(100f, GlassRefraction.nearestBeadX(0f, centers), 0f);
+        assertEquals(100f, GlassRefraction.nearestBeadX(199f, centers), 0f);
+        assertEquals(300f, GlassRefraction.nearestBeadX(201f, centers), 0f);
+        assertEquals(500f, GlassRefraction.nearestBeadX(10000f, centers), 0f);
+        assertEquals("a tie is the first", 100f, GlassRefraction.nearestBeadX(200f, centers), 0f);
+        // The program's twelve slots: the beads in order, the rest parked where nothing is nearer.
+        float[] slots = GlassRefraction.beadSlots(centers, 3);
+        assertEquals(12, slots.length);
+        assertEquals(GlassRefraction.BEAD_SLOTS, slots.length);
+        assertEquals(100f, slots[0], 0f);
+        assertEquals(500f, slots[2], 0f);
+        for (int i = 3; i < slots.length; i++)
+            assertEquals(GlassRefraction.BEAD_UNUSED_X, slots[i], 0f);
+        for (float x = -50f; x < 2000f; x += 7f)
+            assertEquals(GlassRefraction.nearestBeadX(x, centers),
+                GlassRefraction.nearestBeadX(x, slots), 0f);
+    }
+
+    @Test
+    public void aBeadsBandIsTightAndItsPullStronger() {
+        float density = DENSITY;
+        float bead = 35f * density;
+        float lookBand = GlassRefraction.Look.DEFAULT.bandPx(density);
+        float band = GlassRefraction.beadSoftBandPx(GlassRefraction.BEAD_SOFT_RIM_DP * density,
+            lookBand, bead);
+        // Ten dp at the default look: under a third of a 70 dp bead's radius.
+        assertEquals(10f * density, band, 1e-3f);
+        assertTrue(band < GlassRefraction.SOFT_RIM_DP * density);
+        // Never past 0.4 of the radius, however wide the look's band.
+        assertEquals(0.4f * bead, GlassRefraction.beadSoftBandPx(10f * density, 60f * density, bead), 1e-3f);
+        // The same held pull over a narrower band: a steeper, stronger lens than the tray's.
+        float strength = GlassRefraction.Look.DEFAULT.strengthPx(density);
+        float beadPull = Math.min(strength, GlassRefraction.SOFT_RIM_MAX_PULL_SHARE * band);
+        float trayBand = Math.max(lookBand, GlassRefraction.SOFT_RIM_DP * density);
+        float trayPull = Math.min(strength, GlassRefraction.SOFT_RIM_MAX_PULL_SHARE * trayBand);
+        assertTrue(beadPull / band > trayPull / trayBand);
     }
 
     @Test
@@ -225,11 +312,11 @@ public class GlassRefractionTest {
             last = pull;
         }
         // The program runs exactly these expressions.
-        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / uBand, 0.0, 1.0);"));
+        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / min(sBand, hs), 0.0, 1.0);"));
         assertTrue(GlassRefraction.AGSL.contains(
-            "float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
+            "float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
         // The pull is an offset that vanishes on the face, so a face pixel samples exactly fragCoord.
-        assertTrue(GlassRefraction.AGSL.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(GlassRefraction.AGSL.contains("float2 sampleCoord = fragCoord - nb * pull;"));
     }
 
     @Test
@@ -262,7 +349,8 @@ public class GlassRefractionTest {
             float pull = GlassRefraction.pullPx(inside, band, strength, half, rimW);
             assertTrue("at " + inside + ": " + pull, pull <= half);
         }
-        assertEquals("a dock is held at its own half height", half * GlassRefraction.edgeProfile(rimW / band),
+        // Its band is held there too, so the profile runs out by the middle line.
+        assertEquals("a dock is held at its own half height", half * GlassRefraction.edgeProfile(rimW / half),
             GlassRefraction.pullPx(rimW, band, strength, half, rimW), 1e-3f);
         assertEquals("a large surface is not", strength * GlassRefraction.edgeProfile(rimW / band),
             GlassRefraction.pullPx(rimW, band, strength, 1000f, rimW), 1e-3f);
@@ -1321,5 +1409,220 @@ public class GlassRefractionTest {
                 f[3] >= previousFringe - 1e-5f);
             previousFringe = f[3];
         }
+    }
+
+    // ------------------------------------------------------------ the dock surface's glass
+
+    @Test
+    public void theDockSurfaceTermsAreGatedSoEveryOtherSurfaceIsUnchanged() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("    if (uSoftRim > 0.0) {\n"));
+        assertTrue(agsl.contains("        if (uShelf > 0.0 && n.y > 0.0) {\n"));
+        // The resting narrow ring is still the first word on the pull; the soft band overrides it
+        // only behind its gate.
+        int ring = agsl.indexOf("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;");
+        int soft = agsl.indexOf("if (uSoftRim > 0.0) {");
+        assertTrue(ring > 0 && soft > ring);
+        assertEquals(GlassRefraction.SOFT_RIM_MAX_PULL_SHARE + "",
+            agsl.split("const float kSoftPull = ")[1].split(";")[0]);
+    }
+
+    @Test
+    public void theSoftProfileIsWholeAtTheRimAndFlatAtBothEnds() {
+        assertEquals(1f, GlassRefraction.softProfile(0f), 0f);
+        assertEquals(0f, GlassRefraction.softProfile(1f), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.softProfile(0.5f), 1e-6f);
+        // No step in slope at either end: the inner edge has no ring.
+        float h = 1e-3f;
+        assertEquals(0f, (GlassRefraction.softProfile(h) - GlassRefraction.softProfile(0f)) / h, 1e-3f);
+        assertEquals(0f, (GlassRefraction.softProfile(1f) - GlassRefraction.softProfile(1f - h)) / h, 1e-3f);
+        float previous = 2f;
+        for (int i = 0; i <= 100; i++) {
+            float v = GlassRefraction.softProfile(i / 100f);
+            assertTrue(v <= previous);
+            previous = v;
+        }
+    }
+
+    @Test
+    public void theSoftBandNeverFoldsThePicture() {
+        // The sample's depth is inside + pull: walking in by a px never walks the sample back,
+        // for the strongest bend the knob reaches and the whole shelf, past the outermost dp.
+        float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
+        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
+        for (float lower : new float[] {0f, 0.5f, 1f}) {
+            for (int bendDp : new int[] {0, 9, 27, 60}) {
+                float previous = -1f;
+                for (float in = 2f * rimW; in < 2f * softPx; in += 0.5f) {
+                    float depth = in + GlassRefraction.softPullPx(in, 20f * DENSITY, softPx,
+                        bendDp * DENSITY, 200f * DENSITY, rimW, lower);
+                    assertTrue(bendDp + "dp lower " + lower + " at " + in, depth > previous);
+                    previous = depth;
+                }
+            }
+        }
+    }
+
+    @Test
+    public void theSoftBandReachesItsWidthAndAWiderLookKeepsItsOwn() {
+        float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
+        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
+        float bend = 9f * DENSITY;
+        float half = 200f * DENSITY;
+        assertTrue(GlassRefraction.softPullPx(softPx * 0.5f, 10f * DENSITY, softPx, bend, half,
+            rimW, 0f) > 0f);
+        assertEquals(0f, GlassRefraction.softPullPx(softPx, 10f * DENSITY, softPx, bend, half,
+            rimW, 0f), 1e-4f);
+        assertTrue(GlassRefraction.softPullPx(softPx * 1.2f, 40f * DENSITY, softPx, bend, half,
+            rimW, 0f) > 0f);
+        // The lower edge is the thicker one under the shelf.
+        assertTrue(GlassRefraction.softPullPx(softPx * 0.6f, 20f * DENSITY, softPx, bend, half,
+            rimW, 1f)
+            > GlassRefraction.softPullPx(softPx * 0.6f, 20f * DENSITY, softPx, bend, half, rimW, 0f));
+    }
+
+    @Test
+    public void theLipLightsOnlyTheLowerEdge() {
+        assertEquals(0f, GlassRefraction.shelfLipK(-1f, 0f, DENSITY, 0.3f, 1f), 0f);
+        assertEquals(0f, GlassRefraction.shelfLipK(0f, 0f, DENSITY, 0.3f, 1f), 0f);
+        assertEquals(0f, GlassRefraction.shelfLipK(1f, 0f, DENSITY, 0.3f, 0f), 0f);
+        float lip = GlassRefraction.shelfLipK(1f, 0f, DENSITY, 0f, 1f);
+        assertEquals(GlassRefraction.SHELF_LIP, lip, 1e-6f);
+        assertTrue(GlassRefraction.shelfLipK(1f, 3f * DENSITY, DENSITY, 0f, 1f) < lip * 0.5f);
+        assertTrue("less over a pale backdrop",
+            GlassRefraction.shelfLipK(1f, 0f, DENSITY, 1f, 1f) < lip);
+    }
+
+    @Test
+    public void theProgramHoldsNoIconReflection() {
+        assertFalse(GlassRefraction.AGSL.contains("reflection"));
+        assertFalse(GlassRefraction.AGSL.contains("uReflect"));
+    }
+
+    @Test
+    public void theProgramNeverDrawsARadiusPastHalfTheRect() {
+        // A one-row band 40 px tall handed the dock's 56 px Corners before its height was known:
+        // the program draws it as the capsule its clip is, not with ends folding in.
+        assertEquals(20f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, 56f), 0.001f);
+        assertEquals(12f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, 12f), 0.001f);
+        // A column is held by its width.
+        assertEquals(15f, GlassRefraction.rectRadiusPx(10f, 0f, 40f, 400f, 99f), 0.001f);
+        // A seam pushes the rect out, and the hold is the pushed rect's, as the program sees it.
+        float[] rim = new float[4];
+        GlassRefraction.rimRect(rim, new Rect(0, 0, 300, 40), 30f, GlassRefraction.SEAM_TOP);
+        assertEquals(35f, GlassRefraction.rectRadiusPx(rim[0], rim[1], rim[2], rim[3], 56f), 0.001f);
+        assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, -5f), 0.001f);
+        assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 0f, 0f, 12f), 0.001f);
+    }
+
+    // ---------------------------------------------------------------- Clear's face terms
+
+    @Test
+    public void theFaceTermsAreInTheLooksEqualityAndHashAndDefaultToNone() {
+        GlassRefraction.Look plain = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        assertEquals(0, plain.faceClarityPercent);
+        assertEquals(0, plain.dimPercent);
+        assertEquals(0, plain.sizeLensPercent);
+        assertEquals(0f, plain.faceClarity(), 0f);
+        assertEquals(0f, plain.dim(), 0f);
+        assertEquals(0f, plain.sizeLens(), 0f);
+        assertEquals(plain, plain.withFaceTerms(0, 0, 0));
+        GlassRefraction.Look clear = plain.withFaceTerms(100, 100, 100);
+        assertNotEquals(plain, clear);
+        assertNotEquals(plain.hashCode(), clear.hashCode());
+        assertEquals(clear, new GlassRefraction.Look(27, 18, 10, 0, 40, 76).withFaceTerms(100, 100, 100));
+        assertEquals(clear.hashCode(),
+            new GlassRefraction.Look(27, 18, 10, 0, 40, 76).withFaceTerms(100, 100, 100).hashCode());
+        assertNotEquals(clear, plain.withFaceTerms(0, 100, 100));
+        assertNotEquals(clear, plain.withFaceTerms(100, 0, 100));
+        assertNotEquals(clear, plain.withFaceTerms(100, 100, 0));
+        // Each term alone moves the hash, and a cover keeps them.
+        assertNotEquals(plain.withFaceTerms(0, 100, 0).hashCode(), plain.withFaceTerms(0, 0, 100).hashCode());
+        GlassRefraction.Look covered = clear.withCover(0.5f);
+        assertEquals(100, covered.dimPercent);
+        assertEquals(1f, covered.faceClarity(), 0f);
+        // Clamped to a percentage.
+        assertEquals(100, plain.withFaceTerms(400, -3, 7).faceClarityPercent);
+        assertEquals(0, plain.withFaceTerms(400, -3, 7).dimPercent);
+    }
+
+    @Test
+    public void theSizeLensScalesBySideAndIsHeldToItsRange() {
+        // 72 dp short side scales nothing; a dock is about that.
+        assertEquals(1f, GlassRefraction.sizeLensK(72f * DENSITY, DENSITY, 1f), 1e-6f);
+        // Smaller surfaces take less, to three quarters; larger take more, to one and a half.
+        assertEquals(0.75f, GlassRefraction.sizeLensK(24f * DENSITY, DENSITY, 1f), 1e-6f);
+        assertEquals(0.75f, GlassRefraction.sizeLensK(0f, DENSITY, 1f), 1e-6f);
+        assertEquals(1.5f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 1f), 1e-6f);
+        assertEquals(1.25f, GlassRefraction.sizeLensK(90f * DENSITY, DENSITY, 1f), 1e-6f);
+        // Off it is exactly 1, whatever the size.
+        assertEquals(1f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 0f), 0f);
+        assertEquals(1f, GlassRefraction.sizeLensK(10f, DENSITY, 0f), 0f);
+        // Half on is half way.
+        assertEquals(1.25f, GlassRefraction.sizeLensK(400f * DENSITY, DENSITY, 0.5f), 1e-6f);
+    }
+
+    @Test
+    public void theFaceFadesOutWithSizeSoLargePanesKeepTheirFrost() {
+        // Full at 200 dp of short side or under, none at 320 or over, smoothstep between.
+        assertEquals(1f, GlassRefraction.faceFade(40f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(200f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0.5f, GlassRefraction.faceFade(260f * DENSITY, DENSITY), 1e-6f);
+        assertEquals(0f, GlassRefraction.faceFade(320f * DENSITY, DENSITY), 1e-6f);
+        // The terminal pane, about 396 dp, keeps its frost; a widget does not.
+        assertEquals(0f, GlassRefraction.faceFade(396f * DENSITY, DENSITY), 0f);
+        assertEquals(1f, GlassRefraction.faceFade(150f * DENSITY, DENSITY), 0f);
+        float last = 1f;
+        for (float dp = 150f; dp <= 400f; dp += 10f) {
+            float f = GlassRefraction.faceFade(dp * DENSITY, DENSITY);
+            assertTrue("falls with size at " + dp, f <= last + 1e-6f);
+            last = f;
+        }
+    }
+
+    @Test
+    public void theFaceToneDimsBrightAndLiftsDarkAndIsNothingAtZero() {
+        float[] tone = new float[2];
+        GlassRefraction.faceTone(1f, 1f, tone);
+        assertEquals(0.35f, tone[0], 1e-6f);
+        assertEquals(0f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0.3f, 1f, tone);
+        assertEquals(0f, tone[0], 0f);
+        assertEquals(0.06f * 0.7f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0f, 1f, tone);
+        assertEquals(0.06f, tone[1], 1e-6f);
+        GlassRefraction.faceTone(0.675f, 1f, tone);
+        assertEquals(0.35f * 0.5f, tone[0], 1e-6f);
+        GlassRefraction.faceTone(0.8f, 0f, tone);
+        assertEquals(0f, tone[0], 0f);
+        assertEquals(0f, tone[1], 0f);
+    }
+
+    @Test
+    public void theProgramTakesTheFaceTermsOnlyBehindTheirGates() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("uniform float uFaceClarity;"));
+        assertTrue(agsl.contains("uniform float uDim;"));
+        assertTrue(agsl.contains("uniform float uSizeLens;"));
+        assertTrue(agsl.contains("    if (faceMix > 0.0) {\n"));
+        assertTrue(agsl.contains("    if (dimK > 0.0) {\n"));
+        assertTrue(agsl.contains("float faceMix = uFaceClarity * faceFade;"));
+        assertTrue(agsl.contains("float dimK = uDim * faceFade;"));
+        assertEquals(GlassRefraction.Look.FACE_FADE_TO_DP + "",
+            agsl.split("const float kFadeToDp = ")[1].split(";")[0]);
+        assertTrue(agsl.contains("float sizeK = uSizeLens > 0.0\n"));
+        assertTrue(agsl.contains(": 1.0;\n"));
+        // The tone comes after the picture is chosen and before the rim's light.
+        int mix = agsl.indexOf("col = mix(col, sharp.eval(f), half(clarityK));");
+        int tone = agsl.indexOf("if (dimK > 0.0) {");
+        int light = agsl.indexOf("if (inside < kGlowReachDp * uDensity) {");
+        assertTrue(mix > 0 && tone > mix && light > tone);
+        assertEquals(GlassRefraction.Look.DIM_MAX + "",
+            agsl.split("const float kDimMax = ")[1].split(";")[0]);
+        assertEquals(GlassRefraction.Look.SIZE_MAX + "",
+            agsl.split("const float kSizeMax = ")[1].split(";")[0]);
+        // No raw uBand, uStrength or uSoftRim in the bend's arithmetic: it takes the scaled ones.
+        assertFalse(agsl.contains("min(uBand"));
+        assertFalse(agsl.contains("min(uStrength"));
     }
 }

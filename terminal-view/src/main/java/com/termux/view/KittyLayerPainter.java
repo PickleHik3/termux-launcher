@@ -74,10 +74,20 @@ final class KittyLayerPainter {
      */
     int paint(@NonNull Target target, boolean underText, int topRow, float fontWidth,
               float lineSpacing, float firstRowTop, float horizontalOffset) {
+        return paintLayer(target, underText ? KittyPlacement.LAYER_BELOW_TEXT : KittyPlacement.LAYER_ABOVE_TEXT,
+            topRow, fontWidth, lineSpacing, firstRowTop, horizontalOffset);
+    }
+
+    /**
+     * Draw the collected placements of one layer ({@link KittyPlacement#getLayer}): below the
+     * cell backgrounds, below the text, or above it.
+     */
+    int paintLayer(@NonNull Target target, int layer, int topRow, float fontWidth,
+                   float lineSpacing, float firstRowTop, float horizontalOffset) {
         int drawn = 0;
         for (int i = 0, n = mVisible.size(); i < n; i++) {
             KittyPlacement placement = mVisible.get(i);
-            if ((placement.getZ() < 0) != underText) continue;
+            if (placement.getLayer() != layer) continue;
             if (placement.getSourceWidth() <= 0 || placement.getSourceHeight() <= 0) continue;
             geometry(placement, topRow, fontWidth, lineSpacing, firstRowTop, horizontalOffset,
                 mDestination, mClip);

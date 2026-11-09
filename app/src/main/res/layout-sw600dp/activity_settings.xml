@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings on a screen at least 600 dp in its smallest width (the Surface; never a phone,
+     even in landscape): the root list and the open section side by side
+     (F4). The same ids as the phone layout, so a fragment restored across a width change finds its
+     container; SettingsActivity rebuilds the stack for the new shape. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/termuxColorSurfaceBase"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:background="?attr/termuxColorSurfaceBase"
+        android:gravity="center_vertical"
+        android:minHeight="80dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="20dp"
+        app:contentInsetStartWithNavigation="0dp"
+        app:navigationIconTint="?attr/termuxColorOnSurface"
+        app:popupTheme="@style/ThemeOverlay.Material3"
+        app:titleMarginTop="0dp"
+        app:titleMarginBottom="0dp"
+        app:titleTextAppearance="@style/TextAppearance.Termux.Settings.ToolbarTitle" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/settings_list"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="?attr/termuxColorOutlineVariant" />
+
+        <FrameLayout
+            android:id="@+id/settings"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="3" />
+
+    </LinearLayout>
+
+</LinearLayout>

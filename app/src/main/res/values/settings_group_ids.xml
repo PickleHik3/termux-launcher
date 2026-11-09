@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SettingsGroupDecoration: a row's last known place in its group, for a row whose adapter
+         position is gone while it animates out. -->
+    <item name="settings_group_shape" type="id" />
+</resources>

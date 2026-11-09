@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * The Linux apps installed in the prefix and in every {@code proot-distro} container, read from
@@ -358,7 +360,7 @@ public final class LinuxAppCatalog {
         }
         String replacement = tryExec;
         if (replacement.isEmpty()) {
-            java.util.Set<String> found = new java.util.TreeSet<>();
+            Set<String> found = new TreeSet<>();
             for (File dir : binDirs(container, desktopFile)) {
                 String[] names = dir.list();
                 if (names == null) continue;

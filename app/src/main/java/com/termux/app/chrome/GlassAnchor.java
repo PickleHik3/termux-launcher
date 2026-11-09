@@ -25,7 +25,7 @@ import com.termux.app.wall.PaneWallLayout;
  *
  * <p>So there are three anchors, chosen per surface by what moves it:</p>
  * <ul>
- *   <li>{@link #place}: glass on a wall page — the pane slabs, the Widgets and Display pages'
+ *   <li>{@link #place}: glass on a wall page — the pane slabs, the Widgets page and the display window'
  *       glass and corner arcs, the corner tab. The wallpaper in it is fixed to the screen, lined
  *       up with the wallpaper the launcher draws behind the wall, whatever the page does: slide,
  *       sink under a held border, tip as a plank. The page's whole transform — its translation,
@@ -100,6 +100,22 @@ public final class GlassAnchor {
         out[0] = Math.round(x) + rootScratch[0];
         out[1] = Math.round(y) + rootScratch[1];
         return slideX;
+    }
+
+    /**
+     * {@code view}'s rect on screen as laid out ({@link #layoutOriginOnScreen}): where an ink
+     * chosen on the glass under a dock row is measured. A crossing carries the accessory stack
+     * through its travel (its translationY, the rows' sink), and a row measured where the travel
+     * has it is judged on wallpaper it will not rest on, so it rises in one ink and changes at
+     * landing; measured here, the crossing and the landing judge the same rect. Never allocates.
+     *
+     * @param origin two ints the laid-out origin is read into
+     * @param rootScratch two ints the root's own screen position is read into
+     */
+    public static void layoutRectOnScreen(@NonNull View view, @NonNull Rect out,
+                                          @NonNull int[] origin, @NonNull int[] rootScratch) {
+        layoutOriginOnScreen(view, origin, rootScratch);
+        out.set(origin[0], origin[1], origin[0] + view.getWidth(), origin[1] + view.getHeight());
     }
 
     /**

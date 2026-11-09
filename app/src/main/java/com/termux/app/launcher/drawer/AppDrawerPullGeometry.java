@@ -32,6 +32,12 @@ public final class AppDrawerPullGeometry {
         RAIL
     }
 
+    /**
+     * A following plane has no dock hop: the hop rises and falls with p, and on top of the
+     * plane's lerp it would move the top edge faster than the finger, then slower.
+     */
+    public static final float FOLLOW_LIFT_PX = 0f;
+
     private AppDrawerPullGeometry() {}
 
     /** Which way a drag has to travel, from the edge the pinned apps row stands on. */
@@ -69,6 +75,36 @@ public final class AppDrawerPullGeometry {
      */
     public static float travelSpanPx(@NonNull Pull pull, float hostWidthPx, float hostHeightPx) {
         return isHorizontal(pull) ? hostWidthPx : hostHeightPx;
+    }
+
+    /**
+     * The finger travel a full open takes when the plane follows a finger that is not on the pinned
+     * apps row (Home's swipe up): the distance the plane's top edge actually crosses, from the
+     * seed's top to the open plane's top, so a finger moved N px moves that edge N px. A seed
+     * already near the top (a top row) has almost nothing to cross, and keeps {@code fallbackPx}
+     * rather than opening in a few pixels.
+     *
+     * <p>The drag is anchored at the claim point with no slop taken off, and has no dock hop
+     * ({@link #FOLLOW_LIFT_PX}), so the edge is linear in the finger from the first move.
+     *
+     * @param minTravelPx the shortest span still followed edge for edge
+     */
+    public static float followTravelPx(float seedTopPx, float openTopPx, float minTravelPx,
+                                       float fallbackPx) {
+        float span = seedTopPx - openTopPx;
+        return span >= minTravelPx ? span : fallbackPx;
+    }
+
+    /**
+     * The progress the release rule reads: the finger's travel since the grab measured against the
+     * row pull's travel, so a follow (longer travel, 1:1 under the finger) commits and flings at the
+     * same finger distance a row pull does. Identity when the two travels are equal.
+     */
+    public static float releaseProgress(float progress, float grabProgress, float travelPx,
+                                        float releaseTravelPx) {
+        if (!(releaseTravelPx > 0f) || travelPx == releaseTravelPx) return progress;
+        return AppDrawerTransitionGeometry.clamp01(
+            grabProgress + (progress - grabProgress) * (travelPx / releaseTravelPx));
     }
 
     /**

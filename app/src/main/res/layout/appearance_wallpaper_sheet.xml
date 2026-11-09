@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The wallpaper picker over the Appearance editor (the Appearance card's Wallpaper row, Change):
+     back to the editor, the page's name, and Done, which keeps every change of the session and
+     closes the editor; the picker's own content under it. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:clickable="true"
+    android:layoutDirection="locale"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/appearance_wallpaper_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/appearance_page_bar_height"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_wallpaper_back"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/wallpaper_picker_back"
+            android:tooltipText="@string/wallpaper_picker_back"
+            app:icon="@drawable/ic_symbol_arrow_back"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/appearance_wallpaper_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:accessibilityHeading="true"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/appearance_row_wallpaper"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
+            android:textColor="?attr/colorOnSurface" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_wallpaper_done"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_done"
+            app:icon="@drawable/ic_symbol_check" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/appearance_wallpaper_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

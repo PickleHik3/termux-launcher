@@ -62,6 +62,8 @@ public class TermuxActivityPageIndicatorTest {
     /** The one bar, standing where the activity's own setup would have put it to begin with. */
     private SuggestionBarView lendBar(TermuxActivity activity) {
         SuggestionBarView bar = new SuggestionBarView(activity, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         // A rail with nothing pinned claims no column at all, so the bar has to be holding
         // something for the walk to stand it anywhere but the dock.
         List<PinnedItem> pinned = new ArrayList<>();

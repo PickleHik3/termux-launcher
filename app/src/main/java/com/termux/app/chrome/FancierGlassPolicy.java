@@ -2,6 +2,8 @@ package com.termux.app.chrome;
 
 import android.os.Build;
 
+import androidx.annotation.NonNull;
+
 /**
  * When the Fancier Glass switch does anything.
  *
@@ -26,8 +28,9 @@ public final class FancierGlassPolicy {
     }
 
     /**
-     * Whether the switch can be flipped: it needs a wallpaper set from inside the launcher, whose
-     * exact pixels the glass can read. With any other wallpaper it is shown disabled, with the hint.
+     * Whether the switch can be flipped: it needs a wallpaper set from inside the launcher (on the
+     * phone, or for the launcher alone), whose exact pixels the glass can read. With any other
+     * wallpaper it is shown disabled, with the hint.
      */
     public static boolean flippable(int sdkInt, boolean managedWallpaperOnScreen) {
         return offered(sdkInt) && managedWallpaperOnScreen;
@@ -38,9 +41,41 @@ public final class FancierGlassPolicy {
      *
      * @param toggleOn                 the stored switch
      * @param managedWallpaperOnScreen the wallpaper on screen is the one the in-app picker set,
-     *                                 and its exact copy is still on disk
+     *                                 and its exact copy is still on disk — on the phone, or the
+     *                                 launcher's app-only picture
+     *                                 ({@link WallpaperSourceFacts#managedOnScreen})
      */
     public static boolean active(int sdkInt, boolean toggleOn, boolean managedWallpaperOnScreen) {
         return flippable(sdkInt, managedWallpaperOnScreen) && toggleOn;
+    }
+
+    /** Why the glass does not refract now, as the editor tells the user. */
+    public enum Off {
+        /** It refracts. */
+        NONE,
+        /** The phone's Android cannot draw it. */
+        PHONE,
+        /** Reduce idle activity (lazy mode) puts it out with the other effects. */
+        LAZY,
+        /** The Glass refraction switch is off. */
+        SWITCH,
+        /** The wallpaper on screen is not one set from the launcher. */
+        WALLPAPER;
+
+        /** Whether a setting the user can change brings it back (all but {@link #PHONE}). */
+        public boolean userCanChange() {
+            return this != NONE && this != PHONE;
+        }
+    }
+
+    /** {@link #active}'s answer with its reason, lazy mode included; the phone's limit first. */
+    @NonNull
+    public static Off off(int sdkInt, boolean toggleOn, boolean managedWallpaperOnScreen,
+                          boolean lazy) {
+        if (!offered(sdkInt)) return Off.PHONE;
+        if (lazy) return Off.LAZY;
+        if (!toggleOn) return Off.SWITCH;
+        if (!managedWallpaperOnScreen) return Off.WALLPAPER;
+        return Off.NONE;
     }
 }

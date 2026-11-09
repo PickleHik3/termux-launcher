@@ -1,0 +1,25 @@
+{
+  "home": {
+    "wide": {
+      "dock_design": "wall_strip"
+    },
+    "portrait": {
+      "keyboard_form": "floating",
+      "status_bar": "top"
+    }
+  },
+  "terminal": {
+    "wide": {
+      "dock_design": "peek_glass"
+    }
+  },
+  "display": {
+    "wide": {
+      "dock_design": "peek_glass"
+    }
+  },
+  "absent": [
+    "terminal.portrait.keyboard_form",
+    "display.portrait.keyboard_form"
+  ]
+}

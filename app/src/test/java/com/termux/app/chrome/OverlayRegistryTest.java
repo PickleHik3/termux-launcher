@@ -45,6 +45,10 @@ public class OverlayRegistryTest {
             open = false;
             log.add(name + ":" + reason);
         }
+
+        @Override public boolean isOpen() {
+            return open;
+        }
     }
 
     /** A typed overlay: owns every key while open and handles Back itself through that route. */
@@ -73,6 +77,25 @@ public class OverlayRegistryTest {
 
     private static KeyEvent down(int keyCode) {
         return new KeyEvent(KeyEvent.ACTION_DOWN, keyCode);
+    }
+
+    /** The signal pages read to leave Back and keys to a layer: asked of the registry, not listed. */
+    @Test
+    public void aLayerIsOpenWhileAnyOverlayIs() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Pane help = new Pane("help", false, log);
+        Editor drawer = new Editor("drawer", false, log);
+        registry.register(help);
+        registry.register(drawer);
+        assertEquals(false, registry.anyOpen());
+        drawer.open = true;
+        assertEquals(true, registry.anyOpen());
+        drawer.open = false;
+        help.open = true;
+        assertEquals(true, registry.anyOpen());
+        registry.onBackPressed();
+        assertEquals(false, registry.anyOpen());
     }
 
     @Test

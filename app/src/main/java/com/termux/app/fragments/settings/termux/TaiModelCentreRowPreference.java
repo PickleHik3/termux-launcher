@@ -29,7 +29,8 @@ public final class TaiModelCentreRowPreference extends Preference {
     public TaiModelCentreRowPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         setLayoutResource(R.layout.preference_tai_model_centre_row);
-        setIconSpaceReserved(false);
+        // SettingsLayoutUtils skips this row's own layout, so it carries its icon itself.
+        setIcon(R.drawable.ic_ms_model_centre);
         setPersistent(false);
     }
 

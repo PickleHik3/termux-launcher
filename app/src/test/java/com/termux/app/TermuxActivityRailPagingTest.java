@@ -14,7 +14,6 @@ import com.termux.app.launcher.az.AzLetterTrack;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
-import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -41,7 +40,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * What a bar standing on a side is given, measured against the real {@code activity_termux.xml}:
- * a band that starts and ends level with the terminal's own frame, a rail that pages down that
+ * a band that starts and ends level with the terminal's own frame, a rail that scrolls down that
  * band instead of running off the end of it, and a page indicator that travels with the row onto
  * every edge it can be put on.
  */
@@ -181,12 +180,14 @@ public class TermuxActivityRailPagingTest {
         assertTrue("and there is a column left to page", host.getHeight() > 0);
     }
 
-    // ------------------------------------------------------------- the rail's paging
+    // ------------------------------------------------------------- the rail's scroll
 
     /** At the phone of record's density, where 1362 px is a phone's 1362 px and the slot is 58dp. */
     @Test
     @Config(sdk = {Build.VERSION_CODES.P}, qualifiers = "xxhdpi")
-    public void aRailPagesTheFrameAlignedColumnAndKeepsEverySlotInsideIt() {
+    public void aRailHoldsEveryPinInOneColumnItsScrollShowsWholeSlotsOf() {
+        // #146: paged by its own length, a rail in a column that shrank (the keyboard up,
+        // Floating's taller dock) kept the old count and ran its last slot on under the dock.
         TermuxActivity activity = inflate();
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.LEFT));
         activity.applySideStackFrameInset(FRAME_INSET);
@@ -196,26 +197,33 @@ public class TermuxActivityRailPagingTest {
         int columnPx = host.getHeight();
 
         SuggestionBarView rail = new SuggestionBarView(activity, null);
+        // The dock hands a rail its icon and slot; a rail handed none draws no icons (#133).
+        rail.setDockRailSizePx(DockLayoutPolicy.railIconSizePx(density(activity)),
+            DockLayoutPolicy.railSlotLengthPx(density(activity)));
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
         ReflectionHelpers.setField(rail, "pinnedItems", pinned(14));
-        rail.measure(View.MeasureSpec.makeMeasureSpec(140, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(columnPx, View.MeasureSpec.EXACTLY));
-        rail.layout(0, 0, 140, columnPx);
-
-        int slotPx = DockLayoutPolicy.railSlotLengthPx(density(activity));
-        int perPage = DockPagingModel.railItemsPerPage(columnPx, slotPx);
-        assertEquals(perPage,
+        assertEquals("every pin in the one column", 14,
             (int) ReflectionHelpers.callInstanceMethod(rail, "computePinnedItemsPerPage"));
-        int pages = ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount");
-        assertEquals("ceil(14 / itemsPerPage)", (14 + perPage - 1) / perPage, pages);
-        assertTrue("fourteen icons do not fit one phone-high column: " + pages, pages > 1);
-        assertTrue(rail.hasPinnedOverflowPages());
-        // Every slot of a page fits the column it is drawn in — which is what the last icon
-        // running under the bottom of the canvas band was the absence of.
-        assertTrue("a page fits: " + perPage + " x " + slotPx + " in " + columnPx,
-            perPage * slotPx <= columnPx);
-        assertTrue("and the next one does not", (perPage + 1) * slotPx > columnPx);
+        assertEquals(1, (int) ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount"));
+
+        // The scroll it stands in shows the whole slots the column holds and scrolls the rest.
+        int slotPx = DockLayoutPolicy.railSlotLengthPx(density(activity));
+        com.termux.app.launcher.drawer.DockRailScrollView scroll =
+            new com.termux.app.launcher.drawer.DockRailScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setRailSlotLengthPx(slotPx);
+        View column = new View(activity);
+        column.setMinimumHeight(DockLayoutPolicy.railContentLengthPx(14, 0, slotPx));
+        scroll.addView(column, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.measure(View.MeasureSpec.makeMeasureSpec(140, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(columnPx, View.MeasureSpec.EXACTLY));
+        int shown = scroll.getMeasuredHeight();
+        assertEquals("whole slots: " + shown + " of " + columnPx, 0, shown % slotPx);
+        assertTrue("never longer than its band", shown <= columnPx);
+        assertTrue("and as many as the band holds", shown + slotPx > columnPx);
+        assertEquals(14 * slotPx, column.getMeasuredHeight());
     }
 
     private static List<PinnedItem> pinned(int count) {

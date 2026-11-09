@@ -17,6 +17,7 @@ other embedders) still runs when you add it by link or file.
 | Gemma 4 E4B IT | Assistants | 3.7 GB | 12 GB+ | Apache-2.0 | Better at code and reasoning, slower. Not gated |
 | Whisper ACFT Base / Base (English) | Speech | 97 MB | 6 GB+ | Apache-2.0 | Voice typing, many languages or English only |
 | Whisper ACFT Small / Small (English) | Speech | 273 MB | 8 GB+ | Apache-2.0 | Voice typing, more accurate |
+| Whisper Base GPU | Speech | 277 MB | 6 GB+ | Apache-2.0 | Voice typing, many languages, one 30-second window. Runs on the GPU at full precision: faster and much less CPU on phones whose GPU runs it, but it needs a GPU. Always downloadable; the sheet and the picker say whether to try it, and the voice benchmark says whether it is recommended on this phone. If the GPU cannot run it, voice input says so; choosing CPU under Accelerator runs it anyway (slower, more battery) |
 | Parakeet TDT 0.6B v3 | Speech | 586 MB | 8 GB+ | CC-BY-4.0 | Voice typing in 25 European languages, detected automatically |
 | KittenTTS Nano 0.8 | Voice output | 90 MB | 4 GB+ | Apache-2.0 | Read aloud, English, four voices |
 | EmbeddingGemma 2 Text+Vision 440M | Search | 388 MB | 4 GB+ | Apache-2.0 | Recommended embedder. Not gated |
@@ -135,6 +136,7 @@ gemma-4-e2b-it-litert-lm
 gemma-4-e4b-it-litert-lm
 whisper-acft-base       whisper-acft-base-en
 whisper-acft-small      whisper-acft-small-en
+whisper-base-gpu
 parakeet-tdt-0.6b-v3
 kittentts-nano-0.8
 embeddinggemma-2-text-vision-440m

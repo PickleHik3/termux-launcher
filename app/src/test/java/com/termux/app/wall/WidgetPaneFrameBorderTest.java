@@ -1,7 +1,6 @@
 package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import android.app.Activity;
@@ -26,10 +25,9 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * The Widgets page's frame line. On glass it is the slab's lit rim; with the glass off but the
- * border preference on it is the terminal's plain stroke, drawn on the page itself so it moves
- * with the page and gives the border drag that pages the wall the same line to find here as on
- * the terminal. With neither, the page wears nothing.
+ * The Home page's frame. A Home page wears no borders (ADR 0008): whatever the glass and the
+ * border preference say for the windows, the page draws no slab and no line, and the widgets
+ * stand on the wallpaper as on any launcher.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -53,28 +51,26 @@ public class WidgetPaneFrameBorderTest {
     }
 
     @Test
-    public void theBorderPreferenceDressesThePageWithAPlainLineWithoutGlass() {
+    public void theBorderPreferenceDrawsNoLineOnAHomePage() {
         WidgetPaneFrame page = page(activity());
         page.applyStyle(new Style(false, true));
-        assertNotNull("the plain stroke", page.getForeground());
+        assertNull("no plain stroke", page.getForeground());
         PaneGlassBackdropView glass = page.findViewById(R.id.widget_pane_glass);
-        assertEquals("no slab without the glass", View.GONE, glass.getVisibility());
+        assertEquals("no slab", View.GONE, glass.getVisibility());
+    }
+
+    @Test
+    public void theGlassDrawsNoSlabAndNoRimOnAHomePage() {
+        WidgetPaneFrame page = page(activity());
+        page.applyStyle(new Style(true, true));
+        assertNull("no rim", page.getForeground());
+        PaneGlassBackdropView glass = page.findViewById(R.id.widget_pane_glass);
+        assertEquals("no slab", View.GONE, glass.getVisibility());
     }
 
     @Test
     public void withNeitherTheGlassNorTheBorderThePageWearsNothing() {
         WidgetPaneFrame page = page(activity());
-        page.applyStyle(new Style(true, true));
-        assertNotNull(page.getForeground());
-        page.applyStyle(new Style(false, false));
-        assertNull(page.getForeground());
-    }
-
-    @Test
-    public void theLineGoesWhenThePreferenceIsSwitchedOff() {
-        WidgetPaneFrame page = page(activity());
-        page.applyStyle(new Style(false, true));
-        assertNotNull(page.getForeground());
         page.applyStyle(new Style(false, false));
         assertNull(page.getForeground());
     }

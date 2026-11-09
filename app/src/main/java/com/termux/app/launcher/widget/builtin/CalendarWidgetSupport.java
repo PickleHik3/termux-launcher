@@ -9,11 +9,7 @@ import android.net.Uri;
 import android.provider.CalendarContract;
 import android.text.format.DateFormat;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -31,9 +27,22 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/** What the agenda and calendar widgets share beyond the events source: words, intents, rows. */
+/** What the Calendar widget needs beyond the events source and its plan: the day, words, intents. */
 final class CalendarWidgetSupport {
     private CalendarWidgetSupport() { }
+
+    /**
+     * The setting that says what the 2×2 shows: today's events, or the month. The old Agenda opens
+     * on the events and the old Calendar month on the month ({@link BuiltinWidgetAliases}).
+     */
+    static final String KEY_VIEW = "view";
+    static final String VIEW_EVENTS = "events";
+    static final String VIEW_MONTH = "month";
+
+    /** Whether {@code config} sets the 2×2 to the month; anything else is the events. */
+    static boolean monthView(@Nullable android.os.Bundle config) {
+        return config != null && VIEW_MONTH.equals(config.getString(KEY_VIEW));
+    }
 
     /**
      * One moment of the calendar as a widget draws it: the day, the events that touch it, the
@@ -50,6 +59,9 @@ final class CalendarWidgetSupport {
         @NonNull final List<CalendarEvent> todays;
         @NonNull final List<CalendarEvent> upcoming;
         @Nullable final CalendarEvent next;
+        /** Today's events not yet over, and tomorrow's first, for when none is left. */
+        @NonNull final List<CalendarEvent> remaining;
+        @Nullable final CalendarEvent tomorrowFirst;
         private final boolean twentyFourHour;
         @NonNull private final CalendarWidgetFormats.Words words;
 
@@ -65,6 +77,8 @@ final class CalendarWidgetSupport {
             todays = CalendarWidgetFormats.onDay(events, today, zone);
             upcoming = CalendarWidgetFormats.upcoming(events, now);
             next = CalendarWidgetFormats.next(events, now, zone);
+            remaining = CalendarWidgetFormats.remainingToday(events, now, zone);
+            tomorrowFirst = CalendarWidgetFormats.firstStarting(events, today.plusDays(1), zone);
             twentyFourHour = is24Hour(context);
             words = words(context);
         }
@@ -77,14 +91,14 @@ final class CalendarWidgetSupport {
             return CalendarWidgetFormats.relative(event, now, zone, twentyFourHour, locale, words);
         }
 
-        @NonNull String date(@NonNull String skeleton) {
-            return CalendarWidgetSupport.date(today, skeleton, locale, zone);
+        /** {@code event}'s start as a clock time, or "All day". */
+        @NonNull String clock(@NonNull CalendarEvent event) {
+            return event.allDay ? words.allDay
+                : CalendarWidgetFormats.clock(event.startMs, zone, twentyFourHour, locale);
         }
 
-        /** "No events today", or "Nothing else today" once today's are over. */
-        @NonNull String emptyText(@NonNull Context context) {
-            return context.getString(todays.isEmpty() ? R.string.bw_calendar_no_events_today
-                : R.string.bw_calendar_nothing_else_today);
+        @NonNull String date(@NonNull String skeleton) {
+            return CalendarWidgetSupport.date(today, skeleton, locale, zone);
         }
 
         /** "3 events" / "No events" for today. */
@@ -234,33 +248,6 @@ final class CalendarWidgetSupport {
         }
     }
 
-    /** The "Allow calendar access" line, in the accent so it reads as the thing to tap. */
-    @NonNull static TextView allowLine(@NonNull BuiltinWidgetUi ui, float sp, boolean shortForm) {
-        return ui.text(ui.context.getString(shortForm ? R.string.bw_calendar_allow_short
-            : R.string.bw_calendar_allow_access), sp, ui.style.sansBold, ui.style.primary);
-    }
-
-    /** A quiet line saying there is nothing to show. */
-    @NonNull static TextView emptyLine(@NonNull BuiltinWidgetUi ui, @NonNull CharSequence text,
-                                       float sp) {
-        return ui.text(text, sp, ui.style.sansMedium, ui.style.onSurfaceVariant);
-    }
-
-    /**
-     * The compact event row both widgets list: an 8dp dot in the event's colour, the title in
-     * 12sp bold over its time in 10.5sp mono. Tapping it opens the event.
-     */
-    @NonNull static LinearLayout compactRow(@NonNull BuiltinWidgetUi ui, @NonNull CalendarEvent event,
-                                            @NonNull String time, boolean interactive) {
-        TextView title = ui.text(title(ui.context, event), 12f, ui.style.sansBold, ui.style.onSurface);
-        TextView when = ui.mono(time, 10.5f);
-        LinearLayout text = ui.column(0, title, when);
-        LinearLayout row = ui.row(8, ui.dot(8, colorOf(event, ui.style.primary)),
-            BuiltinWidgetUi.flex(text));
-        if (interactive) makeEventRow(row, event, time);
-        return row;
-    }
-
     /** Makes {@code row} open {@code event} on tap and say so to a screen reader. */
     static void makeEventRow(@NonNull View row, @NonNull CalendarEvent event, @NonNull String time) {
         Context context = row.getContext();
@@ -272,19 +259,20 @@ final class CalendarWidgetSupport {
         pressable(row);
     }
 
-    /** A row whose children share a text baseline, the design's {@code align-items:baseline}. */
-    @NonNull static LinearLayout baselineRow(@NonNull BuiltinWidgetUi ui, int gapDp,
-                                             @NonNull View... children) {
-        LinearLayout row = ui.row(gapDp, children);
-        row.setGravity(Gravity.START);
-        row.setBaselineAligned(true);
-        return row;
-    }
-
-    /** Stretches {@code view} across its column. */
-    @NonNull static <V extends View> V wide(@NonNull V view) {
-        ViewGroup.LayoutParams existing = view.getLayoutParams();
-        int height = existing == null ? ViewGroup.LayoutParams.WRAP_CONTENT : existing.height;
-        return BuiltinWidgetUi.size(view, ViewGroup.LayoutParams.MATCH_PARENT, height);
+    /**
+     * Sets {@code paint} up for a grid's day numbers as the plan measured them at {@code role}:
+     * tabular figures in the sans, or the terminal's mono under the Mono numerals choice.
+     */
+    static void dressNumerals(@NonNull android.graphics.Paint paint, @NonNull BuiltinWidgetStyle style,
+                              @NonNull WidgetTokens.Role role, float sizePx) {
+        boolean mono = style.monoNumerals();
+        if (mono) {
+            paint.setTypeface(role.emphasised ? style.monoMedium : style.mono);
+            paint.setFontFeatureSettings(null);
+        } else {
+            paint.setTypeface(role.emphasised ? style.sansMedium : style.sans);
+            paint.setFontFeatureSettings(WidgetTokens.TABULAR_FIGURES);
+        }
+        paint.setTextSize(sizePx);
     }
 }

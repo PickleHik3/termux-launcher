@@ -2,7 +2,6 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -27,7 +26,7 @@ import org.robolectric.annotation.Config;
  * The saved Custom across editor visits: Custom set up with keyboard and terminal overrides and
  * left with Done comes back whole on a later visit's move to Custom, after a Look was picked and
  * saved in between; picking the Look again resets everything to it and leaves the saved Custom
- * alone. Each visit is a fresh {@link SurfaceEditorController.SessionCustom} over a fresh
+ * alone, and so does Done on that Look. Each visit is a fresh {@link SurfaceEditorController.SessionCustom} over a fresh
  * preferences object on the same store, as after a restart.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -85,7 +84,7 @@ public class SavedCustomRestoreTest {
     }
 
     @Test
-    public void aLookSavedIsCustomsNextStartingPoint() {
+    public void aLookSavedLeavesTheSavedCustomForTheNextVisit() {
         // Visit 1: a Custom setup saved.
         TermuxAppSharedPreferences first = freshPreferences();
         SurfacePresets.applyLook(first, mist);
@@ -93,22 +92,23 @@ public class SavedCustomRestoreTest {
         visit1.enter(first);
         tuneTheKeyboardAndTheTerminal(first);
         doneAtCustom(visit1, first);
+        String custom = AppearanceSnapshot.signatureOf(first);
 
-        // Visit 2: Clear picked and saved: the saved Custom goes.
+        // Visit 2: Clear picked and saved: the saved Custom stays.
         TermuxAppSharedPreferences second = freshPreferences();
         SurfaceEditorController.SessionCustom visit2 = new SurfaceEditorController.SessionCustom();
         visit2.leave(second);
         SurfacePresets.applyLook(second, clear);
         doneAtLook(second);
         assertOnClear(second);
-        assertNull(SurfacePresets.custom(second));
+        assertNotNull(SurfacePresets.custom(second));
 
-        // Visit 3: opens on Clear; Custom starts from Clear's values, not the old setup.
+        // Visit 3: opens on Clear; Custom is the user's own setup again.
         TermuxAppSharedPreferences third = freshPreferences();
         SurfaceEditorController.SessionCustom visit3 = new SurfaceEditorController.SessionCustom();
         visit3.enter(third);
-        assertOnClear(third);
-        assertFalse("seeded from Clear, untouched", visit3.isTouched(third));
+        assertEquals(custom, AppearanceSnapshot.signatureOf(third));
+        assertTuned(third);
     }
 
     @Test
@@ -128,7 +128,7 @@ public class SavedCustomRestoreTest {
         assertFalse("a forgotten position is not saved", blob.containsKey(
             TermuxAppSharedPreferences.surfaceGlassPositionKey(SurfaceSlot.DOCK)));
         assertEquals(KEYS, blob.get(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY));
-        assertEquals(TINT, blob.get(TermuxAppSharedPreferences.surfaceOverrideKey(
+        assertEquals(TINT, blob.get(SurfacePresets.cellKey(
             SurfaceSlot.CANVAS, SurfaceProperty.TINT)));
         assertTrue("positions never decide a match",
             SurfacePresets.matches(prefs, SurfacePresets.custom(prefs)));
@@ -147,9 +147,9 @@ public class SavedCustomRestoreTest {
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
         session.enter(prefs);
 
-        assertEquals(21, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(prefs.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals("no Keys saved reads as the theme's",
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY, prefs.getInAppKeyboardKeyOpacity());
@@ -209,12 +209,12 @@ public class SavedCustomRestoreTest {
     }
 
     private TermuxAppSharedPreferences freshPreferences() {
-        return new TermuxAppSharedPreferences(context, store, null);
+        return com.termux.app.look.TerminalPageIdFixture.give(
+            new TermuxAppSharedPreferences(context, store, null));
     }
 
-    /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook). */
+    /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook): writes nothing. */
     private static void doneAtLook(TermuxAppSharedPreferences prefs) {
-        prefs.setSurfaceCustomPreset(null);
     }
 
     /** The editor's Done at the Custom stop. */
@@ -244,8 +244,8 @@ public class SavedCustomRestoreTest {
                 assertFalse(slot + " " + property, prefs.isSurfaceInheriting(slot, property));
             assertEquals(slot.toString(), GLASS, prefs.getSurfaceGlassPosition(slot));
         }
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
-        assertEquals(TINT, prefs.getInAppKeyboardTintStrength());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(TINT, prefs.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(OPACITY, prefs.getTerminalBackgroundOpacity());
         assertEquals(TINT, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
         assertEquals(KEYS, prefs.getInAppKeyboardKeyOpacity());
@@ -262,5 +262,11 @@ public class SavedCustomRestoreTest {
             prefs.getInAppKeyboardKeyOpacity());
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS,
             prefs.getInAppKeyboardBlurRadiusRaw());
+    }
+
+    /** The grid's page kinds are process-wide: none leaks into the next test class. */
+    @org.junit.After
+    public void resetLookGridPageKinds() {
+        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 }

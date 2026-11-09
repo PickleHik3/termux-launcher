@@ -190,7 +190,10 @@ public final class TaiBenchStore {
             JSONObject check = new JSONObject().put("passed", 0).put("total", TaiBenchSuite.CHECKS.size())
                 .put("details", new JSONArray());
             JSONObject device = marker.optJSONObject("device");
-            return new JSONObject()
+            JSONObject record = new JSONObject();
+            // A voice run's marker names its kind, so its crash lands on the voice board.
+            if (marker.has("kind")) record.put("kind", marker.optString("kind", ""));
+            return record
                 .put("id", java.util.UUID.randomUUID().toString())
                 .put("benchVersion", marker.optString("benchVersion", TaiBenchSuite.BENCH_VERSION))
                 .put("preset", marker.optString("preset", ""))
@@ -239,6 +242,8 @@ public final class TaiBenchStore {
         json.put("benchVersion", benchVersion);
         json.put("records", records);
         json.put("leaderboard", leaderboard(records, benchVersion));
+        // Voice records share the file and never the text board: they have their own.
+        json.put("voiceLeaderboard", TaiVoiceBench.leaderboard(records));
         JSONArray versions = new JSONArray();
         for (String version : benchVersions(records)) versions.put(version);
         json.put("benchVersions", versions);

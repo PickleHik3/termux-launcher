@@ -36,6 +36,7 @@ public final class TerminalSessionBrowser {
         mActivity = activity;
         mView = new SessionsDrawerView(activity);
         mView.setListener(new DrawerListener());
+        mView.setHost(activity.sessionsDrawerHost());
     }
 
     /** True while the drawer is the card on the plane. */

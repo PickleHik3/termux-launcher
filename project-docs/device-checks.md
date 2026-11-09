@@ -1,584 +1,964 @@
-# Device checks owed
+# Device checks owed (Agent)
 
 Built, merged, not yet seen on a device. The list a drop or a cut is checked against first.
-
-**Agent** items can be driven over adb: the emulator, or pong with the developer's go-ahead.
-**Developer** items need a hand on the phone: feel, frame timing, a lock screen, taste.
+Every item here can be driven over adb: the emulator, or pong with the developer's go-ahead.
+An item that needs a hand on the phone (feel, frame timing, a thumb mid-gesture, a lock
+screen, taste, a Linux container or package the developer installs, Perfetto) goes to
+`project-docs/developer-checks.md` instead.
 
 One line per item: date · commit or PR · what to look at · what passes · how (device, route).
 Verified items are **deleted**, never ticked; the PR, the commit or a bug is the record. An item
 lands here in the same commit or PR as the change it belongs to, whenever a hand-over still owes
-a device check. Before a drop or a cut, work through the Agent list and hand the Developer list
-over; an item two releases old is re-judged and dropped if nothing rides on it. The file stays
-under twenty items; past that, the oldest are re-judged first.
+a device check. Before a drop or a cut, work through this list; an item two releases old is
+re-judged and dropped if nothing rides on it. The file stays under twenty items; past that, the
+oldest are re-judged first.
+
+The 2026-10-23/24 and 10-26 emulator sweeps were worked and pruned on 2026-11-02; their
+unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
-- 2026-11-01 · rel/1.2.2 backport · Seen on emulator tl16 2026-11-01: fresh 1.2.1 to 1.2.2 upgrade,
-  Nix fresh bootstrap, segmented pills, dock hold and unpin, drawer folder pull, hardware keys in
-  search, punctuation-free selection. Still owed: two extra-key pages turn one page per swipe;
-  Chromium opens from the drawer and a missing command toasts (needs a distro); a GPU load the
-  #191 guard skips refuses with the skip reason (needs a GPU and a model) · emulator, or pong by hand.
-- 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
-  · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
-  Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
-  is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
-- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
-  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
-  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
-  not Zink · pong over adb, with the developer's go-ahead.
-- 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
-  (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
-- 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
-  the emulator 2026-10-15:** with a fresh screenshot waiting, paste with a latched or held Ctrl or
-  Alt still typed the screenshot's path; plain paste should give the clipboard text while the photo
-  keeps showing (`~/reports/devcheck-2026-10-15/k2g_row.png`, `k2h_term.png`). The glyph swap,
-  the path paste and the return to the paste glyph passed · emulator.
-- 2026-10-13 · commit "fix(launcher): scale an icon pack as one, not icon by icon" · Still owed:
-  an app's notification icon with a pack (needs a real app posting one; `cmd notification post`
-  shows a system icon); a pack with no margin looks as it always did · emulator, Arcticons from
-  `https://mirror.cyberbits.eu/fdroid/repo/com.donnnno.arcticons_1570.apk`.
-- 2026-10-13 · commit "feat(tai): plan a load on the typical measured drop, not the largest" · E4B
-  GPU cleanup is admitted with about 3.8–4 GB free (`tai logs`: `load_ok … gpu ctx=2048`, no
-  `load refused`), and any refusal reads `needs X MB + 768 MB floor = Y MB free, Z MB available`
-  with the GPU's figure. Seen loading from 6.4 GB free on 2026-10-15 (`ctx=4096`); the low-memory
-  case is still unseen · pong with the go-ahead, a 0.25 s MemAvailable watchdog that unloads
-  below 2 GB.
-- 2026-10-14 · commit "feat(keyboard): edit, reset and create layouts in Settings › Layouts" ·
-  Still owed: TalkBack reads the 48dp icons (force-stop TalkBack's tutorial first, then relaunch
-  the app) · emulator.
-- 2026-10-14 · commit "fix(keyboard): readable rebuilt layouts, no fallback flash on a first
-  swap" · A later swap to a new user layout showed it at once, 2026-10-15; still owed: the very
-  first swap right after creating the layout and adding it to the cycle, captured from the tap ·
-  emulator.
-- 2026-10-15 · PR #75 · Touch light on a sheet card row. The terminal action sheet's Kill process
-  row is a flat light list with a grey press highlight, no rim light or glow (2026-10-15,
-  `~/reports/devcheck-2026-10-15/a9holdcrop.png`); find a sheet whose rows are centred glass
-  cards (the `GlassPress` overload's callers) and hold one: the nearest rim lights, a faint glow
-  sits under the finger, both fade within a quarter second. Nothing lights under Reduce motion,
-  lazy mode or battery saver · emulator.
-- 2026-10-15 · PR #75 · Edge clarity on the Widgets and Display pages under Mist, and with RTL on
-  (`debug.force_rtl` did not mirror the app; use the developer option or an RTL locale): the bent
-  edge shows a clearer wallpaper, the frost inside is unchanged, corners and hairlines clean. The
-  pane slab under Floating at Clear passed, also at font scale 1.3 · emulator.
-- 2026-10-15 · commit "feat(glass): draw the rim as a hairline and bend on Haze's edge profile" ·
-  Clear, Mist and Tint at their shipped values (an install on the old Looks re-adopts them on
-  launch) on the `glass-city` and `glass-flowers` wallpapers: crop a pane corner (one pane and
-  split) and the dock's top edge (Docked and Floating, keyboard up and down). Passes when the rim
-  is a faint hairline, lit along the top edge and fading round the corners; the picture is
-  continuous with the wallpaper outside at the outline; the bend is a narrow ring and the face
-  inside it stays flat; no milky band anywhere; Clear shows a faint red/blue glint at the corners
-  only; a small pane shows no picture from its opposite edge; no line on a seam (keyboard over
-  the strip under the pill, status over the window bar); Solid unchanged · emulator.
-- 2026-10-15 · commits "fix(terminal-view): resolve symbol_map and fallback faces inside scaled
-  text" and "fix(terminal-view): spread a wide icon across the blanks after it in scaled text" ·
-  `/tmp/launcher-scaled-symbols-2026-10-15/scaled-icon-cases.sh` (run with `bash`): no tofu at
-  any scale; a default-width (w=0) scaled icon, e.g. `66;s=2;<icon> `, stays one scaled column
-  wide and centred in it (each character is its own block, so it does not spread); an explicit
-  `66;s=2:w=2;<icon><space>` block, the form dawn's ribbon uses, draws the icon spread over both
-  columns, centred, about letter height; plain-size icons and Latin in a scaled block are
-  unchanged · emulator.
-- 2026-10-15 · commits "feat(appearance-editor): Depth alone in the Glass group, Looks on the
-  hairline" and "feat(appearance-editor): Depth as the global set's last slider, no Surface |
-  Glass toggle" · Look › Custom with nothing tapped has no toggle in its heading row; Depth is the
-  seventh, last slider after Corner radius, its legend whole and every column whole (also at font
-  scale 1.3 on a 360dp screen). Depth is absent from every element's set, and absent from All
-  surfaces in Lazy mode or with no wallpaper set from the launcher. After a drag the
-  readout matches `fancier_glass_bend`/`_edge_width` (`run-as` the prefs) and no other key moves.
-  Clear, Mist and Tint picked from the stops read Depth 90/80/70, and a Depth nudge and back lands
-  on the Look's stop again. Drag Depth to 92 on Clear, tap an element and back to All surfaces: it
-  still reads 92; pick a Look and it reads that Look's position. A Custom saved with the old six values (e.g.
-  13/32/60/20/20/90) opens without changing any key until Depth moves · emulator, with a
-  wallpaper set from the launcher.
-- 2026-10-16 · commit "test(surfaces): pin the first run on Clear, on Depth's curve" (glass plan
-  Round 0) · Fresh install (`ad clear`, then a wallpaper set through the picker): the Look page
-  shows Clear selected and Depth reads 90, and `run-as` the prefs holds `fancier_glass_bend` 27
-  and `fancier_glass_edge_width` 18; one Depth step down writes 26/17 and the dock's bend ring
-  narrows by a step, not to a third. Fails if the page says Custom with Depth 34: something wrote
-  a preference before the first-run check, and the install was taken for an upgrade · emulator.
-- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" (glass plan Round
-  1, always on) · Android 13+, wallpaper set from the picker, Clear, Mist and Tint: every glass
-  surface shows one edge, the wallpaper's colour brightened, brightest top-left and faint all
-  round, and no white line or gradient stroke beside it. Crop each: the dock (Docked and capsule,
-  where the capsule must still clip to its rounded outline), the under-pill strip, the keyboard,
-  the window bar capsule, a Floating pane with the border on (one edge, no rim), a split's focused
-  pane (its active colour still shows), a wall page's corner tab (now lit), the frame gutter in a
-  joined Docked frame (no glow along the screen's edges). No bright line on a seam (keyboard over
-  the strip, status over the window bar). Over a pale sky the edge stays blue, not white or cyan.
-  With no Look (Fancier Glass off, a wallpaper not set from the picker) the dock and the strip
-  still show the gathered edge and no rim under it, and the other surfaces keep their rims ·
-  emulator, `glass-city` and `glass-flowers` and a pale-sky wallpaper, Docked and Floating,
-  keyboard up and down.
-- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · Android 12 (or a
-  forced plain draw) looks exactly as on `pre`: every rim, the dock's rim under its glass, the
-  panes' gradient rim · an API 31/32 emulator.
-- 2026-10-17 · commit "fix(glass): every edge follows the glass on screen, not the rule" · The
-  window bar capsule: one edge on a cold start (no rim beside the gathered light on the first
-  frame after the frost lands), and its stroke back the moment the frost goes (Fancier Glass off,
-  status blur radius 0, the bar moved onto the dock's plank and back). The dock: its rim under the
-  glass shows while a blur is in flight on a fresh wallpaper and goes once the glass is up. A
-  Floating pane: its rim shows while its slab is plain (a fresh blur in flight, a corner-masked
-  page) and goes when the slab refracts · emulator, logcat clean.
-- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · Settings › Theme
-  & fonts has no Adaptive glass row and nothing else on the page moved (crop the page before and
-  after) · emulator.
-- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" ·
-  `GlassRefractionAgslInstrumentationTest` passes, `aPaleSkysOutlineKeepsItsBlue` and the lit
-  top-left corner included (only a device proves the AGSL compiles) · emulator.
-- 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" ·
-  A swipe that starts in a moved border strip keeps its own key's swipe legend: with Adaptive
-  touch accuracy past its warm-up and a border moved (the low strip of `b` typing a space), swipe
-  up from that strip and get `b`'s upward legend, never the space bar's; a plain tap there still
-  types a space · emulator, warm-up driven with scripted taps.
-- 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" · A forced drift pause shows in Settings and resume restarts the warm-up: set
-  `"state":2` under `"engine"` in `files/keyboard-tap-model.json` (`run-as`, before any
-  force-stop), reopen Settings → Keyboard → Typing: the status row reads Paused with the taps
-  learned; tap it: Learning, and the file's `"wt"` is 0 · emulator.
-- 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" · The status row reads whole at font scale 1.3 in all three states (Learning, Active,
-  Paused), its summary wrapping rather than clipping, and dims with the switch off · emulator,
-  `font_scale 1.3`, force-stop after the change.
 
-- 2026-10-17 · branch feat/glass-controls-unify, "feat(glass): one set of glass controls in Look › Custom" · Look ›
-  Custom from Clear, then Mist, then Tint: Tint 0→100 adds visible accent each time (Mist light
-  theme too); Hue Secondary/Tertiary changes the tint; Glass 0→100 goes clear→frosted with
-  no sandy grain; Vibrancy 0.7x/1.5x changes the glass colour but not the bare wallpaper beside
-  it; the global heading row shows "All surfaces" with Hue beside it, whole at 360dp and at Large
-  text; Contrast moves with wallpaper colours off; Glass released at 5 reads 5 on reopening; no
-  Shade column anywhere; Undo puts all of it back · emulator tl16, dark and light theme,
-  screenshots before/after per control.
-- 2026-10-17 · same branch · Migration: an install on Clear, Mist, Tint and Solid from the pre build
-  keeps its stop and its colour after the update (Clear and Tint change blur and grain by design);
-  a Custom with Tint 40 on Mist comes up at Tint 0 and the same colour; a saved Custom applies as it
-  looked · emulator, a pre-build store per Look.
-- 2026-10-17 · same branch · Edge outline: the gathered edge on dark Mist (60%, gain 2.25), light
-  Mist (35%), the dock, sheets and Solid reads about as strong as on Clear, never white-clipped,
-  on a pale and a dark wallpaper ·
-  emulator tl16 (Android 13+), screenshots of each surface.
-- 2026-10-17 · same branch, "fix(glass): the terminal's ink follows the face its panes are drawn
-  with" · Light theme, wallpaper on, Terminal colours dynamic: Solid shows dark terminal text on its
-  near-white panes, after switching to it from Clear and after a fresh start; a Clear-derived Custom
-  dragged Opacity 0→100 in the editor flips the text to dark within a moment of release (and back to
-  pale at 0), with the keyboard shown and hidden first; dark theme unchanged · emulator tl16,
-  screenshots before/after.
-- 2026-10-17 · same branch, "feat(glass): Edge is a slider" · Look › Custom, glass edge drawn
-  (Android 13+): the global set reads Glass, Opacity, Tint, Edge, Vibrancy, Depth, whole at 360dp
-  and Large text; Clear opens at Edge 40 and looks exactly as before (compare a `pre` crop), Mist
-  and Tint at 0. Edge 0, 40, 70, 100 on Clear and on Mist, both themes: each step a plainly
-  stronger split; seams (keyboard over strip, status over window bar) show no line · emulator
-  tl16, top-edge and corner crops per value. On pong the first bold edge read as a red band on a
-  dark wallpaper, and its successor as a separate yellow-green border just inside every
-  surface under a gold Look; "fix(glass): Edge past 40 splits the rim's light" replaces both.
-  Recheck Clear, Mist and a gold-tinted Look at Edge 100 over Celestial Field (dark) and a pale
-  wallpaper: every edge of the dock, panes, status band and keyboard wears a cyan-blue px on the
-  outline itself and an orange one right against it (about 1.5 dp in all), no gap and no line
-  further in, both visible on the dark and the pale wallpaper, the cool side cyan-blue (not
-  green) under the gold tint, the edge as a whole not redder or bluer than at 40, nothing
-  white-clipped; Edge 40 identical to before (same crop boxes as `codex-emu4/sheets`).
-- 2026-10-17 · same branch, "feat(glass): retire Shade" · An install whose store or saved Custom
-  had Shade 60 comes up with the face as at Shade 0 and no Shade column; the chrome, terminal, A-Z
-  and key legends readable on Clear and Mist over a pale and a dark wallpaper, both themes ·
-  emulator tl16, a store with `surface_glass_shade` set (`run-as`, before the force-stop).
-- 2026-10-17 · same branch, "feat(keyboard): a Keys slider" · Keyboard selected in Look › Custom:
-  Glass, Opacity, Tint, Keys, Radius, Spacing whole at 360dp and Large text; Keys stands at the
-  theme's cap opacity on a fresh store; Keys 0, 50, 100 over the dark grass and a pale wallpaper,
-  both themes: every legend (letters, Ctrl, Alt, Fn, gear, Shift, Backspace, Enter, arrows)
-  legible on its cap, at 0 on the glass itself; a Look stop and Undo put the theme's value back ·
-  emulator tl16, keyboard crops per value. **Failed on the emulator 2026-10-17:** light theme,
-  keyboard Glass 20, Opacity 35, Keys 0 over the dark grass: dark legends, Ctrl, Alt, 123+, arrows
-  and Enter nearly invisible, the number row faint (Glass 75 read). Two causes: the keyboard's rows
-  were measured off the dock's frame (its 25 dp blur mixed the lit grass into the bottom rows),
-  and the function legends are drawn secondary (toward mid grey, black as #404040) but were judged
-  as the full tone. "fix(keyboard): legends at Keys 0 judged on the keyboard's own frame, as drawn"
-  reads the rows at the keyboard's radius and chooses (and veils for) the secondary rendition.
-  Recheck that route at Glass 20 and 75, Keys 0, then Keys 50: every legend legible on every row
-  (a light veil rising where needed, not milky past that); dark theme the same route; the theme's
-  own key opacity over dark grass and a pale wallpaper unchanged in look.
-- 2026-10-17 · same branch, "fix(keyboard): legends re-judged when the keyboard's own frame
-  lands" · Light theme, keyboard card, Keys 0, Opacity 10, Tint 0 over the dark grass: tap and
-  drag Glass 20→0, release, capture at once and again 1 s later: the second capture shows every
-  legend (letters, Ctrl, Alt, Fn, 123+, Shift, arrows, Backspace, Enter, the number row) legible,
-  with no further edit: pale legends with no milky veil ("fix(keyboard): legend tone chosen on the
-  bare face"), the same tone a fresh start on those settings shows; Ctrl, Alt and the arrows are
-  #BFBFBF at best and may read a little under 4.5:1 there (unit model 3.96). A pale wallpaper
-  takes dark legends, no veil; a mid grey takes the better tone with the least veil; a face near
-  the line does not flicker between tones while Glass or Opacity is dragged.
-  The same in the editor's live preview; no flicker or repeated repaint after the release
-  (gfxinfo flat once settled) · emulator tl16, two crops per step.
-- 2026-10-17 · same branch, "feat(looks): Mist is 35% on light glass" · Light theme: picking Mist
-  shows Opacity 35 and the stop reads Mist; switching the theme dark→light→dark with Mist on moves
-  it 60→35→60 and the stop stays Mist; a Custom at 50 keeps 50 across the switch · emulator tl16,
-  editor screenshots per theme.
-- 2026-10-17 · same branch, "feat(editor): a Hue picked at Tint 0" · From Clear, Custom: pick
-  Secondary in the Hue pill and the Tint column jumps to 40 with the colour showing; at Tint 15 a
-  Hue pick leaves 15; Undo returns to the open state · emulator tl16, editor screenshots.
-- 2026-10-17 · same branch, "fix(glass): keyboard-area labels" and "fix(glass): keyboard legends
-  are chosen on every row's face" · **Failed on the emulator 2026-10-17 before the row fix:** light
-  theme, Celestial Field, Custom from Solid at Opacity 10 and 0: the keyboard's Ctrl, Alt, Fn, gear
-  and right-hand cluster stayed dark on their see-through chips over the near-black grass under the
-  bottom row (Mist light about 2.5:1); Opacity 100 light and Opacity 10 dark passed. Recheck that
-  route at Opacity 0, 10, Mist and 100: every keyboard legend legible on every row, a light veil on
-  the keyboard where no legend tone reads otherwise. The A-Z letters stay pale there: the row under
-  them averages 0.01-0.03 luminance on that screenshot, so pale is the measured answer; judge by
-  eye. Then the first round: dark wallpaper, Opacity 100 dark labels, 10 pale; dark theme on a pale
-  wallpaper the mirror; the A-Z bar on the plank and its own capsule · emulator tl16, row crops.
-  **After the row fix, 2026-10-17:** Opacity 36 and dark theme passed, no veil loop; Opacity 0 and
-  9 light still failed (Ctrl, Alt, Fn, gear, Shift, Backspace, right cluster dark grey on dark
-  grass; 16 readable). Cause: the keyboard draws a cap's gradient with the fill's alpha on the
-  paint too, so a 124/255 function chip shows about 0.23 of its colour (measured off those
-  screenshots), not the 0.49 the legend was chosen on. "fix(glass): function legends on the chip
-  as drawn" chooses them on the drawn chip and raises the function fill where no tone reads.
-  Recheck light theme over the dark grass at Opacity 0, 9, 16 and 36: function legends legible
-  (pale at 0, or on a fuller chip), letter keys as before, no milky keyboard; dark theme at 0 and 9.
-- 2026-10-17 · same branch, "feat(glass): Tint colours the glass across its range, Clear
-  included" · Clear, Custom: Tint 0, 40, 100, dark and light theme, a grey-ish and a colourful
-  wallpaper: each step is plainly more accent-coloured behind every glass surface (dock, status,
-  keyboard, panes with blur), the bare wallpaper beside the panes unchanged, no white lift; Mist and
-  Solid at Tint 100 a strong accent face, readable text; the Tint Look stop renders as before
-  (compare against a `pre` screenshot) and still reads Tint; terminal, A–Z, extra keys and key
-  legends readable at Tint 100 on Clear, Mist, Tint and Solid, both themes; Hue pick at Tint 0
-  shows 40 with visible colour on Clear. Migration: a format-1 store on the Tint Look comes up on
-  the Tint stop at 35, same colour; a Custom with Tint 100 comes up at 35 · emulator tl16
-  (Android 13+), screenshots per value.
-- 2026-10-17 · same branch, "fix(editor): choosing a Look resets every surface to it" · Look ›
-  Custom, keyboard tapped: move Glass, Opacity, Tint and Keys well off; tap Clear: the keyboard's
-  glass and caps are Clear's at once (compare a fresh Clear crop); back at Custom the keyboard
-  card shows the moved values again (this visit's Custom comes back); Undo puts back the look the
-  editor opened on. Same with the dock's Glass · emulator tl16, keyboard crops before/after.
-- 2026-10-17 · same branch, "fix(editor): Custom comes back whole after a Look is saved" · Look ›
-  Custom: keyboard Glass 0, Opacity 90, Tint 100, Keys 0, terminal Glass 0, Opacity 90, Tint 100;
-  Done. Reopen, tap Clear, Done; force-stop the app, reopen the editor: it opens on Clear; tap
-  Custom: every card shows those values again and the keyboard and terminal look as they did
-  (compare crops); tap Clear: all of Clear at once. Undo after a Custom edit puts back the look
-  and the Custom the editor opened with · emulator tl16, crops before/after.
-- 2026-10-17 · same branch, "fix(glass): never recycle a wallpaper frame a surface was handed" ·
-  With an X11 pane showing on the wall, set a wallpaper from the in-app picker, then another with
-  `launcherctl wallpaper set <file>`; repeat both with the Look editor open, and once with a
-  widget pane showing: no crash (`adb logcat -b crash` empty, no `Cannot create BitmapShader for
-  recycled bitmap`), and the panes' glass shows the new picture after it lands · emulator tl16,
-  release build, screenshots before/after each set.
-- 2026-10-17 · same branch, "fix(wallpaper): a new wallpaper re-styles in place, no recreate" ·
-  With wallpaper mode on and the Look editor open, `launcherctl wallpaper set <file>`: the editor
-  stays open on the same page with its state, its preview shows the new picture, and logcat has no
-  `Recreating activity`; turning wallpaper mode off and on (Settings) still restyles the theme ·
-  emulator tl16. Then on pong: Firefox running in an X11 display pane, set a wallpaper from the
-  in-app picker, then with `launcherctl wallpaper set`: the display keeps running, Firefox still
-  drawn and answering touch, no `Recreating activity` · pong with the go-ahead.
-- 2026-10-17 · same branch, "fix(wallpaper): launcherctl wallpaper set runs the picker's in-place
-  apply" · **Failed before it on the emulator:** with the mode on and the Look editor open,
-  `launcherctl wallpaper set` left the pid but changed the window (4→5→6) and closed the editor.
-  Now: run `adb logcat -b events -c`, then the same set twice with two pictures of different
-  colours: the editor stays open, the window id holds, and `adb logcat -b events | grep -E
-  'am_relaunch|wm_relaunch|am_destroy'` shows nothing for TermuxActivity. If a relaunch still
-  shows there, repeat it with the in-app picker from the Overview: a relaunch on both is Android
-  restyling for the new wallpaper colours, not our code · emulator tl16.
-- 2026-10-17 · same branch, "fix(appearance): the surface and its editor session survive a
-  configuration relaunch" · Open Look through the Overview, tap the keyboard in the frame, move a
-  slider (Undo shows), then `launcherctl wallpaper set` with a picture of different colours. When
-  `am_relaunch`/`wm_relaunch` shows for TermuxActivity, the editor comes back on Look under a
-  short colorSurface cover (no hop from the Overview), keyboard still selected, Undo still shown;
-  Undo puts back the look at the first open; Back goes to the Overview. Repeat from a corner
-  tab's Layout door (Back then closes) and once with dark mode toggled (`cmd uimode night yes`)
-  · emulator tl16.
-- 2026-10-17 · same branch, "fix(x11): a relaunch's destroy never reads as the display stopping"
-  · Firefox in the Display place: `launcherctl wallpaper set` (and dark mode toggled) relaunches
-  the activity; the Display place comes back drawing Firefox and answering touch, the place bar's
-  display dot stays on, a new terminal session still has `DISPLAY` set. If the display still
-  stops, note whether `pgrep -f termux-x11` still lists the server and whether Firefox's process
-  is alive: the launcher side lets go of nothing but its own view · pong with the go-ahead.
-  Seen on pong (release 2f5596e2b): Firefox survived, but `printenv DISPLAY` in a pane opened with
-  `launcherctl pane open` after the relaunch was empty. Re-check on the build with "fix(x11): new
-  sessions' DISPLAY follows the server, not the activity": after the wallpaper change and after the
-  dark-mode toggle, a new pane prints `:0` (the opt-in on); then Stop the display and a new pane
-  prints nothing; and with the display stopped first, a relaunch neither starts it nor gives a new
-  pane `DISPLAY` · pong with the go-ahead, emulator first.
-- 2026-10-18 · same branch, "fix(x11): the Linux app runner outlives a configuration relaunch"
-  · Firefox on the X11 display (from the drawer), then set a wallpaper of different colours from
-  the in-app picker, again with `launcherctl wallpaper set <file>`, and once with a theme switch
-  (dark mode toggled): after each, Firefox's pid is the same (`pgrep -f firefox` before/after),
-  its window is drawn and answers touch on the Display place, and logcat has no
-  `X11LinuxAppRunner: firefox exited with`. If it still dies, that line's code is the lead: 143
-  or 137 is a signal (look for a sender), 0 is Firefox closing itself (look for a close or quit
-  reaching it). Also: an Xfce desktop running, relaunch, tap Xfce again (only shows it), tap
-  another desktop (asks first) · pong with the go-ahead, release build.
-- 2026-10-18 · same branch, "fix(x11): a relaunched activity's Display page hears its display
-  runs" · (The in-app picker case passed on pong 2026-10-18 at 2f5596e2b.) Firefox on the X11
-  display, resting on the Display place: `launcherctl wallpaper set <file>` with a picture of
-  different colours, then once with dark mode toggled. After each the Display place
-  is still on the wall and draws Firefox (no "Start display" empty state), answers touch, the
-  place bar's display dot is on, and the window chips list Firefox. Also once relaunched from the
-  terminal place, then swipe to Display: same. Then stop the display, relaunch: the page shows
-  its empty state, nothing restarts · pong with the go-ahead, release build.
-- 2026-10-18 · commit "fix(widgets): a relaunch no longer hands a widget's saved Bundle to
-  another view (#83)" · With two or more app widgets on Home (widget ids that are small numbers,
-  as on a fresh install), several panes open, the Appearance editor open and the Display page
-  showing, relaunch the activity with `adb shell cmd uimode night yes` then `no`, and with
-  `launcherctl wallpaper set <file>` twice: no crash and no "Wrong state class" in logcat; the
-  editor reopens where it was and the widgets come back. Repeat on Android 12 (API 31) if an image
-  is at hand · emulator.
+- **GIF import converts to video (11-09, perf/gif-wallpaper).** Seen on pong 11-09 with the
+  developer's 32 MB 800x1412 5 s GIF: the stored file is a 3.2 MB HEVC .mp4, the GIF is gone, the
+  hint reads "GIF converted to video · 800×1412 · 5 s · 3 MB · hardware decoded", it plays through
+  the Qualcomm decoder with 0 dropped frames, and the launcher fell from about 50-65% of one core
+  (scene thread 42%) to 44% (scene thread 17%, RenderThread 18%, main 8%); the rest is the fixed
+  30 Hz scene loop plus the 15 Hz glass pass. Still owed · pong: the conversion time by the clock
+  (the log puts it under 15 s); the loop seam (end to start) has no hitch, flash or black frame;
+  it is cover-cropped like a video. Emulator: a one-frame GIF stays a still; `debug.tl.video_file`
+  on a .gif runs the same conversion; fallback (force a failure): the GIF still plays, its hint
+  says "decodes on the CPU", and its frames still update with the hardware canvas (a frozen frame
+  means updateTexImage ran before the render thread posted the buffer).
 
-### Living glass (10-19)
-- 2026-10-19 · feat(glass) living glass · Fancier Glass on, pane glass, Living glass on: a chip-tap
-  window switch, a seam fling, a pane swap (FLIP move) and a float drag released quickly each show
-  the slab's rim bending more on the edge that leads and less on the one behind while it moves,
-  then rocking back once (perhaps a faint second time) as it lands, flat again within about 400 ms;
-  a slow divider or float drag barely changes the rim. No band of light runs anywhere.
-  Screenrecord, frames at the quarters and 400 ms after landing · emulator (AGSL needs API 33+).
-- 2026-10-20 · feat(glass) no dent under a press · Holding a finger on a terminal pane no longer
-  dents the glass: no dip or spread under the finger while held and no bump on release (the
-  "ripple" the user disliked). The pane still tips on its press rig and the slab follows it (the
-  rim away from the finger thickens a little, the face swims about 1.5 dp) and lies flat again
-  after the lift; starting a scroll, a body swipe or a border drag still works · emulator.
-- 2026-10-19 · feat(glass) living glass · The shader compiles on the device: the glass still
-  refracts after the update (no fall back to the plain frost, no "Glass refraction shader failed"
-  in logcat) · emulator, then pong.
-- 2026-10-19 · feat(glass) living glass · Each of these keeps every case above at the resting look:
-  Look › Fancier Glass › Living glass off; Developer options' animator scale off (animations
-  removed); General › Motion › Animation speed Off; lazy mode; battery saver. Slower and Faster
-  stretch and shorten the settle · emulator.
-- 2026-10-19 · feat(glass) living glass · At rest nothing draws: `dumpsys gfxinfo` over 30 s
-  untouched after a window switch matches the build before (5 frames in 30 s on pong's baseline),
-  i.e. the springs stop asking for frames once settled (about half a second after landing) ·
-  emulator for the count's shape.
-- 2026-10-19 · feat(glass) living glass · Settings › Look shows Fancier Glass › Living glass (on by
-  default; an install that had Motion light off keeps it off), a search for "living glass" lands
-  on it; below Android 13 the category is hidden · emulator, API 33+ and an API 31 or 32 image.
+- **Terminal engine: Fast (libghostty-vt) (11-09, merged from exp/ghostty-wave3).** Verified on
+  pong 11-09 on both engines: parse and frame benchmarks, the protocol sheet, emoji widths,
+  XTVERSION/DA1/mode 2027, kitty images (PNG, animated GIF, tmux placeholders), sixel at the top and
+  bottom of a pane, mode 2026 hold, trim with an image on screen, links in scrollback, prompt jumps,
+  OSC 99 notifications, the Terminal engine row in light and dark, the crash guard (force-stop keeps
+  Fast on, a native crash turns it off, an update turns it back on), an idle Fast pane (6 frames in
+  30 s). Sixel against a real Standard baseline (11-09, the setting on Standard, not the property):
+  top, bottom, taller than the pane, cut at the right edge, `clear` and `\e[2J` all match; DA1 is
+  `?62;4;22` on Fast and `?64;1;2;4;6;9;15;18;21;22` on Standard. Fast draws a sixel taller than the
+  pane up into the pane's top padding by a few pixels where Standard stops at the first row
+  (cosmetic). Still owed · drop build: Settings › Terminal › Clipboard & compatibility shows
+  Terminal engine (the library is in the APK).
 
-### Tilted glass (10-20)
-- 2026-10-20 · feat(glass) tilted glass · Fancier Glass on, Living glass on, two wall pages with
-  glass: drag slowly between pages and hold mid-way (planks tipped, up to 18°): the picture inside
-  each slab sits a few dp off the wallpaper in the gap beside it, carried toward the edge going
-  away, a little larger on the near half; the near edge's rim bends more and is brighter, the far
-  edge's thins and dims. Released, it slides back as the pages lie flat, and the settled glass
-  matches a screenshot taken before the drag pixel for pixel. No fold, mirror strip or tear at
-  any slab edge, corners included. Screenrecord, frames at a quarter, half and landing ·
-  emulator (AGSL needs API 33+).
-- 2026-10-20 · feat(glass) tilted glass · Hold a wall page's left or right border until it sinks
-  (6° press tip): the same displacement and rim lean, toward the held side, while held; lifting
-  brings it back to flat. A finger on a terminal pane (the 1.1° press rig): the rim on the edge
-  away from the finger thickens a little and the face swims about 2 dp as the pane tips and
-  untips · emulator.
-- 2026-10-20 · feat(glass) tilted glass · Living glass off, animator scale off, reduced motion,
-  lazy mode and battery saver each keep tipped slabs drawing exactly as flat ones (the plank
-  still tips; the glass in it does not swim). After a held press on a tipped pane is let go and
-  everything settles, `dumpsys gfxinfo` over 30 s shows no extra frames against the build before
-  (the slab stops asking for frames once its tilt is flat or has held still six draws) · emulator.
+- **Pick previews, Done keeps (11-09, round 4).** Emulator-checked on the Shader page: tile tap
+  previews live, Back reverts, Done writes the stills; pencil opens the editor; Apply in the title row.
+  Owed · pong: pick a shader tile and Back (the previous wallpaper is back, no stills written); pick
+  and Done, then Back to photo restores the photo; an example tap makes a copy that Back removes and
+  Done keeps (two examples then Done: only the last copy stays); edit the in-use shader, Apply, Back
+  (choice reverts, source kept); over a photo import a video then Back (photo back); over a video
+  import a video then Back (the new one stays, stills written); change the rate pill then Back (rate
+  restored); the pencil's touch target and look on bright and dark thumbnails at light/dark/font 1.3;
+  rotate while previewing (the preview reverts: known).
 
-### Glass perception (10-20)
-- 2026-10-20 · feat(glass) glass perception · The shader still compiles on the device (no
-  "Glass refraction shader failed" in logcat; panes, dock, bars and the keyboard host still
-  refract) · emulator, then pong.
-- 2026-10-20 · fix(glass) the glint is motion only · Rest look, Fancier Glass on, Clear and Mist,
-  the same wallpaper: a still pane's top-left corner and the dock's top-left corner pixel-match
-  the build before 894dd56c1 (the travelling glint), crop both at 48 dp round the corner and
-  diff; the bars and the keyboard host likewise. No bright wallpaper-coloured spot at any
-  top-left corner at rest · emulator.
-- 2026-10-20 · fix(glass) the glint is motion only · Living glass on, a wall page dragged and held
-  at the planks' 18°: the top-left light narrows into a brighter glint as the page tips, slides
-  round its corner toward the edge rising toward you, with a faint one bottom-right; released, it
-  fades back to the wide rest light as the page lies flat, with no snap at the end, and the
-  settled glass matches the pre-drag screenshot pixel for pixel. A finger held on a terminal pane
-  (1.1°) shows only a faint hint of it. Screenrecord, frames at a quarter, half, landing and
-  500 ms after · emulator (AGSL needs API 33+).
-- 2026-10-20 · feat(glass) glass perception · A chip-tap window switch and a seam fling: the glint
-  appears while the pane moves, leans a little toward the edge that leads and fades out as it
-  lands; it never moves or shows while the pane is still · emulator (AGSL needs API 33+).
-- 2026-10-20 · feat(glass) glass perception · The same 18° hold: the face's picture now swims
-  less as a whole (about 7 dp, was 10) and is visibly larger toward the near edge and smaller
-  toward the far one; no fold, mirror strip or tear anywhere, small panes and corners included.
-  On Clear, while a pane moves, its rim's picture is sharper than at rest and settles back to the
-  rest look; the text area of the pane never sharpens · emulator.
+- **Frame-rate versions of the stored video (11-09, round 3).** Emulator-checked: a 60 fps clip
+  imported at 30 stores original.mp4 + v60.mp4 (copy) + v30.mp4; tapping 15 shows "Preparing 15 fps
+  version… NN%" with Choose and Back to photo greyed and the pills live, the layer plays the source
+  meanwhile and swaps to v15.mp4 when done, and the source is pruned once 15/30/60 all exist; a
+  24 fps clip greys 60 with "Clip is 24 fps" and clamps a stored 60 to 30; a 20 fps GIF greys 60,
+  encodes 15 and 30 and drops the .gif after both. Owed · pong: import the 1080p60 clip at 30
+  (encode time by the clock, launcher CPU with the 30 fps file vs the 16% codec share measured
+  with the 60 fps source), tap 15 (codec share near 4%), the 15 and 30 versions look right (no
+  stutter from the frame drop, rotation kept on a rotated clip), `v<rate>.mp4` sizes; the GIF
+  flow on the 32 MB GIF (15 and 30 fps versions, time each); kill the app mid-encode and reopen
+  the Video page (the preparation resumes, no .tmp left); a still (one-frame) GIF stays a still
+  with no bar; light/dark and font 1.3 for the rate note and the longer status line.
 
+- **Scene cold start (11-09, fix/scene-first-frame).** On the CPU-rendered emulator a cold start with a
+  shader or video stored sometimes ANR'd ("waited 5001 ms for FocusEvent"): the window's first layout
+  waited in `SurfaceSyncGroup` for the scene SurfaceView's first buffer, which came only after the EGL
+  setup and the shader compile or player prepare. The surface now posts one cleared buffer (the system
+  wallpaper's primary colour, else black) right after the EGL context exists. Emulator after the fix:
+  video 4/4 clean starts, shader 2/3 (the one ANR was a render-thread wait with the host at load 35).
+  On pong: ten cold starts each with a shader and a video stored (`am force-stop com.termux`, Home),
+  no ANR, the first visible frame is a flat colour at most for a blink, then the scene · pong.
+- **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
+  Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
+  guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and
+  move; the touch spot follows the finger; status-bar and dock glass show the blurred scene; a
+  broken file logs `Line N:` at the user's line and keeps the last good program; the debug file
+  reloads within 1 s; `setprop debug.tl.shader_file ""` removes the layer; Photo | Video | Shader
+  row; New shader → Paste → Apply sets the still on Home+Lock and recolours the look; the list is
+  a 3-column grid with the active tile bordered; editing the active shader rebuilds the layer;
+  Video → Choose video or GIF → system picker imports an H.264 clip that plays on Home; GIF and
+  video are cover-cropped; a clip with rotation metadata stands upright; Back to photo puts the
+  photo back and the picker reopens on Photo. The stored shader survives a reinstall.
+  Debug routes: `debug.tl.shader_file=<path>`, `debug.tl.video_file=<path>` (files must sit
+  where the app can read them: push to /data/local/tmp, chmod 644, `run-as` copy into
+  files/home); `debug.tl.shader_guard=off`.
+  Owed on pong (with the developer's go): power and heat, 20 min each at Half/30, for a light
+  shader (gradient), the plasma and a raymarcher, one HEVC 1080p30 clip and one GIF, against the
+  11-05 baseline (no scene 1.27 W, Aurora 1.2 W, Particles 2.0 W); frame time via
+  `dumpsys gfxinfo`; a clip with rotation metadata (the emulator's decoder does not rotate, pong's
+  may, so a double turn is the thing to look for); Back to photo restores the real previous
+  photo (the emulator had none to remember: READ_EXTERNAL_STORAGE denied on a fresh install);
+  screen off/on and the drawer over the scene resume where they stopped; battery saver holds the
+  frame; the heavy-frame guard steps a heavy shader Half → Quarter → hold with "Too heavy at this
+  quality" on the editor page; the pending marker reverts to Photo after a forced kill during the
+  first 3 s of a new shader; `dumpsys meminfo` graphics flat over 5 min for a shader and a video;
+  `dumpsys media.player` shows one player; Import file, Texture, Delete (incl. the shader in use)
+  flows; light/dark and font scale 1.3 on the three pages; terminal-app mode "Also set as phone
+  wallpaper" · pong.
+- **Live blur plans once per swipe (11-08, perf/glass-translate).** Live blur and Glass Look on,
+  a terminal printing (`yes | pv -qL 20` in a pane), a Home float and a built-in widget on Home2,
+  the in-app keyboard up once and down once. Swipe slowly Home2 ↔ Workspace ↔ AI. Passes: the
+  glass under the status bar, the dock, the panes, the float, the widgets and the keyboard
+  tracks the wallpaper and the pages under it on every frame (no stale strip, no frozen picture);
+  the terminal keeps scrolling under the glass mid-swipe; the landed look is the same as before
+  this change. Also: open the drawer mid-rest, then swipe; show a Home float, then swipe at once.
+  How: pong with the developer's go-ahead, `screenrecord` read frame by frame; a perfetto trace
+  shows `LiveBackdrop.plan` only on a swipe's first frame and after a layout pass.
+- **CRT screen events (#225).** Owed on pong, a pane on the CRT effect, Screen events on:
+  backspace at column 0 while typing tears the pane each time (a held backspace tears about every
+  150 ms, never a stutter); a keybinding that moves focus between two panes wobbles the new one;
+  a split (keys and the pane-agent API) plays the bright-line power-on after the divider sweep,
+  not under it; closing a pane (titlebar ✕, `pane.close`) collapses it to a line before it goes,
+  in a split and as the last pane of a window, and on a Home float; `kill -9 $$` in a pane shows
+  snow before it goes (the kept "[Process completed]" pane on an outside kill snows and stays);
+  closing the current session powers off its panes, then the session slides away as before.
+  Battery and performance > Idle glitch rate shows only with Idle animations on and the CRT
+  effect; Often tears an idle pane every 10–30 s, and typing still pauses it.
+- **Keyboard rises in its landing inks (11-08, fix/crossing-look).** Home2 → Workspace with the
+  in-app keyboard rising, then Workspace → Home2; keyboard up and down at the start; Docked and
+  Floating dock. Passes: the rising keyboard's function chips and legends are already the
+  Workspace's mid-swipe, with no change at landing; the strip under the navigation bar looks the
+  same mid-swipe as at rest at either end. 11-08 (fix/rising-keyboard-inks): Glass Look and Live
+  blur on, light wallpaper: the toolbar row above the keys (keyboard, mouse, home, >_, display,
+  grid, list) rises with its icons already crisp and the >_ / display glyphs already saturated,
+  no brightening at landing; the special keys (shift, backspace, Ctrl/123+, Fn/Alt, Enter's well)
+  do not darken at landing. 11-08 (fix/rising-fn-keys): the crossing's first frame judged the
+  keyboard on the page it left (band below the screen, a stand-in read, chips at 0xCA, 0xE1 at
+  landing); it now judges again when a layout moves the band. Same swipe in a 30 fps recording:
+  the special keys' fill is the landed one on every frame they show, with no step at landing
+  and none mid-rise.
+  How: pong with the developer's go-ahead, `screenrecord` read frame by frame.
+- **No keyboard under the pill after landing (11-08, fix/keyboard-under-dock).** Dock design
+  Peek glass, Live blur and Fancier glass on, gesture navigation; in-app keyboard up on the
+  Workspace, down on Home2. Workspace → Home2, Docked and Floating, and back. Passes: once the
+  keyboard has slid down, no keycap (the number row) shows at the screen's bottom under the
+  gesture pill on any frame, during the dock's rise or in the ~0.5 s before the wall settles; the
+  band under the pill shows the dock's glass. Back to the Workspace, the keyboard rises in above
+  the pill band, not out of it. How: pong with the developer's go-ahead, `screenrecord` at 30 fps
+  read frame by frame around the landing.
+- **Peek reflection never sharp (11-08, fix/peek-band).** Dock design Peek glass, Reflection
+  on, Fancier glass on; Workspace (keyboard up) → Home2 and back, Docked and Floating. Passes: from
+  the landing on, the icons' reflection under the A–Z letters is soft and faint on every frame,
+  with no sharp, bright copies in the ~0.5 s before the wall settles, and nothing changes in the
+  band at the settle. Also look at the dock's glass edge over that half second: the card's rim
+  should already be where it rests. How: pong with the developer's go-ahead, `screenrecord` read
+  frame by frame around the landing.
+- **Backdrop layers, no pop (11-07, perf/glass-slide-on-swipe).** Look Custom (Opacity 12, Blur 20,
+  Edge 40, Depth 90), Live blur on, glass widgets on Home, a float over them. Screenshots at rest,
+  on the first moving frame, mid-swipe and after landing, Home ↔ Workspace both ways. Passes: the
+  first and the landed frame match the resting screenshot in every glass; mid-swipe glass shows
+  the same wallpaper, widgets and pages, moving. Ship gate. How: pong with the developer's
+  go-ahead, `screenrecord` read frame by frame.
+- **Backdrop layers, soft edges and glass on glass (11-07, same branch).** Side by side, resting
+  against mid-swipe: widget edges under the float's glass and text edges under the dock's glass
+  look equally soft; two stacked floats over Home show the float behind and Home through both
+  while swiping. Passes: no difference visible at arm's length. How: pong, screenshots.
+- **Backdrop layers, scene and transitions (11-07, same branch).** A live scene on, then each page
+  transition (Slide, Slide with plank tilt, Depth, Fade, Carousel, Stack) and the sink. Passes:
+  the scene keeps moving under the glass at its glass rate during the swipe; no blank or dark
+  glass in any style; keyboard up and down, Docked and Floating dock. How: pong, `screenrecord`;
+  a perfetto trace counts `Glass.layers.fallback` per style.
+- **See through (11-07, same branch).** Battery & performance → See through: One layer, then All
+  layers. Passes: with One layer the front of two stacked floats shows the back float (titlebar
+  and text) frosted over the wallpaper only, with no widgets or pages through both, at rest and
+  swiping; a single float over widgets still shows the widgets; All layers brings the widgets
+  back through both. How: emulator or pong.
+- **Backdrop layers, the cost (11-07, same branch).** In one session: Custom look on the base
+  5169acb0f and on this branch, then Solid, 10 Home ↔ Workspace round trips each. Passes:
+  RenderThread "flush layers" per swipe frame near Solid's 1.4 ms (was 4.1); swipe p90 within a
+  few ms of Solid's; `Glass.layers.local` about once per swipe per surface, `Glass.layers.fallback`
+  rare. How: pong with the developer's go-ahead, perfetto.
 
-### Living glass (10-19)
-- 2026-10-19 · feat(glass) living glass · Taste on pong, on a dark and on a pale wallpaper, under
-  Clear and Mist: does a moving pane read as glass with weight (the rim thickening ahead, thinning
-  behind, rocking back once on landing) and a press as a rigid pane tipping, with nothing rippling
-  under the finger, rather than as an effect laid on top; and is the glass at rest exactly as
-  before (screenshot before and after a slide, pixel-compare the rim) · pong, by hand (ask first).
-- 2026-10-19 · feat(glass) living glass · Frame time of a seam fling and a chip-tap window switch,
-  glass on, two panes, Living glass on against off (`scripts/perf-frametime.sh`): it adds two
-  uniform writes per moved frame, three samples instead of one on a pixel whose bend changed, and
-  up to about half a second of slab redraws after landing; report any p90 worse than off by more
-  than the noise, per docs/agents/performance.md · pong, by hand (ask first).
+- **Live glass during a page swipe, the look (11-07, perf/glass-slide-on-swipe).** Look Clear,
+  Live blur on, a float over Home's glass widgets, the dock showing pages under it. Swipe Home ↔
+  Workspace slowly and fast, scene off and on. Passes: the float's glass still shows the widgets'
+  glass under it all the way across; the dock's glass shows both pages sliding under it, blurred,
+  with the scene still moving under it; nothing pops or jumps in the glass on the first frame of
+  the swipe or as the wall settles (a terminal printing or the clock ticking under the glass may
+  hold still for the quarter second and catch up at settle); a slow drag that reverses past rest
+  shows the other neighbour, not an empty strip; keyboard up on the Workspace (the dock lifts as
+  it crosses). How: pong with the developer's go-ahead, `screenrecord` of five swipes each way.
+- **Live glass during a page swipe, the cost (11-07, perf/glass-slide-on-swipe).** Look Clear
+  against Look Solid, 10 Home ↔ Workspace round trips each, swipe frames from `gfxinfo
+  framestats`, scene off and on. Passes: Clear within about 1–2 ms of Solid at the median of
+  total and of ISSUE_DRAW_COMMANDS_START → FRAME_COMPLETED (before this change Clear 23 / p90
+  43 ms total, 16.4 ms issue → completed; Solid 16.7 / 22, 12.1); no frame at the swipe's start
+  worse than before (the page layer's capture runs there); at rest on Home with a scene, the
+  frame count per 30 s no worse than before; PSS within noise. How: pong with the developer's
+  go-ahead, the same scripted round trips as the measurement that motivated it, a perfetto trace
+  for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
+  swipe and usually one).
 
-### Tilted glass (10-20)
-- 2026-10-20 · feat(glass) tilted glass · Taste on pong, dark and pale wallpaper, Clear and Mist:
-  does a page drag (18°), a held border (6°) and a press on a terminal pane (about 1°) each read
-  as the wallpaper refracting through a tipped plate of glass — clearly at the press, strong but
-  not torn at the plank's full tip — rather than as a shimmer or a picture sliding about? If the
-  press reads too faint or the plank too strong, the knobs are `TILT_SHIFT_DP`/`TILT_SOFT` (face)
-  and `TILT_LEAN_GAIN`/`TILT_LIGHT` (rim) in GlassRefraction · pong, by hand (ask first).
-- 2026-10-20 · feat(glass) tilted glass · Frame time of a page drag held and released, two
-  panes, Living glass on against off (`scripts/perf-frametime.sh`): it adds one uniform write per
-  tipped frame and the rim's live path on tipped slabs, one face sample as before; report any p90
-  worse than off by more than the noise · pong, by hand (ask first).
-### Flick on a mouse-tracking TUI (10-20)
-- 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · Emulator, landscape, a
-  mouse-tracking program (`printf '\033[?1049h\033[?1000h\033[?1006h'; cat`): a flick of under a
-  row (29 px drag, then a fling) logged onScroll, onFling, onUp with the scroll delivered, sent
-  only wheel reports (`^[[<65;61;9M` x7), no click, and the keyboard stayed down · emulator.
-  (`adb shell input swipe` under ~60 ms can arrive with no move at all, which is a tap: don't
-  read that as the bug.)
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
+  shows what is beneath the float (the page, the terminal behind, another float's glass), not only
+  the wallpaper; drag it over a second float and the strip shows that float through it; resize
+  and maximise keep it aligned with the body; Clear and another Look; with Live blur off the strip
+  is the stored frame as before; minimise and bring back; with nine or more Live surfaces open the
+  strip still follows its float (it takes no slot of its own).
+- **Drawer category cards stay glass in a dark theme over a bright wallpaper.** Owed on pong:
+  system dark theme, bright wallpaper, open the app drawer's Categories view. Each category
+  container must show the drawer's backdrop through it (a faint lift, not a near-black slab;
+  the old build sampled about #1A1712 inside a card). Press a card: it must still look pressed.
+  Repeat in light theme: the cards must still be findable against the frost. Pinned folder shells
+  in the dock and the drawer's search rows use the same wash; look at them too.
 
-## Developer
-### Hardware keyboard shortcuts (10-25)
-- 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
-  Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
-  notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
-  splits off and splits with them on · Surface, hand on the keyboard.
+- **One status bar and dock look for every page (11-08, perf/shared-chrome, wave 2a).** Owed on
+  pong, on an install whose Home and Workspace differed in status bar edge, compact or expanded
+  state, dock design, Search field or Drawer icon: after the update every page (Home, Workspace,
+  Assistant, Display) wears what Home wore, portrait and landscape, keyboard up and down,
+  Docked and Floating. Change the status bar's edge, its compact rest, the dock design, the
+  Search field or the Drawer icon from the Workspace, then from Home: the other page shows the
+  same at once, and Discard puts it back. The dock's height is the same on every page.
+  Landscape Home keeps its side-bar dock. Swipe Home2 <-> Workspace 5 times: the status bar and
+  dock do not re-dress or move at the landing. Trace: no `Settle.dockDesign` and no
+  `Bar.refresh` at landing where only these values differed before · pong.
+- **One Margin for every page (11-08, perf/bar-travel).** Owed on pong, on an install whose
+  Home Margin differed from the Workspace's: after the update every page (Home, Workspace,
+  Assistant, Display) wears the Margin Home wore, on the status bar, the dock and the panes,
+  Docked and Floating, keyboard up and down, one pane and split. The Appearance editor shows
+  Margin only on Customization (not on Home, Workspace, Dock, Status bar, Terminal or Keyboard);
+  moving it, with Where on Everywhere or on a page, moves every page alike, and Discard puts it
+  back. Swipe Home2 <-> Workspace 5 times: the status bar keeps its inset through the slide and
+  the landing, and the window chips and the Wall strip are the landed page's. Trace: no
+  `Bar.refresh` under `Touch.dispatch` on a drag, no `Wall.halfRedress` where only the Margins
+  differed before · pong.
+- **Toolbar text input built when idle (11-08, perf/bar-travel).** Owed on pong: force-stop,
+  let the launcher come back on Home, wait 3 s, then swipe Home2 -> Workspace with the extra
+  keys on the dock. Trace: one `Toolbar.prepareTextInput` slice about 1-2 s after the first frame,
+  outside any frame's traversal; the first swipe has no `inflate` of `TextInputEditText` under
+  `measure` and no frame near the 74 ms one. Functional: swipe the extra keys left to the text
+  input, type and send; the paste button pastes and a long press returns to the keys; rotate
+  with text typed and it is still there; with the extra keys placed on another edge, they still
+  show there after a cold start · pong.
+- **Landing dresses the dock once (11-08, perf/landing-settle).** Owed on pong, with Home's
+  layout on a different Dock design or Drawer tile from the Workspace's: Perfetto over 5
+  Home <-> Workspace round trips shows one `Dock.restyle` per `Wall.settleChrome` (was two, one
+  under `Place.dockDress` and one under `Settle.dockDesign`); note the `Place.hosts.*`,
+  `Place.edgeStacks.walk/.metrics` and `Bar.refresh` slices for the next round. Functional, Docked
+  and Floating, keyboard up and down on the Workspace: the landed dock wears the arriving page's
+  design, tile and height, with no jump a frame later; a design with the Search field or Wall
+  strip on one half only lands at full height; after changing a Dock design or a look setting in
+  the editor, the next landing still re-dresses; a slide that comes back is unchanged.
+- **Page-swipe stalls: landing layout once, frost skip, keyboard pre-measure.** Owed on pong,
+  Perfetto over 5 Home <-> Workspace round trips at 90 Hz: `Wall.settleChrome` under about 15 ms
+  (was ~43); `Place.syncLayout` one call per `Wall.settleChrome` (was two; count its slices
+  under each `Wall.settleChrome`); `Frost.updateTopPane` mostly absent from the landing, running
+  when the pane moves; `Wall.preRollKeyboard` under about 10 ms, with `Keyboard.showInternal`
+  and its children (`Keyboard.ensureView`, `.setContainerVisible`, `.geometrySync`,
+  `.recheckLayout`) showing what is left, and `Keyboard.prewarmMeasure` appearing after a
+  landing. Functional, on the Workspace: keyboard up and down by tap and by swipe; terminal
+  bounds and dock lift as before; Home unchanged; with the keyboard down, taps where it would
+  stand reach the pane below; the status and window bar frost follows keyboard up/down, a pane
+  resize, a split round the camera, a wallpaper change and a scheme change (Light, Dark, Black,
+  Material You).
+- **Terminal ink holds across cold starts (11-07, #228).** Emulator then pong, even-out on,
+  Clear look, light theme, a blue/cream wallpaper: force-stop and relaunch 4 times; the pane's
+  text ink, the even-out band and the dock body come out the same every time, and the chosen
+  ink reads (no SHORTFALL in the pane's ink report). Repeat once with dark, black and Material
+  You, and once at terminal Opacity 10%.
+- **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
+  Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
+  gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
+  outline is drawn round the camera's box over the page, following the value. It must go on
+  release, on the Home key or recents mid-drag, on Back, and by itself 1.5 s after the last
+  move; after a mid-drag Home, nothing is drawn on the page or on the home when coming back.
+  Check the Settings page does not jump when the outline appears (it lets the window draw
+  under the camera while it shows). Upgrade from a build with a custom centre and width: the
+  gap stands where it did (margin 0, scale and Move sideways derived once); Off hides Margin.
+- **Camera hole, wave 3: the pane top round the camera.** Owed on pong, status bar off and Full
+  screen: one pane, then a 2-way vertical split (the camera over the seam or over one pane):
+  the rim's top line breaks over the camera's box and resumes either side, the glass and the
+  outline are unchanged, the first text row starts just below the box (it used to start at the
+  safe inset, 126 px; now at the traced box's bottom). Floating and Docked; rotate to landscape
+  and back (no break in landscape); status bar on or system bar showing: no break.
+- **Camera hole, wave 2: the Floating bar splits round the camera.** Owed on pong, Full screen,
+  Floating status bar: the bar's glass and rim stop either side of the camera, both cards with
+  the bar's own radius (pong's hole is mid-bar, so two cards; check each end of Move sideways
+  in Custom for the collapse to one card); the chips and readings still clear the gap; compact
+  and expanded keep the split, the expanded bar's second row runs either side; Home and Terminal
+  crossing leaves no flash at the gap and the cards ease with their outer edges; light, dark,
+  black, Material You, scheme chrome; font scale 1.3; Docked and the system bar showing are
+  unchanged; keyboard up and down. The frost and the rim of the second card are not yet seen
+  on a device: look for a seam or a double rim. Pong's first build of this (11-07) showed the
+  main card's frost still spanning the whole bar under the camera and behind the left card; the
+  frost layers now take the cards' margins too. Check the main card's left end is rounded at the
+  camera's right edge, no glass under the camera, and the left card ends at the camera's left
+  edge (not past it); wallpaper pan and a Home/Terminal crossing move both frosts together.
+- **Camera hole, wave 1 (feat/camera-hole).** Owed on pong: Full screen with the status bar on,
+  the chips and readings still clear the camera (the gap now follows the cutout path's bounds,
+  which may be narrower than the bounding rect: check the margin looks even each side), Floating
+  and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
+  bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
+  on Custom.
+- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
+  input now holds the Speech model row (opens a list of installed models plus Get more models),
+  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
+  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
+  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
+  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
+  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
+  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
+  picker land on the Voice input page. How: emulator `settings` route, or pong with the
+  developer's go-ahead.
+- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
+  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
+  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
+  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
+  `logcat --pid` runs.
+- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
+- **Peek reflection through the A–Z row (11-07, fix/peek-dock-travel).** Not seen on a device. On
+  pong, Peek dock with the A–Z row: the icon reflections run continuous through the letters, with
+  no darkened patch behind them, and the letters stay readable on a bright wallpaper and on a dark
+  one (they keep their own halo).
 
-### Graphics setup leaves your display alone (10-24)
-- 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
-  `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
-  with no reset and the glass is kept; (2) with the display off, `pgrep -af termux-x11` and
-  `ls $PREFIX/tmp/.X11-unix` show nothing left afterwards; (3) the Vulkan wrapper is downloaded,
-  tested and removed again if it lost (kept if it won), and a wrong checksum is refused · pong,
-  by hand.
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections run the card's full height behind the letters, and the letters stay legible.
+- **Peek glass with the A–Z row (11-06, fix/peek-with-az).** Not seen on a device. On pong, Home
+  with Peek glass, apps row over the A–Z row, extra keys hidden: the card rises from the screen's
+  edge with its top through the icons' centres, the A–Z letters sit on it with no second slab or
+  line behind them, the reflections fade out above the letters, and the letters stay legible.
+  Check Docked and Floating, Home keyboard up and down (the card stands on the keyboard), the A–Z
+  row hidden (as before), the A–Z row ordered over the apps row (falls back to the Tray slab),
+  extra keys on the bottom (Tray slab), a Workspace page (Lens beads unchanged), and at the
+  largest font scale. Look for a reflection cut off too short by the A–Z row's top padding.
 
-### Flick on a mouse-tracking TUI (10-20)
-- 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
-  in landscape and portrait: repeated short and long flicks scroll it and never raise the
-  keyboard; a still tap still raises it; a slow drag under a row still clicks · pong, by hand.
+- **Peek glass polish (11-07, fix/peek-with-az).** Not seen on a device; needs Android 13+ with
+  Live glass on. On pong, Peek glass over a light and then a dark wallpaper, A–Z row under the
+  icons: the mirror is clearly readable just under each icon and softens and fades all the way
+  down to the card's bottom edge (past the letters, no early cut-off), seen through a faint still
+  ripple (nothing moves at rest); a fine bright line (1.5 dp, over the glass's own edge) runs
+  along the card's top edge and round its top corners, visible on both wallpapers, and behind the A–Z letters the reflection
+  is dimmed and greyer so the letters read over a bright icon. Check the A–Z row hidden (the
+  specular line only), Docked and Floating, keyboard up, Live glass off (the old still
+  reflection: no ripple, line or band), light/dark/scheme chrome, and the largest font scale.
 
-### Glass perception (10-20)
-- 2026-10-20 · feat(glass) glass perception · Taste on pong, dark and pale wallpaper, Clear and
-  Mist: does a page drag (18°), a held border (6°), a press on a terminal pane (about 1°) and a
-  window switch now read as glass without looking for it: the glint travelling round the corner
-  with the tip and fading as it settles, the picture bending rather than sliding? And at rest: is
-  every surface back to the old light, with no bright smear in the top-left corner (dock and bars
-  included)? Is the glint at a press on a pane (about 1°, an eighth of it) enough, or too little?
-  Knobs in GlassRefraction: `glintWeight` (how much glint a pose gives), `Look.LIVE_KEY_EXPONENT`/
-  `KEY_PEAK` (glint), `Look.COUNTER`, `Look.LIVE_EDGE_SHADE`, `KEY_LIGHT_RISE` (how far the glint
-  travels), `TILT_MAG`/`TILT_MAG_MAX_DP` (gradient), `TILT_SHIFT_DP`/`TILT_SOFT` (shift),
-  `LIVE_CLARITY`/`LIVE_CLARITY_REACH` (live rim) · pong, by hand (ask first).
-- 2026-10-20 · feat(glass) glass perception · Frame time of a page drag held and released and of
-  a seam fling, Living glass on against off (`scripts/perf-frametime.sh`): at rest the program
-  runs the old light, nothing more; while live, four more `pow` per pixel within 10 dp of an
-  outline, no new samples anywhere; report any p90 worse than the build before by more than the
-  noise · pong, by hand (ask first).
+- **Wallpaper flow, round two (11-06, fix/wpflow-editor).** Seen on pong 11-06 13:22 (77 fps
+  recording): no chrome over the closing menu, no card-sheet tabs under the rising Wallpaper
+  sheet, the door's Done rides the sheet down with the editor, grid and scene page cross-fade,
+  no duplicate frames at ramp starts, the Notifications card complete mid-swipe, and the
+  recolour relaunch shows no home frame. Still owed: Home long-press › Wallpaper, the editor's
+  first moving frame within two frames of the menu's last frame (the picker now loads while the
+  menu slides; the slide itself must not stutter); after "Use as wallpaper" on a scene of
+  another colour (Aurora from a purple scene), Done exits the whole editor as before the
+  relaunch, the grid comes back at its scroll and tab, and Back instead of Done slides the sheet
+  down onto the card sheet with no one-frame pop; the editor exit's last frame equals the home
+  at rest (no corner drop, no pixel shift); the terminal's More › Wallpaper and Appearance
+  rows wait for their sheet the same way. How: `adb -s <serial> shell screenrecord`, frames
+  stepped (scratchpad `wallpaper-flow/verify`).
+- **Assistant page with a real model (11-06, 41019af0b, ADR 0022).** On pong, add the Assistant
+  page (Edit pages › Add assistant, or the drawer's Assistant entry), download Gemma E2B from
+  the model chip's sheet, ask a question: the answer streams in plain text, Stop turns it into
+  "Stopped" with its text kept, Copy/Share/Try again sit under a finished answer, a fenced code
+  block scrolls sideways with its own Copy while a sideways swipe elsewhere pages the wall. A
+  question sent before the model was ready ("Waiting for the model") is answered once it loads.
+  Leave the page mid-answer and come back: the text has kept growing. Stop must not cut off a
+  local-API answer started elsewhere (stop() uses the runtime-wide cancel). Watchdog on
+  MemAvailable while loading (pong memory rule). How: pong, `ad -s pong`, with the go-ahead.
+- **Assistant page dictation (11-06, 41019af0b).** The composer's mic: a Listening row with
+  levels, phrases appear as each pause closes, Done puts them in the field; first use asks for
+  the microphone. How: pong (the emulator has no microphone).
+- **Assistant page theme and font (11-06, 41019af0b).** Switching dark/light while the launcher
+  runs re-themes the page and its model sheet without a relaunch and stays on the Assistant page
+  (emulator: it kept the old theme and dropped to the Terminal page). At font scale 1.5 the
+  no-model notice's Download button doesn't wrap (emulator: "Downloa/d"). The "Assistant page
+  added" snackbar doesn't cover the composer. How: emulator or pong.
 
-- 2026-10-17 · commit "feat(motd): a rounded welcome card in the wallpaper's colours" · On a fresh
-  session the card reads well over a light wallpaper as well as a dark one, and tapping "Tap to
-  read the docs" opens the guide · pong, release build.
-- 2026-10-17 · same branch · Taste: light-theme Mist at 35% no longer milky; the edge gain cap at
-  2.25 (dark Mist now gets its full ratio) · pong.
-- 2026-10-17 · same branch, "feat(glass): Tint colours the glass across its range" · Taste on
-  pong: Clear at Tint 100 reads as tinted glass, not neon and not milky; the frame-tint caps
-  (`GlassFrameTint.MAX_STRENGTH` 0.42, `MAX_CHROMA` 0.6, fade-out at Opacity 45) are the knobs. A
-  Tint or Opacity drag stays smooth, the glass behind catches up once after release (one re-blur) ·
+- **Voice models in the Benchmark (11-05, #223).** On-device AI › Benchmark: a Text | Voice
+  choice heads Home; Voice shows the voice board (or "No results yet"), Run a benchmark opens
+  Choose listing the installed speech models (one line on top, no Quick/Standard), Continue →
+  Check sheet → Run. Each model runs load, warm-up, clips on the CPU, then the GPU where the
+  Speech accelerator row offers it; the dial reads "N× real time"; the whole run on pong stays
+  under about five minutes plus cool-downs. Rows read "4.2× real time · 3% word errors · loads in
+  0.9 s"; a GPU that fell back says "GPU unavailable, ran on CPU" and sits under Not ranked. A
+  result's Use this sets Keyboard › Voice input › Speech model and its accelerator row to that
+  model and processor, and a dictation afterwards works. The Text board and the Model centre
+  speed pills are unchanged · pong or emulator.
+
+- **Dock tiles lift on a held press (11-04).** On the Tray and Strip dock designs, with the
+  Drawer, Command palette and New float terminal tiles all on: a finger held still on each
+  tile for about half a second lifts it (haptic tick, the tile grows) with no Edit/Hide card
+  opening, and dragging along the row and letting go drops it on the nearest column, swapping
+  with a tile it lands on; the order survives a restart and the Dock card's Reset puts the
+  palette and float tiles back last. A hold on the dock's empty frame still opens the card, and
+  a quick sideways swipe starting on a tile still pages the row · pong or emulator.
+- **MNN 3.6.2 runtime (11-04, #211).** On pong: the MNN chat models already installed load and
+  answer (CPU and OpenCL), an embedding model and a diffusion model still run, and
+  `taobao-mnn/MobileMoE-S-SFT-MNN` (716 MB, uses IndexedLinear) imports, loads and answers.
+  Optional: `LFM2.5-8B-A1B-MNN` (4.8 GB) · pong.
+- **AI runtimes updated (11-04).** A LiteRT-LM chat model loads and answers on GPU and on CPU
+  (and the Benchmark route still returns numbers); voice typing's speech detection still starts
+  and stops on speech · pong.
+- **Keyboard frosts the display (11-04).** A Display page with an X app that moves, keyboard
+  up, in overlay and in resize mode, Docked and Floating Style, Docked with the frame joined:
+  in overlay mode the bed shows the live display frosted behind it, keys sharp, at the Keyboard
+  card's Display-pages Opacity and Tint; no wallpaper picture in the bed, no frost outside its
+  rounded outline, and the strip under the pill matches the bed. In resize mode the bed wears
+  the ordinary wallpaper glass with the Display-pages look values, no frost layer
+  (`dumpsys SurfaceFlinger --list` shows no 'Keyboard frost'). Frost 0 is see-through, Frost
+  high is clearly frosted. Battery saver on (and Settings › Accessibility window blur off):
+  see-through, same Opacity and Tint, and the frost returns when it goes off with the keyboard
+  still up. Rotate with it up. Open and close the keyboard twenty times, leave the page and come
+  back, HOME and back: no stuck blur band with the keyboard down, `dumpsys SurfaceFlinger
+  --list | grep -c 'Keyboard frost'` at most 1. Typing lands in X; display taps above the
+  keyboard still reach X. In overlay mode the display runs to the screen's bottom (or the
+  Floating card's bottom inset) under the keyboard and the strip under the pill, and its size
+  (`xdpyinfo | grep dimensions` in X) is the same with the keyboard up and down; the extra keys
+  lie over its foot with the keyboard down. Resize mode: the display still ends above the
+  keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
+  Appearance editor open over a Display page the frost sits exactly under the scaled keyboard in
+  the preview (no patch elsewhere), follows it through peek/half/full, and stays right on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
+  pong (API 34+, blur supported), plus an API 30 emulator for the see-through fallback.
+- **No hitch at a look-only landing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, nothing else apart: swipe Home 2 to the Workspace and back, slow and flung, with
+  a perfetto trace. The landing frame holds no `Wall.halfRedress` section (it runs in the frame
+  after, as a shape-apart landing's does) and draws under 16 ms; nothing visible hitches as the
+  wall lands. Docked and Floating, keyboard up and down · pong.
+- **Dock opacity blends across a crossing (11-04).** Terminal page's Dock Opacity detached to 20,
+  Home's at 90, same Style, Corners and Margin: swipe Home 2 to the Workspace and back, slow and
+  reversed. The dock stays on screen (no dip) and its opacity eases with the finger; the landing
+  frame changes nothing in the dock. Again with the dock's Tint and Grain apart: both ease too.
+  Known gaps, still changing at the landing: the dock's Blur radius, the keyboard bed's own
+  look, the under-pill strip and the status bar's look. Docked (also on a joined frame, where
+  the dock's sheet stands down and nothing blends) and Floating, keyboard up and down, Live blur
+  on and off · pong.
+- **Terminal pane stays sharp after a crossing (11-04).** Home Margin 16, Workspace Margin 4,
+  and the dock's opacity apart on Home: swipe Home 2 to the Workspace with a session showing
+  text. Record the screen: no frame after the landing shows the pane's text blurred (it was ~4
+  frames). Live blur on and off, Docked and Floating, keyboard up and down · pong.
+- **Crossings turn by the Page transition (11-04).** Page transition Carousel, then Depth, Fade,
+  Stack and Slide: swipe Home 2 to the Workspace and back, slow, flung and reversed mid-way. The
+  two pages move as Home 1 and Home 2 do under the same setting (Slide: flat); the status bar,
+  dock and keyboard stay flat on screen and ease with the finger; a bar only one end wears fades
+  in place under the turning ones; the terminal pane's glass and Live blur (on and off) turn
+  with their page; a Display page in front still slides. Docked and Floating dock, keyboard up
+  and down · pong.
+- **Home page arrives live (11-04).** Home 1 (home), Home 2, Terminal: on Home 1 swipe to Home 2,
+  go to the Workspace, keyboard up, then the extra keys' Home key, and again with the phone's
+  home press: Home 1 slides in with its widgets and status bar from the first frame, never the
+  "Home 1" card. On Home 1 at rest, wait 10 s, then swipe right toward the Workspace: the wall
+  leaves from Home 1, not Home 2. A float chip for a float on Home 2 lands on Home 2 · pong.
+- **Bar across a Margin apart (11-04).** Home Margin 16, Workspace Margin 4, both with the bar on
+  top: swipe Workspace -> Home 2 and Home 2 -> Workspace, slow and flung. The bar stays on screen
+  the whole way (the window chips pan out, Home's content pans in), its width easing to the
+  arriving page's Margin with the finger, and nothing about it changes on the landing frame; a
+  reversal mid-way eases back; no bare handle at the top mid-swipe. Docked and Floating, keyboard
+  up and down, Live blur on and off (the bar's glass stays sharp at its edges while it eases).
+  Only the glass stretches: the clock, chips and readings keep their size mid-swipe (no wide or
+  narrow text), the start ones moving with the left edge and the end ones with the right; on a
+  Floating card the rounded corners follow the eased width both ways (wider and narrower).
+  Same Margins: as before · pong.
+- **Drawer pages fill the page (11-04).** Drawer view = pages, keyboard down: the rows spread
+  from the search field to the page dots, with no dock-high empty band under the last row; the
+  dots sit in their own band. Also at font 1.3 and with an explicit Rows count · pong.
+- **Pane corner panel: More (11-04).** Hold a pane corner on a lone pane and on a split pane:
+  More is the last button in both (lone: Appearance, Minimal, Auto-tiling, Settings, Help, More;
+  split: Close, Move, Maximise, More). Tapping it opens the same sheet a long press on the
+  Workspace opens, and Share, Reset and Kill act on that pane's session (try it from the
+  non-focused pane of a split). The three-dot glyph sits like its neighbours, light and dark
+  theme · pong.
+- **Home press lands on the page set as home (11-04).** Wall Home 1 (set as home), Home 2,
+  Terminal: press Android Home from the Terminal page, from Home 2 and from Home 1. Each ends on
+  Home 1 (pressing on Home 1 doesn't move). Then swipe Home 1 → Home 2 → Home 1 inside Home:
+  the dots and the status bar follow each page, and Home 1 slides in drawn, never an empty page
+  for a frame · pong.
+- **Full screen pane under the camera: keyboard up/down slide lands without a jump (11-04).**
+  Fix #190 (the slide's row prediction now reads the text top inset the resize uses). With a pane
+  Full screen under the camera cut-out and a busy shell (prompt on the last row), raise and lower
+  the in-app keyboard, Docked and Floating dock: the rows slide straight to where they rest, with
+  no step at the end of the slide · pong.
+- **Display Start with (11-04, #166).** Debian with `xfce4 dbus-x11` installed, Settings › Linux
+  apps › Start with lists "Debian desktop (XFCE)" (a distro without XFCE is not listed) and set to
+  it: opening the display (Display page Start, a drawer Linux app, `termux-x11 :0` from a shell)
+  shows XFCE; leaving and reopening the Display page, or closing its window while the server
+  runs and opening it again, does not start a second session (`ps` inside Debian shows one
+  `xfce4-session`).
+  Start with = A command… `xterm`: an xterm opens with the display; a command `false` shows "The
+  display's start command did not run." once, with no retry. The tap that starts the display on
+  a drawer desktop (XFCE from the drawer) does not start a second one · emulator.
+
+- **Drawer pages swipe closes the keyboard (11-04).** Drawer view = pages, "Open keyboard
+  automatically" on: open the drawer (keyboard rises), swipe sideways to the next page: the keyboard
+  goes as the swipe starts, the query stays. Dragging an app to the page edge (which turns the page)
+  does not close it. In-app and system keyboard · pong.
+- **Edit pages: a Home page vanished once (emu2, 11-04)** after Bring back → force-stop → Add
+  page → Rename → night toggle; not reproduced. When re-running that sequence, capture
+  `wall_pages.xml` (with `next`) and the widget repository's stored page ids before and after
+  the night toggle · emulator or pong.
+- **Edit pages fixes (11-04, after the emu2 check).** (1) Use as Terminal only set from
+  Settings › Use as (not the welcome sheet): Edit pages shows "Bring back N Home pages" with N
+  the Home pages hidden; tapping it shows them again and Use as reads Home screen. (2) Every Home
+  and Display card carries its name over its top left ("Page 2", "Display", the app's name); a
+  renamed card shows its new name at once; a long name ends in "…" short of the red button.
+  The captions and the "Terminal ⋮⋮" grip take dark ink on a light (cream) wallpaper and white
+  on a dark one, in light and dark theme, Material You on and off.
+  (3) Rename: the keyboard is up as the dialog opens, the field focused. Emulator or pong.
+- **Remove and bring back the Terminal page (11-04, #202, #200).** (1) Two sessions, three
+  windows in all: long-press a Terminal card › Remove Terminal asks "Close 3 windows and remove
+  Terminal?"; Cancel keeps everything; Close stops the shells, the Terminal cards go, no undo
+  snackbar, the wall lands on a neighbour, Add terminal appears. (2) Force-stop and relaunch:
+  still no Terminal page, and no shell started (the empty-workspace autosave). (3) Each of
+  Ctrl+Alt+C, the drawer's New terminal, a Terminal=true Linux app and `launcherctl` pane open
+  brings the Terminal page back after the last Home page, lands on it and opens the window
+  there. (4) Edit pages › Add terminal adds an empty Terminal page after the focused card;
+  landing on it starts a shell. (5) The Terminal page's own look (a detached canvas tint) after
+  it comes back. Emulator or pong.
+- **Edit pages under Terminal only (11-04, #203).** Set Use as to Terminal only. (1) Appearance
+  editor › Terminal card › Links shows Pages; it opens Edit pages with no Home card and no Add
+  page pill, and a "Bring back N Home pages" pill (N = the pages set aside). (2) Tap it: the Home
+  cards come back in their order with their icons and widgets, the pill goes, Add page returns,
+  and Settings › Use as reads Home screen. (3) Back out: Home pages are on the wall again.
+  Emulator or pong.
+- **Edit pages card menu and Display picker (11-04, #201, #200).** (1) Long-press a Home card
+  and let go: a menu with Set as home, Rename, Remove opens at the finger; long-press and move
+  on: the menu goes and the card drags as before. (2) Rename a Home page and a Display page: the
+  dialog's keyboard comes up, the card shows the new name; an empty name goes back to "Page n" /
+  "Display". (3) Remove from the menu: the same undo snackbar as the red button. (4) The first
+  Terminal card offers Set as home and Remove, later ones Remove only. (5) With a Linux app
+  installed, Add display opens a list, Whole display first then apps; an app adds a Display card
+  after the focused card named after it; Bind app on a Display card swaps its app (Whole display
+  unbinds); an app already bound to a page is not listed. (6) With no Linux apps, Add display
+  adds the whole display at once, as before. Light and dark theme, editor open and closed.
+  Emulator or pong.
+- **Blank Device ring after deep sleep: diagnose (11-04).** Fix 854a10047 (re-read the battery on
+  start and screen-on; "–" when there is no reading) is merged, but the cause is unconfirmed. The
+  diag build is `../diag-apks/termux-app_v2.0.0-pre.1+dev.0fac95378_termux_apt-android-7_arm64-v8a.apk`
+  (sha256 89f7ec81…; v2-redesign 74fcf5a98 plus the `DevWidgetDiag` log commit on the local branch
+  `diag/devwidget-pong`, worktree `../tl-diag-pong`; the branch is never merged or pushed). Install it on pong with the
+  developer's go-ahead (staging, test key: updates over the pre release). Then the developer leaves the
+  phone asleep for an hour or more and wakes it. Read `adb logcat -s DevWidgetDiag`. Done when the
+  wake's lines name the cause: `readNow` with `sticky=true` and a level, then `bindLive label=<level>`,
+  means the fix holds. `label=–` means the system gave no reading. Report which, then delete the
+  branch, the worktree and the APK · pong.
+- **Temporary Display page (11-04).** With no Display page on the wall: (1) tap a Linux app in
+  the drawer: a Display page appears and the app runs on it; Edit pages lists no Display card and
+  Add display is enabled. (2) Close the app: about 2 s later the page goes, the wall lands on its
+  neighbour, the display stops. (3) Relaunch, open Edit pages, tap Add display: a Display card
+  appears, the app keeps running; close the app and the page stays. (4) Relaunch from a wall with
+  no Display page, force-stop with the app up, start again: no Display page left. Emulator or pong.
+- **Live glass wave 4 owed (11-03).** (1) The bars at a cold start (force-stop, relaunch): no
+  see-through status or window bar before the stored frame lands. (2) Live widgets on pong (wave
+  3b): Live blur on, a widget shows the icons and widgets beneath it; off shows wallpaper only.
+  (3) Android 8-11 panels on a real device: drawer, palette, sheet and menus blur what is beneath
+  them and release on close (API 30 emulator only so far). (4) Contrast on custom schemes on pong
+  changes the terminal live. (5) The Wallpaper entries on pong: each opens the picker, and the
+  Workspace's More sheet has one.
+- **Live blur floats (11-03, wave 3).** Live blur on: a Workspace float over a terminal printing
+  (`yes`) shows the text scrolling blurred behind it; two overlapping Home floats, the upper shows
+  the lower's glass and text, raising swaps them; minimise, restore, close, dock back leave no stale
+  glass (a docked-back pane is on the stored frame); keyboard up (pong).
+- **Live blur on the dock (11-03, wave 2).** Live blur on, Floating dock, terminal text or a page
+  sliding under the dock: the dock shows it blurred and following; Live off shows wallpaper only;
+  blur strength the same either way (emulator or pong).
+- **Battery & performance at the root (11-03, a38b183c3).** Pong 11-03: root row in System
+  above General, page opens, glyphs read at 1.0× in dark. Still owed: two-pane (landscape)
+  Settings, search for "Glass refraction" lands on the page, glyphs at 1.3× font and in light.
+- **Dock glass after the GlassEffects move (11-03, 5559211a5).** Emulator was pixel-identical for
+  the four dock types, Docked; still owed: Floating style for the four types, and a held extra
+  key's lens on the dock still magnifies and fades (pong).
+- **Home key with Start in on the Terminal (11-02, 1d7506c51).** With two Home pages and Start in
+  set to the Terminal page (then to a Display page), the extra keys' house key from the Terminal
+  goes to Home 1, not the nearer Home 2; with Start in on Home 2 it goes to Home 2.
+- **One icon size (11-02, ADR 0020 §3; cap rule a6f81e3c3).** Pong 11-02: Dock card reads "7 pinned
+  apps fit up to M", L/XL off (Docked). Still owed: pin an 8th (drops to S), unpin (choice returns);
+  Floating with Lens beads on the Terminal caps 7 pins at S; Home grid icons equal the dock's; no
+  icon touches the edge. Pong's stored choice is S from the old migration: pick M once.
+- **Home in landscape (11-02, ADR 0020 §12; turn fix a364a4624).** Pong 11-02 on +dev.19df39d42: a
+  turn cut the grid to 5 columns and saved the reflow (fixed; emulator with pong's store: no write
+  through 90/270/0). Owed on pong with real widgets: rotate both ways and back, widget store
+  revision unchanged, every widget keeps its cell, no widget zooms. Pong's landscape keeps its own
+  dock setting (hidden there, developer 11-02), so no side bar on pong is expected.
+- **Glass controls reach + dark sections (11-03, 509b634db).** On pong, dark theme: the editor's
+  sections stand apart from the sheet (lighter fill, thin outline) and, with Appearance open, the
+  unselected Look tiles (Mist, Tint, Solid, Custom) still read as tiles on the lighter section.
+  Keyboard card › Applies to Global › Opacity and Blur move the keyboard on Home and on a Display
+  page as well as the Terminal; Customization Opacity moves the Home keyboard while no Keyboard ›
+  Home value was set. Turn Glass refraction off in Battery & performance: Depth and Edge read
+  "Glass refraction is off." and the card shows a Glass refraction link that lands on the switch;
+  with Reduce idle activity on they read "Off while Reduce idle activity is on." · pong, go-ahead.
+
+- **Removing a Display card (11-02, #193).** Edit pages › Display card × with Firefox on it: after
+  the Undo window a stop question (an app is open); Confirm: `wall_pages.xml` has no page 9 and no
+  `pending`, X and Firefox stop; Cancel: the card's page is back and the display runs; Undo before
+  expiry leaves the display untouched.
+
+- **CRT wave 1 on pong (11-02, 41b6a6036).** Terminal effect CRT on a dark Look and on a bright
+  glass tint: the 8/10 dp bezel reads lit at the top and shaded at the bottom over glass and over a
+  solid fill; the screen edge has an inner shadow; box lines carry a faint orange/blue fringe; the
+  triad mask is a hair of colour fringe on glyphs, not a grid over the background (emulator 11-02
+  showed a grid over saturated green; judge on the phone); the dock, status bar and keyboard keep
+  crisp icons and letters. Typing with Terminal effect on and off: no missed echo frames beyond the
+  10-22 baseline (`project-docs/active/input-latency-study.md` method).
+- **Trail halo + decays on pong (11-02, 963e8329e).** Cursor trail Default and Comet on a dark Look
+  and on a bright glass tint: a faint additive glow (peak alpha 0.28 since the developer's 11-02
+  look, a bright core within a cell and a skirt two cells out with no visible edge) hugs the
+  trail quad on moves in both directions (no dark band, no glow only inside, no pale box); a
+  `cursor_trail_color` from kitty.conf colours the halo too; the other four styles are unchanged.
+  Typing feel at kitty's 0.10/0.40 s decays (the app's defaults again since 11-02): a newline's
+  streak settles well under a second over a slow ssh echo; a `cursor_trail_decay` line in
+  kitty.conf still wins. Known: an echo burst of 3+ cells starts a trail (kitty's 2-cell
+  `cursor_trail_start_threshold`), so fast typing over ssh trails now and then.
+- **CRT screen events on pong (11-02, 2b7484ebd).** Terminal effect CRT (also green, amber), more
+  than 1.5 s after the last key or scroll: a bell (`sleep 2; printf '\a'`) tears one 4–5 row band
+  sideways with a red/blue split for about 150 ms and nothing else moves (emulator: seen); a pane
+  opened by touch or `launcherctl pane open` powers on from a bright centre line over about 400 ms
+  (emulator: seen); tapping the other pane of a two-pane window shears it sideways for about
+  300 ms, strongest at the top and bottom (emulator: not resolvable at 4 fps); a shell killed from
+  outside (`kill -9 <pid>`) shows about 300 ms of grey snow before "[Process completed (signal 9)]"
+  (emulator: seen). Nothing within 1.5 s of a key or a scroll, nothing with Remove animations on,
+  nothing with Settings › Terminal › Text & display › Screen events off, nothing on TFT or on the
+  chrome. A pane at rest after an event draws no further frames (gfxinfo frame count flat).
+  Known gaps, not bugs: a plain `exit` closes the pane before the snow; power-off is unwired; a
+  split or focus change started from the keyboard is held by the typing rule.
+- **Idle animations + dim on pong (11-02, 88e25065e).** Battery and performance › Idle animations
+  off (default): a CRT pane at rest renders no frames (`dumpsys gfxinfo com.termux reset`, 30 s,
+  then `dumpsys gfxinfo com.termux`: 0; emulator: 0 in 20 s). On: the pane breathes very gently
+  with no flashes at a low steady rate (emulator: 120 frames in 20 s, 6 fps on CPU rendering; the
+  brief aimed at about 20); one small sideways tear within 2–5 minutes of idling (not waited for
+  on the emulator); everything stops on a key for 1.5 s, on screen off, Lazy mode, power save,
+  Remove animations, or when the pane leaves the screen. Dim, switch or not: with two panes the
+  unfocused CRT pane's text is about 10 % darker and slightly greyer, snaps on tap (emulator:
+  near-white pixel share 1.3 % vs 2.7 %, seen); one pane alone is never dimmed; TFT never dims.
+- **Solid CRT bezel on pong (11-03, wave 7).** Terminal effect CRT on a glass Look with a
+  visible wallpaper: the 8/10 dp band round the screen is a flat opaque panel tone (the drawer's
+  colour), no wallpaper or blur through it, lit at the top and shaded at the bottom as before, the
+  1 dp line still round the screen; the glass blur and tint still show inside the screen behind the
+  text, and the near-black tube face at the picture's pulled-in corners stands off the bezel. Same
+  with Glass off and on the light theme (a pale bezel). TFT: the same solid band.
+- **Deck keyboard on pong (11-03, wave 8a, 2734fdf36).** Terminal effect CRT, docked in-app
+  keyboard up: the keyboard bed is an opaque dark plastic in the drawer's tone (no wallpaper
+  through it), each key a raised push-button with a faint lighter top edge and a 2 dp darker foot,
+  6 dp corners; return is amber with dark ink; hold Ctrl: its label turns amber and a 2 dp amber bar
+  sits above its foot; release: plain. Docked form: the keyboard card's rounded corners still clip
+  the bed. Effect off: the Look's glass keyboard comes back exactly. CRT green / amber / Material:
+  return and the latched bar take green / amber / the theme's primary (emulator emu2, dark theme:
+  bed, bevel and amber return seen; latched bar and the other palettes not exercised).
+- **Deck window bar + extra keys on pong (11-03, waves 8b-8c).** Terminal effect CRT on the
+  Workspace: the window bar is an opaque dark slab (lit top, shaded bottom, no wallpaper through
+  it, the blur off); each window chip and the "+" a raised 4 dp button with a 2 dp foot; the chip
+  in front has an amber title and a lit 5 dp LED at its left; the sessions count square at the
+  bar's left is the same button without an LED; a window that rings its bell behind
+  lights its LED; a working window's LED breathes between a quarter and full; an idle one is dark.
+  CPU, RAM and weather sit in one near-black inset window in cyan with a soft glow, the dots dim
+  cyan; sizes as before. The extra keys row: opaque bed, raised buttons, the active mode button
+  (keyboard / mouse pad / ...) amber with a 2 dp bar, a latched CTRL amber. Docked: the bar card's
+  rounded corners still clip the slab. Effect off and on three times: the bar's glass and blur, the
+  stats cluster's padding and the row's look come back exactly. CRT green / amber / Material: the
+  lights and the display take green / amber / the theme's primary. Home page: everything plain.
+- **Deck bands + single frame on pong (11-03, wave 8e, e29a3379f).** Docked layout, CRT on, the
+  keyboard up: the band behind the system status bar (clock, signal) and the band behind the
+  navigation pill are the same opaque slab as the bar and the keyboard, no wallpaper through
+  either; look for a seam where the status band meets the bar's top (each band shades on its own).
+  The CRT pane's frame is one opaque ring: no thin light line outside it and no grey line between
+  it and the screen; the glass blur and tint still show inside the screen. Keyboard down (dock foot
+  showing): the foot keeps the dock's own glass. Effect off: both bands gone, the status strip's
+  glass and blur back, the pane's edge light back round the glass slab.
+- **Live windows while swiping (11-01).** Three Workspace windows, each running something that
+  prints (`top`, `cmatrix`). From the middle one, drag the border slowly left: the next window
+  slides in live beside it, its output moving, at the same size and glass as the current one.
+  Release past half: no blank frame, no flash, the arriving window is in front with its prompt
+  where it was; the motion log shows no `pty-resize` at the landing. Open a window with the
+  keyboard down, go to another, raise the keyboard, then drag toward the first: its one
+  `pty-resize` comes as the drag begins, its rows fit its pane as it slides in (text the same
+  size as the current window's), and none comes at the landing. Release short: both
+  slide back and nothing changes. Repeat right, repeat with a split window and a Stacked window
+  as the neighbour, and with the keyboard up. A chip tap and a keyboard shortcut still switch at
+  once. Settings › Battery and performance › Live windows while swiping off: the swipe shows the
+  old empty slot then the slide at release (today's behaviour). At rest (`dumpsys gfxinfo`, no
+  touch) the idle frame count is unchanged from the setting off.
+
+- **Home → Terminal, one pane, keyboard closed: no bottom snap (11-01, flush padding).** On pong with
+  a single pane and the keyboard closed, swipe Home → Terminal (after one Terminal → Home trip
+  since the launcher started). The pane's bottom gap above the extra keys is there for the whole
+  slide and does not move at landing; the bottom text rows do not jump up. Was: the pane ran
+  flush onto the toolbar mid-slide and pulled up ~10 px (4dp) at landing.
+- 2026-11-01 · e9b879382 + 1a21b62f8 + 3c4454300, Home ⇄ Terminal keeps the terminal's rest; stacks ride with their pages; Home 2 wears Home's dock · emulator-verified 2026-11-01 with pong's prefs (Home 2 → Terminal, keyboard closed: no pty-resize between crossing-begin and land, the toolbar rides in under the pane, no band, no drop at landing; Home 2 draws Peek like Home 1). Owed on pong: the same swipe both ways with keyboard closed and open; Home 1 ⇄ Home 2 with no dock pop; the toolbar's glass while it slides sideways (Floating and Docked); a Home float terminal, if used, is not laid out short; reduced motion; the stack no longer rises after landing (f2b4cc385 reversed by 72682966b; revert that one commit to bring the rise back) · pong.
+- 2026-10-31 · Workspace terminal 4dp off its bars, padding favours rows, pills moved (merge after a6d1fa3d5) · pong, Terminal page, keyboard up and down, Floating and Docked status and dock, one pane and split, Corners 0 and bare glass, light/dark, font 1.0 and 1.3: 4dp above and below the pane, Margin at the sides; rows before vs after (expect +1 to +2); corner glyphs never cut; the keyboard pill sits on the pane's rim and the swipe still works (on a bare square pane it may touch the last row); the status pill hangs under the bar and the pull works from it; the Docked insert's glass matches the pane, also mid-slide Home ⇄ Workspace; the Floating side rails (A–Z, side apps) may stand ~8dp longer than the pane at each end; Home's spacing and pills unchanged; no terminal resize as a slide lands (motion-invariants.sh) · pong.
+- 2026-10-31 · 2e476b3dd + the Media polaroid merge, plan-hosted widgets keep their parts in place · pong: the Media card, at its size and after a few seconds of playback (a progress tick re-lays it), shows the art inset with its own corners and nothing over it, words beside it, the bar and back/play/next at the foot; an upright 2x2 card is a polaroid (square art across the top in a thin 8dp frame, title, artist, bar and controls centred below); the 255x160 Short card has square art on the start side with three controls beside; a long title ellipsizes; the art's corners stay concentric after a resize between the layouts; Resume, idle and paused; Clock, Calendar, Weather, Notifications stay put after a rebind or page change; back/next no longer wear discs, check they still read as buttons; light/dark/black, font 1.0 and 1.3 · pong.
+- 2026-10-31 · ADR 0018 wave D, the dock as one surface (2801c1f14; the root stops fitting the bottom inset, `BottomInsets`, the dock host reaches the screen's edge) · seen on pong 19:30: the seam loop reads +2.5 / +3.4 / +2.4 at opacity 34 / 0 / 100 (was +12), Home 2 wears Peek like Home 1, Home's Peek card stands on Home's keyboard. Still owed: `dockfoot-check.py` at row 2349 reads under 4 at dock opacity 0, 34 and 100; the dock never sits under the gesture pill after an insets change (rotate, the system IME shown and hidden, a notification shade pull) or a Peek ↔ Tray switch; Docked Tray, Floating Tray, Beads, Peek, keyboard down and up, one pane and split, light/dark/black look as before but for the seam (no band under the pill for the Floating Tray card); the terminal's rows, widgets, drawer, sheets, palette, A–Z tab and floating keyboard stop above the pill; the system keyboard over the terminal and over Home moves nothing and leaves no glass under it; Display with the system keyboard keeps its room; the editor's Dock card rings the dock and its rows change it live; `launcherctl look set opacity 95 --element dock` darkens the whole dock, foot included; `motion-invariants.sh` over a Home ⇄ Terminal round trip reports no new resize; `launcherctl keyboard show` once did not return for ten minutes although the keyboard came up: watch for it · pong.
+- 2026-10-30..31 · the look grid (ADR 0017 W1–W3: 322432562, ed18a80a3, 5672889bc, fb44e0fb2, 732a34e39, ef0f80ede) · emulator at font 1.0 and 1.3, light, dark and scheme chrome, then pong: installed over the previous build with no data cleared, Home, every page kind, dock, status bar, keyboard, terminal, Card widgets, drawer, folders, menus, sheets and the rename chip look as before (a blur of at most 2 dp may shift), and a fresh install shows Clear and Home's keyboard as Mist over widgets; every glass card shows the Where and What chips (the Appearance card only Where) and reads Look, Frost, Opacity, Tint, Colour, Corners, Depth, Edge, then More: Grain, Rim; every value slider is a horizontal row with no clipping; Dock card Look, Grain and Rim change the dock alone; What → All glass moves every glass element in the frame, Done keeps it, Undo returns it; the source dot goes tertiary on the dock and primary on its page; long-press a row name, "Reset this row" clears that cell only and is disabled where it holds nothing; Margin and Vibrancy are never greyed except Margin on the Dock card until What is All glass; Display pages show the keyboard Clear; the Keyboard card's Where chip offers Home pages and a kind value wears the secondary dot; `run-as` write `look.opacity.dock` 90 and `look.frost.dock` 0 (force-stop first): the dock turns solid, the drawer, folder popups, menus, terminal sheet and rename chip keep their glass; idle PSS (`dumpsys meminfo`, Home, one Card widget) within noise of before · emulator, pong.
+- 2026-10-31 · editor odds · an App menu on an app with many shortcuts shows four, then More shortcuts; the Widget editor's Back keeps the edit and its cross discards it; in the Appearance editor a tap on a Card-form widget raises the Widgets card with the ring round that widget, a tap on a Bare widget opens Home's card with no widget ring; a card swap (dock, then status bar) keeps the sheet at half · emulator.
+- 2026-10-30 · 418a2d7ef, the setup sheet fix after 47f2e0316 and b324fb00f · on pong: Appearance › Global › Change wallpaper › Choose photo › crop › Done shows no editor flash, shows its progress line, and ends on the Global card with the new wallpaper and accents (also with a photo whose colours match the old one, launcher-only mode, Choose photo then cancel, and the setup wizard's wallpaper card, whose Done still closes); with a setup card open and wallpaper mode off, applying a wallpaper rebuilds without opening the card sheet, and opening it from Settings › Setup then applying one that switches the mode brings it back; a long-press on the status bar's top offers Expand or Compact status bar, lands as the status swipe does, survives a restart, and is absent with the bar down a side · pong.
+- 2026-10-30 · ADR 0016, the wall's page stops (#183 to #187) · pong, with Home, a Terminal window and a Display page: from the Display page its key then Home lands on Home; the Terminal key then a left swipe on Home slides the Terminal page in; the Android home button from the Display page shows Home; a fling right on the Terminal page's seam slides and lands with no rubber-band; with two Home runs or two Display pages, the leaving page shows a still in the chrome's ink and the arriving one turns live on landing; with every Terminal window closed, reaching the empty Terminal page by swipe or by its key starts one shell on landing with no over-swipe; the extra keys show the go-to keys for the page kinds the wall has and fade those that cannot act · pong; emulator pass at https://amal-build.taild9c5dc.ts.net/reports/wall-cells-2026-10-30/.
+- 2026-10-29 · a11264eec (LorieView lastClipboardTimestamp starts at 0) · on pong: copy a URL in the terminal before the display starts, start Firefox, tap its address bar and use the keyboard's paste key: the URL appears; copy in Firefox and paste in the terminal · passes when both directions carry the text · pong.
+- 2026-10-29 · the terminal palette wears the pane band's ink (fix/contrast-polarity-flap) and the herdr theme hook keeps the user's rows (after c496185e3) · on pong with the blue wallpaper and herdr open: Appearance › Terminal › Contrast › Harder, Done, reopen the editor, Done again, leave and return: the terminal keeps one ink, the editor's miniature matches the live terminal, herdr re-themes at most once; Default and Softer unchanged. Then, with the developer's `claude` row in `~/.config/herdr/config.toml` commented `# launcher-material:` and the shadowing `~/.termux/theme-templates/herdr/` copy removed, toggle the herdr tool or flip light/dark: the row comes back plain, the `[theme.custom.*]` tables and `auto_switch` are still spliced, and herdr's Claude sidebar keeps the project folder in teal across a re-theme · pong.
+- 2026-10-29 · the home press and the extra keys' house follow Start in; Edit pages fixes (0ab0ea5f4, 7d753cc0c, 93c35220f and the overview round 6a688dc92..1504e53d4) · on pong: in Edit pages the terminal card's home button makes Start in read Terminal (the display card, Display); the home press then lands on the first terminal window (window 1 in front), on the display when it is marked, on a marked Home page as before; a return from another app shows the page left; after a force-stop the launcher opens where the marker is; the overview opens at once, the sheet folds to its header, the chips read Add page, Add terminal, Add display whole at font 1.3, a tap on a side card centres it and a tap on the centred card zooms in, Back asks no Discard, and with herdr running five swipes between Home and the terminal card write no `TermGeom` resize line until the card is zoomed into · pong.
+- 2026-10-28 · fix/sound-ghost-server (3e6eb6b52; emulator passed, pong owed) and 4a5918b59 · Exit in the notification with `pacat --raw /dev/zero &` playing, open a new pane: `pactl info` answers and a new `pacat` shows RUNNING; after `rm -rf $PREFIX/var/run/termux-launcher/sound` a new pane restarts the server within ~15 s (logcat `Termux.LauncherSound` "pulseaudio is broken"); a new pane after Exit has `DBUS_SESSION_BUS_ADDRESS` and `dbus-send` lists names. Separately, Home → Terminal with the pinned apps under the keyboard, Floating, extra keys off writes one `TermGeom` resize per crossing (pong-verified for the default layout only) · pong.
+- 2026-10-22 · PR #99 (migrations 9–13) and layouts step 17 · upgrade the shipped stable (1.0.6 / 1.1.0 release APK, from the GitHub release) over a real profile with a Home dock height, Corners or Margin set apart, a Prompt line or Taskbar dock style and a Custom Look: Home keeps its rows, Prompt line → Tray + Search field, Taskbar → Tray + Drawer tile, the Look keeps its stop and colour, no first-run tour · emulator.
+- 2026-11-01 · 1ac2f4ef6 (#191 follow-up) · on pong (11.5 GB MemTotal), with the launcher in
+  front, `tai status` then `POST /v1/ai/runtime/load` of the usual E4B model on `gpu`: the
+  response's `memoryBudget.reserveBytes` reads about 1,970,000,000 (a sixth of MemTotal, up from
+  805,306,368) and `neededFreeBytes` = `estimatedBytes` + that; the load still fits when
+  `availableBytes` clears it, and a refusal shows those three numbers in agreement (no
+  `fits:false` while available exceeds needed). Record the three numbers either way · pong, go-ahead,
+  curl from a shell on the phone with `~/.launcherctl/endpoint` and `token`.
+**Pane borders card (2026-11-01, #206).**
+Seen on the emulator (emu2, staging x86_64 of 9a8e5683c, 1080 × 2400 and 360 × 640 at font 1.3):
+the row and its label open the subcard, the back arrow and system Back return to the Terminal
+card scrolled to the row, Custom colour's dialog gets the keyboard and commits `#DC143C` /
+`#00AAFF` into the strip and the live float, garbage keeps the dialog open, Glow Steady shows on
+the live float, Back twice reaches Unsaved changes and Discard restores the entry values. At
+360 dp wide the six-swatch choosers fall into `SegmentRow`'s vertical stack (one swatch per row),
+nothing clipped. Still owed:
+- 2026-11-01 · 9a8e5683c · on pong: a crimson custom border on a single Terminal-page pane and on
+  a split (the focused pane Primary, the other crimson), Glow Steady, light and dark theme, the
+  launcher's scheme chrome on and off; the in-app keyboard comes back after the Custom colour
+  dialog's OK and after Cancel; Reset pane borders and the Terminal card's Reset put back the
+  theme outline, Primary and no glow · pong, go-ahead.
+- 2026-11-01 · 9a8e5683c · Docked style: the divider edges take the border colour and no glow is
+  drawn round a Docked pane (the glow is skipped there on purpose) · pong or emulator.
+- 2026-11-04 · #205 · After `pm install -r` over a running build, with the launcher not opened, `curl $(cat ~/.launcherctl/endpoint)/v1/ai/status` answers (the API binds when the main process is revived as a service host) · pong or emulator.
+**Linux apps guide marks an installed distro (2026-11-04, #176).**
+- 2026-11-04 · feat/176-installed-distro · emulator: install Debian by hand with
+  `proot-distro install debian`, then open Settings › Linux apps › Set up Linux apps and go to the
+  Linux step: Debian shows "Installed" (in place of "Recommended"), the others do not, and the
+  copied command on the last step has no `proot-distro install` line. With nothing installed the
+  picker and command are as before · emulator, no pong needed.
+- 2026-11-04 · feat/176-installed-distro · emulator, #177: pick a full Linux, tick Desktop on
+  the Apps step (off by default, not offered on the Termux route); the Command step shows the
+  Start with note and the command installs xfce4. Run it, then `dbus-launch startxfce4` with
+  DISPLAY set draws XFCE. Debian, Ubuntu and Arch (Arch is untested: pacman group xfce4) · emulator.
+
+**App menu shortcut icons and the More shortcuts card (2026-11-04, #198).** Not yet seen on a
+device. Owed:
+- 2026-11-04 · App menu on a Home icon, a drawer icon and a dock icon of an app that publishes
+  shortcuts (Chrome, Messages): each shortcut row shows that shortcut's own icon, untinted; an
+  app whose shortcuts have none keeps the bolt glyph · pong.
+- 2026-11-04 · More shortcuts on an app with more than four shortcuts: the side menu is the App
+  menu's card (same rows, shades, type, no arrow), beside the card and centred on the More row,
+  on the left when the right has no room, scrolling when taller than the screen; a tap launches
+  and closes both; the main card's drag highlight still follows the finger onto it · pong.
+- 2026-11-04 · The same in light and dark theme, with the launcher's scheme chrome on and off,
+  and with an icon pack pinned (shortcut icons are the app's own, not the pack's) · pong.
+- 2026-11-04 · Font scale 1.3: long shortcut labels ellipsize on one line · pong or emulator.
+
+**Move to category in the App menu (2026-11-04, #199).** Not yet seen on a device. Owed:
+- 2026-11-04 · Long-press an app in the drawer (every view type) and a Home icon of a drawer app:
+  the card shows Move to category alone below the shortcuts; it opens the categories picker, a
+  pick (or Automatic) moves the app and the Categories view regrouping follows · pong.
+- 2026-11-04 · The row is absent on a dock icon, a dock folder member and a Linux app entry · pong.
+- 2026-11-04 · Light and dark theme, scheme chrome on and off, font scale 1.3 (one line, ellipsized) · pong.
+
+**New float terminal tile on the dock (2026-11-04, #197 narrow).** Not yet seen on a device; the
+tile is off by default; the switch is New float terminal in the Dock card's Options and the
+Elements list (pref `dock_float_terminal_button`). Owed:
+- 2026-11-04 · The switch appears in both places, flips the tile live, is undone by Discard and
+  cleared by the Dock card's Reset · pong.
+- 2026-11-04 · With the switch on: the apps row gains one last column holding the tile; a tap opens a
+  floating terminal on Home as the Terminal entry's New float here does; Docked and Floating dock
+  styles, keyboard up and down, one pane and many · pong.
+- 2026-11-04 · Both the Command palette tile and the Float tile on: palette then Float, each one
+  column; dragging the palette tile or the Drawer tile never lands on the Float column; a page
+  swipe holds all still tiles, Lens beads keep a bead under each · pong.
+- 2026-11-04 · Light and dark, scheme chrome, glyph ink on a pale wallpaper (glyph is the status
+  bar's add-window drawable, the closest existing) · pong.
+
+**Swipe-up handoff from other apps (2026-11-04).** Not yet seen on a device. The latched pref
+`app_launcher_animation_safe_mode` clears on the next cold start; an app with no icon here is no
+longer counted as an error. Owed:
+- 2026-11-04 · Swipe home from an app pinned on the dock, from one on a Home page, and from one
+  opened from the drawer: the first two shrink into their icon, the third plays the plain
+  fallback, and `app_launcher_animation_safe_mode` stays false. `adb logcat -s
+  LauncherTransitionController` shows one "Gesture handoff" line each (source dock, home, none) ·
   pong.
-- 2026-10-17 · same branch, "feat(glass): Edge is a slider" (replaces the Prism rows: on pong
-  Glint and Prism looked alike) · Taste at arm's length, dark and light, Celestial Field: Edge 100
-  on Clear, on Mist and on a warm/gold Look reads as light splitting at the glass rim, a crisp
-  spectral edge on the outline itself (cyan-blue on the outer px, orange right inside), never a
-  separate coloured border, on a dark and a pale wallpaper, and the edge does not read red
-  overall; compare against the 10-17 shot of the old one, Edge 100 on a gold Look over the cat
-  wallpaper, where a yellow-green line ran inside every edge:
-  `/tmp/claude-1000/-home-amalvajdan-Projects-termux-launcher-app-termux-launcher/ff00a939-66f3-41a9-acb3-82df73313d71/scratchpad/pong-edge100.png`
-  (dock crop `pong-edge100-dock.png` beside it; /tmp, so copy it out before a reboot). 40 is
-  Clear's glint as before; the slider feels even from 40 to 100; Edge drags stay smooth. Knobs:
-  `Look.BOLD_MIX` 0.4 (how far a fringe's peak mixes toward its colour per unit of the cover
-  gain, the strength), `BOLD_LOBE_DP` 0.3 and `BOLD_CENTRE` 2 (width and where the two meet),
-  `BOLD_WARM`/`BOLD_COOL` (the two colours) · pong.
 
-- 2026-10-16 · commit "feat(glass): the gathered light is the only glass edge" · The edge reads
-  as light, not an outline, on every surface; on Mist and Solid (and the sheet and chip, floored
-  near opaque) note how faint the outline gets under their tint, for phase B's opacity scaling.
-  Also record whether floating panels still stand apart from a white wallpaper: that is Round 5's
-  gate · pong, release build.
-- 2026-10-16 · commit "feat(keyboard): a touch engine that learns where your taps land" ·
-  The touch engine's pass bar, under the round 2 take-back rule: take-backs into space drop by
-  30% or more from the warm-up's rate to the corrected rate, no other key's rate rises, and aiming
-  at the space bar and landing on `b` or `v` types a space · pong, a few days of normal typing
-  from the 2026-10-16 install of 1dbeda5b1 (learning restarted from zero there). Read it with
-  `project-docs/verification/touch-engine-passbar.py --pong`, which prints a verdict per layout
-  grid; until it says PASS or FAIL it reports how much data is still missing. A FAIL, a paused
-  engine, or the developer reporting misses that still go to `b` or `v` sends the next session to
-  the spec's Round 2 section before any change.
-- 2026-10-15 · commit "feat(settings): make the Low-memory preset a switch" · Turning it on and off
-  returns the look you had (material, opacity, effects, parallax), and Reduce idle activity follows
-  the switch both ways without leaving the page · pong, Settings → App behavior.
+- **Last change wins on the Global and Workspace sliders (11-04).** Dock card (Applies to
+  Global) Opacity to 20, Keyboard card (Applies to Home) Corners to 30. Global card: move Opacity;
+  the dock now wears Global's opacity on Home and Terminal pages, the keyboard keeps its 30 dp
+  corners. Move Global Corners; the keyboard's corners follow. Dock Opacity to 20 again: only the
+  dock changes. Workspace card Opacity: Terminal and Display pages follow, the dock on Home stays
+  at 20. Discard after any of these puts every value back. Global Margin moves the air on every
+  surface · pong.
+- **One-line slider rows (11-04).** Global, Dock, Terminal and Keyboard cards at font 1.0 and
+  1.3, light, dark and the launcher's scheme chrome: each slider is one line (glyph, name, a thick
+  track) with its value inside the track's end, white-on-fill where the fill reaches it and grey
+  over the empty track, never cut; a long name at 1.3 falls back to name and value over a
+  full-width track. Drag each: the value follows with no jump in the card; long-press a name opens
+  its menu; TalkBack reads the value · pong.
+- **Rows in group order (11-04).** Global, Workspace, Dock, Terminal and Keyboard cards: inside
+  each section the Look and the structural choices come first (Dock Type, Status bar Position,
+  Keyboard Form, Style), then the sliders, then switches and small choices (Rim, Contrast), then
+  colours (Tint colour), then links (Pane borders, Refraction), with a small gap
+  between groups and no new headings; the Keyboard's Linked toggle still stands between its two
+  opacities; sections and their open or closed state are as before · pong.
+- **Home card sliders reset what is beneath them (11-04).** Dock card (Applies to Global)
+  Opacity to 20; Home card Opacity: the dock on Home pages follows Home, on the Terminal page it
+  stays at 20 · pong.
+- **Margin per page kind (11-04).** Before anything: Home and Terminal pages look as they did
+  after the update. Workspace card Margin to 20: Terminal and Display pages' dock, status bar and
+  pane air move, Home pages do not; Home card Margin to 4: Home alone moves; swipe Home ↔
+  Terminal: each settles on its own margin with no jump. Terminal card Outer margin and Dock
+  (Applies to Home) Margin edit those levels; Global Margin resets both kinds; Discard restores ·
+  pong.
+- **Volume keys on the Display page (11-05).** Display page in front with a display running:
+  volume up and down move the phone's volume and show the system panel; same with no display
+  running; a physical keyboard still types into X (that path now runs through the X11 input
+  handler, which also releases stuck modifiers) · pong.
+- **Home Wallpaper dim (11-05).** Home tab > Appearance > Wallpaper dim (after Depth): drag 0 →
+  60 with Home behind the editor: the wallpaper darkens live, stays after Done, Cancel restores.
+  With two Home pages, one drag darkens both; the Terminal page keeps its own dim. Add a third
+  Home page afterwards: it is as dark as the others · pong.
+- **Display page after its display stops (11-05).** Display page in front, kill or stop the
+  display: only "No display is running." / Start display / Get GUI apps, no monitor icon behind
+  the text and no "Display" word on the button, not a black page in the dark theme; same in
+  landscape. Swipe to Home and back with a display running, then stop it: the empty state, not a
+  frozen picture. First visit after a cold start: at most a brief card, then the display. The
+  text group sits on a readable glass panel over a busy wallpaper, light and dark theme · pong.
+- **Key combos in the extra keys picker (11-05).** Row + , type `ctrl+f7`: the first row reads
+  "Send Ctrl+F7 as keys", the cap reads Ctrl+F7; in xev on the display it arrives as Control
+  press, F7, Control release. `ctrl + m` saved as a plain macro sends Ctrl+M (Enter) in the
+  terminal. A category chip unchecks while a query is typed and returns when it is cleared ·
+  pong.
+- **Terminal extra keys guide (11-05).** Settings > Keyboard > Terminal extra keys: below Add row,
+  "What a key can be" with eight facts on their own lines, at font 1.0 and 1.3; Cancel / Save
+  stay pinned; in landscape Row 1 and Add row fit above the fold and the bar is one compact row ·
+  pong.
+- **No flash when the display closes itself (11-06).** Firefox (or any app started as the
+  display's start-up app) on the Display page, quit it from inside (Ctrl+Q): the page goes from
+  the app's last frame straight to the empty state on its panel, with no frame of bare wallpaper
+  and no white sheet; same for Stop from the page's menu; a temporary Display page (opened from a
+  Linux app) still disappears with its display · pong.
+- **New Home page wears the page in front's look (11-06).** Home 1 with its own dim and glass,
+  Edit pages > Add page: Home 2 looks the same from its first frame; add a page while Home 1 has
+  no overrides: the new page follows Global · pong.
+- **Whisper Base on the GPU (11-06, #227, b6ff781a3).** On-device AI › Speech: "Base GPU ·
+  Many languages" is listed with "Runs on the GPU and uses little CPU. Many languages, 30-second
+  window." and "Try it on this phone's GPU" (dimmed with "No usable GPU found on this phone"
+  only where there is no OpenCL). Seen on pong 11-06 up to install and select; still owed: (1) the
+  Voice benchmark runs Base GPU on the GPU and afterwards the sheet, the Model centre row and the
+  Speech picker card read "Recommended" or "Slower on this phone"; (2) dictation with it on Auto
+  and on GPU gives correct text, and on CPU still works (slow); (3) the accelerator dialog lists
+  Auto, CPU and "GPU · uses less battery, may be slower"; (4) no crash or `stt_gpu_unavailable` in
+  logcat on pong; (5) the speech card offers no language or window switch for it; the install sheet's size pill
+  (Base / Small / Base GPU, size on a second line, aadab9db7) fits on pong at font 1.0 and 1.3,
+  as it did on emu2; (6) put the
+  developer's own speech model back as the voice-input model afterwards. Pong reference: 59 s of
+  audio in ~14 s on GPU, Small.en CPU ~17 s · pong.
+- CRT signal (wave 9), on pong: (1) default CRT text is no softer than before; (2) colour
+  boundaries (a coloured prompt on dark, an icat image's edges) blend sideways; (3) Composite
+  signal on turns a dithered icat image's checker into flat shades, and off restores it; the
+  switch appears only with a CRT style, on Terminal and Performance pages; (4) status bar, dock
+  and keyboard chrome look unchanged.
+- **Dictation cleanup rows on Voice input.** Settings > Voice input > Dictation cleanup: "Cleanup model" reads "Automatic · <model>" and a tap lists Automatic, each installed chat model and "Remote · <model>" only when a remote is set up, with "Get more models" opening the Model centre; Raw text is never listed (a stored Raw text shows as the summary until another is picked). "Runs on" shows CPU | GPU (hidden with no GPU path and when the pick is Remote), follows the model in use, and agrees with the Tidy dictation sheet afterwards. "Level" is a Light | Polished pill that agrees with the sheet; turning "Clean up dictation" off dims all three rows · pong.
+- **Keyboard glass kept across chrome applies (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace and Fancier Glass on: swipe Home ↔ Workspace 5 times, open
+  and close the keyboard, change the wallpaper, rotate. The keyboard's glass shows the wallpaper
+  under it at every step, its rim and light look as before, and nothing goes blank or freezes on
+  an old wallpaper. Trace: Chrome.kb.glass well under 1 ms after the first build · pong.
+- **Keyboard palette built once per set of inputs (11-07, perf/page-settle-stalls).** With the
+  in-app keyboard up on the Workspace: flip light/dark in Android settings, change the wallpaper
+  under Material You, switch the launcher's colour scheme on and off, change the keyboard theme
+  (System, Light, Dark), the Glass Look (Scheme, Obsidian) and the key opacity. After each, the
+  keys and legends re-tint at once to match (no keyboard hide and show needed) and the legends
+  stay readable on light and dark wallpaper. Trace over 5 Home ↔ Workspace round trips:
+  `Keyboard.palette.glass` well under 1 ms where it has no `Keyboard.palette.glass.build`
+  child; `.build` only on the first apply and after a faces, tone or theme change · pong.
+- **Home swipe up follows the finger (11-07).** Settings > Home > Gestures, Swipe up set to the
+  app drawer: on a Home page's free area the drawer rises with the finger, its top edge staying
+  level with the fingertip the whole way (no running ahead, no dock hop; 11-08, fix/drawer-pull-1to1),
+  and comes back down with it when the finger reverses; let go after about 100 dp of travel
+  (roughly 2 cm), or flick after a short drag, and it opens, a short drag eases back (the same finger
+  distances as before the fix); the first pull after a cold start (no earlier
+  drawer use) is as smooth as the later ones; page swipes, widget touches, long press, double tap,
+  two-finger swipes and pinch behave as before; Swipe up set to anything else (palette, none,
+  lock) works exactly as before; swipe down is unchanged · pong.
+- **Custom Look is kept (11-07, fix/custom-look-kept).** Appearance editor › Customization: set a
+  Custom look (Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth 90, Rim Bright). (1) Tap Solid,
+  then Custom: every slider is back where you left it. (2) Tap Solid, Done, open the editor again
+  (it opens on Solid), tap Custom: your values are back. (3) Tap Solid, then Back through
+  "Discard changes": the look is as it was before, and Custom still brings back the same values.
+  (4) From a preset move one slider: the Custom chip lights, then Solid and Custom again keeps that
+  slider. (5) The same on the Home, Workspace and a surface card (Status bar, Dock, Keyboard): move
+  Opacity, tap Solid, then Custom: the card's own values are back, also after Done and reopen;
+  Discard leaves the card as it was · pong.
+- **Show wallpaper off reaches every surface (11-07, fix/wallpaper-off-chrome).** Appearance
+  editor > Global > Show wallpaper off, Done: no wallpaper picture, blurred or sharp, on the
+  keyboard, the extra-keys bar, the band under the keyboard, the dock, the status bar, the nav
+  strip or a floating window's bar; each is plain tint like the terminal panes. Check with the
+  keyboard up and down, on Home and on Workspace, in a Docked and a Floating dock, with the
+  keyboard's, extra keys' and status bar's Blur detached to a non-zero value. Then Show wallpaper
+  back on: the blurs return as they were · pong.
+- **Travel keyboard dressed by the frame's apply, IME handed over after the landing (11-07,
+  perf/page-settle-stalls).** Swipe Home → Workspace slowly with the Workspace's keyboard
+  remembered up, in the Glass and Solid Looks, Docked and Floating dock: the keys rise from the
+  bottom already in their glass and legends, with no flash of plain keys in the first frames.
+  Swipe back half way and let go: the keyboard goes down and Home's search field still opens the
+  phone's keyboard. Land on the Workspace and tap the terminal: only the in-app keyboard shows,
+  never the phone's. Land on the Display place with the phone's keyboard in use there: it still
+  takes the phone's keyboard. Trace over 5 round trips: no `Chrome.kb.host` under
+  `Keyboard.setContainerVisible`, no `Keyboard.suppressSystemIme` inside `Wall.preRollKeyboard`
+  or `Wall.settleChrome`, one in a posted message just after the landed frame · pong.
+- **Top-pane frost cut with the frame's commit (11-08, perf/swipe-main-thread).** Swipe Home2 ↔
+  Workspace 5 times slowly and 5 times fast, keyboard remembered up and down on the Workspace,
+  Docked and Floating dock, status bar at the top: the status bar's glass and the strip behind
+  the system bar show the wallpaper under them on every frame of the slide and at the landing,
+  with no frame of stale or blank frost as the bar changes dress at the seam. Change the
+  wallpaper and open the Appearance editor once: the bar's frost follows. Trace: no drag frame
+  holds two `Frost.updateTopPane` passes; under `Wall.chromeTravel`, the new `Travel.*`,
+  `Place.hosts.*` and `Settle.*` sections name the rest of each slow frame · pong.
+- **A finger on the focused pane leaves the bar alone (11-08, perf/swipe-ends).** On the
+  Workspace with one pane and with a split, keyboard up and down, Docked and Floating: start 5
+  Home2 <-> Workspace swipes on the terminal; the terminal keeps drawing through each slide. Tap
+  the pane that has focus: nothing in the bar changes. In a split, tap the other pane: it takes
+  focus (cursor, border, dim) and the window chip's label follows it. With a Home float focused,
+  go to the Workspace and tap a pane: the float lets go of the keyboard and the bar selects the
+  window. Switch windows from a chip: the bar refreshes in full. Trace: no `Bar.refresh` under
+  `View.onTouchListener#onTouch - TerminalView`; a tap on the other pane shows only
+  `Bar.chipsOnly` · pong.
+- **Swipe landing and Peek travel (perf/swipe-stalls).** 2026-11-08 · 96f3c94ae, 30270fe41 ·
+  The place settle now runs just after the landed frame. Home2 → Workspace (keyboard remembered
+  up): the keyboard is up, the extra keys live, the terminal at its keyboard-up size, the window
+  chips on the bar; Workspace → Home2: the keyboard away, the A–Z bar and apps row on Home, the
+  grid at its full height. Swipe back the instant a page lands, ten times each way: never a
+  half-landed chrome (keyboard over Home, dock at the wrong height). A drag that springs back
+  changes nothing. Reduced motion on: every swipe lands as before. Docked and Floating, keyboard
+  up and down, one pane and a split. Peek glass dock: the card's reflection fades to the screen's
+  edge at rest after each landing, and the strip under the pill matches it · emulator or pong.
+- **A dock icon let go at the screen's edge goes back (11-08, fix/dock-drop-left-edge).** Docked
+  and Floating, keyboard down, on Home2 and Home1, with two dock pages: lift a dock icon
+  (long-press, slide sideways) and let go at the screen's leftmost edge, at dock height and up
+  over Home; rest there first so Home's page (and the dock's, on its second page) turns, then let
+  go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
+  hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **The Workspace is Terminal, Display and Assistant pages (11-09, feat/workspace-family,
+  ADR 0025).** With an Assistant page and a Display page on the wall: the Assistant page wears
+  what a terminal page wears (status bar, extra keys, dock rows as set; the window bar without
+  window chips). Type in the composer with the soft keyboard up and with the in-app keyboard up:
+  the composer and its send button are never under the extra keys, the dock or a keyboard. Swipe
+  Terminal ↔ Assistant ↔ Display ten times: no chrome moves or redraws at landing. Swipe Home ↔
+  Assistant: the same crossing as Home ↔ Terminal. Open Appearance and Layout from a long-press on
+  the Assistant page's chrome: the title says "Workspace layout", the Where chip "Workspace
+  pages", and a change made there shows on the terminal and the Display page. Upgrade an install
+  that had its own Display layout: the Display page now wears the terminal's. Minimal mode on: the
+  Assistant page wears the minimal layout · emulator.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **Example shaders (11-09, feat/shader-examples).** Wallpaper picker, Shader kind: under your shaders an "Examples" heading and five tiles (Plasma, Aurora, Drift, Caustics, Starfield), none with an In use border, each with a moving thumbnail like the saved ones; with no saved shaders the heading is still there. At font scale 1.3 the heading and tile names stay on one line. Tap Aurora: the editor shows its name and code, Quality Half, Rate 30, the line "Example. Apply saves a copy you can edit.", and no Delete. Apply: the wallpaper moves, the list shows a saved "Aurora" tile with the border and the Aurora example is still under Examples. Open Aurora again and Apply: a second saved shader, "Aurora 2". Edit and delete the saved copy: the example is unchanged. Back out of an example without Apply: nothing new in the list. Look at each example running: Drift takes the look's colours and shifts a little with Home pages; Caustics brightens near a touch; Starfield is light with dark off and dark with it on; none drops frames at Half and 30 fps · emulator, then pong.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **Wallpaper kind pills carry glyphs (feat/kind-glyphs).** 2026-11-09 · Open the Wallpaper
+  picker: Photo, Video and Shader each show a glyph left of the label, in the label's colour
+  (checked and unchecked). Light, dark and the launcher's scheme theme; font scale 1.3: the three
+  segments still fit one line, no clipped label. Dock style and the editor's Quality and Frame
+  rate rows are still text-only (a check mark on the selected one, as before) · pong.
 
-- 2026-10-15 · stronger glass edges · The same three Looks on pong with a photo wallpaper: the
-  edge reads at a glance on the dock, the keyboard and the panes, and is not too strong (no
-  smeared or mirrored band that distracts, no glare on a pressed key or under a finger) · pong, by
-  eye.
-- 2026-10-15 · voice edit keeps the cleanup's marks · Dictate a sentence the cleanup changes, tap the text to edit: the changed and added words stay in the accent colour and the struck removed words are gone. Type inside a marked word, before it and after it, delete across a mark's edge, press ✓: the marks moved with the text (typing inside grows the mark, at its edges stays plain) and the committed text is exactly what was shown · pong, by voice.
-- 2026-10-15 · Low-memory preset · Settings → App behavior → Low-memory preset, Apply: back on the launcher it is the Solid look with an opaque terminal, no cursor trail, no effect, and the Reduce idle activity switch is on; picking another look in Appearance brings the old look back · pong, by hand.
-- 2026-10-15 · Cursor trail Off · Appearance editor → Terminal → Cursor trail: Off stops the trail at once, a style turns it back on, Cancel restores the earlier state, and Settings shows the same on/off · pong, by hand.
-- 2026-10-12 · PR #64 · App chips on a light chip (light theme or a light Look): the icon's ring is
-  the dark one, not the white one; on the emulator the light chip's ring was only faintly pale
-  (2026-10-14) · pong, by hand, night mode off.
-- 2026-09-27 · voice panel · Keyboard → Voice input → Mic sensitivity (Normal, High): soft speech at
-  arm's length is picked up on both; High lets in more of a nearby voice or video, Normal fewer;
-  keyboard clicks, a fan or air conditioning alone never open a phrase on either · pong, by hand.
-- 2026-10-12 · fix(appearance): Custom starts from the Look on screen (with no Custom saved;
-  a saved one now comes back instead) · On pong, apply Clear,
-  Done, reopen the editor, tap Custom: the sliders show Clear's numbers and the look does not
-  change. Tweak Blur, tap Mist, tap Custom: the tweak is back. Undo: Clear again · pong, by hand.
-- 2026-10-12 · PR #63 · The resting look at Clear and Mist on pong: the outer ~2 dp of every rim
-  now mirrors the wallpaper (quarter-circle bevel along the true normal); it should read as a
-  thick glass edge, not a double line. If it reads wrong, the profile in `GlassRefraction` is the
-  dial, not the Looks.
-- 2026-10-12 · PR #63 · Frame timing with Bend 30 and Dispersion 100 on pong: page slides and
-  keyboard up/down at 90 Hz, no frame over 11 ms · `scripts/perf-baseline.sh`.
-- 2026-10-12 · PR #63 · Dispersion fringing shows on the city wallpaper between 50 and 100%; on
-  a blue test picture it was only measurable, not visible.
-- 2026-10-12 · PR #67 · Export settings, then Import settings on pong as the default home: the
-  launcher comes back as home within a few seconds with the same look, layout and terminal font
-  size, and nothing asks to pick a home app.
-- 2026-10-12 · PR #64 · The chip strip with your real usage on pong: Shizuku, Solid Explorer and
-  the keyboard types as named chips, and typing "s" pins Shizuku.
-- 2026-10-12 · commit "feat(agent-skills): pack the launcher and speech skills for tlstore" · With
-  both tarballs from `scripts/pack-agent-skills.sh` unpacked into `~/.agents/skills/` and each
-  linked from `~/.claude/skills/`, Claude Code and Codex each: open a pane beside the shell and
-  wait on it; answer "how do I change the terminal font" from the docs, naming the settings path;
-  with the speech skill, read one answer aloud and stop when told · pong, by hand.
-- 2026-10-13 · commit "fix(dock): let a lone pinned-apps row's icons fill its bar" · The pinned
-  apps alone on their dock or plank (no A–Z row, no extra keys), Docked and Floating, Icon size at
-  its smallest, the default and its largest, with 5 and 10 apps, keyboard up and down: the bar is
-  as tall as before and the icons fill it, centred between the ticks and the far rim; 10 apps
-  never touch; an A–Z scrub's matches in that row are the same size; the Icon size slider reads
-  the bigger icon, and adding an A–Z row in Layout shrinks the icons back to today's size · pong,
-  by hand.
-- 2026-10-15 · commit "perf(terminal): replay the grid between row crossings of a smooth scroll"
-  · Drag, fling and let settle a long transcript in the normal buffer, one pane and split, with a
-  transparent frame and an opaque one, keyboard up and down: every frame looks as before (no
-  blank or stale grid, the row coming in at the bottom and leaving at the top is whole, the find
-  overlay and the padding fill track the text); output arriving and the cursor blinking mid-scroll
-  show at once; a pane snapshot (split reveal) mid-fling is whole; on Android 10 the
-  `Terminal.scrollCache.draw` frames in a trace cost one node draw, not a render · pong, by hand.
-- 2026-10-15 · commit "perf(terminal): keep a scrolled row's recording, record only the rows that
-  came in" · Fill the transcript with mixed content (bold, 256 colours, a URL with underlines on,
-  a kitty image if easy, and a few text sizing blocks: `printf '\e]66;s=2;Big\a\n'`, no probe
-  exists in project-docs/verification), then drag and fling through it, one pane and split: every
-  row lands where it did before, rows under a text block and the block itself stay whole and in
-  place (also with the block's anchor just above the top edge), the cursor row looks right when it
-  scrolls back in, and the row entering at the bottom is whole · pong, by hand.
-- 2026-10-15 · PR #75 · The natural glass on pong at Clear, Mist and Tint: the rim reads lit from
-  above and softer below, the band brightens toward the lit rim and the edge shows the wallpaper
-  more clearly than the frost; it should read as real glass, not a double line or a halo. Frame
-  timing with the Looks' values: page slides, keyboard up/down and a dock tap at 90 Hz, no frame
-  over 11 ms · `scripts/perf-baseline.sh`, pong, by hand.
-- 2026-10-15 · voice, by voice only (nothing over adb can start a dictation; the agent routes
-  through the API passed on 2026-10-15) · In one sitting on pong: tap the waiting text on the
-  dictation card to edit it (caret where tapped, keyboard under the card, ✓ inserts the edit, Undo
-  and Redo, a 7-line scroll does not open the editor); a Polished list shows on its own lines and
-  pastes whole in a shell with bracketed paste; a 90-second dictation with E2B on the GPU shows
-  `cleanup early` lines in logcat while listening and the cleaned text lands 1–2 s after Pause,
-  with `lang=en sent=N/M` lines and no `fallback:context_echo`; with a multilingual Whisper model
-  Voice language Auto-detect names a non-English language on the card; an "um" is struck through
-  and changed words are in the accent, Undo gives the as-heard text; the screen stays on while
-  listening and sleeps after about 3 minutes untouched (timeout 30 s); the grab handle moves pill
-  and panel, a sideways swipe never discards, a double tap returns it to the top-right · pong, by
-  hand.
-- 2026-10-13 · commit "feat(tai): stop a model that runs the phone under 448 MB free" and "fix(tai):
-  book a memory stop as a stop, not a crash" · Start an E4B GPU load at about 3.7 GB free with a
-  memory hog beside it: `tai logs` shows `oom_guard … stopped the model to keep the phone
-  responsive`, the runtime goes away, the launcher and Shizuku stay up, and the Model centre and
-  `tai logs` book it as a stop, not a crash. Not run by the agent: the 2 GB watchdog would unload
-  first and a load like this froze the phone once · pong, by hand, with everything saved.
-- 2026-10-14 · commit "feat(keyboard): slide a layout row's buttons open beneath it" · On pong the
-  row opened in about 0.3 s with animations on, ripple included (`~/reports/devcheck-2026-10-15-pong/03-row-open-anim1.mp4`);
-  judge whether that reads as the intended ~200 ms. TalkBack reads "name, second line, actions
-  hidden" and offers Show/Hide. Typing in the layout editor with the phone's keyboard shrinks the
-  XML field above it · pong, by hand.
+- **Video import shows progress (feat/video-progress).** 2026-11-09 · Wallpaper picker, Video: choose an animated GIF. Under "Choose video or GIF" a bar appears with "Copying…", then fills with "Converting GIF to video… NN%" rising to 100; Choose, the rate pills and Back to photo are greyed meanwhile; then the bar goes and the line shows "In use: name" with its hint. Choose a plain MP4: a brief "Copying…", then the same final state. Pick a broken file: the bar goes and the error line shows, controls back. Rotate or leave mid-import: no crash; reopen later and the final state is shown. Font scale 1.3: the label stays on one line · pong.

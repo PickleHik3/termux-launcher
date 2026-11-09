@@ -49,18 +49,19 @@ public class WallpaperModePreferencesTest {
 
         assertFalse(preferences.isUseSystemWallpaperEnabled());
         assertEquals(100, preferences.getTerminalBackgroundOpacity());
-        assertEquals(100, preferences.getAppBarOpacity());
-        assertEquals(0, preferences.getExtraKeysBlurRadius());
+        assertEquals(100, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(37, preferences.getWallpaperEnabledTerminalBackgroundOpacity());
         assertEquals(63, preferences.getWallpaperEnabledAppBarOpacity());
-        assertEquals(19, preferences.getWallpaperEnabledExtraKeysBlurRadius());
+        // The remembered blur is the blur worn, which sits on a Frost stop: 19 wears 17.
+        assertEquals(17, preferences.getWallpaperEnabledExtraKeysBlurRadius());
 
         ChromePolicy.applyWallpaperModePreferences(preferences, true);
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(37, preferences.getTerminalBackgroundOpacity());
-        assertEquals(63, preferences.getAppBarOpacity());
-        assertEquals(19, preferences.getExtraKeysBlurRadius());
+        assertEquals(63, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(17, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -82,8 +83,8 @@ public class WallpaperModePreferencesTest {
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(25, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
         assertEquals(60, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
-        assertEquals(25, preferences.getExtraKeysBlurRadius());
-        assertEquals(60, preferences.getAppBarOpacity());
+        assertEquals(25, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(60, preferences.getTerminalBackgroundOpacity());
     }
 

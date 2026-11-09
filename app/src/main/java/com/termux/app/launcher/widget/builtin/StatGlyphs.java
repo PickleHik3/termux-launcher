@@ -3,9 +3,10 @@ package com.termux.app.launcher.widget.builtin;
 import androidx.annotation.NonNull;
 
 /**
- * The Nerd Font glyphs the built-in widgets put where a reading's name would go: a glyph and its
- * value, never a word. CPU and memory are the status bar's own glyphs, so a reading looks the same
- * wherever the launcher shows it. Android-free; the word stays as the glyph's spoken description.
+ * The Nerd Font glyphs the built-in widgets put beside a reading: on the Device widget a glyph
+ * leads its bar's word label ("RAM 3.1/7.7 GB"), never stands in for it. CPU and memory are the
+ * status bar's own glyphs, so a reading looks the same wherever the launcher shows it.
+ * Android-free.
  */
 public final class StatGlyphs {
     private StatGlyphs() { }

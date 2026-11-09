@@ -52,7 +52,7 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   (`x11-server/.../x11/input/`: `InputEventSender`, `TouchInputHandler`, `TapGestureDetector`,
   `SwipeDetector`, `InputStub`, `InputStrategyInterface`, `RenderData`) keep that license; the
   notice is reproduced in THIRD_PARTY_LICENSES.txt.
-- **MNN 3.6.1** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
+- **MNN 3.6.2** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
   arm64 native builds and a patched UTF-8 stream processor.
 - **nlohmann/json 3.11.2** — MIT — Copyright 2013–2022 Niels Lohmann. It is statically included in
   the MNN Android JNI library.
@@ -89,6 +89,12 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   licenses; the upstream license audit and glyph notices are reproduced in THIRD_PARTY_LICENSES.txt.
   The glyph names in
   `app/src/main/res/raw/nerd_font_glyphs.csv` are generated from that font's own name table.
+- **[Libron](https://github.com/nicoverbruggen/libron)** — SIL OFL 1.1, with Reserved Font Name
+  "Libron" — Copyright 2026 Nico Verbruggen; Libron is a modified version of Readerly (Copyright
+  2026 Nico Verbruggen), itself based on Newsreader (Copyright 2020 The Newsreader Project
+  Authors). Version 0.31. The Bold face is shipped unmodified and under its own name as
+  `app/src/main/assets/fonts/Libron-Bold.ttf`, drawn by the Clock widget's Analog and Numerals
+  faces. The license text is reproduced in THIRD_PARTY_LICENSES.txt.
 - **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
   Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
   `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
@@ -119,7 +125,7 @@ The Android application also uses these independently maintained libraries:
 - Apache Commons IO — Apache-2.0
 - Google Guava — Apache-2.0
 - Google Gson — Apache-2.0 — through LiteRT-LM
-- Google LiteRT 1.4.2 and LiteRT-LM 0.17.1 — Apache-2.0
+- Google LiteRT 1.4.2 and LiteRT-LM 0.19.0 — Apache-2.0
 - Kotlin standard library, kotlin-reflect and kotlinx.coroutines — Apache-2.0 — through LiteRT-LM
   and AndroidX
 - Lottie for Android — Apache-2.0 — renders the bundled Meteocons weather animations

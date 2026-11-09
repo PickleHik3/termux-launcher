@@ -158,7 +158,7 @@ public class SurfacePresetsBatchTest {
         tuned.setWallpaperBackdropDim(12);
         Map<String, Object> look = new LinkedHashMap<>(SurfacePresets.captureLook(tuned));
         // A look stored before corners were Layout's still names them; apply must skip them alike.
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, 9);
+        look.put(SurfacePresets.cellKey(null, SurfaceProperty.CORNER_RADIUS), 9);
         looks.add(new SurfacePresets.Preset(SurfacePresets.CUSTOM_ID,
             R.string.termux_surface_preset_custom, look));
         return looks;

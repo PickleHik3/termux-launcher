@@ -61,6 +61,7 @@ public class AppearanceSnapshotTest {
         preferences.setTerminalContrastLevel("harder");
         preferences.setTerminalCursorTrailStyle("comet");
         preferences.setTerminalRetroEffect("crt_amber");
+        preferences.setTextSizePercent(130);
         // Layout mode's Corners and Margin.
         int corners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
         int sideGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
@@ -90,6 +91,65 @@ public class AppearanceSnapshotTest {
         assertEquals("default", preferences.getTerminalContrastLevel().value);
         assertEquals("default", preferences.getTerminalCursorTrailStyle());
         assertEquals("none", preferences.getTerminalRetroEffect());
+        assertEquals(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT, preferences.getTextSizePercent());
+    }
+
+    /**
+     * Margin writes the layout margin and nothing of the pane gap: a store that holds a gap keeps
+     * it, a fresh one is not given one, and Split gap's own write dirties the editor and Undo
+     * restores it.
+     */
+    @Test
+    public void marginLeavesTheSplitGapAlone() {
+        assertFalse(store.contains(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        preferences.setLayoutMarginDp(false, 30);
+        assertFalse(store.contains(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP, preferences.getTerminalPaneGap());
+
+        preferences.setTerminalPaneGap(9);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        preferences.setLayoutMarginDp(false, 5);
+        assertEquals(9, preferences.getTerminalPaneGap());
+        preferences.setTerminalPaneGap(20);
+        assertNotEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(9, preferences.getTerminalPaneGap());
+    }
+
+    /** The Text size slider dirties the editor, and its way back cleans it again. */
+    @Test
+    public void thePaneBordersAreSnapshottedSignedAndRestored() {
+        AppearanceSnapshot snapshot = AppearanceSnapshot.capture(preferences);
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        preferences.setTerminalPaneBorderColour("custom");
+        preferences.setTerminalPaneBorderCustom(0xFFDC143C);
+        preferences.setTerminalPaneFocusColour("same_as_border");
+        preferences.setTerminalPaneFocusCustom(0xFF00FF00);
+        preferences.setTerminalPaneGlow(true);
+        preferences.setTerminalPaneGlowColour("tertiary");
+        preferences.setTerminalPaneGlowCustom(0x800000FF);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        snapshot.restore(preferences);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_BORDER_COLOUR,
+            preferences.getTerminalPaneBorderColour());
+        assertEquals(0, preferences.getTerminalPaneBorderCustom());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_FOCUS_COLOUR,
+            preferences.getTerminalPaneFocusColour());
+        assertEquals(0, preferences.getTerminalPaneFocusCustom());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW, preferences.getTerminalPaneGlow());
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GLOW_COLOUR,
+            preferences.getTerminalPaneGlowColour());
+        assertEquals(0, preferences.getTerminalPaneGlowCustom());
+    }
+
+    @Test
+    public void theSignatureSeesTheTextSize() {
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        preferences.setTextSizePercent(115);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        preferences.setTextSizePercent(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
 
     /**
@@ -198,7 +258,8 @@ public class AppearanceSnapshotTest {
 
         session.restore(preferences);
 
-        assertEquals(63, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        // 63 dp is past the last Frost stop: its 36 dp.
+        assertEquals(36, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
         assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
     }
@@ -219,8 +280,34 @@ public class AppearanceSnapshotTest {
 
         assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
-        assertEquals(55, preferences.getStatusBarTintStrength());
+        assertEquals(55, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+    }
+
+    /**
+     * #84: Style, Corners and Margin are one across the wall, so an edit made from Home's side
+     * is the Workspace's value, undone as it is, and no key of Home's own is ever written back.
+     */
+    @Test
+    public void undoPutsTheLinkedShapeBackAndWritesNoHomeKeys() {
+        preferences.setLayoutCornersDp(false, 30);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setLayoutStyle(true, TermuxAppSharedPreferences.LayoutStyle.FLOATING);
+        preferences.setLayoutCornersDp(true, 6);
+        preferences.setLayoutMarginDp(true, 40);
+        assertEquals("one value on both halves", 6, preferences.getLayoutCornersDp(false));
+        assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+
+        entry.restore(preferences);
+
+        assertEquals(30, preferences.getLayoutCornersDp(true));
+        assertEquals(30, preferences.getLayoutCornersDp(false));
+        assertFalse(store.contains(TERMUX_APP.KEY_HOME_LAYOUT_STYLE));
+        assertFalse(store.contains(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS));
+        assertFalse(store.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
     }
 }

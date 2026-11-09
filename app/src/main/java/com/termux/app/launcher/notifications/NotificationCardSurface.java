@@ -580,6 +580,44 @@ public final class NotificationCardSurface {
         @Nullable RemoteInput[] remoteInputs,
         @Nullable CharSequence reply
     ) {
+        return sendPendingIntent(host.context(), pendingIntent, remoteInputs, reply);
+    }
+
+    /**
+     * The first action of {@code notification} that takes a typed reply, or null: the one a card's
+     * composer and the Notifications widget's Reply both answer through.
+     */
+    @Nullable
+    public static Notification.Action replyAction(@Nullable Notification notification) {
+        if (notification == null || notification.actions == null) return null;
+        for (Notification.Action action : notification.actions) {
+            if (action != null && action.actionIntent != null
+                && firstFreeformRemoteInput(action.getRemoteInputs()) != null) return action;
+        }
+        return null;
+    }
+
+    /**
+     * Sends {@code action}'s intent with {@code text} in its free-form RemoteInputs, as a card's
+     * composer does. Blank text sends nothing.
+     */
+    public static boolean sendReply(@NonNull Context context, @NonNull Notification.Action action,
+                                    @Nullable String text) {
+        String value = text == null ? "" : text.trim();
+        if (TextUtils.isEmpty(value) || action.actionIntent == null) return false;
+        return sendPendingIntent(context, action.actionIntent, action.getRemoteInputs(), value);
+    }
+
+    /**
+     * Sends {@code pendingIntent}, filling {@code reply} into the free-form {@code remoteInputs}
+     * when both are given. False when the intent has been cancelled.
+     */
+    public static boolean sendPendingIntent(
+        @NonNull Context context,
+        @NonNull PendingIntent pendingIntent,
+        @Nullable RemoteInput[] remoteInputs,
+        @Nullable CharSequence reply
+    ) {
         try {
             Intent fillIn = null;
             if (remoteInputs != null && reply != null) {
@@ -592,7 +630,7 @@ public final class NotificationCardSurface {
                 }
                 RemoteInput.addResultsToIntent(remoteInputs, fillIn, results);
             }
-            pendingIntent.send(host.context(), 0, fillIn);
+            pendingIntent.send(context, 0, fillIn);
             return true;
         } catch (PendingIntent.CanceledException exception) {
             Log.d(LOG_TAG, "Notification action is no longer available: " + exception.getMessage());

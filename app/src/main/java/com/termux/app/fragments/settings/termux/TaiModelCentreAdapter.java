@@ -178,6 +178,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean installing;
         @NonNull String note = "";
         boolean noteIsError;
+        /** Shown quieter: a model this phone is unlikely to run well. Still installable. */
+        boolean dimmed;
         /** The note is Hugging Face asking for a token: offer "Add token" under it. */
         boolean tokenAction;
         /** A speech-output (voice) model: its own menu and install path, the wave icon like speech. */
@@ -200,7 +202,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull
         String signature() {
             return title + '|' + subtitle + '|' + pillPrimary + '|' + tonePrimary + '|' + pillSecondary + '|'
-                + pillBackend + '|' + pillSpeed + '|' + extra + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction + '|' + highlighted;
+                + pillBackend + '|' + pillSpeed + '|' + extra + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + dimmed + '|' + tokenAction + '|' + highlighted;
         }
     }
 
@@ -757,6 +759,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                 card.setStrokeColor(role(context, androidx.appcompat.R.attr.colorPrimary));
                 card.setStrokeWidth(next.highlighted ? Math.round(2 * context.getResources().getDisplayMetrics().density) : 0);
             }
+            core.setAlpha(next.dimmed ? 0.6f : 1f);
             setText(note, next.note);
             note.setTextColor(role(context, next.noteIsError ? androidx.appcompat.R.attr.colorError
                 : com.google.android.material.R.attr.colorOnSurfaceVariant));

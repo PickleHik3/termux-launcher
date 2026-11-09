@@ -41,6 +41,8 @@ public class SuggestionBarAppDiscoveryTest {
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         shadowPackageManager = shadowOf(context.getPackageManager());
         suggestionBarView = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        suggestionBarView.setDockIconSizePx(Math.round(24f * suggestionBarView.getResources().getDisplayMetrics().density));
         suggestionBarView.setMaxButtonCount(1);
         appDataProvider = LauncherAppDataProvider.getInstance(context);
         appDataProvider.invalidate();

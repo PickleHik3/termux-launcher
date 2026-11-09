@@ -50,7 +50,8 @@ public final class TerminalRow {
     private int mSpaceUsed;
 
     /**
-     * If this row has been line wrapped due to text output at the end of line.
+     * If this row has been line wrapped due to text output at the end of line. Written through
+     * {@link #setLineWrap}, so the stamp moves.
      */
     boolean mLineWrap;
 
@@ -83,7 +84,8 @@ public final class TerminalRow {
 
     /**
      * The OSC 133 mark of this row, one of the {@code MARK_*} values. Marks live on the row rather than
-     * in a separate list so that they follow it through the circular buffer for free.
+     * in a separate list so that they follow it through the circular buffer for free. Written
+     * through {@link #setShellIntegrationMark}, so the stamp moves.
      */
     public byte mShellIntegrationMark;
 
@@ -108,6 +110,27 @@ public final class TerminalRow {
     private int[] mTextSizes;
 
     /**
+     * Where the last {@link #locateColumn} found a cell: the cell that starts at column
+     * {@code mHintColumn} has its code point at {@code mText[mHintIndex]}, and nothing before that
+     * index has changed since. Text is written left to right, so the next write usually starts its
+     * walk here instead of at column 0. Every change to {@link #mText} or {@link #mCharWidths}
+     * happens in {@link #setChar}, at or after the index its own walk just recorded, or in
+     * {@link #clear} and {@link #widenCell}, which put the hint back to the start of the row.
+     */
+    private int mHintColumn;
+    private int mHintIndex;
+
+    /**
+     * Moves on every change to what this row holds: its text, widths, styles, side tables, wrap
+     * flag, mark and placements. Every method that changes any of them moves it, and the fields
+     * other classes may read ({@link #mText}, {@link #mLineWrap}, {@link #mShellIntegrationMark},
+     * {@link #mHasBitmap}) are written only from here. A reader that kept the stamp along with the
+     * row object knows the row is unchanged while both are the same; the stamp says nothing about
+     * how two different row objects compare. The hint above is not content and does not move it.
+     */
+    private long mStamp;
+
+    /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
@@ -119,6 +142,34 @@ public final class TerminalRow {
     }
 
     /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    /** Whether this row soft-wraps into the one below it. */
+    public boolean getLineWrap() {
+        return mLineWrap;
+    }
+
+    /** Whether this row soft-wraps into the one below it. */
+    void setLineWrap(boolean lineWrap) {
+        mStamp++;
+        mLineWrap = lineWrap;
+    }
+
+    /** Set the OSC 133 mark, one of the {@code MARK_*} values. */
+    void setShellIntegrationMark(byte mark) {
+        mStamp++;
+        mShellIntegrationMark = mark;
+    }
+
+    /** Replace one cell's style without touching its text (DECCARA and DECRARA). */
+    void setStyleAt(int column, long style) {
+        mStamp++;
+        mStyle[column] = style;
+    }
+
+    /** See {@link #mStamp}: equal stamps on the same row object mean nothing in it changed. */
+    public long getStamp() {
+        return mStamp;
+    }
+
     public boolean hasDecorationColors() {
         return mDecorationColors != null;
     }
@@ -180,6 +231,7 @@ public final class TerminalRow {
 
     /** Store a packed record, or zero to make the cell plain again. */
     void setTextSizeRecord(int column, int record) {
+        mStamp++;
         if (mTextSizes == null) {
             if (record == 0)
                 return;
@@ -245,6 +297,7 @@ public final class TerminalRow {
 
     /** Forget every text sizing record on this row, leaving the text where it is. */
     void clearTextSizes() {
+        mStamp++;
         mTextSizes = null;
     }
 
@@ -252,6 +305,7 @@ public final class TerminalRow {
      * NOTE: The sourceX2 is exclusive.
      */
     public void copyInterval(TerminalRow line, int sourceX1, int sourceX2, int destinationX) {
+        mStamp++;
         mHasNonOneWidthOrSurrogateChars |= line.mHasNonOneWidthOrSurrogateChars;
         final int x1 = line.findStartOfColumn(sourceX1);
         final int x2 = line.findStartOfColumn(sourceX2);
@@ -342,10 +396,12 @@ public final class TerminalRow {
     }
 
     public void clear(long style) {
+        mStamp++;
         Arrays.fill(mText, ' ');
         Arrays.fill(mCharWidths, (byte) 1);
         Arrays.fill(mStyle, style);
         mSpaceUsed = mColumns;
+        mHintColumn = mHintIndex = 0;
         mHasNonOneWidthOrSurrogateChars = false;
         mHasBitmap = false;
         // Erasing a row drops its links and decoration colors, as they belong to the erased text.
@@ -368,21 +424,61 @@ public final class TerminalRow {
     }
 
     void addKittyPlacement(KittyPlacement placement) {
+        mStamp++;
         if (mKittyPlacements == null) mKittyPlacements = new java.util.ArrayList<>(2);
         mKittyPlacements.add(placement);
         placement.anchor = this;
     }
 
     void removeKittyPlacement(KittyPlacement placement) {
+        mStamp++;
         if (mKittyPlacements != null && mKittyPlacements.remove(placement)
             && mKittyPlacements.isEmpty())
             mKittyPlacements = null;
         if (placement.anchor == this) placement.anchor = null;
     }
 
+    /**
+     * This row's first {@code columns} cells as a row {@code columns} wide, cut or padded with
+     * blanks on the right, nothing wrapped: the alternate screen's resize (see
+     * {@link TerminalBuffer#resizeWithoutRewrap}). A wide character the cut would halve goes. The
+     * placements anchored here move to the new row, fitted to its columns.
+     */
+    TerminalRow resizedTo(int columns, long style) {
+        TerminalRow row = new TerminalRow(columns, style);
+        int end = Math.min(mColumns, columns);
+        if (end > 0 && end < mColumns && wideDisplayCharacterStartingAt(end - 1)) end--;
+        if (end > 0) row.copyInterval(this, 0, end, 0);
+        row.mLineWrap = mLineWrap && columns >= mColumns;
+        row.mShellIntegrationMark = mShellIntegrationMark;
+        row.mHasBitmap = mHasBitmap;
+        row.mStamp++;
+        if (mKittyPlacements != null) {
+            java.util.ArrayList<KittyPlacement> carried = takeKittyPlacements();
+            for (KittyPlacement placement : carried) {
+                placement.fitToColumns(columns);
+                row.addKittyPlacement(placement);
+            }
+        }
+        return row;
+    }
+
+    /**
+     * The placements anchored here, which the caller moves to another row, leaving none here; null
+     * when there were none.
+     */
+    java.util.ArrayList<KittyPlacement> takeKittyPlacements() {
+        java.util.ArrayList<KittyPlacement> taken = mKittyPlacements;
+        if (taken == null) return null;
+        mStamp++;
+        mKittyPlacements = null;
+        return taken;
+    }
+
     /** Detach every placement anchored here; returns whether there were any. */
     boolean dropKittyPlacements() {
         if (mKittyPlacements == null) return false;
+        mStamp++;
         for (KittyPlacement placement : mKittyPlacements) placement.anchor = null;
         mKittyPlacements = null;
         return true;
@@ -418,6 +514,7 @@ public final class TerminalRow {
         if (mCharWidths[start] != 1 || column >= mColumns - 1) return false;
         // A sized block already owns how many cells it covers; widening would eat its neighbour.
         if (isTextSizeCell(column) || isTextSizeCell(column + 1)) return false;
+        mStamp++;
         if (wideDisplayCharacterStartingAt(column + 1))
             setChar(column + 1, ' ', mStyle[column + 1]);
         int nextStart = findStartOfColumn(column + 1);
@@ -427,6 +524,8 @@ public final class TerminalRow {
         System.arraycopy(mCharWidths, nextEnd, mCharWidths, nextStart, mSpaceUsed - nextEnd);
         mSpaceUsed -= removed;
         mCharWidths[start] = 2;
+        // The cell after this one is gone, so a hint that points at it no longer does.
+        mHintColumn = mHintIndex = 0;
         mStyle[column + 1] = mStyle[column];
         setDecorationColor(column + 1, getDecorationColor(column));
         setHyperlinkId(column + 1, getHyperlinkId(column));
@@ -434,10 +533,59 @@ public final class TerminalRow {
         return true;
     }
 
+    /**
+     * Walk the row once to the cell covering {@code column}. The result is the index in
+     * {@link #mText} of the code point stored for that cell, shifted left one bit, with bit 0 set
+     * when the column is the right half of a double-width character. Zero-width code points
+     * belong to the cell before them. Returns -1 when the row's cells end before the column. The
+     * walk starts at {@link #mHintColumn} when that is not past the column, and leaves the hint at
+     * the cell it found.
+     */
+    private int locateColumn(int column) {
+        final char[] text = mText;
+        final byte[] widths = mCharWidths;
+        final int used = mSpaceUsed;
+        int currentColumn = 0;
+        int index = 0;
+        if (mHintColumn <= column) {
+            currentColumn = mHintColumn;
+            index = mHintIndex;
+        }
+        for (; index < used; ) {
+            int width = widths[index];
+            if (width > 0) {
+                if (currentColumn + width > column) {
+                    mHintColumn = currentColumn;
+                    mHintIndex = index;
+                    return (index << 1) | (currentColumn < column ? 1 : 0);
+                }
+                currentColumn += width;
+            }
+            index += Character.isHighSurrogate(text[index]) ? 2 : 1;
+        }
+        mHintColumn = mHintIndex = 0;
+        return -1;
+    }
+
+    /** What {@link #locateColumn} answers, from the separate scans, for a row it cannot walk. */
+    private int scanForColumn(int column) {
+        return (findStartOfColumn(column) << 1)
+            | ((column > 0 && wideDisplayCharacterStartingAt(column - 1)) ? 1 : 0);
+    }
+
+    /** Index just past the cell stored at {@code startIndex} and its zero-width code points. */
+    private int endOfColumnText(int startIndex) {
+        int index = startIndex + (Character.isHighSurrogate(mText[startIndex]) ? 2 : 1);
+        while (index < mSpaceUsed && mCharWidths[index] <= 0)
+            index += Character.isHighSurrogate(mText[index]) ? 2 : 1;
+        return index;
+    }
+
     private void setChar(int columnToSet, int codePoint, long style, int decorationColor,
                          int hyperlinkId, int newCodePointDisplayWidth, boolean updateCellMetadata) {
         if (columnToSet < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
+        mStamp++;
         if (updateCellMetadata) {
             mStyle[columnToSet] = style;
             setDecorationColor(columnToSet, decorationColor);
@@ -460,27 +608,66 @@ public final class TerminalRow {
             }
         }
         final boolean newIsCombining = newCodePointDisplayWidth <= 0;
-        boolean wasExtraColForWideChar = (columnToSet > 0) && wideDisplayCharacterStartingAt(columnToSet - 1);
+        // One walk from the start of the row finds the cell under the column. The width of that
+        // cell, whether the column is the right half of a wide character, the wide character that
+        // may start in the next column and where this cell's text ends all come from it. Only a
+        // write that first blanks a neighbouring wide character moves the text and walks again.
+        int located = locateColumn(columnToSet);
+        boolean walked = located >= 0;
+        if (!walked) {
+            // The row's cells end before this column, which a well formed row never does. Keep
+            // the answers the separate scans would give.
+            located = scanForColumn(columnToSet);
+        }
+        boolean wasExtraColForWideChar = (located & 1) != 0;
         if (newIsCombining) {
             // When standing at second half of wide character and inserting combining:
-            if (wasExtraColForWideChar)
+            if (wasExtraColForWideChar) {
                 columnToSet--;
+                if (!walked)
+                    located = scanForColumn(columnToSet);
+            }
         } else {
+            boolean textMoved = false;
             // Check if we are overwriting the second half of a wide character starting at the previous column:
-            if (wasExtraColForWideChar)
+            if (wasExtraColForWideChar) {
                 setChar(columnToSet - 1, ' ', style);
+                textMoved = true;
+            }
             // Check if we are overwriting the first half of a wide character starting at the next column:
-            boolean overwritingWideCharInNextColumn = newCodePointDisplayWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1);
-            if (overwritingWideCharInNextColumn)
-                setChar(columnToSet + 1, ' ', style);
+            if (newCodePointDisplayWidth == 2) {
+                boolean overwritingWideCharInNextColumn;
+                if (textMoved || !walked) {
+                    overwritingWideCharInNextColumn = wideDisplayCharacterStartingAt(columnToSet + 1);
+                } else {
+                    // The next cell starts where this one's text ends, unless this cell is itself
+                    // wide and takes the next column.
+                    int startIndex = located >> 1;
+                    int nextStartIndex = endOfColumnText(startIndex);
+                    overwritingWideCharInNextColumn = mCharWidths[startIndex] == 1
+                        && nextStartIndex < mSpaceUsed && mCharWidths[nextStartIndex] == 2;
+                }
+                if (overwritingWideCharInNextColumn) {
+                    setChar(columnToSet + 1, ' ', style);
+                    textMoved = true;
+                }
+            }
+            if (textMoved) {
+                located = locateColumn(columnToSet);
+                walked = located >= 0;
+                if (!walked)
+                    located = scanForColumn(columnToSet);
+            }
         }
         char[] text = mText;
-        final int oldStartOfColumnIndex = findStartOfColumn(columnToSet);
+        final int oldStartOfColumnIndex = located >> 1;
         final int oldCodePointDisplayWidth = mCharWidths[oldStartOfColumnIndex];
         // Get the number of elements in the mText array this column uses now
         int oldCharactersUsedForColumn;
         if (columnToSet + oldCodePointDisplayWidth < mColumns) {
-            int oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth);
+            int oldEndOfColumnIndex = walked
+                ? endOfColumnText(oldStartOfColumnIndex)
+                : findStartOfColumn(columnToSet + oldCodePointDisplayWidth);
             oldCharactersUsedForColumn = oldEndOfColumnIndex - oldStartOfColumnIndex;
         } else {
             // Last character.

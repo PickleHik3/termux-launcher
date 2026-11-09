@@ -40,14 +40,38 @@
 
     <!-- Shown whenever no server is running, which is the state a home screen rests in: the
          launcher never starts one on its own. -->
-    <LinearLayout
+    <!-- A RelativeLayout, not a FrameLayout: a wrap_content FrameLayout measures a match_parent
+         child at the page's whole size (a plain View answers AT_MOST with the bound), so the
+         panel grew to the page. Here the panel is aligned to the group's edges instead. -->
+    <RelativeLayout
         android:id="@+id/x11_pane_empty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_gravity="center">
+
+    <!-- The text group's own glass panel: the Base Look's blur and radius at the group's rect,
+         under the group's own scrim, so the message and buttons stay readable over any
+         wallpaper. Shown only while the page is see-through (X11PaneFrame.applyEmptyPanel); an
+         opaque page has a ground already. -->
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/x11_pane_empty_glass"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_alignLeft="@+id/x11_pane_empty_group"
+        android:layout_alignTop="@+id/x11_pane_empty_group"
+        android:layout_alignRight="@+id/x11_pane_empty_group"
+        android:layout_alignBottom="@+id/x11_pane_empty_group"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/x11_pane_empty_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:gravity="center"
         android:orientation="vertical"
-        android:paddingHorizontal="24dp">
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="16dp">
 
         <TextView
             android:id="@+id/x11_pane_empty_message"
@@ -118,5 +142,20 @@
             android:textSize="12sp"
             android:visibility="gone"
             android:text="@string/termux_x11_read_guide" />
+
+        <!-- Shown only with the reason a Start died; opens Settings > Linux apps. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_support"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:text="@string/termux_x11_start_failed_help" />
     </LinearLayout>
+    </RelativeLayout>
 </com.termux.app.x11.X11PaneFrame>

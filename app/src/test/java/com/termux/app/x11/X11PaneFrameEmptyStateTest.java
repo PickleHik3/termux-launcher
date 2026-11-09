@@ -100,7 +100,7 @@ public class X11PaneFrameEmptyStateTest {
 
         assertEquals(1, asked.size());
         java.util.List<String> expected = KeyboardDataInstall.command(
-            com.termux.app.tour.TourEdition.of(activity.getPackageName()));
+            com.termux.app.AppEdition.of(activity.getPackageName()));
         assertNotNull(expected);
         assertEquals(expected, asked.get(0));
     }

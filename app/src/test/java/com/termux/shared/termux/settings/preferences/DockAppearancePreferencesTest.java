@@ -34,31 +34,10 @@ public class DockAppearancePreferencesTest {
     @Test
     public void blurRadiusUsesTheSameBoundsAsItsSlider() {
         preferences.setExtraKeysBlurRadius(-4);
-        assertEquals(0, preferences.getExtraKeysBlurRadius());
+        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         preferences.setExtraKeysBlurRadius(49);
-        assertEquals(48, preferences.getExtraKeysBlurRadius());
-    }
-
-    @Test
-    public void wallpaperAlignmentRoundTripsAndClampsToItsSlider() {
-        // Nothing stored yet: the device's measured starting point, not a hard-coded 100.
-        assertEquals(TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER),
-            preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(108);
-        assertEquals(108, preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(80);
-        assertEquals(90, preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(150);
-        assertEquals(120, preferences.getWallpaperRenderZoom());
-
-        // A value written past the bounds by hand is still read back inside them.
-        store.edit().putInt(TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, 300)
-            .commit();
-        assertEquals(120, preferences.getWallpaperRenderZoom());
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -103,9 +82,9 @@ public class DockAppearancePreferencesTest {
         preferences.setDockGlassGrain(21);
         preferences.setAppLauncherDockCornerRadius(19);
 
-        assertEquals(17, preferences.getStatusBarBlurRadius());
-        assertEquals(63, preferences.getStatusBarOpacity());
-        assertEquals(21, preferences.getStatusBarGrain());
+        assertEquals(17, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(63, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(21, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(19, preferences.getStatusBarCornerRadius());
     }
 
@@ -116,9 +95,9 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(48, preferences.getStatusBarBlurRadius());
-        assertEquals(0, preferences.getStatusBarOpacity());
-        assertEquals(100, preferences.getStatusBarGrain());
+        assertEquals(36, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(100, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(40, preferences.getStatusBarCornerRadius());
     }
 

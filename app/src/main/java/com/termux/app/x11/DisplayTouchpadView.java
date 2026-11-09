@@ -3,6 +3,7 @@ package com.termux.app.x11;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
@@ -13,11 +14,17 @@ import android.view.ViewConfiguration;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
+import com.termux.R;
 import com.termux.app.haptics.Haptics;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.x11.LorieView;
 import com.termux.x11.input.InputStub;
+
+import java.util.List;
 
 /**
  * The display's touchpad: it takes the keyboard's place, and its size, while mouse mode is on
@@ -25,7 +32,10 @@ import com.termux.x11.input.InputStub;
  * clicks; hold, or tap and touch again, then move, to drag. Two fingers scroll, running on after
  * a fast lift, and pinch to zoom; two fingers tapping together click the right button. Three
  * fingers tapping click the middle button, swiping sideways switch windows, and swiping down
- * bring the keyboard back. The small arrow in its bottom-left corner does the same. A strip down
+ * bring the keyboard back. The small arrow in its bottom-left corner does the same. Beside it a
+ * second button, the same pill, shows the keyboard mode — two overlapping squares for Overlay,
+ * arrows pulling in for Resize — and a tap switches it, so the display can give the pad its room
+ * and its bottom corners come out from under it. A strip down
  * its trailing edge scrolls on its own: drag it with one thumb and no second finger is needed,
  * and flicking it coasts the same way a two-finger scroll does. A second finger set down on the
  * strip is ignored; the first keeps scrolling.
@@ -74,6 +84,15 @@ public final class DisplayTouchpadView extends View {
     private static final float RADIUS_DP = 20f;
     private static final float BACK_SIZE_DP = 28f;
     private static final float BACK_INSET_DP = 8f;
+    /** Between the arrow and the keyboard mode button: the inset the arrow keeps from the edge. */
+    private static final float MODE_GAP_DP = 8f;
+    /** nf-fa-clone: two squares, one over the other — the pad floats over the display. */
+    private static final String MODE_OVERLAY_GLYPH = "\uF24D";
+    /** nf-fa-compress: arrows pulling in — the display shrinks to give the pad its room. */
+    private static final String MODE_RESIZE_GLYPH = "\uF066";
+    /** The arrow and the keyboard mode button, as the screen reader's virtual views. */
+    private static final int VIRTUAL_BACK = 1;
+    private static final int VIRTUAL_MODE = 2;
     /** The scroll strip along the pad's trailing edge, drawn this wide. */
     private static final float STRIP_WIDTH_DP = 30f;
     /**
@@ -103,6 +122,8 @@ public final class DisplayTouchpadView extends View {
     private final Paint mStripGripPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mBounds = new RectF();
     private final RectF mBack = new RectF();
+    /** The keyboard mode button, beside the arrow; empty while it is not offered. */
+    private final RectF mMode = new RectF();
     /** The scroll strip's own rect, along the pad's trailing edge; empty when it is hidden. */
     private final RectF mStrip = new RectF();
     /** The grip pill drawn centred in the strip; empty along with {@link #mStrip}. */
@@ -134,6 +155,12 @@ public final class DisplayTouchpadView extends View {
      * display's own picture.
      */
     @Nullable private Runnable mTapListener;
+    /** Told when the keyboard mode button is tapped; the host flips and saves the mode. */
+    @Nullable private Runnable mModeSwitchListener;
+    /** Whether the keyboard mode button is offered at all: not over a floating keyboard. */
+    private boolean mModeShown;
+    /** The keyboard mode the button shows: Overlay when true, Resize when false. */
+    private boolean mModeOverlay;
 
     private float mLastX, mLastY;
     private float mDownX, mDownY;
@@ -143,6 +170,8 @@ public final class DisplayTouchpadView extends View {
     /** The most fingers down at once in this gesture; it names the tap's button. */
     private int mMaxFingers;
     private boolean mOnBack;
+    /** The gesture started on the keyboard mode button: like the arrow, it is a button press. */
+    private boolean mOnMode;
     /** The gesture started on the scroll strip; it owns every pointer until the fingers lift. */
     private boolean mOnStrip;
     /** The last tap's time, for a touch soon after it that turns into a drag. */
@@ -180,7 +209,7 @@ public final class DisplayTouchpadView extends View {
 
     /** A finger held still long enough: the left button goes down and stays down for a drag. */
     private void onHold() {
-        if (mMoved || mMaxFingers > 1 || mOnBack) return;
+        if (mMoved || mMaxFingers > 1 || mOnBack || mOnMode) return;
         LorieView display = mSink.display();
         if (display == null) return;
         mDragging = true;
@@ -217,6 +246,7 @@ public final class DisplayTouchpadView extends View {
         mStripGripPaint.setColor(accentColor);
         setClickable(true);
         setFocusable(false);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -226,6 +256,25 @@ public final class DisplayTouchpadView extends View {
     /** Run whenever a single-finger tap clicks the left button; pass null to stop. */
     public void setTapListener(@Nullable Runnable listener) {
         mTapListener = listener;
+    }
+
+    /** Run when the keyboard mode button is tapped; pass null to stop. */
+    public void setModeSwitchListener(@Nullable Runnable listener) {
+        mModeSwitchListener = listener;
+    }
+
+    /**
+     * Whether the keyboard mode button is offered, and the mode it shows: [overlay] for Overlay,
+     * otherwise Resize. The host owns the mode; the button only says what it is.
+     */
+    public void setKeyboardModeSwitch(boolean shown, boolean overlay) {
+        if (mModeShown == shown && mModeOverlay == overlay) return;
+        boolean moved = mModeShown != shown;
+        mModeShown = shown;
+        mModeOverlay = overlay;
+        if (moved) layOutPanel(getWidth(), getHeight());
+        invalidate();
+        mAccessibility.invalidateRoot();
     }
 
     /**
@@ -255,6 +304,12 @@ public final class DisplayTouchpadView extends View {
         float size = dp(BACK_SIZE_DP);
         float margin = dp(BACK_INSET_DP);
         mBack.set(margin, h - margin - size, margin + size, h - margin);
+        if (mModeShown) {
+            float left = mBack.right + dp(MODE_GAP_DP);
+            mMode.set(left, mBack.top, left + size, mBack.bottom);
+        } else {
+            mMode.setEmpty();
+        }
         layOutStrip();
     }
 
@@ -321,6 +376,12 @@ public final class DisplayTouchpadView extends View {
         canvas.drawRoundRect(mBack, mBack.height() / 2f, mBack.height() / 2f, mBackPaint);
         float baseline = mBack.centerY() - (mGlyphPaint.ascent() + mGlyphPaint.descent()) / 2f;
         canvas.drawText("", mBack.centerX(), baseline, mGlyphPaint);
+        // The keyboard mode button wears the arrow's pill and ink, so the two read as one row.
+        if (!mMode.isEmpty()) {
+            canvas.drawRoundRect(mMode, mMode.height() / 2f, mMode.height() / 2f, mBackPaint);
+            canvas.drawText(mModeOverlay ? MODE_OVERLAY_GLYPH : MODE_RESIZE_GLYPH,
+                mMode.centerX(), baseline, mGlyphPaint);
+        }
     }
 
     @Override
@@ -338,15 +399,16 @@ public final class DisplayTouchpadView extends View {
                 mSwipeFired = false;
                 mTwoFingerMode = TouchpadGesturePolicy.TwoFingerMode.UNDECIDED;
                 mOnBack = mBack.contains(mDownX, mDownY);
-                mOnStrip = !mOnBack && !mStrip.isEmpty()
+                mOnMode = !mOnBack && !mMode.isEmpty() && mMode.contains(mDownX, mDownY);
+                mOnStrip = !mOnBack && !mOnMode && !mStrip.isEmpty()
                     && TouchpadGesturePolicy.stripHit(mDownX, mBounds.right, dp(STRIP_HIT_BAND_DP));
                 if (mOnStrip) grabGrip();
-                mTapDragArmed = !mOnBack && !mOnStrip
+                mTapDragArmed = !mOnBack && !mOnMode && !mOnStrip
                     && TouchpadGesturePolicy.tapDragArmed(mDownTime, mLastTapTime, TAP_DRAG_MS);
                 if (mVelocity == null) mVelocity = android.view.VelocityTracker.obtain();
                 else mVelocity.clear();
                 mVelocity.addMovement(event);
-                if (!mOnBack && !mOnStrip) postDelayed(mHold, HOLD_MS);
+                if (!mOnBack && !mOnMode && !mOnStrip) postDelayed(mHold, HOLD_MS);
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
                 // A second finger on the strip does nothing: the first keeps scrolling, and
@@ -369,7 +431,7 @@ public final class DisplayTouchpadView extends View {
                 mTwoFingerMode = TouchpadGesturePolicy.TwoFingerMode.UNDECIDED;
                 return true;
             case MotionEvent.ACTION_MOVE: {
-                if (mOnBack) return true;
+                if (mOnBack || mOnMode) return true;
                 if (mVelocity != null) mVelocity.addMovement(event);
                 if (mOnStrip) {
                     float y = event.getY();
@@ -428,6 +490,14 @@ public final class DisplayTouchpadView extends View {
                     }
                     return true;
                 }
+                if (mOnMode) {
+                    mOnMode = false;
+                    if (mMode.contains(event.getX(), event.getY())) {
+                        Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
+                        if (mModeSwitchListener != null) mModeSwitchListener.run();
+                    }
+                    return true;
+                }
                 if (mOnStrip) {
                     // No travel is a tap on the strip, which does nothing — never a click.
                     mOnStrip = false;
@@ -461,6 +531,7 @@ public final class DisplayTouchpadView extends View {
                 }
                 mDragging = false;
                 mOnBack = false;
+                mOnMode = false;
                 if (mOnStrip) settleGrip();
                 mOnStrip = false;
                 recycleVelocity();
@@ -680,6 +751,66 @@ public final class DisplayTouchpadView extends View {
     private static float spread(@NonNull MotionEvent event) {
         if (event.getPointerCount() < 2) return 0f;
         return (float) Math.hypot(event.getX(1) - event.getX(0), event.getY(1) - event.getY(0));
+    }
+
+    /**
+     * The arrow and the keyboard mode button as virtual views: the pad draws both itself, so
+     * without this a screen reader finds nothing to name or press. The mode button says which
+     * mode is on as its state, and a click switches it as a tap does.
+     */
+    private final ExploreByTouchHelper mAccessibility = new ExploreByTouchHelper(this) {
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (mBack.contains(x, y)) return VIRTUAL_BACK;
+            if (!mMode.isEmpty() && mMode.contains(x, y)) return VIRTUAL_MODE;
+            return ExploreByTouchHelper.INVALID_ID;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> virtualViewIds) {
+            virtualViewIds.add(VIRTUAL_BACK);
+            if (!mMode.isEmpty()) virtualViewIds.add(VIRTUAL_MODE);
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            boolean mode = virtualViewId == VIRTUAL_MODE;
+            node.setContentDescription(getResources().getString(mode
+                ? R.string.display_touchpad_keyboard_mode_description
+                : R.string.display_touchpad_exit_description));
+            if (mode) {
+                node.setStateDescription(getResources().getString(mModeOverlay
+                    ? R.string.display_touchpad_keyboard_mode_overlay
+                    : R.string.display_touchpad_keyboard_mode_resize));
+            }
+            node.setClassName(android.widget.Button.class.getName());
+            node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            Rect bounds = new Rect(0, 0, 1, 1);
+            RectF rect = mode ? mMode : mBack;
+            if (!rect.isEmpty()) rect.roundOut(bounds);
+            node.setBoundsInParent(bounds);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action,
+                                                        @Nullable android.os.Bundle arguments) {
+            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
+            if (virtualViewId == VIRTUAL_BACK) {
+                if (mListener != null) mListener.onExitRequested();
+                return true;
+            }
+            if (virtualViewId == VIRTUAL_MODE && !mMode.isEmpty()) {
+                if (mModeSwitchListener != null) mModeSwitchListener.run();
+                return true;
+            }
+            return false;
+        }
+    };
+
+    @Override
+    protected boolean dispatchHoverEvent(@NonNull MotionEvent event) {
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
     @Override

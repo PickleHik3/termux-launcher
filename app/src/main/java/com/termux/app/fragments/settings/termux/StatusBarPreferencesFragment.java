@@ -11,13 +11,15 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.SliderPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The status bar's own page: the 12-hour choice, the CPU/memory/weather cards and the media row's
- * switch, with the place the weather follows when it should not follow the device. Pinned
- * notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
+ * switch, with the place the weather follows when it should not follow the device, and the gap
+ * the row leaves for the camera. Pinned notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
  * the last row here links to it.
  *
  * <p>Splits the status half out of the old combined Terminal &amp; status page; the terminal half
@@ -38,6 +40,77 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         bindWeatherPlace(findPreference("status_widget_weather_location"));
+        bindCutoutMode(findPreference("status_bar_cutout_mode"));
+        bindCutoutOutline(context);
+    }
+
+    @Nullable private CameraCutoutOutline mOutline;
+
+    /** The four camera sliders draw the camera's outline over this page while a finger is on one. */
+    private void bindCutoutOutline(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+        if (preferences == null) return;
+        SliderPreference.Tracking tracking = new SliderPreference.Tracking() {
+            @Override public void onTrackingStart() { showOutline(preferences); }
+            @Override public void onTrackingChange() { showOutline(preferences); }
+            @Override public void onTrackingStop() { hideOutline(); }
+        };
+        for (String key : MARGIN_AND_CUSTOM_KEYS) {
+            Preference row = findPreference(key);
+            if (row instanceof SliderPreference) ((SliderPreference) row).setTracking(tracking);
+        }
+    }
+
+    private void showOutline(@NonNull TermuxAppSharedPreferences preferences) {
+        android.app.Activity activity = getActivity();
+        if (activity == null || !isResumed()) return;
+        if (mOutline == null) mOutline = new CameraCutoutOutline(activity, preferences);
+        mOutline.showOrUpdate();
+    }
+
+    private void hideOutline() {
+        if (mOutline != null) mOutline.hide();
+    }
+
+    @Override
+    public void onPause() {
+        hideOutline();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroyView() {
+        hideOutline();
+        mOutline = null;
+        super.onDestroyView();
+    }
+
+    /** The cutout's move and size sliders are there only while the gap is the user's own. */
+    private void bindCutoutMode(@Nullable SegmentedPillPreference mode) {
+        if (mode == null) return;
+        applyCutoutSliders(mode.getValue());
+        mode.setOnPreferenceChangeListener((preference, newValue) -> {
+            // Fired before the new value is stored, so gate on the incoming one.
+            applyCutoutSliders(newValue == null ? null : newValue.toString());
+            return true;
+        });
+    }
+
+    private static final String[] MARGIN_AND_CUSTOM_KEYS = {"status_bar_cutout_margin",
+        "status_bar_cutout_offset_x", "status_bar_cutout_offset_y", "status_bar_cutout_scale"};
+
+    private static final String[] CUSTOM_KEYS = {"status_bar_cutout_offset_x",
+        "status_bar_cutout_offset_y", "status_bar_cutout_scale"};
+
+    private void applyCutoutSliders(@Nullable String mode) {
+        boolean custom = "custom".equals(mode);
+        Preference margin = findPreference("status_bar_cutout_margin");
+        if (margin != null && margin.isVisible() == "off".equals(mode))
+            margin.setVisible(!"off".equals(mode));
+        for (String key : CUSTOM_KEYS) {
+            Preference row = findPreference(key);
+            if (row != null && row.isVisible() != custom) row.setVisible(custom);
+        }
     }
 
     /**

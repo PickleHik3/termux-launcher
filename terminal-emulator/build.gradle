@@ -28,7 +28,7 @@ android {
         }
 
         ndk {
-            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+            abiFilters 'x86_64', 'armeabi-v7a', 'arm64-v8a'
         }
     }
 
@@ -80,6 +80,39 @@ tasks.withType(JavaCompile) {
 dependencies {
     implementation "androidx.annotation:annotation:1.9.0"
     testImplementation "junit:junit:4.13.2"
+    // Real ICU break rules for the differential tests of GraphemeClusterer; the android.jar stubs
+    // used by local JVM tests have none. Test only: nothing ships.
+    testImplementation "com.ibm.icu:icu4j:75.1"
+}
+
+// Experimental libghostty-vt terminal core, only with -Pghostty=true: builds the pinned library and
+// its JNI shim into build/ghostty/jniLibs for arm64-v8a and x86_64 (see ghostty/build-libghostty.sh).
+// Other builds, armeabi-v7a and CI carry no native core and always use the Java one.
+if ((project.findProperty('ghostty') ?: 'false').toString() == 'true') {
+    def ghosttyScript = file('ghostty/build-libghostty.sh')
+    def ghosttyJniLibs = layout.buildDirectory.dir('ghostty/jniLibs').get().asFile
+    def ghosttyHostLib = layout.buildDirectory.dir('ghostty/host').get().asFile
+    def ndkVersionName = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
+
+    def buildGhostty = tasks.register('buildGhostty', Exec) {
+        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'), file('ghostty/ghostty_png.c'), file('ghostty/ghostty_png.h'))
+        outputs.dir(ghosttyJniLibs)
+        environment 'NDK_VERSION', ndkVersionName
+        commandLine 'bash', ghosttyScript.absolutePath, ghosttyJniLibs.absolutePath, 'arm64-v8a', 'x86_64'
+    }
+    android.sourceSets.main.jniLibs.srcDirs += ghosttyJniLibs
+    tasks.named('preBuild') { dependsOn buildGhostty }
+
+    // The same library for this machine, so JVM tests can drive the real thing.
+    def buildGhosttyHost = tasks.register('buildGhosttyHost', Exec) {
+        inputs.files(ghosttyScript, file('ghostty/ghostty_jni.c'), file('ghostty/ghostty_png.c'), file('ghostty/ghostty_png.h'))
+        outputs.dir(ghosttyHostLib)
+        commandLine 'bash', ghosttyScript.absolutePath, ghosttyHostLib.absolutePath, 'host'
+    }
+    tasks.withType(Test).configureEach {
+        dependsOn buildGhosttyHost
+        systemProperty 'termux.ghostty.libDir', new File(ghosttyHostLib, 'host').absolutePath
+    }
 }
 
 task sourceJar(type: Jar) {

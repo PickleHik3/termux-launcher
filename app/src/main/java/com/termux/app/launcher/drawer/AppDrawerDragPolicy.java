@@ -39,8 +39,7 @@ public final class AppDrawerDragPolicy {
         }
 
         public boolean dragEligible() {
-            return interactive && emptyQuery && eligibleCell
-                && viewType != AppDrawerViewType.CATEGORIES && stableId != null;
+            return interactive && emptyQuery && eligibleCell && stableId != null;
         }
     }
 

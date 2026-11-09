@@ -188,6 +188,27 @@ public class SettingsBackupTest {
     }
 
     @Test
+    public void pageListAndPageLookKeysTravelTogether() throws Exception {
+        Install source = new Install("pages_source", 2f);
+        String state = "{\"v\":1,\"pages\":[3,7]}";
+        source.prefs.get(Store.WALL_PAGES).edit()
+            .putString(com.termux.app.wall.WallPagesStore.KEY_STATE, state).commit();
+        source.main().edit().putInt("wall_terminal_page_id", 7)
+            .putInt("status_bar_opacity@7", 33).commit();
+        byte[] bundle = export(source);
+
+        Install target = new Install("pages_target", 2f);
+        target.prefs.get(Store.WALL_PAGES).edit()
+            .putString(com.termux.app.wall.WallPagesStore.KEY_STATE, "old").commit();
+        assertEquals(0, restore(target, bundle).failures);
+
+        assertEquals(state, target.prefs.get(Store.WALL_PAGES)
+            .getString(com.termux.app.wall.WallPagesStore.KEY_STATE, null));
+        assertEquals(7, target.main().getInt("wall_terminal_page_id", -1));
+        assertEquals(33, target.main().getInt("status_bar_opacity@7", -1));
+    }
+
+    @Test
     public void import_leavesExcludedKeysAlone_andResetsIncludedKeysTheBundleLacks() throws IOException {
         Install source = new Install("source", 2f);
         source.main().edit()

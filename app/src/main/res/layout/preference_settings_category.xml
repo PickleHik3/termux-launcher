@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Section header: spacing separates sections; no divider line. -->
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/title"
+<!-- Section header: spacing separates sections; no divider line. The frame takes no height
+     when the category has no title (the title view is then gone), so an untitled section adds
+     only the group spacing (SettingsRowGroups.Kind.SPACER). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:accessibilityHeading="true"
-    android:paddingStart="@dimen/settings_gutter"
-    android:paddingTop="@dimen/settings_category_top"
-    android:paddingEnd="@dimen/settings_gutter"
-    android:paddingBottom="@dimen/settings_category_bottom"
-    android:textAppearance="?attr/textAppearanceTitleSmall"
-    android:textColor="?attr/colorPrimary" />
+    android:layout_height="wrap_content">
+
+    <TextView
+        android:id="@android:id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityHeading="true"
+        android:paddingStart="@dimen/settings_gutter"
+        android:paddingTop="@dimen/settings_category_top"
+        android:paddingEnd="@dimen/settings_gutter"
+        android:paddingBottom="@dimen/settings_category_bottom"
+        android:textAppearance="?attr/textAppearanceTitleSmall"
+        android:textColor="?attr/colorPrimary" />
+</FrameLayout>

@@ -81,6 +81,11 @@ public final class AzPullTabLayer extends FrameLayout {
     @Nullable private AzTabPolicy.Placement mPlacement;
     /** The canvas, in this layer's pixels: what the letters are measured in and clipped to. */
     @NonNull private AzTabPolicy.Box mCanvasBox = AzTabPolicy.EMPTY;
+    /**
+     * How far in from the canvas's left, top, right and bottom the pane's text begins, or null
+     * where the canvas holds no pane of text (setTextInsets).
+     */
+    @Nullable private int[] mTextInsets;
     /** Where the letters rest while out, in this layer's pixels. */
     @NonNull private AzTabPolicy.Box mLettersBox = AzTabPolicy.EMPTY;
 
@@ -181,6 +186,27 @@ public final class AzPullTabLayer extends FrameLayout {
      * Shows the tab or takes it away. Away, the letters are tucked at once and the layer takes no
      * touch at all.
      */
+    /**
+     * Where the pane's text begins inside the canvas, as {@code {left, top, right, bottom}} pixels
+     * in from the canvas's own edges, or null where the canvas holds no pane of text. The tab
+     * rests beside that box and keeps out of it (AzTabPolicy#placeOnScreen).
+     */
+    public void setTextInsets(@Nullable int[] insetsPx) {
+        int[] insets = insetsPx == null || insetsPx.length < 4 ? null : insetsPx.clone();
+        if (java.util.Arrays.equals(insets, mTextInsets)) return;
+        mTextInsets = insets;
+        requestLayout();
+    }
+
+    /** The pane's text box in this layer's pixels: the canvas less the text insets; or empty. */
+    @NonNull
+    private AzTabPolicy.Box textBox() {
+        int[] insets = mTextInsets;
+        if (insets == null || mCanvasBox.isEmpty()) return AzTabPolicy.EMPTY;
+        return new AzTabPolicy.Box(mCanvasBox.left + insets[0], mCanvasBox.top + insets[1],
+            mCanvasBox.right - insets[2], mCanvasBox.bottom - insets[3]);
+    }
+
     public void setTabShown(boolean shown) {
         mReveal.setEnabled(shown);
         if (!shown) tuck();
@@ -334,7 +360,7 @@ public final class AzPullTabLayer extends FrameLayout {
         float density = getResources().getDisplayMetrics().density;
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         AzTabPolicy.Placement placement = AzTabPolicy.placeOnScreen(mEdge, rtl, mCanvasBox,
-            width, density);
+            textBox(), width, density);
         mPlacement = placement;
         AzTabPolicy.Box letters = AzTabPolicy.revealBox(mEdge, mCanvasBox.width(),
             mCanvasBox.height(), mThicknessPx, mMarginPx, mSideInsetPx);

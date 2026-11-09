@@ -16,6 +16,38 @@ public class WeatherWidgetModelTest {
     private static final List<String> HOURS = Arrays.asList(
         "2026-10-06T12:00", "2026-10-06T13:00", "2026-10-06T14:00", "2026-10-06T15:00");
 
+    private static Calendar at(int hour, int minute) {
+        Calendar now = Calendar.getInstance();
+        now.set(2026, Calendar.OCTOBER, 6, hour, minute, 0);
+        return now;
+    }
+
+    @Test public void theNextSunTimeIsTheSunriseBeforeDawnTheSunsetByDay() {
+        assertEquals(WeatherWidgetModel.Sun.RISE,
+            WeatherWidgetModel.nextSun("06:58", "19:42", "06:59", at(5, 0)));
+        assertEquals(WeatherWidgetModel.Sun.SET,
+            WeatherWidgetModel.nextSun("06:58", "19:42", "06:59", at(13, 40)));
+    }
+
+    @Test public void afterSunsetTheNextSunTimeIsTomorrowsSunrise() {
+        assertEquals(WeatherWidgetModel.Sun.RISE,
+            WeatherWidgetModel.nextSun("06:58", "19:42", "06:59", at(21, 0)));
+        // Without tomorrow's pair there is nothing to say after dark.
+        assertEquals(WeatherWidgetModel.Sun.NONE,
+            WeatherWidgetModel.nextSun("06:58", "19:42", "", at(21, 0)));
+        assertEquals(WeatherWidgetModel.Sun.NONE,
+            WeatherWidgetModel.nextSun("06:58", "19:42", at(21, 0)));
+    }
+
+    @Test public void dataIsStaleOnceOlderThanTheCacheLifetime() {
+        long now = 10_000_000_000L;
+        long ttl = WeatherController.CACHE_TTL_MS;
+        assertEquals(-1, WeatherWidgetModel.staleMinutes(now - ttl + 1, now));
+        assertEquals((int) (ttl / 60000L), WeatherWidgetModel.staleMinutes(now - ttl, now));
+        assertEquals(40, WeatherWidgetModel.staleMinutes(now - 40 * 60000L - 5000L, now));
+        assertEquals(-1, WeatherWidgetModel.staleMinutes(0L, now));
+    }
+
     @Test public void currentHourIsTheProvidersKeyForThisHour() {
         Calendar now = Calendar.getInstance();
         now.set(2026, Calendar.OCTOBER, 6, 13, 40, 12);

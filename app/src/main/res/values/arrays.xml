@@ -97,6 +97,18 @@
         <item>light</item>
         <item>polished</item>
     </string-array>
+    <string-array name="settings_keyboard_voice_polish_level_pill_entries">
+        <item>@string/tai_fn_level_light</item>
+        <item>@string/tai_fn_level_polished</item>
+    </string-array>
+    <string-array name="cleanup_accelerator_entries">
+        <item>@string/tai_fn_cpu</item>
+        <item>@string/tai_fn_gpu</item>
+    </string-array>
+    <string-array name="cleanup_accelerator_values">
+        <item>cpu</item>
+        <item>gpu</item>
+    </string-array>
     <string-array name="settings_keyboard_voice_mic_sensitivity_entries">
         <item>@string/settings_keyboard_voice_mic_sensitivity_normal</item>
         <item>@string/settings_keyboard_voice_mic_sensitivity_high</item>
@@ -143,10 +155,29 @@
         <item>horizontal</item>
         <item>categories</item>
     </string-array>
+    <string-array name="app_launcher_drawer_az_side_entries">
+        <item>@string/settings_drawer_az_side_left</item>
+        <item>@string/settings_drawer_az_side_right</item>
+        <item>@string/settings_drawer_az_side_off</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_az_side_values">
+        <item>left</item>
+        <item>right</item>
+        <item>off</item>
+    </string-array>
+    <string-array name="notification_badge_style_entries">
+        <item>@string/settings_notification_badge_style_dot</item>
+        <item>@string/settings_notification_badge_style_count</item>
+    </string-array>
+    <string-array name="notification_badge_style_values">
+        <item>dot</item>
+        <item>count</item>
+    </string-array>
     <string-array name="termux_top_pane_clock_style_entries">
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>
         <item>@string/termux_top_pane_clock_style_minimal</item>
+        <item>@string/termux_top_pane_clock_style_minimal_medium</item>
         <item>@string/termux_top_pane_clock_style_led</item>
         <item>@string/termux_top_pane_clock_style_tape</item>
         <item>@string/termux_top_pane_clock_style_slab</item>
@@ -155,6 +186,7 @@
         <item>flip</item>
         <item>lcd</item>
         <item>minimal</item>
+        <item>minimal_medium</item>
         <item>led</item>
         <item>tape</item>
         <item>slab</item>
@@ -267,6 +299,16 @@
         <item>5</item>
         <item>10</item>
     </string-array>
+    <string-array name="speech_model_accelerator_entries">
+        <item>@string/speech_model_accelerator_auto</item>
+        <item>@string/speech_model_accelerator_cpu</item>
+        <item>@string/speech_model_accelerator_gpu</item>
+    </string-array>
+    <string-array name="speech_model_accelerator_values">
+        <item>auto</item>
+        <item>cpu</item>
+        <item>gpu</item>
+    </string-array>
     <string-array name="termux_ai_catalog_backend_filter_entries">
         <item>@string/termux_ai_catalog_backend_all</item>
         <item>@string/termux_ai_backend_label_litert</item>
@@ -277,29 +319,33 @@
         <item>litert-lm</item>
         <item>mnn-llm</item>
     </string-array>
-    <string-array name="x11_runtime_badge_entries">
-        <item>Termux X11</item>
-        <item>Arch Linux</item>
-        <item>Ubuntu</item>
-        <item>Debian</item>
-        <item>Fedora</item>
+    <string-array name="settings_status_cutout_entries">
+        <item>@string/settings_status_cutout_auto</item>
+        <item>@string/settings_status_cutout_custom</item>
+        <item>@string/settings_status_cutout_off</item>
     </string-array>
-    <string-array name="x11_runtime_badge_values">
-        <item>termux</item>
-        <item>arch</item>
-        <item>ubuntu</item>
-        <item>debian</item>
-        <item>fedora</item>
+    <string-array name="settings_status_cutout_values">
+        <item>auto</item>
+        <item>custom</item>
+        <item>off</item>
     </string-array>
     <string-array name="x11_touch_mode_entries">
         <item>Trackpad</item>
-        <item>Touchscreen (Default, custom behavior)</item>
-        <item>Direct touch</item>
+        <item>Touch</item>
+        <item>Direct</item>
     </string-array>
     <string-array name="x11_touch_mode_values">
         <item>1</item>
         <item>2</item>
         <item>3</item>
+    </string-array>
+    <string-array name="x11_keyboard_over_display_entries">
+        <item>@string/settings_x11_keyboard_over_display_overlay</item>
+        <item>@string/settings_x11_keyboard_over_display_resize</item>
+    </string-array>
+    <string-array name="x11_keyboard_over_display_values">
+        <item>overlay</item>
+        <item>resize</item>
     </string-array>
     <string-array name="x11_filtering_entries">
         <item>Smooth</item>
@@ -320,24 +366,6 @@
         <item>scaled</item>
         <item>exact</item>
         <item>custom</item>
-    </string-array>
-    <string-array name="gui_apps_route_entries">
-        <item>Termux X11 repo</item>
-        <item>proot distro</item>
-    </string-array>
-    <string-array name="gui_apps_route_values">
-        <item>x11</item>
-        <item>distro</item>
-    </string-array>
-    <string-array name="gui_apps_distro_entries">
-        <item>Debian (recommended)</item>
-        <item>Ubuntu</item>
-        <item>Arch Linux</item>
-    </string-array>
-    <string-array name="gui_apps_distro_values">
-        <item>debian</item>
-        <item>ubuntu</item>
-        <item>arch</item>
     </string-array>
     <string-array name="settings_terminal_cursor_trail_style_entries">
         <item>Default</item>
@@ -383,18 +411,38 @@
         <item>secondary</item>
         <item>tertiary</item>
     </string-array>
+    <string-array name="settings_terminal_engine_entries">
+        <item>@string/settings_terminal_engine_standard</item>
+        <item>@string/settings_terminal_engine_ghostty</item>
+    </string-array>
+    <string-array name="settings_terminal_engine_values" translatable="false">
+        <item>standard</item>
+        <item>ghostty</item>
+    </string-array>
     <string-array name="settings_terminal_retro_effect_entries">
         <item>None</item>
         <item>CRT</item>
         <item>CRT (green)</item>
         <item>CRT (amber)</item>
+        <item>CRT (Material colours)</item>
         <item>TFT grid</item>
+    </string-array>
+    <string-array name="settings_idle_tear_rate_entries">
+        <item>Rare (every 2–5 minutes)</item>
+        <item>Sometimes (every 30–90 seconds)</item>
+        <item>Often (every 10–30 seconds)</item>
+    </string-array>
+    <string-array name="settings_idle_tear_rate_values">
+        <item>rare</item>
+        <item>sometimes</item>
+        <item>often</item>
     </string-array>
     <string-array name="settings_terminal_retro_effect_values">
         <item>none</item>
         <item>crt</item>
         <item>crt_green</item>
         <item>crt_amber</item>
+        <item>crt_material</item>
         <item>tft</item>
     </string-array>
 </resources>

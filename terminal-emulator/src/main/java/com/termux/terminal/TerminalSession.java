@@ -17,6 +17,8 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.LongSupplier;
 
 /**
  * A terminal session, consisting of a process coupled to a terminal interface.
@@ -33,8 +35,7 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
     public interface SizeUpdateObserver {
-        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                             boolean keepCursorAtBottom);
+        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels);
     }
 
     private SizeUpdateObserver mSizeUpdateObserver;
@@ -99,6 +100,15 @@ public final class TerminalSession extends TerminalOutput {
     private boolean mBoldWithBright;
 
     /**
+     * Whether the session writes "[Process completed … - press Enter]" when its process ends.
+     * Off for a read-only session that says how it ended elsewhere and takes no Enter.
+     */
+    public boolean mShowsExitLine = true;
+
+    /** Whether {@link #finishIfRunning()} ended the process, rather than a signal from elsewhere. */
+    private boolean mFinishRequested;
+
+    /**
      * The file descriptor referencing the master half of a pseudo-terminal pair, resulting from calling
      * {@link JNI#createSubprocess(String, String, String[], String[], int[], int, int, int, int)}.
      */
@@ -149,22 +159,15 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Inform the attached pty of the new size and reflow or initialize the emulator. */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
-        updateSize(columns, rows, cellWidthPixels, cellHeightPixels, false);
-    }
-
-    /** Inform the pty of a new size with an optional bottom-anchored row expansion. */
-    public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                           boolean keepCursorAtBottom) {
         if (mSizeUpdateObserver != null && mSizeUpdateObserver.onUpdateSize(columns, rows,
-            cellWidthPixels, cellHeightPixels, keepCursorAtBottom)) return;
+            cellWidthPixels, cellHeightPixels)) return;
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
             Trace.beginSection("Terminal.resize");
             try {
                 JNI.setPtyWindowSize(mTerminalFileDescriptor, rows, columns, cellWidthPixels, cellHeightPixels);
-                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels,
-                    keepCursorAtBottom);
+                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels);
             } finally {
                 Trace.endSection();
             }
@@ -190,6 +193,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void initializeEmulator(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
         mEmulator = new TerminalEmulator(this, mBoldWithBright, columns, rows, cellWidthPixels, cellHeightPixels, mTranscriptRows, mClient);
+        chooseEngine(GhosttyCore.isRequested(DebugSwitch.SYSTEM_PROPERTIES));
 
         int[] processId = new int[1];
         mTerminalFileDescriptor = JNI.createSubprocess(mShellPath, mCwd, mArgs, mEnv, processId, rows, columns, cellWidthPixels, cellHeightPixels);
@@ -208,7 +212,7 @@ public final class TerminalSession extends TerminalOutput {
                             return;
                         if (!mProcessToTerminalIOQueue.write(buffer, 0, read))
                             return;
-                        mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+                        onProcessOutputQueued();
                     }
                 } catch (Exception e) {
                     // Ignore, just shutting down.
@@ -256,9 +260,14 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public void write(byte[] data, int offset, int count) {
         if (mShellPid > 0) {
-            synchronized (mWriteLock) {
-                mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
-                mTerminalToProcessIOQueue.write(data, offset, count);
+            Trace.beginSection("Terminal.write");
+            try {
+                synchronized (mWriteLock) {
+                    mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
+                    mTerminalToProcessIOQueue.write(data, offset, count);
+                }
+            } finally {
+                Trace.endSection();
             }
         }
     }
@@ -383,6 +392,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void finishIfRunning() {
         if (!isRunning()) return;
+        mFinishRequested = true;
         ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
             this::sendSignal, mMainThreadHandler::postDelayed, PROCESS_TABLE, () -> mShellPid);
     }
@@ -417,6 +427,44 @@ public final class TerminalSession extends TerminalOutput {
         // closed pane keeps its images alive, and keeps decoding them, for the life of the process.
         // The emulator is only safe to touch from the main thread, which is where this runs.
         if (mEmulator != null) mEmulator.shutdownKittyGraphics();
+        if (mEmulator != null) mEmulator.releaseGhosttyCore();
+        mGhosttyIdleCompressor.cancel();
+    }
+
+    /**
+     * The one place a new session's engine is decided: Ghostty when the Terminal engine setting or
+     * the debug property {@code debug.tl.terminal_core=ghostty} asks for it (either is enough), the
+     * library loads, and the crash guard has not turned it off ({@link TerminalEngine#useGhostty}).
+     * Otherwise Standard, with one log line saying why when Ghostty was asked for. After a native
+     * crash the stored choice is left as the user set it (GhosttyCrashGuard).
+     */
+    void chooseEngine(boolean propertyAsksGhostty) {
+        boolean preferred = mClient != null && mClient.prefersGhosttyEngine();
+        if (!preferred && !propertyAsksGhostty) return;
+        boolean blocked = GhosttyCrashGuard.isDisabledAfterCrash();
+        // Checked only when asked for: the first check loads the library.
+        boolean available = !blocked && GhosttyNative.isAvailable();
+        if (!TerminalEngine.useGhostty(preferred, propertyAsksGhostty, available, blocked)) {
+            if (blocked) {
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty off after a crash, using the Java core ("
+                    + GhosttyCrashGuard.disabledReason() + ")");
+            } else {
+                Throwable why = GhosttyNative.loadError();
+                Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty unavailable, using the Java core"
+                    + (why == null ? "" : " (" + why + ")"));
+            }
+            return;
+        }
+        try {
+            if (mEmulator.useGhosttyCore()) {
+                Logger.logInfo(mClient, LOG_TAG, "Terminal core: ghostty");
+                return;
+            }
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty would not start, using the Java core");
+        } catch (Throwable t) {
+            mEmulator.releaseGhosttyCore();
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty failed, using the Java core (" + t + ")");
+        }
     }
 
     @Override
@@ -426,6 +474,11 @@ public final class TerminalSession extends TerminalOutput {
 
     public synchronized boolean isRunning() {
         return mShellPid != -1;
+    }
+
+    /** Whether the process ended because {@link #finishIfRunning()} asked it to. */
+    public boolean isFinishRequested() {
+        return mFinishRequested;
     }
 
     /**
@@ -601,35 +654,106 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * How much shell output one main-thread message hands the emulator. A burst is parsed in slices
-     * this size, each its own message, so the frame clock gets a turn between them instead of
-     * waiting behind a whole 64 KB queue.
+     * How much shell output the emulator takes in one go. A turn hands over slices until its time
+     * budget is spent, so the slice is the granularity of that budget: a turn overruns it by at most
+     * one slice's parsing.
      */
     static final int DRAIN_SLICE_BYTES = 16 * 1024;
 
+    /**
+     * How long one main-thread turn may spend parsing shell output before it yields to the frame
+     * clock and input: half a frame at 120 Hz, so even the fastest panel keeps half of every frame
+     * for drawing while a flood lasts.
+     */
+    static final long DRAIN_BUDGET_NANOS = 4_000_000L;
+
     private final byte[] mReceiveBuffer = new byte[DRAIN_SLICE_BYTES];
 
+    /** The clock a turn's budget is read from; a test in this package steps it by hand. */
+    LongSupplier mNanoClock = System::nanoTime;
+
+    /** How many bytes the last {@link #handleNewInput} turn parsed; a test hook. */
+    int mLastTurnBytes;
+
     /**
-     * Move at most one slice of waiting shell output into the emulator. Main thread only.
+     * Parse at most one slice of waiting shell output, without telling the client or, with the
+     * Ghostty core, mirroring it (see {@link #flushBatchedOutput()}). Main thread only.
      *
-     * @return whether the slice came back full, so more output may still be waiting
+     * @return the bytes parsed, 0 when nothing was waiting
      */
-    boolean drainProcessOutputSlice() {
+    private int appendProcessOutputSlice() {
         int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
-        if (bytesRead <= 0) return false;
+        if (bytesRead <= 0) return 0;
         // Named in system traces so the parsing's share of the UI thread can be read next to
         // Terminal.render and the frame clock: this is the emulator's only entry point for shell
         // output, and it runs on the main thread by design.
         Trace.beginSection("Terminal.append");
         mAppendingProcessOutput = true;
         try {
-            mEmulator.append(mReceiveBuffer, bytesRead);
+            mEmulator.appendBatched(mReceiveBuffer, bytesRead);
         } finally {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
+        return bytesRead;
+    }
+
+    /**
+     * Bring the emulator up to date with the slices parsed since the last call: with the Ghostty
+     * core this copies its screen and the rows it scrolled off into the Java buffers, once per turn
+     * however many slices it took. Nothing to do with the Java core.
+     */
+    private void flushBatchedOutput() {
+        if (!mEmulator.isGhosttyCoreActive()) return;
+        Trace.beginSection("Terminal.mirror");
+        try {
+            mEmulator.flushBatchedOutput();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * Move at most one slice of waiting shell output into the emulator and tell the client. Main
+     * thread only.
+     *
+     * @return whether the slice came back full, so more output may still be waiting
+     */
+    boolean drainProcessOutputSlice() {
+        int bytesRead = appendProcessOutputSlice();
+        if (bytesRead <= 0) return false;
+        flushBatchedOutput();
+        onGhosttyOutput();
+        LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
+    }
+
+    /**
+     * One main-thread turn of shell output: slices until the queue runs dry or
+     * {@link #DRAIN_BUDGET_NANOS} is spent, then one screen update for the lot. The update goes
+     * through {@link #notifyScreenUpdate}, so a synchronized update still holds it exactly as it
+     * held a per-slice one: only the state after the turn's last byte counts either way.
+     *
+     * @return whether the turn stopped on its budget with more output still waiting
+     */
+    private boolean drainProcessOutputTurn() {
+        long start = mNanoClock.getAsLong();
+        int total = 0;
+        boolean more;
+        do {
+            int bytesRead = appendProcessOutputSlice();
+            total += bytesRead;
+            more = bytesRead == mReceiveBuffer.length;
+        } while (more && mNanoClock.getAsLong() - start < DRAIN_BUDGET_NANOS);
+        mLastTurnBytes = total;
+        if (total > 0) {
+            flushBatchedOutput();
+            onGhosttyOutput();
+            LatencyProbe.outputArrived();
+            notifyScreenUpdate();
+        }
+        return more;
     }
 
     /**
@@ -642,6 +766,75 @@ public final class TerminalSession extends TerminalOutput {
     void drainProcessOutputBeforeExit() {
         int budget = PROCESS_OUTPUT_QUEUE_BYTES;
         while (budget > 0 && drainProcessOutputSlice()) budget -= DRAIN_SLICE_BYTES;
+    }
+
+    /**
+     * Whether a {@link #MSG_NEW_INPUT} is posted and not yet handled. At most one ever is: a link
+     * that delivers its stream in small segments makes every pty read a write here, and posting
+     * one message per write once queued ten thousand a second ahead of the frame clock.
+     *
+     * <p>The reader writes its bytes and then tries to set the flag; the handler clears the flag and
+     * then drains. So a write either lands before the clear, and the drain that follows reads it,
+     * or lands after it, and the reader finds the flag clear and posts the next turn itself.
+     */
+    final AtomicBoolean mNewInputPending = new AtomicBoolean();
+
+    /** Posts {@link #MSG_NEW_INPUT}; a test in this package counts the posts and runs them by hand. */
+    Runnable mNewInputPoster = () -> mMainThreadHandler.sendEmptyMessage(MSG_NEW_INPUT);
+
+    /** Reader thread: bytes were just written to {@link #mProcessToTerminalIOQueue}. */
+    void onProcessOutputQueued() {
+        requestNewInputTurn();
+    }
+
+    /** Post a {@link #MSG_NEW_INPUT} unless one is already waiting. Any thread. */
+    private void requestNewInputTurn() {
+        if (mNewInputPending.compareAndSet(false, true)) mNewInputPoster.run();
+    }
+
+    /** One {@link #MSG_NEW_INPUT} turn on the main thread. */
+    void handleNewInput() {
+        mNewInputPending.set(false);
+        if (drainProcessOutputTurn()) {
+            // More of the burst is waiting: let the frame clock and input run before the next turn.
+            requestNewInputTurn();
+        }
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** Where the idle compressor's callbacks go; a test in this package swaps in a fake. */
+    GhosttyIdleCompressor.Scheduler mGhosttyIdleScheduler = new GhosttyIdleCompressor.Scheduler() {
+        @Override
+        public void postDelayed(Runnable runnable, long delayMillis) {
+            mMainThreadHandler.postDelayed(runnable, delayMillis);
+        }
+
+        @Override
+        public void cancel(Runnable runnable) {
+            mMainThreadHandler.removeCallbacks(runnable);
+        }
+    };
+
+    /** Compresses a Ghostty pane's history once its output goes quiet; idle with the Java core. */
+    final GhosttyIdleCompressor mGhosttyIdleCompressor = new GhosttyIdleCompressor(
+        new GhosttyIdleCompressor.Scheduler() {
+            @Override
+            public void postDelayed(Runnable runnable, long delayMillis) {
+                mGhosttyIdleScheduler.postDelayed(runnable, delayMillis);
+            }
+
+            @Override
+            public void cancel(Runnable runnable) {
+                mGhosttyIdleScheduler.cancel(runnable);
+            }
+        },
+        () -> mEmulator == null ? -1 : mEmulator.compressGhosttyIdleStep());
+
+    /** A turn of output reached the emulator: with the Ghostty core, compress once it goes quiet. */
+    private void onGhosttyOutput() {
+        if (mEmulator.isGhosttyCoreActive()) mGhosttyIdleCompressor.onOutput();
+        else mGhosttyIdleCompressor.cancel();
     }
 
     @SuppressLint("HandlerLeak")
@@ -662,13 +855,14 @@ public final class TerminalSession extends TerminalOutput {
                     exitDescription += " (signal " + (-exitCode) + ")";
                 }
                 exitDescription += " - press Enter]";
-                byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
-                mEmulator.append(bytesToWrite, bytesToWrite.length);
+                if (mShowsExitLine) {
+                    byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
+                    mEmulator.append(bytesToWrite, bytesToWrite.length);
+                }
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
-            } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {
-                // More of the burst is waiting: let the frame clock run before the next slice.
-                sendEmptyMessage(MSG_NEW_INPUT);
+            } else {
+                handleNewInput();
             }
         }
     }

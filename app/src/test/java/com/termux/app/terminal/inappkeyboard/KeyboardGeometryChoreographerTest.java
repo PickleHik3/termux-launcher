@@ -70,6 +70,51 @@ public class KeyboardGeometryChoreographerTest {
         assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(true, true, false, false));
     }
 
+    // ------------------------------------------------------------ put-away pre-measure
+
+    @Test
+    public void prewarmMeasuresAPutAwayKeyboardAndLeavesItGoneWithItsMemoUntouched() {
+        mSurface.keyboardContainer.measuredHeight = 600;
+        assertEquals(0, mChoreographer.desiredHeightPx());
+
+        assertTrue(mChoreographer.prewarmMeasure());
+
+        assertEquals("the stack, insets and touches never see it", View.GONE,
+            mSurface.keyboardContainer.getVisibility());
+        assertEquals(1, mSurface.keyboardContainer.measurePasses);
+        assertEquals("the height memo is the show's to fill, as with the keyboard GONE", 0,
+            mChoreographer.desiredHeightPx());
+        assertTrue("no layout request leaves the pre-measure", mSurface.log.isEmpty());
+    }
+
+    @Test
+    public void prewarmMeasuresOncePerBoundsAndAgainAfterTheMeasurementIsDiscarded() {
+        assertTrue(mChoreographer.prewarmMeasure());
+        assertFalse(mChoreographer.prewarmMeasure());
+        mChoreographer.discardMeasuredHeight();
+        assertTrue(mChoreographer.prewarmMeasure());
+    }
+
+    @Test
+    public void prewarmNeverMeasuresAShownOrAFloatingKeyboard() {
+        mSurface.keyboardContainer.setVisibility(View.VISIBLE);
+        assertFalse(mChoreographer.prewarmMeasure());
+        mSurface.keyboardContainer.setVisibility(View.GONE);
+        mSurface.floatingReference = new KeyboardGeometryChoreographer.HostReference(900, 800);
+        assertFalse(mChoreographer.prewarmMeasure());
+        assertEquals(0, mSurface.keyboardContainer.measurePasses);
+    }
+
+    @Test
+    public void prewarmRuleNeedsAGoneStackKeyboardWhoseBoundsMoved() {
+        assertTrue(KeyboardGeometryChoreographer.needsPrewarm(true, false, false, 0, 0, 1080, 1920));
+        assertTrue(KeyboardGeometryChoreographer.needsPrewarm(true, false, true, 1080, 1920, 1080, 1800));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, false, true, 1080, 1920, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(false, false, false, 0, 0, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, true, false, 0, 0, 1080, 1920));
+        assertFalse(KeyboardGeometryChoreographer.needsPrewarm(true, false, false, 0, 0, 0, 1920));
+    }
+
     // ------------------------------------------------------------------- open reveal
 
     @Test
@@ -140,6 +185,66 @@ public class KeyboardGeometryChoreographerTest {
         assertFalse(mChoreographer.isOpenRevealPending());
         assertNull(mChoreographer.openPreDrawListener());
         assertEquals("no backstop may outlive the gate", 0, mSurface.posted.size());
+    }
+
+    @Test
+    public void aKeyboardOpeningBelowTheScreenIsRevealedAtOnceWithOneRenderPassAndNoGate() {
+        // A seam crossing's pre-roll: the travel holds the keyboard below the screen, so no frame
+        // of the drag is held back for its backdrop, and no chrome pass runs inside a frame.
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = false;
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mChoreographer.isOpenRevealPending());
+        assertNull("a below-screen open arms no pre-draw gate", mChoreographer.openPreDrawListener());
+        assertFalse("no chrome pass runs synchronously", mSurface.log.contains("applyChromeSpec"));
+        assertEquals("one posted render pass cuts its crop", 1,
+            java.util.Collections.frequency(mSurface.log, "requestAccessoryRenderSync"));
+        assertEquals("no backstop for a reveal that already happened", 0, mSurface.posted.size());
+    }
+
+    @Test
+    public void aBelowScreenOpenLeavesTheKeyboardsDressToTheFramesOwnApply() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = true;
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertFalse("the dress is not made inside the request",
+            mSurface.log.contains("applyKeyboardSurfaceState"));
+        assertFalse(mSurface.log.contains("buildChromeSpec"));
+        assertEquals("the frame's apply is booked once", 1,
+            java.util.Collections.frequency(mSurface.log, "requestApplyThisFrame"));
+        assertTrue(KeyboardGeometryChoreographer.dressesOnRequest(false));
+        assertFalse(KeyboardGeometryChoreographer.dressesOnRequest(true));
+    }
+
+    @Test
+    public void anOnScreenOpenStillDressesTheKeyboardAtOnce() {
+        mChoreographer.onVisibilityRequested(true, false);
+
+        assertTrue(mSurface.log.contains("applyKeyboardSurfaceState"));
+        assertFalse(mSurface.log.contains("requestApplyThisFrame"));
+    }
+
+    @Test
+    public void aBelowScreenOpenReleasesAGateAnEarlierOpenLeftArmed() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = false;
+        mChoreographer.onVisibilityRequested(true);
+        assertNotNull(mChoreographer.openPreDrawListener());
+
+        mChoreographer.onVisibilityRequested(true, true);
+
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mChoreographer.isOpenRevealPending());
+        assertNull(mChoreographer.openPreDrawListener());
+        assertEquals(0, mSurface.posted.size());
     }
 
     @Test
@@ -638,6 +743,11 @@ public class KeyboardGeometryChoreographerTest {
         @Override
         public void requestAccessoryRenderSync() {
             log.add("requestAccessoryRenderSync");
+        }
+
+        @Override
+        public void requestApplyThisFrame() {
+            log.add("requestApplyThisFrame");
         }
 
         @Override

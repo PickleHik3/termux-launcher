@@ -8,6 +8,7 @@ import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiFeatureCheckRunner;
 import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiVoiceBench;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -127,10 +128,19 @@ public final class TaiBenchRunState {
         /** A feature check's speed once its record landed ({@code TaiFeatureCheck}'s unit), and whether its answers were right. */
         public double featureSpeed;
         public boolean featurePassed;
+        /** A voice run's entry: a speech model on one processor. */
+        public final boolean voice;
+        /** A voice entry's figures once its record landed: times real time, word error rate (NaN unmeasured), load. */
+        public double realtime;
+        public double wer = Double.NaN;
+        public long loadMs = -1L;
+        /** Where a voice entry really ran; differs from {@link #accelerator} when the GPU fell back to the CPU. */
+        @Nullable public String ranOn;
 
         Entry(int index, int total, @NonNull JSONObject plan, @NonNull String displayName) {
             this.index = index;
             this.total = total;
+            this.voice = TaiVoiceBench.KIND.equals(plan.optString("kind", ""));
             this.feature = TaiFunction.fromId(plan.optString("feature", ""));
             this.modelId = plan.optString("modelId", "");
             this.backend = plan.optString("backend", "");
@@ -143,6 +153,12 @@ public final class TaiBenchRunState {
 
         public boolean finished() {
             return status != EntryStatus.RUNNING && status != EntryStatus.PENDING;
+        }
+
+        /** A GPU voice entry whose graph came up on the CPU. */
+        public boolean gpuFellBack() {
+            return voice && TaiBenchSuite.ACCELERATOR_GPU.equals(accelerator) && ranOn != null
+                && !TaiBenchSuite.ACCELERATOR_GPU.equals(ranOn);
         }
     }
 
@@ -235,6 +251,7 @@ public final class TaiBenchRunState {
     private boolean chatFinal;
     private long readMs = -1L;
     private boolean readFinal;
+    private double voiceRealtime = -1.0;
     /** The entry that finished last, for the cool-down card. */
     @Nullable public Entry lastFinished;
     /** A run that could not start, or died: the {@code error} event's code and message. */
@@ -435,7 +452,8 @@ public final class TaiBenchRunState {
     /** One generation is about to be submitted: its reply starts over, and the reading counter starts from now. */
     private void onRunStart(@NonNull JSONObject event, long at) {
         String phaseName = event.optString("phase", live.phase);
-        String prompt = phaseName.equals(live.phase) ? live.prompt : "";
+        // A voice run names each clip's spoken text with its run.
+        String prompt = event.has("prompt") ? event.optString("prompt", "") : phaseName.equals(live.phase) ? live.prompt : "";
         live.reset(phaseName, prompt, event.optInt("run", 1), event.optInt("runs", 1));
         live.startedAtMs = at;
         Entry entry = current();
@@ -468,6 +486,9 @@ public final class TaiBenchRunState {
         // Chat phase lands its median (phase_done): the dial then holds it, and the short replies
         // after it never overwrite it.
         if (live.tps > 0.0 && !chatFinal) chatDecodeTps = live.tps;
+        // A voice run's speed so far, over the clips timed until now.
+        double realtime = event.optDouble("realtime", 0.0);
+        if (realtime > 0.0) voiceRealtime = realtime;
     }
 
     /** What the one dial shows. */
@@ -479,7 +500,9 @@ public final class TaiBenchRunState {
         /** The long page is being read, no token yet: {@link Dial#value} is the seconds waited so far. */
         READING,
         /** The long page was read: {@link Dial#value} is the seconds it took. */
-        READ
+        READ,
+        /** A voice run's speed: {@link Dial#value} is audio seconds per second of transcription. */
+        REALTIME
     }
 
     public static final class Dial {
@@ -500,6 +523,7 @@ public final class TaiBenchRunState {
      */
     @NonNull
     public Dial dial(long nowMs) {
+        if (voiceRealtime > 0.0) return new Dial(DialKind.REALTIME, voiceRealtime);
         if (readFinal && readMs > 0L) return new Dial(DialKind.READ, readMs / 1000.0);
         if (live.active && TaiBenchSuite.PHASE_LONG_INPUT.equals(live.phase)) {
             if (live.ttftMs > 0L) return new Dial(DialKind.READ, live.ttftMs / 1000.0);
@@ -585,6 +609,9 @@ public final class TaiBenchRunState {
                     readMs = Math.round(TaiBenchStore.median(metrics, "readMs", readMs));
                     readFinal = true;
                 }
+                break;
+            case TaiVoiceBench.PHASE_VOICE:
+                if (metrics.optDouble("realtime", 0.0) > 0.0) voiceRealtime = metrics.optDouble("realtime", 0.0);
                 break;
             default:
                 break;
@@ -675,6 +702,14 @@ public final class TaiBenchRunState {
             entry.decodeTps = TaiBenchStore.median(chat, "decodeTps", 0.0);
             entry.ttftMs = TaiBenchStore.median(chat, "ttftMs", 0.0);
             entry.readMs = TaiBenchStore.median(longInput, "readMs", 0.0);
+            if (entry.voice) {
+                JSONObject voice = TaiVoiceBench.headline(record);
+                JSONObject load = phases == null ? null : phases.optJSONObject("load");
+                entry.realtime = voice == null ? 0.0 : voice.optDouble("realtime", 0.0);
+                entry.wer = voice == null ? Double.NaN : voice.optDouble("wer", Double.NaN);
+                entry.loadMs = load == null ? -1L : load.optLong("ms", -1L);
+                entry.ranOn = record.isNull("ranOn") ? null : record.optString("ranOn", null);
+            }
             if (entry.reason == null && record.has("skipReason")) entry.reason = record.optString("skipReason", null);
             if (record.optBoolean("cacheRebuilt", false)) entry.cacheRebuilt = true;
         }
@@ -732,6 +767,7 @@ public final class TaiBenchRunState {
         chatFinal = false;
         readMs = -1L;
         readFinal = false;
+        voiceRealtime = -1.0;
     }
 
     /** The phases of an entry, in order, for the stepper's sub-line; the Sanity check is left out, as it only shows when it fails. */
@@ -744,6 +780,7 @@ public final class TaiBenchRunState {
     /** {@link #phasesFor()} for a bench entry; a feature check's run is its load and its workload. */
     @NonNull
     public static List<String> phasesFor(@NonNull Entry entry) {
+        if (entry.voice) return Arrays.asList(TaiVoiceBench.PHASE_LOAD, TaiVoiceBench.PHASE_WARMUP, TaiVoiceBench.PHASE_VOICE);
         if (entry.feature == null) return phasesFor();
         return Arrays.asList(TaiBenchSuite.PHASE_LOAD, TaiFeatureCheckRunner.PHASE_FEATURE);
     }
@@ -751,5 +788,10 @@ public final class TaiBenchRunState {
     /** Whether this state is a feature check's rather than a bench run's. */
     public boolean featureCheck() {
         return TaiFeatureCheckRunner.PRESET_ID.equals(presetId);
+    }
+
+    /** Whether this state is a voice run's. */
+    public boolean voice() {
+        return TaiVoiceBench.PRESET_ID.equals(presetId);
     }
 }

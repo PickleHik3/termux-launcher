@@ -221,6 +221,28 @@ public final class TaiDeviceCapabilities {
         return false;
     }
 
+    /** Where Android keeps the vendor's OpenCL library, which LiteRT's GPU path loads. */
+    static final String[] OPENCL_LIBRARY_PATHS = {
+        "/vendor/lib64/libOpenCL.so", "/system/vendor/lib64/libOpenCL.so", "/system/lib64/libOpenCL.so"
+    };
+
+    /**
+     * A cheap static answer to "can this phone run a model on the GPU": the GPU is allowed
+     * ({@link #supportsAccelerator}, which keeps the Pixel 10 rule) and an OpenCL library is on the
+     * phone. It is a recommendation input only; nothing is blocked by it.
+     */
+    public boolean hasUsableGpu() {
+        return supportsAccelerator("gpu") && openClLibraryPresent(File::isFile);
+    }
+
+    /** Whether any of {@link #OPENCL_LIBRARY_PATHS} is a file by {@code exists}'s say-so (a test seam). */
+    static boolean openClLibraryPresent(@NonNull java.util.function.Predicate<File> exists) {
+        for (String path : OPENCL_LIBRARY_PATHS) {
+            if (exists.test(new File(path))) return true;
+        }
+        return false;
+    }
+
     @NonNull
     public List<String> compatibleAccelerators(@NonNull TaiModelProfile profile) {
         ArrayList<String> result = new ArrayList<>();

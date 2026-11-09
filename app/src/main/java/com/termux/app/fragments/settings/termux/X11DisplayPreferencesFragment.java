@@ -14,6 +14,7 @@ import androidx.preference.PreferenceManager;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.x11.DisplayStartWith;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.x11.LoriePreferences;
@@ -33,14 +34,17 @@ import com.termux.x11.Prefs;
  */
 public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_TOUCH_MODE = "touchMode";
     private static final String KEY_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
     private static final String KEY_RESOLUTION_MODE = "displayResolutionMode";
     private static final String KEY_SCALE = "displayScale";
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
+    private static final String KEY_SOUND_STATUS = "launcher_sound_status";
 
-    /** The overview is this class; each focused subpage names its own XML and title. */
+    /**
+     * The overview is this class, Terminal › Linux apps (the old Display section, with its Linux
+     * apps rows on top); each focused subpage names its own XML and title.
+     */
     @androidx.annotation.XmlRes
     protected int preferencesXml() {
         return R.xml.x11_display_preferences;
@@ -48,7 +52,7 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
     @androidx.annotation.StringRes
     protected int titleRes() {
-        return R.string.settings_destination_display;
+        return R.string.settings_terminal_sub_linux_apps_title;
     }
 
     @Override
@@ -56,6 +60,33 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         super.onResume();
         // Child screens (GUI apps) retitle the activity; take it back when they pop.
         if (getActivity() != null) getActivity().setTitle(titleRes());
+        // The guide's row says what the last run set up.
+        Preference setup = findPreference("x11_gui_apps_setup");
+        Context context = getContext();
+        if (setup != null && context != null) {
+            setup.setSummary(com.termux.app.x11.GuiAppsSetupGuide.rowSummary(context,
+                com.termux.app.x11.GuiAppsSetupGuide.preferences(context),
+                com.termux.app.AppEdition.of(context.getPackageName())));
+        }
+        updateSoundStatus();
+    }
+
+    /**
+     * The line under the sound switches: the user's own setup in use (decision 7), or the server
+     * left down after it kept stopping (decision 3). Hidden when there is nothing to say.
+     */
+    private void updateSoundStatus() {
+        Preference row = findPreference(KEY_SOUND_STATUS);
+        Context context = getContext();
+        if (row == null || context == null) return;
+        com.termux.app.sound.LauncherSound.Status status =
+            com.termux.app.sound.LauncherSound.get(context).status();
+        int text = status == com.termux.app.sound.LauncherSound.Status.USER_SETUP
+            ? R.string.settings_launcher_sound_user_setup
+            : status == com.termux.app.sound.LauncherSound.Status.GAVE_UP
+                ? R.string.settings_launcher_sound_gave_up : 0;
+        if (text != 0) row.setSummary(text);
+        if (row.isVisible() != (text != 0)) row.setVisible(text != 0);
     }
 
     @Override
@@ -72,11 +103,15 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         Preference dpiRow = findPreference("x11_display_dpi");
         if (dpiRow instanceof com.termux.app.fragments.settings.SliderPreference)
             ((com.termux.app.fragments.settings.SliderPreference) dpiRow).setValueSuffix(" dpi");
-        com.termux.app.fragments.settings.SegmentedPillPreference touch = findPreference(KEY_TOUCH_MODE);
-        if (touch != null) {
-            applyKeyboardFollowsTextRow(touch.getValue());
-            touch.setOnPreferenceChangeListener((preference, value) -> {
-                applyKeyboardFollowsTextRow(String.valueOf(value));
+        Preference sound = findPreference(
+            TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND);
+        if (sound != null) {
+            // Off hides the line at once; on, the server decides afresh, so the line waits for it.
+            sound.setOnPreferenceChangeListener((preference, value) -> {
+                if (Boolean.FALSE.equals(value)) {
+                    Preference row = findPreference(KEY_SOUND_STATUS);
+                    if (row != null && row.isVisible()) row.setVisible(false);
+                }
                 return true;
             });
         }
@@ -88,6 +123,97 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
+        setUpStartWith();
+    }
+
+    private static final String KEY_START_WITH =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH;
+    private static final String KEY_START_WITH_COMMAND =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND;
+
+    /**
+     * Start with (#166): Nothing and A command… at once, then one desktop row per installed
+     * distro that has XFCE, found off the main thread. A stored desktop stays listed while the
+     * search runs, so the row never holds a choice it does not show.
+     */
+    private void setUpStartWith() {
+        ListPreference startWith = findPreference(KEY_START_WITH);
+        if (startWith == null) return;
+        String stored = startWith.getValue();
+        java.util.List<String> distros = new java.util.ArrayList<>();
+        DisplayStartWith.Choice choice = DisplayStartWith.parse(stored, "");
+        if (choice.kind == DisplayStartWith.Kind.DESKTOP) distros.add(choice.distro);
+        applyStartWithEntries(startWith, distros);
+        startWith.setSummaryProvider(preference -> {
+            ListPreference list = (ListPreference) preference;
+            String value = list.getValue();
+            if (value == null || value.isEmpty() || list.getEntry() == null) {
+                return list.getContext().getString(R.string.settings_x11_start_with_summary);
+            }
+            return list.getEntry();
+        });
+        applyStartWithCommandRow(stored);
+        startWith.setOnPreferenceChangeListener((preference, value) -> {
+            String picked = String.valueOf(value);
+            applyStartWithCommandRow(picked);
+            Preference command = findPreference(KEY_START_WITH_COMMAND);
+            if (DisplayStartWith.VALUE_COMMAND.equals(picked) && command != null
+                && getListView() != null) {
+                // "A command…" asks for the command straight away, once the list dialog is gone.
+                getListView().post(() -> {
+                    if (isAdded()) onDisplayPreferenceDialog(command);
+                });
+            }
+            return true;
+        });
+        new Thread(() -> {
+            java.util.List<String> found =
+                DisplayStartWith.distrosWithDesktop(com.termux.app.x11.ProotDistro.installed());
+            android.app.Activity activity = getActivity();
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                ListPreference row = findPreference(KEY_START_WITH);
+                if (row == null) return;
+                java.util.List<String> merged = new java.util.ArrayList<>(found);
+                DisplayStartWith.Choice now = DisplayStartWith.parse(row.getValue(), "");
+                if (now.kind == DisplayStartWith.Kind.DESKTOP && !merged.contains(now.distro)) {
+                    merged.add(now.distro);
+                }
+                applyStartWithEntries(row, merged);
+            });
+        }, "x11-start-with-distros").start();
+    }
+
+    /** Nothing, a desktop for each of {@code distros}, then A command…. */
+    private void applyStartWithEntries(@NonNull ListPreference row,
+                                       @NonNull java.util.List<String> distros) {
+        Context context = row.getContext();
+        java.util.List<CharSequence> entries = new java.util.ArrayList<>();
+        java.util.List<CharSequence> values = new java.util.ArrayList<>();
+        entries.add(context.getString(R.string.settings_x11_start_with_nothing));
+        values.add(DisplayStartWith.VALUE_NOTHING);
+        for (String distro : distros) {
+            entries.add(context.getString(R.string.settings_x11_start_with_desktop,
+                DisplayStartWith.distroLabel(distro)));
+            values.add(DisplayStartWith.desktopValue(distro));
+        }
+        entries.add(context.getString(R.string.settings_x11_start_with_command));
+        values.add(DisplayStartWith.VALUE_COMMAND);
+        CharSequence[] newEntries = entries.toArray(new CharSequence[0]);
+        if (java.util.Arrays.equals(newEntries, row.getEntries())) return;
+        row.setEntries(newEntries);
+        row.setEntryValues(values.toArray(new CharSequence[0]));
+        // The summary reads the entry, which may only now exist for a stored desktop.
+        Preference.SummaryProvider<ListPreference> summary = row.getSummaryProvider();
+        if (summary != null) row.setSummaryProvider(summary);
+    }
+
+    /** The command row shows only while the choice is a command. */
+    private void applyStartWithCommandRow(@Nullable String choice) {
+        Preference command = findPreference(KEY_START_WITH_COMMAND);
+        boolean visible = DisplayStartWith.VALUE_COMMAND.equals(choice);
+        if (command != null && command.isVisible() != visible) command.setVisible(visible);
     }
 
     /** Only the size row that the chosen resolution mode reads is shown. */
@@ -98,21 +224,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         if (scale != null) scale.setVisible("scaled".equals(mode));
         if (exact != null) exact.setVisible("exact".equals(mode));
         if (custom != null) custom.setVisible("custom".equals(mode));
-    }
-
-    /**
-     * A tap only means "here" while touch is read as a touchscreen, so the keyboard row says as
-     * much in the other two modes rather than offering a switch that would do nothing.
-     */
-    private void applyKeyboardFollowsTextRow(@Nullable String touchMode) {
-        Preference row = findPreference(KEY_KEYBOARD_FOLLOWS_TEXT);
-        if (row == null) return;
-        boolean touchscreen = String.valueOf(
-            com.termux.app.x11.DisplayTextFocusPolicy.TOUCH_MODE_TOUCHSCREEN).equals(touchMode);
-        row.setEnabled(touchscreen);
-        row.setSummary(touchscreen
-            ? R.string.settings_x11_keyboard_follows_text_summary
-            : R.string.settings_x11_keyboard_follows_text_unavailable);
     }
 
     /**
@@ -167,8 +278,10 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 launcher.setX11DisplayCommand(value == null ? "" : value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 launcher.setX11WindowManager(value);
-            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
-                launcher.setX11RuntimeBadge(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH.equals(key)) {
+                launcher.setX11StartWith(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
+                launcher.setX11StartWithCommand(value);
             }
         }
 
@@ -186,8 +299,11 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_WINDOW_MANAGER.equals(key)) {
                 return launcher.getX11WindowManager();
             }
-            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_RUNTIME_BADGE.equals(key)) {
-                return launcher.getX11RuntimeBadge();
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH.equals(key)) {
+                return launcher.getX11StartWith();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
+                return launcher.getX11StartWithCommand();
             }
             return defValue;
         }
@@ -224,13 +340,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 return;
             }
             switch (key) {
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_ENABLED:
-                    // The one path the switch takes, whichever page it is on: the prefix
-                    // commands, the drawer's Linux apps, the usage mode and the launcher's own
-                    // reconcile all hang off it. Writing the preference here alone, as this used
-                    // to, changed nothing until the next cold start.
-                    TermuxStylePreferencesDataStore.getInstance(context).putBoolean(key, value);
-                    break;
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART:
                     launcher.setX11DisplayAutostartEnabled(value);
                     break;
@@ -260,6 +369,14 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
                         .refreshAsync(null, null);
                     break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND:
+                    launcher.setLauncherSoundEnabled(value);
+                    com.termux.app.sound.LauncherSound.get(context).onSettingsChanged();
+                    break;
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS:
+                    launcher.setLauncherMediaControlsEnabled(value);
+                    com.termux.app.sound.LauncherSound.get(context).onSettingsChanged();
+                    break;
                 default:
                     break;
             }
@@ -270,8 +387,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             if (key == null) return defValue;
             if (isDisplayKey(key)) return display.keys.get(key).asBoolean().get();
             switch (key) {
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_ENABLED:
-                    return launcher.isX11DisplayEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART:
                     return launcher.isX11DisplayAutostartEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_SET_DISPLAY_ENV:
@@ -286,6 +401,10 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     return launcher.isX11KeyboardFollowsTextEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
                     return launcher.isX11DrawerAppsEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND:
+                    return launcher.isLauncherSoundEnabled();
+                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS:
+                    return launcher.isLauncherMediaControlsEnabled();
                 default:
                     return defValue;
             }

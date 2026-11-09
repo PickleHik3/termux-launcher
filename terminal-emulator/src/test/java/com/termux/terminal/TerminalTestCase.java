@@ -205,8 +205,8 @@ public abstract class TerminalTestCase extends TestCase {
 	}
 
 	public void assertHistoryStartsWith(String... rows) {
-		assertTrue("About to check " + rows.length + " lines, but only " + mTerminal.getScreen().getActiveTranscriptRows() + " in history",
-				mTerminal.getScreen().getActiveTranscriptRows() >= rows.length);
+		assertTrue("About to check " + rows.length + " lines, but only " + mTerminal.getContent().historyRows() + " in history",
+				mTerminal.getContent().historyRows() >= rows.length);
 		for (int i = 0; i < rows.length; i++) {
 			assertLineIs(-i - 1, rows[i]);
 		}
@@ -274,7 +274,7 @@ public abstract class TerminalTestCase extends TestCase {
 	}
 
 	protected void assertLineIs(int line, String expected) {
-		TerminalRow l = mTerminal.getScreen().allocateFullLineIfNecessary(mTerminal.getScreen().externalToInternalRow(line));
+		TerminalRow l = mTerminal.getContent().row(line);
 		char[] chars = l.mText;
 		int textLen = l.getSpaceUsed();
 		if (textLen != expected.length()) fail("Expected '" + expected + "' (len=" + expected.length() + "), was='"

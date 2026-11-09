@@ -625,6 +625,9 @@ public class LauncherCtlApiServer {
                         result.text.getBytes(StandardCharsets.UTF_8), null);
                 }
                 return jsonResponse(result.json);
+            } else if (com.termux.app.sound.SoundRoutes.handles(request.method, request.path)) {
+                return jsonResponse(com.termux.app.sound.SoundRoutes.handle(context, request.path,
+                    queryParameters(request.query), request.body));
             } else if (signalToolFor(request.method, request.path) != null) {
                 return jsonResponse(runSignalRequest(request));
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
@@ -633,11 +636,16 @@ public class LauncherCtlApiServer {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
                 com.termux.app.x11.X11GpuProbe.Result gpu = com.termux.app.x11.X11GpuProbe.probe(context);
-                if ("env".equals(queryParameters(request.query).get("format"))) {
+                String format = queryParameters(request.query).get("format");
+                if ("env".equals(format) || "table".equals(format)) {
+                    // table: the profile list termux-x11-gpu-setup benchmarks (X11GpuProbe.Result#toTable).
+                    String text = "table".equals(format) ? gpu.toTable() : gpu.toEnv();
                     return new HttpResponse(200, "text/plain; charset=utf-8",
-                        gpu.toEnv().getBytes(StandardCharsets.UTF_8), null);
+                        text.getBytes(StandardCharsets.UTF_8), null);
                 }
-                return jsonResponse(gpu.toJson());
+                JSONObject json = gpu.toJson();
+                new com.termux.app.x11.X11GpuProfileStore(context).putChoice(json, gpu);
+                return jsonResponse(json);
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -1583,7 +1591,10 @@ public class LauncherCtlApiServer {
             return error;
         }
 
-        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        // A Linux app installed from a pane a moment ago is found: the catalogue re-lists the
+        // desktop files first when they changed.
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context)
+            .getAllAppsWithCurrentLinuxAppsBlocking();
         AppLaunchMatch match = resolveLaunchMatch(apps, query);
         if (match.entry == null) {
             JSONObject error = jsonError(match.errorCode, match.message);
@@ -2085,6 +2096,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/vibrate", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/look", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/motion-log/clear", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/volume", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/toast", new SimpleRateLimiter(60, 60_000));
@@ -2987,15 +3001,18 @@ public class LauncherCtlApiServer {
             "  launcherctl vibrate [-d MS] [--force]\n" +
             "  launcherctl torch on|off\n" +
             "  launcherctl battery\n" +
+            "  launcherctl motion-log dump|clear\n" +
+            "  launcherctl look get|set|reset ...\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
             "  launcherctl wallpaper get\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
+            "  launcherctl media player|gone|seeked|streams ...   (the launcher's media helper)\n" +
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, volume, toast, wallpaper and x11.\n" +
+            "battery, motion-log, look, volume, toast, wallpaper, x11 and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3209,6 +3226,42 @@ public class LauncherCtlApiServer {
             "(microamperes) as JSON, as termux-battery-status does.\n" +
             "EOF\n" +
             "      ;;\n" +
+            "    motion-log) cat <<'EOF'\n" +
+            "launcherctl motion-log - the motion log\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl motion-log dump\n" +
+            "  launcherctl motion-log clear\n" +
+            "\n" +
+            "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
+            "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
+            "lines; clear empties them.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    look) cat <<'EOF'\n" +
+            "launcherctl look - the glass look\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl look get PROPERTY [--element E] [--page ID | --kind K]\n" +
+            "  launcherctl look set PROPERTY VALUE [--element E] [--page ID | --kind K]\n" +
+            "  launcherctl look reset [PROPERTY] [--element E] [--page ID | --kind K]\n" +
+            "\n" +
+            "Properties: frost opacity tint colour corners depth edge grain rim vibrancy margin.\n" +
+            "Elements: status dock keyboard terminal widgets sheets. Without --element a value\n" +
+            "applies to all glass; without --page or --kind, everywhere. --kind takes home,\n" +
+            "terminal or display: every page of that kind. Vibrancy and margin are for all glass,\n" +
+            "everywhere.\n" +
+            "Values: a number; frost takes a stop 0-7 or a blur such as 12dp; colour takes primary,\n" +
+            "secondary or tertiary; rim takes off, hairline or bright; corners takes dp or auto.\n" +
+            "get prints the value and where it is set; reset puts back what the cell followed.\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl look set opacity 60 --element dock\n" +
+            "  launcherctl look get opacity --element dock\n" +
+            "  launcherctl look set opacity 60 --element keyboard --kind home\n" +
+            "  launcherctl look reset --element dock\n" +
+            "EOF\n" +
+            "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
             "launcherctl volume - stream volumes\n" +
             "\n" +
@@ -3243,10 +3296,26 @@ public class LauncherCtlApiServer {
             "launcherctl x11 - Linux apps on the display\n" +
             "\n" +
             "Usage:\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
             "\n" +
             "gpu says which graphics profile fits this phone and whether its packages are\n" +
-            "installed; --env prints the exports instead, ready to eval.\n" +
+            "installed, and which one you picked; --env prints the exports instead, ready to\n" +
+            "eval; --table prints the profile list the graphics benchmark tries.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    media) cat <<'EOF'\n" +
+            "launcherctl media - what Linux media players are doing, for the media notification\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl media player NAME [PID] < REPLY\n" +
+            "  launcherctl media gone NAME\n" +
+            "  launcherctl media seeked NAME MICROSECONDS\n" +
+            "  launcherctl media streams COUNT\n" +
+            "\n" +
+            "The launcher's own media helper reports through these; you do not need them. NAME is\n" +
+            "an MPRIS bus name (org.mpris.MediaPlayer2.*); REPLY is what dbus-send --print-reply\n" +
+            "printed for the player's Properties.GetAll. streams is how many sound streams are\n" +
+            "playing through the launcher's sound server.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    *) return 1 ;;\n" +
@@ -3675,6 +3744,50 @@ public class LauncherCtlApiServer {
             "    *) echo 'usage: launcherctl torch on|off' >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "layout_cmd() {\n" +
+            "  sub=\"${1:-}\"; kind=\"${2:-}\"\n" +
+            "  case \"$sub\" in\n" +
+            "    get)\n" +
+            "      [ -n \"$kind\" ] || { echo \"usage: launcherctl layout get <home|terminal|terminal_minimal|display|sizes>\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"get\\\",\\\"kind\\\":\\\"$kind\\\"}\"\n" +
+            "      ;;\n" +
+            "    set)\n" +
+            "      file=\"${3:-}\"\n" +
+            "      [ -n \"$kind\" ] && [ -n \"$file\" ] || { echo \"usage: launcherctl layout set <kind> FILE\" >&2; exit 2; }\n" +
+            "      [ -r \"$file\" ] || { echo \"launcherctl layout: cannot read $file\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"set\\\",\\\"kind\\\":\\\"$kind\\\",\\\"layout\\\":$(cat \"$file\")}\"\n" +
+            "      ;;\n" +
+            "    *)\n" +
+            "      echo \"usage: launcherctl layout get <kind> | layout set <kind> FILE\" >&2; exit 2\n" +
+            "      ;;\n" +
+            "  esac\n" +
+            "}\n" +
+            "look_cmd() {\n" +
+            "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
+            "  op=\"${1:-}\"\n" +
+            "  case \"$op\" in get|set|reset) shift ;; *) echo \"$usage\" >&2; exit 2 ;; esac\n" +
+            "  prop='' val='' elem='' page='' kind='' have_val=0\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --element) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; elem=\"$2\"; shift 2 ;;\n" +
+            "      --page) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; page=\"$2\"; shift 2 ;;\n" +
+            "      --kind) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; kind=\"$2\"; shift 2 ;;\n" +
+            "      -*) echo \"launcherctl look: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) if [ -z \"$prop\" ]; then prop=\"$1\"; elif [ \"$have_val\" -eq 0 ] && [ \"$op\" = set ]; then val=\"$1\"; have_val=1; else echo \"$usage\" >&2; exit 2; fi; shift ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  case \"$page\" in *[!0-9]*) echo 'launcherctl look: --page takes a page number' >&2; exit 2 ;; esac\n" +
+            "  case \"$kind\" in ''|home|terminal|display) ;; *) echo 'launcherctl look: --kind takes home, terminal or display' >&2; exit 2 ;; esac\n" +
+            "  [ -z \"$page\" ] || [ -z \"$kind\" ] || { echo 'launcherctl look: give --page or --kind, not both' >&2; exit 2; }\n" +
+            "  [ \"$op\" = reset ] || [ -n \"$prop\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  [ \"$op\" != set ] || [ \"$have_val\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  body=\"{\\\"op\\\":\\\"$op\\\",\\\"property\\\":$(printf '%s' \"$prop\" | json_str)\"\n" +
+            "  [ \"$op\" != set ] || body=\"$body,\\\"value\\\":$(printf '%s' \"$val\" | json_str)\"\n" +
+            "  [ -z \"$elem\" ] || body=\"$body,\\\"element\\\":$(printf '%s' \"$elem\" | json_str)\"\n" +
+            "  [ -z \"$page\" ] || body=\"$body,\\\"page\\\":$page\"\n" +
+            "  [ -z \"$kind\" ] || body=\"$body,\\\"kind\\\":\\\"$kind\\\"\"\n" +
+            "  api POST /v1/look \"$body}\"\n" +
+            "}\n" +
             "volume_cmd() {\n" +
             "  if [ \"$#\" -eq 0 ]; then api GET /v1/volume; return; fi\n" +
             "  [ \"$#\" -eq 2 ] || { echo 'usage: launcherctl volume [STREAM VALUE]' >&2; exit 2; }\n" +
@@ -3728,7 +3841,7 @@ public class LauncherCtlApiServer {
             "esac\n" +
             "if [ \"$#\" -eq 1 ]; then\n" +
             "  case \"$cmd\" in\n" +
-            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11)\n" +
+            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|media)\n" +
             "      group_help \"$cmd\" >&2\n" +
             "      exit 2\n" +
             "      ;;\n" +
@@ -3790,6 +3903,27 @@ public class LauncherCtlApiServer {
             "  battery)\n" +
             "    api GET /v1/battery\n" +
             "    ;;\n" +
+            "  motion-log)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      dump)\n" +
+            "        # The buffered lines, one per line, oldest first.\n" +
+            "        out=$(api GET /v1/motion-log) || { printf '%s\\n' \"$out\"; exit 1; }\n" +
+            "        case \"$out\" in\n" +
+            "          *'\"lines\":[]'*) ;;\n" +
+            "          *) printf '%s\\n' \"$out\" | sed 's/^.*\"lines\":\\[\"//; s/\"\\]}$//; s/\",\"/\\n/g' ;;\n" +
+            "        esac\n" +
+            "        ;;\n" +
+            "      clear) api POST /v1/motion-log/clear '{}' ;;\n" +
+            "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  layout)\n" +
+            "    shift || true; layout_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  look)\n" +
+            "    shift || true\n" +
+            "    look_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  volume)\n" +
             "    shift || true\n" +
             "    volume_cmd \"$@\"\n" +
@@ -3828,14 +3962,58 @@ public class LauncherCtlApiServer {
             "      gpu)\n" +
             "        # What this phone's GPU can do for Linux apps on the display, and the exact\n" +
             "        # environment that asks for it: JSON, or with --env lines to eval in a shell.\n" +
-            "        if [ \"${2:-}\" = \"--env\" ]; then api GET \"/v1/x11/gpu?format=env\"; else api GET /v1/x11/gpu; fi\n" +
+            "        # --table is the profile list termux-x11-gpu-setup benchmarks.\n" +
+            "        case \"${2:-}\" in\n" +
+            "          --env) api GET \"/v1/x11/gpu?format=env\" ;;\n" +
+            "          --table) api GET \"/v1/x11/gpu?format=table\" ;;\n" +
+            "          *) api GET /v1/x11/gpu ;;\n" +
+            "        esac\n" +
             "        ;;\n" +
-            "      *) echo \"usage: launcherctl x11 gpu [--env]\" >&2; exit 2 ;;\n" +
+            "      *) echo \"usage: launcherctl x11 gpu [--env|--table]\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  media)\n" +
+            "    shift || true\n" +
+            "    sub=\"${1:-}\" name=\"${2:-}\"\n" +
+            "    case \"$sub\" in\n" +
+            "      player|gone|seeked) ;;\n" +
+            "      streams)\n" +
+            "        case \"$name\" in ''|*[!0-9]*) echo \"usage: launcherctl media streams COUNT\" >&2; exit 2 ;; esac\n" +
+            "        api POST \"/v1/media/streams?playing=$name\" '{}'\n" +
+            "        exit $?\n" +
+            "        ;;\n" +
+            "      *) group_help media >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    # A bus name, which is also safe in a URL as it stands.\n" +
+            "    case \"$name\" in\n" +
+            "      org.mpris.MediaPlayer2.*) ;;\n" +
+            "      *) echo \"launcherctl media: NAME must be an MPRIS bus name\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    case \"$name\" in *[!A-Za-z0-9._-]*) echo \"launcherctl media: NAME must be an MPRIS bus name\" >&2; exit 2 ;; esac\n" +
+            "    case \"$sub\" in\n" +
+            "      gone) api POST \"/v1/media/gone?name=$name\" '{}' ;;\n" +
+            "      seeked)\n" +
+            "        position=\"${3:-}\"\n" +
+            "        case \"$position\" in ''|-|*[!0-9-]*|?*-*) echo \"usage: launcherctl media seeked NAME MICROSECONDS\" >&2; exit 2 ;; esac\n" +
+            "        api POST \"/v1/media/seeked?name=$name&position=$position\" '{}'\n" +
+            "        ;;\n" +
+            "      player)\n" +
+            "        pid=\"${3:-0}\"\n" +
+            "        case \"$pid\" in ''|*[!0-9]*) pid=0 ;; esac\n" +
+            "        need_server\n" +
+            "        # The reply goes as it was printed, on stdin; the launcher reads it.\n" +
+            "        out=$(curl -sS --connect-timeout 2 --max-time \"$API_MAX_TIME\" -X POST -w '\\n%{http_code}' \\\n" +
+            "          -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain\" \\\n" +
+            "          --data-binary @- \"$BASE/v1/media/player?name=$name&pid=$pid\")\n" +
+            "        code=$(printf '%s\\n' \"$out\" | tail -n 1)\n" +
+            "        printf '%s\\n' \"$out\" | sed '$d'\n" +
+            "        [ \"$code\" -lt 400 ] 2>/dev/null\n" +
+            "        ;;\n" +
             "    esac\n" +
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, wallpaper, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

@@ -141,6 +141,8 @@ public final class HelpTargets {
             // space bar with its swipes. Each is measured on the keys it is about.
             add(s, "prefix", union(keyRect("ctrl"), keyRect("alt")), 0);
             add(s, "space", keyRect("space"), 0);
+        } else if (place == PaneWallPage.ASSISTANT) {
+            // The Assistant page has no controls of its own to point at yet (ADR 0022).
         } else if (place == PaneWallPage.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),
@@ -201,7 +203,7 @@ public final class HelpTargets {
         add(s, "keyboard_grabber", out, 0);
     }
 
-    /** The top-left corner square of a page that is not the terminal: the Widgets or Display page. */
+    /** The top-left corner square of a page that is not the terminal: the Widgets or display window. */
     private Rect wallCorner(Rect wall) {
         float density = context.getResources().getDisplayMetrics().density;
         int size = Math.round(com.termux.app.chrome.CornerZones.clampSize(

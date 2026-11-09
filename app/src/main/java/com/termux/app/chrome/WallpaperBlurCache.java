@@ -9,6 +9,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.logger.Logger;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,6 +23,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.LongSupplier;
 
 /**
  * The one pre-blurred wallpaper frame every glass surface samples.
@@ -160,10 +163,11 @@ public final class WallpaperBlurCache {
      * How many radii stay resident. A look uses one radius per surface — dock, status bar, pane
      * glass, the wall's own radius 0, and more when the keyboard and a palette are dressed apart —
      * and a rotation on Pong asked for six distinct radii in one frame while four fit, so the first
-     * two were evicted as the last two landed (2026-09-09). Six holds a full look; the byte budget
-     * below still bounds what a larger panel keeps.
+     * two were evicted as the last two landed (2026-09-09). Eight holds every Frost stop (ADR 0017
+     * §4), so no mix of per-element looks can evict a radius a visible surface still samples; the
+     * byte budget below still bounds what a larger panel keeps.
      */
-    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 6;
+    public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 8;
     /**
      * How many bytes of pre-blurred frames stay resident, whatever the radius count. A count alone
      * let a QHD phone hold 55 MB of wallpaper nobody was looking at, so the budget bounds the bytes
@@ -171,12 +175,31 @@ public final class WallpaperBlurCache {
      * it was blurred at — a quarter of the panel at the usual radii, ~1 MB for a 1.5×-wide parallax
      * frame on 1080x2412 (2026-09-27); only radius 0, the wallpaper itself, and a radius under the
      * blur's 25px cap keep a full-size frame (~15.6 MB wide). Sized for the full set of six.
+     *
+     * <p>The budget only ever evicts frames nobody is asking for. A radius obtained within
+     * {@link #IN_USE_WINDOW_MS} is in use by a visible surface and is never evicted for bytes:
+     * evicting it made the next render pass bake it again and evict its neighbour, a loop that
+     * baked ~8 frames a second on an idle 2736x1824 tablet, where four full-size radii are 80 MB
+     * (2026-11-05). When the radii in use alone exceed the budget the cache holds them anyway and
+     * logs the figure once per source; the budget does not grow, so the frames nobody asks for are
+     * still the first to go. The most recent frame always stays, and the radius count cap holds.
      */
     public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 72L * 1024 * 1024;
+
+    private static final String LOG_TAG = "WallpaperBlurCache";
+
+    /** How long after an {@link #obtain} a radius counts as sampled by a visible surface. */
+    static final long IN_USE_WINDOW_MS = 3000L;
 
     @NonNull private final Source mSource;
     @Nullable private final Runnable mOnCleared;
     private final long mMaxBytes;
+    /** Uptime in ms; replaced by tests. */
+    @NonNull LongSupplier mClockMs = () -> System.nanoTime() / 1_000_000L;
+    /** When each radius was last asked for, by any {@link #obtain}, hit or miss. */
+    @NonNull private final Map<Integer, Long> mLastAskedMs = new HashMap<>();
+    /** True once the in-use set outgrew the byte budget for the current source. */
+    private boolean mOverBudgetLogged;
 
     @NonNull private final LinkedHashMap<Integer, Bitmap> mByRadius =
         new LinkedHashMap<>(4, 0.75f, true);
@@ -408,6 +431,16 @@ public final class WallpaperBlurCache {
         return frame != null && mByRadius.containsValue(frame);
     }
 
+    /** The Vibrancy the resident frames were baked at; what a live picture matches. */
+    public int bakedVibrancy() {
+        return mVibrancy;
+    }
+
+    /** The frame tint the resident frames were baked with; what a live picture matches. */
+    public int bakedFrameTint() {
+        return mFrameTint;
+    }
+
     /**
      * The blur radius, in dp, {@code frame} was cut at, or -1 when it is not a resident frame.
      * Does not touch the LRU order.
@@ -418,6 +451,16 @@ public final class WallpaperBlurCache {
             if (entry.getValue() == frame) return entry.getKey();
         }
         return -1;
+    }
+
+    /**
+     * The resident frame for {@code blurRadiusDp}, or null; never captures or blurs. Live glass's
+     * ground layer samples it during a swipe ({@link LiveBackdrop.GroundSource}).
+     */
+    @Nullable
+    public Bitmap peek(int blurRadiusDp) {
+        Bitmap frame = mByRadius.get(blurRadiusDp);
+        return frame == null || frame.isRecycled() ? null : frame;
     }
 
     /** Visible for tests: how many radii are resident right now. */
@@ -446,6 +489,9 @@ public final class WallpaperBlurCache {
      */
     @Nullable
     public Bitmap obtain(int blurRadiusDp, @NonNull View wallpaperFrame) {
+        // The wallpaper scene's live frame is blurred at the radius glass is asking for.
+        com.termux.app.chrome.scene.LiveSceneFrame.noteBlurRadius(blurRadiusDp);
+        mLastAskedMs.put(blurRadiusDp, mClockMs.getAsLong());
         Rect frameRect = mSource.wallpaperFrameRect();
         boolean managedSource = mSource.useManagedWallpaperSource();
         int systemWallpaperId = mSource.systemWallpaperId();
@@ -766,13 +812,32 @@ public final class WallpaperBlurCache {
                        long managedLastModified, long managedLength) {
         if (blurredBitmap == capture.bitmap()) capture.handedOut = true;
         mByRadius.put(blurRadiusDp, blurredBitmap);
-        while (mByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII
-            || (mByRadius.size() > 1 && residentBytes() > mMaxBytes)) {
-            Iterator<Bitmap> eldest = mByRadius.values().iterator();
-            eldest.next();
+        long now = mClockMs.getAsLong();
+        while (true) {
+            boolean overCount = mByRadius.size() > MAX_CACHED_WALLPAPER_BLUR_RADII;
+            boolean overBytes = mByRadius.size() > 1 && residentBytes() > mMaxBytes;
+            if (!overCount && !overBytes) break;
+            // Eldest first, but a radius asked for within the window is spared the byte budget, and
+            // the frame just stored is spared always. Only the count cap may take one in use.
+            Integer victim = null;
+            for (Map.Entry<Integer, Bitmap> entry : mByRadius.entrySet()) {
+                int radius = entry.getKey();
+                if (radius == blurRadiusDp) continue;
+                if (!overCount && isInUse(radius, now)) continue;
+                victim = radius;
+                break;
+            }
+            if (victim == null) {
+                if (!mOverBudgetLogged) {
+                    mOverBudgetLogged = true;
+                    Logger.logWarn(LOG_TAG, "Radii in use hold " + residentBytes()
+                        + " bytes, over the " + mMaxBytes + " byte wallpaper blur budget; keeping them");
+                }
+                break;
+            }
             // Dropped, never recycled: a surface may still be drawing it (an X11 pane's corner
             // mask keeps the wall-behind frame across passes), and the collector reclaims it.
-            eldest.remove();
+            mByRadius.remove(victim);
         }
         recordSource(frameRect, orientation, managedSource, systemWallpaperId,
             managedLastModified, managedLength);
@@ -781,6 +846,11 @@ public final class WallpaperBlurCache {
         } else {
             mCrossfadedRadii.remove(blurRadiusDp);
         }
+    }
+
+    private boolean isInUse(int blurRadiusDp, long nowMs) {
+        Long asked = mLastAskedMs.get(blurRadiusDp);
+        return asked != null && nowMs - asked <= IN_USE_WINDOW_MS;
     }
 
     /**
@@ -869,6 +939,7 @@ public final class WallpaperBlurCache {
 
     private void doClearTraced(boolean crossfade, boolean keepCapture) {
         mGeneration++;
+        mOverBudgetLogged = false;
         mPending.clear();
         mHeldStandIns.clear();
         // A radius still waiting from an earlier wallpaper-change clear keeps its mark through a

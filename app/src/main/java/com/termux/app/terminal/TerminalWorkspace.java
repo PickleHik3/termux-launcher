@@ -14,10 +14,12 @@ import java.util.List;
 /** Versioned, declarative description of a terminal workspace. */
 public final class TerminalWorkspace {
 
-    public static final int VERSION = 3;
+    public static final int VERSION = 5;
     /**
      * Oldest schema this build still loads. Version 2 added per-window floating panes, version 3
-     * per-window names. Both are optional keys, so every older file still loads unchanged.
+     * per-window names, version 4 a Home float's page and shape ({@code homeFloat}), version 5 the
+     * float's page by id ({@code pageId}; a v4 file's {@code page} is a position, read once
+     * against the Home pages as they stand). All are optional keys, so every older file still loads.
      */
     private static final int MIN_VERSION = 1;
     public static final int MAX_SESSIONS = 64;
@@ -66,21 +68,79 @@ public final class TerminalWorkspace {
         @NonNull public final List<FloatingPane> floats;
         /** User-given tab name, or null while the tab labels itself from its foreground process. */
         @Nullable public final String name;
+        /**
+         * Where this window floated over Home when it was saved, or null for a window of the
+         * Workspace's row. Only a window of one pane, the tree's root, with no floating panes can
+         * be a Home float; on any other window it is dropped, so it loads as a tiled window.
+         */
+        @Nullable public final HomeFloat homeFloat;
 
         public Window(int activePane, @NonNull Node root) {
-            this(activePane, root, null, null);
+            this(activePane, root, null, null, null);
         }
 
         public Window(int activePane, @NonNull Node root, @Nullable List<FloatingPane> floats) {
-            this(activePane, root, floats, null);
+            this(activePane, root, floats, null, null);
         }
 
         public Window(int activePane, @NonNull Node root, @Nullable List<FloatingPane> floats,
                       @Nullable String name) {
+            this(activePane, root, floats, name, null);
+        }
+
+        public Window(int activePane, @NonNull Node root, @Nullable List<FloatingPane> floats,
+                      @Nullable String name, @Nullable HomeFloat homeFloat) {
             this.activePane = activePane;
             this.root = root;
             this.floats = floats == null ? Collections.emptyList() : immutable(floats);
             this.name = name;
+            this.homeFloat = root instanceof Pane && this.floats.isEmpty() ? homeFloat : null;
+        }
+    }
+
+    /**
+     * A <b>Home float</b> as saved: the id of the Home page it floated over, whether it
+     * was tucked into its chip, and its shape in each orientation it had one in, as fractions of
+     * the room Home floats are laid out in. A shape not known is null; the float is then born there
+     * as a new float is.
+     */
+    public static final class HomeFloat {
+        public final int pageId;
+        public final boolean minimised;
+        @Nullable public final FloatShape portrait;
+        @Nullable public final FloatShape landscape;
+
+        public HomeFloat(int pageId, boolean minimised, @Nullable FloatShape portrait,
+                         @Nullable FloatShape landscape) {
+            this.pageId = pageId;
+            this.minimised = minimised;
+            this.portrait = portrait;
+            this.landscape = landscape;
+        }
+    }
+
+    /** A float's size and spot as fractions of its room: left and top, width and height. */
+    public static final class FloatShape {
+        public final float left;
+        public final float top;
+        public final float width;
+        public final float height;
+
+        public FloatShape(float left, float top, float width, float height) {
+            this.left = left;
+            this.top = top;
+            this.width = width;
+            this.height = height;
+        }
+
+        /** Finite fractions with a size in (0, 1], the same bounds a floating pane keeps. */
+        public static boolean isValid(float left, float top, float width, float height) {
+            return Float.isFinite(left) && Float.isFinite(top) && Float.isFinite(width)
+                && Float.isFinite(height) && width > 0f && width <= 1f && height > 0f && height <= 1f;
+        }
+
+        boolean isValid() {
+            return isValid(left, top, width, height);
         }
     }
 
@@ -171,6 +231,11 @@ public final class TerminalWorkspace {
                 }
                 if (window.activePane < 0 || window.activePane >= windowPanes)
                     invalid("activePane is outside the window's panes");
+                HomeFloat homeFloat = window.homeFloat;
+                if (homeFloat != null && (homeFloat.pageId < 0
+                    || (homeFloat.portrait != null && !homeFloat.portrait.isValid())
+                    || (homeFloat.landscape != null && !homeFloat.landscape.isValid())))
+                    invalid("a Home float needs a page id from 0 and finite shapes with size in (0, 1]");
                 panes += windowPanes;
                 if (panes > MAX_PANES) invalid("workspace has more than " + MAX_PANES + " panes");
             }
@@ -199,7 +264,12 @@ public final class TerminalWorkspace {
     @NonNull
     public JSONObject toJson() throws JSONException {
         JSONObject json = new JSONObject();
-        json.put("version", version);
+        // A Home float is written by page id, which only a v5 reader knows.
+        int written = version;
+        for (Session session : sessions) {
+            for (Window window : session.windows) if (window.homeFloat != null) written = Math.max(version, VERSION);
+        }
+        json.put("version", written);
         json.put("name", name);
         json.put("savedAtEpochMs", savedAtEpochMs);
         json.put("currentSession", currentSession);
@@ -226,6 +296,7 @@ public final class TerminalWorkspace {
                     }
                     windowJson.put("floats", floatArray);
                 }
+                if (window.homeFloat != null) windowJson.put("homeFloat", homeFloatToJson(window.homeFloat));
                 windowArray.put(windowJson);
             }
             sessionJson.put("windows", windowArray);
@@ -235,8 +306,36 @@ public final class TerminalWorkspace {
         return json;
     }
 
+    /**
+     * The Home pages a v4 file's Home float positions are read against: the Home page ids in
+     * order and the id of home. A position names the page at that place; past the last, home,
+     * else the first Home page. Without one ({@code null}) a position {@code i} reads as id
+     * {@code i + 1}, the ids a fresh wall's Home pages are given.
+     */
+    public static final class HomePages {
+        @NonNull public final List<Integer> ids;
+        public final int homeId;
+
+        public HomePages(@NonNull List<Integer> ids, int homeId) {
+            this.ids = new ArrayList<>(ids);
+            this.homeId = homeId;
+        }
+
+        int idAtPosition(int position) {
+            if (position >= 0 && position < ids.size()) return ids.get(position);
+            if (ids.contains(homeId)) return homeId;
+            return ids.isEmpty() ? Math.max(0, position) + 1 : ids.get(0);
+        }
+    }
+
     @NonNull
     public static TerminalWorkspace fromJson(@NonNull JSONObject json) throws WorkspaceException {
+        return fromJson(json, null);
+    }
+
+    @NonNull
+    public static TerminalWorkspace fromJson(@NonNull JSONObject json, @Nullable HomePages pages)
+        throws WorkspaceException {
         try {
             int version = requiredInt(json, "version");
             String name = requiredString(json, "name");
@@ -271,7 +370,7 @@ public final class TerminalWorkspace {
                     }
                     windows.add(new Window(requiredInt(windowJson, "activePane"),
                         nodeFromJson(requiredObject(windowJson, "root"), 1), floats,
-                        optionalString(windowJson, "name")));
+                        optionalString(windowJson, "name"), homeFloatFromJson(windowJson, version, pages)));
                 }
                 sessions.add(new Session(sessionName, currentWindow, windows));
             }
@@ -284,6 +383,73 @@ public final class TerminalWorkspace {
         } catch (JSONException | ClassCastException e) {
             throw new WorkspaceException("invalid_workspace", "Invalid workspace JSON: " + e.getMessage(), e);
         }
+    }
+
+    @NonNull
+    private static JSONObject homeFloatToJson(@NonNull HomeFloat homeFloat) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("pageId", homeFloat.pageId);
+        json.put("minimised", homeFloat.minimised);
+        if (homeFloat.portrait != null) json.put("portrait", shapeToJson(homeFloat.portrait));
+        if (homeFloat.landscape != null) json.put("landscape", shapeToJson(homeFloat.landscape));
+        return json;
+    }
+
+    @NonNull
+    private static JSONObject shapeToJson(@NonNull FloatShape shape) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("left", shape.left);
+        json.put("top", shape.top);
+        json.put("width", shape.width);
+        json.put("height", shape.height);
+        return json;
+    }
+
+    /**
+     * A window's {@code homeFloat}, or null when it has none or it is malformed: a page that is
+     * not a whole number from 0, a {@code minimised} that is not a boolean, or a shape that is not
+     * finite fractions with a size in (0, 1]. A malformed one is dropped, never failing the load,
+     * so the window comes back as a tiled window.
+     */
+    @Nullable
+    private static HomeFloat homeFloatFromJson(@NonNull JSONObject windowJson, int version,
+                                               @Nullable HomePages pages) {
+        JSONObject json = windowJson.optJSONObject("homeFloat");
+        if (json == null) return null;
+        try {
+            int page;
+            if (version >= 5) {
+                page = requiredInt(json, "pageId");
+            } else {
+                int position = requiredInt(json, "page");
+                if (position < 0) return null;
+                page = pages != null ? pages.idAtPosition(position) : position + 1;
+            }
+            if (page < 0) return null;
+            boolean minimised = false;
+            if (json.has("minimised") && !json.isNull("minimised")) {
+                Object value = json.get("minimised");
+                if (!(value instanceof Boolean)) return null;
+                minimised = (Boolean) value;
+            }
+            FloatShape portrait = shapeFromJson(json, "portrait");
+            FloatShape landscape = shapeFromJson(json, "landscape");
+            if ((portrait != null && !portrait.isValid()) || (landscape != null && !landscape.isValid()))
+                return null;
+            return new HomeFloat(page, minimised, portrait, landscape);
+        } catch (JSONException | WorkspaceException | ClassCastException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static FloatShape shapeFromJson(@NonNull JSONObject json, @NonNull String key)
+        throws JSONException, WorkspaceException {
+        if (!json.has(key) || json.isNull(key)) return null;
+        JSONObject shape = requiredObject(json, key);
+        return new FloatShape((float) requiredDouble(shape, "left"),
+            (float) requiredDouble(shape, "top"), (float) requiredDouble(shape, "width"),
+            (float) requiredDouble(shape, "height"));
     }
 
     private static int validateNode(@NonNull Node node, int depth) throws WorkspaceException {

@@ -57,7 +57,7 @@ public class PlaceLayoutSharedMigrationTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     /** An install on version 5 whose three places were arranged three different ways. */
@@ -128,7 +128,9 @@ public class PlaceLayoutSharedMigrationTest {
         seedThreeDifferentPlaces();
         PlaceLayoutStore store = store();
         assertEquals(6, store.widgetColumns(PlaceOrientation.PORTRAIT));
-        assertEquals(3, store.widgetRows(PlaceOrientation.LANDSCAPE));
+        // One grid for both orientations (ADR 0020 §12): landscape reads the portrait count.
+        assertEquals(store.widgetRows(PlaceOrientation.PORTRAIT),
+            store.widgetRows(PlaceOrientation.LANDSCAPE));
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
     }
 
@@ -225,5 +227,12 @@ public class PlaceLayoutSharedMigrationTest {
         assertFalse(store.isStatusCompact(PlaceOrientation.LANDSCAPE));
         for (String key : prefs.getAll().keySet())
             assertFalse(key, PER_PLACE_KEY.matcher(key).matches());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The round check of the Overview's "Also set as phone wallpaper": a ring, filled with a check
+     when ticked. WallpaperPickerPage tints it (primary when ticked, on-surface-variant when not). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_symbol_check_circle" android:state_checked="true" />
+    <item android:drawable="@drawable/ic_symbol_radio_unchecked" />
+</selector>

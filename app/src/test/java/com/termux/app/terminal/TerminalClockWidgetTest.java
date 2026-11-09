@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Calendar;
+import java.util.Locale;
 import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
@@ -34,14 +35,21 @@ public class TerminalClockWidgetTest {
         calendar.clear();
         calendar.set(2026, Calendar.JULY, 22, 4, 5, 6);
 
-        TerminalClockWidget.ClockSnapshot snapshot =
-            TerminalClockWidget.snapshot(calendar.getTimeInMillis(), utc);
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(Locale.UK);
+        try {
+            ClockFaceRenderer.ClockSnapshot snapshot =
+                ClockFaceRenderer.snapshot(calendar.getTimeInMillis(), utc);
 
-        assertEquals("04", snapshot.hh);
-        assertEquals("05", snapshot.mm);
-        assertEquals("06", snapshot.ss);
-        assertEquals("WED 22 JUL", snapshot.date);
-        assertEquals("", snapshot.period);
+            assertEquals("04", snapshot.hh);
+            assertEquals("05", snapshot.mm);
+            assertEquals("06", snapshot.ss);
+            // Sentence case from the locale's own pattern (#111), no longer "WED 22 JUL".
+            assertEquals("Wed 22 Jul", snapshot.date);
+            assertEquals("", snapshot.period);
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 
     @Test
@@ -51,8 +59,8 @@ public class TerminalClockWidgetTest {
         calendar.clear();
         calendar.set(2026, Calendar.JULY, 22, 16, 5, 6);
 
-        TerminalClockWidget.ClockSnapshot snapshot =
-            TerminalClockWidget.snapshot(calendar.getTimeInMillis(), utc, true);
+        ClockFaceRenderer.ClockSnapshot snapshot =
+            ClockFaceRenderer.snapshot(calendar.getTimeInMillis(), utc, true);
 
         assertEquals("04", snapshot.hh);
         assertEquals("PM", snapshot.period);
@@ -126,7 +134,7 @@ public class TerminalClockWidgetTest {
      */
     @Test
     public void everyFullStyleTranslatesTheTimeBandByTheAlignmentOffset() throws Exception {
-        String source = read("app/src/main/java/com/termux/app/terminal/TerminalClockWidget.java");
+        String source = read("app/src/main/java/com/termux/app/terminal/ClockFaceRenderer.java");
         for (String method : new String[] {"drawFullLcd", "drawFullMinimal", "drawFullSlab",
             "drawFullTape", "drawFullLed", "drawFullFlip"}) {
             assertTrue(method + " must offset its time band by the alignment",
@@ -154,49 +162,83 @@ public class TerminalClockWidgetTest {
                 android.view.View.MeasureSpec.EXACTLY));
         widget.layout(0, 0, widget.getMeasuredWidth(), widget.getMeasuredHeight());
 
-        // Flip: a 35.5dp band over the cards' 4.26dp shadow and an 11.7dp date block, centred in
-        // the slot.
-        float top = (slot - 51.46f * density) / 2f;
+        // Flip: a 35.5dp band over the cards' 4.26dp shadow, both scaled, then the date row at
+        // the Label role's painted height, the column centred in the slot. The Label row no
+        // longer scales with the face (#111), so the geometry is read off the widget, not typed.
+        float band = widget.fullBandHeightPx();
+        float scale = band / (35.5f * density);
+        float bandCenter = widget.fullBandCenterYPx();
+        float rule = widget.fullRuleCenterYPx();
         assertTrue("the digits must be tappable",
-            widget.isInsideTapTarget(density, top + 4f * density));
+            widget.isInsideTapTarget(density, bandCenter));
         assertTrue("the date row must not open the clock app",
-            !widget.isInsideTapTarget(density, top + 45f * density));
+            !widget.isInsideTapTarget(density, rule));
         assertTrue("the slack above the window chips must not open the clock app",
             !widget.isInsideTapTarget(density, slot - density));
         // The date row starts where the cards' shadow ends: band centre to rule centre is half
-        // the band, the shadow's 3.2dp blur and 1.06dp drop, and half the date row.
-        assertEquals((35.5f / 2f + 3.2f + 1.06f + 11.7f / 2f) * density,
-            widget.fullRuleCenterYPx() - widget.fullBandCenterYPx(), .01f);
+        // the band, the shadow's 3.2dp blur and 1.06dp drop (scaled), and half the date row —
+        // a 12sp Label line in the date's face, at its painted size whatever the scale. (This
+        // class runs on legacy graphics, where a line has no height; ClockFaceFixesTest holds
+        // the painted sizes on native graphics.)
+        android.graphics.Paint label = new android.graphics.Paint();
+        label.setTypeface(android.graphics.Typeface.create("sans-serif-condensed-medium",
+            android.graphics.Typeface.NORMAL));
+        label.setTextSize(android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP, 12f,
+            ApplicationProvider.getApplicationContext().getResources().getDisplayMetrics()));
+        float halfRow = rule - bandCenter - band / 2f - (3.2f + 1.06f) * density * scale;
+        assertEquals("the date row is a Label line, not the old 11.7dp block",
+            (label.descent() - label.ascent()) / 2f, halfRow, .01f);
+        // And the whole column stays inside the 65dp slot.
+        assertTrue(rule + halfRow <= slot);
     }
 
     @Test
     public void flip_pairGapIsOneAndAHalfDigitGapsInEveryForm() {
         // Full: 5.7dp between the cards of a pair, so the hour stands 8.55dp off the minutes
         // (it was 13.5dp, which read as two separate numbers).
-        assertEquals(1.5f, TerminalClockWidget.FLIP_PAIR_GAP_RATIO, 0f);
-        assertEquals(8.55f, TerminalClockWidget.flipPairGapDp(5.7f), 1e-4f);
+        assertEquals(1.5f, ClockFaceRenderer.FLIP_PAIR_GAP_RATIO, 0f);
+        assertEquals(8.55f, ClockFaceRenderer.flipPairGapDp(5.7f), 1e-4f);
         assertEquals(4f * 26f + 2f * 5.7f + 8.55f,
-            TerminalClockWidget.flipRowWidthDp(26f, 5.7f), 1e-4f);
+            ClockFaceRenderer.flipRowWidthDp(26f, 5.7f), 1e-4f);
         // Compact: 1.5dp digit gaps, 2.25dp between the pairs.
         assertEquals(4f * 15f + 2f * 1.5f + 2.25f,
-            TerminalClockWidget.flipRowWidthDp(15f, 1.5f), 1e-4f);
+            ClockFaceRenderer.flipRowWidthDp(15f, 1.5f), 1e-4f);
+    }
+
+    /**
+     * A face whose parts all scale — the shape every face had before #111 — so the old cases
+     * read the same: a 48 column, a 34 band, a 130-wide time row and a 150-wide date row.
+     */
+    private static ClockFaceRenderer.FitParts allScaled() {
+        ClockFaceRenderer.FitParts parts = new ClockFaceRenderer.FitParts();
+        parts.band = 34f;
+        parts.columnScaled = 48f;
+        parts.timeScaled = 130f;
+        parts.dateScaled = 150f;
+        return parts;
+    }
+
+    private static float[] plan(ClockFaceRenderer.FitParts parts, float height, float width,
+                                float floor) {
+        return ClockFaceRenderer.fitScalePlan(parts, height, width, floor, new float[3]);
     }
 
     @Test
     public void fitScale_growsTheWholeColumnToTheBudgetButNeverPastTheCeiling() {
         // 58 budget over a 48 column: the date stays and the face grows by one uniform scale.
-        float[] plan = TerminalClockWidget.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = plan(allScaled(), 58f, 400f, .65f);
         assertEquals(58f / 48f, plan[0], 1e-4f);
         assertEquals(1f, plan[1], 0f);
         assertEquals(150f * plan[0], plan[2], 1e-3f);
         // A tall budget stops at the ceiling.
-        float[] tall = TerminalClockWidget.fitScalePlan(200f, 4000f, 48f, 34f, 150f, 130f, .65f);
-        assertEquals(TerminalClockWidget.FIT_MAX_SCALE, tall[0], 0f);
+        float[] tall = plan(allScaled(), 200f, 4000f, .65f);
+        assertEquals(ClockFaceRenderer.FIT_MAX_SCALE, tall[0], 0f);
     }
 
     @Test
     public void fitScale_widthBudgetShrinksTheWholeFaceTogether() {
-        float[] plan = TerminalClockWidget.fitScalePlan(58f, 120f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = plan(allScaled(), 58f, 120f, .65f);
         assertEquals(120f / 150f, plan[0], 1e-4f);
         assertEquals(1f, plan[1], 0f);
     }
@@ -204,12 +246,55 @@ public class TerminalClockWidgetTest {
     @Test
     public void fitScale_dropsTheDateWhenTheColumnFallsBelowTheFloor() {
         // 30 over a 48 column is .625, under the .65 floor: the band alone is fitted.
-        float[] plan = TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
+        float[] plan = plan(allScaled(), 30f, 400f, .65f);
         assertEquals(0f, plan[1], 0f);
         assertEquals(30f / 34f, plan[0], 1e-4f);
         assertEquals(130f * plan[0], plan[2], 1e-3f);
         // With no floor (the slot to itself) the date is never dropped.
-        assertEquals(1f, TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
+        assertEquals(1f, plan(allScaled(), 30f, 400f, 0f)[1], 0f);
+    }
+
+    @Test
+    public void fitScale_theLabelRowKeepsItsSizeAndTheDigitsMakeRoomForIt() {
+        // A 14px label row under a 39px scaled column in a 49px budget: (49 - 14) / 39.
+        ClockFaceRenderer.FitParts parts = allScaled();
+        parts.columnScaled = 39f;
+        parts.columnFixed = 14f;
+        parts.timeFixed = 13f;
+        parts.dateScaled = 39f;
+        parts.dateFixed = 55f;
+        float[] plan = plan(parts, 49f, 400f, 0f);
+        assertEquals(35f / 39f, plan[0], 1e-4f);
+        assertEquals("the column fills the budget exactly", 49f, parts.column(plan[0], true),
+            1e-3f);
+        // Width: the 13px seconds hold, only the 130px of digits shrink: (120 - 13) / 130.
+        float[] narrow = plan(parts, 49f, 120f, 0f);
+        assertEquals(107f / 130f, narrow[0], 1e-4f);
+        assertEquals(120f, narrow[2], 1e-3f);
+    }
+
+    @Test
+    public void fitScale_aStackedStrokeNeverPaintsUnderItsFloor() {
+        // Tape: a .1-per-scale track under the column, floored at 1px.
+        ClockFaceRenderer.FitParts parts = allScaled();
+        parts.columnFixed = 14f;
+        parts.strokeScaled = 1.5f;
+        parts.strokeFloor = 1f;
+        float scale = plan(parts, 49f, 400f, 0f)[0];
+        assertEquals(49f, parts.column(scale, true), 1e-3f);
+        // Squeezed until the track would be under 1px: the floor is reserved instead.
+        float squeezed = plan(parts, 20f, 400f, 0f)[0];
+        assertTrue(1.5f * squeezed < 1f);
+        assertEquals(20f, parts.column(squeezed, true), 1e-3f);
+    }
+
+    @Test
+    public void bandStroke_isAFractionOfTheBandWithAOnePixelFloorOncePainted() {
+        // Proportional: twice the band, twice the stroke.
+        assertEquals(3f, ClockFaceRenderer.bandStroke(1f / 11f, 33f, 1f, 1f), 1e-4f);
+        assertEquals(6f, ClockFaceRenderer.bandStroke(1f / 11f, 66f, 1f, 1f), 1e-4f);
+        // Floored: a .5 stroke at scale .8 is raised so it paints 1px (1.25 before the scale).
+        assertEquals(1.25f, ClockFaceRenderer.bandStroke(1f / 64f, 32f, .8f, 1f), 1e-4f);
     }
 
     /** The source of {@code method}, from its signature to the first line that closes it. */

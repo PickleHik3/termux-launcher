@@ -1,28 +1,21 @@
 package com.termux.app.statusbar;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.appwidget.AppWidgetHostView;
 import android.content.Context;
-import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.NestedScrollingParent3;
 import androidx.core.view.NestedScrollingParentHelper;
-import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 
-import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.place.PlaceLayout.Edge;
 
@@ -61,32 +54,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mDispatchInProgress;
     private boolean mDeferredReset;
     @Nullable private android.view.VelocityTracker mVelocityTracker;
-    /**
-     * Drag hint: one small chevron that fades in at the row's inner edge on a tap of the bar's
-     * chrome, pointing the way the bar can go from here - down while it is folded, up while it
-     * is open - and drifting that way as it fades. A single thin stroke, no glow: the bar is
-     * quiet chrome and the hint should read as a whisper, not a widget.
-     */
-    private static final long HINT_DURATION_MS = 680L;
-    private static final float HINT_CHEVRON_WIDTH_DP = 10f;
-    private static final float HINT_CHEVRON_HEIGHT_DP = 4f;
-    private static final float HINT_STROKE_DP = 1.5f;
-    /**
-     * Distance from the bar's inner edge to where the chevron starts. Generous, so that the whole
-     * glyph sits inside the compact bar and its drift ends before the edge: it must never look as
-     * if it is sinking into the border.
-     */
-    private static final float HINT_INSET_DP = 10f;
-    private static final float HINT_TRAVEL_DP = 5f;
-    @Nullable private ValueAnimator mHintAnimator;
-    private float mHintProgress;
-    @Nullable private Paint mHintPaint;
-    @Nullable private android.graphics.Path mHintPath;
-    private int mPullHintCount;
-
-    /** How many times the drag hint has played — the animation itself is not observable. */
-    int pullHintCount() { return mPullHintCount; }
-
     public StatusBarSwipeLayout(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
@@ -101,6 +68,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
+
+    /**
+     * A child took the live stream for a gesture of its own — a window chip lifted to be dragged
+     * along the row — so the fold stands down for the rest of it. A fold already under way is
+     * left alone: it claimed first.
+     */
+    public void yieldStreamToChild() {
+        if (mGesture != null) mGesture.nestedScrollStarted();
+    }
 
     /**
      * The edge the bar stands on. It decides which way a drag folds the bar; a live stream is
@@ -142,108 +118,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      * regardless: this only vetoes the expand swipe, it never folds a bar already open elsewhere.
      */
     public void setExpansionAllowed(boolean allowed) { mExpansionAllowed = allowed; }
-
-    /**
-     * A tap on the bar's own chrome answers with the direction the bar does not show at rest:
-     * one chevron that fades in at the row's inner edge, drifts the way a swipe would take the
-     * bar and fades out. Taps that belong to a child (window chips, the stat and weather widgets,
-     * the sessions chip) never reach here, so switching windows or opening a card stays silent.
-     */
-    private void showPullHint() {
-        mPullHintCount++;
-        if (mHintAnimator != null) mHintAnimator.cancel();
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(HINT_DURATION_MS);
-        animator.setInterpolator(new DecelerateInterpolator());
-        animator.addUpdateListener(value -> {
-            mHintProgress = (float) value.getAnimatedValue();
-            invalidate();
-        });
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator a) {
-                mHintProgress = 0f;
-                mHintAnimator = null;
-                invalidate();
-            }
-        });
-        mHintAnimator = animator;
-        animator.start();
-    }
-
-    private void cancelPullHint() {
-        if (mHintAnimator != null) {
-            mHintAnimator.cancel();
-            mHintAnimator = null;
-        }
-        if (mHintProgress != 0f) {
-            mHintProgress = 0f;
-            invalidate();
-        }
-    }
-
-    private void drawPullHint(@NonNull android.graphics.Canvas canvas) {
-        if (mHintProgress <= 0f) return;
-        // One rise-and-fall envelope over the whole animation, so the chevron never snaps off.
-        float envelope = (float) Math.sin(Math.PI * mHintProgress);
-        if (envelope <= 0.01f) return;
-        float density = getResources().getDisplayMetrics().density;
-        if (mHintPaint == null) {
-            mHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mHintPaint.setStyle(Paint.Style.STROKE);
-            mHintPaint.setStrokeCap(Paint.Cap.ROUND);
-            mHintPaint.setStrokeJoin(Paint.Join.ROUND);
-            mHintPaint.setStrokeWidth(HINT_STROKE_DP * density);
-        }
-        if (mHintPath == null) mHintPath = new android.graphics.Path();
-        // Folded, the bar opens by a pull down; open, it folds by a push up. The chevron points
-        // that way and travels that way.
-        boolean opening = mState.toCollapsedPreference();
-        float expand = StatusBarGesturePolicy.expandSign(mEdge);
-        // Folded, the bar opens away from its edge; open, it folds back towards it.
-        boolean down = opening == (expand > 0f);
-        float direction = down ? 1f : -1f;
-        float width = HINT_CHEVRON_WIDTH_DP * density;
-        float height = HINT_CHEVRON_HEIGHT_DP * density;
-        float travel = HINT_TRAVEL_DP * density * mHintProgress * direction;
-        boolean vertical = StatusBarGesturePolicy.isVertical(mEdge);
-        // The chevron sits at the bar's inner edge — the one facing the terminal — and points
-        // the way a drag would take it, whichever edge the bar stands on.
-        float cx = vertical ? getHeight() / 2f : getWidth() / 2f;
-        float span = vertical ? getWidth() : getHeight();
-        float top = expand > 0f
-            ? span - HINT_INSET_DP * density - height + travel
-            : HINT_INSET_DP * density + travel;
-        int chevronLayer = vertical ? canvas.save() : -1;
-        if (vertical) {
-            // One rotation, so the chevron path below stays the single description of the shape:
-            // (x, y) drawn here lands at (y, height - x) on screen, which turns the row's
-            // "along the width, across the height" into the column's own two axes.
-            canvas.rotate(-90f, 0f, 0f);
-            canvas.translate(-getHeight(), 0f);
-        }
-        mHintPaint.setColor(pullHintColor());
-        mHintPaint.setAlpha(Math.round(200 * envelope));
-        // The tip leads: pointing down it is at the bottom, pointing up at the top.
-        float tipY = down ? top + height : top;
-        float tailY = down ? top : top + height;
-        mHintPath.reset();
-        mHintPath.moveTo(cx - width / 2f, tailY);
-        mHintPath.lineTo(cx, tipY);
-        mHintPath.lineTo(cx + width / 2f, tailY);
-        canvas.drawPath(mHintPath, mHintPaint);
-        if (chevronLayer >= 0) canvas.restoreToCount(chevronLayer);
-    }
-
-    /** The hint's colour: the accent, from the theme like every other status widget. */
-    int pullHintColor() {
-        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(getContext(), R.color.termux_primary));
-    }
-
-    @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
-        super.dispatchDraw(canvas);
-        drawPullHint(canvas);
-    }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
@@ -308,15 +182,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mGesture != null) {
-                    StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
-                    if (isFoldClaim(after) && mListener != null) {
-                        // The fold is the finger's while the finger is down: the bar stands
-                        // where the travel across it says, the way it opens being positive.
-                        mFoldDragActive = true;
-                        mListener.onFoldDrag(StatusBarGesturePolicy.acrossAxis(mEdge,
-                            event.getRawX() - mGesture.down().rawX,
-                            event.getRawY() - mGesture.down().rawY)
-                            * StatusBarGesturePolicy.expandSign(mEdge));
+                    // No touch gesture folds the bar (the status bar's long-press menu does):
+                    // a move past the slop hands the stream to whoever else would take it.
+                    if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING
+                        && movedPastSlop(event)) {
+                        mGesture.nestedScrollStarted();
                     }
                 }
                 break;
@@ -368,6 +238,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         mVelocityTracker.addMovement(event);
     }
 
+    private boolean movedPastSlop(MotionEvent event) {
+        StatusBarGesturePolicy.Down d = mGesture.down();
+        float dx = event.getX() - d.localX;
+        float dy = event.getY() - d.localY;
+        return dx * dx + dy * dy > (float) mTouchSlop * mTouchSlop;
+    }
+
     private void finish(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
         if (gesture != null && isFoldClaim(gesture.claim())) {
@@ -379,10 +256,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 mListener.onCollapsedStateRequested(collapsed, foldVelocityTowardOpen());
             }
         } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
-            // eligible() is the "this touch was the bar's own, not a child's" test — the
-            // form drag alone keeps a chip's stream PENDING too, and a chip tap must not
-            // answer with a hint.
-            if (gesture.down().eligible()) showPullHint();
+            // A tap on the bar does not fold it: only the status bar menu folds it.
             performClick();
         }
         requestStructuralReset();
@@ -408,7 +282,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override protected void onDetachedFromWindow() {
         if (mGesture != null) mGesture.cancel();
-        cancelPullHint();
         clearTracking();
         super.onDetachedFromWindow();
     }

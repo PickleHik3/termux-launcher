@@ -264,7 +264,7 @@ public final class TerminalEmulator {
     private static final int DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT = 1 << 7;
 
     /**
-     * DECSET 1004 - NOT implemented.
+     * DECSET 1004 - send focus events: the view reports focus through {@link #onFocusChanged(boolean)}.
      */
     private static final int DECSET_BIT_SEND_FOCUS_EVENTS = 1 << 8;
 
@@ -757,6 +757,7 @@ public final class TerminalEmulator {
      * set of the {@code KittyKeyEncoder.FLAG_*} values. Zero means legacy key encoding.
      */
     public int getKeyboardFlags() {
+        if (mGhostty != null) return mGhosttyKeyboardFlags;
         return keyboardModes().flags;
     }
 
@@ -786,18 +787,13 @@ public final class TerminalEmulator {
     private final TerminalHyperlinks mHyperlinks = new TerminalHyperlinks();
 
     /**
-     * The number of scrolled lines since last calling {@link #clearScrollCounter()}. Used for moving selection up along
-     * with the scrolling text.
+     * Lines scrolled off the top: {@code pending} since the view last took them (a scrolled-back
+     * view and a selection move up by them), and {@code total} ever, never reset. A kitty graphics
+     * placement captures the cursor row when the command arrives but lands after an asynchronous
+     * decode; the difference in the total across that gap is how many rows the captured anchor has
+     * since moved up. Both buffers share it.
      */
-    private int mScrollCounter = 0;
-
-    /**
-     * Total lines ever scrolled off the top, never reset (unlike {@link #mScrollCounter}, which the
-     * view consumes and clears). A kitty graphics placement captures the cursor row when the command
-     * arrives but lands after an asynchronous decode; the difference in this count across that gap is
-     * how many rows the captured anchor has since moved up.
-     */
-    private long mScrollEventCount;
+    private final ScrollCount mScrolls = new ScrollCount();
 
     /**
      * If automatic scrolling of terminal is disabled
@@ -833,13 +829,21 @@ public final class TerminalEmulator {
             ? "termux-launcher" : "termux-launcher(" + appVersionName + ")";
     }
 
+    /**
+     * Our XTVERSION name. Ghostty panes answer it with GhosttyCore.XTVERSION_SUFFIX after it, copied
+     * into native memory at creation.
+     */
+    static String xtVersionName() {
+        return sXtVersionName;
+    }
+
     public void setCellSize(int w, int h) {
         cellW = w;
         cellH = h;
     }
 
     long scrollEventCount() {
-        return mScrollEventCount;
+        return mScrolls.total;
     }
 
     public int getCellWidthPixels() {
@@ -925,6 +929,8 @@ public final class TerminalEmulator {
         mSession = session;
         mScreen = mMainBuffer = new TerminalBuffer(client, columns, getTerminalTranscriptRows(transcriptRows), rows);
         mAltBuffer = new TerminalBuffer(client, columns, rows, rows);
+        mMainBuffer.setScrollCount(mScrolls);
+        mAltBuffer.setScrollCount(mScrolls);
         mClient = client;
         mBoldWithBright = boldWithBright;
         mRows = rows;
@@ -945,8 +951,19 @@ public final class TerminalEmulator {
         setCursorBlinkState(true);
     }
 
+    /**
+     * The Java buffer on screen: the Java parser's own, and where Java-only features (sixel, text
+     * sizing, kitty placements, extra cursors) live. Readers of rows, text and scroll position use
+     * {@link #getContent()}, which serves both cores.
+     */
     public TerminalBuffer getScreen() {
         return mScreen;
+    }
+
+    /** What this pane shows and holds, row by row, whichever core parses its output. */
+    public TerminalContent getContent() {
+        GhosttyContent ghostty = mGhosttyContent;
+        return ghostty != null ? ghostty : mScreen;
     }
 
     public boolean isAlternateBufferActive() {
@@ -1048,11 +1065,8 @@ public final class TerminalEmulator {
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
-        resize(columns, rows, cellWidthPixels, cellHeightPixels, false);
-    }
-
-    public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                       boolean keepCursorAtBottom) {
+        // Output the Ghostty core has parsed but not yet mirrored belongs to the old size.
+        flushBatchedOutput();
         boolean cellSizeChanged = mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels;
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
@@ -1063,17 +1077,12 @@ public final class TerminalEmulator {
             if (cellSizeChanged) {
                 endSynchronizedUpdateForResize();
                 sendInBandResizeReport();
+                resizeGhostty();
             }
             return;
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
         }
-        // Bottom anchoring exists so a prompt parked against the bottom edge stays on that edge as
-        // the screen grows. A cursor higher up means there is no such prompt — after a
-        // transcript-wiping clear it sits at the top — and anchoring then would float it
-        // mid-screen over rows of fresh blank padding, where every other terminal keeps it
-        // top-anchored. Judged against the pre-resize screen, before mRows moves.
-        keepCursorAtBottom &= mCursorRow >= mRows - 2;
         if (mRows != rows) {
             mRows = rows;
             mTopMargin = 0;
@@ -1091,8 +1100,29 @@ public final class TerminalEmulator {
             mRightMargin = mColumns;
         }
         endSynchronizedUpdateForResize();
-        resizeScreen(keepCursorAtBottom);
+        resizeScreen();
+        // A Ghostty pane's history stays in the library; rows the Java reflow pushed above the
+        // screen are not history, and its screen is rewritten from Ghostty's reflow below.
+        if (mGhostty != null) mMainBuffer.clearTranscript();
         sendInBandResizeReport();
+        resizeGhostty();
+    }
+
+    /**
+     * The Ghostty core reflows on its own, screen and history alike; its screen then replaces the
+     * one the Java buffer reflowed, and history rows read before the resize are read again. Ghostty
+     * sends its own size report (mode 2048).
+     */
+    private void resizeGhostty() {
+        if (mGhostty == null) return;
+        try {
+            mGhostty.setHistoryLimit(GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
+            mGhostty.resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels);
+            mGhosttyContent.forgetHistory();
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+        }
     }
 
     /**
@@ -1110,17 +1140,17 @@ public final class TerminalEmulator {
     /**
      * Where {@link #resize} to {@code rows} rows, at the same columns, would move the rows now on
      * screen: how many rows down each surviving row lands (negative is up), before any resize has
-     * happened. The bottom anchor is judged the way {@link #resize} judges it, against the cursor
-     * on the screen as it is. 0 when the row count does not change, and 0 on the alternate screen:
-     * a shrinking alternate buffer keeps its old ring but wraps it at the new, smaller total, so its
-     * rows do not land anywhere stable — the full-screen program repaints after the resize anyway.
+     * happened. 0 when the row count does not change, and 0 on the alternate screen, which
+     * resizes in place, top-anchored ({@link TerminalBuffer#resizeWithoutRewrap}).
      *
      * @see TerminalBuffer#predictRowsOnlyResizeShift
      */
-    public int predictRowsOnlyResizeShift(int rows, boolean keepCursorAtBottom) {
+    public int predictRowsOnlyResizeShift(int rows) {
         if (rows == mRows || rows < 2 || mScreen == mAltBuffer) return 0;
-        keepCursorAtBottom &= mCursorRow >= mRows - 2;
-        return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow, keepCursorAtBottom);
+        // The Ghostty core settles the resize, so it predicts it too.
+        if (mGhosttyContent != null)
+            return GhosttyContent.rowsOnlyResizeShift(rows - mRows, mGhosttyContent.historyRows());
+        return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow);
     }
 
     /**
@@ -1151,6 +1181,7 @@ public final class TerminalEmulator {
             setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
             mSynchronizedUpdateDeadline = 0;
             mKittyGraphics.synchronizedHoldEnded();
+            endGhosttyHold();
             return false;
         }
         return true;
@@ -1244,14 +1275,15 @@ public final class TerminalEmulator {
     }
 
     private void resizeScreen() {
-        resizeScreen(false);
-    }
-
-    private void resizeScreen(boolean keepCursorAtBottom) {
         final int[] cursor = { mCursorCol, mCursorRow };
-        int newTotalRows = (mScreen == mAltBuffer) ? mRows : mMainBuffer.mTotalRows;
-        mScreen.resize(mColumns, mRows, newTotalRows, cursor, getStyle(),
-            isAlternateBufferActive(), keepCursorAtBottom);
+        if (mScreen == mAltBuffer) {
+            // In place, as kitty does: the ring below would wrap the alternate screen's rows at
+            // its new, smaller total and show them rotated until the program repaints.
+            mAltBuffer.resizeWithoutRewrap(mColumns, mRows, cursor, getStyle());
+        } else {
+            mScreen.resize(mColumns, mRows, mMainBuffer.mTotalRows, cursor, getStyle(),
+                isAlternateBufferActive());
+        }
         mCursorCol = cursor[0];
         mCursorRow = cursor[1];
         resetGraphemeTracking();
@@ -1328,6 +1360,16 @@ public final class TerminalEmulator {
      * brings it back is answered as the user's paste rather than as a program reading the
      * clipboard on its own.
      */
+    /**
+     * The view gained or lost keyboard focus (its own, or its window's). A program that asked for
+     * focus events (DECSET 1004) hears {@code CSI I} and {@code CSI O}; nothing is written otherwise.
+     * Touch handling is untouched: this is not a mouse-tracking mode.
+     */
+    public void onFocusChanged(boolean focused) {
+        if (isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS))
+            mSession.write(focused ? "\033[I" : "\033[O");
+    }
+
     public void sendPasteEvent(List<String> mimeTypes) {
         mKittyClipboard.pasteEvent(mimeTypes, System.currentTimeMillis(), mKittyClipboardHandler);
     }
@@ -1424,8 +1466,39 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        appendBatched(buffer, length);
+        flushBatchedOutput();
+    }
+
+    /**
+     * {@link #append}, except that with the Ghostty core the emulator's buffers, cursor and modes
+     * catch up only at the next {@link #flushBatchedOutput()}. The session parses a turn of shell
+     * output this way and flushes once before telling the client, so the mirror runs once per turn
+     * rather than once per read. With the Java core this is {@link #append}.
+     */
+    void appendBatched(byte[] buffer, int length) {
+        if (mGhostty != null) {
+            writeGhostty(buffer, length);
+            return;
+        }
         int startRow = mCursorRow, startCol = mCursorCol;
         appendInternal(buffer, length);
+        if (mCursorRow != startRow || mCursorCol != startCol)
+            mCursorPositionChangedAtMillis = mClock.nowMillis();
+    }
+
+    /**
+     * Bring the buffers up to date with output {@link #appendBatched} handed to the Ghostty core.
+     * Does nothing with the Java core, or when nothing is waiting.
+     */
+    public void flushBatchedOutput() {
+        if (!mGhosttyPending) return;
+        int startRow = mCursorRow, startCol = mCursorCol;
+        try {
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+        }
         if (mCursorRow != startRow || mCursorCol != startCol)
             mCursorPositionChangedAtMillis = mClock.nowMillis();
     }
@@ -1450,6 +1523,403 @@ public final class TerminalEmulator {
             }
             processByte(buffer[i++]);
         }
+    }
+
+    // Experimental libghostty-vt core, chosen per session with debug.tl.terminal_core=ghostty.
+    // Ghostty parses; the screen rows each sync changed are copied into this emulator's buffer, and
+    // cursor and mode bits into its fields. History stays in Ghostty: readers reach it through
+    // getContent() (GhosttyContent), and the Java transcript stays empty. OSC 8 links, OSC 133
+    // prompt marks and exit codes, OSC 9;4 progress, OSC 22 pointer shapes and OSC 9/99/777
+    // notifications reach the same state and callbacks as on the Java core (GhosttyCore events).
+    // Kitty graphics are Ghostty's, drawn through GhosttyImages. Sixel, iTerm2 images and the fork's
+    // own modes (7727, 5523) are not handled in this mode; OSC 66 sized text is written at normal size.
+
+    /** The Ghostty core parsing this session's output, or null for the Java parser. */
+    private GhosttyCore mGhostty;
+    /** Its rows as readers see them; null exactly when {@link #mGhostty} is. */
+    private GhosttyContent mGhosttyContent;
+    /** Its kitty images as the renderer asks for them; null exactly when {@link #mGhostty} is. */
+    private GhosttyImages mGhosttyImages;
+    /** Colours read back from the Ghostty core, reused. */
+    private final int[] mGhosttyColors = new int[TextStyle.NUM_INDEXED_COLORS];
+    /** The cursor shape Ghostty reported last; only a change made by the program moves ours. */
+    private int mGhosttyCursorShape = -1;
+    /** The OSC 22 pointer shape Ghostty reported last; as with the cursor, only a change moves ours. */
+    private int mGhosttyMouseShape = -1;
+    /** Gives Ghostty rows this session's OSC 8 link ids; null exactly when {@link #mGhostty} is. */
+    private GhosttyLinks mGhosttyLinks;
+
+    /** What a Ghostty event does: the same as the sequence it came from does on the Java core. */
+    private final GhosttyCore.EventTarget mGhosttyEvents = new GhosttyCore.EventTarget() {
+        @Override
+        public void onGhosttyEvent(int kind, int a, int b, String first, String second) {
+            switch (kind) {
+                case GhosttyNative.EVENT_PROMPT:
+                    onGhosttyShellIntegration(a, b);
+                    break;
+                case GhosttyNative.EVENT_PROGRESS:
+                    // As doOscProgress: a negative percentage keeps the last value.
+                    setProgress(a, b);
+                    break;
+                case GhosttyNative.EVENT_NOTIFICATION:
+                    // OSC 9 carries no title, which the Java core passes as null.
+                    if (second != null && !(second.isEmpty() && (first == null || first.isEmpty())))
+                        mSession.onNotification(first == null || first.isEmpty() ? null : first, second);
+                    break;
+                case GhosttyNative.EVENT_KITTY_NOTIFICATION:
+                    if (first != null) mKittyNotifications.handle(first, mKittyNotificationHandler);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+    /** The kitty keyboard flags Ghostty holds for the current screen. */
+    private int mGhosttyKeyboardFlags;
+    /** Set while {@link #applyGhosttyState} runs, so ending a hold from inside it does not sync again. */
+    private boolean mGhosttyApplying;
+    /** Whether output went to the Ghostty core since the last sync. */
+    private boolean mGhosttyPending;
+
+    /**
+     * The DEC private mode bits Ghostty answers for, as {Ghostty bit, our bit} pairs. Read live at
+     * every sync, held or not, as the Java core's are. Two are not here: cursor visibility (25) is
+     * part of the frame a render hold keeps, and synchronized output (2026) is the hold itself; see
+     * {@link #applyGhosttyHold}.
+     */
+    private static final int[][] GHOSTTY_MODE_BITS = {
+        {GhosttyNative.MODE_APPLICATION_CURSOR_KEYS, DECSET_BIT_APPLICATION_CURSOR_KEYS},
+        {GhosttyNative.MODE_REVERSE_VIDEO, DECSET_BIT_REVERSE_VIDEO},
+        {GhosttyNative.MODE_ORIGIN, DECSET_BIT_ORIGIN_MODE},
+        {GhosttyNative.MODE_AUTOWRAP, DECSET_BIT_AUTOWRAP},
+        {GhosttyNative.MODE_APPLICATION_KEYPAD, DECSET_BIT_APPLICATION_KEYPAD},
+        {GhosttyNative.MODE_MOUSE_PRESS_RELEASE, DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE},
+        {GhosttyNative.MODE_MOUSE_BUTTON_EVENT, DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT},
+        {GhosttyNative.MODE_MOUSE_ANY_EVENT, DECSET_BIT_MOUSE_TRACKING_ANY_EVENT},
+        {GhosttyNative.MODE_FOCUS_EVENTS, DECSET_BIT_SEND_FOCUS_EVENTS},
+        {GhosttyNative.MODE_MOUSE_SGR, DECSET_BIT_MOUSE_PROTOCOL_SGR},
+        {GhosttyNative.MODE_MOUSE_SGR_PIXELS, DECSET_BIT_MOUSE_PROTOCOL_SGR_PIXELS},
+        {GhosttyNative.MODE_BRACKETED_PASTE, DECSET_BIT_BRACKETED_PASTE_MODE},
+        {GhosttyNative.MODE_PASTE_EVENTS, DECSET_BIT_PASTE_EVENTS},
+    };
+
+    /**
+     * Parse this session's output with libghostty-vt from now on. False, with the Java parser kept,
+     * when the library is not in this build or will not start.
+     */
+    public boolean useGhosttyCore() {
+        if (mGhostty != null) return true;
+        int[] colors = new int[TextStyle.NUM_INDEXED_COLORS];
+        for (int i = 0; i < colors.length; i++) colors[i] = mColors.mCurrentColors[i] & 0xffffff;
+        GhosttyCore core = GhosttyCore.create(mColumns, mRows, mCellWidthPixels, mCellHeightPixels, colors,
+            GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
+        if (core == null) return false;
+        mGhostty = core;
+        mGhosttyLinks = new GhosttyLinks(mHyperlinks, new GhosttyLinks.UsedIds() {
+            @Override
+            public void markUsed(boolean[] used) {
+                mMainBuffer.markUsedHyperlinkIds(used);
+                mAltBuffer.markUsedHyperlinkIds(used);
+                GhosttyContent content = mGhosttyContent;
+                if (content != null) content.markUsedHyperlinkIds(used);
+            }
+        });
+        mGhosttyContent = new GhosttyContent(core, mMainBuffer, mScrolls, mGhosttyLinks);
+        mGhosttyImages = new GhosttyImages(core, mSession, TerminalEmulator::monotonicMillis,
+            GhosttyImages.bitmapCache(core));
+        mMainBuffer.clearTranscript();
+        mGhosttyCursorShape = -1;
+        mGhosttyMouseShape = -1;
+        try {
+            applyGhosttyState();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+            return false;
+        }
+        return true;
+    }
+
+    /** Whether the Ghostty core is parsing this session's output. */
+    public boolean isGhosttyCoreActive() {
+        return mGhostty != null;
+    }
+
+    /**
+     * Free the Ghostty core. The screen it left stays in this emulator's buffers, its readable
+     * history is handed to the Java transcript (one native read per row, once), and any later
+     * output (the "[Process completed]" line) goes through the Java parser.
+     */
+    public void releaseGhosttyCore() {
+        GhosttyCore core = mGhostty;
+        GhosttyContent content = mGhosttyContent;
+        mGhostty = null;
+        mGhosttyContent = null;
+        releaseGhosttyCompanions();
+        if (core == null) return;
+        try {
+            // Output parsed since the last sync would move history under the rows handed over.
+            if (!mGhosttyPending && core.isAlive()) content.handOverHistory();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty history not handed over", e);
+        } finally {
+            mGhosttyPending = false;
+            core.release();
+        }
+    }
+
+    /**
+     * Give back what a pane keeps beside its Ghostty core: the image bitmaps (with their budget and
+     * their memory-trim registration) and the link-id bridge. Every way off the core goes through
+     * here: a pane closing ({@link #releaseGhosttyCore}) and a Ghostty error ({@link #ghosttyFailed}).
+     */
+    private void releaseGhosttyCompanions() {
+        GhosttyImages images = mGhosttyImages;
+        mGhosttyImages = null;
+        if (images != null) images.release();
+        mGhosttyLinks = null;
+        mGhosttyCursorShape = -1;
+        mGhosttyMouseShape = -1;
+    }
+
+    /** The Ghostty core's primary-screen memory (see GhosttyNative.MEM_*), or null. */
+    public long[] getGhosttyMemoryUsage() {
+        return mGhostty == null ? null : mGhostty.memoryUsage();
+    }
+
+    /** The Ghostty core, or null; for {@link TerminalParseBench}. */
+    GhosttyCore ghosttyCore() {
+        return mGhostty;
+    }
+
+    /** The Ghostty core's images, or null; for tests in this package. */
+    GhosttyImages ghosttyImages() {
+        return mGhosttyImages;
+    }
+
+    /** For tests: draw this pane's Ghostty images from {@code cache} (stand-in bitmaps). */
+    void useGhosttyImageCacheForTests(GhosttyImageCache<android.graphics.Bitmap> cache) {
+        if (mGhostty == null) return;
+        if (mGhosttyImages != null) mGhosttyImages.release();
+        mGhosttyImages = new GhosttyImages(mGhostty, mSession, TerminalEmulator::monotonicMillis, cache);
+    }
+
+    /** Hand the bytes to Ghostty in one write. Nothing is copied until the next sync. */
+    private void writeGhostty(byte[] buffer, int length) {
+        if (length <= 0) return;
+        // A hold past its deadline ends before more output is parsed, as the Java core's does on
+        // the next question, so a program asking (DECRQM 2026) is never told it still holds.
+        if (isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE)) isScreenUpdateHeld();
+        if (mGhostty == null) {
+            appendBatched(buffer, length);
+            return;
+        }
+        try {
+            mGhostty.write(buffer, 0, length);
+            mGhosttyPending = true;
+        } catch (RuntimeException e) {
+            // The write may have been parsed in part; later output goes to the Java parser.
+            ghosttyFailed(e);
+        }
+    }
+
+    // Fail-safes and memory (wave 3 slice 6).
+
+    /** Screens of history a replay carries above the screen (spec §9: screen rows x 4). */
+    static final int REPLAY_HISTORY_SCREENS = 4;
+
+    /** The line a pane starts with when its Ghostty screen could not be kept. */
+    static final String REPLAY_FAILED_NOTICE = "[Terminal reset after an error. Earlier output could not be kept.]\r\n";
+
+    /**
+     * A Ghostty error (a failed sync, write, resize or reset): carry on with the Java parser by
+     * replay. The Java buffers hold no copy of Ghostty's history and may be behind its screen, so
+     * Ghostty formats its screen and the last {@link #REPLAY_HISTORY_SCREENS} screens of history as
+     * VT, the core is freed, and the bytes go through a fresh Java core of the same size. Text,
+     * colours, modes and the cursor survive; images do not. If the formatter fails too, the Java
+     * core starts empty with {@link #REPLAY_FAILED_NOTICE}.
+     */
+    private void ghosttyFailed(RuntimeException e) {
+        Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty failed, replaying its screen into the Java core", e);
+        GhosttyCore core = mGhostty;
+        mGhostty = null;
+        mGhosttyContent = null;
+        mGhosttyPending = false;
+        // Images are lost in a replay; links come back from the replayed OSC 8 into a pool the
+        // fresh Java core starts empty (reset).
+        releaseGhosttyCompanions();
+        if (core == null) return;
+        boolean alternate = mScreen == mAltBuffer;
+        byte[] replay = null;
+        try {
+            replay = core.formatReplay(mRows * REPLAY_HISTORY_SCREENS);
+        } catch (RuntimeException formatFailure) {
+            Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Terminal core: ghostty screen could not be formatted", formatFailure);
+        } finally {
+            core.release();
+        }
+        startFreshJavaCore();
+        if (replay != null) {
+            // The formatter writes the screen that is up; an alternate screen goes back where it was.
+            if (alternate) appendBytes("\033[?1049h");
+            appendInternal(replay, replay.length);
+        } else {
+            appendBytes(REPLAY_FAILED_NOTICE);
+        }
+        mCursorPositionChangedAtMillis = mClock.nowMillis();
+        mSession.onScreenChanged();
+    }
+
+    /** Back to a just-created Java core of the current size, keeping the colours and the title. */
+    private void startFreshJavaCore() {
+        int[] colors = mColors.mCurrentColors.clone();
+        mScreen = mMainBuffer;
+        reset();
+        System.arraycopy(colors, 0, mColors.mCurrentColors, 0, colors.length);
+        mSession.onColorsChanged();
+        mMainBuffer.clearTranscript();
+        mMainBuffer.blockSet(0, 0, mColumns, mRows, ' ', TextStyle.NORMAL);
+        mAltBuffer.blockSet(0, 0, mColumns, mRows, ' ', TextStyle.NORMAL);
+        mCursorRow = mCursorCol = 0;
+    }
+
+    private void appendBytes(String text) {
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        appendInternal(bytes, bytes.length);
+    }
+
+    /**
+     * One idle compression step on the Ghostty core (see {@link GhosttyIdleCompressor}): a
+     * {@code GhosttyNative.COMPRESS_*} result, or -1 with the Java core. Compression never changes
+     * what the terminal holds, so an error here only stops the chain.
+     */
+    int compressGhosttyIdleStep() {
+        GhosttyCore core = mGhostty;
+        return core == null ? -1 : core.compressIdleStep();
+    }
+
+    /** For tests: make the Ghostty core's next sync fail as a Ghostty error would. */
+    void failNextGhosttySyncForTests(RuntimeException failure, boolean formatterFailsToo) {
+        if (mGhostty == null) return;
+        mGhostty.failNextSyncForTests(failure);
+        if (formatterFailsToo) mGhostty.breakFormatterForTests();
+    }
+
+    /** Copy what the last Ghostty writes changed into this emulator, then deliver their effects. */
+    private void applyGhosttyState() {
+        mGhosttyPending = false;
+        GhosttyCore core = mGhostty;
+        if (core == null) return;
+        mGhosttyApplying = true;
+        try {
+            applyGhosttyState(core);
+        } finally {
+            mGhosttyApplying = false;
+        }
+    }
+
+    /**
+     * One sync. While a render hold (mode 2026) is on, the library leaves the frame it froze when the
+     * hold began: the rows, cursor, screen and scroll count below are that frame's, and only modes,
+     * replies and events are live, as with the Java core.
+     */
+    private void applyGhosttyState(GhosttyCore core) {
+        GhosttyMirror.Stats stats = GhosttyMirror.stats;
+        long syncStart = stats == null ? 0 : System.nanoTime();
+        boolean synced = core.sync();
+        if (stats != null) stats.sync(System.nanoTime() - syncStart);
+        if (!synced) return;
+        int[] state = core.state();
+        int flags = state[GhosttyNative.STATE_FLAGS];
+        TerminalBuffer screen = (flags & GhosttyNative.FLAG_ALT_SCREEN) != 0 ? mAltBuffer : mMainBuffer;
+        if (screen != mScreen) {
+            mScreen = screen;
+            clearExtraCursors();
+            resetGraphemeTracking();
+        }
+        // The rows that scrolled off move the shared scroll count, which a scrolled-back view and a
+        // selection follow, by the same rows the Java core counts one line at a time.
+        mGhosttyContent.onSync(mScreen, state[GhosttyNative.STATE_HISTORY],
+            mScreen == mMainBuffer ? state[GhosttyNative.STATE_SCROLLED] : 0);
+        if (state[GhosttyNative.STATE_COLS] == mColumns && state[GhosttyNative.STATE_ROWS] == mRows
+            && mScreen.mColumns == mColumns && mScreen.mScreenRows == mRows) {
+            GhosttyMirror.applyScreen(mScreen, mColumns, mRows, core.screen(), core.dirty(), core.extra(),
+                mGhosttyLinks, core.linkRuns(), core.linkUris());
+        }
+        mCursorCol = Math.max(0, Math.min(mColumns - 1, state[GhosttyNative.STATE_CURSOR_X]));
+        mCursorRow = Math.max(0, Math.min(mRows - 1, state[GhosttyNative.STATE_CURSOR_Y]));
+        applyGhosttyModes(state[GhosttyNative.STATE_MODES]);
+        setDecsetinternalBit(DECSET_BIT_CURSOR_ENABLED, (flags & GhosttyNative.FLAG_CURSOR_VISIBLE) != 0);
+        applyGhosttyHold((flags & GhosttyNative.FLAG_HELD) != 0, (flags & GhosttyNative.FLAG_HOLD_BEGAN) != 0);
+        mGhosttyKeyboardFlags = state[GhosttyNative.STATE_KITTY_FLAGS];
+        int shape = state[GhosttyNative.STATE_CURSOR_STYLE];
+        if (mGhosttyCursorShape >= 0 && shape != mGhosttyCursorShape) {
+            mCursorStyle = shape == GhosttyNative.CURSOR_BAR ? TERMINAL_CURSOR_STYLE_BAR
+                : shape == GhosttyNative.CURSOR_UNDERLINE ? TERMINAL_CURSOR_STYLE_UNDERLINE
+                : TERMINAL_CURSOR_STYLE_BLOCK;
+        }
+        mGhosttyCursorShape = shape;
+        int mouseShape = state[GhosttyNative.STATE_MOUSE_SHAPE];
+        if (mGhosttyMouseShape >= 0 && mouseShape != mGhosttyMouseShape)
+            setPointerShape(GhosttyNative.mouseShapeName(mouseShape));
+        mGhosttyMouseShape = mouseShape;
+
+        if ((flags & GhosttyNative.FLAG_TITLE_CHANGED) != 0) setTitle(core.title());
+        if ((flags & GhosttyNative.FLAG_PWD_CHANGED) != 0) setReportedWorkingDirectory(core.workingDirectory());
+        if ((flags & GhosttyNative.FLAG_PALETTE_CHANGED) != 0 && core.colors(mGhosttyColors)) {
+            System.arraycopy(mGhosttyColors, 0, mColors.mCurrentColors, 0, mGhosttyColors.length);
+            mSession.onColorsChanged();
+        }
+        core.deliver(mGhosttyEvents, mSession);
+        core.flushClipboard(mSession);
+        if ((flags & GhosttyNative.FLAG_BELL) != 0) mSession.onBell();
+    }
+
+    private void applyGhosttyModes(int modes) {
+        int mirrored = 0, set = 0;
+        for (int[] pair : GHOSTTY_MODE_BITS) {
+            mirrored |= pair[1];
+            if ((modes & pair[0]) != 0) set |= pair[1];
+        }
+        mCurrentDecSetFlags = (mCurrentDecSetFlags & ~mirrored) | set;
+    }
+
+    /**
+     * Follow Ghostty's render hold with the same bit and deadline the Java core's mode 2026 uses, so
+     * {@link #isScreenUpdateHeld} answers for both cores and owns the one timeout. A hold that began
+     * since the last sync arms the deadline, including one that began right after another ended; a
+     * hold that ended (the program, a reset or a resize) hands the client one update, as the Java
+     * core does on release. Setting the mode again during a hold does not reach here, so it does
+     * not push the deadline out.
+     */
+    private void applyGhosttyHold(boolean held, boolean began) {
+        boolean wasHeld = isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE);
+        if (held) {
+            if (began || !wasHeld) {
+                setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, true);
+                mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+            }
+        } else if (wasHeld) {
+            setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
+            mSynchronizedUpdateDeadline = 0;
+            mSession.onScreenChanged();
+        }
+    }
+
+    /**
+     * The hold ran out ({@link #isScreenUpdateHeld}): end it in Ghostty too and take the frame as it
+     * is now, so the update the caller is about to deliver shows it. Nothing with the Java core.
+     */
+    private void endGhosttyHold() {
+        GhosttyCore core = mGhostty;
+        if (core == null) return;
+        try {
+            core.endHold();
+        } catch (RuntimeException e) {
+            ghosttyFailed(e);
+            return;
+        }
+        mGhosttyPending = true;
+        if (!mGhosttyApplying) flushBatchedOutput();
     }
 
     /** A clock the cursor-trail timestamp reads, injectable so a JVM test can control time. */
@@ -2085,6 +2555,26 @@ public final class TerminalEmulator {
                             case "TN":
                             case "name":
                                 responseValue = "xterm";
+                                break;
+                            // What this terminal does beyond xterm-256color's terminfo, answered here
+                            // so a program that asks the terminal (neovim, among others) learns it
+                            // without a terminfo entry of our own: OSC 52 (taken, and a `?` read is
+                            // answered, see TerminalSessionClient), 24-bit colour, underline styles
+                            // (SGR 4:n) and underline colour (SGR 58). RGB, Tc and Su are booleans
+                            // and answer with an empty value, as kitty does.
+                            case "Ms":
+                                responseValue = "\033]52;%p1%s;%p2%s\007";
+                                break;
+                            case "RGB":
+                            case "Tc":
+                            case "Su":
+                                responseValue = "";
+                                break;
+                            case "Smulx":
+                                responseValue = "\033[4:%p1%dm";
+                                break;
+                            case "Setulc":
+                                responseValue = "\033[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m";
                                 break;
                             default:
                                 responseValue = KeyHandler.getCodeFromTermcap(trans, isDecsetInternalBitSet(DECSET_BIT_APPLICATION_CURSOR_KEYS), isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD));
@@ -3634,6 +4124,10 @@ public final class TerminalEmulator {
                     continue;
                 int firstArg = mArgs[i + 1];
                 if (firstArg == 2) {
+                    // The colon form may carry an empty colour-space id before the components
+                    // ("58:2::R:G:B", the Setulc string kitty and neovim use): skip that slot.
+                    if (i + 5 <= mArgIndex && (mArgsSubParamsBitSet & (1 << (i + 2))) != 0 && mArgs[i + 2] < 0)
+                        i++;
                     if (i + 4 > mArgIndex) {
                         Logger.logWarn(mClient, LOG_TAG, "Too few CSI" + code + ";2 RGB arguments");
                     } else {
@@ -4335,6 +4829,30 @@ public final class TerminalEmulator {
     }
 
     /**
+     * An OSC 133 step the Ghostty core reported, kept as {@link #doShellIntegration} keeps it. The
+     * prompt rows themselves are read from Ghostty's rows ({@link GhosttyContent#findPromptRow}).
+     */
+    private void onGhosttyShellIntegration(int step, int exitCode) {
+        mShellIntegrationSeen = true;
+        switch (step) {
+            case GhosttyNative.SEMANTIC_PROMPT_START:
+                mShellIntegrationCommandRunning = false;
+                break;
+            case GhosttyNative.SEMANTIC_OUTPUT_START:
+                mShellIntegrationCommandRunning = true;
+                break;
+            case GhosttyNative.SEMANTIC_COMMAND_END:
+                mShellIntegrationCommandRunning = false;
+                mLastCommandExitCode = exitCode == GhosttyNative.NO_EXIT_CODE ? COMMAND_EXIT_CODE_UNKNOWN : exitCode;
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
      * The exit status the shell last reported through OSC 133;D, or {@link #COMMAND_EXIT_CODE_UNKNOWN}
      * when no command has finished or shell integration is not in use.
      */
@@ -4420,6 +4938,8 @@ public final class TerminalEmulator {
      * {@link Integer#MIN_VALUE} if there is none. Rows are in the external coordinate system.
      */
     public int findPromptRow(int fromRow, boolean backwards) {
+        GhosttyContent ghostty = mGhosttyContent;
+        if (ghostty != null) return ghostty.findPromptRow(fromRow, backwards);
         return mScreen.findRowWithMark(fromRow, TerminalRow.MARK_PROMPT_START, backwards);
     }
 
@@ -4434,9 +4954,10 @@ public final class TerminalEmulator {
      * @param row a row in the external coordinate system, so negative for transcript rows.
      */
     public String getHyperlinkUriAt(int row, int column) {
-        if (column < 0 || column >= mColumns || row < -mScreen.getActiveTranscriptRows() || row >= mRows)
+        TerminalContent content = getContent();
+        if (column < 0 || column >= mColumns || row < -content.historyRows() || row >= mRows)
             return null;
-        return mHyperlinks.getUri(mScreen.getHyperlinkIdAt(row, column));
+        return mHyperlinks.getUri(content.row(row).getHyperlinkId(column));
     }
 
     /**
@@ -4480,8 +5001,7 @@ public final class TerminalEmulator {
     }
 
     private void scrollDownOneLine() {
-        mScrollCounter++;
-        mScrollEventCount++;
+        mScrolls.add(1);
         long currentStyle = getStyle();
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
             // Horizontal margin: Do not put anything into scroll history, just non-margin part of screen up.
@@ -4930,12 +5450,13 @@ public final class TerminalEmulator {
         resetGraphemeTracking();
     }
 
+    /** Rows scrolled since the last {@link #clearScrollCounter()}; the view takes them through {@link #getContent()}. */
     public int getScrollCounter() {
-        return mScrollCounter;
+        return mScrolls.pending;
     }
 
     public void clearScrollCounter() {
-        mScrollCounter = 0;
+        mScrolls.pending = 0;
     }
 
     public boolean isAutoScrollDisabled() {
@@ -5011,6 +5532,17 @@ public final class TerminalEmulator {
         clearExtraCursors();
         mExtraCursorColor.type = mExtraCursorColor.value = 0;
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;
+        if (mGhostty != null) {
+            try {
+                mGhostty.reset();
+                mGhosttyContent.forgetHistory();
+                // The pointer shape was just reset to the terminal's own; Ghostty's is only recorded.
+                mGhosttyMouseShape = -1;
+                applyGhosttyState();
+            } catch (RuntimeException e) {
+                ghosttyFailed(e);
+            }
+        }
     }
 
     /**
@@ -5086,6 +5618,7 @@ public final class TerminalEmulator {
     /** Resolve the stored image and virtual placement referenced by a U+10EEEE cell. */
     public boolean getKittyImagePlaceholder(long imageId, long placementId,
                                             KittyImagePlaceholder out) {
+        if (mGhosttyImages != null) return mGhosttyImages.placeholder(imageId, placementId, out);
         return mKittyGraphics.getPlaceholder(imageId, placementId, out);
     }
 
@@ -5095,6 +5628,7 @@ public final class TerminalEmulator {
      * about an id whose image had not arrived yet sees the answer move when it does.
      */
     public long getKittyImageGeneration(long imageId) {
+        if (mGhosttyImages != null) return mGhosttyImages.imageGeneration(imageId);
         return mKittyGraphics.imageGeneration(imageId);
     }
 
@@ -5104,6 +5638,7 @@ public final class TerminalEmulator {
      * the renderer compares moves when they do; this is what tells it something did.
      */
     public long getKittyPlacementGeneration() {
+        if (mGhosttyImages != null) return mGhosttyImages.placementsGeneration();
         return mKittyPlacementGeneration;
     }
 
@@ -5189,6 +5724,11 @@ public final class TerminalEmulator {
      * {@code topRow} of the current screen, for the renderer to draw over the cells.
      */
     public void collectKittyPlacements(int topRow, int rowCount, java.util.List<KittyPlacement> out) {
+        // The renderer asks once per drawn frame, which is when the Ghostty core ticks animations.
+        if (mGhosttyImages != null) {
+            mGhosttyImages.collect(topRow, rowCount, mCellWidthPixels, mCellHeightPixels, out);
+            return;
+        }
         mScreen.collectVisibleKittyPlacements(topRow, rowCount, out);
     }
 
@@ -5239,11 +5779,13 @@ public final class TerminalEmulator {
      * while it is not. Frames and playback position are kept either way; only the ticking stops.
      */
     public void setKittyAnimationsVisible(boolean visible) {
+        if (mGhosttyImages != null) mGhosttyImages.setVisible(visible);
         mKittyGraphics.setAnimationsVisible(visible);
     }
 
     /** Release every kitty graphics resource, including the pending animation tick. */
     public void shutdownKittyGraphics() {
+        if (mGhosttyImages != null) mGhosttyImages.release();
         mKittyGraphics.shutdown();
     }
 
@@ -5253,6 +5795,8 @@ public final class TerminalEmulator {
      * blank and no session is lost.
      */
     public void dropKittyAnimationFrames() {
+        // The Ghostty core keeps no frames here, only bitmaps of what is on screen: drop those.
+        if (mGhosttyImages != null) mGhosttyImages.trim();
         mKittyGraphics.dropAllAnimationFrames();
     }
 
@@ -5321,7 +5865,7 @@ public final class TerminalEmulator {
      * (transcripts, find, AI context) must see the text exactly as it sits on screen.
      */
     public String getSelectedText(int x1, int y1, int x2, int y2) {
-        String selectedText = mScreen.getSelectedText(x1, y1, x2, y2);
+        String selectedText = getContent().text(x1, y1, x2, y2);
         return mClipboardCleanupEnabled ? ClipboardCleanup.forCopy(selectedText) : selectedText;
     }
 

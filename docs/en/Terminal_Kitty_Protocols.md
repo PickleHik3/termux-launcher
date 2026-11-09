@@ -42,7 +42,8 @@ Properties are read from the app's cached copy, so editing the file is not enoug
 with. Verified on device: a session opened straight after the file edit still reported
 `xterm-256color`, while one opened after `termux-reload-settings` reported `xterm-kitty`.
 
-XTVERSION reports `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel color-register count and
+XTVERSION reports `termux-launcher(version)`; with the Fast [terminal engine](#terminal-engine) it
+reports `termux-launcher(version) (libghostty-vt 1.0)`. XTSMGRAPHICS reports the Sixel color-register count and
 geometry for the current screen. Capability detectors such as chafa and notcurses can therefore pick
 a supported renderer instead of relying on a conservative terminal-name fallback.
 
@@ -135,7 +136,7 @@ When the cursor jumps, inside a pane or from one pane to another, a short animat
 it. Ordinary one-cell typing is not animated, and there is no trail while you are scrolled back.
 Over a text-sizing block the trail covers the whole enlarged cursor.
 
-Pick its look in **Settings → Terminal → Terminal display → Cursor trail**, or in **Appearance →
+Pick its look in **Settings → Terminal → Text & display → Cursor trail**, or in **Appearance →
 Look**: choose **Custom**, tap the terminal, then **Cursor trail**:
 
 - **Default**: kitty's own trail, a solid shape that shears toward the cursor and is gone once it
@@ -169,17 +170,14 @@ in `kitty.conf` picks a style and overrides the Settings choice; any other shade
 Motion blur, Railgun and Torpedo are this app's own takes on the kitty shaders they are named
 after; Pixie dust follows kitty's particles.
 
-## Terminal effect and edge colours
+## Terminal effect
 
-**Settings → Terminal → Terminal display → Terminal effect** gives the whole home screen a **CRT**,
+**Settings → Terminal → Text & display → Terminal effect** gives the whole home screen a **CRT**,
 **CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It is also on the
 terminal's **Custom** row in **Appearance → Look**, and needs Android 13 or newer. The effect
 covers every terminal pane and the status bar, dock, bars and keyboard around them, with the
 scanlines fixed to the screen. Only the panes curve like a tube; the bars stay flat so every key is
 where you touch it.
-
-**Extend edge colors** in the same section ("Match pane padding to nearby terminal colors."), on
-by default, fills a pane's padding with the terminal colours next to it.
 
 ## Kitty graphics Tier 2
 
@@ -275,7 +273,7 @@ the scrollback.
   number. Tapping the notification returns to the pane.
 - **OSC 9;4;state;pct** sets the progress ring on the window chip.
 - **OSC 52** writes the Android clipboard, and with `?` reads it. A write from a pane needs the
-  launcher on screen; a read also needs **Settings → Terminal → Clipboard → Let programs read the
+  launcher on screen; a read also needs **Settings → Terminal → Clipboard & compatibility → Let programs read the
   clipboard**.
 
 Each escape shares one implementation with `launcherctl`, for a process that has no terminal to
@@ -290,7 +288,7 @@ writes even while the launcher is off screen. See [LauncherCtl](LauncherCtl.md) 
 `kitten clipboard` works. The terminal implements kitty's
 [clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text and pictures, on the same
 Android clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and
-a read needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused
+a read needs it on screen and *Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard* on. A refused
 read is answered `status=EPERM`. `CSI ? 5522 $ p` answers `CSI ? 5522 ; 2 $ y` (supported, paste
 events off) or `; 1 $ y` (on), so a program can tell the protocol is there before it uses it.
 
@@ -372,6 +370,43 @@ shared memory and falls back to sending the picture through the terminal. `kitte
 **Key inspector** in the [command palette](Command_Palette_And_Actions.md) shows each key event,
 the binding that claimed it, the active kitty keyboard flags, and the exact bytes written to the
 shell. It has no shortcut of its own, so it can inspect any key.
+
+## Terminal engine
+
+Builds that carry libghostty-vt (Ghostty's terminal library) offer **Settings → Terminal →
+Clipboard & compatibility → Terminal engine**:
+
+- **Standard (Termux)**, the default, is the Java engine Termux has always used.
+- **Fast (LibGhostty)** reads output with libghostty-vt. It handles heavy output much faster,
+  keeps scrollback compressed when idle, and holds the screen still while a program draws a frame
+  (synchronized output, mode 2026).
+
+Measured on a Nothing Phone 2 (120 Hz):
+
+| | Standard | Fast |
+|---|---|---|
+| Reading output (13 MB of mixed text, nothing drawn) | 14–18 MB/s | 300–340 MB/s |
+| `cat` of 200,000 lines on screen | about 5 s | about 1 s |
+| Main thread's frame delay during that `cat` (p90) | 8.4 ms | 1.6 ms |
+| Full-screen redraw, btop, typing while output streams | same | same |
+| An animated kitty image: frames over twice the budget in 10 s | 15 | 30 |
+
+Drawing is shared, so screens that redraw everything cost the same on both; Fast pays off when
+programs print a lot.
+
+The choice applies to panes you open after changing it; open panes keep their engine. Drawing,
+fonts, links, copy, prompt jumps, kitty images, sixel and keyboard are the same on both. Where Fast differs:
+
+- Emoji follow Ghostty's widths: an emoji with VS16 (❤️) and a flag take two cells, and programs can
+  see this through mode 2027.
+- Text sizing (OSC 66) prints as plain text; tlstore's headings fall back to one size.
+- iTerm2 images are not shown.
+- A kitty temporary-file transfer (`t=t`) is read only from the app's temporary folder; tools such
+  as `kitten icat` notice and send the pixels directly instead.
+
+If the app crashes in native code while a Fast pane is open, new panes use Standard until the app
+is updated, so a fault cannot bring the home screen down twice; force-stopping the app does not
+count as a crash.
 
 ## Current limitations
 

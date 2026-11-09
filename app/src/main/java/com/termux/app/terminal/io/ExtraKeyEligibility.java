@@ -112,6 +112,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WALL_WIDGETS, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_TERMINAL, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_DISPLAY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_WALL_ASSISTANT, Band.LAUNCHER);
         // The keyboard is the launcher's, not the terminal's: a widget's own text field needs one
         // as much as a shell does.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, Band.LAUNCHER);
@@ -126,6 +127,8 @@ public final class ExtraKeyEligibility {
         // Dictation types wherever the keyboard would, a Home search or a display as much as a
         // shell, and copies where nothing takes typing.
         tools.put(LauncherToolRegistry.TOOL_VOICE_DICTATE, Band.LAUNCHER);
+        // Minimal mode is the windows', but the switch is the launcher's, on every page.
+        tools.put(LauncherToolRegistry.TOOL_MINIMAL_TOGGLE, Band.LAUNCHER);
         // The dock and the key row are chrome every place wears.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_EXTRA_KEYS_EDIT, Band.LAUNCHER);
@@ -174,6 +177,11 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEW, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_CLOSE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_SELECT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_CONSUME, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_EXPEL, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME_PROMPT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_SESSION_NEW, Band.MULTIPLEX);
@@ -235,7 +243,22 @@ public final class ExtraKeyEligibility {
         if (!isUsable(keyValue, place)) return false;
         if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
         PaneWallPage target = placeSwitchTarget(keyValue);
-        return target == null || pages.contains(target);
+        // The Assistant key stays live with no page: it adds the page (AssistantEntry).
+        return target == null || target == PaneWallPage.ASSISTANT || pages.contains(target);
+    }
+
+    /**
+     * The place a key row is dressed for: the half the stack wears ({@code stackDressPage}, the
+     * other half's while a crossing stands its rows) or else where the wall rests
+     * ({@code restingPlace}). Asked on every crossing frame and at the settle alike, so a toolbar a
+     * crossing brings up rises already drawn live where it lands (and its place switch for the
+     * place it lands on already in front) rather than dead in the leaving place's terms until the
+     * settle restates it.
+     */
+    @NonNull
+    public static PaneWallPage rowPlace(@NonNull PaneWallPage restingPlace,
+                                        @Nullable PaneWallPage stackDressPage) {
+        return stackDressPage != null ? stackDressPage : restingPlace;
     }
 
     /** Whether the key sending {@code keyValue} can act on {@code place}. */
@@ -292,6 +315,7 @@ public final class ExtraKeyEligibility {
             case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PaneWallPage.ASSISTANT;
             case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
             default: return null;
         }

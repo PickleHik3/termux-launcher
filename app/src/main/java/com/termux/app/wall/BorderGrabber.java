@@ -17,8 +17,9 @@ import com.google.android.material.color.MaterialColors;
  * A border swipe's grabber: a short pill centred on the current page's bottom border for the
  * keyboard swipe, or on its top border for the status bar's, the way a sheet shows where it can
  * be pulled, so the line the swipe starts on says it can be pulled. In the rim's accent at low
- * emphasis, just outside the page's edge, so it sits on the frame line and in the air beyond it
- * and never over the page's own text. One class, two instances: which edge is fixed at
+ * emphasis: the keyboard's on the page's bottom rim, the status bar's hung from the bar's bottom
+ * border over a window (on a Home page, at the page's top), and never over the page's own text
+ * (the pane's inner padding holds the text off its rim). One class, two instances: which edge is fixed at
  * construction ({@link #BorderGrabber(View, boolean)}), and everything else is the same.
  *
  * <p>It answers the finger: brighter and a little wider from the moment a finger lands in its
@@ -40,9 +41,26 @@ public final class BorderGrabber {
     /** How much wider it grows under a finger. */
     public static final float PRESSED_EXTRA_WIDTH_DP = 8f;
     public static final float THICKNESS_DP = 3f;
-    /** How far outside the page's edge its centre sits: on the frame line, outside the page. */
+    /**
+     * How far above the edge it is given the status bar's pill centres: on the bar's own bottom
+     * border, inside the bar. The keyboard's pill instead centres on the page's rim
+     * ({@link #rimCentreInsetPx}), since the air under a window is too narrow to hold it.
+     */
     public static final float DROP_DP = 2f;
+
+    /**
+     * How far inside a page's bottom edge the keyboard's pill centres: the middle of the rim's
+     * stroke, which is painted just inside the outline, so the pill sits on the line it pulls.
+     */
+    public static float rimCentreInsetPx(float density) {
+        return com.termux.app.GlassRimRenderer.strokePx(density) / 2f;
+    }
     static final float REST_ALPHA = 0.3f;
+    /**
+     * A Home page's grabber at rest: twice a window's, since it stands over the wallpaper and the
+     * widgets rather than on a frame line.
+     */
+    static final float HOME_REST_ALPHA = 0.6f;
     static final float PRESSED_ALPHA = 0.75f;
     /** How much of the swipe's travel it is drawn along by, and how far at most. */
     static final float TRACK_FRACTION = 0.25f;
@@ -168,7 +186,42 @@ public final class BorderGrabber {
         if (!(visibility > 0f)) return;
         float density = mHost.getResources().getDisplayMetrics().density;
         bounds(mRect, centreX, edgeY, mEmphasis, mTrackPx, scale, density, mTop);
+        drawRect(canvas, visibility);
+    }
+
+    /**
+     * Draw the status bar's pill over a window: hung from the bar's bottom border at
+     * {@code borderY} ({@link #borderBounds}), in the air between the bar and the window.
+     */
+    void drawUnderBorder(@NonNull Canvas canvas, float centreX, float borderY, float scale,
+                         float visibility) {
+        if (!(visibility > 0f)) return;
+        float density = mHost.getResources().getDisplayMetrics().density;
+        borderBounds(mRect, centreX, borderY, mEmphasis, mTrackPx, scale, density);
+        drawRect(canvas, visibility);
+    }
+
+    private void drawRect(@NonNull Canvas canvas, float visibility) {
         float alpha = alpha(mEmphasis) * Math.min(1f, visibility);
+        mPaint.setColor(mColor);
+        mPaint.setAlpha(Math.round(255f * alpha * (android.graphics.Color.alpha(mColor) / 255f)));
+        float radius = mRect.height() / 2f;
+        canvas.drawRoundRect(mRect, radius, radius, mPaint);
+    }
+
+    /**
+     * Draw the grabber of a Home page, at rest in {@code restLeft, restTop, restRight, restBottom}
+     * ({@link BorderDrag#homeGrabber}) carried {@code shiftX} sideways with its page, at
+     * {@code visibility} of its full alpha: {@link #HOME_REST_ALPHA} at rest, wider and brighter
+     * under a finger and drawn along the swipe as a window's is.
+     */
+    void drawHome(@NonNull Canvas canvas, float restLeft, float restTop, float restRight,
+                  float restBottom, float shiftX, float visibility) {
+        if (!(visibility > 0f)) return;
+        float density = mHost.getResources().getDisplayMetrics().density;
+        homeBounds(mRect, restLeft + shiftX, restTop, restRight + shiftX, restBottom, mEmphasis,
+            mTrackPx, density);
+        float alpha = homeAlpha(mEmphasis) * Math.min(1f, visibility);
         mPaint.setColor(mColor);
         mPaint.setAlpha(Math.round(255f * alpha * (android.graphics.Color.alpha(mColor) / 255f)));
         float radius = mRect.height() / 2f;
@@ -194,9 +247,10 @@ public final class BorderGrabber {
     }
 
     /**
-     * The pill for a page edge at ({@code centreX}, {@code edgeY}): centred on it sideways,
-     * {@link #DROP_DP} outside it — below a bottom edge, above a top one ({@code top}) — and
-     * {@code trackPx} along the swipe, wider with {@code emphasis}, and scaled with its page.
+     * The pill for an edge at ({@code centreX}, {@code edgeY}): centred on it sideways; for a
+     * page's bottom edge centred on its rim ({@link #rimCentreInsetPx}), for the status bar's
+     * bottom border ({@code top}) {@link #DROP_DP} up into the bar; {@code trackPx} along the
+     * swipe, wider with {@code emphasis}, and scaled with its page.
      */
     public static void bounds(@NonNull RectF out, float centreX, float edgeY, float emphasis,
                               float trackPx, float scale, float density, boolean top) {
@@ -204,10 +258,44 @@ public final class BorderGrabber {
         float e = clamp01(emphasis);
         float halfWidth = (WIDTH_DP + PRESSED_EXTRA_WIDTH_DP * e) * density * s / 2f;
         float halfThickness = THICKNESS_DP * density * s / 2f;
-        float drop = DROP_DP * density * s;
-        float centreY = edgeY + (top ? -drop : drop) + (Float.isNaN(trackPx) ? 0f : trackPx);
+        float lift = (top ? DROP_DP * density : rimCentreInsetPx(density)) * s;
+        float centreY = edgeY - lift + (Float.isNaN(trackPx) ? 0f : trackPx);
         out.set(centreX - halfWidth, centreY - halfThickness, centreX + halfWidth,
             centreY + halfThickness);
+    }
+
+    /**
+     * The status bar's pill over a window: centred sideways at {@code centreX}, its top edge on
+     * the bar's bottom border at {@code borderY}, so it hangs from the border into the air below
+     * it (inside the wall, never under the bar's own glass); {@code trackPx} along the swipe,
+     * wider with {@code emphasis}, and sized with its page.
+     */
+    public static void borderBounds(@NonNull RectF out, float centreX, float borderY,
+                                    float emphasis, float trackPx, float scale, float density) {
+        float s = Float.isNaN(scale) || scale <= 0f ? 1f : scale;
+        float halfWidth = (WIDTH_DP + PRESSED_EXTRA_WIDTH_DP * clamp01(emphasis)) * density * s
+            / 2f;
+        float top = borderY + (Float.isNaN(trackPx) ? 0f : trackPx);
+        out.set(centreX - halfWidth, top, centreX + halfWidth, top + THICKNESS_DP * density * s);
+    }
+
+    /**
+     * A Home page's grabber resting at {@code left, top, right, bottom}, as drawn for
+     * {@code emphasis} and a swipe's {@code trackPx}: wider about its centre under a finger, and
+     * drawn along the swipe.
+     */
+    static void homeBounds(@NonNull RectF out, float left, float top, float right, float bottom,
+                           float emphasis, float trackPx, float density) {
+        float centreX = (left + right) / 2f;
+        float halfWidth = (right - left) / 2f + PRESSED_EXTRA_WIDTH_DP * density * clamp01(emphasis)
+            / 2f;
+        float track = Float.isNaN(trackPx) ? 0f : trackPx;
+        out.set(centreX - halfWidth, top + track, centreX + halfWidth, bottom + track);
+    }
+
+    /** The share of full alpha a Home page's grabber is drawn at for {@code emphasis}. */
+    static float homeAlpha(float emphasis) {
+        return HOME_REST_ALPHA + (PRESSED_ALPHA - HOME_REST_ALPHA) * clamp01(emphasis);
     }
 
     /** The share of full alpha the grabber is drawn at for {@code emphasis}. */

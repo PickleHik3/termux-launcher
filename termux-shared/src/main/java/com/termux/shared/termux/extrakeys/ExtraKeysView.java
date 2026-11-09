@@ -12,6 +12,7 @@ import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.InsetDrawable;
 import android.os.Build;
@@ -576,6 +577,44 @@ public final class ExtraKeysView extends GridLayout {
      */
     public void setPopupCapsuleStyle(boolean verticalPill) {
         mPopupVerticalPill = verticalPill;
+    }
+
+    private boolean mDeckOn;
+    private int mDeckKey, mDeckKeyTop, mDeckKeyFoot, mDeckLit;
+    @Nullable private Drawable mDeckSavedBackground;
+
+    /**
+     * The deck look for the row: raised push-button keys on the slab its host wears (the dock's
+     * sheet or the plank off it carries the opaque bed, so the row's inset inside the host is
+     * never seen as a second slab), the active button lit with a bar. {@code on == false}
+     * restores the normal look.
+     */
+    public void setDeckLook(boolean on, int bed, int bedTop, int key, int keyTop, int keyFoot, int lit, int litInk) {
+        if (on) {
+            if (!mDeckOn)
+                mDeckSavedBackground = getBackground();
+            setBackground(null);
+            mDeckOn = true;
+            mDeckKey = key;
+            mDeckKeyTop = keyTop;
+            mDeckKeyFoot = keyFoot;
+            mDeckLit = lit;
+        } else {
+            if (!mDeckOn)
+                return;
+            mDeckOn = false;
+            setBackground(mDeckSavedBackground);
+            mDeckSavedBackground = null;
+        }
+        restateEveryKey();
+    }
+
+    private void applyDeckBackground(@NonNull MaterialButton button, boolean active) {
+        button.setBackground(new InsetDrawable(
+            new DeckButtonDrawable(getResources().getDisplayMetrics().density,
+                mDeckKey, mDeckKeyTop, mDeckKeyFoot, mDeckLit, active),
+            Math.round(dpToPx(1f))));
+        button.setBackgroundTintList(null);
     }
 
     public void setButtonColors(int buttonTextColor, int buttonActiveTextColor, int buttonBackgroundColor, int buttonActiveBackgroundColor) {
@@ -1184,25 +1223,35 @@ public final class ExtraKeysView extends GridLayout {
                 // text shadow layer rather than the row's press bloom, because this is a resting
                 // state and has to survive every press, latch and repaint the bloom plays over it,
                 // and the row sets clipChildren false so the halo spills past the button.
-                button.setTextColor(glyph);
-                if (PlaceSwitchGlyph.GLOW_RADIUS_DP > 0f) {
+                button.setTextColor(mDeckOn ? mDeckLit : glyph);
+                if (PlaceSwitchGlyph.GLOW_RADIUS_DP > 0f && !mDeckOn) {
                     button.setShadowLayer(dpToPx(PlaceSwitchGlyph.GLOW_RADIUS_DP), 0f, 0f,
                         withAlpha(glyph, PlaceSwitchGlyph.GLOW_ALPHA));
                 }
             } else {
                 button.setTextColor(withAlpha(glyph, PlaceSwitchGlyph.UNFOCUSED_ALPHA));
             }
-            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            if (mDeckOn)
+                applyDeckBackground(button, placeFocus == PlaceFocus.FOCUSED);
+            else
+                button.setBackground(new ColorDrawable(mButtonBackgroundColor));
             return;
         }
         if (role == null) {
-            button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
-            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            button.setTextColor(activeText ? (mDeckOn ? mDeckLit : mButtonActiveTextColor) : mButtonTextColor);
+            if (mDeckOn)
+                applyDeckBackground(button, activeText);
+            else
+                button.setBackground(new ColorDrawable(mButtonBackgroundColor));
             return;
         }
         int[] colors = roleColors(role);
         // A latched modifier still wins: its accent label reads over the role's own fill.
-        button.setTextColor(activeText ? mButtonActiveTextColor : colors[1]);
+        button.setTextColor(activeText ? (mDeckOn ? mDeckLit : mButtonActiveTextColor) : colors[1]);
+        if (mDeckOn) {
+            applyDeckBackground(button, activeText);
+            return;
+        }
         GradientDrawable cap = new GradientDrawable();
         cap.setShape(GradientDrawable.RECTANGLE);
         cap.setCornerRadius(dpToPx(COLORED_KEY_CORNER_RADIUS_DP));
@@ -1222,9 +1271,11 @@ public final class ExtraKeysView extends GridLayout {
     @Nullable
     private ExtraKeyColorRole roleFor(@NonNull MaterialButton button,
                                       @Nullable ExtraKeyButton info) {
-        if (mPreviewRoles.containsKey(button))
-            return mPreviewRoles.get(button);
-        return info == null ? null : info.getColor();
+        ExtraKeyColorRole role = mPreviewRoles.containsKey(button)
+            ? mPreviewRoles.get(button) : info == null ? null : info.getColor();
+        if (role == null && info != null && placeFocusOf(info) != PlaceFocus.NOT_A_PLACE)
+            return ExtraKeyColorRole.defaultForPlaceSwitch(info.getKey());
+        return role;
     }
 
     /** {@code {background, label}} for a role, resolved from the theme once and then remembered. */

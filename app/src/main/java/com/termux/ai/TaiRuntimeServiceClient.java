@@ -371,10 +371,9 @@ public final class TaiRuntimeServiceClient {
         String message;
         if (TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation) || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)) {
             message = lowMemory
-                ? "Android closed the AI runtime to free memory while it was loading the model; the load was not retried. "
-                    + "Close other apps, or load on CPU or a smaller model. "
-                    + "Automatic loads now keep off that accelerator at that window; "
-                    + "name the accelerator again to try it once at the smallest window."
+                ? "Android closed the AI runtime to free memory while it was loading the model. "
+                    + "Automatic loads try that accelerator again once memory has had a few minutes to recover; "
+                    + "name it to try now at the smallest window, or load on CPU or a smaller model."
                 : "AI runtime process died while loading the model (Android may have closed it for memory); "
                     + "the load was not retried. Automatic loads now keep off that accelerator at that window; "
                     + "name the accelerator again to try it once at the smallest window, or load on CPU or a smaller model.";

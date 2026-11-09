@@ -17,8 +17,9 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * The pane's content sits the same distance off every edge of its frame: the arc's clearance on
- * all four sides for any content, and for a terminal the top's margin makes up only what the
+ * The pane's content is held clear of the corner arc with the clearance traded toward the sides
+ * ({@link PaneShape#verticalInsetPx}, {@link PaneShape#sideInsetPx}): the same gap off the top as
+ * off the bottom, the same off both sides, and for a terminal the top's margin makes up only what the
  * renderer's own headroom above the first row has not already paid — so the first cell is as far
  * off the top as the last row's cells are off the bottom, in normal and minimal mode alike (the
  * frame does not know which it is in, which is the point).
@@ -44,30 +45,45 @@ public class PaneContentFramePaddingTest {
         return frame;
     }
 
+    private static int verticalInset() {
+        return PaneShape.verticalInsetPx(
+            PaneShape.radiusForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT), 0);
+    }
+
+    private static int sideInset() {
+        return PaneShape.sideInsetPx(
+            PaneShape.radiusForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT), verticalInset());
+    }
+
     @Test
-    public void plainContentSitsTheArcsClearanceOffEveryEdge() {
+    public void plainContentSitsCloserToTheTopAndBottomThanToTheSides() {
         View content = new View(RuntimeEnvironment.getApplication());
-        PaneContentFrame frame = frameAround(content);
-        int inset = PaneShape.contentInsetForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT);
-        assertTrue(inset > 0);
-        assertEquals(inset, content.getLeft());
-        assertEquals(inset, content.getTop());
-        assertEquals(inset, FRAME_WIDTH - content.getRight());
-        assertEquals(inset, FRAME_HEIGHT - content.getBottom());
+        frameAround(content);
+        int vertical = verticalInset();
+        int side = sideInset();
+        assertTrue(vertical > 0);
+        assertTrue("the vertical gap is the one trimmed",
+            vertical < PaneShape.contentInsetPx(RADIUS_PX));
+        assertTrue(side > vertical);
+        assertEquals(side, content.getLeft());
+        assertEquals(vertical, content.getTop());
+        assertEquals(side, FRAME_WIDTH - content.getRight());
+        assertEquals(vertical, FRAME_HEIGHT - content.getBottom());
     }
 
     @Test
     public void aTerminalsFirstCellSitsAsFarOffTheTopAsItsLastRowOffTheBottom() {
         TerminalView terminal = new TerminalView(RuntimeEnvironment.getApplication(), null);
         terminal.setTextSize(30);
-        PaneContentFrame frame = frameAround(terminal);
-        int inset = PaneShape.contentInsetForBounds(RADIUS_PX, FRAME_WIDTH, FRAME_HEIGHT);
+        frameAround(terminal);
+        int vertical = verticalInset();
+        int side = sideInset();
         int headroom = terminal.getFirstRowTopPx();
-        assertEquals(inset, terminal.getLeft());
-        assertEquals(inset, FRAME_WIDTH - terminal.getRight());
-        assertEquals(inset, FRAME_HEIGHT - terminal.getBottom());
-        // The top margin plus the renderer's own headroom is the same band as the other edges.
-        assertEquals(inset, terminal.getTop() + Math.min(headroom, inset));
-        assertTrue("the top margin never exceeds the sides", terminal.getTop() <= inset);
+        assertEquals(side, terminal.getLeft());
+        assertEquals(side, FRAME_WIDTH - terminal.getRight());
+        assertEquals(vertical, FRAME_HEIGHT - terminal.getBottom());
+        // The top margin plus the renderer's own headroom is the same band as the bottom's.
+        assertEquals(vertical, terminal.getTop() + Math.min(headroom, vertical));
+        assertTrue("the top margin never exceeds the bottom's", terminal.getTop() <= vertical);
     }
 }

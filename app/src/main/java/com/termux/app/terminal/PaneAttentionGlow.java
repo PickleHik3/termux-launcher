@@ -41,6 +41,9 @@ final class PaneAttentionGlow extends Drawable {
     private final RectF mRect = new RectF();
     private float mPulse = 1f;
     private int mAlpha = 255;
+    /** Frame-source counter for the idle audit: attentionGlow. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("attentionGlow");
+
     @Nullable private ValueAnimator mAnimator;
     private boolean mPulsing;
     /**
@@ -93,6 +96,7 @@ final class PaneAttentionGlow extends Drawable {
         a.setRepeatCount(ValueAnimator.INFINITE);
         a.setRepeatMode(ValueAnimator.REVERSE);
         a.addUpdateListener(v -> {
+            FRAMES.tick();
             mPulse = (float) v.getAnimatedValue();
             invalidateSelf();
         });

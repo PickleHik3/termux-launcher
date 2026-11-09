@@ -9,6 +9,11 @@
             app:summary="@string/settings_app_search_prefix_summary"
             android:defaultValue="%"
             android:inputType="text" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_drawer_open_only_match"
+            app:title="@string/settings_open_only_match_title"
+            app:summary="@string/settings_open_only_match_summary"
+            android:defaultValue="false" />
         <Preference
             app:key="app_launcher_reset_usage_ranking"
             app:title="@string/settings_reset_usage_ranking_title"

@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status and the display's GPU probe. There are no media, resource, event, MCP or restart routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status, the display's GPU probe and the media helper's reports. There are no resource, event, MCP or restart routes.
 
 ### Health and discovery
 
@@ -476,7 +476,7 @@ answer with their own codes rather than a generic one:
   write from a pane keeps the on-screen rule, since any program printing to a pane can emit one.
 - Reading needs the launcher on screen. Off screen, `GET /v1/clipboard` answers 409
   `launcher_not_visible` — Android only lets the focused app read the clipboard anyway.
-- Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
+- Reading also needs **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard** (on by default), the
   same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
 
 There is no separate clipboard history to keep in step: the Android clipboard is the one clipboard
@@ -574,6 +574,18 @@ The history lives in `~/.launcherctl/launcher.db`, readable by anything running 
 that is why it is opt-in per app. The older `notifications.jsonl` mirror is gone and is deleted
 the first time the new store opens.
 
+### POST /v1/layout
+
+One layout document (ADR 0020). Body `{"op":"get","kind":"home"}` answers
+`{"ok":true,"kind":"home","layout":{...}}`. Body `{"op":"set","kind":"home","layout":{...}}`
+validates the document and writes it whole, then re-dresses the live chrome. `set` replaces the
+document: fields left out fall back to their defaults. A known field whose value the launcher
+cannot read (unknown `dock_design`, a bad placement edge, `icon_size` not s/m/l/xl, a negative
+`*_order`, a size outside its range) answers 400 `invalid_layout` with the field named and the
+stored document unchanged; fields this build does not know are accepted. An unknown kind
+answers 400 `bad_kind`. Kinds:
+`home`, `terminal`, `terminal_minimal`, `display`, `sizes`.
+
 ### Device routes: vibrate, torch, battery, volume, toast, wallpaper
 
 | Method | Path | Body | Answer |
@@ -645,6 +657,21 @@ launcherctl wallpaper get
 | GET | `/v1/x11/gpu` | Which graphics profile fits this phone for Linux apps: `gpu`, `recommended`, every `profiles` entry with `reason`, `installed`, `packages`, `env` and `server`, and `env_text`. `?format=env` answers the exports as shell lines (`launcherctl x11 gpu [--env]`) |
 
 See [Agent status](Agent_Status.md) and [The Linux display](X11_Display.md#gpu-acceleration-for-your-apps).
+
+### The media helper's reports
+
+The launcher's media helper reports what Linux media players and sound streams are doing through
+these; nothing else needs them. Background-safe, and ignored while Media controls is off.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/media/player?name=N&pid=P` | Body: what `dbus-send --print-reply` printed for the MPRIS player's `Properties.GetAll`; `pid` owns the name (`launcherctl media player`) |
+| POST | `/v1/media/gone?name=N` | The player left the bus (`launcherctl media gone`) |
+| POST | `/v1/media/seeked?name=N&position=US` | The player jumped to `US` microseconds (`launcherctl media seeked`) |
+| POST | `/v1/media/streams?playing=COUNT` | How many streams play through the launcher's sound server (`launcherctl media streams`) |
+
+`name` must be an MPRIS bus name (`org.mpris.MediaPlayer2.*`); anything else is `400 bad_request`.
+See [Sound for Linux apps](X11_Display.md#sound-for-linux-apps).
 
 ### OpenAI-compatible
 
@@ -814,6 +841,8 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | POST | `/v1/ai/runtime/benchmark` | LiteRT-LM's own benchmark() (`tai benchmark --native`) |
 | POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag. The reply also carries `memoryMode` (`relaxed` or `unrestricted`, read-only) |
 | POST | `/v1/auth/rotate` | Rotate the API token and rewrite discovery files |
+
+A load that Android closes the runtime for (a `tai_runtime_crashed` error with `exitReason: "low_memory"`) is not held against the accelerator for good: automatic loads try it again once at the full window after a few minutes, and the load plan's `memoryBudget` reports that as `retriedAfterLowMemory: true`. A load that names its accelerator is tried right away at the smallest window.
 
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
 

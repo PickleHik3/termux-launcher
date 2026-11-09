@@ -54,8 +54,9 @@ public class TopPaneWidgetSlotAlignmentTest {
         mContext = ApplicationProvider.getApplicationContext();
         mDensity = mContext.getResources().getDisplayMetrics().density;
         mWidth = 1080;
-        mLeading = StatusBarLensView.leadingCellWidthPx(mContext);
         mGutter = Math.round(12f * mDensity);
+        // No mark beside the clock (#90): the leading edge keeps the trailing gutter's air.
+        mLeading = Math.max(StatusBarLensView.leadingCellWidthPx(mContext), mGutter);
         mGap = Math.round(12f * mDensity);
         // The feed reads empty until the notification listener is connected.
         TopPaneFeed.setListenerConnected(true);

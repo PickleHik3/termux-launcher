@@ -48,13 +48,44 @@
             app:dependency="status_widget_weather" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_status_more_header">
-        <Preference
-            app:key="status_bar_notifications_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_notifications"
-            app:summary="@string/settings_status_bar_notifications_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
+    <!-- Where the bar shares the camera's band, its row leaves a gap for the camera (#163).
+         Auto follows the phone's own cutout; Custom adds the sliders that move and size it. -->
+    <PreferenceCategory app:title="@string/settings_status_cutout_header">
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="status_bar_cutout_mode"
+            app:title="@string/settings_status_cutout_title"
+            android:defaultValue="auto"
+            app:entries="@array/settings_status_cutout_entries"
+            app:entryValues="@array/settings_status_cutout_values" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_margin"
+            app:title="@string/settings_status_cutout_margin_title"
+            app:summary="@string/settings_status_cutout_margin_summary"
+            android:defaultValue="4"
+            app:min="0"
+            android:max="24"
+            app:showSeekBarValue="true" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_offset_x"
+            app:title="@string/settings_status_cutout_x_title"
+            app:summary="@string/settings_status_cutout_x_summary"
+            android:defaultValue="0"
+            app:min="-200"
+            android:max="200"
+            app:showSeekBarValue="true" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_offset_y"
+            app:title="@string/settings_status_cutout_y_title"
+            android:defaultValue="0"
+            app:min="-24"
+            android:max="24"
+            app:showSeekBarValue="true" />
+        <com.termux.app.fragments.settings.SliderPreference
+            app:key="status_bar_cutout_scale"
+            app:title="@string/settings_status_cutout_size_title"
+            android:defaultValue="100"
+            app:min="50"
+            android:max="200"
+            app:showSeekBarValue="true" />
     </PreferenceCategory>
-
 </PreferenceScreen>

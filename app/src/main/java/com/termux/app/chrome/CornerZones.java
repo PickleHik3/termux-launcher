@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * The four squares a frame keeps for itself. Every frame on the wall — the Widgets page, the
- * Display page, a terminal pane, a floating pane, the floating keyboard's card — answers touches
+ * display window, a terminal pane, a floating pane, the floating keyboard's card — answers touches
  * at its corners and hands its edges to whatever it is holding, so a maximised X window, a widget
  * that reaches the rim and a terminal's own last column are all touchable to the pixel.
  *

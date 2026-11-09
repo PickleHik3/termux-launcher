@@ -335,6 +335,9 @@ public final class TaiTierPolicy {
                 return t3 ? Offer.LISTED : Offer.SUGGESTED;
             case TaiModelCatalog.PARAKEET_TDT_V3_ID:
                 return t1 ? Offer.LISTED : Offer.SUGGESTED;
+            case TaiModelCatalog.WHISPER_BASE_GPU_ID:
+                // Recommendations come from the GPU check and the benchmark (TaiSpeechGpuAdvice), not the tier.
+                return Offer.LISTED;
             case TaiModelCatalog.KITTEN_TTS_NANO_ID:
                 return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
             case TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID:

@@ -13,6 +13,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.graphics.Rect;
+import android.os.Bundle;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -24,6 +26,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -44,9 +49,9 @@ import java.util.List;
  * and layout pass per frame, and the clipped, bottom-anchored viewport with its focus wash and
  * bottom fade has no natural widget anyway.
  *
- * <p>The backdrop blur is not drawn here. The host stacks a {@code RealtimeBlurView} clipped to
- * this rectangle's outline underneath, exactly as the dock does; this view draws the tint,
- * gradient, specular, rim and content over it.
+ * <p>The backdrop blur is not drawn here. The host stacks the panel's backdrop
+ * ({@code chrome.PanelBackdrop}) clipped to this rectangle's outline underneath; this view draws
+ * the tint, gradient, specular, rim and content over it.
  *
  * <p>Colors resolve through Material roles and every label is contrast-checked against the
  * composited glass with {@link InAppKeyboardPaletteFactory#ensureContrast}, because the live
@@ -79,6 +84,16 @@ public final class CommandPaletteView extends View {
 
         /** A tap landed outside the palette and its strip. */
         void onOutsideTapped();
+    }
+
+    /**
+     * Where the in-app keyboard, the floating keyboard's frame and the dock stand at a touch, as
+     * {@code left, top, right, bottom} quadruples in this view's coordinates. Asked on each
+     * touch-down, since a floating keyboard can be dragged while the palette is open.
+     */
+    public interface PassThroughSource {
+        @Nullable
+        float[] passThroughRects();
     }
 
     public static final int KIND_CATEGORY = 0;
@@ -257,7 +272,12 @@ public final class CommandPaletteView extends View {
     }
 
     // Geometry, in dp, from the handoff's 412 x 920 dp reference frame.
-    private static final float FILTER_ROW_H = 34f;
+    /**
+     * The filter row, and so the closed palette: Material's 48dp minimum touch height, tall enough
+     * that a mid-range Corner radius reads as a rounded rect rather than a pill. Its type is
+     * single-line and ellipsized and its baseline is centred in it, so it holds at 1.3x font scale.
+     */
+    private static final float FILTER_ROW_H = 48f;
     private static final float ARG_ROW_H = 30f;
     private static final float CATEGORY_H = 22f;
     private static final float ROW_PAD_V = 6f;
@@ -320,15 +340,23 @@ public final class CommandPaletteView extends View {
     private static final float FLING_MIN_KEEP_DP = 24f;
 
     // Type sizes, in dp for a stable ledger grid under any font scale.
-    private static final float SIZE_CRUMB = 10.5f;
-    private static final float SIZE_META = 10f;
-    private static final float SIZE_FILTER = 13f;
-    private static final float SIZE_CATEGORY = 9.5f;
-    private static final float SIZE_ROW = 12.5f;
-    private static final float SIZE_DESCRIPTION = 10.5f;
-    private static final float SIZE_SHORTCUT = 10f;
-    private static final float SIZE_CAP_GLYPH = 11f;
-    private static final float SIZE_CAP_LABEL = 10.5f;
+    // Material 3's type scale (sp), in the palette's monospace face: the field is a search bar
+    // (body large), rows a dense list (body medium title, body small supporting line), chips,
+    // categories and meta labels (label medium / small).
+    private static final float M3_BODY_LARGE = 16f;
+    private static final float M3_BODY_MEDIUM = 14f;
+    private static final float M3_BODY_SMALL = 12f;
+    private static final float M3_LABEL_MEDIUM = 12f;
+    private static final float M3_LABEL_SMALL = 11f;
+    private static final float SIZE_CRUMB = M3_LABEL_SMALL;
+    private static final float SIZE_META = M3_LABEL_SMALL;
+    private static final float SIZE_FILTER = M3_BODY_LARGE;
+    private static final float SIZE_CATEGORY = M3_LABEL_SMALL;
+    private static final float SIZE_ROW = M3_BODY_MEDIUM;
+    private static final float SIZE_DESCRIPTION = M3_BODY_SMALL;
+    private static final float SIZE_SHORTCUT = M3_LABEL_SMALL;
+    private static final float SIZE_CAP_GLYPH = M3_LABEL_MEDIUM;
+    private static final float SIZE_CAP_LABEL = M3_LABEL_SMALL;
     /**
      * Smallest the search hint shrinks to before it ellipsizes: the category rules' size, the
      * smallest type this view already sets.
@@ -369,6 +397,10 @@ public final class CommandPaletteView extends View {
      * into.
      */
     private final RectF mModalBounds = new RectF();
+    /** {@link #mModalBounds} packed for {@link CommandPaletteTouchPolicy}. */
+    private final float[] mModalQuad = new float[4];
+    /** The keyboard and the dock, which take their own touches even inside the modal bounds. */
+    @Nullable private PassThroughSource mPassThrough;
     /** The caps' rects for the current draw; only the first {@link #mCapCount} are live. */
     private final List<RectF> mCapRects = new ArrayList<>();
     private int mCapCount;
@@ -396,6 +428,10 @@ public final class CommandPaletteView extends View {
     private int mOnSurfaceVariant;
     private int mMeta;
     private int mChipFill;
+    /** The selected row: secondary container under on-secondary-container ink. */
+    private int mSelectedFill;
+    private int mSelectedInk;
+    private int mSelectedMeta;
     /**
      * The strip's keycap fill. The strip hangs below the glass, straight over the terminal, so a
      * translucent cap let the terminal's text run through its label; this is the chip composited
@@ -453,6 +489,7 @@ public final class CommandPaletteView extends View {
     private float mDownX;
     private float mDownY;
     private float mLastTouchY;
+    private final PaletteAccessibility mAccessibility;
     @Nullable private VelocityTracker mVelocity;
     private float mFlingVelocity;
     private final Runnable mFlingStep = this::stepFling;
@@ -468,7 +505,28 @@ public final class CommandPaletteView extends View {
         mMarkOutline.setStyle(Paint.Style.STROKE);
         mMarkOutline.setStrokeWidth(1f);
         setClickable(true);
+        mAccessibility = new PaletteAccessibility(this);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+        ViewCompat.setImportantForAccessibility(this, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
         refreshPalette();
+    }
+
+    @Override
+    public boolean dispatchHoverEvent(MotionEvent event) {
+        // Touch exploration finds the virtual rows through hover events.
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
+    }
+
+    /** Where the sheet's glass comes from: the in-app keyboard's palette, so the two match. */
+    public interface GlassBaseSource {
+        @ColorInt int glassBaseColor();
+    }
+
+    @Nullable private GlassBaseSource mGlassBaseSource;
+
+    /** The sheet's glass from {@code source} on the next {@link #refreshPalette()}; null for the dock's. */
+    public void setGlassBaseSource(@Nullable GlassBaseSource source) {
+        mGlassBaseSource = source;
     }
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
@@ -478,18 +536,14 @@ public final class CommandPaletteView extends View {
     /** Re-resolves every role. Called on theme, wallpaper-color and configuration changes. */
     public void refreshPalette() {
         Context context = getContext();
-        mGlassBase = InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
-        mPrimary = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
-        int onSurface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurface,
-            ContextCompat.getColor(context, R.color.termux_on_surface));
-        int onSurfaceVariant = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant,
-            ColorUtils.blendARGB(onSurface, mGlassBase, 0.28f));
-        int surfaceContainerHigh = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh,
-            ColorUtils.blendARGB(mGlassBase, onSurface, 0.10f));
+        GlassBaseSource source = mGlassBaseSource;
+        mGlassBase = source != null ? source.glassBaseColor()
+            : InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
+        // Roles through the launcher's scheme while it owns the chrome, as the rest of it reads them.
+        CommandPaletteRoles roles = CommandPaletteRoles.resolve(context, mGlassBase);
+        mPrimary = roles.primary;
+        int onSurface = roles.onSurface;
+        int onSurfaceVariant = roles.onSurfaceVariant;
 
         // Reference background for the contrast pass: the glass tint plus its darkening
         // gradient, composited down to something opaque to measure against.
@@ -500,13 +554,17 @@ public final class CommandPaletteView extends View {
         mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 212);
         mPrimary = InAppKeyboardPaletteFactory.ensureContrast(mPrimary, overGlass);
 
-        // Keycaps use the keyboard's chip recipe, so their labels are checked against the
-        // chip composited over the glass rather than over the glass alone.
-        mChipFill = ColorUtils.setAlphaComponent(surfaceContainerHigh, 160);
-        int capOverGlass = ColorUtils.setAlphaComponent(
-            ColorUtils.compositeColors(mChipFill, overGlass), 255);
+        // The selected row, its chip and the strip's keycaps sit on the secondary container
+        // (Material's selected pair), opaque: the strip hangs over the terminal, and a translucent
+        // cap let its text run through the label. Ink is checked against that fill.
+        int capOverGlass = roles.secondaryContainer | 0xFF000000;
+        mChipFill = capOverGlass;
         mCapFill = capOverGlass;
-        mCapLabel = InAppKeyboardPaletteFactory.ensureContrast(onSurface, capOverGlass);
+        mCapLabel = InAppKeyboardPaletteFactory.ensureContrast(roles.onSecondaryContainer,
+            capOverGlass);
+        mSelectedFill = capOverGlass;
+        mSelectedInk = mCapLabel;
+        mSelectedMeta = ColorUtils.setAlphaComponent(mCapLabel, 212);
         mMarkOutlineColor = ColorUtils.setAlphaComponent(
             ColorUtils.calculateLuminance(capOverGlass) < 0.5 ? Color.WHITE : Color.BLACK,
             MARK_OUTLINE_ALPHA);
@@ -524,7 +582,11 @@ public final class CommandPaletteView extends View {
         mBodyAlpha = clamp01(bodyAlpha);
         mStripAlpha = clamp01(stripAlpha);
         mStripOffset = stripOffsetPx;
+        float previousProgress = mProgress;
         mProgress = clamp01(progress);
+        // Only the palette appearing or going away changes what a screen reader can reach; the
+        // frames in between would flood it with events.
+        if ((previousProgress > 0.01f) != (mProgress > 0.01f)) mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -534,6 +596,15 @@ public final class CommandPaletteView extends View {
      */
     public void setModalBounds(@NonNull RectF bounds) {
         mModalBounds.set(bounds);
+        mModalQuad[0] = bounds.left;
+        mModalQuad[1] = bounds.top;
+        mModalQuad[2] = bounds.right;
+        mModalQuad[3] = bounds.bottom;
+    }
+
+    /** What lies inside the modal bounds and still takes its own touches (see the source). */
+    public void setPassThroughSource(@Nullable PassThroughSource source) {
+        mPassThrough = source;
     }
 
     public void setRows(@NonNull List<Row> rows, int focusIndex) {
@@ -543,6 +614,7 @@ public final class CommandPaletteView extends View {
         mFocusIndex = focusIndex;
         // Chips are laid out by the next draw; until then none is tappable.
         mActionRects.clear();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -557,6 +629,7 @@ public final class CommandPaletteView extends View {
         if (keycaps == mKeycaps) return;
         mKeycaps = keycaps;
         measureKeycaps();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -591,6 +664,7 @@ public final class CommandPaletteView extends View {
     public void setHeader(@NonNull String metaText, @NonNull String crumb) {
         mMetaText = metaText;
         mCrumb = crumb;
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -598,6 +672,7 @@ public final class CommandPaletteView extends View {
         mQuery = query;
         mQueryPlaceholder = placeholder;
         restartCaret();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -652,6 +727,7 @@ public final class CommandPaletteView extends View {
         mArgumentPlaceholder = placeholder;
         mArgumentValue = value;
         restartCaret();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -982,12 +1058,13 @@ public final class CommandPaletteView extends View {
         boolean focused = index == mFocusIndex;
         if (focused) {
             mFill.setShader(null);
-            mFill.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(mPrimary, 28), alpha));
+            mFill.setColor(withBodyAlpha(mSelectedFill, alpha));
             canvas.drawRect(mFrame.left, top, mFrame.right, top + height, mFill);
             mFill.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawRect(mFrame.left, top, mFrame.left + dp(FOCUS_BAR_W), top + height, mFill);
         }
-        int titleColor = row.enabled ? mOnSurface : mMeta;
+        int titleColor = focused ? (row.enabled ? mSelectedInk : mSelectedMeta)
+            : row.enabled ? mOnSurface : mMeta;
         mMono.setTextSize(sp(SIZE_ROW));
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(titleColor, row.enabled ? alpha : alpha / 2));
@@ -1008,11 +1085,7 @@ public final class CommandPaletteView extends View {
         // The chip first: its width is what the shortcut and the title have to leave room for.
         if (row.action != null) {
             float chipWidth = dp(ACTION_CHIP_DP);
-            float chipRight = shortcutRight;
-            float chipTop = top + dp(ROW_PAD_V)
-                + (lineHeight(SIZE_ROW) - chipWidth) / 2f;
-            mActionRects.put(index, new RectF(
-                chipRight - chipWidth, chipTop, chipRight, chipTop + chipWidth));
+            mActionRects.put(index, chipRect(top, shortcutRight));
             shortcutRight -= chipWidth + dp(CAP_GAP);
         }
         float titleWidth = shortcutRight - shortcutWidth - textLeft;
@@ -1020,13 +1093,13 @@ public final class CommandPaletteView extends View {
 
         if (!row.shortcut.isEmpty()) {
             mMono.setTextSize(sp(SIZE_SHORTCUT));
-            mMono.setColor(withBodyAlpha(mOnSurfaceVariant, alpha));
+            mMono.setColor(withBodyAlpha(focused ? mSelectedMeta : mOnSurfaceVariant, alpha));
             canvas.drawText(row.shortcut, shortcutRight - mMono.measureText(row.shortcut),
                 titleBaseline, mMono);
         }
         if (focused && row.description != null && !row.description.isEmpty()) {
             mMono.setTextSize(sp(SIZE_DESCRIPTION));
-            mMono.setColor(withBodyAlpha(mMeta, alpha));
+            mMono.setColor(withBodyAlpha(mSelectedMeta, alpha));
             float descriptionBaseline = titleBaseline + lineHeightOf(mMono);
             float width = mFrame.right - dp(ROW_PAD_RIGHT) - textLeft;
             canvas.drawText(ellipsize(mMono, "↳ " + row.description, width),
@@ -1415,14 +1488,21 @@ public final class CommandPaletteView extends View {
 
     /** Whether the palette owns this point, or it belongs to whatever is underneath. */
     private boolean isModalAt(float x, float y) {
+        float[] passThrough = mPassThrough != null ? mPassThrough.passThroughRects() : null;
+        return CommandPaletteTouchPolicy.classify(x, y, isOnCard(x, y),
+            mModalBounds.isEmpty() ? null : mModalQuad, passThrough)
+            != CommandPaletteTouchPolicy.Target.PASS_THROUGH;
+    }
+
+    /** Whether this point is on the glass or one of its keycaps. */
+    private boolean isOnCard(float x, float y) {
         if (mFrame.contains(x, y)) return true;
         for (int i = 0; i < mCapCount; i++) {
             RectF cap = mCapRects.get(i);
             if (x >= cap.left && x <= cap.right
                 && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset) return true;
         }
-        // No bounds set yet: behave as a full-screen scrim rather than leaking every tap.
-        return mModalBounds.isEmpty() || mModalBounds.contains(x, y);
+        return false;
     }
 
     private boolean inList(float x, float y) {
@@ -1452,6 +1532,14 @@ public final class CommandPaletteView extends View {
         }
         int index = rowIndexAt(y);
         if (index >= 0 && mRows.get(index).isSelectable()) mCallbacks.onRowTapped(index);
+    }
+
+    /** The trailing chip of a row whose top is {@code top}, right edge at {@code right}. */
+    @NonNull
+    private RectF chipRect(float top, float right) {
+        float chipWidth = dp(ACTION_CHIP_DP);
+        float chipTop = top + dp(ROW_PAD_V) + (lineHeight(SIZE_ROW) - chipWidth) / 2f;
+        return new RectF(right - chipWidth, chipTop, right, chipTop + chipWidth);
     }
 
     /**
@@ -1628,5 +1716,211 @@ public final class CommandPaletteView extends View {
 
     private static float clamp01(float value) {
         return value < 0f ? 0f : (value > 1f ? 1f : value);
+    }
+
+    // ------------------------------------------------------------------ accessibility
+
+    private static final int A11Y_FIELD = 0;
+    private static final int A11Y_ARGUMENT = 1;
+    private static final int A11Y_CAP_BASE = 100;
+    private static final int A11Y_ROW_BASE = 1000;
+    private static final int A11Y_CHIP_BASE = 1_000_000;
+
+    /** Whether the palette is up and so has anything for a screen reader. */
+    private boolean a11yOpen() {
+        return mCallbacks != null && mProgress > 0.01f && !mFrame.isEmpty();
+    }
+
+    /** Top of row {@code index} in view coordinates, scrolled. */
+    private float rowTop(int index) {
+        float y = listTop() - mScrollOffset;
+        for (int i = 0; i < index; i++) y += rowHeight(i);
+        return y;
+    }
+
+    private static void roundOut(@NonNull RectF in, @NonNull Rect out) {
+        out.set((int) Math.floor(in.left), (int) Math.floor(in.top),
+            (int) Math.ceil(in.right), (int) Math.ceil(in.bottom));
+        if (out.width() < 1) out.right = out.left + 1;
+        if (out.height() < 1) out.bottom = out.top + 1;
+    }
+
+    /** One node per control and result: the search field, each row and call chip, each keycap. */
+    private final class PaletteAccessibility extends ExploreByTouchHelper {
+        private final RectF mTemp = new RectF();
+
+        PaletteAccessibility(@NonNull View host) {
+            super(host);
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (!a11yOpen()) return HOST_ID;
+            layoutKeycaps();
+            for (int i = 0; i < mCapCount; i++) {
+                RectF cap = mCapRects.get(i);
+                if (x >= cap.left && x <= cap.right
+                    && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset)
+                    return A11Y_CAP_BASE + i;
+            }
+            if (!mFrame.contains(x, y)) return HOST_ID;
+            if (y < listTop()) return A11Y_FIELD;
+            if (mArgumentMode && y > listBottom()) return A11Y_ARGUMENT;
+            int row = rowIndexAt(y);
+            if (row < 0) return HOST_ID;
+            if (mRows.get(row).action != null) {
+                RectF chip = chipRect(rowTop(row), mFrame.right - dp(ROW_PAD_RIGHT));
+                if (chip.contains(x, y)) return A11Y_CHIP_BASE + row;
+            }
+            return A11Y_ROW_BASE + row;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> ids) {
+            if (!a11yOpen()) return;
+            ids.add(A11Y_FIELD);
+            if (mArgumentMode) ids.add(A11Y_ARGUMENT);
+            for (int i = 0; i < mRows.size(); i++) {
+                ids.add(A11Y_ROW_BASE + i);
+                if (mRows.get(i).action != null) ids.add(A11Y_CHIP_BASE + i);
+            }
+            layoutKeycaps();
+            for (int i = 0; i < mCapCount; i++) ids.add(A11Y_CAP_BASE + i);
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int id,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            Rect bounds = new Rect();
+            if (id == A11Y_FIELD) {
+                mTemp.set(mFrame.left, mFrame.top, mFrame.right, listTop());
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.EditText");
+                node.setEditable(false);
+                node.setText(mQuery);
+                node.setHintText(mQueryPlaceholder);
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_search));
+                node.setFocusable(true);
+            } else if (id == A11Y_ARGUMENT) {
+                mTemp.set(mFrame.left, listBottom(), mFrame.right, mFrame.bottom);
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.EditText");
+                node.setEditable(false);
+                node.setText(mArgumentValue);
+                node.setHintText(mArgumentPlaceholder);
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_argument));
+                node.setFocusable(true);
+            } else if (id >= A11Y_CHIP_BASE) {
+                int row = id - A11Y_CHIP_BASE;
+                RectF chip = chipRect(rowTop(row), mFrame.right - dp(ROW_PAD_RIGHT));
+                roundOut(chip, bounds);
+                node.setClassName("android.widget.Button");
+                node.setText(getContext().getString(R.string.palette_a11y_call));
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_call)
+                    + ", " + mRows.get(row).primary);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                node.setClickable(true);
+            } else if (id >= A11Y_ROW_BASE) {
+                int index = id - A11Y_ROW_BASE;
+                Row row = mRows.get(index);
+                float top = rowTop(index);
+                mTemp.set(mFrame.left, top, mFrame.right, top + rowHeight(index));
+                RectF viewport = new RectF(mFrame.left, listTop(), mFrame.right, listBottom());
+                // A row scrolled out of the list keeps its own bounds; the helper marks it hidden.
+                if (!mTemp.intersect(viewport)) mTemp.set(mFrame.left, top, mFrame.right,
+                    top + rowHeight(index));
+                roundOut(mTemp, bounds);
+                node.setText(row.primary);
+                if (row.isSelectable()) {
+                    node.setClassName("android.widget.Button");
+                    node.setEnabled(row.enabled);
+                    node.setSelected(index == mFocusIndex);
+                    node.setClickable(true);
+                    node.setLongClickable(true);
+                    node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                    node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+                    StringBuilder spoken = new StringBuilder(row.primary);
+                    if (row.description != null && !row.description.isEmpty())
+                        spoken.append(", ").append(row.description);
+                    if (!row.shortcut.isEmpty()) spoken.append(", ").append(row.shortcut);
+                    node.setContentDescription(spoken);
+                } else {
+                    node.setClassName("android.widget.TextView");
+                    if (row.kind == KIND_CATEGORY) node.setHeading(true);
+                }
+            } else {
+                int index = id - A11Y_CAP_BASE;
+                layoutKeycaps();
+                RectF cap = mCapRects.get(index);
+                mTemp.set(cap.left, cap.top + mStripOffset, cap.right, cap.bottom + mStripOffset);
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.Button");
+                node.setText(mKeycaps.get(index).label);
+                node.setClickable(true);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            }
+            node.setBoundsInParent(bounds);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int id, int action,
+                                                        @Nullable Bundle args) {
+            if (mCallbacks == null) return false;
+            if (id >= A11Y_CHIP_BASE) {
+                if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
+                mCallbacks.onRowActionTapped(id - A11Y_CHIP_BASE);
+                return true;
+            }
+            if (id >= A11Y_ROW_BASE) {
+                int index = id - A11Y_ROW_BASE;
+                if (index >= mRows.size() || !mRows.get(index).isSelectable()) return false;
+                if (action == AccessibilityNodeInfoCompat.ACTION_CLICK) {
+                    mCallbacks.onRowTapped(index);
+                    return true;
+                }
+                if (action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK) {
+                    mCallbacks.onRowLongPressed(index);
+                    return true;
+                }
+                return false;
+            }
+            if (id >= A11Y_CAP_BASE) {
+                if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
+                mCallbacks.onKeycapTapped(id - A11Y_CAP_BASE);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                                                      @NonNull AccessibilityNodeInfoCompat info) {
+            super.onInitializeAccessibilityNodeInfo(host, info);
+            info.setPaneTitle(getContext().getString(R.string.palette_a11y_pane));
+            if (a11yOpen() && maxScroll() > 0f) {
+                info.setScrollable(true);
+                if (mScrollOffset > 0f) info.addAction(
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SCROLL_BACKWARD);
+                if (mScrollOffset < maxScroll()) info.addAction(
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SCROLL_FORWARD);
+            }
+        }
+
+        @Override
+        public boolean performAccessibilityAction(@NonNull View host, int action,
+                                                  @Nullable Bundle args) {
+            if (action == AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD
+                || action == AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD) {
+                float page = Math.max(dp(ROW_PAD_V), listBottom() - listTop());
+                boolean moved = scrollByPx(
+                    action == AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD ? page : -page);
+                if (moved) {
+                    invalidate();
+                    invalidateRoot();
+                }
+                return moved;
+            }
+            return super.performAccessibilityAction(host, action, args);
+        }
     }
 }

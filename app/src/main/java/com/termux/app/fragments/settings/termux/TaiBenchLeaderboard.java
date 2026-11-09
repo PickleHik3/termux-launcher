@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiModelSpec;
+import com.termux.ai.TaiVoiceBench;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -30,14 +31,23 @@ final class TaiBenchLeaderboard {
         @NonNull final String liteRtVersion;
         @NonNull final String mnnVersion;
 
+        /** The LiteRT the speech graphs run on (not LiteRT-LM): a voice record's runtime version. */
+        @NonNull final String speechVersion;
+
         Versions(@NonNull String appVersion, @NonNull String liteRtVersion, @NonNull String mnnVersion) {
+            this(appVersion, liteRtVersion, mnnVersion, liteRtVersion);
+        }
+
+        Versions(@NonNull String appVersion, @NonNull String liteRtVersion, @NonNull String mnnVersion, @NonNull String speechVersion) {
             this.appVersion = appVersion;
             this.liteRtVersion = liteRtVersion;
             this.mnnVersion = mnnVersion;
+            this.speechVersion = speechVersion;
         }
 
         @NonNull
         String runtimeVersionFor(@NonNull String backend) {
+            if (TaiVoiceBench.BACKEND.equals(backend)) return speechVersion;
             return TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? mnnVersion : liteRtVersion;
         }
     }
@@ -91,8 +101,26 @@ final class TaiBenchLeaderboard {
         final boolean crashed;
         final boolean olderVersion;
         final boolean installed;
+        /** A voice row ({@code TaiVoiceBench.leaderboard}): a speech model on one processor. */
+        final boolean voice;
+        @NonNull final String engine;
+        /** Where it really ran; {@link #gpuFallback} when a GPU entry came up on the CPU. */
+        @NonNull final String ranOn;
+        final boolean gpuFallback;
+        /** Times real time; {@code 0} unmeasured. */
+        final double realtime;
+        /** Word error rate, {@code NaN} unmeasured. */
+        final double wer;
+        final boolean wrongText;
 
         Row(@NonNull JSONObject row, @NonNull Versions versions, boolean installed) {
+            voice = TaiVoiceBench.KIND.equals(row.optString("kind", ""));
+            engine = row.optString("engine", "");
+            ranOn = row.optString("ranOn", row.optString("accelerator", ""));
+            gpuFallback = row.optBoolean("gpuFallback", false);
+            realtime = row.optDouble("realtime", 0.0);
+            wer = row.isNull("wer") ? Double.NaN : row.optDouble("wer", Double.NaN);
+            wrongText = row.optBoolean("wrongText", false);
             rank = row.optInt("rank", 0);
             key = row.optString("key", "");
             recordId = row.optString("recordId", "");
@@ -179,25 +207,35 @@ final class TaiBenchLeaderboard {
     private TaiBenchLeaderboard() {
     }
 
-    /** Reads the {@code benchmarks()} JSON into rows with their marks. */
+    /** Reads the {@code benchmarks()} JSON into the text board's rows with their marks. */
     @NonNull
     static Board read(@Nullable JSONObject benchmarks, @NonNull Versions versions) {
+        return read(benchmarks, versions, false);
+    }
+
+    /**
+     * The text board, or with {@code voice} the voice board ({@code voiceLeaderboard}); each counts only its
+     * own records for "last run" and "other versions", so the two never bleed into each other.
+     */
+    @NonNull
+    static Board read(@Nullable JSONObject benchmarks, @NonNull Versions versions, boolean voice) {
         if (benchmarks == null) return new Board(Collections.emptyList(), Collections.emptyList(), 0, 0L);
         Map<String, Boolean> installedById = new HashMap<>();
         int otherVersion = 0;
         long lastRun = 0L;
-        String benchVersion = benchmarks.optString("benchVersion", "");
+        String benchVersion = voice ? TaiVoiceBench.BENCH_VERSION : benchmarks.optString("benchVersion", "");
         JSONArray records = benchmarks.optJSONArray("records");
         if (records != null) {
             for (int i = 0; i < records.length(); i++) {
                 JSONObject record = records.optJSONObject(i);
                 if (record == null) continue;
                 installedById.put(record.optString("id", ""), record.optBoolean("installed", true));
+                if (TaiVoiceBench.isVoice(record) != voice) continue;
                 lastRun = Math.max(lastRun, record.optLong("timestamp", 0L));
                 if (!benchVersion.isEmpty() && !benchVersion.equals(record.optString("benchVersion", ""))) otherVersion++;
             }
         }
-        JSONObject leaderboard = benchmarks.optJSONObject("leaderboard");
+        JSONObject leaderboard = benchmarks.optJSONObject(voice ? "voiceLeaderboard" : "leaderboard");
         List<Row> ranked = rows(leaderboard == null ? null : leaderboard.optJSONArray("ranked"), versions, installedById);
         List<Row> broken = rows(leaderboard == null ? null : leaderboard.optJSONArray("broken"), versions, installedById);
         return new Board(ranked, broken, otherVersion, lastRun);
@@ -246,6 +284,29 @@ final class TaiBenchLeaderboard {
             boolean passed = check != null && check.optInt("total", 0) > 0 && check.optInt("passed", 0) >= check.optInt("total", 0);
             points.add(new Point(record.optLong("timestamp", 0L), TaiBenchStore.median(chat, "decodeTps", 0.0),
                 record.optString("appVersion", ""), record.optString("runtimeVersion", ""), status, passed));
+        }
+        Collections.sort(points, (a, b) -> Long.compare(a.timestamp, b.timestamp));
+        return points;
+    }
+
+    /**
+     * Every complete record of a voice entry, oldest first, for the Result screen's chart: the charted
+     * figure ({@link Point#decodeTps}) is its times-real-time speed, and a run with wrong text draws hollow.
+     */
+    @NonNull
+    static List<Point> voiceHistory(@Nullable JSONObject benchmarks, @NonNull String key) {
+        List<Point> points = new ArrayList<>();
+        JSONArray records = benchmarks == null ? null : benchmarks.optJSONArray("records");
+        if (records == null) return points;
+        for (int i = 0; i < records.length(); i++) {
+            JSONObject record = records.optJSONObject(i);
+            if (record == null || !TaiVoiceBench.isVoice(record) || !key.equals(TaiBenchStore.keyOf(record))) continue;
+            String status = record.optString("status", "");
+            JSONObject voice = TaiVoiceBench.headline(record);
+            if (!TaiBenchStore.STATUS_COMPLETE.equals(status) || voice == null) continue;
+            boolean right = voice.optDouble("wer", 1.0) < TaiVoiceBench.WRONG_TEXT_WER;
+            points.add(new Point(record.optLong("timestamp", 0L), voice.optDouble("realtime", 0.0),
+                record.optString("appVersion", ""), record.optString("runtimeVersion", ""), status, right));
         }
         Collections.sort(points, (a, b) -> Long.compare(a.timestamp, b.timestamp));
         return points;

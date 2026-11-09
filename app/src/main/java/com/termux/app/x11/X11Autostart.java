@@ -4,9 +4,9 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
@@ -24,14 +24,14 @@ public final class X11Autostart {
 
     /**
      * The command to run at service start, or null when nothing should be: the build has no
-     * server, the display or the opt-in is off, the launcher's {@code termux-x11} is not in the
-     * prefix yet, or a server already answers on the X socket.
+     * server, the opt-in is off, the launcher's {@code termux-x11} is not in the prefix yet, or a
+     * server already answers on the X socket. There is no display switch to ask (ADR 0008).
      */
     @Nullable
     public static String[] commandToRun(@NonNull Context context) {
         if (!X11ServerSupport.isAvailable(context)) return null;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DisplayAutostartEnabled()) {
+        if (prefs == null || !prefs.isX11DisplayAutostartEnabled()) {
             return null;
         }
         String[] argv = X11StartCommand.argv(prefs.getX11DisplayCommand(), prefs.getX11DisplayDpi(),
@@ -41,12 +41,16 @@ public final class X11Autostart {
             Logger.logInfo(LOG_TAG, "Not starting the display: its command is not in the prefix yet");
             return null;
         }
-        File sockets = new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, ".X11-unix");
-        String[] live = sockets.list((dir, name) -> name.startsWith("X"));
-        if (live != null && live.length > 0) {
+        if (serverRunning(X11Sockets.socketDir(), X11Sockets.LOCAL_SOCKET)) {
             Logger.logInfo(LOG_TAG, "Not starting the display: one is already running");
             return null;
         }
         return argv;
+    }
+
+    /** True when a socket in the directory answers; dead ones are cleaned up on the way. */
+    @VisibleForTesting
+    static boolean serverRunning(@NonNull File socketDir, @NonNull X11Sockets.Probe probe) {
+        return !X11Sockets.liveDisplays(socketDir, probe).isEmpty();
     }
 }
