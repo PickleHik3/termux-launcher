@@ -46,6 +46,7 @@
     <string name="video_in_use">In use: %1$s</string>
     <string name="video_copying">Copying…</string>
     <string name="video_converting">Converting GIF to video… %1$d%%</string>
+    <string name="video_applying">Setting wallpaper…</string>
     <string name="video_failed">Could not use that file.</string>
 
     <string name="live_knob_frame_rate">Frame rate</string>

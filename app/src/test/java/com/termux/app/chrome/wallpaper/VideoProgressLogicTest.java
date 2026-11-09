@@ -9,6 +9,7 @@ import org.junit.Test;
 public class VideoProgressLogicTest {
 
     private static final String COPY = "Copying…";
+    private static final String APPLY = "Setting wallpaper\u2026";
     private static final String CONV = "Converting GIF to video… %1$d%%";
 
     @Test
@@ -16,7 +17,7 @@ public class VideoProgressLogicTest {
         VideoProgressLogic l = new VideoProgressLogic();
         assertEquals(VideoProgressLogic.Phase.IDLE, l.phase());
         assertFalse(l.busy());
-        assertEquals("", l.label(COPY, CONV));
+        assertEquals("", l.label(COPY, CONV, APPLY));
     }
 
     @Test
@@ -25,7 +26,7 @@ public class VideoProgressLogicTest {
         l.start();
         assertTrue(l.busy());
         assertTrue(l.indeterminate());
-        assertEquals(COPY, l.label(COPY, CONV));
+        assertEquals(COPY, l.label(COPY, CONV, APPLY));
     }
 
     @Test
@@ -43,7 +44,7 @@ public class VideoProgressLogicTest {
         assertTrue(l.onProgress(0.4f, 1000));
         assertEquals(VideoProgressLogic.Phase.CONVERTING, l.phase());
         assertFalse(l.indeterminate());
-        assertEquals("Converting GIF to video… 40%", l.label(COPY, CONV));
+        assertEquals("Converting GIF to video… 40%", l.label(COPY, CONV, APPLY));
     }
 
     @Test
@@ -73,7 +74,7 @@ public class VideoProgressLogicTest {
         l.finish(true);
         assertEquals(VideoProgressLogic.Phase.DONE, l.phase());
         assertFalse(l.busy());
-        assertEquals("", l.label(COPY, CONV));
+        assertEquals("", l.label(COPY, CONV, APPLY));
         assertFalse(l.onProgress(0.9f, 5000));
         l.start();
         l.finish(false);
@@ -90,5 +91,22 @@ public class VideoProgressLogicTest {
         l.start();
         assertEquals(0, l.percent());
         assertTrue(l.indeterminate());
+    }
+
+    @Test
+    public void applyingFollowsTheImportAndNeverGoesBackToCopying() {
+        VideoProgressLogic l = new VideoProgressLogic();
+        l.start();
+        l.onProgress(1f, 0);
+        l.finish(true);
+        l.startApplying();
+        assertEquals(VideoProgressLogic.Phase.APPLYING, l.phase());
+        assertTrue(l.busy());
+        assertTrue(l.indeterminate());
+        assertEquals(APPLY, l.label(COPY, CONV, APPLY));
+        assertFalse(l.onProgress(0.5f, 1000));
+        assertEquals(APPLY, l.label(COPY, CONV, APPLY));
+        l.finish(true);
+        assertFalse(l.busy());
     }
 }

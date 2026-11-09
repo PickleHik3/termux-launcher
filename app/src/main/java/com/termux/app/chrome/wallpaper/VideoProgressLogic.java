@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
  */
 public final class VideoProgressLogic {
 
-    public enum Phase { IDLE, COPYING, CONVERTING, DONE, ERROR }
+    public enum Phase { IDLE, COPYING, CONVERTING, APPLYING, DONE, ERROR }
 
     /** The least time between two bar updates. */
     public static final long MIN_UPDATE_MS = 100;
@@ -24,11 +24,11 @@ public final class VideoProgressLogic {
 
     /** Controls wait and the bar shows while copying or converting. */
     public boolean busy() {
-        return mPhase == Phase.COPYING || mPhase == Phase.CONVERTING;
+        return mPhase == Phase.COPYING || mPhase == Phase.CONVERTING || mPhase == Phase.APPLYING;
     }
 
     public boolean indeterminate() {
-        return mPhase == Phase.COPYING;
+        return mPhase == Phase.COPYING || mPhase == Phase.APPLYING;
     }
 
     /** The import began. */
@@ -38,13 +38,19 @@ public final class VideoProgressLogic {
         mLastUpdateMs = 0;
     }
 
+    /** The wallpaper is being set (after an import, or Back to photo): never goes back to copying. */
+    public void startApplying() {
+        mPhase = Phase.APPLYING;
+        mFraction = 0f;
+    }
+
     /**
      * A progress callback. Returns true when the page should redraw: the first value above 0
      * always does, later ones at most every {@link #MIN_UPDATE_MS} (reaching 100% always does).
      * Ignored outside an import.
      */
     public boolean onProgress(float fraction, long nowMs) {
-        if (!busy() || !(fraction > 0f)) return false;
+        if ((mPhase != Phase.COPYING && mPhase != Phase.CONVERTING) || !(fraction > 0f)) return false;
         float f = Math.min(1f, fraction);
         boolean first = mPhase == Phase.COPYING;
         mPhase = Phase.CONVERTING;
@@ -61,12 +67,14 @@ public final class VideoProgressLogic {
 
     /** The line under the bar; empty when nothing is running. */
     @NonNull
-    public String label(@NonNull String copying, @NonNull String convertingFormat) {
+    public String label(@NonNull String copying, @NonNull String convertingFormat, @NonNull String applying) {
         switch (mPhase) {
             case COPYING:
                 return copying;
             case CONVERTING:
                 return String.format(convertingFormat, percent());
+            case APPLYING:
+                return applying;
             default:
                 return "";
         }
