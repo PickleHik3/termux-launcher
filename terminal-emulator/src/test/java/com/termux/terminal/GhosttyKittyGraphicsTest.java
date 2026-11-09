@@ -215,6 +215,29 @@ public class GhosttyKittyGraphicsTest extends TerminalTestCase {
         assertEquals(1, collect().size());
     }
 
+    /** A one-pixel RGBA file named the way kitten names its temp files, in the JVM's temp dir. */
+    private static String tempFilePayload() throws Exception {
+        File file = File.createTempFile("kitty-tty-graphics-protocol-", ".rgba");
+        file.deleteOnExit();
+        java.nio.file.Files.write(file.toPath(), new byte[] {1, 2, 3, 4});
+        return Base64.getEncoder().encodeToString(file.getPath().getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * kitten icat probes t=t with a query and then sends every GIF frame by the medium the reply
+     * allowed, so the reply must be the Ghostty core's own: an OK for a temp file Ghostty then
+     * refuses drew nothing and leaked "ENOENT: image not found" for each animation command.
+     */
+    public void testATempFileQueryAgreesWithWhatGhosttyLoads() throws Exception {
+        if (!ghostty(10, 4)) return;
+        mOutput.getOutputAndClear();
+        enterString(apc("a=q,i=21,s=1,v=1,f=32,t=t", tempFilePayload()));
+        boolean queryOk = "\033_Gi=21;OK\033\\".equals(mOutput.getOutputAndClear());
+        enterString(apc("a=t,i=22,s=1,v=1,f=32,t=t,S=4", tempFilePayload()));
+        boolean loaded = "\033_Gi=22;OK\033\\".equals(mOutput.getOutputAndClear());
+        assertEquals("query OK " + queryOk + ", load OK " + loaded, loaded, queryOk);
+    }
+
     // ---- transmit, place, pixels ----
 
     public void testATransmittedImageIsPlacedAtTheCursorWithItsPixels() {
@@ -351,6 +374,30 @@ public class GhosttyKittyGraphicsTest extends TerminalTestCase {
         enterString(apc("a=f,i=9,f=32,s=1,v=1,z=100,q=2", rgba(0xff0000ff)));
         enterString(apc("a=a,i=9,r=1,z=100,q=2", null));
         enterString(apc("a=a,i=9,s=3,v=1,q=2", null));
+    }
+
+    /** kitten icat's GIF sequence: addressed by image number, frame controls without q. */
+    public void testAGifAddressedByImageNumberAnimates() {
+        if (!ghostty(10, 4)) return;
+        mOutput.getOutputAndClear();
+        String number = "I=1401116184";
+        enterString(apc("a=T," + number + ",f=32,s=1,v=1,q=2", rgba(0xffff0000)));
+        enterString(apc("a=a," + number + ",r=1,z=100,v=1", null));
+        enterString(apc("a=a," + number + ",s=2", null));
+        enterString(apc("a=f," + number + ",f=32,s=1,v=1,z=100,q=2", rgba(0xff0000ff)));
+        enterString(apc("a=a," + number + ",s=3", null));
+        String replies = mOutput.getOutputAndClear();
+        assertFalse(replies, replies.contains("ENOENT"));
+        List<KittyPlacement> placements = collect();
+        assertEquals(1, placements.size());
+        KittyPlacement p = placements.get(0);
+        int firstPixel = mBitmaps.pixels.get(p.getBitmap())[0];
+        assertEquals(0xffff0000, firstPixel);
+        assertEquals(1, mRecording.delays.size());
+        mNow += mRecording.delays.get(0);
+        mRecording.pending.run();
+        p = collect().get(0);
+        assertEquals(0xff0000ff, mBitmaps.pixels.get(p.getBitmap())[0]);
     }
 
     public void testAnimationTicksOncePerFrameAndPostsOneRedraw() {

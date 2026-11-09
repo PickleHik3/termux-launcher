@@ -1308,17 +1308,25 @@ static void kq_release(Core* c) {
     k->watch = KQ_GROUND;
 }
 
-// Whether a held control header ("G" then key=value pairs) is a kitty query.
+// Whether a held control header ("G" then key=value pairs) is a kitty query the Java core answers.
+// A temp file query (t=t) is left to Ghostty: the Java core reads a t=t file from any path, Ghostty
+// only from its temp directory, and kitten picks the medium for every later transmission from this
+// one reply, so a Java OK followed by Ghostty refusing each t=t frame is a GIF that never draws.
+// Ghostty's answer is the one its own loads keep.
 static bool kq_is_query(const uint8_t* h, size_t n) {
     if (n < 1 || h[0] != 'G') return false;
+    bool query = false;
     size_t i = 1;
     while (i < n) {
         size_t end = i;
         while (end < n && h[end] != ',') end++;
-        if (end - i == 3 && h[i] == 'a' && h[i + 1] == '=' && h[i + 2] == 'q') return true;
+        if (end - i == 3 && h[i + 1] == '=') {
+            if (h[i] == 'a' && h[i + 2] == 'q') query = true;
+            if (h[i] == 't' && h[i + 2] == 't') return false;
+        }
         i = end + 1;
     }
-    return false;
+    return query;
 }
 
 static void kq_answer(Core* c) {
