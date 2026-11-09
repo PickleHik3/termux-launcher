@@ -433,6 +433,13 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Experimental: parse with libghostty-vt (debug.tl.terminal_core=ghostty), or say why not. */
     private void useGhosttyCoreOrLog() {
+        // After a native crash in the library the core stays off for new panes; the stored engine
+        // choice is left as the user set it (GhosttyCrashGuard).
+        if (GhosttyCrashGuard.isDisabledAfterCrash()) {
+            Logger.logWarn(mClient, LOG_TAG, "Terminal core: ghostty off after a crash, using the Java core ("
+                + GhosttyCrashGuard.disabledReason() + ")");
+            return;
+        }
         try {
             if (mEmulator.useGhosttyCore()) {
                 Logger.logInfo(mClient, LOG_TAG, "Terminal core: ghostty");

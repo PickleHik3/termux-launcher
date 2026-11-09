@@ -105,12 +105,14 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         mHandle = 0;
         if (handle == 0) return;
         GhosttyNative.nativeFree(handle);
-        GhosttyMemory.unregister(this);
+        GhosttyCrashGuard.onCoreReleased(GhosttyMemory.unregister(this));
     }
 
     /** Parse the bytes. The Java buffers see the result only after the next {@link #sync()}. */
     void write(byte[] data, int offset, int length) {
-        if (mHandle != 0) GhosttyNative.nativeWrite(mHandle, data, offset, length);
+        if (mHandle == 0) return;
+        GhosttyCrashGuard.beforeWrite();
+        GhosttyNative.nativeWrite(mHandle, data, offset, length);
     }
 
     void setHistoryLimit(int rows) {
