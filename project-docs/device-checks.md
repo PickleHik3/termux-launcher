@@ -904,3 +904,5 @@ longer counted as an error. Owed:
   (checked and unchecked). Light, dark and the launcher's scheme theme; font scale 1.3: the three
   segments still fit one line, no clipped label. Dock style and the editor's Quality and Frame
   rate rows are still text-only (a check mark on the selected one, as before) · pong.
+
+- **Video import shows progress (feat/video-progress).** 2026-11-09 · Wallpaper picker, Video: choose an animated GIF. Under "Choose video or GIF" a bar appears with "Copying…", then fills with "Converting GIF to video… NN%" rising to 100; Choose, the rate pills and Back to photo are greyed meanwhile; then the bar goes and the line shows "In use: name" with its hint. Choose a plain MP4: a brief "Copying…", then the same final state. Pick a broken file: the bar goes and the error line shows, controls back. Rotate or leave mid-import: no crash; reopen later and the final state is shown. Font scale 1.3: the label stays on one line · pong.

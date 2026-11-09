@@ -91,6 +91,20 @@ public final class WallpaperLiveHost {
         @NonNull
         Result importFile(@NonNull Context context, @NonNull Uri uri);
 
+        /**
+         * The same, reporting a GIF's conversion as a fraction above 0 up to 1, from the calling
+         * (import) thread. Sources without progress keep the plain import.
+         */
+        @NonNull
+        default Result importFile(@NonNull Context context, @NonNull Uri uri, @NonNull Progress progress) {
+            return importFile(context, uri);
+        }
+
+        /** Conversion progress. */
+        interface Progress {
+            void onProgress(float fraction);
+        }
+
         /** How an import ended. */
         final class Result {
             public final boolean ok;
@@ -734,14 +748,16 @@ public final class WallpaperLiveHost {
 
     private void onVideoPicked(@Nullable Uri uri) {
         if (uri == null || mReleased || mVideo == null) return;
-        mVideo.setBusy(true);
+        mVideo.startImport();
         mVideo.setHint(null);
         final Context app = mContext.getApplicationContext();
         final VideoSource source = mVideoSource;
         IO.execute(() -> {
             VideoSource.Result result;
             try {
-                result = source.importFile(app, uri);
+                result = source.importFile(app, uri, fraction -> mRoot.post(() -> {
+                    if (!mReleased && mVideo != null) mVideo.onImportProgress(fraction);
+                }));
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Importing the video failed", e);
                 result = new VideoSource.Result(false, null, null, null);
@@ -750,12 +766,13 @@ public final class WallpaperLiveHost {
             mRoot.post(() -> {
                 if (mReleased || mVideo == null) return;
                 if (!done.ok || done.name == null) {
-                    mVideo.setBusy(false);
+                    mVideo.endImport();
                     mVideo.setHint(done.error != null ? done.error : mContext.getString(R.string.video_failed));
                     return;
                 }
                 SharedPreferences prefs = prefs();
                 if (prefs != null) prefs.edit().putString(KEY_VIDEO_HINT, done.hint == null ? "" : done.hint).apply();
+                mVideo.endImport();
                 mVideo.setHint(videoStatus(done.name, done.hint));
                 useMotion(WallpaperMotion.video(done.name));
             });
