@@ -887,4 +887,8 @@ longer counted as an error. Owed:
   over Home; rest there first so Home's page (and the dock's, on its second page) turns, then let
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
-  Undo brings it back) and back on its own slot (nothing moves) · pong.
+  Undo brings it back) and back on its own slot (nothing moves) · pong.- **Wallpaper kind pills carry glyphs (feat/kind-glyphs).** 2026-11-09 · Open the Wallpaper
+  picker: Photo, Video and Shader each show a glyph left of the label, in the label's colour
+  (checked and unchecked). Light, dark and the launcher's scheme theme; font scale 1.3: the three
+  segments still fit one line, no clipped label. Dock style and the editor's Quality and Frame
+  rate rows are still text-only (a check mark on the selected one, as before) · pong.
