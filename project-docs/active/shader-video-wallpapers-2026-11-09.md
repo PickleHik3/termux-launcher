@@ -169,3 +169,17 @@ at its own rate whatever the scene draws. Decided (developer):
 Built as two seams against a committed contract (`VideoVariantRules`, `VideoVariants`, 107f19968):
 engine (`VideoTranscode` decoder→encoder-surface frame dropper, storage, prune, scene swap on
 `wallpaper_video_variant_rev`) and picker UI.
+
+## Round 4 (2026-11-09, night): one flow for all three kinds
+The Shader page asked for Apply at the bottom of the editor; people tapped a tile, pressed Done and
+nothing changed. Decided (developer): every kind follows the Photo page. A pick shows a preview, the
+sheet's Done keeps it, Back puts back what was in use when the sheet opened.
+- **Shader**: a tile tap previews that shader live behind the sheet (the motion choice is written,
+  nothing goes to the phone); an example tap saves a copy and previews it; a pencil on the tile opens
+  the editor; the editor's Apply sits in its title row, enabled only when there is something to apply,
+  and previews the draft. Done runs the one heavy apply (stills on Home and Lock, remembered photos).
+  Back reverts the choice and the rate and deletes preview-only example copies; an edited shader's
+  saved source stays.
+- **Video**: an import over a photo or shader previews; over a video it commits at once, since the
+  previous clip's files are gone with the import. Back to photo stays immediate.
+- Known: a rotation while previewing reverts the preview (the surface is released and reopened).

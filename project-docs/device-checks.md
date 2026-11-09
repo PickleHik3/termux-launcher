@@ -43,6 +43,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   (cosmetic). Still owed · drop build: Settings › Terminal › Clipboard & compatibility shows
   Terminal engine (the library is in the APK).
 
+- **Pick previews, Done keeps (11-09, round 4).** Emulator-checked on the Shader page: tile tap
+  previews live, Back reverts, Done writes the stills; pencil opens the editor; Apply in the title row.
+  Owed · pong: pick a shader tile and Back (the previous wallpaper is back, no stills written); pick
+  and Done, then Back to photo restores the photo; an example tap makes a copy that Back removes and
+  Done keeps (two examples then Done: only the last copy stays); edit the in-use shader, Apply, Back
+  (choice reverts, source kept); over a photo import a video then Back (photo back); over a video
+  import a video then Back (the new one stays, stills written); change the rate pill then Back (rate
+  restored); the pencil's touch target and look on bright and dark thumbnails at light/dark/font 1.3;
+  rotate while previewing (the preview reverts: known).
+
 - **Frame-rate versions of the stored video (11-09, round 3).** Emulator-checked: a 60 fps clip
   imported at 30 stores original.mp4 + v60.mp4 (copy) + v30.mp4; tapping 15 shows "Preparing 15 fps
   version… NN%" with Choose and Back to photo greyed and the pills live, the layer plays the source
