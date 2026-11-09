@@ -37,7 +37,9 @@ Latest stable: v1.2.2.
 - Peek: the darkened band behind the A–Z is gone, and the reflection reads as wet glass that fades at the edge.
 
 ### Wallpaper
-- The Wallpaper kind is Photo, Video or Shader: a video or GIF plays as your wallpaper (a GIF is converted to video on import), and Shader runs a shader, with examples to start from.
+- The Wallpaper kind is Photo, Video or Shader: a video or GIF plays as your wallpaper (a GIF is converted to video on import), and Shader runs a shader, with examples to start from. Tap a shader to use it; its pencil opens it in the editor.
+- A video wallpaper can play at a lower frame rate: pick a rate on the Video page and it prepares that version, showing its progress and size.
+- Video and Shader wallpapers preview like a photo: Done keeps the new one, and closing without Done puts back what you had.
 - Blurred wallpapers are ready sooner on Android 12 and newer.
 
 ### Glass
