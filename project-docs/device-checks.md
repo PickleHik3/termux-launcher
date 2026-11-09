@@ -25,7 +25,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   scrollback swipe, typed input. Owed: flood while scrolled back then resize; vim/htop colours
   and cursor shape; tmux paste and mouse; closing a pane; `[Process completed]`; then the
   benchmark (same `cat` transcript timed per core, `dumpsys meminfo` PSS per core, CPU during a
-  long flood).
+  long flood). Wave 2 (mirror once per turn): rerun `bench` both cores, then
+  `ghostty-core-bench.sh pong parse` (in-process parse, nothing drawn); also a command that prints
+  and at once opens a full-screen program (`seq 100; vim`): the printed rows are in scrollback
+  after quitting it.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame

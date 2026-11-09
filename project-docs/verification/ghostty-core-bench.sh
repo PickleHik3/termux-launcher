@@ -9,11 +9,17 @@
 #   ghostty-core-bench.sh DEV smoke  java|ghostty   # replies, kitty keyboard query, alt screen, keyboard resize mid-flood, exit
 #   ghostty-core-bench.sh DEV look   java|ghostty   # test-terminal-protocols.sh in a pane, then a screenshot
 #   ghostty-core-bench.sh DEV bench  java|ghostty [RUNS]   # time `cat` of the transcript, CPU, PSS, frames
+#   ghostty-core-bench.sh DEV parse  [RUNS] [COLS ROWS]     # parse the transcript in-process, nothing drawn (default 3, 52 45)
+#
+# `parse` runs com.termux.terminal.TerminalParseBench in its own app_process (as the app user, the
+# installed APK on the class path), not in the launcher: per run it times the Java core, the Ghostty
+# core writing only, and the Ghostty core with the mirror, one JSON line each.
 #
 # Results go to $OUT (default ~/reports/ghostty-core-<date>), one line per measurement in results.tsv.
 set -euo pipefail
 
 DEV=${1:?device}; CMD=${2:?command}; CORE=${3:-ghostty}; RUNS=${4:-3}
+if [ "$CMD" = parse ]; then CORE=parse; RUNS=${3:-3}; COLS=${4:-52}; ROWS=${5:-45}; fi
 AD=~/.claude/skills/android-control/ad
 PKG=com.termux
 OUT=${OUT:-$HOME/reports/ghostty-core-$(date +%F)}
@@ -124,6 +130,20 @@ bench)
     crashcheck; close_pane
     timeout 5 tail -f /dev/null || true
     record after-close "$(pss)"
+    ;;
+parse)
+    gate; PID0=$(ad adb shell pidof "$PKG" | tr -d '\r'); CRASH0=$(ad adb shell logcat -d -b crash 2>/dev/null | grep -c "$PKG" || true)
+    run "test -s $B/bench.txt" >/dev/null 2>&1 || { echo "no $B/bench.txt: run setup first" >&2; exit 2; }
+    raw="$OUT/parse-$(date +%H%M%S).jsonl"
+    # The bench copies the library out of the APK into \$TMPDIR; app_process cannot load it from there.
+    run "CLASSPATH=\$(/system/bin/pm path $PKG | head -1 | cut -d: -f2) /system/bin/app_process /system/bin com.termux.terminal.TerminalParseBench $B/bench.txt --runs $RUNS --cols $COLS --rows $ROWS --lib-dir \$TMPDIR" \
+        | tr -d '\r' | grep '^{' > "$raw" || true
+    [ -s "$raw" ] || { echo "FAIL: the parse bench printed nothing" | tee -a "$OUT/results.tsv"; exit 4; }
+    while IFS= read -r line; do
+        label=$(printf '%s' "$line" | grep -o '"run":[0-9]*,"mode":"[a-z-]*"' | sed 's/"run":\([0-9]*\),"mode":"\(.*\)"/parse-\2-run\1/' || true)
+        record "${label:-parse-header}" "$line"
+    done < "$raw"
+    crashcheck
     ;;
 *) echo "unknown command $CMD" >&2; exit 2 ;;
 esac
