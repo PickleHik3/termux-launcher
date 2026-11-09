@@ -92,8 +92,25 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @Nullable private SceneInvalTrace mInvalTrace;
     /** The persisted choice as of the last attach or {@link #refresh}; read here, never per touch. */
     @NonNull private WallpaperMotion mMotion = WallpaperMotion.photo();
-    /** The stored shader's settings, read when the choice changes. */
+    /** The stored shader's settings, re-read on every refresh. */
     @Nullable private ShaderStore.Meta mMeta;
+    /** The stored shader as of the last refresh, the one the running layer was built from, and one that failed its check. */
+    @Nullable private ShaderStamp mStoredStamp, mRunningStamp, mRejectedStamp;
+    /** A changed source or texture is being checked offscreen before the layer is rebuilt. */
+    @Nullable private ShaderStamp mCheckingStamp;
+    private static final java.util.concurrent.ExecutorService CHECKER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "ShaderCheck");
+            t.setDaemon(true);
+            return t;
+        });
+
+    /**
+     * The video's rate in Hz (15, 30 or 60), written by the picker (feat/gl-picker's
+     * {@code ShaderStore.KEY_VIDEO_RATE}; one literal until the branches meet).
+     */
+    static final String KEY_VIDEO_RATE = "wallpaper_video_rate_hz";
+    private int mVideoRateHz = SceneFramePolicy.DEFAULT_RATE_HZ;
     /** The debug file a layer gave up on: not tried again until the property changes. */
     @Nullable private String mDebugGaveUp;
     /** The current gesture began over the keyboard: its moves are typing, not the scene's. */
@@ -101,7 +118,10 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @Nullable private SharedPreferences mStore;
     private final SharedPreferences.OnSharedPreferenceChangeListener mChoiceListener =
         (prefs, key) -> {
-            if (TERMUX_APP.KEY_WALLPAPER_MOTION.equals(key)) refresh();
+            if (TERMUX_APP.KEY_WALLPAPER_MOTION.equals(key)
+                || ShaderStore.KEY_MOTION_APPLIED_AT.equals(key) || KEY_VIDEO_RATE.equals(key)) {
+                refresh();
+            }
         };
     private boolean mPowerWatched;
     private boolean mPowerHold;
@@ -159,13 +179,19 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private void readChoice() {
         SharedPreferences store = store();
         WallpaperMotion motion = store == null ? WallpaperMotion.photo() : ShaderStore.readMotion(store);
-        if (motion.kind == WallpaperMotion.Kind.SHADER && motion.id != null
-            && (!motion.equals(mMotion) || mMeta == null)) {
+        if (motion.kind == WallpaperMotion.Kind.SHADER && motion.id != null) {
+            // Re-read on every refresh: an edit of the shader in use keeps the same motion string.
             mMeta = ShaderStore.readMeta(mActivity, motion.id);
-        } else if (motion.kind != WallpaperMotion.Kind.SHADER) {
+            File texture = ShaderStore.textureFile(mActivity, motion.id, mMeta);
+            mStoredStamp = new ShaderStamp(ShaderStore.sourceFile(mActivity, motion.id).lastModified(),
+                mMeta.texture, texture == null ? 0L : texture.lastModified(), mMeta.quality, mMeta.rateHz);
+        } else {
             mMeta = null;
+            mStoredStamp = null;
         }
+        if (!motion.equals(mMotion)) mRejectedStamp = null;
         mMotion = motion;
+        mVideoRateHz = store == null ? SceneFramePolicy.DEFAULT_RATE_HZ : videoRateHz(store);
     }
 
     /** The one-time move off the AGSL scenes: clear the old keys, put the remembered photo back. */
@@ -301,11 +327,16 @@ public final class SceneController implements LatencyProbe.CommitListener {
         SceneLayerView.Spec spec = isSupported() ? currentSpec(now) : null;
         // A different shader is a different layer.
         if (mLayer != null && (spec == null || !mLayer.key().equals(spec.key))) removeLayer();
-        if (spec != null && mLayer == null) installLayer(spec);
+        if (spec != null && mLayer != null && !spec.debugFile) checkForRebuild();
+        if (spec != null && mLayer == null) {
+            installLayer(spec);
+            mRunningStamp = spec.debugFile ? null : mStoredStamp;
+        }
         SceneLayerView layer = mLayer;
         if (layer == null || spec == null) return;
         String rateProp = RATE.get(now);
-        int choiceRate = spec.debugFile || mMeta == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mMeta.rateHz;
+        int choiceRate = mMotion.kind == WallpaperMotion.Kind.VIDEO && !spec.debugFile ? mVideoRateHz
+            : spec.debugFile || mMeta == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mMeta.rateHz;
         int sceneRate = rateProp == null || rateProp.isEmpty()
             ? choiceRate : SceneFramePolicy.parseRate(rateProp);
         layer.setRateHz(sceneRate);
@@ -313,6 +344,58 @@ public final class SceneController implements LatencyProbe.CommitListener {
         layer.setPowerHold(mPowerHold);
         layer.setGlassLowRes(SceneFramePolicy.glassLowRes(GLASS.get(now)));
         layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now), sceneRate));
+    }
+
+    /**
+     * The shader in use was edited: a new source or texture is compiled and drawn offscreen first
+     * ({@link ShaderCheck}) and only then replaces the running layer (its clock starts again); a
+     * failing one is logged and the running program stays. Quality and rate apply in place.
+     */
+    private void checkForRebuild() {
+        ShaderStamp stored = mStoredStamp;
+        WallpaperMotion motion = mMotion;
+        if (stored == null || motion.id == null) return;
+        if (ShaderStamp.decide(mRunningStamp, stored) != ShaderStamp.Change.REBUILD) {
+            mRunningStamp = stored;
+            return;
+        }
+        if (stored.equals(mRejectedStamp) || stored.equals(mCheckingStamp)) return;
+        mCheckingStamp = stored;
+        final File source = ShaderStore.sourceFile(mActivity, motion.id);
+        CHECKER.execute(() -> {
+            String text = ShaderStore.readText(source);
+            final List<ShaderErrors.Error> errors = text == null
+                ? java.util.Collections.singletonList(new ShaderErrors.Error(-1, "cannot read " + source))
+                : ShaderCheck.run(text);
+            mActivity.runOnUiThread(() -> onRebuildChecked(motion, stored, errors));
+        });
+    }
+
+    private void onRebuildChecked(@NonNull WallpaperMotion motion, @NonNull ShaderStamp stamp,
+                                  @NonNull List<ShaderErrors.Error> errors) {
+        if (stamp.equals(mCheckingStamp)) mCheckingStamp = null;
+        if (!mAttached || !motion.equals(mMotion) || !stamp.equals(mStoredStamp)) return;
+        if (!ShaderCheck.passed(errors)) {
+            Log.w(TAG, "edited shader " + motion + " does not pass, the running one stays:\n"
+                + ShaderErrors.format(errors));
+            mRejectedStamp = stamp;
+            return;
+        }
+        Log.i(TAG, "edited shader " + motion + " passed, rebuilding the layer");
+        removeLayer();
+        poll();
+    }
+
+    /** {@link #KEY_VIDEO_RATE}: 15, 30 or 60; anything else is 30. */
+    static int videoRateHz(@NonNull SharedPreferences store) {
+        int hz;
+        try {
+            hz = store.getInt(KEY_VIDEO_RATE, SceneFramePolicy.DEFAULT_RATE_HZ);
+        } catch (ClassCastException e) {
+            // Stored as text: read it as the rate's digits.
+            hz = SceneFramePolicy.parseRate(store.getString(KEY_VIDEO_RATE, ""));
+        }
+        return hz == 15 || hz == 60 ? hz : SceneFramePolicy.DEFAULT_RATE_HZ;
     }
 
     private void installLayer(@NonNull SceneLayerView.Spec spec) {

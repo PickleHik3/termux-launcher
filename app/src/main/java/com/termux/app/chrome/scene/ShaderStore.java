@@ -37,6 +37,12 @@ public final class ShaderStore {
     public static final String SOURCE_FILE = "source.glsl";
     public static final String META_FILE = "meta.json";
     static final String PENDING_FILE = "motion-pending";
+    /**
+     * Written by every {@link #apply} (wall time), so re-applying the shader already in use (same
+     * {@code wallpaper_motion} string, which SharedPreferences does not report as a change) still
+     * reaches the scene's preference listener.
+     */
+    public static final String KEY_MOTION_APPLIED_AT = "wallpaper_motion_applied_at";
     /** A shader or meta file longer than this is not read (a pasted shader is a few KB). */
     static final long MAX_TEXT_BYTES = 1L << 20;
 
@@ -179,7 +185,8 @@ public final class ShaderStore {
                              @NonNull WallpaperMotion motion) {
         if (motion.moves()) writePending(context);
         else clearPending(context);
-        prefs.edit().putString(TERMUX_APP.KEY_WALLPAPER_MOTION, motion.format()).apply();
+        prefs.edit().putString(TERMUX_APP.KEY_WALLPAPER_MOTION, motion.format())
+            .putLong(KEY_MOTION_APPLIED_AT, System.currentTimeMillis()).apply();
     }
 
     @NonNull

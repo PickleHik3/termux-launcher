@@ -122,6 +122,25 @@ public class ShaderSafetyTest {
     }
 
     @Test
+    public void anEditOfTheShaderInUseRebuildsOnlyForSourceOrTexture() {
+        ShaderStamp running = new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.HALF, 30);
+        assertEquals(ShaderStamp.Change.REBUILD, ShaderStamp.decide(null, running));
+        assertEquals(ShaderStamp.Change.NONE,
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 99L, ShaderSafety.Quality.HALF, 30)));
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(running, new ShaderStamp(2000L, null, 0L, ShaderSafety.Quality.HALF, 30)));
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(running, new ShaderStamp(1000L, "a.png", 5L, ShaderSafety.Quality.HALF, 30)));
+        ShaderStamp textured = new ShaderStamp(1000L, "a.png", 5L, ShaderSafety.Quality.HALF, 30);
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(textured, new ShaderStamp(1000L, "a.png", 6L, ShaderSafety.Quality.HALF, 30)));
+        assertEquals(ShaderStamp.Change.IN_PLACE,
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.FULL, 30)));
+        assertEquals(ShaderStamp.Change.IN_PLACE,
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.HALF, 60)));
+    }
+
+    @Test
     public void shaderGuardIsOnUnlessOff() {
         assertTrue(SceneFramePolicy.shaderGuard(null));
         assertTrue(SceneFramePolicy.shaderGuard(""));
