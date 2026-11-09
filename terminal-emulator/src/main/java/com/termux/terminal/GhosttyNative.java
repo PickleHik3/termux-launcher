@@ -57,6 +57,10 @@ final class GhosttyNative {
     static final int FLAG_PWD_CHANGED = 1 << 5;
     static final int FLAG_BELL = 1 << 6;
     static final int FLAG_DIRTY_FULL = 1 << 7;
+    /** A render hold (mode 2026) is on: the rows, cursor and scroll state are the frame it froze. */
+    static final int FLAG_HELD = 1 << 8;
+    /** A hold began since the last sync; this sync carries the frame from just before it. */
+    static final int FLAG_HOLD_BEGAN = 1 << 9;
 
     /** Bits of {@link #STATE_MODES}, one per DEC private mode. */
     static final int MODE_APPLICATION_CURSOR_KEYS = 1;       // 1
@@ -153,6 +157,9 @@ final class GhosttyNative {
     static native void nativeResize(long handle, int columns, int rows, int cellWidthPixels, int cellHeightPixels);
 
     static native void nativeReset(long handle);
+
+    /** End a render hold that outlived its timeout, as if the program had reset mode 2026. */
+    static native void nativeEndHold(long handle);
 
     /**
      * Fill {@code state} (see STATE_*), and for each row changed since the last sync its cells in

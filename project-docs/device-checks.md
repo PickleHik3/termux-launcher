@@ -38,6 +38,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   below the cursor into history, the Java core drops them); exit the shell and scroll the finished
   pane back. Then `ghostty-core-bench.sh pong parse`: `mirror_history_ms` 0, `scrollback_us_per_row`
   near 3.5, `mirror_max_ms` under 8.3 ms.
+  Wave 3 slice 3 (exp/ghostty-slice3: mode 2026 through Ghostty's render hold; row stamps on both
+  cores): `frames tui`, `frames btop`, `frames type` on both cores, Ghostty no worse than wave 2 and
+  Java no worse than its baseline (18.2 ms tui p50, 50 btop frames over 2x budget). Ghostty: btop and
+  vim redraw without torn frames; a held program that never releases (`printf '\e[?2026h'; sleep 2`,
+  then type) gets its screen back within 150 ms; the cursor does not blink off mid-redraw in vim.
 
 - **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
   Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame

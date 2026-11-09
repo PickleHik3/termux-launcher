@@ -122,6 +122,11 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (mHandle != 0) GhosttyNative.nativeReset(mHandle);
     }
 
+    /** End a render hold (mode 2026) the program has not ended; the next sync takes a fresh frame. */
+    void endHold() {
+        if (mHandle != 0) GhosttyNative.nativeEndHold(mHandle);
+    }
+
     /** Read the terminal's state and changed rows; false when there is nothing to read. */
     boolean sync() {
         return mHandle != 0 && GhosttyNative.nativeSync(mHandle, mState, mScreen, mDirty, mExtra);
