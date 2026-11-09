@@ -110,9 +110,9 @@ public final class VideoPage {
         mBack.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
-    /** Working: the buttons wait and the bar shows. */
+    /** The host is setting the wallpaper: the buttons wait and the bar shows "Setting wallpaper…". */
     public void setBusy(boolean busy) {
-        if (busy) mLogic.start();
+        if (busy) mLogic.startApplying();
         else mLogic.finish(true);
         render();
     }
@@ -150,7 +150,8 @@ public final class VideoPage {
                 mProgress.setProgressCompat(mLogic.percent(), false);
             }
             mProgressLabel.setText(mLogic.label(mRoot.getContext().getString(R.string.video_copying),
-                mRoot.getContext().getString(R.string.video_converting)));
+                mRoot.getContext().getString(R.string.video_converting),
+                mRoot.getContext().getString(R.string.video_applying)));
         }
         mChoose.setEnabled(!busy);
         mBack.setEnabled(!busy);
