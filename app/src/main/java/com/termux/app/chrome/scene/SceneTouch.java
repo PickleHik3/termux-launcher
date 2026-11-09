@@ -46,29 +46,38 @@ public final class SceneTouch {
     }
 
     /**
-     * Writes {@code iMouse} for a frame of a view {@code viewHeight} tall rendered at {@code scale}
-     * (render pixels per view pixel). {@link #frameDrawn} then ends the click's first frame.
+     * Writes {@code iMouse} for a frame of a view {@code viewHeight} tall rendered at
+     * {@code scale} render pixels per view pixel. {@link #frameDrawn} then ends the click's first frame.
      */
     public void fill(@NonNull float[] out, float viewHeight, float scale) {
+        fill(out, viewHeight, scale, scale);
+    }
+
+    /**
+     * Writes {@code iMouse} in the render target's pixels: view x times {@code scaleX}, and y
+     * measured from the bottom ({@code viewHeight - y}) times {@code scaleY}, so it shares
+     * {@code iResolution}'s space at any quality.
+     */
+    public void fill(@NonNull float[] out, float viewHeight, float scaleX, float scaleY) {
         if (!mEver) {
             out[0] = out[1] = out[2] = out[3] = 0f;
             return;
         }
-        out[0] = mX * scale;
-        out[1] = (viewHeight - mY) * scale;
-        float cx = mClickX * scale, cy = (viewHeight - mClickY) * scale;
+        out[0] = mX * scaleX;
+        out[1] = (viewHeight - mY) * scaleY;
+        float cx = mClickX * scaleX, cy = (viewHeight - mClickY) * scaleY;
         out[2] = mDown ? cx : -cx;
         out[3] = mClickFresh ? cy : -cy;
     }
 
     /** ShaderEditor's {@code touch}: the pointer in render pixels, y up (zero before the first touch). */
-    public void fillTouch(@NonNull float[] out, float viewHeight, float scale) {
+    public void fillTouch(@NonNull float[] out, float viewHeight, float scaleX, float scaleY) {
         if (!mEver) {
             out[0] = out[1] = 0f;
             return;
         }
-        out[0] = mX * scale;
-        out[1] = (viewHeight - mY) * scale;
+        out[0] = mX * scaleX;
+        out[1] = (viewHeight - mY) * scaleY;
     }
 
     public void frameDrawn() {

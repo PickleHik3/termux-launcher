@@ -149,6 +149,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     private volatile boolean mDark;
     private volatile int mAccent, mSurface, mOnSurface;
     private volatile int mLookGen;
+    private static final com.termux.terminal.DebugChoice SHADER_GUARD = new com.termux.terminal.DebugChoice(
+        SceneFramePolicy.PROP_SHADER_GUARD, "on", com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
     private static final com.termux.terminal.DebugChoice GLASS_DIV = new com.termux.terminal.DebugChoice(
         SceneFramePolicy.PROP_GLASS_DIV, Integer.toString(SceneFramePolicy.DEFAULT_GLASS_DIV),
         com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
@@ -562,7 +564,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 ShaderSafety.Quality q = mDrawQuality != null ? mDrawQuality : mQuality;
                 int fw = Math.max(1, Math.round(w * q.scale));
                 int fh = Math.max(1, Math.round(h * q.scale));
-                fillInputs(nowMs, fw / (float) w);
+                fillInputs(nowMs, fw / (float) w, fh / (float) h);
                 boolean drew = gl.renderScene(mIn, fw, fh, frameTimeNanos);
                 if (drew && glass) {
                     renderLowRes(gl, nowMs);
@@ -590,10 +592,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             }
         }
 
-        private void fillInputs(long nowMs, float scale) {
+        /** {@code scaleX}/{@code scaleY}: render-target pixels per view pixel, so iMouse shares iResolution's space. */
+        private void fillInputs(long nowMs, float scaleX, float scaleY) {
             float viewH = mSurfaceH;
-            mTouch.fill(mIn.mouse, viewH, scale);
-            mTouch.fillTouch(mIn.touch, viewH, scale);
+            mTouch.fill(mIn.mouse, viewH, scaleX, scaleY);
+            mTouch.fillTouch(mIn.touch, viewH, scaleX, scaleY);
             mIn.pointerCount = mTouch.isDown() ? 1 : 0;
             mIn.pointers[0] = mIn.touch[0];
             mIn.pointers[1] = mIn.touch[1];
@@ -621,6 +624,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             if (!mPendingCleared && ShaderSafety.pendingMayClear(mFirstDrawMs, nowMs)) {
                 mPendingCleared = true;
                 ShaderStore.clearPending(mAppContext);
+            }
+            // debug.tl.shader_guard=off: no step-down or hold (a CPU-rendered emulator is always heavy).
+            if (!SceneFramePolicy.shaderGuard(SHADER_GUARD.get(nowMs))) {
+                mHeavy.reset();
+                return;
             }
             switch (mHeavy.onFrame(wallNs, period, q)) {
                 case ShaderSafety.HeavyFrames.STEP_DOWN:

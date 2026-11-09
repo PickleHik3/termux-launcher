@@ -106,6 +106,30 @@ public class ShaderSafetyTest {
     }
 
     @Test
+    public void mouseSharesTheRenderTargetsSpaceOnEachAxis() {
+        // A 1080 x 2401 view at Half renders 540 x 1201: y scales by 1201/2401, not by 0.5.
+        SceneTouch t = new SceneTouch();
+        float[] m = new float[4];
+        float sx = 540f / 1080f, sy = 1201f / 2401f;
+        t.down(1080f, 0f);
+        t.fill(m, 2401f, sx, sy);
+        assertEquals(540f, m[0], 1e-3f);
+        assertEquals(1201f, m[1], 1e-3f);
+        t.move(0f, 2401f);
+        t.fill(m, 2401f, sx, sy);
+        assertEquals(0f, m[0], 0f);
+        assertEquals(0f, m[1], 0f);
+    }
+
+    @Test
+    public void shaderGuardIsOnUnlessOff() {
+        assertTrue(SceneFramePolicy.shaderGuard(null));
+        assertTrue(SceneFramePolicy.shaderGuard(""));
+        assertTrue(SceneFramePolicy.shaderGuard("on"));
+        assertFalse(SceneFramePolicy.shaderGuard(" off "));
+    }
+
+    @Test
     public void motionParsesAndFormats() {
         assertEquals(WallpaperMotion.Kind.PHOTO, WallpaperMotion.parse("").kind);
         assertEquals(WallpaperMotion.Kind.PHOTO, WallpaperMotion.parse(null).kind);

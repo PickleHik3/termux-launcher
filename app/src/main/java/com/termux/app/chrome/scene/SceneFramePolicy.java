@@ -6,6 +6,9 @@ package com.termux.app.chrome.scene;
  *
  * <p>{@code debug.tl.shader_file}: an absolute path; when set, that file runs as the active shader
  * (over the user's choice) and is reloaded when its time stamp moves.
+ * {@code debug.tl.shader_guard}: {@code on} (default) or {@code off}; off turns off the heavy-frame
+ * quality step-down and the hold at Quarter (context-loss handling and the pending marker stay on).
+ * For emulators, whose GL runs on the CPU and always reads as heavy.
  * {@code debug.tl.scene_rate}: frames per second, overriding the shader's rate: {@code 15},
  * {@code 30}, {@code 60}, {@code 90} (every vsync), or {@code 0} for no motion. {@code debug.tl.scene_glass}:
  * {@code lowres} (default) or {@code still}. {@code debug.tl.scene_glass_rate}: the low-res
@@ -16,6 +19,7 @@ package com.termux.app.chrome.scene;
 public final class SceneFramePolicy {
 
     public static final String PROP_SHADER_FILE = "debug.tl.shader_file";
+    public static final String PROP_SHADER_GUARD = "debug.tl.shader_guard";
     public static final String PROP_RATE = "debug.tl.scene_rate";
     public static final String PROP_GLASS = "debug.tl.scene_glass";
     public static final String PROP_GLASS_RATE = "debug.tl.scene_glass_rate";
@@ -53,6 +57,11 @@ public final class SceneFramePolicy {
      */
     public static boolean holdAtStill(boolean powerSaveMode, int thermalStatus) {
         return powerSaveMode || thermalStatus >= THERMAL_SEVERE;
+    }
+
+    /** {@code debug.tl.shader_guard}: on unless the value is {@code off}. */
+    public static boolean shaderGuard(String value) {
+        return value == null || !"off".equals(value.trim());
     }
 
     /** True for {@code lowres} and anything unrecognised; false only for {@code still}. */
