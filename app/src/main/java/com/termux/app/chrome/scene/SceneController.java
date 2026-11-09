@@ -453,14 +453,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
 
     /** {@code tlDark} and {@code tlColor0..2} from the activity's Material roles (the scheme writes them when it is on). */
     private void pushLook(@NonNull SceneLayerView layer) {
-        boolean dark = (mActivity.getResources().getConfiguration().uiMode
-            & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        int accent = MaterialColors.getColor(mActivity, androidx.appcompat.R.attr.colorPrimary, 0xff6750a4);
-        int surface = MaterialColors.getColor(mActivity, com.google.android.material.R.attr.colorSurface,
-            dark ? 0xff141218 : 0xfffef7ff);
-        int onSurface = MaterialColors.getColor(mActivity, com.google.android.material.R.attr.colorOnSurface,
-            dark ? 0xffe6e0e9 : 0xff1d1b20);
-        layer.setLook(dark, accent, surface, onSurface);
+        ShaderLook look = ShaderLook.resolve(mActivity);
+        layer.setLook(look.dark, look.accent, look.surface, look.onSurface);
     }
 
     /** The layer cannot go on (a second lost context, no ES 3, a stored shader that no longer builds). */

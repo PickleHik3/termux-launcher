@@ -97,11 +97,12 @@ public final class SceneThumbView extends View {
         final int rw = Math.max(1, Math.round(w * scale)), rh = Math.max(1, Math.round(h * scale));
         final File channel0 = mChannel0;
         final int generation = mGeneration;
+        final ShaderLook look = ShaderLook.resolve(getContext());
         mRendering = true;
         WORKER.execute(() -> {
             Bitmap still = null;
             try {
-                still = SceneStill.render(source, channel0, rw, rh);
+                still = SceneStill.render(source, channel0, rw, rh, look);
             } catch (RuntimeException e) {
                 Log.w(TAG, "thumbnail still failed", e);
             }

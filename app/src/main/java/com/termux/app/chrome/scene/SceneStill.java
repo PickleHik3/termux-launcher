@@ -63,17 +63,20 @@ public final class SceneStill {
         String source = ShaderStore.readText(ShaderStore.sourceFile(context, motion.id));
         if (source == null) return null;
         ShaderStore.Meta meta = ShaderStore.readMeta(context, motion.id);
-        return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx);
+        return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx,
+            ShaderLook.resolve(context));
     }
 
     /**
      * @param channel0 the iChannel0 image, or null for none
+     * @param look     tlDark and tlColor0..2, or null to leave them 0
      * @return a mutable software ARGB_8888 bitmap, or null below API 29 or when the shader does not build
      * @throws IllegalStateException when the GPU could not draw it
      */
     @WorkerThread
     @Nullable
-    public static Bitmap render(@NonNull String source, @Nullable File channel0, int widthPx, int heightPx) {
+    public static Bitmap render(@NonNull String source, @Nullable File channel0, int widthPx, int heightPx,
+                                @Nullable ShaderLook look) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
         int[] size = fitSize(widthPx, heightPx);
         int width = size[0], height = size[1];
@@ -93,6 +96,9 @@ public final class SceneStill {
             if (channel0 != null) gl.setChannel(0, new ImageChannel(channel0));
             ShaderInputs in = new ShaderInputs();
             in.setDate(System.currentTimeMillis());
+            in.pageOffset = 0f;
+            in.battery = 1f;
+            if (look != null) look.applyTo(in);
             gl.renderScene(in, width, height, 0L);
             ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
             gl.readScene(pixels);
