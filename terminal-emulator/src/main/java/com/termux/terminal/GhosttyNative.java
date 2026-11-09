@@ -135,6 +135,18 @@ final class GhosttyNative {
          */
         void onKittyQuery(byte[] apc);
 
+        /**
+         * The next part of a sixel string kept from Ghostty ({@code op} is 0 to begin one, 1 for data,
+         * 2 to cancel it). Called between library calls, never from a library callback.
+         */
+        void onSixel(int op, byte[] data);
+
+        /**
+         * A sixel string ended with the cursor in column {@code cursorX}: its pixels, and in
+         * {@code meta} what {@link GhosttySixel#end} says about where they go; null for no image.
+         */
+        int[] onSixelEnd(int cursorX, int columns, int cellW, int cellH, int[] meta);
+
         /** Something a program asked for (see EVENT_*); strings are UTF-8 or null. */
         void onEvent(int kind, int a, int b, byte[] first, byte[] second);
     }

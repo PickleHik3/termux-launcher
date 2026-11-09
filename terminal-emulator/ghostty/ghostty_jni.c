@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <ghostty/vt.h>
 
@@ -169,6 +170,13 @@ static bool kq_watching(Core* c);
 static bool kq_in_apc(Core* c);
 static void kq_apc_started(Core* c);
 static size_t kq_step(Core* c, uint8_t b);
+// The sixel watch's side of the write loop (see the end of this file).
+static bool sx_enabled(Core* c);
+static bool sx_in_dcs(Core* c);
+static void sx_dcs_started(Core* c);
+static size_t sx_step(Core* c, uint8_t b);
+static void sx_flush(Core* c);
+static void sx_reset(Core* c);
 
 // Extra code points (combining marks, ZWJ sequences) one sync can carry; matches
 // GhosttyNative.EXTRA_CAPACITY. A cluster past the cap keeps its first code point.
@@ -281,6 +289,20 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
     GhosttyString s = {.ptr = NULL, .len = 0};
     if (c != NULL && c->xtversion != NULL) { s.ptr = c->xtversion; s.len = c->xtversion_len; }
     return s;
+}
+
+// DA1: what we always said (VT220, ANSI colour) and, only while sixel works on this core, 4. The
+// secondary and tertiary answers stay the library's defaults. No JNI call here.
+static bool on_device_attributes(GhosttyTerminal t, void* ud, GhosttyDeviceAttributes* out) {
+    (void) t;
+    Core* c = (Core*) ud;
+    out->primary.conformance_level = GHOSTTY_DA_CONFORMANCE_VT220;
+    size_t n = 0;
+    if (c != NULL && sx_enabled(c)) out->primary.features[n++] = GHOSTTY_DA_FEATURE_SIXEL;
+    out->primary.features[n++] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+    out->primary.num_features = n;
+    out->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
+    return true;
 }
 
 static jbyteArray byte_array(JNIEnv* env, const uint8_t* data, size_t len) {
@@ -480,6 +502,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*) on_title);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*) on_pwd);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*) on_device_attributes);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*) on_render_hold);
@@ -608,19 +631,26 @@ static void write_sized_text(Core* c) {
 // stopping where either interceptor needs to look, and each stop is handled where it falls in the
 // stream. The OSC sniffer stops at OSC starts and ends (and at ground while sized text waits); the
 // kitty query watch stops at APC starts and then reads the APC a byte at a time (kq_step), holding
-// back a query's content, which the Java core answers. Replies, events and query answers are
+// back a query's content, which the Java core answers; the sixel watch does the same for a DCS
+// (sx_step) and keeps a sixel's bytes from Ghostty, which ignores them. Replies, events and query answers are
 // therefore produced in stream order, and GhosttyCore keeps them in that order for Java.
 static void write_stream(Core* c, const uint8_t* data, size_t len) {
     const bool queries = kq_watching(c);
+    const bool sixels = sx_enabled(c);
     size_t off = 0;
     while (off < len) {
         if (queries && kq_in_apc(c)) {
             off += kq_step(c, data[off]);
             continue;
         }
+        if (sixels && sx_in_dcs(c)) {
+            off += sx_step(c, data[off]);
+            continue;
+        }
         uint32_t want = GHOSTTY_TERMINAL_BOUNDARY_OSC_START | GHOSTTY_TERMINAL_BOUNDARY_OSC_END;
         if (c->text_len > 0) want |= GHOSTTY_TERMINAL_BOUNDARY_GROUND;
         if (queries) want |= GHOSTTY_TERMINAL_BOUNDARY_APC_START;
+        if (sixels) want |= GHOSTTY_TERMINAL_BOUNDARY_DCS_START;
         GhosttyTerminalWriteStop stop = GHOSTTY_INIT_SIZED(GhosttyTerminalWriteStop);
         GhosttyResult r = ghostty_terminal_vt_write_until(c->term, data + off, len - off, want, &stop);
         if (r == GHOSTTY_NO_VALUE) {
@@ -648,7 +678,11 @@ static void write_stream(Core* c, const uint8_t* data, size_t len) {
         if ((stop.reached & GHOSTTY_TERMINAL_BOUNDARY_GROUND) && c->text_len > 0) write_sized_text(c);
         if (queries && (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_APC_START) && stop.kind == GHOSTTY_TERMINAL_STRING_KIND_APC)
             kq_apc_started(c);
+        if (sixels && (stop.reached & GHOSTTY_TERMINAL_BOUNDARY_DCS_START) && (stop.byte == 'P' || stop.byte == 0x90))
+            sx_dcs_started(c);
     }
+    // A sixel's bytes so far go to the Java decoder now, so nothing waits here between writes.
+    if (sixels) sx_flush(c);
     send_progress(c, false);
     // A string that ended on the last byte: its text goes in now if the stream is at ground (BEL),
     // or after the next write's first byte completes ESC \.
@@ -715,6 +749,7 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeReset(JNIEnv
     c->env = env;
     ghostty_terminal_reset(c->term);
     c->env = NULL;
+    sx_reset(c);
     pin_top(c);
 }
 
@@ -1255,6 +1290,17 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 #define KQ_QUERY_MAX (64 * 1024)
 enum { KQ_GROUND, KQ_HEADER, KQ_QUERY };
 
+// The sixel watch: the longest DCS header (parameters before 'q') read, and how many body bytes
+// gather before they go to Java's decoder.
+#define SX_HEADER_MAX 64
+#define SX_CHUNK 4096
+enum { SX_GROUND, SX_HEADER, SX_BODY, SX_ESC };
+// GhosttyCore.onSixel's operations.
+enum { SX_OP_BEGIN = 0, SX_OP_DATA = 1, SX_OP_CANCEL = 2 };
+// Kitty ids of sixel images count up from here, far above the small ids programs choose, and wrap
+// within the top 2^28 so they stay clear of them.
+#define SX_ID_BASE 0xF0000000u
+
 // Ints per placement in nativeKittyPlacements; mirrored by GhosttyNative.KP_*.
 enum {
     KP_IMAGE_ID = 0, KP_KIND, KP_LAYER, KP_Z, KP_COL, KP_ROW, KP_GRID_COLS, KP_GRID_ROWS,
@@ -1269,6 +1315,13 @@ typedef struct KittyState {
     GhosttyRenderStateImageIterator images;
     GhosttyKittyGraphicsPlacementIterator placements;
     jmethodID on_query;
+    jmethodID on_sixel, on_sixel_end;
+    // The sixel watch (sx_*): where it is in a sixel DCS, the bytes not yet handed to Java's decoder,
+    // and the next kitty image id for a sixel's pixels.
+    int sx;
+    uint8_t sx_buf[SX_CHUNK];
+    size_t sx_len;
+    uint32_t sx_next_id;
     // The query watch: a kitty query (a=q) is answered by the Java core's own code, so both cores
     // give the same bytes, including for the media and formats this one refuses.
     int watch;
@@ -1402,6 +1455,224 @@ static size_t kq_step(Core* c, uint8_t b) {
     return 0;
 }
 
+// The sixel watch. A sixel is `ESC P <digits and ;> q <data> ST`, which Ghostty ignores. The loop
+// stops at each DCS introducer; the header is held until its final byte shows whether this is a
+// sixel. Anything else is released to Ghostty unchanged. A sixel's data never reaches Ghostty: it
+// goes, a few KiB at a time, to the Java decoder (GhosttyCore.onSixel, which runs the Java core's
+// own TerminalSixel, so both cores read the same bytes the same way), and Ghostty gets only an ST
+// that ends its empty DCS. At the end, between library calls and with the library at ground, the
+// decoded pixels go in as a kitty image placed at the cursor (direct RGBA, q=2) and the cursor is
+// put where the Java core leaves it: on the row below the image, in the column the sixel started
+// in. The image then scrolls, clears and draws through the kitty path. State lives across writes.
+
+// Whether this core takes sixels: Java has the callbacks and the cell size is known.
+static bool sx_enabled(Core* c) {
+    KittyState* k = c->kitty;
+    return k != NULL && k->on_sixel != NULL && k->on_sixel_end != NULL && c->cell_w > 0 && c->cell_h > 0;
+}
+
+static bool sx_in_dcs(Core* c) {
+    return c->kitty->sx != SX_GROUND;
+}
+
+static void sx_dcs_started(Core* c) {
+    c->kitty->sx = SX_HEADER;
+    c->kitty->held_len = 0;
+}
+
+static void sx_reset(Core* c) {
+    KittyState* k = c->kitty;
+    if (k == NULL) return;
+    k->sx = SX_GROUND;
+    k->sx_len = 0;
+    k->held_len = 0;
+}
+
+// Give Ghostty the DCS header held back; it carries on with the DCS as if nothing had stopped it.
+static void sx_release(Core* c) {
+    KittyState* k = c->kitty;
+    if (k->held_len > 0) ghostty_terminal_vt_write(c->term, k->held, k->held_len);
+    k->held_len = 0;
+    k->sx = SX_GROUND;
+}
+
+static void sx_call(Core* c, int op, const uint8_t* data, size_t len) {
+    KittyState* k = c->kitty;
+    JNIEnv* env = c->env;
+    if (env == NULL || c->sink == NULL) return;
+    jbyteArray arr = NULL;
+    if (len > 0) {
+        arr = byte_array(env, data, len);
+        if (arr == NULL) return;
+    }
+    (*env)->CallVoidMethod(env, c->sink, k->on_sixel, (jint) op, arr);
+    clear_exception(env);
+    if (arr != NULL) (*env)->DeleteLocalRef(env, arr);
+}
+
+static void sx_flush(Core* c) {
+    KittyState* k = c->kitty;
+    if (k->sx_len == 0) return;
+    size_t n = k->sx_len;
+    k->sx_len = 0;
+    sx_call(c, SX_OP_DATA, k->sx_buf, n);
+}
+
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static size_t b64_encode(const uint8_t* in, size_t n, char* out) {
+    size_t o = 0;
+    for (size_t i = 0; i < n; i += 3) {
+        uint32_t v = (uint32_t) in[i] << 16;
+        if (i + 1 < n) v |= (uint32_t) in[i + 1] << 8;
+        if (i + 2 < n) v |= in[i + 2];
+        out[o++] = B64[(v >> 18) & 63];
+        out[o++] = B64[(v >> 12) & 63];
+        out[o++] = i + 1 < n ? B64[(v >> 6) & 63] : '=';
+        out[o++] = i + 2 < n ? B64[v & 63] : '=';
+    }
+    return o;
+}
+
+// Send the image as direct RGBA in APC chunks of 4096 base64 characters, one library write each,
+// so nothing the size of the image is built here. Pixels come from the Java raster a row at a
+// time; what lies past the raster (the padding to whole cells) is transparent.
+static bool sx_send_image(Core* c, jintArray raster, const jint* meta) {
+    KittyState* k = c->kitty;
+    JNIEnv* env = c->env;
+    const uint32_t rw = (uint32_t) meta[0], rh = (uint32_t) meta[1];
+    const uint32_t ow = (uint32_t) meta[2], oh = (uint32_t) meta[3];
+    if (meta[0] <= 0 || meta[1] <= 0 || meta[2] <= 0 || meta[3] <= 0) return false;
+    if ((uint64_t) (*env)->GetArrayLength(env, raster) < (uint64_t) rw * rh) return false;
+    jint* row = malloc(sizeof(jint) * rw);
+    if (row == NULL) return false;
+    const uint32_t id = SX_ID_BASE + (k->sx_next_id++ & 0x0FFFFFFFu);
+    const uint64_t total = (uint64_t) ow * oh;
+    enum { RAW = 3072 };
+    uint8_t raw[RAW];
+    char msg[SX_CHUNK + 128];
+    uint64_t done = 0;
+    uint32_t x = 0, y = 0, row_y = UINT32_MAX;
+    bool first = true;
+    while (done < total) {
+        size_t n = 0;
+        while (n < RAW && done < total) {
+            jint px = 0;
+            if (x < rw && y < rh) {
+                if (row_y != y) {
+                    (*env)->GetIntArrayRegion(env, raster, (jsize) ((uint64_t) y * rw), (jsize) rw, row);
+                    row_y = y;
+                }
+                px = row[x];
+            }
+            raw[n++] = (uint8_t) ((uint32_t) px >> 16);
+            raw[n++] = (uint8_t) ((uint32_t) px >> 8);
+            raw[n++] = (uint8_t) px;
+            raw[n++] = (uint8_t) ((uint32_t) px >> 24);
+            done++;
+            if (++x == ow) { x = 0; y++; }
+        }
+        const int more = done < total;
+        int head;
+        if (first) {
+            head = snprintf(msg, 112, "\033_Ga=T,t=d,f=32,s=%u,v=%u,i=%u,q=2,m=%d;", ow, oh, id, more);
+            first = false;
+        } else {
+            head = snprintf(msg, 112, "\033_Gq=2,m=%d;", more);
+        }
+        size_t len = (size_t) head + b64_encode(raw, n, msg + head);
+        msg[len++] = '\033';
+        msg[len++] = '\\';
+        ghostty_terminal_vt_write(c->term, (const uint8_t*) msg, len);
+    }
+    free(row);
+    return true;
+}
+
+// The sixel's string ended: ask Java for the pixels and where they go, close Ghostty's empty DCS,
+// then place the image and move the cursor.
+static void sx_finish(Core* c) {
+    KittyState* k = c->kitty;
+    JNIEnv* env = c->env;
+    sx_flush(c);
+    k->sx = SX_GROUND;
+    jint meta[6] = {0, 0, 0, 0, 0, 0};
+    jintArray raster = NULL;
+    uint16_t cx = 0;
+    ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_CURSOR_X, &cx);
+    if (env != NULL && c->sink != NULL) {
+        jintArray meta_arr = (*env)->NewIntArray(env, 6);
+        if (meta_arr != NULL) {
+            raster = (jintArray) (*env)->CallObjectMethod(env, c->sink, k->on_sixel_end, (jint) cx, (jint) c->cols,
+                                                          (jint) c->cell_w, (jint) c->cell_h, meta_arr);
+            clear_exception(env);
+            if (raster != NULL) (*env)->GetIntArrayRegion(env, meta_arr, 0, 6, meta);
+            (*env)->DeleteLocalRef(env, meta_arr);
+        } else {
+            clear_exception(env);
+        }
+    }
+    // The empty DCS Ghostty has been holding ends here, which puts it at ground.
+    static const uint8_t st[2] = {0x1b, '\\'};
+    ghostty_terminal_vt_write(c->term, st, sizeof(st));
+    if (raster == NULL) return;
+    if (sx_send_image(c, raster, meta)) {
+        // Ghostty moved the cursor to the last row of the image, past its last column (or one row
+        // further down when that reached the right edge). The Java core leaves it on the row below
+        // the image, in the column the sixel started in.
+        const bool wraps = (uint32_t) cx + (uint32_t) meta[4] >= c->cols;
+        char fix[24];
+        int n = snprintf(fix, sizeof(fix), "%s\033[%uG", wraps ? "" : "\033D", (unsigned) cx + 1);
+        ghostty_terminal_vt_write(c->term, (const uint8_t*) fix, (size_t) n);
+    }
+    (*env)->DeleteLocalRef(env, raster);
+}
+
+// One byte of a DCS the watch is reading: 1 when it took the byte, 0 when the byte goes on to the
+// library through write_stream (after a release).
+static size_t sx_step(Core* c, uint8_t b) {
+    KittyState* k = c->kitty;
+    if (k->sx == SX_HEADER) {
+        if ((b >= '0' && b <= '9') || b == ';') {
+            if (k->held_len < SX_HEADER_MAX && kq_hold(k, b)) return 1;
+            sx_release(c);
+            return 0;
+        }
+        if (b == 'q') {
+            k->held_len = 0;
+            k->sx = SX_BODY;
+            k->sx_len = 0;
+            sx_call(c, SX_OP_BEGIN, NULL, 0);
+            return 1;
+        }
+        sx_release(c);
+        return 0;
+    }
+    if (k->sx == SX_ESC) {
+        if (b == '\\') {
+            sx_finish(c);
+            return 1;
+        }
+        // An ESC not followed by '\' is dropped, as the Java core does; the byte is data.
+        k->sx = SX_BODY;
+    }
+    if (b == 0x1b) {
+        k->sx = SX_ESC;
+        return 1;
+    }
+    if (b == 0x18 || b == 0x1a) {
+        // CAN and SUB cancel the string: no image, and Ghostty's empty DCS ends with them.
+        sx_flush(c);
+        sx_call(c, SX_OP_CANCEL, NULL, 0);
+        k->sx = SX_GROUND;
+        ghostty_terminal_vt_write(c->term, &b, 1);
+        return 1;
+    }
+    k->sx_buf[k->sx_len++] = b;
+    if (k->sx_len == SX_CHUNK) sx_flush(c);
+    return 1;
+}
+
 // Turn images on: Ghostty's store per screen is storage_limit bytes (KittyImageStore's, so both
 // cores keep the same), direct and file media as the Java core takes them, temp files from
 // temp_dir (UTF-8, may be null), and no shared memory, which Android does not have.
@@ -1422,6 +1693,10 @@ JNIEXPORT jboolean JNICALL Java_com_termux_terminal_GhosttyNative_nativeKittySet
         jclass sink_class = (*env)->GetObjectClass(env, c->sink);
         k->on_query = (*env)->GetMethodID(env, sink_class, "onKittyQuery", "([B)V");
         if (k->on_query == NULL) clear_exception(env);
+        k->on_sixel = (*env)->GetMethodID(env, sink_class, "onSixel", "(I[B)V");
+        if (k->on_sixel == NULL) clear_exception(env);
+        k->on_sixel_end = (*env)->GetMethodID(env, sink_class, "onSixelEnd", "(IIII[I)[I");
+        if (k->on_sixel_end == NULL) clear_exception(env);
     }
     uint64_t limit = storage_limit > 0 ? (uint64_t) storage_limit : 0;
     if (ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &limit) != GHOSTTY_SUCCESS)
