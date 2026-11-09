@@ -1,0 +1,84 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Studio kit</title><style>
+:root{--bg:#14161b;--card:#1d2027;--ink:#ecedf0;--dim:#9ca1ab;--line:#2c3039;--acc:#e9b872}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 2px}.sub{color:var(--dim);margin:0 0 20px}
+.wrap{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:28px;align-items:start}
+@media(max-width:760px){.wrap{grid-template-columns:1fr}}
+.phone{background:#000;border-radius:28px;padding:8px;box-shadow:0 10px 40px #0008}
+.phone canvas{width:100%;display:block;border-radius:22px;aspect-ratio:9/19.5;background:#222}
+.field{margin:0 0 18px}.field b{display:block;font-size:13px;color:var(--dim);font-weight:500;margin-bottom:6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}.seg button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--acc);color:#1b1408;border-color:var(--acc)}
+.sentence{font-size:20px;margin:6px 0 18px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.play{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
+#status{color:var(--dim);font-size:13px}
+h2{font-size:15px;margin:28px 0 10px;color:var(--dim);font-weight:500}
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}.strip figure{margin:0}.strip canvas{width:100%;border-radius:14px;aspect-ratio:9/19.5;display:block;background:#222;cursor:pointer}
+.strip figcaption{font-size:13px;color:var(--dim);margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:520px}.grid canvas{width:100%;border-radius:14px;aspect-ratio:9/19.5;display:block;background:#222;cursor:pointer;outline:3px solid transparent}
+.grid canvas.on{outline-color:var(--acc)}
+.label{color:var(--dim);font-size:14px;margin:-10px 0 16px;text-transform:capitalize}
+</style></head><body><main>
+<h1>Studio kit</h1><p class="sub">Wilds: every Shuffle composes new wallpapers from painted parts. Pick a look, then Shuffle.</p>
+<div class="wrap">
+ <div class="phone"><canvas id="view" width="324" height="702"></canvas></div>
+ <div>
+  <div class="field"><b>Atmosphere</b><div class="seg" id="atm"></div></div>
+  <div class="field"><b>Motion</b><div class="seg" id="motion"></div></div>
+  <p class="label" id="label"></p>
+  <div class="row"><button class="play" id="shuffle">Shuffle</button> <button class="play" id="play">Pause</button><span id="status">Loading…</span></div>
+  <h2>This Shuffle (tap one to see it move)</h2>
+  <div class="grid" id="grid"></div>
+ </div>
+</div></main>
+<script>
+const V = '?v=' + (document.currentScript.dataset.v || Date.now());
+const w = new Worker('kit-worker.js' + V);
+let state = { atm: 'golden-hour', motion: 'gentle', seed: 1 }, seeds = [], playing = true, info, nextId = 0, shuffleNo = 0;
+const pending = new Map();
+w.onmessage = ({ data }) => {
+  if (data.hello) return boot(data);
+  if (data.error && !pending.has(data.id)) return status('Error: ' + data.error);
+  const cb = pending.get(data.id); pending.delete(data.id); cb && cb(data);
+};
+const render = o => new Promise(res => { const id = ++nextId; pending.set(id, res); w.postMessage({ id, ...o }); });
+const status = s => document.getElementById('status').textContent = s;
+const paint = (cv, d) => { if (d.error) { status(d.error); return; } if (d.gl) return; cv.getContext('2d').putImageData(new ImageData(d.pixels, d.width, d.height), 0, 0); };
+function seg(el, map, key) {
+  el.innerHTML = '';
+  for (const [k, v] of Object.entries(map)) {
+    const b = document.createElement('button'); b.textContent = v.label; b.setAttribute('aria-pressed', state[key] === k);
+    b.onclick = () => { state[key] = k; seg(el, map, key); grid(); if (!playing) frame(); };
+    el.appendChild(b);
+  }
+}
+async function grid() {
+  const box = document.getElementById('grid'), mine = ++shuffleNo;
+  if (box.children.length !== seeds.length) {
+    box.innerHTML = '';
+    for (const s of seeds) { const c = document.createElement('canvas'); c.width = 162; c.height = 351; c.onclick = () => pick(s); box.appendChild(c); }
+  }
+  [...box.children].forEach((c, i) => c.classList.toggle('on', seeds[i] === state.seed));
+  for (let i = 0; i < seeds.length && mine === shuffleNo; i++) paint(box.children[i], await render({ ...state, seed: seeds[i], time: 4, width: 162, height: 351 }));
+}
+function pick(s) { state.seed = s; [...document.getElementById('grid').children].forEach((c, i) => c.classList.toggle('on', seeds[i] === s)); if (!playing) frame(); }
+function shuffle() { seeds = Array.from({ length: 6 }, () => 1 + Math.floor(Math.random() * 1e9)); state.seed = seeds[0]; grid(); if (!playing) frame(); }
+const view = document.getElementById('view'); const t0 = performance.now(); let busy = false, avg = 0, mode = 'Software';
+async function frame() {
+  if (busy) return; busy = true; const start = performance.now();
+  const d = await render({ ...state, live: true, time: (performance.now() - t0) / 1000, width: view.width, height: view.height });
+  paint(view, d); busy = false;
+  if (d.label) document.getElementById('label').textContent = d.label;
+  const ms = performance.now() - start;
+  if (!d.error) { avg = avg ? avg * 0.9 + ms * 0.1 : ms; status(`${mode} · ${avg.toFixed(0)} ms a frame`); }
+}
+function loop() { if (playing && !document.hidden) frame(); setTimeout(loop, 66); }
+document.getElementById('shuffle').onclick = shuffle;
+document.getElementById('play').onclick = e => { playing = !playing; e.target.textContent = playing ? 'Pause' : 'Play'; };
+function boot(i) { info = i; mode = i.gl ? 'WebGL' : 'Software'; seg(document.getElementById('atm'), i.atmospheres, 'atm'); seg(document.getElementById('motion'), i.motions, 'motion'); shuffle(); loop(); }
+const soft = new URLSearchParams(location.search).has('software');
+const off = soft ? null : view.transferControlToOffscreen();
+w.postMessage({ hello: true, glCanvas: off, forceSoftware: soft }, off ? [off] : []);
+</script></body></html>

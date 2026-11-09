@@ -4,6 +4,8 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd); assets="$here/../../app/src/main/assets/studio"
 out="${1:-$HOME/reports/studio-scenes/lab}"; v=$(date +%s)
 mkdir -p "$out/studio/scenes"
-cp "$here/worker.js" "$out/"; sed "s#<script>#<script data-v=\"$v\">#" "$here/index.html" > "$out/index.html"
-cp "$assets/scene.agsl" "$assets/scene-words.json" "$out/studio/"; cp -r "$assets/scenes/." "$out/studio/scenes/"
+cp "$here/worker.js" "$here/kit-worker.js" "$out/"; sed "s#<script>#<script data-v=\"$v\">#" "$here/kit.html" > "$out/kit.html"
+mkdir -p "$out/studio/kits"; cp -r "$assets/kits/." "$out/studio/kits/"; sed "s#<script>#<script data-v=\"$v\">#" "$here/index.html" > "$out/index.html"
+cp "$assets/scene.agsl" "$assets/kit.agsl" "$assets/scene-words.json" "$out/studio/"; cp -r "$assets/scenes/." "$out/studio/scenes/"
 echo "https://amal-build.taild9c5dc.ts.net/reports/studio-scenes/lab/?v=$v"
+echo "https://amal-build.taild9c5dc.ts.net/reports/studio-scenes/lab/kit.html?v=$v"

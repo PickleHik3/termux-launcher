@@ -1,0 +1,249 @@
+// Studio kit effect: a landscape composed from parts, so every Shuffle is a new wallpaper.
+// The parts are flat-poster pieces painted in four greys (the tone); the composer picks the
+// pieces, places them and hands over a palette, and this shader colours, layers and animates them.
+//   back to front: sky (gradient + stars), sun or moon, clouds, far range, mid band, lake
+//   (mirroring everything behind it), animals, foreground, a framing tree, then mist.
+// Coordinates are scene px: the scene is 1536 tall and as wide as the screen's aspect gives.
+// AGSL-safe: child shaders only, no loops, no arrays, no preprocessor.
+
+uniform shader far;      // far range strip, 1024 x 683, tone in R, coverage in A
+uniform shader mid;      // middle band strip, same layout
+uniform shader fore;     // foreground strip, same layout
+uniform shader tree;     // framing tree, 512 x 1024
+uniform shader clouds;   // 2 x 3 atlas of 512 x 256 cloud cells
+uniform shader fauna;    // 2 x 3 atlas of 512 x 256 animal cells, facing +x
+
+uniform float2 uOut;     // output px
+uniform float  uTime;
+// Motion
+uniform float  uSway;    // grass and crown sway, scene px
+uniform float  uWater;   // ripple, scene px
+uniform float  uDrift;   // cloud drift, scene px per second
+uniform float  uLife;    // animal speed
+// Sky
+uniform float3 uSkyTop;
+uniform float3 uSkyHor;
+uniform float  uHorY;    // where the sky gradient reaches the horizon colour
+uniform float  uStars;
+uniform float4 uCel;     // sun or moon: x, y, radius, kind (0 none, 1 sun, 2 moon)
+uniform float3 uCelC;
+uniform float3 uCloudLo;
+uniform float3 uCloudHi;
+uniform float4 uC0;      // clouds: x, y, scale, cell (scale 0 = none)
+uniform float4 uC1;
+uniform float4 uC2;
+uniform float4 uC3;
+uniform float4 uC4;
+// Strips: x offset, image top y, scale, flip (1 = mirrored); then the skyline y and 4 tones
+uniform float4 uFarP;
+uniform float3 uFarA;
+uniform float3 uFarB;
+uniform float3 uFarC;
+uniform float3 uFarD;
+uniform float4 uMidP;
+uniform float  uMidTop;
+uniform float3 uMidA;
+uniform float3 uMidB;
+uniform float3 uMidC;
+uniform float3 uMidD;
+uniform float4 uForeP;
+uniform float  uForeTop;
+uniform float3 uForeA;
+uniform float3 uForeB;
+uniform float3 uForeC;
+uniform float3 uForeD;
+uniform float4 uTreeP;   // x, top y, scale, cell + 2 * flip (scale 0 = none)
+uniform float3 uTreeA;
+uniform float3 uTreeB;
+uniform float3 uTreeC;
+uniform float3 uTreeD;
+// Lake
+uniform float  uLakeY;   // shoreline y (0 = no lake)
+uniform float3 uWaterC;
+uniform float3 uGlintC;
+// Animals: x, y (feet), scale, cell; then mode (0 idle, 1 walk, 2 circle, 3 drift), speed, radius, phase
+uniform float4 uF0;
+uniform float4 uF0m;
+uniform float4 uF1;
+uniform float4 uF1m;
+uniform float4 uF2;
+uniform float4 uF2m;
+uniform float3 uFaunaA;
+uniform float3 uFaunaB;
+uniform float3 uFaunaC;
+uniform float3 uFaunaD;
+// Weather
+uniform float  uMist;
+uniform float3 uMistC;
+
+float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+
+float noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// The four painted greys (#2E, #6E, #A6, #DE) map onto four palette tones.
+float3 ramp(float g, float3 a, float3 b, float3 c, float3 d) {
+    if (g < 0.43) return mix(a, b, clamp((g - 0.18) / 0.25, 0.0, 1.0));
+    if (g < 0.65) return mix(b, c, (g - 0.43) / 0.22);
+    return mix(c, d, clamp((g - 0.65) / 0.22, 0.0, 1.0));
+}
+
+// Over-composite a toned sample (straight colour from a premultiplied grey) onto col.
+float3 over(float3 col, half4 s, float3 a, float3 b, float3 c, float3 d) {
+    float al = float(s.a);
+    if (al < 0.004) return col;
+    float g = float(s.r) / al;
+    return mix(col, ramp(g, a, b, c, d), al);
+}
+
+// A full-width strip: solid below its painted part, transparent above it. Returns image coords
+// (y < 0 = above the strip); one sampler per child, since children cannot be passed around.
+float2 stripUV(float4 P, float2 p, float dx) {
+    float2 q = (p - P.xy) / P.z;
+    if (q.y < 0.0) return float2(0.0, -1.0);
+    q.x = mod(q.x + dx / P.z, 1024.0);
+    if (P.w > 0.5) q.x = 1023.0 - q.x;
+    q.y = min(q.y, 681.0);
+    return q;
+}
+half4 farAt(float2 p) { float2 q = stripUV(uFarP, p, 0.0); return q.y < 0.0 ? half4(0.0) : far.eval(q); }
+half4 midAt(float2 p, float dx) { float2 q = stripUV(uMidP, p, dx); return q.y < 0.0 ? half4(0.0) : mid.eval(q); }
+half4 foreAt(float2 p, float dx) { float2 q = stripUV(uForeP, p, dx); return q.y < 0.0 ? half4(0.0) : fore.eval(q); }
+
+half4 cloudAt(float4 C, float2 p) {
+    if (C.z <= 0.0) return half4(0.0);
+    float vw = uOut.x * 1536.0 / uOut.y;
+    float span = vw + 512.0 * C.z + 200.0;
+    float x = mod(C.x + uTime * uDrift * (0.6 + 0.4 * C.z) + 256.0 * C.z + 100.0, span) - 256.0 * C.z - 100.0;
+    float2 q = (p - float2(x, C.y)) / C.z + float2(256.0, 128.0);
+    if (q.x < 1.0 || q.x > 511.0 || q.y < 1.0 || q.y > 255.0) return half4(0.0);
+    return clouds.eval(q + float2(mod(C.w, 2.0) * 512.0, floor(C.w / 2.0) * 256.0));
+}
+
+half4 animalAt(float4 F, float4 M, float2 p) {
+    if (F.z <= 0.0) return half4(0.0);
+    float vw = uOut.x * 1536.0 / uOut.y;
+    float2 at = F.xy;
+    float dir = M.y < 0.0 ? -1.0 : 1.0;
+    float t = uTime * uLife;
+    if (M.x > 0.5 && M.x < 1.5) {                 // walk across and wrap
+        float span = vw + 600.0 * F.z;
+        at.x = mod(F.x + t * M.y, span) - 300.0 * F.z;
+        at.y += abs(sin(t * 3.0 + M.w)) * -3.0 * F.z;
+    } else if (M.x > 1.5 && M.x < 2.5) {          // circle (soaring)
+        float a = t * M.y * 0.01 + M.w;
+        at += float2(cos(a) * M.z, sin(a) * M.z * 0.3);
+        dir = sin(a) > 0.0 ? -1.0 : 1.0;
+    } else if (M.x > 2.5) {                       // drift on the water
+        at.x += sin(t * 0.05 * abs(M.y) + M.w) * M.z;
+        at.y += sin(t * 1.3 + M.w) * 1.5;
+        dir = cos(t * 0.05 * abs(M.y) + M.w) > 0.0 ? 1.0 : -1.0;
+    } else {                                      // idle: breathe
+        at.y += sin(t * 0.8 + M.w) * 1.2;
+    }
+    float2 q = (p - at) / F.z;
+    q.x *= dir;
+    q += float2(256.0, 236.0);                    // feet near the bottom of the cell
+    if (q.x < 1.0 || q.x > 511.0 || q.y < 1.0 || q.y > 255.0) return half4(0.0);
+    return fauna.eval(q + float2(mod(F.w, 2.0) * 512.0, floor(F.w / 2.0) * 256.0));
+}
+
+float starField(float2 p) {
+    float2 cell = floor(p / 18.0);
+    float2 at = (float2(hash(cell + 3.0), hash(cell + 5.0)) * 0.7 + 0.15) * 18.0;
+    float sd = length(p - cell * 18.0 - at);
+    return step(0.9, hash(cell)) * smoothstep(1.9, 0.6, sd) * (0.6 + 0.4 * sin(uTime * 1.5 + hash(cell + 7.0) * 40.0))
+         * mix(0.4, 1.0, hash(cell + 11.0));
+}
+
+// Everything behind the lake: sky, stars, sun or moon, clouds, the far range and the mid band.
+float3 backdrop(float2 p, float sway) {
+    float t = clamp(p.y / max(uHorY, 1.0), 0.0, 1.0);
+    float3 col = mix(uSkyTop, uSkyHor, pow(t, 1.4));
+    if (uStars > 0.0) col += starField(p) * uStars * (1.0 - t * t);
+    if (uCel.w > 0.5) {
+        float d = length(p - uCel.xy);
+        if (uCel.w < 1.5) {
+            col = mix(col, uCelC, smoothstep(uCel.z + 1.0, uCel.z - 1.0, d));
+            col += uCelC * exp(-max(d - uCel.z, 0.0) / (uCel.z * 2.5)) * 0.35;
+        } else {
+            float lit = smoothstep(uCel.z + 1.0, uCel.z - 1.0, d)
+                      * smoothstep(uCel.z * 0.95, uCel.z * 0.55, length(p - uCel.xy - float2(uCel.z * 0.45, -uCel.z * 0.2)));
+            col = mix(col, uCelC, lit);
+            col += uCelC * exp(-max(d - uCel.z, 0.0) / (uCel.z * 3.0)) * 0.12;
+        }
+    }
+    half4 c;
+    c = cloudAt(uC0, p); if (c.a > 0.004) col = mix(col, mix(uCloudLo, uCloudHi, float(c.r) / float(c.a)), float(c.a));
+    c = cloudAt(uC1, p); if (c.a > 0.004) col = mix(col, mix(uCloudLo, uCloudHi, float(c.r) / float(c.a)), float(c.a));
+    c = cloudAt(uC2, p); if (c.a > 0.004) col = mix(col, mix(uCloudLo, uCloudHi, float(c.r) / float(c.a)), float(c.a));
+    c = cloudAt(uC3, p); if (c.a > 0.004) col = mix(col, mix(uCloudLo, uCloudHi, float(c.r) / float(c.a)), float(c.a));
+    c = cloudAt(uC4, p); if (c.a > 0.004) col = mix(col, mix(uCloudLo, uCloudHi, float(c.r) / float(c.a)), float(c.a));
+    col = over(col, farAt(p), uFarA, uFarB, uFarC, uFarD);
+    float w = smoothstep(uMidTop + 90.0, uMidTop - 30.0, p.y);
+    half4 m = midAt(p, sway * 0.3 * w);
+    col = over(col, m, uMidA, uMidB, uMidC, uMidD);
+    // the low ground of the mid band recedes into the air colour
+    col = mix(col, uSkyHor, smoothstep(uMidTop + 30.0, uMidTop + 420.0, p.y) * 0.22 * float(m.a));
+    return col;
+}
+
+half4 main(float2 fc) {
+    float2 p = fc * (1536.0 / uOut.y);
+    float vw = uOut.x * 1536.0 / uOut.y;
+    // One breeze for everything: slow sway plus gusts that travel across.
+    float gust = smoothstep(0.55, 1.0, noise(float2(p.x * 0.004 - uTime * 0.35, 0.5)));
+    float sway = (sin(uTime * 1.1 + p.x * 0.013) * 0.7 + sin(uTime * 2.3 + p.x * 0.031) * 0.3) * uSway * (1.0 + gust);
+
+    float3 col;
+    if (uLakeY > 0.0 && p.y > uLakeY) {
+        // The lake mirrors what stands behind it, broken up by ripples that grow toward the viewer.
+        float depth = clamp((p.y - uLakeY) / 400.0, 0.04, 1.0);
+        float rip = sin(p.y * 0.9 / depth - uTime * 1.6) * 0.6 + noise(float2(p.x * 0.02, p.y * 0.25 / depth + uTime * 0.6)) - 0.5;
+        float2 m = float2(p.x + rip * uWater * depth * 2.0, 2.0 * uLakeY - p.y);
+        col = backdrop(m, sway);
+        col = mix(col, uWaterC, 0.32 + 0.25 * depth);
+        float streak = smoothstep(0.66, 0.86, noise(float2(p.x * 0.015 + uTime * 0.05, p.y * 0.35 / depth + uTime * 0.5)));
+        float path = uCel.w > 0.5 ? exp(-abs(p.x - uCel.x) / (50.0 + 220.0 * depth)) : 0.0;
+        col += uGlintC * streak * (0.06 + path * 0.5);
+        col = mix(col, uGlintC, smoothstep(2.5, 0.0, p.y - uLakeY) * 0.5);   // bright shoreline
+    } else {
+        col = backdrop(p, sway);
+    }
+
+    half4 a;
+    a = animalAt(uF0, uF0m, p); col = over(col, a, uFaunaA, uFaunaB, uFaunaC, uFaunaD);
+    a = animalAt(uF1, uF1m, p); col = over(col, a, uFaunaA, uFaunaB, uFaunaC, uFaunaD);
+    a = animalAt(uF2, uF2m, p); col = over(col, a, uFaunaA, uFaunaB, uFaunaC, uFaunaD);
+
+    float wf = smoothstep(uForeTop + 160.0, uForeTop - 40.0, p.y);
+    col = over(col, foreAt(p, sway * wf), uForeA, uForeB, uForeC, uForeD);
+    col *= mix(1.0, 0.8, smoothstep(uForeTop + 60.0, 1536.0, p.y));   // the near ground falls into shade
+
+    if (uTreeP.z > 0.0) {
+        float2 q = (p - uTreeP.xy) / uTreeP.z;
+        float crown = clamp(1.0 - q.y / 900.0, 0.0, 1.0);
+        q.x += sway * 0.35 * crown * crown / uTreeP.z;
+        float flip = floor(uTreeP.w / 2.0);
+        if (flip > 0.5) q.x = 511.0 - q.x;
+        if (q.x > 0.5 && q.x < 511.5 && q.y > 0.5 && q.y < 1023.5)
+            col = over(col, tree.eval(q + float2(mod(uTreeP.w, 2.0) * 512.0, 0.0)), uTreeA, uTreeB, uTreeC, uTreeD);
+    }
+
+    if (uMist > 0.0) {
+        float band = smoothstep(uMidTop - 160.0, uMidTop + 60.0, p.y) * smoothstep(uForeTop + 260.0, uForeTop - 40.0, p.y);
+        float m = noise(float2(p.x * 0.004 + uTime * 0.02, p.y * 0.016)) * 0.7 + noise(float2(p.x * 0.011 - uTime * 0.03, p.y * 0.04)) * 0.3;
+        col = mix(col, uMistC, smoothstep(0.25, 0.75, m) * band * uMist);
+    }
+    // a whisper of grain so flat fills do not band
+    col += (hash(fc) - 0.5) / 255.0;
+    return half4(half3(clamp(col, 0.0, 1.0)), 1.0);
+}

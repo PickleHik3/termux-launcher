@@ -1,0 +1,33 @@
+{
+  "name": "Wilds",
+  "_about": "Parts painted in four greys; the composer picks and places them from a seed and colours them from an atmosphere x a land mood. Strip skylines (top, peak) are in the 1024x683 piece.",
+  "strips": {
+    "far": {"far-1": "snowy peaks", "far-2": "rounded hills", "far-3": "lone peak", "far-4": "mesa"},
+    "mid": {"mid-1": "pine forest", "mid-2": "rolling hills", "mid-3": "rocky ridge", "mid-4": "birch grove"},
+    "fore": {"fore-1": "wildflowers", "fore-2": "reeds", "fore-3": "boulders and ferns", "fore-4": "tall grass"}
+  },
+  "trees": ["pine", "oak"],
+  "fauna": [
+    {"cell": 0, "name": "stag", "scale": 0.42, "where": "ground", "mode": 0},
+    {"cell": 1, "name": "doe", "scale": 0.36, "where": "ground", "mode": 0},
+    {"cell": 2, "name": "heron", "scale": 0.40, "where": "shore", "mode": 0},
+    {"cell": 3, "name": "fox", "scale": 0.30, "where": "ground", "mode": 1, "speed": 28},
+    {"cell": 4, "name": "eagle", "scale": 0.22, "where": "sky", "mode": 2, "speed": 9},
+    {"cell": 5, "name": "duck", "scale": 0.16, "where": "lake", "mode": 3, "speed": 4}
+  ],
+  "lands": {
+    "summer":  {"far": "#6d86a0", "mid": "#355f3e", "fore": "#6b8f3a", "tree": "#2b4630", "fauna": "#7a5636"},
+    "autumn":  {"far": "#7a7f9c", "mid": "#9a5a2a", "fore": "#b08a3a", "tree": "#7a3a1c", "fauna": "#6e4a30"},
+    "alpine":  {"far": "#8296b0", "mid": "#2c5250", "fore": "#4f7a4a", "tree": "#1f3b38", "fauna": "#6a5040"},
+    "heather": {"far": "#7a7aa0", "mid": "#3f5a48", "fore": "#8a5a8a", "tree": "#2f4436", "fauna": "#6e5038"},
+    "spring":  {"far": "#87a0b8", "mid": "#5f8a4a", "fore": "#8db04a", "tree": "#3f6a36", "fauna": "#8a6040"}
+  },
+  "atmospheres": {
+    "dawn":        {"label": "Dawn", "skyTop": "#6f86b8", "skyHor": "#f2b8a0", "light": [1.08, 0.95, 0.90], "hi": "#ffe2c8", "shadow": [0.55, 0.55, 0.75], "sat": 0.85, "mul": [0.95, 0.92, 1.0], "haze": 0.55, "cel": "low-sun", "celC": "#ffd9b0", "cloudLo": "#b88aa0", "cloudHi": "#ffd7c4", "clouds": [1, 4], "water": "#4a5a80", "glint": "#ffd9b8", "stars": 0, "mist": 0.2, "mistC": "#e2ccce"},
+    "day":         {"label": "Day", "skyTop": "#3d7fd0", "skyHor": "#a9d2ef", "light": [1.05, 1.03, 0.95], "hi": "#fffbe8", "shadow": [0.5, 0.58, 0.75], "sat": 1.0, "mul": [1, 1, 1], "haze": 0.45, "cel": "sun", "celC": "#fff6dc", "cloudLo": "#b4c6dc", "cloudHi": "#ffffff", "clouds": [2, 5], "water": "#2f6f9a", "glint": "#ffffff", "stars": 0, "mist": 0, "mistC": "#ffffff"},
+    "golden-hour": {"label": "Golden Hour", "skyTop": "#4f73b0", "skyHor": "#ffc27a", "light": [1.15, 0.98, 0.78], "hi": "#ffe0a0", "shadow": [0.55, 0.48, 0.62], "sat": 1.05, "mul": [1.04, 0.97, 0.86], "haze": 0.5, "cel": "low-sun", "celC": "#fff0c0", "cloudLo": "#d98a6a", "cloudHi": "#ffe0b0", "clouds": [1, 4], "water": "#3a5a78", "glint": "#ffd38a", "stars": 0, "mist": 0, "mistC": "#ffffff"},
+    "dusk":        {"label": "Dusk", "skyTop": "#2b2f5e", "skyHor": "#e07a6a", "light": [1.0, 0.8, 0.8], "hi": "#f6b0a0", "shadow": [0.4, 0.38, 0.6], "sat": 0.75, "mul": [0.62, 0.58, 0.72], "haze": 0.55, "cel": "none", "celC": "#ffffff", "cloudLo": "#5a4a72", "cloudHi": "#e89a8a", "clouds": [1, 3], "water": "#2a3050", "glint": "#f0a090", "stars": 0.35, "mist": 0, "mistC": "#ffffff"},
+    "night":       {"label": "Night", "skyTop": "#070b1e", "skyHor": "#1d2a52", "light": [0.85, 0.92, 1.15], "hi": "#c8d6ff", "shadow": [0.5, 0.55, 0.8], "sat": 0.35, "mul": [0.32, 0.36, 0.5], "haze": 0.35, "cel": "moon", "celC": "#f2efe0", "cloudLo": "#141b36", "cloudHi": "#4a5680", "clouds": [0, 3], "water": "#0c1430", "glint": "#b8c8ff", "stars": 1, "mist": 0, "mistC": "#ffffff"},
+    "misty":       {"label": "Misty", "skyTop": "#97a5b2", "skyHor": "#d2d8da", "light": [1.0, 1.0, 1.0], "hi": "#eef0ee", "shadow": [0.6, 0.64, 0.7], "sat": 0.6, "mul": [0.95, 0.97, 1.0], "haze": 0.75, "cel": "none", "celC": "#ffffff", "cloudLo": "#b9c0c6", "cloudHi": "#e8ebec", "clouds": [0, 2], "water": "#7d8c96", "glint": "#f0f0f0", "stars": 0, "mist": 0.45, "mistC": "#cfd5d7"}
+  }
+}
