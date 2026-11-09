@@ -89,6 +89,10 @@ final class GhosttyMirror {
                 if (extraCodePoint > 0 && extraCodePoint <= Character.MAX_CODE_POINT)
                     row.appendCodePointToCell(x, extraCodePoint);
             }
+            // A cluster whose first code point is narrow but whose cell Ghostty made wide (a flag's
+            // regional indicators, a VS16 emoji) takes two cells, as the Java core stores it.
+            if (wide == GhosttyNative.WIDE_WIDE && x < columns - 1 && WcWidth.width(codePoint) != 2)
+                row.widenCell(x);
         }
         return extraIndex;
     }
