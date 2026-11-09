@@ -18,34 +18,33 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
-- **GL shader wallpaper, wave A (11-09, feat/gl-wallpaper).** Emulator first, then pong with the
-  developer's go-ahead. Copy a sample in and point the debug route at it:
-  `adb shell "run-as com.termux sh -c 'cat > files/home/plasma.glsl'" < tools/shaders/plasma.glsl`,
-  `adb shell setprop debug.tl.shader_file /data/data/com.termux/files/home/plasma.glsl`, tap Home
-  once. Passes: the plasma moves behind Home and the panes at 30 fps; a drag moves the bright spot
-  (iMouse, y not flipped); the dock and status-bar glass show a blurred plasma; screen off and on,
-  or the drawer over it, resumes where it stopped (no jump to t = 0); battery saver holds the
-  frame; `tools/shaders/gradient.glsl` (ShaderEditor `void main`) draws a gradient that follows
-  touch; editing the pushed file again reloads within a second; a broken file logs
-  `SceneLayer` errors with the user's line numbers and draws black. `setprop debug.tl.shader_file ""`
-  removes the layer. No `SceneThread` crash in logcat, `dumpsys meminfo` graphics flat over five
-  minutes.
-- **Video and GIF wallpaper, wave B (11-09, feat/gl-video).** Emulator first, then pong with the
-  developer's go-ahead. The debug route imports a file and plays it (no picker yet). The app cannot
-  read `/data/local/tmp`, so push into its own external folder:
-  `adb push clip.mp4 /sdcard/Android/data/com.termux/files/clip.mp4`, then
-  `adb shell setprop debug.tl.video_file /sdcard/Android/data/com.termux/files/clip.mp4`, tap Home
-  once (`logcat -s SceneLayer VideoImport` prints the hint line). Do the same with an H.264 MP4, an
-  H.265 MP4, a portrait file with rotation metadata and a GIF. Passes: it plays behind Home and the
-  panes, centre-cropped (no stretch, upright, no green or black bars), looping with no visible
-  hitch at the seam, muted; the dock and status-bar glass show the blurred video; screen off and on,
-  or the drawer over it, continues from where it stopped (not from the start); battery saver holds
-  the frame; the GIF animates at its own speed (frame changes visible over 5 s); `dumpsys meminfo`
-  graphics flat over five minutes and `dumpsys media.player` shows one player; clearing the
-  property (`setprop debug.tl.video_file ""`) removes the layer and the player is gone. A file over
-  150 MB or a text file renamed `.mp4` logs `VideoImport` "not imported" and shows photo.
-  Owed after wave C: Use as wallpaper on a video gives a still of the clip (frame about 0.5 s in)
-  for Home and Lock.
+- **Shader and video wallpapers (11-09, feat/gl-wallpaper, spec shader-video-wallpapers-2026-11-09).**
+  Emulator (x86_64 debug, emu2, `debug.tl.shader_guard=off` because CPU GL trips the heavy-frame
+  guard) confirmed: a pasted Shadertoy plasma and a ShaderEditor `void main` gradient build and
+  move; the touch spot follows the finger; status-bar and dock glass show the blurred scene; a
+  broken file logs `Line N:` at the user's line and keeps the last good program; the debug file
+  reloads within 1 s; `setprop debug.tl.shader_file ""` removes the layer; Photo | Video | Shader
+  row; New shader → Paste → Apply sets the still on Home+Lock and recolours the look; the list is
+  a 3-column grid with the active tile bordered; editing the active shader rebuilds the layer;
+  Video → Choose video or GIF → system picker imports an H.264 clip that plays on Home; GIF and
+  video are cover-cropped; a clip with rotation metadata stands upright; Back to photo puts the
+  photo back and the picker reopens on Photo. The stored shader survives a reinstall.
+  Debug routes: `debug.tl.shader_file=<path>`, `debug.tl.video_file=<path>` (files must sit
+  where the app can read them: push to /data/local/tmp, chmod 644, `run-as` copy into
+  files/home); `debug.tl.shader_guard=off`.
+  Owed on pong (with the developer's go): power and heat, 20 min each at Half/30, for a light
+  shader (gradient), the plasma and a raymarcher, one HEVC 1080p30 clip and one GIF, against the
+  11-05 baseline (no scene 1.27 W, Aurora 1.2 W, Particles 2.0 W); frame time via
+  `dumpsys gfxinfo`; a clip with rotation metadata (the emulator's decoder does not rotate, pong's
+  may, so a double turn is the thing to look for); Back to photo restores the real previous
+  photo (the emulator had none to remember: READ_EXTERNAL_STORAGE denied on a fresh install);
+  screen off/on and the drawer over the scene resume where they stopped; battery saver holds the
+  frame; the heavy-frame guard steps a heavy shader Half → Quarter → hold with "Too heavy at this
+  quality" on the editor page; the pending marker reverts to Photo after a forced kill during the
+  first 3 s of a new shader; `dumpsys meminfo` graphics flat over 5 min for a shader and a video;
+  `dumpsys media.player` shows one player; Import file, Texture, Delete (incl. the shader in use)
+  flows; light/dark and font scale 1.3 on the three pages; terminal-app mode "Also set as phone
+  wallpaper" · pong.
 - **Live blur plans once per swipe (11-08, perf/glass-translate).** Live blur and Glass Look on,
   a terminal printing (`yes | pv -qL 20` in a pane), a Home float and a built-in widget on Home2,
   the in-app keyboard up once and down once. Swipe slowly Home2 ↔ Workspace ↔ AI. Passes: the
@@ -889,19 +888,3 @@ longer counted as an error. Owed:
   go. Each time the icon is back in its slot with no gap, or moved where the row put it; never a
   hole. Then drop one on a free Home cell (it moves there, the dock closes up), on Remove (gone,
   Undo brings it back) and back on its own slot (nothing moves) · pong.
-- **Wallpaper picker: Photo | Video | Shader (11-09, feat/gl-picker, wave C).** Open Appearance →
-  Wallpaper. The row reads Photo | Video | Shader, three even segments; at font scale 1.3 the
-  labels stay on one line. Dark and light. Shader: "New shader" opens the editor (Name, code box,
-  Paste, Import file, Quality, Frame rate, Texture: none, Apply). Paste a Shadertoy shader (the
-  clipboard), Apply: the list returns with the shader marked "In use" and its thumbnail drawn, the
-  Home and Lock screens show its still, and the back scene moves. Paste a broken shader, Apply:
-  up to three "Line N: message" lines show under the buttons at the user's own line numbers, and
-  nothing else changes. The code box scrolls sideways, does not wrap and does not autocorrect.
-  Import file (a .glsl from Downloads) fills the box; Texture "Choose image" copies a photo (name
-  shown, Remove clears it); Delete asks first, and deleting the shader in use brings the photo
-  back. Edit the shader in use (change a colour) and Apply: the back scene must show the change
-  (open note in the build report). Quality Quarter on a heavy shader shows "Too heavy at this
-  quality" when it holds. Video: the format line reads in full, "Choose video or GIF" opens the
-  system picker (until the video import lands it answers "Video arrives in the next build");
-  Back to photo returns the photo on Home and Lock. Terminal-app mode: the editor shows "Also set
-  as phone wallpaper". Reopen the picker with a shader in use: it opens on Shader · pong.
