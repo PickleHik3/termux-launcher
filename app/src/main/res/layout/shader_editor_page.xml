@@ -2,7 +2,7 @@
 <!-- The shader editor (ShaderEditorPage), under the sheet's bar: name, a monospace code box that
      scrolls sideways instead of wrapping, Paste and Import file, the error strip, the knobs
      (Quality, Frame rate, Texture), "Also set as phone wallpaper" in terminal-app mode only,
-     Apply, Back to photo while a motion is in use, and Delete. The knobs reuse the settings rows
+     Apply (in the title row), Back to photo while a motion is in use, and Delete. The knobs reuse the settings rows
      (preference_segmented_pill). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -22,17 +22,37 @@
             android:orientation="vertical"
             android:paddingBottom="24dp">
 
-            <TextView
-                android:id="@+id/shader_editor_title"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:accessibilityHeading="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:paddingStart="@dimen/settings_gutter"
                 android:paddingTop="4dp"
-                android:paddingEnd="@dimen/settings_gutter"
-                android:text="@string/shader_editor_heading"
-                android:textAppearance="?attr/textAppearanceTitleLarge"
-                android:textColor="?attr/colorOnSurface" />
+                android:paddingEnd="@dimen/settings_gutter">
+
+                <TextView
+                    android:id="@+id/shader_editor_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:accessibilityHeading="true"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/shader_editor_heading"
+                    android:textAppearance="?attr/textAppearanceTitleLarge"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_apply"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minHeight="48dp"
+                    android:text="@string/shader_apply" />
+            </LinearLayout>
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/shader_name_layout"
@@ -250,18 +270,6 @@
                 android:layout_marginEnd="@dimen/settings_gutter"
                 android:indeterminate="true"
                 android:visibility="invisible" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/shader_apply"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/settings_gutter"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="@dimen/settings_gutter"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:minHeight="48dp"
-                android:text="@string/shader_apply" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/live_back_to_photo"

@@ -29,16 +29,22 @@ import java.util.concurrent.Executors;
  * The Shader half of the wallpaper picker: the saved shaders in three columns, each a
  * phone-proportioned {@link SceneThumbView} with its name under it and a border on the one in
  * use, then New shader, and Back to photo while a video or a shader is in use. Tapping a shader
- * opens the editor ({@link Listener#onOpen}). The shaders are read off the main thread.
+ * applies it ({@link Listener#onPick}); its pencil opens the editor ({@link Listener#onOpen}). The shaders are read off the main thread.
  */
 public final class ShaderListPage {
 
     /** What the page asks of its host; on the main thread. */
     public interface Listener {
-        /** A saved shader's editor. */
+        /** A saved shader's tile was tapped: apply it. */
+        void onPick(@NonNull String id);
+
+        /** A bundled example's tile was tapped: apply a copy of it. */
+        void onPickExample(@NonNull String slug);
+
+        /** A saved shader's editor (its pencil). */
         void onOpen(@NonNull String id);
 
-        /** A bundled example's editor, by slug. */
+        /** A bundled example's editor, by slug (its pencil). */
         void onOpenExample(@NonNull String slug);
 
         void onNew();
@@ -78,6 +84,8 @@ public final class ShaderListPage {
     /** Moves with every bind, so a late read for an older one is dropped. */
     private int mGeneration;
     private boolean mReleased;
+    /** An apply is running: the tiles wait. */
+    private boolean mBusy;
 
     public ShaderListPage(@NonNull Context context, @NonNull Listener listener) {
         mContext = context;
@@ -100,6 +108,12 @@ public final class ShaderListPage {
     public void release() {
         mReleased = true;
         mGeneration++;
+    }
+
+    /** Working: the tiles and their pencils ignore taps until it is false again. */
+    void setBusy(boolean busy) {
+        mBusy = busy;
+        for (View t : mTiles) t.setEnabled(!busy);
     }
 
     /** How far the list is scrolled, to put back when it returns from the editor. */
@@ -212,7 +226,17 @@ public final class ShaderListPage {
             }
             tile.setContentDescription(inUse ? l.entry.name + ", " + mContext.getString(R.string.live_in_use)
                 : l.entry.name);
+            tile.setEnabled(!mBusy);
             tile.setOnClickListener(v -> {
+                if (mBusy) return;
+                if (example) mListener.onPickExample(id);
+                else mListener.onPick(id);
+            });
+            View edit = tile.findViewById(R.id.live_scene_edit);
+            edit.setVisibility(View.VISIBLE);
+            edit.setContentDescription(mContext.getString(R.string.shader_edit_named, l.entry.name));
+            edit.setOnClickListener(v -> {
+                if (mBusy) return;
                 if (example) mListener.onOpenExample(id);
                 else mListener.onOpen(id);
             });

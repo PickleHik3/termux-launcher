@@ -22,6 +22,27 @@
             android:id="@+id/live_scene_thumb"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <FrameLayout
+            android:id="@+id/live_scene_edit"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="bottom|end"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:background="@drawable/shader_edit_scrim"
+                android:importantForAccessibility="no"
+                android:padding="5dp"
+                android:src="@drawable/ic_shader_edit"
+                android:tint="@android:color/white" />
+        </FrameLayout>
     </com.termux.app.chrome.wallpaper.LiveAspectFrame>
 
     <LinearLayout

@@ -24737,9 +24737,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void restoreSide(@NonNull String side, int scrollY) {
                         liveHost.restoreSide(WALLPAPER_SIDE_LIVE.equals(side), scrollY);
                     }
-                    @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
+                    @Override public boolean hasPendingChanges() {
+                        return picker.hasPendingChanges() || liveHost.hasPendingChanges();
+                    }
+                    // The Photo picker's choice first, then the previewed video or shader; both finish before done.
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
-                        picker.commit(done, failed);
+                        picker.commit(() -> liveHost.commit(done, failed), failed);
                     }
                 });
             });
