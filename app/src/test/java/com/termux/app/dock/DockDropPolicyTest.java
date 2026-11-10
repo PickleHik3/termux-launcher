@@ -59,40 +59,44 @@ public class DockDropPolicyTest {
     // ---- what a release over an icon makes
 
     @Test
-    public void theMiddleOfAnIconMakesAFolderItsSidesGoBeside() {
+    public void anArmedRestOnAnAppMakesAFolderAnyOtherReleaseGoesBeside() {
         assertEquals(DockDropPolicy.Outcome.MAKE_FOLDER,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.5f));
+            DockDropPolicy.outcome(false, true, false, false, true, true));
         assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.1f));
-        assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.9f));
+            DockDropPolicy.outcome(false, true, false, false, true, false));
         assertTrue(DockDropPolicy.onIcon(0.28f));
         assertFalse(DockDropPolicy.onIcon(0.27f));
     }
 
     @Test
-    public void aFolderTakesItAnywhereOverItWhileItHasRoom() {
+    public void anArmedRestOnAFolderJoinsItWhileItHasRoom() {
         assertEquals(DockDropPolicy.Outcome.ADD_TO_FOLDER,
-            DockDropPolicy.outcome(false, false, true, false, true, 0.1f));
+            DockDropPolicy.outcome(false, false, true, false, true, true));
         assertEquals(DockDropPolicy.Outcome.FOLDER_FULL,
-            DockDropPolicy.outcome(false, false, true, false, false, 0.5f));
+            DockDropPolicy.outcome(false, false, true, false, false, true));
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(false, false, true, true, true, 0.5f));
+            DockDropPolicy.outcome(false, false, true, true, true, true));
+    }
+
+    @Test
+    public void aFolderThatIsNotArmedTakesNothing() {
+        assertEquals(DockDropPolicy.Outcome.INSERT,
+            DockDropPolicy.outcome(false, false, true, false, true, false));
     }
 
     /** The row never holds an app twice: one already pinned stays where it is. */
     @Test
     public void anAppAlreadyInTheRowIsRefused() {
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(true, true, false, false, true, 0.5f));
+            DockDropPolicy.outcome(true, true, false, false, true, true));
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(true, false, false, false, true, 0.5f));
+            DockDropPolicy.outcome(true, false, false, false, true, false));
     }
 
     @Test
     public void overEmptySlotsItGoesIn() {
         assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, false, false, false, true, 0.5f));
+            DockDropPolicy.outcome(false, false, false, false, true, false));
     }
 
     // ---- the ends of the row

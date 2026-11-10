@@ -27,6 +27,14 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   in use, Runs on reads "Built for the GPU: uses less battery and CPU" (another model: the old
   line). Model centre › Functions › Voice typing: Base GPU's line is its GPU advice, not "Made for
   bigger phones". Installed › KittenTTS ⋯ › Voice settings opens Read aloud.
+- **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).** The
+  emulator saw a dock app lifted and held: the row parted and the drop landed in the slot; a rest
+  on an icon swelled it and made a folder. Owed · emulator or pong: the same in Floating and in
+  Docked, and with the in-app keyboard up (the row parts by whole columns, the still tiles keep
+  theirs); on a full page an app carried in from Home slides the page's last icon off and it is
+  the next page's first after the drop; an app carried out of the drawer past its top edge and
+  let go over the row is pinned at that slot and Home gets nothing; a drag that leaves the row
+  closes the gap, and a cancel leaves no icon offset, faded or enlarged.
 - **Card looks survive a relaunch and a kill mid-edit (11-10, fix/card-looks-session).** Unit tests
   only. Owed · emulator: in the Appearance editor take a card on Custom to a Look, change the theme
   (the editor relaunches), then Undo: the card is back on its Custom with the values from before

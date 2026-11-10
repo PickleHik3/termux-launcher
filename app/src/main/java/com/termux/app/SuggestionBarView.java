@@ -141,6 +141,7 @@ import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.dock.DockDropPolicy;
+import com.termux.app.dock.DockReorderPolicy;
 import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -989,6 +990,8 @@ public final class SuggestionBarView extends GridLayout
     private int floatTileColumn = -1;
     /** The page's app slots in that render where it held a tile, by app index; else empty. */
     @NonNull private final List<View> tileRowAppViews = new ArrayList<>();
+    /** The page's drawn pins' views by drawn position in that render, tile row or not. */
+    @NonNull private final List<View> pageAppViews = new ArrayList<>();
     /** Whether a long press has picked a still tile (Drawer or palette) up and a drag moves it. */
     private boolean drawerTileDragging;
     /**
@@ -3924,7 +3927,8 @@ public final class SuggestionBarView extends GridLayout
         }
         // A pickup state or a folder-drag hover left over from the previous gesture means the row is
         // still mid-interaction; the drawer stays out of it.
-        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
+        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0
+            && !reorderActive;
         return new AppDrawerGestureArbiter.Eligibility(
             listener != null && listener.isAppDrawerEnabled(),
             // The filtered apps row and a lingering A–Z preview used to veto the pull-down, forcing
@@ -4374,6 +4378,7 @@ public final class SuggestionBarView extends GridLayout
         }
         resetTransientVisualState();
         folderDragHoverIndex = -1;
+        reorderDiscard();
         setTranslationX(0f);
         setAlpha(1f);
         removeAllViews();
@@ -4386,6 +4391,7 @@ public final class SuggestionBarView extends GridLayout
         floatTileSlot = null;
         floatTileColumn = -1;
         tileRowAppViews.clear();
+        pageAppViews.clear();
         // The still tiles, on every pinned page lying down: each in its own column, the page's
         // app slots keeping their order around them.
         boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePlace != null;
@@ -4480,6 +4486,7 @@ public final class SuggestionBarView extends GridLayout
 
             addView(view);
             if (tileRow && !azPreview) tileRowAppViews.add(view);
+            if (!azPreview && col < drawnSlotPositions.size()) pageAppViews.add(view);
             if (renderCol >= 0 && renderCol < usedColumns.length) {
                 usedColumns[renderCol] = true;
             }
@@ -8257,6 +8264,7 @@ public final class SuggestionBarView extends GridLayout
         activeFolderEntryDragState = null;
         activeLongPressPickupState = null;
         clearFolderDragInsertionPreview();
+        reorderExit();
     }
 
     // ---- Icons carried onto and out of the row ------------------------------------------------
@@ -8349,6 +8357,185 @@ public final class SuggestionBarView extends GridLayout
         return slot;
     }
 
+    // ---- Live reorder of the row ----------------------------------------------------------
+
+    private final DockReorderPolicy reorder = new DockReorderPolicy();
+    /** Whether {@link #reorder} has begun for the page in view and this drag. */
+    private boolean reorderActive;
+    /** The page-local slot of the carried pin on the page in view, or -1. */
+    private int reorderSource = -1;
+    /** How many drawn pins the reorder began with. */
+    private int reorderCount;
+    private boolean[] reorderMergeable = new boolean[8];
+    private final Runnable reorderTick = this::tickReorder;
+    /** When the posted {@link #reorderTick} runs, or -1 with none posted. */
+    private long reorderTickDueMs = -1L;
+
+    /**
+     * The finger is at {@code localX} along the row with a pin or app in hand: the icons part
+     * around the slot it rests on and the one it rests on arms to take it as a folder
+     * ({@link DockReorderPolicy}). Begins on the first hover of a drag and again after a page turn.
+     *
+     * @param sourceIndex  the carried pin's index in the stored list, or -1 for one from outside
+     * @param carriedApp   what is carried is an app, which a folder or an icon can take
+     * @param appsTakeIt   an app icon can take it as a folder (a member of a folder does not)
+     * @param ownFolderId  the folder a carried member came from, which does not take it back
+     */
+    private void reorderHover(float localX, int sourceIndex, boolean carriedApp,
+                              boolean appsTakeIt, @Nullable String ownFolderId) {
+        if (vertical) return;
+        DropSlot slot = dropSlotAt(localX);
+        if (!reorderActive) beginReorder(sourceIndex, carriedApp, appsTakeIt, ownFolderId);
+        if (reorder.hover(slot.hoveredSlot, slot.dropXRatio, SystemClock.uptimeMillis())) {
+            applyReorder();
+        }
+        scheduleReorderTick();
+    }
+
+    /** A release at {@code localX}: what the drop does, read from {@link #reorder}. */
+    @NonNull
+    private DockReorderPolicy.Kind settleReorder(float localX, int sourceIndex, boolean carriedApp,
+                                                 boolean appsTakeIt, @Nullable String ownFolderId) {
+        DropSlot slot = dropSlotAt(localX);
+        if (!reorderActive) beginReorder(sourceIndex, carriedApp, appsTakeIt, ownFolderId);
+        reorder.hover(slot.hoveredSlot, slot.dropXRatio, SystemClock.uptimeMillis());
+        return reorder.release();
+    }
+
+    private void beginReorder(int sourceIndex, boolean carriedApp, boolean appsTakeIt,
+                              @Nullable String ownFolderId) {
+        int[] drawn = drawnPinnedIndices;
+        int count = Math.min(drawn == null ? 0 : drawn.length, pageAppViews.size());
+        if (reorderMergeable.length < count) reorderMergeable = new boolean[count];
+        reorderSource = -1;
+        for (int i = 0; i < count; i++) {
+            int pin = drawn[i];
+            if (pin == sourceIndex) reorderSource = i;
+            PinnedItem item = pinnedItems != null && pin >= 0 && pin < pinnedItems.size()
+                ? pinnedItems.get(pin) : null;
+            boolean takes = false;
+            if (carriedApp && pin != sourceIndex) {
+                if (item instanceof PinnedFolderItem) {
+                    PinnedFolderItem folder = (PinnedFolderItem) item;
+                    takes = folder.apps.size() < PinnedFolderItem.MAX_APPS
+                        && !folder.id.equals(ownFolderId);
+                } else {
+                    takes = item instanceof PinnedAppItem && appsTakeIt;
+                }
+            }
+            reorderMergeable[i] = takes;
+        }
+        reorderCount = count;
+        reorder.begin(count, Math.max(1, pinnedItemsPerPage), reorderSource, reorderMergeable);
+        reorderActive = true;
+    }
+
+    private void tickReorder() {
+        reorderTickDueMs = -1L;
+        if (!reorderActive) return;
+        int was = reorder.gap();
+        if (reorder.tick(SystemClock.uptimeMillis())) {
+            applyReorder();
+            if (reorder.gap() != was) {
+                Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
+            }
+        }
+        scheduleReorderTick();
+    }
+
+    /** One pending run, at the moment the policy next has something to commit. */
+    private void scheduleReorderTick() {
+        long due = reorder.nextDueMs();
+        // A finger moving within one slot keeps the run already posted for it.
+        if (due == reorderTickDueMs) return;
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = due;
+        if (due >= 0L) postDelayed(reorderTick, Math.max(0L, due - SystemClock.uptimeMillis()));
+    }
+
+    /** The column app {@code slot} of the page in view stands in. */
+    private int reorderColumn(int slot) {
+        if (drawerTileAppSlots <= 0) return slot;
+        return com.termux.app.dock.PaletteTilePolicy.slotOf(slot, shownDrawerColumn(),
+            shownPaletteColumn(), shownFloatColumn(), drawerTileAppSlots);
+    }
+
+    /**
+     * Eases every drawn app to where {@link #reorder} shows it: a whole column per slot, an icon
+     * pushed off the page faded out, the armed one swollen. The still tiles do not move.
+     */
+    private void applyReorder() {
+        int columns = Math.max(1, getColumnCount());
+        float step = getWidth() / (float) columns
+            * (getLayoutDirection() == LAYOUT_DIRECTION_RTL ? -1f : 1f);
+        boolean instant = liftHost != null && liftHost.reducedMotion();
+        int perPage = Math.max(1, pinnedItemsPerPage);
+        int count = Math.min(reorderCount, pageAppViews.size());
+        for (int i = 0; i < count; i++) {
+            if (i == reorderSource) continue;
+            View view = pageAppViews.get(i);
+            if (view == null) continue;
+            int own = reorderColumn(i);
+            boolean pushed = reorder.pushed(i);
+            int to = pushed ? reorderColumn(perPage - 1) + 1 : reorderColumn(reorder.shownSlot(i));
+            if (own < 0 || to < 0) continue;
+            float tx = (to - own) * step;
+            float alpha = pushed ? 0f : 1f;
+            float scale = reorder.armed() == i
+                ? com.termux.app.launcher.widget.HomeFolderPolicy.MERGE_TARGET_SCALE : 1f;
+            view.animate().cancel();
+            if (instant) {
+                view.setTranslationX(tx);
+                view.setAlpha(alpha);
+                view.setScaleX(scale);
+                view.setScaleY(scale);
+                continue;
+            }
+            boolean slides = view.getTranslationX() != tx || view.getAlpha() != alpha;
+            view.animate().translationX(tx).alpha(alpha).scaleX(scale).scaleY(scale)
+                .setDuration(slides ? DockReorderPolicy.SLIDE_MS : 120L)
+                .setInterpolator(new DecelerateInterpolator()).start();
+        }
+    }
+
+    /** The finger left the row or the drag ended: the icons ease back and the reorder is over. */
+    private void reorderExit() {
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
+        if (!reorderActive) return;
+        reorderActive = false;
+        reorder.leave();
+        applyReorder();
+    }
+
+    /** The row is drawn again, or the drop re-lays it: the reorder is over, views left as they are. */
+    private void reorderDiscard() {
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
+        reorderActive = false;
+    }
+
+    /** The pin drawn at page-local slot {@code item}, or null. */
+    @Nullable
+    private PinnedItem drawnPinAt(int item) {
+        int[] drawn = drawnPinnedIndices;
+        if (pinnedItems == null || drawn == null || item < 0 || item >= drawn.length) return null;
+        int pin = drawn[item];
+        return pin >= 0 && pin < pinnedItems.size() ? pinnedItems.get(pin) : null;
+    }
+
+    /**
+     * The index in the stored list that an insertion at {@code at} among the page's other pins is:
+     * the index of the pin it goes before, or just past the page's last drawn one.
+     */
+    private int globalInsertion(int at) {
+        int[] drawn = drawnPinnedIndices;
+        int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
+        if (drawn == null || drawn.length == 0) return pageOffset;
+        if (at < reorder.listSize()) return drawn[reorder.itemAt(at)];
+        return drawn[drawn.length - 1] + 1;
+    }
+
     /** Whether a carried icon is over the row now, its gap open. */
     private boolean carryHovering;
     /** Which end of the row the carried icon rests at (-1, +1), or 0; and where along it, in px. */
@@ -8386,7 +8573,8 @@ public final class SuggestionBarView extends GridLayout
         // Beside the row is still the row: its end slot, and the end that turns the page.
         x = Math.max(0f, Math.min(getWidth() - 1f, x));
         carryHovering = true;
-        updateFolderDragInsertionPreview(dropSlotAt(x).hoveredSlot);
+        DockLift lift = dockLift;
+        reorderHover(x, lift == null ? -1 : liftSourceIndex(lift), true, true, null);
         watchCarryEdge(x);
         return true;
     }
@@ -8394,9 +8582,8 @@ public final class SuggestionBarView extends GridLayout
     /** The carried icon left the row, or was let go: the gap closes and the ends stop turning. */
     private void carryLeave() {
         stopCarryEdge();
-        if (!carryHovering) return;
         carryHovering = false;
-        clearFolderDragInsertionPreview();
+        reorderExit();
     }
 
     /** A carried icon resting in the band at either end of the row turns the page after a pause. */
@@ -8436,14 +8623,16 @@ public final class SuggestionBarView extends GridLayout
     private boolean carryDropApp(@NonNull AppRef app, float rawX, float rawY) {
         if (!takesCarriedIcons() || pinnedItems == null) return false;
         getLocationOnScreen(carryLocation);
-        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
+        DockReorderPolicy.Kind kind = settleReorder(rawX - carryLocation[0], -1, true, true, null);
+        boolean merge = kind == DockReorderPolicy.Kind.MERGE;
         AppRef ref = resolveForSelectionRef(app);
-        PinnedFolderItem folder = slot.targetItem instanceof PinnedFolderItem
-            ? (PinnedFolderItem) slot.targetItem : null;
+        PinnedItem target = merge ? drawnPinAt(reorder.index()) : null;
+        PinnedFolderItem folder = target instanceof PinnedFolderItem
+            ? (PinnedFolderItem) target : null;
         DockDropPolicy.Outcome outcome = DockDropPolicy.outcome(findPinnedAppIndex(ref) >= 0,
-            slot.targetItem instanceof PinnedAppItem, folder != null,
+            target instanceof PinnedAppItem, folder != null,
             folder != null && folder.containsApp(ref),
-            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, slot.dropXRatio);
+            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, merge);
         switch (outcome) {
             case ALREADY_THERE:
                 AppNotice.show(getContext(), R.string.dock_already_has_app, false);
@@ -8455,18 +8644,18 @@ public final class SuggestionBarView extends GridLayout
                 folder.apps.add(new PinnedAppItem(ref));
                 break;
             case MAKE_FOLDER:
-                pinnedItems.set(slot.targetIndex,
-                    dockFolderOf((PinnedAppItem) slot.targetItem, new PinnedAppItem(ref)));
+                pinnedItems.set(drawnPinnedIndices[reorder.index()],
+                    dockFolderOf((PinnedAppItem) target, new PinnedAppItem(ref)));
                 break;
             case INSERT:
             default:
-                int wanted = computeInsertionIndex(slot.targetIndex, slot.targetItem,
-                    slot.dropXRatio);
+                if (kind == DockReorderPolicy.Kind.NONE) return false;
                 pinnedItems.add(DockDropPolicy.insertIndex(pinnedPageIndex,
-                    Math.max(1, pinnedItemsPerPage), pinnedItems.size(), wanted),
-                    new PinnedAppItem(ref));
+                    Math.max(1, pinnedItemsPerPage), pinnedItems.size(),
+                    globalInsertion(reorder.index())), new PinnedAppItem(ref));
                 break;
         }
+        reorderDiscard();
         persistPinsAndReload();
         return true;
     }
@@ -8683,16 +8872,27 @@ public final class SuggestionBarView extends GridLayout
      */
     private boolean dropLiftedOnRow(@NonNull DockLift lift, float rawX) {
         if (pinnedItems == null || !takesCarriedIcons()) return false;
-        int source = lift.sourceIndex < pinnedItems.size()
-            && pinnedItems.get(lift.sourceIndex) == lift.pin
-            ? lift.sourceIndex : indexOfSamePin(pinnedItems, lift.pin);
+        int source = liftSourceIndex(lift);
         if (source < 0) return false;
         getLocationOnScreen(carryLocation);
-        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
-        // Back onto its own slot: nothing moves.
-        if (slot.targetIndex == source) return false;
-        return applyPinnedDrop(new PinnedDragState(source), slot.targetIndex, slot.targetItem,
-            slot.dropXRatio);
+        DockReorderPolicy.Kind kind = settleReorder(rawX - carryLocation[0], source, true, true,
+            null);
+        // Back onto its own slot, or onto nothing: nothing moves.
+        if (kind == DockReorderPolicy.Kind.NONE) return false;
+        boolean merge = kind == DockReorderPolicy.Kind.MERGE;
+        boolean moved = applyPinnedDrop(new PinnedDragState(source),
+            merge ? drawnPinnedIndices[reorder.index()] : -1,
+            merge ? -1 : globalInsertion(reorder.index()));
+        if (moved) reorderDiscard();
+        return moved;
+    }
+
+    /** Where in the stored list the lifted pin is now: its own index, or where its twin went. */
+    private int liftSourceIndex(@NonNull DockLift lift) {
+        if (pinnedItems == null) return -1;
+        return lift.sourceIndex < pinnedItems.size()
+            && pinnedItems.get(lift.sourceIndex) == lift.pin
+            ? lift.sourceIndex : indexOfSamePin(pinnedItems, lift.pin);
     }
 
     /**
@@ -8754,8 +8954,34 @@ public final class SuggestionBarView extends GridLayout
         persistPinsAndReload();
     }
 
+    private final int[] homeDropAt = new int[2];
+
+    /**
+     * An app carried out of the drawer: the row hears the drag so Home's follower gets every
+     * point over it. Home drives the row through {@code dockDrop()}; nothing is reordered here.
+     */
+    private boolean handleHomeAppDropEvent(@NonNull View targetView,
+            @NonNull com.termux.app.launcher.widget.HomeAppDrop drop, @NonNull DragEvent event) {
+        int action = event.getAction();
+        if (action != DragEvent.ACTION_DRAG_LOCATION && action != DragEvent.ACTION_DROP) return true;
+        com.termux.app.launcher.widget.HomeAppDrop.Follower follower = drop.follower();
+        if (follower == null) return action != DragEvent.ACTION_DROP;
+        targetView.getLocationOnScreen(homeDropAt);
+        float rawX = homeDropAt[0] + event.getX();
+        float rawY = homeDropAt[1] + event.getY();
+        if (action == DragEvent.ACTION_DRAG_LOCATION) {
+            follower.moveTo(rawX, rawY);
+            return true;
+        }
+        return follower.releaseAt(rawX, rawY);
+    }
+
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
+        if (localState instanceof com.termux.app.launcher.widget.HomeAppDrop) {
+            return handleHomeAppDropEvent(targetView,
+                (com.termux.app.launcher.widget.HomeAppDrop) localState, event);
+        }
         boolean pinnedDrag = localState instanceof PinnedDragState;
         FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
         boolean folderEntryDrag = folderEntry != null;
@@ -8766,36 +8992,71 @@ public final class SuggestionBarView extends GridLayout
         int targetIndex = slot.targetIndex;
         PinnedItem targetItem = slot.targetItem;
         float dropXRatio = slot.dropXRatio;
+        // The row lying down opens its gap live; the rail keeps the nudge and the ratio.
+        boolean live = !vertical;
+        int sourceIndex = pinnedDrag ? ((PinnedDragState) localState).sourceIndex : -1;
+        boolean carriedApp = !pinnedDrag || (pinnedItems != null && sourceIndex >= 0
+            && sourceIndex < pinnedItems.size()
+            && pinnedItems.get(sourceIndex) instanceof PinnedAppItem);
+        String ownFolderId = folderEntryDrag ? folderEntry.folderId : null;
 
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED:
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 // A pin held at either end of the row turns its page, as a carried icon does.
-                if (!vertical) watchCarryEdge(event.getX());
+                if (live) watchCarryEdge(event.getX());
                 return true;
             case DragEvent.ACTION_DRAG_ENTERED:
                 targetView.setAlpha(0.92f);
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 return true;
             case DragEvent.ACTION_DRAG_EXITED:
                 targetView.setAlpha(1f);
                 stopCarryEdge();
+                reorderExit();
                 return true;
-            case DragEvent.ACTION_DROP:
+            case DragEvent.ACTION_DROP: {
                 targetView.setAlpha(1f);
                 stopCarryEdge();
                 clearFolderDragInsertionPreview();
-                if (folderEntryDrag) {
-                    return applyFolderEntryDrop(folderEntry, targetIndex, targetItem, dropXRatio);
+                int mergeIndex = -1;
+                int insertion;
+                if (live) {
+                    DockReorderPolicy.Kind kind = settleReorder(event.getX(), sourceIndex,
+                        carriedApp, pinnedDrag, ownFolderId);
+                    if (kind == DockReorderPolicy.Kind.NONE) {
+                        reorderExit();
+                        return false;
+                    }
+                    boolean merge = kind == DockReorderPolicy.Kind.MERGE;
+                    mergeIndex = merge ? drawnPinnedIndices[reorder.index()] : -1;
+                    insertion = merge ? -1 : globalInsertion(reorder.index());
+                } else {
+                    if (targetItem instanceof PinnedFolderItem
+                        || (targetItem instanceof PinnedAppItem
+                            && DockDropPolicy.onIcon(dropXRatio))) {
+                        mergeIndex = targetIndex;
+                    }
+                    insertion = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
                 }
-                return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
+                boolean done = folderEntryDrag
+                    ? applyFolderEntryDrop(folderEntry, mergeIndex, insertion)
+                    : applyPinnedDrop((PinnedDragState) localState, mergeIndex, insertion);
+                if (done) reorderDiscard();
+                else reorderExit();
+                return done;
+            }
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 stopCarryEdge();
                 clearFolderDragInsertionPreview();
+                reorderExit();
                 // A folder-entry drag left its source popup hidden but alive; finish it now.
                 if (folderEntryDrag) sharedFolderPopup.dismissImmediate();
                 activePinnedDragSourceView = null;
@@ -8820,10 +9081,17 @@ public final class SuggestionBarView extends GridLayout
         return drawn[drawn.length - 1] + 1 + (slot - drawn.length);
     }
 
-    private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
+    /**
+     * Applies the drop of a pin of the row: onto the item at {@code mergeIndex} (a folder it joins,
+     * an app it makes a folder with), or, with none, into the list at {@code insertionIndex}, a
+     * position before the move that takes the pin out.
+     */
+    private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int mergeIndex,
+                                    int insertionIndex) {
         if (dragState.cancelled) return false;
         if (dragState.sourceIndex < 0 || dragState.sourceIndex >= pinnedItems.size()) return false;
-        if (targetIndex < 0 || targetIndex > pinnedItems.size()) return false;
+        if (mergeIndex >= pinnedItems.size()) return false;
+        PinnedItem targetItem = mergeIndex >= 0 ? pinnedItems.get(mergeIndex) : null;
 
         PinnedItem sourceItem = pinnedItems.get(dragState.sourceIndex);
         boolean sourceIsApp = sourceItem instanceof PinnedAppItem;
@@ -8844,11 +9112,11 @@ public final class SuggestionBarView extends GridLayout
             return true;
         }
 
-        if (sourceIsApp && targetItem instanceof PinnedAppItem && shouldCreateFolderOnDrop(dropXRatio)) {
+        if (sourceIsApp && targetItem instanceof PinnedAppItem) {
             PinnedAppItem targetApp = (PinnedAppItem) targetItem;
             AppRef targetRef = resolveForSelectionRef(targetApp.appRef);
             int source = dragState.sourceIndex;
-            int target = targetIndex;
+            int target = mergeIndex;
             if (source < target) {
                 pinnedItems.remove(source);
                 target = target - 1;
@@ -8861,7 +9129,6 @@ public final class SuggestionBarView extends GridLayout
             return true;
         }
 
-        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         return movePinnedItem(dragState.sourceIndex, insertionIndex);
     }
 
@@ -8871,9 +9138,13 @@ public final class SuggestionBarView extends GridLayout
      * back onto the source folder's own tile cancels. Folder collapse (0/1 members left) rides
      * the repository's normalize pass during {@link #persistPinsAndReload}.
      */
-    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int targetIndex,
-                                         @Nullable PinnedItem targetItem, float dropXRatio) {
+    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int mergeIndex,
+                                         int insertionIndex) {
         if (dragState.cancelled) return false;
+        if (mergeIndex >= 0 && (pinnedItems == null || mergeIndex >= pinnedItems.size())) {
+            return false;
+        }
+        PinnedItem targetItem = mergeIndex >= 0 ? pinnedItems.get(mergeIndex) : null;
         PinnedFolderItem sourceFolder = resolveLatestFolder(dragState.folderId);
         PinnedAppItem member = findFolderApp(sourceFolder, dragState.appRef);
         if (sourceFolder == null || member == null) return false;
@@ -8903,7 +9174,6 @@ public final class SuggestionBarView extends GridLayout
             persistPinsAndReload();
             return true;
         }
-        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         LauncherFolderMutator.AppendResult result = LauncherFolderMutator.moveFolderAppToTopLevel(
             pinnedItems, sourceFolder, member.appRef.stableId(), insertionIndex);
         if (result != LauncherFolderMutator.AppendResult.APPLIED) return false;
@@ -8917,10 +9187,6 @@ public final class SuggestionBarView extends GridLayout
             insertionIndex = targetIndex + 1;
         }
         return clamp(insertionIndex, 0, Math.max(0, pinnedItems.size()));
-    }
-
-    private boolean shouldCreateFolderOnDrop(float dropXRatio) {
-        return DockDropPolicy.onIcon(dropXRatio);
     }
 
     private boolean movePinnedItem(int fromIndex, int insertionIndex) {

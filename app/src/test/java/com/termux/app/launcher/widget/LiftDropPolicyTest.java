@@ -40,6 +40,15 @@ public class LiftDropPolicyTest {
     }
 
     @Test
+    public void anAppCarriedOutOfTheDrawerLandsOnHomeOrTheDockAndHasNoTargets() {
+        assertTrue(LiftDropPolicy.accepts(Item.DRAWER_APP, Place.HOME));
+        assertTrue(LiftDropPolicy.accepts(Item.DRAWER_APP, Place.DOCK));
+        assertFalse(LiftDropPolicy.accepts(Item.DRAWER_APP, Place.REMOVE));
+        assertFalse(LiftDropPolicy.accepts(Item.DRAWER_APP, Place.UNINSTALL));
+        assertEquals(Collections.emptyList(), LiftDropPolicy.targetsFor(Item.DRAWER_APP, true));
+    }
+
+    @Test
     public void removeTakesAnythingOffHomeOrTheDock() {
         assertTrue(LiftDropPolicy.accepts(Item.HOME_APP, Place.REMOVE));
         assertTrue(LiftDropPolicy.accepts(Item.HOME_FOLDER, Place.REMOVE));

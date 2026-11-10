@@ -25,8 +25,8 @@ public final class DockDropPolicy {
     public static final int EDGE_BAND_DP = WidgetPaneController.EDGE_BAND_DP;
 
     /**
-     * The middle share of an icon's slot, as a fraction of its width, where a release makes a
-     * folder (or joins the folder there) rather than going beside it.
+     * The middle share of an icon's slot, as a fraction of its width, where a rest can arm a
+     * folder (or joining the folder there) rather than going beside it.
      */
     static final float FOLDER_BAND_START = 0.28f;
     static final float FOLDER_BAND_END = 0.72f;
@@ -47,30 +47,34 @@ public final class DockDropPolicy {
 
     private DockDropPolicy() {}
 
-    /** Whether a release at {@code dropXRatio} across an icon's slot lands on the icon itself. */
+    /**
+     * Whether a finger at {@code dropXRatio} across an icon's slot is on the icon itself, where a
+     * rest can arm a folder, rather than beside it.
+     */
     public static boolean onIcon(float dropXRatio) {
         return dropXRatio >= FOLDER_BAND_START && dropXRatio <= FOLDER_BAND_END;
     }
 
     /**
      * What a release does with an app carried in from outside the row, over a slot holding an app
-     * ({@code overApp}), a folder ({@code overFolder}) or nothing. The dock's own drag already
-     * does the same with its pins: a folder takes whatever is dropped on it, an icon makes a folder
-     * only from the middle of its slot.
+     * ({@code overApp}), a folder ({@code overFolder}) or nothing. A rest on an icon that
+     * {@link DockReorderPolicy} armed ({@code merge}) makes a folder of an app and joins a folder;
+     * a release anywhere else goes in beside.
      *
      * @param alreadyDocked  the app is a pin of the row's own already (not inside a folder)
      * @param folderHasIt    the folder under the finger holds the app already
      * @param folderHasRoom  the folder under the finger can take one more app
+     * @param merge          the rest on the icon or folder under the finger armed it
      */
     @NonNull
     public static Outcome outcome(boolean alreadyDocked, boolean overApp, boolean overFolder,
-                                  boolean folderHasIt, boolean folderHasRoom, float dropXRatio) {
-        if (overFolder) {
+                                  boolean folderHasIt, boolean folderHasRoom, boolean merge) {
+        if (merge && overFolder) {
             if (folderHasIt) return Outcome.ALREADY_THERE;
             return folderHasRoom ? Outcome.ADD_TO_FOLDER : Outcome.FOLDER_FULL;
         }
         if (alreadyDocked) return Outcome.ALREADY_THERE;
-        return overApp && onIcon(dropXRatio) ? Outcome.MAKE_FOLDER : Outcome.INSERT;
+        return merge && overApp ? Outcome.MAKE_FOLDER : Outcome.INSERT;
     }
 
     /**

@@ -66,6 +66,12 @@ Landed 2026-10-24 (#155 partial): the dock still takes drops only from its own p
 dragged out of the drawer and let go over the dock is not put down. Dock pinning by drag from the
 drawer and the live reorder are still open.
 
+Landed 2026-11-10 (feat/dock-live-reorder-155): the live reorder (`DockReorderPolicy`: icons part
+by whole columns after 650 ms, 150 ms slide, around the still tiles; a 300 ms rest on an icon's
+middle swells it and a release then makes a folder or joins it, a quick release goes beside it; a
+full page's last icon slides off for an icon from outside) and pins from the drawer (an app
+carried out past the drawer's top and let go over the row). The rail keeps the old drop rule.
+
 ### 6. Dock items (#156)
 
 - The Drawer tile, New terminal, New float terminal and Command palette stand in the apps row
