@@ -40,10 +40,10 @@ import java.util.List;
  */
 public class CrossingTest {
 
-    private static final int WIDTH = 1000;
-    private static final float STEP = 0.02f;
+    static final int WIDTH = 1000;
+    static final float STEP = 0.02f;
     private static final float DENSITY = 2.625f;
-    private static final List<PaneWallPage> ROW =
+    static final List<PaneWallPage> ROW =
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
     private static final WallShape SHAPE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
@@ -76,9 +76,9 @@ public class CrossingTest {
             .build();
     }
 
-    private static final DockLayout HOME_REST =
+    static final DockLayout HOME_REST =
         DockGeometry.compute(snapshot().restOf(PageRef.HOME));
-    private static final DockLayout WORKSPACE_REST =
+    static final DockLayout WORKSPACE_REST =
         DockGeometry.compute(snapshot().restOf(PageRef.TERMINAL));
 
     // ---- Dresses ----
@@ -103,7 +103,7 @@ public class CrossingTest {
         @NonNull @Override public WallShape shape() { return SHAPE; }
     }
 
-    private static SeamCrossing.Endpoint half(@NonNull PaneWallPage page, boolean keyboardUp) {
+    static SeamCrossing.Endpoint half(@NonNull PaneWallPage page, boolean keyboardUp) {
         return half(page, keyboardUp, false);
     }
 
@@ -184,7 +184,7 @@ public class CrossingTest {
         }
     }
 
-    private static final int REVISION = 7;
+    static final int REVISION = 7;
 
     // ---- The drive ----
 
@@ -243,13 +243,13 @@ public class CrossingTest {
             l.promptFieldBandPx, DockMorph.rowsPx(l)};
     }
 
-    private static final PaneWallPage[] BOTH = {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS};
+    static final PaneWallPage[] BOTH = {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS};
 
-    private static DockLayout restOf(PaneWallPage page) {
+    static DockLayout restOf(PaneWallPage page) {
         return page == PaneWallPage.WIDGETS ? HOME_REST : WORKSPACE_REST;
     }
 
-    private static PaneWallPage across(PaneWallPage page) {
+    static PaneWallPage across(PaneWallPage page) {
         return page == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
     }
 
