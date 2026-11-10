@@ -121,7 +121,7 @@ public class AssistantChatViewTest {
             @Override public void onMic() { }
             @Override public void onCancelDictation() { }
             @Override public void onDoneDictation() { }
-            @Override public void onFieldFocused() { }
+            @Override public void onFieldFocused(boolean focused) { }
         });
         layout(composer, 1000, 300);
         composer.setText("   ");

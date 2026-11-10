@@ -520,8 +520,8 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     }
 
     @Override
-    public void onSearchFocused() {
-        imeRequested();
+    public void onSearchFocused(boolean focused) {
+        typingFocusChanged(focused);
     }
 
     /** Whether back should close the Chats list; the page's host asks first. */
@@ -836,14 +836,17 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     // -------------------------------------------------------------------------- dictation
 
     @Override
-    public void onFieldFocused() {
-        imeRequested();
+    public void onFieldFocused(boolean focused) {
+        typingFocusChanged(focused);
     }
 
-    /** The system keyboard is about to show: the activity must accept its insets first. */
-    private void imeRequested() {
+    /**
+     * One of the page's fields took or lost focus: the launcher's keyboard comes up for it and
+     * takes the keys, or the claim is recomputed without it. The phone's keyboard never opens here.
+     */
+    private void typingFocusChanged(boolean focused) {
         Activity activity = activity();
-        if (activity instanceof TermuxActivity) ((TermuxActivity) activity).onSystemImeRequested();
+        if (activity instanceof TermuxActivity) ((TermuxActivity) activity).onAssistantTypingFocus(focused);
     }
 
     @Nullable
@@ -882,7 +885,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
                     return;
                 }
                 chatView.composer().insertDictation(text);
-                imeRequested();
             }
         });
         if (result == AssistantDictation.Start.NO_PERMISSION) showMicNotice();

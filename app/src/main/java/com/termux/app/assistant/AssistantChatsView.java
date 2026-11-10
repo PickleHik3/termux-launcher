@@ -138,6 +138,7 @@ final class AssistantChatsView extends FrameLayout {
         search.setBackground(null);
         search.setHint(R.string.assistant_search_hint);
         search.setSingleLine(true);
+        search.setShowSoftInputOnFocus(false);
         search.setInputType(InputType.TYPE_CLASS_TEXT);
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         search.setPaddingRelative(AssistantUi.dp(context, 12), 0, 0, 0);
@@ -202,14 +203,22 @@ final class AssistantChatsView extends FrameLayout {
             }
         });
         search.setOnFocusChangeListener((v, focused) -> {
-            if (focused && listener instanceof ImeListener) ((ImeListener) listener).onSearchFocused();
+            if (listener instanceof ImeListener) ((ImeListener) listener).onSearchFocused(focused);
         });
         applyPalette(palette);
     }
 
     /** A listener that also hears of the search field taking focus, for the keyboard gate. */
     interface ImeListener extends Listener {
-        void onSearchFocused();
+        void onSearchFocused(boolean focused);
+    }
+
+    /** The search field. It is typed into with the launcher's keyboard, never the phone's. */
+    @NonNull EditText search() { return search; }
+
+    /** Whether the search field is the one holding focus on screen. */
+    boolean isSearchTyping() {
+        return search.hasFocus() && isShown();
     }
 
     void setListener(@Nullable Listener listener) {
