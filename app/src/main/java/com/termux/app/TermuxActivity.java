@@ -16329,6 +16329,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public boolean offerBindingChord(@NonNull KeyEvent down) {
+            return mTermuxTerminalViewClient != null
+                && mTermuxTerminalViewClient.consumeInAppKeyboardChord(down);
+        }
+
+        @Override
+        public boolean isBindingSequencePending() {
+            return com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                .hasPendingSequence();
+        }
+
+        @Override
         public TerminalSession getCurrentSession() {
             return TermuxActivity.this.getCurrentSession();
         }

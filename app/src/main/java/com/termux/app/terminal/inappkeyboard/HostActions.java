@@ -3,6 +3,20 @@ package com.termux.app.terminal.inappkeyboard;
 /** Activity-owned actions that do not belong in terminal input dispatch. */
 public interface HostActions {
 
+    /**
+     * Offer a keyboard chord to the user's key bindings, as the key event a hardware keyboard
+     * would have produced. Returns true when a binding ran or took the stroke as the start of a
+     * sequence, so the key must not also type anywhere. Hosts without bindings decline.
+     */
+    default boolean offerBindingChord(@androidx.annotation.NonNull android.view.KeyEvent down) {
+        return false;
+    }
+
+    /** True while a multi-stroke binding is waiting for its next stroke. */
+    default boolean isBindingSequencePending() {
+        return false;
+    }
+
     /** The paste key: a fresh screenshot the keyboard offers, or else the clipboard. */
     void paste();
 

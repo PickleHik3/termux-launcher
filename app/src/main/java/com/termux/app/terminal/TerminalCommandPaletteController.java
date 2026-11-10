@@ -1364,6 +1364,12 @@ public final class TerminalCommandPaletteController
 
     // ------------------------------------------------------------------ input
 
+    /** Assigning a binding needs the raw chord, so capture is the one mode bindings wait out. */
+    @Override
+    public boolean yieldsToBindings() {
+        return mMode != Mode.CAPTURE;
+    }
+
     @Override
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {

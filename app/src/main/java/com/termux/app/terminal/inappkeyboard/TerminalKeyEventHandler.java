@@ -105,6 +105,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
         /** @return true when the value was consumed and must not reach the terminal. */
         boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt, boolean shift);
+
+        /**
+         * Whether a Ctrl/Alt chord (or the next stroke of a pending sequence) is offered to the
+         * user's key bindings before this interceptor sees it. A surface that needs the raw
+         * chord, such as binding capture or X11 forwarding, answers false.
+         */
+        default boolean yieldsToBindings() {
+            return true;
+        }
     }
 
     /** Installs the overlay interceptor, or clears it with {@code null}. */
@@ -163,8 +172,53 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         return mModifiers;
     }
 
+    /**
+     * Offer a Ctrl/Alt chord, or any stroke continuing a pending sequence, to the user's key
+     * bindings. Plain keys are not offered, so letters still type into a search or palette.
+     */
+    private boolean offerToBindings(KeyValue value, TerminalModifiers modifiers,
+                                    KeyValueInterceptor interceptor) {
+        if (interceptor != null && !interceptor.yieldsToBindings())
+            return false;
+        boolean chord = modifiers.isCtrl() || modifiers.isAlt();
+        if (!chord && !mHostActions.isBindingSequencePending())
+            return false;
+        int keyCode;
+        TerminalModifiers stroke = modifiers;
+        switch (value.getKind()) {
+            case Char: {
+                char c = value.getChar();
+                if (c == '?') {
+                    keyCode = KeyEvent.KEYCODE_SLASH;
+                    stroke = modifiers.withShift();
+                    break;
+                }
+                Integer code = com.termux.app.terminal.TerminalKeyBindingResolver.keyCodeForToken(
+                    com.termux.app.terminal.TerminalKeyBindingResolver.tokenForChar(c));
+                if (code == null)
+                    return false;
+                keyCode = code;
+                if (Character.isUpperCase(c))
+                    stroke = modifiers.withShift();
+                break;
+            }
+            case Keyevent:
+                keyCode = value.getKeyevent();
+                break;
+            default:
+                return false;
+        }
+        long now = SystemClock.uptimeMillis();
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+            stroke.toKeyEventMetaState(), KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0,
+            VIRTUAL_KEY_SOURCE);
+        return mHostActions.offerBindingChord(down);
+    }
+
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
         KeyValueInterceptor interceptor = mInterceptor;
+        if (offerToBindings(value, modifiers, interceptor))
+            return;
         if (interceptor != null && interceptor.interceptKeyValue(value,
             modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
             return;

@@ -578,6 +578,99 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void aBoundChordFiresAndNeverReachesTheInterceptor() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.CTRL));
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.ALT));
+
+        assertEquals(2, mHost.bindingsRan);
+        assertEquals(0, intercepted.size());
+        assertEquals(0, mTerminal.codePoints.size());
+    }
+
+    @Test
+    public void anUnboundChordStillReachesTheInterceptor() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('j'), mods(KeyValue.Modifier.CTRL));
+
+        assertEquals(1, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+        assertEquals(0, mHost.bindingsRan);
+    }
+
+    @Test
+    public void aPlainLetterIsNotOfferedToBindings() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), Pointers.Modifiers.EMPTY);
+
+        assertEquals(0, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+    }
+
+    @Test
+    public void aSurfaceNeedingTheRawChordKeepsFirstRefusal() {
+        // Binding capture and the X11 bridge answer false from yieldsToBindings.
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor(new TerminalKeyEventHandler.KeyValueInterceptor() {
+            @Override public boolean interceptKeyValue(KeyValue value, boolean ctrl, boolean alt,
+                                                       boolean shift) {
+                intercepted.add(value);
+                return true;
+            }
+
+            @Override public boolean yieldsToBindings() {
+                return false;
+            }
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.CTRL));
+
+        assertEquals(0, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+        assertEquals(0, mHost.bindingsRan);
+    }
+
+    @Test
+    public void aTwoStrokeBindingCompletesAcrossTheInterceptor() {
+        mHost.sequenceFirst = KeyEvent.KEYCODE_A;
+        mHost.sequenceSecond = KeyEvent.KEYCODE_B;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('a'), mods(KeyValue.Modifier.CTRL));
+        // The second stroke is a bare letter, offered only because a sequence is pending.
+        mHandler.key_up(KeyValue.makeCharKey('b'), Pointers.Modifiers.EMPTY);
+        // With the sequence over, a bare letter types again.
+        mHandler.key_up(KeyValue.makeCharKey('b'), Pointers.Modifiers.EMPTY);
+
+        assertEquals(1, mHost.bindingsRan);
+        assertEquals(1, intercepted.size());
+        assertEquals(2, mHost.offeredChords.size());
+    }
+
+    @Test
     public void aSlidersFirstTickIsOfferedToTheInterceptorToo() {
         // A space-bar swipe on the Display place must not leave its first arrow in the shell.
         List<KeyValue> intercepted = new ArrayList<>();
@@ -742,6 +835,41 @@ public class TerminalKeyEventHandlerTest {
         private final List<String> suggestions = new ArrayList<>();
         private final List<String> logs = new ArrayList<>();
         private final List<String> launcherTools = new ArrayList<>();
+        private final List<KeyEvent> offeredChords = new ArrayList<>();
+        /** Key codes that count as bound under Ctrl or Alt; A then B is a two-stroke binding. */
+        private int boundKeyCode = -1;
+        private int sequenceFirst = -1;
+        private int sequenceSecond = -1;
+        private boolean sequencePending;
+        private int bindingsRan;
+
+        @Override
+        public boolean offerBindingChord(android.view.KeyEvent down) {
+            offeredChords.add(down);
+            int code = down.getKeyCode();
+            if (sequencePending) {
+                sequencePending = false;
+                if (code == sequenceSecond) {
+                    bindingsRan++;
+                    return true;
+                }
+                return true;
+            }
+            if (code == sequenceFirst && down.isCtrlPressed()) {
+                sequencePending = true;
+                return true;
+            }
+            if (code == boundKeyCode && (down.isCtrlPressed() || down.isAltPressed())) {
+                bindingsRan++;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean isBindingSequencePending() {
+            return sequencePending;
+        }
 
         @Override
         public void runLauncherTool(String toolId) {
