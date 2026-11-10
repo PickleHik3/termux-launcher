@@ -734,6 +734,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The status bar's events and state (ADR 0018 §1); it reaches this activity through {@link StatusBarControllerHost}. */
     private final com.termux.app.statusbar.StatusBarController mStatusBar =
         new com.termux.app.statusbar.StatusBarController(new StatusBarControllerHost());
+    /** The sheets' own code (chrome.sheets.SheetsController; ADR 0018 wave H, D17). */
+    private final com.termux.app.chrome.sheets.SheetsController mSheets =
+        new com.termux.app.chrome.sheets.SheetsController(new SheetsControllerHost());
     /** {@link #frameStandsDown} as a crossing's begin asks it, bound once rather than per begin. */
     private final com.termux.app.place.SeamCrossing.FrameGlass mFrameStandsDown =
         this::frameStandsDown;
@@ -779,9 +782,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAppliedPlaceHome;
     /** Always on as last applied to the widget grid; null until the first pass reads it. */
     @Nullable private Boolean mAppliedHomeAlwaysOn;
-    /** Always on's notice, held while the editor that turned it on is still up. */
-    private final com.termux.app.place.HomeAlwaysOnNotice mAlwaysOnNotice =
-        new com.termux.app.place.HomeAlwaysOnNotice();
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
 
@@ -1224,15 +1224,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.BackgroundProcessModel();
     @Nullable private com.termux.app.statusbar.BackgroundProcessStackView mBackgroundProcessStack;
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
-    /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
-    private int mAppNoticeOccupancyPx;
     /** The setup sheet the first-boot run is offered on, built the first time it is asked for. */
-    /**
-     * Nesting depth of {@link #runWithoutNotices}. Creating a window or a pane touches the focused
-     * shell, which several unrelated listeners read as a session change worth announcing; the user
-     * sees the result of the split on screen already, so the whole operation runs silent.
-     */
-    private int mNoticeSuppressionDepth;
     /**
      * Shells that rang while the user was elsewhere, so their window pill can say so. Kept by pid
      * rather than by session object: the flag has to survive the pane tree being rearranged under it.
@@ -1562,8 +1554,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Runnable mArrangementAutosave = this::autosaveArrangementNow;
     /** The autosaved arrangement a cold start rebuilds once the bootstrap answers, or null. */
     @Nullable private com.termux.app.terminal.TerminalWorkspace mPendingArrangementRebuild;
-    /** A rebuild put the arrangement back and its notice waits for the window to be in front. */
-    private boolean mWindowsRestoredNoticeOwed;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -2081,7 +2071,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
-        ensureAppNoticeHost();
+        mSheets.ensureAppNoticeHost();
         if (savedInstanceState == null) {
             View contentView = findViewById(android.R.id.content);
             boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
@@ -2171,24 +2161,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Creates the notice pill up front, hands it the terminal it will be floating over, and joins
-     * it to the column below, so the background-process stack moves down under it while a notice is
-     * up rather than being drawn over.
-     */
-    private void ensureAppNoticeHost() {
-        com.termux.app.notice.AppNoticeHostView host = AppNotice.hostFor(this);
-        if (host == null) return;
-        // Read through, never copied: the corner knob, the opacity slider and the glass tint all
-        // move while the surface editor is open, and the pill has to be wearing what the terminal
-        // is wearing at the moment it is raised.
-        host.setTerminalDressSource(terminalDressSource());
-        host.setOccupancyListener(height -> {
-            mAppNoticeOccupancyPx = height;
-            applyNoticeColumnOffsets();
-        });
-    }
-
-    /**
      * What the terminal is wearing, for everything the launcher draws on top of it: the notice pill
      * and the sessions drawer read the same numbers, so the two can never disagree about the radius
      * or the fill.
@@ -2208,12 +2180,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             };
         }
         return mTerminalDressSource;
-    }
-
-    /** The column under the pill: the background stack sits directly below whatever it is showing. */
-    private void applyNoticeColumnOffsets() {
-        if (mBackgroundProcessStack != null)
-            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
     }
 
     @Override
@@ -11281,26 +11247,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.app.terminal.ArrangementRecovery.rebuildWantsFreshWindow(rowWindows,
                 arrangementStartIn()))
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
-        mWindowsRestoredNoticeOwed = true;
-        showWindowsRestoredNoticeIfDue();
+        mSheets.oweWindowsRestoredNotice();
+        mSheets.showWindowsRestoredNoticeIfDue();
         return true;
-    }
-
-    /**
-     * Shows the "Windows restored" notice a rebuild owes, once the activity is in front
-     * ({@link com.termux.app.terminal.ArrangementRecovery#restoredNoticeDue}); called again when
-     * the window gains the focus. Posted, so it goes up after the frame the wall's start page and
-     * the rebuilt row are laid out in, on whichever half is in front, for its ordinary hold.
-     */
-    private void showWindowsRestoredNoticeIfDue() {
-        if (!com.termux.app.terminal.ArrangementRecovery.restoredNoticeDue(
-                mWindowsRestoredNoticeOwed, mIsVisible, hasWindowFocus())) return;
-        mWindowsRestoredNoticeOwed = false;
-        View content = findViewById(android.R.id.content);
-        Runnable show = () -> com.termux.app.notice.AppNotice.show(this,
-            R.string.notice_windows_restored);
-        if (content != null) content.post(show);
-        else show.run();
     }
 
     /** Start in as the arrangement's start reads it: the Workspace when there is no Home. */
@@ -16674,32 +16623,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.widget.WidgetReflowReport report =
                 rows > 0 ? widgets.shrinkGridRows(rows) : null;
             store.setHomeKeyboardRows(report == null ? 0 : rows);
-            showAlwaysOnNotice(report);
+            mSheets.showAlwaysOnNotice(report);
         } else {
             widgets.restoreGridRows();
             store.setHomeKeyboardRows(0);
-            mAlwaysOnNotice.withdraw();
+            mSheets.alwaysOnNotice().withdraw();
         }
         if (mWidgetPaneController != null) mWidgetPaneController.redraw();
         return true;
-    }
-
-    /** The one line always on says about the grid: what moved, or that nothing could. */
-    private void showAlwaysOnNotice(
-            @Nullable com.termux.app.launcher.widget.WidgetReflowReport report) {
-        String text;
-        if (report == null) {
-            text = getString(R.string.home_always_on_no_rows);
-        } else if (report.isEmpty()) {
-            text = getString(R.string.home_always_on_nothing_moved);
-        } else {
-            text = getResources().getQuantityString(R.plurals.home_always_on_moved,
-                report.movedCount(), report.movedCount());
-        }
-        // Turned on from the Layout editor, it waits for the editor to close (onClosed), so it
-        // never stands over the editor's controls.
-        String now = mAlwaysOnNotice.offer(text, mSurfaceEditor.isActive());
-        if (now != null) showToast(now, false);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -20056,47 +19987,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * burst is read in order instead of only its last line surviving.
      */
     public void showToast(String text, boolean longDuration) {
-        if (text == null || text.isEmpty() || mNoticeSuppressionDepth > 0)
+        if (text == null || text.isEmpty() || mSheets.areNoticesSuppressed())
             return;
         AppNotice.show(this, text, longDuration);
     }
 
-    /**
-     * Raises a notice the terminal is the subject of, on the same pill as everything else, held for
-     * as long as its kind is worth reading.
-     *
-     * <p>These used to have a chip of their own in the terminal's top-leading corner, with one hold
-     * for all of them: a refusal the user has to act on and a window number they have already seen
-     * both left after 1400ms. On the pill each says how long it is worth.
-     */
+    /** Raises a notice the terminal is the subject of (SheetsController#showTerminalNotice). */
     void showTerminalNotice(@Nullable String text, @NonNull AppNoticeItem.Hold hold) {
-        if (text == null || text.isEmpty() || isFinishing() || mNoticeSuppressionDepth > 0)
-            return;
-        AppNotice.held(this, hold == AppNoticeItem.Hold.REFUSAL
-            ? AppNoticeItem.Kind.WARNING
-            : AppNoticeItem.Kind.INFO, text, hold);
-    }
-
-    /**
-     * Runs {@code body} with every transient notice swallowed.
-     *
-     * <p>Window and pane creation are visible in themselves — a new pane appears, the window bar
-     * grows a pill — so announcing them was pure noise, and worse, the new shell also tripped the
-     * session-change notice, so one keypress raised two notices at once. Only session switches and
-     * new sessions are worth a notice, and neither goes through here.
-     */
-    private void runWithoutNotices(@NonNull Runnable body) {
-        mNoticeSuppressionDepth++;
-        try {
-            body.run();
-        } finally {
-            mNoticeSuppressionDepth--;
-        }
-    }
-
-    /** True while a window/pane operation is deliberately running silent. */
-    public boolean areNoticesSuppressed() {
-        return mNoticeSuppressionDepth > 0;
+        mSheets.showTerminalNotice(text, hold);
     }
 
     // ------------------------------------------------------------- "how do I drive this mode?"
@@ -20156,7 +20054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             host.addView(mBackgroundProcessStack,
                 com.termux.app.statusbar.BackgroundProcessStackView.buildHostLayoutParams(this));
             // A notice can already be up when the first background command appears.
-            mBackgroundProcessStack.setNoticeOccupancyPx(mAppNoticeOccupancyPx);
+            mBackgroundProcessStack.setNoticeOccupancyPx(mSheets.appNoticeOccupancyPx());
         }
         return mBackgroundProcessStack;
     }
@@ -22596,7 +22494,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
                 && wantsKeyboardOnEnter(mLastWallPage))
                 applyPlaceKeyboard(mLastWallPage);
-            String notice = mAlwaysOnNotice.onEditorClosed();
+            String notice = mSheets.alwaysOnNotice().onEditorClosed();
             if (notice != null) {
                 if (mTermuxActivityRootView != null)
                     mTermuxActivityRootView.post(() -> showToast(notice, false));
@@ -24681,6 +24579,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int height = params != null && params.height > 0 ? params.height : 0;
         return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height, keyboardPx,
             mStatusBar.bottomStatusBandPx());
+    }
+
+    /** What only the activity gives the sheets' controller (chrome.sheets.SheetsController). */
+    private final class SheetsControllerHost
+            implements com.termux.app.chrome.sheets.SheetsController.Host {
+        // -------------------------------------------------------------- window
+        @Override public @NonNull android.app.Activity activity() { return TermuxActivity.this; }
+        @Override public boolean isActivityVisible() { return mIsVisible; }
+        // -------------------------------------------------------------- notices
+        @Override public @NonNull TerminalDress.Source terminalDressSource() { return TermuxActivity.this.terminalDressSource(); }
+        @Override public @Nullable com.termux.app.statusbar.BackgroundProcessStackView backgroundProcessStack() { return mBackgroundProcessStack; }
+        @Override public SurfaceEditorController surfaceEditor() { return mSurfaceEditor; }
+        @Override public void showToast(String text, boolean longDuration) { TermuxActivity.this.showToast(text, longDuration); }
     }
 
     /** What only the activity gives the status bar's controller (statusbar.StatusBarController). */
@@ -28350,7 +28261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS)
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
         syncHomeFloatObstructions();
-        runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
+        mSheets.runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .ShowReason.KEYBOARD_ACTION);
@@ -29110,7 +29021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shell == null) return;
         // Not shown yet: it borrows a size so its shell starts (openCommandWindow's reason).
         seedWindowSize(shell);
-        runWithoutNotices(() -> {
+        mSheets.runWithoutNotices(() -> {
             com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
             int at = insertRowWindowAt(w, row);
             if (at <= mCurrentWSession.current) mCurrentWSession.current++;
@@ -32624,7 +32535,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // No notice on success: the new pane is the feedback. The refusal above still speaks,
         // because nothing visible happens when there is no shell to split.
-        runWithoutNotices(() -> mPaneController.split(orientation));
+        mSheets.runWithoutNotices(() -> mPaneController.split(orientation));
     }
 
     /** Push the Sessions-and-panes behaviour toggles into the pane controller. */
@@ -32643,7 +32554,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 AppNoticeItem.Hold.REFUSAL);
             return;
         }
-        runWithoutNotices(() -> mPaneController.splitAuto());
+        mSheets.runWithoutNotices(() -> mPaneController.splitAuto());
     }
 
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
@@ -32831,7 +32742,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneController.showWindow(w);
                 setDisplayInFront(false, 1, 0f, fromRow);
             } else if (isVisible()) {
-                runWithoutNotices(() -> {
+                mSheets.runWithoutNotices(() -> {
                     captureTerminalDeparture();
                     mPaneController.showWindow(w);
                     animateTerminalWindowLifecycleArrival(1);
@@ -32953,7 +32864,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TerminalSession cur = getCurrentSession();
         TerminalSession shell = createShellForCwd(cur != null ? cur.getCwd() : null);
         if (shell == null) return;
-        runWithoutNotices(() -> {
+        mSheets.runWithoutNotices(() -> {
             com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
             // Right after the window in front, the display window's included, so related windows
             // sit together (ADR 0008).
@@ -34168,7 +34079,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             }
             boolean[] added = {false};
-            runWithoutNotices(() -> added[0] = placement == null
+            mSheets.runWithoutNotices(() -> added[0] = placement == null
                 ? mPaneController.addPane(shell, focus)
                 : mPaneController.addPaneAt(shell, placement, focus));
             if (!added[0]) {
@@ -34706,7 +34617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
-        showWindowsRestoredNoticeIfDue();
+        mSheets.showWindowsRestoredNoticeIfDue();
         // The Appearance surface's own dialogs and sheets take and return focus: the backdrops are
         // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
         if (!mAppearance.isOpen())
