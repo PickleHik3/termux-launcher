@@ -18453,7 +18453,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 openSurfaceEditor(com.termux.app.surfaces.EditorDoor.TERMINAL_CONTEXT_MENU);
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
-                com.termux.app.terminal.TerminalCommandPalette.show(this);
+                // Opened on a Home page, the palette shows the Home set.
+                com.termux.app.terminal.TerminalCommandPalette.show(getCommandPaletteController(),
+                    paletteContextHere());
                 return true;
             case CONTEXT_MENU_STYLE_ID:
                 openTerminalStyling();
@@ -18604,10 +18606,99 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public com.termux.app.terminal.TerminalCommandPaletteController getCommandPaletteController() {
         if (mCommandPalette == null) {
-            mCommandPalette = new com.termux.app.terminal.TerminalCommandPaletteController(this);
+            mCommandPalette = new com.termux.app.terminal.TerminalCommandPaletteController(
+                new CommandPaletteActivityHost());
             mCommandPalette.setHomeHost(new PaletteHomeHost());
         }
         return mCommandPalette;
+    }
+
+    /** The activity's half of the command palette's seam. */
+    private final class CommandPaletteActivityHost
+        implements com.termux.app.terminal.TerminalCommandPaletteController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public <T extends View> T findView(int viewId) {
+            return findViewById(viewId);
+        }
+
+        @NonNull @Override public View decorView() {
+            return getWindow().getDecorView();
+        }
+
+        @Nullable @Override public TermuxInAppKeyboard inAppKeyboard() {
+            return getInAppKeyboard();
+        }
+
+        @Override public boolean inAppKeyboardSpaceBarRect(@NonNull Rect out) {
+            return getInAppKeyboardSpaceBarRect(out);
+        }
+
+        @Override public boolean isInAppKeyboardEnabled() {
+            return TermuxActivity.this.isInAppKeyboardEnabled();
+        }
+
+        @NonNull @Override public java.util.List<String> inAppKeyboardLayoutRing() {
+            return TermuxActivity.this.inAppKeyboardLayoutRing();
+        }
+
+        @NonNull @Override public String activeInAppKeyboardLayoutId() {
+            return TermuxActivity.this.activeInAppKeyboardLayoutId();
+        }
+
+        @Override public void setCommandPaletteInterceptorActive(boolean active) {
+            TermuxActivity.this.setCommandPaletteInterceptorActive(active);
+        }
+
+        @Override public void closeAppDrawerImmediate() {
+            getAppDrawerController().closeImmediate();
+        }
+
+        @Override public void dismissTerminalSheets() {
+            getTerminalSheetController().dismissAll();
+        }
+
+        @NonNull @Override
+        public com.termux.app.terminal.TerminalSheetController terminalSheet() {
+            return getTerminalSheetController();
+        }
+
+        @NonNull @Override
+        public java.util.List<com.termux.app.terminal.SessionBrowserModel.Session> sessionBrowserSessions() {
+            return getSessionBrowserSessions();
+        }
+
+        @Nullable @Override public TerminalSession currentSession() {
+            return getCurrentSession();
+        }
+
+        @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
+            return TermuxActivity.this.applyCommandPaletteWallpaperFrost(frost);
+        }
+
+        @Override public int commandPaletteCornersDp() {
+            return TermuxActivity.this.commandPaletteCornersDp();
+        }
+
+        @Override public boolean isFloatingStyle() {
+            return TermuxActivity.this.isFloatingStyle();
+        }
+
+        @Override public boolean isRowHapticsEnabled() {
+            return TermuxActivity.this.isRowHapticsEnabled();
+        }
+
+        @Override public void startActivity(@NonNull Intent intent) {
+            TermuxActivity.this.startActivity(intent);
+        }
+
+        @Override public void requestContactsPermission() {
+            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                new String[]{android.Manifest.permission.READ_CONTACTS},
+                REQUEST_CODE_PALETTE_CONTACTS);
+        }
     }
 
     public boolean isCommandPaletteOpen() {
@@ -34421,7 +34512,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void showCommandPalette() {
             // The run hears the open from the palette's own funnel
             // (setCommandPaletteInterceptorActive), whichever way it was asked for.
-            com.termux.app.terminal.TerminalCommandPalette.show(TermuxActivity.this);
+            // Opened on a Home page, the palette shows the Home set.
+            com.termux.app.terminal.TerminalCommandPalette.show(getCommandPaletteController(),
+                paletteContextHere());
         }
 
         @Override public boolean toggleMouseMode() {
