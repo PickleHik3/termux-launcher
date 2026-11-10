@@ -744,6 +744,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     {
         mCrossingViews.attach(mCrossing);
     }
+    /** The dock's events and state (ADR 0018 §1); it reaches this activity through {@link DockControllerHost}. */
+    private final com.termux.app.dock.DockController mDock =
+        new com.termux.app.dock.DockController(new DockControllerHost());
     /** {@link #frameStandsDown} as a crossing's begin asks it, bound once rather than per begin. */
     private final com.termux.app.place.SeamCrossing.FrameGlass mFrameStandsDown =
         this::frameStandsDown;
@@ -3730,7 +3733,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * read) while the stack stands down on the frame.
      */
     private boolean dockBeadsCutFrame() {
-        return mDockBeads != null && stackStandsDownOnFrame();
+        return mDock.beads() != null && stackStandsDownOnFrame();
     }
 
     /**
@@ -3740,7 +3743,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * keyboard's sheet and the gesture strip keep asking {@link #stackStandsDownOnFrame}.
      */
     private boolean dockSheetStandsDownOnFrame() {
-        return mDockBeads == null && stackStandsDownOnFrame();
+        return mDock.beads() == null && stackStandsDownOnFrame();
     }
 
     /** Whether the sheets were last dressed standing down; see {@link #syncFrameStandDown}. */
@@ -3860,7 +3863,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(mFrameGutterDrawable instanceof com.termux.app.dock.FrameBandCutDrawable)) return;
         com.termux.app.dock.FrameBandCutDrawable frame =
             (com.termux.app.dock.FrameBandCutDrawable) mFrameGutterDrawable;
-        com.termux.app.dock.LensBeadGeometry.Beads beads = mDockBeads;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mDock.beads();
         View body = findViewById(R.id.docked_frame_glass);
         View host = findViewById(R.id.accessory_surface_host);
         SuggestionBarView row = mSuggestionBarView;
@@ -3883,7 +3886,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The A–Z row under the icons wears letter beads too: its band leaves the frame as well,
         // with the room its beads rise into.
-        com.termux.app.dock.AzBeadRow az = mDockAzBeads;
+        com.termux.app.dock.AzBeadRow az = mDock.azBeads();
         View azRow = az != null ? findViewById(R.id.apps_bar_az_row) : null;
         if (az != null && azRow != null) {
             azRow.getLocationOnScreen(at);
@@ -5251,7 +5254,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.dock.DockSurfaceSpec spec = dockSlabSpec();
         // Beads are drawn under Lens beads, and across the seam while they melt into the slab
         // with the beaded half's share of the slide (dockBeadsWanted), whichever page is committed.
-        com.termux.app.dock.LensBeadGeometry.Beads beads = dockBeadsDrawn();
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mDock.dockBeadsDrawn();
         if (beads != null) {
             // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
             // the beads stand where the host's origin sits in the backdrop. The glass is the
@@ -5272,12 +5275,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 program.clearBeadCapsule();
             }
             // The A–Z row's letter beads under them, risen by the finger's lift.
-            com.termux.app.dock.AzBeadRow az = mDockAzBeads;
+            com.termux.app.dock.AzBeadRow az = mDock.azBeads();
             if (az != null) {
                 program.setAzBeads(az.firstCenterX + mGlassOriginLeft, az.pitchPx, az.count,
                     az.centerY + mGlassOriginTop, az.radiusPx,
-                    Float.isNaN(mDockAzLiftX) ? Float.NaN : mDockAzLiftX + mGlassOriginLeft,
-                    mDockAzLiftPeakPx);
+                    Float.isNaN(mDock.azLiftX()) ? Float.NaN : mDock.azLiftX() + mGlassOriginLeft,
+                    mDock.azLiftPeakPx());
             } else {
                 program.clearAzBeads();
             }
@@ -5300,95 +5303,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shelf == null) return;
         View host = findViewById(R.id.accessory_surface_host);
         // Beads always float, so each keeps its shadow under Docked too.
-        boolean beads = mDockBeads != null;
+        boolean beads = mDock.beads() != null;
         boolean show = state != null && mGlassEffects.paramsValid() && host != null
             && mDockRows.surfaceShown() && !state.keyboardShown
             && (dockFloats() || beads) && dockSlabSpec().contactShadow;
-        shelf.setBeads(show ? dockBeadsShadowed() : null);
-        shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
+        shelf.setBeads(show ? mDock.dockBeadsShadowed() : null);
+        shelf.setBeadShelfAlpha(mDock.dockBeadShelfAlpha());
         shelf.follow(show ? host : null);
         mDockRows.setShelfShown(show);
-    }
-
-    // ------------------------------------------------------------------ Lens beads
-    //
-    // Lens beads (DockSurfaceSpec.LENS_BEADS), on whichever half's dock wears the design (#93;
-    // under the Workspace's extra keys or a keyboard sharing the glass the row keeps the slab,
-    // LensBeadGeometry.rowWearsBeads): the dock's one glass host draws a round
-    // bead under each icon instead of its slab. The host clips everything in it to the beads
-    // (DockSurfaceHostLayout), the dock's one glass program draws every bead's rim, shelf and
-    // reflection from the beads' centres (GlassRefraction.Program#setBeads), and the shelf view
-    // draws each bead's shadow. The beads are worked out again only when the row or the host
-    // lays out, before the frame that shows the new layout draws; at rest nothing runs.
-
-    /** The beads as last drawn, in the host's coordinates; null while the dock is a slab. */
-    @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeads;
-    /**
-     * The beads where a page swipe draws the icons now ({@link #onDockIconsMoved}), in the
-     * host's coordinates; null at rest, when the beads are {@link #mDockBeads}.
-     */
-    @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeadsMoving;
-    /** Where the row stands in the host sideways, and the span it draws its icons in there. */
-    private float mDockBeadsRowDx;
-    /** Where it stands down the host, and the bottom the beads are held above; NaN unread. */
-    private float mDockBeadsRowDy = Float.NaN;
-    private float mDockBeadsBottomPx = Float.NaN;
-    private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
-    /** Scratch for the row's still tiles (Drawer, palette), whose beads a swipe holds still. */
-    private final float[] mDockBeadStills = new float[2];
-    /** Scratch for the neighbouring page's icons a swipe stages. */
-    private final float[] mDockBeadNeighbours =
-        new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
-
-    /**
-     * Whether the dock draws beads now (the row still has to wear them, {@link #resolveDockBeads}):
-     * under Lens beads, but not where a slide has carried the beaded half wholly off; and across
-     * the seam from a half without them while any of the beaded half's share shows, so they come
-     * in as the page does.
-     */
-    private boolean dockBeadsWanted() {
-        if (mPreferences == null) return false;
-        float share = mCrossing.beadShare();
-        if (shownDockSurfaceSpec().beads) return Float.isNaN(share) || share > 0f;
-        return !Float.isNaN(share) && share > 0f;
-    }
-
-    /** The beads where the row draws its icons now: moving with a swipe, or at rest. */
-    @Nullable
-    private com.termux.app.dock.LensBeadGeometry.Beads dockBeadsShadowed() {
-        return mDockBeads != null && mDockBeadsMoving != null ? mDockBeadsMoving : mDockBeads;
-    }
-
-    /**
-     * The beads as the dock's glass draws them now: where the row draws its icons, swollen by a
-     * melt across the seam toward the slab they cover at its far end. The shadows stay the
-     * beads' own ({@link #dockBeadsShadowed}); the swelling glass covers them.
-     */
-    @Nullable
-    private com.termux.app.dock.LensBeadGeometry.Beads dockBeadsDrawn() {
-        com.termux.app.dock.LensBeadGeometry.Beads beads = dockBeadsShadowed();
-        float share = mCrossing.beadShare();
-        if (beads == null || Float.isNaN(share) || share >= 1f) return beads;
-        View host = hotView(R.id.accessory_surface_host);
-        if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return beads;
-        float cover = com.termux.app.dock.LensBeadGeometry.coverRadiusPx(beads, host.getWidth(),
-            host.getHeight());
-        return beads.withRadius(com.termux.app.dock.LensBeadGeometry.meltRadiusPx(
-            beads.radiusPx, cover, share));
-    }
-
-    /** How much of the beads' shadows and glow show: all at rest, none once they cover the slab. */
-    private float dockBeadShelfAlpha() {
-        return com.termux.app.dock.LensBeadGeometry.beadShelfAlpha(mCrossing.beadShare());
-    }
-
-    /** The slab clip the host cuts melting beads to: the slab's corners; NaN at rest. */
-    private float dockBeadSlabClipPx() {
-        float share = mCrossing.beadShare();
-        if (mDockBeads == null || Float.isNaN(share) || share >= 1f) return Float.NaN;
-        View host = hotView(R.id.accessory_surface_host);
-        if (host == null) return Float.NaN;
-        return dockFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
     }
 
     /**
@@ -5408,406 +5330,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float share = seam.beadShare();
         if (Float.isNaN(share) || Float.compare(share, mCrossing.beadShare()) == 0) return;
         mCrossing.beadShare(share);
-        applyDockBeadMelt(false);
-    }
-
-    /**
-     * The beads drawn again for the crossing's bead share (Crossing#beadShare): the host's clip and slab cut, and the
-     * dock's effect once. Beads coming or going (the beaded half's share reaching or leaving
-     * nothing) dress
-     * the dock again, as a row turning to beads or back does. Mid-slide the row is read again
-     * only when beads are to come or go ({@code settled}: always, the slide having landed).
-     */
-    private void applyDockBeadMelt(boolean settled) {
-        boolean wereBeads = mDockBeads != null;
-        boolean modeChanged = (settled || dockBeadsWanted() != wereBeads)
-            && refreshDockBeads() && wereBeads != (mDockBeads != null);
-        View host = hotView(R.id.accessory_surface_host);
-        if (host instanceof DockSurfaceHostLayout) {
-            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
-            beadHost.setBeads(dockBeadsDrawn());
-            beadHost.setSlabClip(dockBeadSlabClipPx());
-        }
-        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null) {
-            if (mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
-            shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
-        }
-        if (modeChanged) {
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        } else if (mDockBeads != null) {
-            rebuildBackdropGlassEffectForLens();
-        }
+        mDock.applyDockBeadMelt(false);
     }
 
     /**
      * The row's icons moved off or back onto their places (a page swipe, a page switch): the
-     * beads ride under them, from the touch or animation callback that moved them, so a bead is
-     * under its icon on the very frame that draws it. Each frame of a swipe re-cuts the host's
-     * clip, moves the shadows (their paints are kept) and rebuilds the dock's effect once, a
-     * single pass of the glass program over the pre-blurred frost (the dock's chain has no blur
-     * of its own); at rest and under the Glass tray nothing runs past the first check.
+     * Peek glass reflection, then the beads ({@link com.termux.app.dock.DockController#onDockIconsMoved}).
      */
     private void onDockIconsMoved() {
         // The Peek glass reflection rides with the icons (live) or steps away (still).
         if (mPeekReflection != null) mPeekReflection.onIconsMoved();
-        SuggestionBarView row = mSuggestionBarView;
-        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
-        com.termux.app.dock.LensBeadGeometry.Beads moving = null;
-        if (row != null && rest != null && row.iconsOffTheirPlaces()) {
-            int neighbours = row.drawnNeighbourIconCentersX(mDockBeadNeighbours);
-            for (int i = 0; i < neighbours; i++) mDockBeadNeighbours[i] += mDockBeadsRowDx;
-            float left = Float.isNaN(mDockBeadsSpanLeft) ? 0f : mDockBeadsSpanLeft;
-            float right = Float.isNaN(mDockBeadsSpanRight) ? Float.MAX_VALUE : mDockBeadsSpanRight;
-            // The Drawer tile (#97) and the palette tile are no page's: their beads stand still
-            // under them.
-            int stills = row.stillTileCentersX(mDockBeadStills);
-            for (int i = 0; i < stills; i++) mDockBeadStills[i] += mDockBeadsRowDx;
-            moving = com.termux.app.dock.LensBeadGeometry.follow(rest, row.drawnPageOffsetPx(),
-                mDockBeadStills, stills, mDockBeadNeighbours, neighbours, left, right,
-                row.drawnPageFade());
-        }
-        if (moving == null && mDockBeadsMoving == null) return;
-        if (moving != null && moving.equals(mDockBeadsMoving)) return;
-        mDockBeadsMoving = moving;
-        View host = hotView(R.id.accessory_surface_host);
-        if (host instanceof DockSurfaceHostLayout) {
-            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
-            beadHost.setBeadSpan(moving != null ? mDockBeadsSpanLeft : Float.NaN,
-                moving != null ? mDockBeadsSpanRight : Float.NaN);
-            beadHost.setBeads(dockBeadsDrawn());
-        }
-        if (moving == null) {
-            // Back at rest: the page the row settled on may hold other icons than the beads did.
-            boolean wereBeads = mDockBeads != null;
-            refreshDockBeads();
-            if (host instanceof DockSurfaceHostLayout)
-                ((DockSurfaceHostLayout) host).setBeads(mDockBeads);
-            if (wereBeads != (mDockBeads != null) && mChrome != null)
-                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        }
-        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        rebuildBackdropGlassEffectForLens();
-    }
-    /** The row's icon boxes, read into this; one icon more than the beads hold says "too many". */
-    private final float[] mDockBeadBoxes =
-        new float[(com.termux.app.dock.LensBeadGeometry.MAX_BEADS + 1) * 4];
-    /** The views whose layout moves the beads, while the dock wears them. */
-    @Nullable private View mDockBeadsWatchedHost;
-    @Nullable private View mDockBeadsWatchedRow;
-    private boolean mDockBeadsRefreshPending;
-    private final View.OnLayoutChangeListener mDockBeadsLayoutListener =
-        (v, l, t, r, b, ol, ot, or, ob) -> scheduleDockBeadsRefresh();
-    private final ViewTreeObserver.OnPreDrawListener mDockBeadsPreDraw =
-        new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                View host = mDockBeadsWatchedHost;
-                if (host != null) host.getViewTreeObserver().removeOnPreDrawListener(this);
-                mDockBeadsRefreshPending = false;
-                onDockBeadsLayoutSettled();
-                return true;
-            }
-        };
-
-    /**
-     * Watches the host and the row for layout while the dock's style draws beads, and lets go
-     * of them otherwise, so the Glass tray and the Workspace's dock carry no listener of this.
-     */
-    private void syncDockBeadsListeners() {
-        boolean beads = dockBeadsWanted();
-        View host = beads ? findViewById(R.id.accessory_surface_host) : null;
-        View row = beads ? mSuggestionBarView : null;
-        if (mDockBeadsWatchedHost != host) {
-            if (mDockBeadsWatchedHost != null) {
-                mDockBeadsWatchedHost.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
-                if (mDockBeadsRefreshPending)
-                    mDockBeadsWatchedHost.getViewTreeObserver().removeOnPreDrawListener(mDockBeadsPreDraw);
-                mDockBeadsRefreshPending = false;
-            }
-            mDockBeadsWatchedHost = host;
-            if (host != null) host.addOnLayoutChangeListener(mDockBeadsLayoutListener);
-        }
-        if (mDockBeadsWatchedRow != row) {
-            if (mDockBeadsWatchedRow != null)
-                mDockBeadsWatchedRow.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
-            mDockBeadsWatchedRow = row;
-            if (row != null) row.addOnLayoutChangeListener(mDockBeadsLayoutListener);
-        }
-        // The A–Z row's letter beads follow its layout too.
-        View azRow = beads ? findViewById(R.id.apps_bar_az_row) : null;
-        if (mDockBeadsWatchedAzRow != azRow) {
-            if (mDockBeadsWatchedAzRow != null)
-                mDockBeadsWatchedAzRow.removeOnLayoutChangeListener(mDockBeadsLayoutListener);
-            mDockBeadsWatchedAzRow = azRow;
-            if (azRow != null) azRow.addOnLayoutChangeListener(mDockBeadsLayoutListener);
-        }
-    }
-
-    @Nullable private View mDockBeadsWatchedAzRow;
-
-    /** A layout moved the host or the row: the beads are read again before the next draw. */
-    private void scheduleDockBeadsRefresh() {
-        View host = mDockBeadsWatchedHost;
-        if (mDockBeadsRefreshPending || host == null) return;
-        mDockBeadsRefreshPending = true;
-        host.getViewTreeObserver().addOnPreDrawListener(mDockBeadsPreDraw);
-    }
-
-    /**
-     * After a layout: beads that moved re-aim the glass program (one rebuild of the dock's
-     * effect) and the shadows; a row that turned to beads or back to the slab dresses the dock
-     * again.
-     */
-    private void onDockBeadsLayoutSettled() {
-        boolean wereBeads = mDockBeads != null;
-        if (!refreshDockBeads()) return;
-        rebuildBackdropGlassEffectForLens();
-        DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        if (wereBeads != (mDockBeads != null) && mChrome != null)
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-    }
-
-    /**
-     * One frame of a crossing's morph under Lens beads: each bead worked out from its icon's
-     * drawn box (SuggestionBarView#drawnIconBoxes) by the rule the beads at rest follow theirs
-     * (LensBeadGeometry.drawnAt), on the surface the last full read found, so bead and icon
-     * never part. The host, the shelf and the dock's effect once, as a swipe's frame does; at
-     * rest and off beads nothing runs past the first check.
-     */
-    private void syncDockBeadsWithMorph() {
-        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
-        SuggestionBarView row = mSuggestionBarView;
-        if (rest == null || row == null || Float.isNaN(mDockBeadsRowDy)
-            || Float.isNaN(mDockBeadsBottomPx)) return;
-        View host = hotView(R.id.accessory_surface_host);
-        if (!(host instanceof DockSurfaceHostLayout) || host.getWidth() <= 0) return;
-        int count = row.drawnIconBoxes(mDockBeadBoxes);
-        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return;
-        for (int i = 0; i < count; i++) {
-            mDockBeadBoxes[i * 4] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 1] += mDockBeadsRowDy;
-            mDockBeadBoxes[i * 4 + 2] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 3] += mDockBeadsRowDy;
-        }
-        com.termux.app.dock.LensBeadGeometry.Beads drawn =
-            com.termux.app.dock.LensBeadGeometry.drawnAt(rest, mDockBeadBoxes, count, 0f, 0f,
-                host.getWidth(), mDockBeadsBottomPx, getResources().getDisplayMetrics().density);
-        if (drawn.equals(rest)) return;
-        mDockBeads = drawn;
-        ((DockSurfaceHostLayout) host).setBeads(dockBeadsDrawn());
-        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        rebuildBackdropGlassEffectForLens();
-    }
-
-    /**
-     * Works the beads out again from the row and the host as laid out and hands them to the
-     * host; true when they changed. A change between beads and the slab re-cuts the host's
-     * shape at once (the slab's rim and clip go, or come back).
-     */
-    private boolean refreshDockBeads() {
-        syncDockBeadsListeners();
-        com.termux.app.dock.LensBeadGeometry.Beads beads = resolveDockBeads();
-        // The A–Z row's letter beads under the icons', where it shares their plank.
-        boolean azChanged = applyDockAzBeads(resolveDockAzBeads(beads));
-        if (beads == null ? mDockBeads == null : beads.equals(mDockBeads)) {
-            // The same beads, but the row may have moved on the screen under the frame's cut.
-            syncFrameBeadCut();
-            return azChanged;
-        }
-        boolean modeChanged = (beads == null) != (mDockBeads == null);
-        mDockBeads = beads;
-        // Back to the slab, nothing of the beads is kept: a swipe's moving beads would otherwise
-        // be what the next bead mode draws first, and the swipe's sideways cut what it clips to.
-        if (beads == null) mDockBeadsMoving = null;
-        View host = findViewById(R.id.accessory_surface_host);
-        if (host instanceof DockSurfaceHostLayout) {
-            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
-            beadHost.setSlabOnlyChildren(findViewById(R.id.accessory_top_edge_fx),
-                findViewById(R.id.accessory_edge_glow_fx));
-            beadHost.setBeads(dockBeadsDrawn());
-        }
-        if (beads == null) {
-            DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-            if (shelf != null) shelf.setBeads(null);
-        }
-        if (modeChanged && host != null && mDockShapeCut)
-            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
-        // The Search field's well nests in its capsule, or in the slab again.
-        syncPromptFieldWell();
-        syncFrameBeadCut();
-        return true;
-    }
-
-    /**
-     * The beads for the row as laid out now, in the host's coordinates, or null where the dock
-     * keeps its slab: a style that is not beads; the row not standing alone on the dock (another
-     * band on the same glass, the keyboard sharing it, a joined Docked frame being the glass);
-     * or a row the beads cannot draw ({@link com.termux.app.dock.LensBeadGeometry#compute}).
-     * The Search field under the row is no band of that kind: it stands in a glass capsule of
-     * its own under the beads (#84).
-     */
-    @Nullable
-    private com.termux.app.dock.LensBeadGeometry.Beads resolveDockBeads() {
-        if (!dockBeadsWanted()) return null;
-        SuggestionBarView row = mSuggestionBarView;
-        View host = findViewById(R.id.accessory_surface_host);
-        View container = findViewById(R.id.accessory_stack_container);
-        if (row == null || !(host instanceof DockSurfaceHostLayout) || container == null
-            || host.getWidth() <= 0 || host.getHeight() <= 0 || row.getWidth() <= 0) return null;
-        PlaceLayout layout = arrangement().layout();
-        if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeadsCuttingFrame(layout,
-            stackStandsDownOnFrame(),
-            isInAppKeyboardShown()
-                && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
-        // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
-        // them mid-slide and through its landing (SuggestionBarView#drawnIconBoxes).
-        int count = row.drawnIconBoxes(mDockBeadBoxes);
-        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
-        float[] rowAt = layoutOffsetIn(row, container);
-        float[] hostAt = layoutOffsetIn(host, container);
-        if (rowAt == null || hostAt == null) return null;
-        float dx = rowAt[0] - hostAt[0];
-        float dy = rowAt[1] - hostAt[1];
-        // The span the row clips its icons to while a swipe carries them: the beads follow there.
-        mDockBeadsRowDx = dx;
-        mDockBeadsSpanLeft = Math.max(0f, dx);
-        mDockBeadsSpanRight = Math.min(host.getWidth(), dx + row.getWidth());
-        float[] boxes = new float[count * 4];
-        for (int i = 0; i < count; i++) {
-            boxes[i * 4] = mDockBeadBoxes[i * 4] + dx;
-            boxes[i * 4 + 1] = mDockBeadBoxes[i * 4 + 1] + dy;
-            boxes[i * 4 + 2] = mDockBeadBoxes[i * 4 + 2] + dx;
-            boxes[i * 4 + 3] = mDockBeadBoxes[i * 4 + 3] + dy;
-        }
-        float density = getResources().getDisplayMetrics().density;
-        // The Search field under the row (#84): the beads are held to the row's own band, as
-        // they are without it, and the field stands in a glass capsule of its own under them,
-        // its view's bounds (LensBeadGeometry.withCapsule).
-        float[] fieldAt = null;
-        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
-        if (mAppliedPromptFieldBandPx > 0 && field != null && field.getVisibility() == View.VISIBLE
-            && field.getParent() == findViewById(R.id.apps_bar_row_host)) {
-            fieldAt = layoutOffsetIn(field, container);
-        }
-        float bottom = host.getHeight();
-        if (fieldAt != null) {
-            fieldAt[0] -= hostAt[0];
-            fieldAt[1] -= hostAt[1];
-            int topPad = ((ViewGroup.MarginLayoutParams) field.getLayoutParams()).topMargin;
-            bottom = Math.min(bottom, fieldAt[1] - topPad);
-        }
-        mDockBeadsRowDy = dy;
-        mDockBeadsBottomPx = bottom;
-        com.termux.app.dock.LensBeadGeometry.Beads beads =
-            com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f, host.getWidth(),
-                bottom, density);
-        if (beads == null || fieldAt == null) return beads;
-        return com.termux.app.dock.LensBeadGeometry.withCapsule(beads, fieldAt[0], fieldAt[1],
-            fieldAt[0] + field.getWidth(), fieldAt[1] + field.getHeight(), density);
-    }
-
-    // ------------------------------------------------------------------ Letter beads
-    //
-    // Under Lens beads with the A–Z row on the dock's plank under the icons
-    // (LensBeadGeometry.azRowWearsBeads), each letter stands on a small bead of the icons' glass
-    // (AzBeadRow): the host clips its frost to them as to the icons' beads, the dock's one glass
-    // program draws their rims from the row's first centre and pitch (Program#setAzBeads), and
-    // a finger on the row lifts the bead under it and its neighbours with their letters
-    // (AzScrubRowView#setBeadLift). A lift's frame re-cuts the host's clip in place and rebuilds
-    // the dock's effect once, as a page swipe's frame does; no layout runs, and at rest nothing.
-
-    /** The letter beads in the host's coordinates, or null where the row has none. */
-    @Nullable private com.termux.app.dock.AzBeadRow mDockAzBeads;
-    /** The A–Z row's x in the host, so a finger along the row is a finger in the host. */
-    private float mDockAzRowDx;
-    /** The lift as last drawn: the finger's x in the host (NaN for none) and the peak, px. */
-    private float mDockAzLiftX = Float.NaN;
-    private float mDockAzLiftPeakPx;
-    /** The row the letter beads were last handed to, so it can be let go of. */
-    @Nullable private AzScrubRowView mDockAzBeadRowView;
-    private final AzScrubRowView.BeadLiftListener mDockAzBeadLift = this::onDockAzBeadLift;
-
-    /**
-     * The letter beads for the A–Z row as laid out now, in the host's coordinates, or null: no
-     * icons' beads ({@code beads}), the row not under the icons on the dock's plank, not shown,
-     * or too crowded for a bead to read as a lens.
-     */
-    @Nullable
-    private com.termux.app.dock.AzBeadRow resolveDockAzBeads(
-            @Nullable com.termux.app.dock.LensBeadGeometry.Beads beads) {
-        if (beads == null) return null;
-        View view = findViewById(R.id.apps_bar_az_row);
-        if (!(view instanceof AzScrubRowView)) return null;
-        AzScrubRowView az = (AzScrubRowView) view;
-        View host = findViewById(R.id.accessory_surface_host);
-        View container = findViewById(R.id.accessory_stack_container);
-        if (host == null || container == null || !az.isShown() || az.isVerticalBar()
-            || az.getWidth() <= 0 || az.getHeight() <= 0
-            || !com.termux.app.dock.LensBeadGeometry.azRowWearsBeads(arrangement().layout()))
-            return null;
-        float[] azAt = layoutOffsetIn(az, container);
-        float[] hostAt = layoutOffsetIn(host, container);
-        if (azAt == null || hostAt == null) return null;
-        float dx = azAt[0] - hostAt[0];
-        float dy = azAt[1] - hostAt[1];
-        mDockAzRowDx = dx;
-        return com.termux.app.dock.AzBeadRow.compute(dx + az.letterCenterPx(0),
-            az.letterPitchPx(), az.letterCount(), dy + az.getHeight() * 0.5f, az.getHeight(),
-            getResources().getDisplayMetrics().density);
-    }
-
-    /**
-     * Hands the letter beads to the host and the row (and lets go of them with null); true when
-     * they changed. The dock's effect is rebuilt by the caller, as for the icons' beads.
-     */
-    private boolean applyDockAzBeads(@Nullable com.termux.app.dock.AzBeadRow azBeads) {
-        View rowView = findViewById(R.id.apps_bar_az_row);
-        AzScrubRowView row = azBeads != null && rowView instanceof AzScrubRowView
-            ? (AzScrubRowView) rowView : null;
-        if (mDockAzBeadRowView != null && mDockAzBeadRowView != row)
-            mDockAzBeadRowView.setBeadLift(false, null);
-        mDockAzBeadRowView = row;
-        if (row != null) row.setBeadLift(true, mDockAzBeadLift);
-        if (azBeads == null ? mDockAzBeads == null : azBeads.equals(mDockAzBeads)) return false;
-        mDockAzBeads = azBeads;
-        if (azBeads == null) {
-            mDockAzLiftX = Float.NaN;
-            mDockAzLiftPeakPx = 0f;
-        }
-        View host = findViewById(R.id.accessory_surface_host);
-        if (host instanceof DockSurfaceHostLayout) {
-            DockSurfaceHostLayout beadHost = (DockSurfaceHostLayout) host;
-            beadHost.setAzBeadLift(mDockAzLiftX, mDockAzLiftPeakPx);
-            beadHost.setAzBeads(azBeads);
-        }
-        return true;
-    }
-
-    /**
-     * One frame of the letter beads' lift (AzScrubRowView#setBeadLift): the finger along the row
-     * and the spring's share. The host's clip is re-cut in place and the dock's effect rebuilt
-     * once; nothing is laid out.
-     */
-    private void onDockAzBeadLift(float fingerAlongPx, float strength) {
-        if (mDockAzBeads == null) return;
-        float x = Float.isNaN(fingerAlongPx) ? Float.NaN : fingerAlongPx + mDockAzRowDx;
-        float peak = strength * com.termux.app.dock.AzBeadRow.LIFT_PEAK_DP
-            * getResources().getDisplayMetrics().density;
-        if (Float.compare(x, mDockAzLiftX) == 0 && Float.compare(peak, mDockAzLiftPeakPx) == 0)
-            return;
-        mDockAzLiftX = x;
-        mDockAzLiftPeakPx = peak;
-        View host = hotView(R.id.accessory_surface_host);
-        if (host instanceof DockSurfaceHostLayout)
-            ((DockSurfaceHostLayout) host).setAzBeadLift(x, peak);
-        rebuildBackdropGlassEffectForLens();
+        mDock.onDockIconsMoved();
     }
 
     /**
@@ -5824,30 +5357,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return shift;
     }
 
-    /**
-     * A view's laid-out offset inside {@code ancestor}, from layout values only (a transform in
-     * flight, such as the dock's press dip, is not baked in), or null when it is not under it.
-     */
-    @Nullable
-    private static float[] layoutOffsetIn(@NonNull View view, @NonNull View ancestor) {
-        float left = 0f;
-        float top = 0f;
-        for (View v = view; v != null; ) {
-            if (v == ancestor) return new float[] {left, top};
-            left += v.getLeft();
-            top += v.getTop();
-            android.view.ViewParent parent = v.getParent();
-            if (parent instanceof View) {
-                View p = (View) parent;
-                left -= p.getScrollX();
-                top -= p.getScrollY();
-                v = p;
-            } else {
-                v = null;
-            }
-        }
-        return null;
-    }
 
     // ------------------------------------------------------------------ Peek glass
     //
@@ -6009,9 +5518,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || decor.getWidth() <= 0 || decor.getHeight() <= 0) return null;
         int count = row.drawnIconBoxes(mPeekIconBoxes);
         if (count <= 0 || count > mPeekIconBoxes.length / 4) return null;
-        float[] rowAt = layoutOffsetIn(row, container);
-        float[] hostAt = layoutOffsetIn(host, container);
-        float[] hostInDecor = layoutOffsetIn(host, decor);
+        float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
+        float[] hostAt = com.termux.app.dock.DockController.layoutOffsetIn(host, container);
+        float[] hostInDecor = com.termux.app.dock.DockController.layoutOffsetIn(host, decor);
         if (rowAt == null || hostAt == null || hostInDecor == null) return null;
         float dx = rowAt[0] - hostAt[0];
         float dy = rowAt[1] - hostAt[1];
@@ -6187,8 +5696,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPeekReflection != null) mPeekReflection.clear();
             return;
         }
-        float[] rowAt = layoutOffsetIn(row, container);
-        float[] hostAt = layoutOffsetIn(host, container);
+        float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
+        float[] hostAt = com.termux.app.dock.DockController.layoutOffsetIn(host, container);
         if (rowAt == null || hostAt == null) {
             if (mPeekReflection != null) mPeekReflection.clear();
             return;
@@ -7981,7 +7490,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             syncPeekReflection();
-            if (mDockBeads != null) {
+            if (mDock.beads() != null) {
                 // Lens beads: there is no slab, so no rim under it and no clip to its outline;
                 // the host clips its own drawing to the beads (DockSurfaceHostLayout).
                 surface.setBackground(null);
@@ -10609,7 +10118,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessorySurfaceBounds(state);
         // The Lens beads follow the row as it is laid out now; a pass that moved them and
         // re-installs nothing rebuilds the effect once below.
-        boolean beadsMoved = refreshDockBeads();
+        boolean beadsMoved = mDock.refreshDockBeads();
         if (shouldUseDockDecorNavBarSurface(state) && !dockFloats()) {
             clearAccessoryRenderEffectBackdrop();
             return;
@@ -19436,7 +18945,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || mChrome == null) return;
         Trace.beginSection("Dock.restyle");
         try {
-            syncDockBeadsListeners();
+            mDock.syncDockBeadsListeners();
             // The Drawer tile comes and goes with the page's toggle.
             syncDrawerTile();
             // The glass is re-cut even where the geometry did not move: its features are the
@@ -19822,7 +19331,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPromptFieldWell() {
         com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
         if (field == null) return;
-        com.termux.app.dock.LensBeadGeometry.Beads beads = mDockBeads;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mDock.beads();
         if (beads != null && beads.hasCapsule()) {
             float inset = com.termux.app.dock.DockLayoutPolicy.promptFieldWellInsetPx(
                 getResources().getDisplayMetrics().density);
@@ -26191,7 +25700,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean pagesSlide = wall.pageTransition()
             == com.termux.app.launcher.home.HomePageTransition.SLIDE;
         mCrossing.begin(here, there,
-            com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
+            com.termux.app.place.SeamCrossing.Stage.of(mDock.beads() != null, mFrameStandsDown,
                 isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, arrangementRevision());
         return true;
@@ -26326,7 +25835,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || mPaneWallController.wall().pageTransition()
                 == com.termux.app.launcher.home.HomePageTransition.SLIDE;
         mCrossing.begin(here, there,
-            com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
+            com.termux.app.place.SeamCrossing.Stage.of(mDock.beads() != null, mFrameStandsDown,
                 isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, arrangementRevision());
         if (!begins) return;
@@ -27037,6 +26546,122 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * What only the activity gives the dock's controller (dock.DockController): the window's
+     * views, the crossing's bead share, the dock's design and placement, and what follows the
+     * beads (the dock's effect, the slab's cut, the Search field's well, the frame's cut).
+     */
+    private final class DockControllerHost implements com.termux.app.dock.DockController.Host {
+
+        @Nullable
+        @Override
+        public <T extends View> T findViewById(int id) {
+            return TermuxActivity.this.findViewById(id);
+        }
+
+        @Nullable
+        @Override
+        public <T extends View> T hotView(int id) {
+            return TermuxActivity.this.hotView(id);
+        }
+
+        @Override
+        public boolean hasPreferences() {
+            return mPreferences != null;
+        }
+
+        @Override
+        public float beadShare() {
+            return mCrossing.beadShare();
+        }
+
+        @NonNull
+        @Override
+        public com.termux.app.dock.DockSurfaceSpec shownDockSurfaceSpec() {
+            return TermuxActivity.this.shownDockSurfaceSpec();
+        }
+
+        @Override
+        public boolean dockFloats() {
+            return TermuxActivity.this.dockFloats();
+        }
+
+        @Override
+        public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
+            return TermuxActivity.this.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
+        }
+
+        @NonNull
+        @Override
+        public com.termux.app.dock.DockRows dockRows() {
+            return mDockRows;
+        }
+
+        @Nullable
+        @Override
+        public ChromeRenderer chrome() {
+            return mChrome;
+        }
+
+        @Override
+        public void rebuildBackdropGlassEffectForLens() {
+            TermuxActivity.this.rebuildBackdropGlassEffectForLens();
+        }
+
+        @Nullable
+        @Override
+        public SuggestionBarView dockRow() {
+            return mSuggestionBarView;
+        }
+
+        @NonNull
+        @Override
+        public PlaceLayout placeLayout() {
+            return arrangement().layout();
+        }
+
+        @Override
+        public boolean stackStandsDownOnFrame() {
+            return TermuxActivity.this.stackStandsDownOnFrame();
+        }
+
+        @Override
+        public boolean keyboardSharesDockGlass() {
+            return isInAppKeyboardShown()
+                && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec());
+        }
+
+        @Nullable
+        @Override
+        public com.termux.app.dock.PromptLineFieldView promptFieldInRowBand() {
+            com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+            if (mAppliedPromptFieldBandPx > 0 && field != null && field.getVisibility() == View.VISIBLE
+                && field.getParent() == TermuxActivity.this.findViewById(R.id.apps_bar_row_host)) {
+                return field;
+            }
+            return null;
+        }
+
+        @Override
+        public float density() {
+            return getResources().getDisplayMetrics().density;
+        }
+
+        @Override
+        public void syncFrameBeadCut() {
+            TermuxActivity.this.syncFrameBeadCut();
+        }
+
+        @Override
+        public void onDockBeadsReplaced(@Nullable View host, boolean modeChanged) {
+            if (modeChanged && host != null && mDockShapeCut)
+                applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+            // The Search field's well nests in its capsule, or in the slab again.
+            syncPromptFieldWell();
+            TermuxActivity.this.syncFrameBeadCut();
+        }
+    }
+
+    /**
      * What only the activity gives the crossing's adapter (place.CrossingViews): the window's
      * views, the travel's shares its own layout passes read, the pane and wall controllers, the
      * keyboard, the dock's row and the picture of the stack.
@@ -27106,7 +26731,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void syncDockBeadsWithMorph() {
-            TermuxActivity.this.syncDockBeadsWithMorph();
+            mDock.syncDockBeadsWithMorph();
         }
 
         @Override
@@ -27343,7 +26968,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             Trace.beginSection("Settle.away");
             syncTerminalAway(page);
-            if (beadsMelted) applyDockBeadMelt(true);
+            if (beadsMelted) mDock.applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
