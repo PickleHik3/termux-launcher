@@ -1,5 +1,13 @@
 package com.termux.app.dock;
 
+import android.content.Context;
+import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -8,7 +16,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.AzScrubRowView;
+import com.termux.app.DockEdgeGlowView;
+import com.termux.app.DockPlankController;
 import com.termux.app.DockShelfView;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.DockSurfaceHostLayout;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
@@ -25,38 +36,87 @@ public final class DockController {
 
     /** What only the activity gives the dock. */
     public interface Host {
+        // -------------------------------------------------------------- window and views
+
         /** The window's view of {@code id}, looked up afresh; null while it has none. */
         @Nullable <T extends View> T findViewById(int id);
         /** The window's view of {@code id}, found once per tree; null while it has none. */
         @Nullable <T extends View> T hotView(int id);
+        /** The activity, as the Context the dock's touch light is made with. */
+        @NonNull Context context();
+        /** The window's decor view, which the touch light's fade steps on. */
+        @NonNull View decorView();
+        /** The display's density. */
+        float density();
+        /** {@code dp} in px at the display's density. */
+        float dpToPx(float dp);
+        /** {@code color} with its alpha replaced by {@code alpha} (0..255, clamped). */
+        int withAlphaComponent(int color, int alpha);
+        /** Whether {@code view} is shown and holds the screen point {@code x}, {@code y}. */
+        boolean viewContainsScreenPoint(@Nullable View view, float x, float y);
+        /** The dock's pinned row; null before it is inflated. */
+        @Nullable SuggestionBarView dockRow();
+        /** The Search field when it stands shown in the row's band under the icons; else null. */
+        @Nullable PromptLineFieldView promptFieldInRowBand();
+
+        // -------------------------------------------------------------- preferences and motion
+
         /** Whether the preferences are read yet. */
         boolean hasPreferences();
-        /** The crossing's bead share: NaN while nothing melts across the seam. */
-        float beadShare();
+        /** Whether reduced motion is on. */
+        boolean isReducedMotionEnabled();
+
+        // -------------------------------------------------------------- keyboard and drawer
+
+        /** Whether the in-app keyboard is shown. */
+        boolean isInAppKeyboardShown();
+        /** Whether the in-app keyboard is up and shares the dock's glass. */
+        boolean keyboardSharesDockGlass();
+        /** Whether the app drawer has taken the gesture (its open drag starts on the dock). */
+        boolean isAppDrawerEngaged();
+
+        // -------------------------------------------------------------- layout and arrangement
+
+        /** The place's layout as arranged now. */
+        @NonNull PlaceLayout placeLayout();
+        /** The dock's rows, which say whether the shelf is shown. */
+        @NonNull DockRows dockRows();
         /** The dock design the half in front shows now. */
         @NonNull DockSurfaceSpec shownDockSurfaceSpec();
         /** Whether the dock's own placement floats (a capsule over the wallpaper). */
         boolean dockFloats();
         /** The capsule's corner radius for a surface this tall. */
         float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx);
-        /** The dock's rows, which say whether the shelf is shown. */
-        @NonNull DockRows dockRows();
+        /** Whether the stack's sheets stand down on the joined frame's glass. */
+        boolean stackStandsDownOnFrame();
+
+        // -------------------------------------------------------------- glass
+
         /** The chrome's renderer; null before it is made. */
         @Nullable ChromeRenderer chrome();
         /** The dock's effect rebuilt once, as a key lens's frame does. */
         void rebuildBackdropGlassEffectForLens();
-        /** The dock's pinned row; null before it is inflated. */
-        @Nullable SuggestionBarView dockRow();
-        /** The place's layout as arranged now. */
-        @NonNull PlaceLayout placeLayout();
-        /** Whether the stack's sheets stand down on the joined frame's glass. */
-        boolean stackStandsDownOnFrame();
-        /** Whether the in-app keyboard is up and shares the dock's glass. */
-        boolean keyboardSharesDockGlass();
-        /** The Search field when it stands shown in the row's band under the icons; else null. */
-        @Nullable PromptLineFieldView promptFieldInRowBand();
-        /** The display's density. */
-        float density();
+        /** Whether the glass effects' parameters are valid. */
+        boolean glassParamsValid();
+        /** The dock's glass program; null while none is up. */
+        @Nullable GlassRefraction.Program dockGlassProgram();
+        /** Whether a key's lens holds the dock's glass now. */
+        boolean keyLensActive();
+        /** The glass origin's offset, so the dock host's coordinates map to the effect's. */
+        float glassOriginLeft();
+        float glassOriginTop();
+        /** Whether any glass touch light may run (the Fancier look on, no lazy mode or saver). */
+        boolean isGlassTouchLightAllowed();
+        /** The accent the dock's specular and rim glow are tinted with. */
+        int resolveDockAccentColor();
+
+        // -------------------------------------------------------------- crossing
+
+        /** The crossing's bead share: NaN while nothing melts across the seam. */
+        float beadShare();
+
+        // -------------------------------------------------------------- callbacks into the activity
+
         /** The row moved under the joined frame's band cut: the cut follows it. */
         void syncFrameBeadCut();
         /**
@@ -592,5 +652,316 @@ public final class DockController {
             }
         }
         return null;
+    }
+
+    // ------------------------------------------------------------------ Plank effects and touch light
+    //
+    // The dock's reactive glass plank (DockPlankController: tilt, specular, accent rim glow) and
+    // the dock icons' touch light (DockTouchFade), fed every touch the window dispatches, before
+    // any view acts on it, and dressed with the dock's chrome pass.
+
+    /** The plank's springs; null before the dock's views are wired ({@link #setupDockPlankFx}). */
+    @Nullable
+    public DockPlankController dockPlankController() {
+        return mDockPlankController;
+    }
+
+    /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
+    @Nullable private DockPlankController mDockPlankController;
+    @Nullable private View mDockPlankTarget;
+    private boolean mDockPlankTouchInside = false;
+    private float mDockPlankLeft = 0f;
+    private float mDockPlankTop = 0f;
+    private float mDockPlankWidth = 0f;
+    private float mDockPlankHeight = 0f;
+    private final int[] mDockPlankLocation = new int[2];
+    private final int[] mDockPlankKeySurfaceLocation = new int[2];
+    /**
+     * The key surfaces that ride on the dock plank. Touches on these never drive the plank
+     * physics — see {@link #isOnDockPlankKeySurface(float, float)}.
+     */
+    private static final int[] DOCK_PLANK_KEY_SURFACE_IDS = {
+        R.id.inapp_keyboard_container,
+        R.id.terminal_toolbar_view_pager,
+    };
+
+    /**
+     * Observes (never consumes) touches over the dock to drive the reactive glass-plank physics:
+     * the plank tilts toward the finger, dips on press, and the specular/rim glow track contact.
+     * Bounds are captured once on ACTION_DOWN so the per-frame tilt transform can't feed back into
+     * the hit-test, and reused for the rest of the gesture.
+     */
+    public void feedDockPlank(MotionEvent ev) {
+        DockPlankController controller = mDockPlankController;
+        if (controller == null) {
+            return;
+        }
+        // The drawer's open drag starts on the dock; letting the plank keep tilting under it would
+        // put two owners on the same views' transforms. The press that began the drag is handed
+        // back the moment the drawer engages — otherwise the springs sit frozen at their aimed
+        // targets (the UP never arrives here) and keep the rows tilted under the drawer's own lift.
+        if (mHost.isAppDrawerEngaged()) {
+            if (mDockPlankTouchInside) {
+                mDockPlankTouchInside = false;
+                controller.releaseToNeutral();
+            }
+            return;
+        }
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                View plank = mDockPlankTarget;
+                mDockPlankTouchInside = false;
+                if (plank == null || plank.getVisibility() != View.VISIBLE
+                    || plank.getWidth() <= 0 || plank.getHeight() <= 0) {
+                    break;
+                }
+                plank.getLocationOnScreen(mDockPlankLocation);
+                mDockPlankLeft = mDockPlankLocation[0];
+                mDockPlankTop = mDockPlankLocation[1];
+                mDockPlankWidth = plank.getWidth();
+                mDockPlankHeight = plank.getHeight();
+                float x = ev.getRawX();
+                float y = ev.getRawY();
+                if (x >= mDockPlankLeft && x <= mDockPlankLeft + mDockPlankWidth
+                    && y >= mDockPlankTop && y <= mDockPlankTop + mDockPlankHeight
+                    && !isOnDockPlankKeySurface(x, y)) {
+                    mDockPlankTouchInside = true;
+                    controller.onPointerDown(
+                        (x - mDockPlankLeft) / mDockPlankWidth,
+                        (y - mDockPlankTop) / mDockPlankHeight);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_MOVE:
+                if (mDockPlankTouchInside && mDockPlankWidth > 0f && mDockPlankHeight > 0f) {
+                    controller.onPointerMove(
+                        (ev.getRawX() - mDockPlankLeft) / mDockPlankWidth,
+                        (ev.getRawY() - mDockPlankTop) / mDockPlankHeight);
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (mDockPlankTouchInside) {
+                    controller.onPointerUp();
+                    mDockPlankTouchInside = false;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Whether a touch lands on one of the key surfaces the plank carries rather than on the dock.
+     *
+     * <p>While the in-app keyboard is up the plank target is the whole accessory surface, and that
+     * surface holds the keyboard and the extra-keys row alongside the dock. Feeding those touches
+     * to the springs tilted and slid the entire plane on every keystroke, so the dock swayed while
+     * you typed. The physics belong to pushing the dock, not to pressing a key.</p>
+     */
+    private boolean isOnDockPlankKeySurface(float rawX, float rawY) {
+        for (int viewId : DOCK_PLANK_KEY_SURFACE_IDS) {
+            View view = mHost.hotView(viewId);
+            if (view == null || view.getVisibility() != View.VISIBLE
+                || view.getWidth() <= 0 || view.getHeight() <= 0) {
+                continue;
+            }
+            view.getLocationOnScreen(mDockPlankKeySurfaceLocation);
+            float left = mDockPlankKeySurfaceLocation[0];
+            float top = mDockPlankKeySurfaceLocation[1];
+            if (rawX >= left && rawX <= left + view.getWidth()
+                && rawY >= top && rawY <= top + view.getHeight()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The dock icons' touch light; built on the first press that may light, see {@link #dockTouchFade}. */
+    @Nullable private com.termux.app.chrome.DockTouchFade mDockTouchFade;
+    /** The finger now down landed on a dock icon and lit it. */
+    private boolean mDockTouchLightDown;
+
+    /**
+     * Observes (never consumes) a press on a dock icon to light the glass under it
+     * ({@link com.termux.app.chrome.DockTouchFade}): on at once on the down, nothing on a move,
+     * a stepped fall on the lift. The click, the long-press and the drag are the icon's as before.
+     */
+    public void feedDockTouchLight(@NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                mDockTouchLightDown = false;
+                float[] at = dockTouchLightPoint(ev.getRawX(), ev.getRawY());
+                if (at == null) return;
+                mDockTouchLightDown = true;
+                dockTouchFade().down(at[0], at[1]);
+                return;
+            }
+            case MotionEvent.ACTION_MOVE:
+                // The drawer's open drag starts on the dock and takes the gesture: let go as on a lift.
+                if (mDockTouchLightDown && mHost.isAppDrawerEngaged()) {
+                    mDockTouchLightDown = false;
+                    dockTouchFade().up();
+                }
+                return;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (!mDockTouchLightDown) return;
+                mDockTouchLightDown = false;
+                dockTouchFade().up();
+                return;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Where a press at this screen point lights the dock's glass, in the dock backdrop's effect
+     * coordinates (the key lens's mapping), or null when it is not on a dock icon over that
+     * backdrop: below API 33, with no refracting backdrop up, while a key's lens holds the glass,
+     * on the keys, or with the row off the dock (a rail or an off-dock plank has glass of its own).
+     */
+    @Nullable
+    private float[] dockTouchLightPoint(float rawX, float rawY) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mHost.glassParamsValid()
+            || mHost.dockGlassProgram() == null || mHost.keyLensActive() || mHost.isAppDrawerEngaged()) return null;
+        SuggestionBarView bar = mHost.dockRow();
+        View container = mHost.hotView(R.id.accessory_stack_container);
+        View surfaceHost = mHost.hotView(R.id.accessory_surface_host);
+        View backdrop = mHost.hotView(R.id.accessory_blur_backdrop);
+        if (bar == null || container == null || surfaceHost == null || backdrop == null
+            || backdrop.getVisibility() != View.VISIBLE
+            || !mHost.viewContainsScreenPoint(surfaceHost, rawX, rawY)
+            || isOnDockPlankKeySurface(rawX, rawY)) return null;
+        boolean onDock = false;
+        for (android.view.ViewParent p = bar.getParent(); p != null; p = p.getParent()) {
+            if (p == container) {
+                onDock = true;
+                break;
+            }
+        }
+        if (!onDock || !bar.isIconAt(rawX, rawY)) return null;
+        int[] hostLoc = new int[2];
+        surfaceHost.getLocationOnScreen(hostLoc);
+        return new float[] {rawX - hostLoc[0] + mHost.glassOriginLeft(), rawY - hostLoc[1] + mHost.glassOriginTop()};
+    }
+
+    /**
+     * The fade, writing the light into the dock's program and rebuilding its effect once per step,
+     * as the key lens does; gated as every glass touch light is ({@link #isGlassTouchLightAllowed}).
+     */
+    @NonNull
+    private com.termux.app.chrome.DockTouchFade dockTouchFade() {
+        if (mDockTouchFade != null) return mDockTouchFade;
+        mDockTouchFade = new com.termux.app.chrome.DockTouchFade(mHost.context(), mHost.decorView(),
+            new com.termux.app.chrome.DockTouchFade.Sink() {
+                @Override public void light(float x, float y, float intensity) {
+                    com.termux.app.chrome.GlassRefraction.Program program = mHost.dockGlassProgram();
+                    if (program == null) return;
+                    // A key's lens took the glass meanwhile: no light, and no rebuild of its effect.
+                    if (mHost.keyLensActive()) {
+                        program.clearTouch();
+                        return;
+                    }
+                    program.setTouch(x, y, com.termux.app.chrome.GlassTouchLight.RADIUS_DP
+                        * mHost.density(), intensity);
+                    mHost.rebuildBackdropGlassEffectForLens();
+                }
+
+                @Override public void clear() {
+                    com.termux.app.chrome.GlassRefraction.Program program = mHost.dockGlassProgram();
+                    if (program == null) return;
+                    program.clearTouch();
+                    if (!mHost.keyLensActive()) mHost.rebuildBackdropGlassEffectForLens();
+                }
+            }, mHost::isGlassTouchLightAllowed);
+        return mDockTouchFade;
+    }
+
+    /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
+    public void setupDockPlankFx() {
+        View plank = mHost.findViewById(mHost.isInAppKeyboardShown()
+            ? R.id.accessory_surface_host : R.id.accessory_stack_container);
+        if (plank == null) {
+            return;
+        }
+        if (mDockPlankController == null || mDockPlankTarget != plank) {
+            if (mDockPlankController != null)
+                mDockPlankController.reset();
+            View specular = mHost.findViewById(R.id.accessory_specular_fx);
+            View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
+            mDockPlankController = new DockPlankController(plank, specular, glow);
+            mDockPlankTarget = plank;
+        }
+        // Every row standing on the glass follows the same springs as the glass under it: the
+        // pinned-apps layer, the letters, and the band of air between them. The set is registered
+        // whole rather than one row at a time — a row left out is a row that reads as thrown off
+        // the surface the moment the dock is pushed.
+        mDockPlankController.setContentLayers(
+            mHost.findViewById(R.id.apps_bar_plank_layer),
+            mHost.findViewById(R.id.apps_bar_az_row),
+            mHost.findViewById(R.id.apps_bar_indicator_band));
+        mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
+    }
+
+    /** Refreshes the plank FX drawables (accent/shape may change) and enables it for a shown dock. */
+    public void refreshDockPlankFx(float materialAlpha) {
+        setupDockPlankFx();
+        if (mDockPlankController == null) {
+            return;
+        }
+        int accent = mHost.resolveDockAccentColor();
+        View specular = mHost.findViewById(R.id.accessory_specular_fx);
+        if (specular != null) {
+            specular.setBackground(buildDockSpecularDrawable(accent));
+            specular.setAlpha(materialAlpha);
+        }
+        View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
+        if (glow instanceof DockEdgeGlowView) {
+            View surfaceHost = mHost.findViewById(R.id.accessory_surface_host);
+            int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
+            float radius = mHost.dockFloats()
+                ? mHost.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx)
+                : 0f;
+            DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
+            glowView.setAlpha(materialAlpha);
+            glowView.setAccentColor(accent);
+            glowView.setCornerRadiusPx(radius);
+            // Feather the rim into a soft glow instead of a hard outline (API 31+). The view draws
+            // its rim inset from the edge so this blur stays inside the rounded clip at the corners.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                float blur = mHost.density() * 7f;
+                glow.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP));
+            }
+        }
+        // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
+        // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
+        boolean capsuleDock = mHost.dockFloats();
+        mDockPlankController.setMotionEnabled(true);
+        mDockPlankController.setHingeMode(!capsuleDock);
+        mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
+        mDockPlankController.setEnabled(true);
+    }
+
+    /** Soft accent-tinted radial specular that rides the touch point across the glass. */
+    @NonNull
+    private Drawable buildDockSpecularDrawable(int accent) {
+        GradientDrawable specular = new GradientDrawable();
+        specular.setShape(GradientDrawable.RECTANGLE);
+        specular.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        specular.setGradientCenter(0.5f, 0.5f);
+        specular.setGradientRadius(mHost.dpToPx(120));
+        // Wide and soft so it reads as caught light gliding over glass rather than a painted accent
+        // disc under the finger — leaning white on the dark dock, and into shadow on the light one,
+        // where a white pool under the finger is a pool of nothing.
+        int caught = com.termux.app.chrome.ChromeShade.polarity()
+            == com.termux.app.chrome.ChromeInk.Polarity.DARK_INK ? Color.BLACK : Color.WHITE;
+        specular.setColors(new int[] {
+            mHost.withAlphaComponent(caught, 70),
+            mHost.withAlphaComponent(accent, 22),
+            mHost.withAlphaComponent(accent, 0)
+        });
+        specular.setDither(true);
+        return specular;
     }
 }

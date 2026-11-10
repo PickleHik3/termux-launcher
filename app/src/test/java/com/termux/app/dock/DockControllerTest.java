@@ -1,7 +1,10 @@
 package com.termux.app.dock;
 
 import android.app.Application;
+import android.content.Context;
 import android.os.Build;
+import android.util.SparseArray;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -12,6 +15,7 @@ import org.robolectric.RuntimeEnvironment;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.chrome.ChromeRenderer;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.place.PlaceLayout;
 
 import org.junit.Before;
@@ -128,17 +132,108 @@ public class DockControllerTest {
         return beads;
     }
 
-    private static final class FakeHost implements DockController.Host {
+    // ------------------------------------------------------------------ Plank effects and touch light
+
+    /** A 400 x 100 dock stack at the window's origin, the plank the springs are wired to. */
+    private View plankAtOrigin() {
+        FrameLayout stack = new FrameLayout(RuntimeEnvironment.getApplication());
+        stack.layout(0, 0, 400, 100);
+        mHost.views.put(R.id.accessory_stack_container, stack);
+        return stack;
+    }
+
+    private static MotionEvent touch(int action, float x, float y) {
+        return MotionEvent.obtain(0L, 0L, action, x, y, 0);
+    }
+
+    private boolean plankTouchInside() {
+        return ReflectionHelpers.getField(mDock, "mDockPlankTouchInside");
+    }
+
+    @Test
+    public void aPressOnThePlankDrivesItsSpringsAndAPressOffItDoesNot() {
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertFalse("no springs before the dock's views are wired", plankTouchInside());
+
+        View plank = plankAtOrigin();
+        mDock.setupDockPlankFx();
+        assertNotNull(mDock.dockPlankController());
+        assertSame(plank, ReflectionHelpers.getField(mDock, "mDockPlankTarget"));
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertTrue("a press on the plank", plankTouchInside());
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_UP, 200f, 50f));
+        assertFalse("the lift lets go", plankTouchInside());
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 300f));
+        assertFalse("a press below the plank", plankTouchInside());
+    }
+
+    @Test
+    public void aPressOnAKeySurfaceRidingThePlankLeavesItsSpringsAlone() {
+        plankAtOrigin();
+        FrameLayout keys = new FrameLayout(RuntimeEnvironment.getApplication());
+        keys.layout(0, 0, 400, 60);
+        mHost.views.put(R.id.inapp_keyboard_container, keys);
+        mDock.setupDockPlankFx();
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 30f));
+        assertFalse("a key under the finger", plankTouchInside());
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 80f));
+        assertTrue("the dock below the keys", plankTouchInside());
+    }
+
+    @Test
+    public void theDrawerTakingTheGestureHandsThePlankBack() {
+        plankAtOrigin();
+        mDock.setupDockPlankFx();
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertTrue(plankTouchInside());
+        mHost.drawerEngaged = true;
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_MOVE, 200f, 40f));
+        assertFalse("the drawer's drag owns the views now", plankTouchInside());
+    }
+
+    @Test
+    public void reducedMotionReachesTheSprings() {
+        plankAtOrigin();
+        mHost.reducedMotion = true;
+        mDock.setupDockPlankFx();
+        assertSpringsReduced(true);
+        mHost.reducedMotion = false;
+        mDock.setupDockPlankFx();
+        assertSpringsReduced(false);
+    }
+
+    private void assertSpringsReduced(boolean reduced) {
+        boolean held = ReflectionHelpers.getField(mDock.dockPlankController(), "mReducedMotion");
+        assertEquals(reduced, held);
+    }
+
+    @Test
+    public void belowApi33APressLightsNothingAndBuildsNoFade() {
+        plankAtOrigin();
+        mDock.feedDockTouchLight(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertFalse(ReflectionHelpers.<Boolean>getField(mDock, "mDockTouchLightDown"));
+        assertNull(ReflectionHelpers.getField(mDock, "mDockTouchFade"));
+    }
+
+    static class FakeHost implements DockController.Host {
         boolean prefs = true;
         float share = Float.NaN;
         @NonNull DockSurfaceSpec spec = DockSurfaceSpec.LENS_BEADS;
         @Nullable View surfaceHost;
+        final SparseArray<View> views = new SparseArray<>();
+        boolean reducedMotion;
+        boolean drawerEngaged;
+        boolean keyboardShown;
 
         @Nullable
         @Override
         @SuppressWarnings("unchecked")
         public <T extends View> T findViewById(int id) {
-            return id == R.id.accessory_surface_host ? (T) surfaceHost : null;
+            if (id == R.id.accessory_surface_host && surfaceHost != null) return (T) surfaceHost;
+            return (T) views.get(id);
         }
 
         @Nullable
@@ -147,7 +242,23 @@ public class DockControllerTest {
             return findViewById(id);
         }
 
+        @NonNull @Override public Context context() { return RuntimeEnvironment.getApplication(); }
+        @NonNull @Override public View decorView() { return new View(context()); }
+        @Override public float dpToPx(float dp) { return dp * density(); }
+        @Override public int withAlphaComponent(int color, int alpha) {
+            return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
+        }
+        @Override public boolean viewContainsScreenPoint(@Nullable View view, float x, float y) {
+            if (view == null || !view.isShown()) return false;
+            int[] at = new int[2];
+            view.getLocationOnScreen(at);
+            return x >= at[0] && x < at[0] + view.getWidth()
+                && y >= at[1] && y < at[1] + view.getHeight();
+        }
         @Override public boolean hasPreferences() { return prefs; }
+        @Override public boolean isReducedMotionEnabled() { return reducedMotion; }
+        @Override public boolean isInAppKeyboardShown() { return keyboardShown; }
+        @Override public boolean isAppDrawerEngaged() { return drawerEngaged; }
         @Override public float beadShare() { return share; }
         @NonNull @Override public DockSurfaceSpec shownDockSurfaceSpec() { return spec; }
         @Override public boolean dockFloats() { return false; }
@@ -155,6 +266,13 @@ public class DockControllerTest {
         @NonNull @Override public DockRows dockRows() { throw new AssertionError("not read"); }
         @Nullable @Override public ChromeRenderer chrome() { return null; }
         @Override public void rebuildBackdropGlassEffectForLens() { }
+        @Override public boolean glassParamsValid() { return true; }
+        @Nullable @Override public GlassRefraction.Program dockGlassProgram() { return null; }
+        @Override public boolean keyLensActive() { return false; }
+        @Override public float glassOriginLeft() { return 0f; }
+        @Override public float glassOriginTop() { return 0f; }
+        @Override public boolean isGlassTouchLightAllowed() { return true; }
+        @Override public int resolveDockAccentColor() { return 0xFF3366CC; }
         @Nullable @Override public SuggestionBarView dockRow() { return null; }
         @NonNull @Override public PlaceLayout placeLayout() { throw new AssertionError("not read"); }
         @Override public boolean stackStandsDownOnFrame() { return false; }
