@@ -368,6 +368,7 @@ public class ClockWidgetTest {
      */
     @Test public void aPeriodIsDrawnWholeOrNotAtAll() {
         List<String> failures = new ArrayList<>();
+        int[][] inkBuffer = {new int[0]};
         ClockFace[] faces = {ClockFace.NUMERALS, ClockFace.SLAB, ClockFace.MINIMAL,
             ClockFace.TAPE, ClockFace.LED, ClockFace.LCD, ClockFace.FLIP};
         java.time.ZonedDateTime wide = ClockWidgetView.sampleNow().withHour(23).withMinute(12);
@@ -389,9 +390,9 @@ public class ClockWidgetTest {
                             services.destroy();
                             ClockFaceView faceView = view.faceView();
                             if (faceView == null || faceView.getWidth() <= 0) continue;
-                            checkInkInside(faceView, where + " 1:40 PM", failures);
+                            checkInkInside(faceView, where + " 1:40 PM", failures, inkBuffer);
                             faceView.setTime(wide);
-                            checkInkInside(faceView, where + " 11:12 PM", failures);
+                            checkInkInside(faceView, where + " 11:12 PM", failures, inkBuffer);
                         }
                     }
                 }
@@ -470,18 +471,26 @@ public class ClockWidgetTest {
 
     /** Draws the face into a canvas wider than its box and finds any ink past the box's edge. */
     private static void checkInkInside(@NonNull ClockFaceView faceView, @NonNull String where,
-                                       @NonNull List<String> failures) {
+                                       @NonNull List<String> failures, @NonNull int[][] buffer) {
         int w = faceView.getWidth(), h = faceView.getHeight();
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(w + 400, h,
             android.graphics.Bitmap.Config.ARGB_8888);
         faceView.draw(new android.graphics.Canvas(bitmap));
         int furthest = -1;
         // Past a 2 px fringe: a flip card's shadow or an LCD segment's glow may bleed one pixel.
-        for (int x = w + 2; x < bitmap.getWidth(); x++) {
+        // One getPixels for the strip past the fringe (a JNI call per pixel is the test's cost),
+        // into a buffer the caller keeps across cells.
+        int from = w + 2, columns = bitmap.getWidth() - from;
+        if (columns > 0) {
+            if (buffer[0].length < columns * h) buffer[0] = new int[columns * h];
+            int[] pixels = buffer[0];
+            bitmap.getPixels(pixels, 0, columns, from, 0, columns, h);
             for (int y = 0; y < h; y++) {
-                if (android.graphics.Color.alpha(bitmap.getPixel(x, y)) > 40) {
-                    furthest = x;
-                    break;
+                for (int c = 0; c < columns; c++) {
+                    if (android.graphics.Color.alpha(pixels[y * columns + c]) > 40
+                        && from + c > furthest) {
+                        furthest = from + c;
+                    }
                 }
             }
         }
