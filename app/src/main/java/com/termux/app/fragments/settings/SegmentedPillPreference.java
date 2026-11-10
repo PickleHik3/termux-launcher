@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.text.StaticLayout;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -14,6 +15,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.preference.Preference;
+import androidx.core.widget.TextViewCompat;
 import androidx.preference.PreferenceViewHolder;
 
 import com.google.android.material.button.MaterialButton;
@@ -62,6 +64,9 @@ public final class SegmentedPillPreference extends Preference {
     /** The side padding a segment keeps around its label when the style's 12dp would push the
      *  row into a stack. */
     private static final int COMPACT_PADDING_DP = 4;
+    /** A two-segment label shrinks from the style's 14sp to this before it ellipsizes. */
+    private static final int AUTOSIZE_MAX_SP = 14;
+    private static final int AUTOSIZE_MIN_SP = 10;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -193,6 +198,7 @@ public final class SegmentedPillPreference extends Preference {
             if (mLabelText[i] != null) button.setText(mLabelText[i]);
             else if (mLabelResIds[i] != 0) button.setText(mLabelResIds[i]);
             button.setEnabled(isEnabled());
+            applyLabelSizing(button, mValues.length == 2);
         }
         group.setContentDescription(getTitle());
         // Every bind: the row's view may have been another pill's, trimmed or not.
@@ -224,6 +230,27 @@ public final class SegmentedPillPreference extends Preference {
         };
         group.addOnButtonCheckedListener(listener);
         group.setTag(R.id.segmented_pill_track, listener);
+    }
+
+    /**
+     * Two segments are wide enough for a label to shrink to one line instead of ellipsizing at a
+     * large font scale (at 14sp, the size it already has, nothing changes). Three or four
+     * segments keep the trim-then-stack fit. Compares before setting.
+     */
+    private static void applyLabelSizing(@NonNull MaterialButton button, boolean autosize) {
+        boolean on = TextViewCompat.getAutoSizeTextType(button)
+            == TextViewCompat.AUTO_SIZE_TEXT_TYPE_UNIFORM;
+        if (on == autosize) return;
+        if (autosize) {
+            button.setMaxLines(1);
+            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(button, AUTOSIZE_MIN_SP,
+                AUTOSIZE_MAX_SP, 1, TypedValue.COMPLEX_UNIT_SP);
+        } else {
+            TextViewCompat.setAutoSizeTextTypeWithDefaults(button,
+                TextViewCompat.AUTO_SIZE_TEXT_TYPE_NONE);
+            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, AUTOSIZE_MAX_SP);
+            button.setMaxLines(2);
+        }
     }
 
     /**

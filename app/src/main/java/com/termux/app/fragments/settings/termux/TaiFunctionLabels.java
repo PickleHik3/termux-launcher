@@ -10,6 +10,7 @@ import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
+import com.termux.ai.TaiSpeechGpuAdvice;
 
 import java.util.Collections;
 import java.util.Map;
@@ -64,6 +65,14 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
             case PLAN_OFFER: return R.string.tai_fn_plan_offer;
             default: return R.string.tai_fn_level_polished;
         }
+    }
+
+    /** The GPU speech model's detail is its advice for this phone, not the tier's fit line. */
+    @Nullable
+    @Override
+    public String modelDetail(@NonNull String modelId) {
+        if (!TaiSpeechActions.isGpuModel(modelId)) return null;
+        return TaiSpeechActions.gpuAdviceLine(context, TaiSpeechGpuAdvice.forContext(context, modelId), false);
     }
 
     @NonNull

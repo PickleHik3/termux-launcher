@@ -2652,6 +2652,7 @@
     <string name="speech_model_idle_unload_summary">%1$s · frees memory when voice input has not been used for a while</string>
     <string name="speech_model_accelerator_title">Runs on</string>
     <string name="speech_model_accelerator_hint">GPU uses less battery, may be slower</string>
+    <string name="speech_model_accelerator_hint_gpu_model">Built for the GPU: uses less battery and CPU</string>
     <string name="speech_model_get_more_models">Get more models</string>
     <string name="read_aloud_title">Read aloud</string>
     <string name="read_aloud_summary">The voice and speed for spoken answers</string>

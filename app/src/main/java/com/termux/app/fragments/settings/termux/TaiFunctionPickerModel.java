@@ -203,7 +203,7 @@ final class TaiFunctionPickerModel {
             String base = TaiFunctionRows.stripVision(info.id);
             skip.add(base);
             TaiFunctionRows.Fit fit = TaiFunctionRows.fit(env, base, info.sizeBytes);
-            onPhone.add(new Entry(Section.ON_PHONE, base, labels.modelName(base), TaiFunctionRows.fitLine(fit, labels),
+            onPhone.add(new Entry(Section.ON_PHONE, base, labels.modelName(base), detail(base, fit, labels),
                 base.equals(pickedBase), TaiTierPolicy.warnsBackground(env, info.sizeBytes), false, info.sizeBytes, false));
         }
         sections.put(Section.ON_PHONE, onPhone);
@@ -236,7 +236,7 @@ final class TaiFunctionPickerModel {
                 if (!item.downloadAvailable || skip.contains(info.id) || !TaiFunctionModels.canServe(function, info)) continue;
                 TaiFunctionRows.Fit fit = TaiFunctionRows.fit(env, info.id, info.sizeBytes);
                 boolean chat = function.usesChatModel();
-                get.add(new Entry(Section.GET, info.id, labels.modelName(info.id), TaiFunctionRows.fitLine(fit, labels),
+                get.add(new Entry(Section.GET, info.id, labels.modelName(info.id), detail(info.id, fit, labels),
                     false, TaiTierPolicy.warnsBackground(env, info.sizeBytes),
                     TaiFunctionRows.suggested(env, info.id, chat), info.sizeBytes, false));
             }
@@ -253,6 +253,14 @@ final class TaiFunctionPickerModel {
         }
         return new Model(function, sections, accelerator, TaiFunctionRows.chainLine(resolution.chain, labels),
             planLine(plan, labels));
+    }
+
+    /** The model's own detail where it has one, else the tier's fit line. */
+    @NonNull
+    private static String detail(@NonNull String modelId, @NonNull TaiFunctionRows.Fit fit,
+                                 @NonNull TaiFunctionRows.Labels labels) {
+        String own = labels.modelDetail(modelId);
+        return own != null ? own : TaiFunctionRows.fitLine(fit, labels);
     }
 
     /**
