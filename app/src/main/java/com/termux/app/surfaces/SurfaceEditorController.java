@@ -935,13 +935,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mEntry = carried.entry;
             mEntrySignature = carried.entrySignature;
             mEntryCustom = carried.entryCustom;
+            mEntryCardCustoms = carried.entryCardCustoms;
             mEntrySettings = carried.settings;
             mEntryMinimal = carried.minimal;
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
         // On disk until the session ends, so a launcher killed before Done starts on this state.
-        AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom);
+        AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom, mEntryCardCustoms);
         // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
         // tried and kept comes back to it. Undo and a killed session put the slot back as
         // mEntryCustom has it.
@@ -2852,8 +2853,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || entry == null || signature == null || settings == null)
             return mCarriedNext;
         LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(entry, signature, mEntryCustom, settings, mEntryMinimal,
-            mSessionCustom.copy(), layout == null ? null : layout.entryArrangement());
+        return new CarriedSession(entry, signature, mEntryCustom, mEntryCardCustoms, settings,
+            mEntryMinimal, mSessionCustom.copy(),
+            layout == null ? null : layout.entryArrangement());
     }
 
     @Override
@@ -2866,18 +2868,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @NonNull final AppearanceSnapshot entry;
         @NonNull final String entrySignature;
         @Nullable final String entryCustom;
+        /** {@link CardCustoms#raw} at open; null when none was saved. */
+        @Nullable final String entryCardCustoms;
         @NonNull final EditorSettingsSnapshot settings;
         final boolean minimal;
         @NonNull final SessionCustom custom;
         @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
         CarriedSession(@NonNull AppearanceSnapshot entry, @NonNull String entrySignature,
-                       @Nullable String entryCustom, @NonNull EditorSettingsSnapshot settings,
+                       @Nullable String entryCustom, @Nullable String entryCardCustoms,
+                       @NonNull EditorSettingsSnapshot settings,
                        boolean minimal, @NonNull SessionCustom custom,
                        @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
             this.entry = entry;
             this.entrySignature = entrySignature;
             this.entryCustom = entryCustom;
+            this.entryCardCustoms = entryCardCustoms;
             this.settings = settings;
             this.minimal = minimal;
             this.custom = custom;
