@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Voice settings fixes (11-10, #232).** Unit tests for the picker only. Owed · pong: Settings ›
+  On-device AI › Voice input at font scale 1.5: the Speech engine segments read "Android system"
+  and "On-device" whole on one line; at 1.0 every two-segment pill looks as before. With Base GPU
+  in use, Runs on reads "Built for the GPU: uses less battery and CPU" (another model: the old
+  line). Model centre › Functions › Voice typing: Base GPU's line is its GPU advice, not "Made for
+  bigger phones". Installed › KittenTTS ⋯ › Voice settings opens Read aloud.
 - **Card looks survive a relaunch and a kill mid-edit (11-10, fix/card-looks-session).** Unit tests
   only. Owed · emulator: in the Appearance editor take a card on Custom to a Look, change the theme
   (the editor relaunches), then Undo: the card is back on its Custom with the values from before
