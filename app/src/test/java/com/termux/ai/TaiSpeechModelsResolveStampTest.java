@@ -19,12 +19,15 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The cached voice-typing answer is reused only while nothing it was derived from has changed:
  * the AI preferences, the models directory and each installed model's file.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiSpeechModelsResolveStampTest {
 
     @Rule

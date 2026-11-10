@@ -21,6 +21,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A programmatic slide from the Workspace to Home ({@link PaneWallLayout#goTo}, what the home key
@@ -30,7 +31,7 @@ import java.util.List;
  * pose is the identity at rest and moves monotonically with the page's distance from it.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class WallArrivingPoseTest {
 
     private static final int WIDTH = 1080;

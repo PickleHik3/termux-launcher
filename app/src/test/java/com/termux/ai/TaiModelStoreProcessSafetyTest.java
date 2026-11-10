@@ -16,8 +16,11 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiModelStoreProcessSafetyTest {
     private Context context;
 

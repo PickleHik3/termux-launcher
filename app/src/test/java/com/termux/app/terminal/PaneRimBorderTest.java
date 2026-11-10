@@ -29,6 +29,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * What a frame's border is made of. A lone pane wears the shared rim, so none of its pixels may
@@ -37,7 +38,7 @@ import org.robolectric.annotation.GraphicsMode;
  * opening's: the theme's outline role at the divider's strength, round the insert's corners.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PaneRimBorderTest {
 

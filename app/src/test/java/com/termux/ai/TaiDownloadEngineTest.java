@@ -25,12 +25,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
+import org.robolectric.annotation.Config;
 
 /**
  * The state machine the engine drives over persisted records, without the foreground service (so
  * no worker ever runs): queue, pause, resume, prioritise, cancel and the reconcile on start.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiDownloadEngineTest {
     private Context context;
     private TaiModelStore store;

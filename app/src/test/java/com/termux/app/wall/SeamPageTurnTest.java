@@ -19,6 +19,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Across the seam between Home and the Workspace the pages move by the page transition, as Home's
@@ -28,7 +29,7 @@ import org.robolectric.annotation.Config;
  * it is moving across the seam, which the chrome eases on.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class SeamPageTurnTest {
 
     private static final int WIDTH = 1080;

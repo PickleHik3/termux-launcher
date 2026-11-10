@@ -25,12 +25,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * A session's cleanup on plain executors: warm first, early passes while listening, the rest at the
  * end, callbacks never after a cancel. Robolectric only for the logger's {@code android.util.Log}.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class VoiceSessionCleanupTest {
 
     /** Runs each task at once on the calling thread; refuses work once shut down. */

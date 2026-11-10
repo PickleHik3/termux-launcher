@@ -17,12 +17,15 @@ import com.termux.view.TerminalRenderer;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Window names carry Nerd Font icons, so a label has to reach the symbol_map faces the terminal
  * itself draws those code points with. Span building only — the view is exercised elsewhere.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TerminalLabelSymbolSpansTest {
 
     /** Private use area: the classic Nerd Font block, entirely inside the BMP. */

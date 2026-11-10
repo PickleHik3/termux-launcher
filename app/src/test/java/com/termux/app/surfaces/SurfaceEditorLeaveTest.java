@@ -40,6 +40,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import android.app.Application;
 
 /**
  * Leaving the editor (AGENTS.md, "the Appearance editor commits only on Done"): Back takes a card
@@ -47,7 +48,7 @@ import java.util.ArrayList;
  * Discard puts everything back as it was at open, both halves and every layout; Done keeps.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorLeaveTest {
 
     private TermuxAppSharedPreferences preferences;

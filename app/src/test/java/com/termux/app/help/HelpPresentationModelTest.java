@@ -20,12 +20,15 @@ import java.util.Set;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * What exploration is showing: the controls it measured, the one that is selected, and the topic and
  * colour each of them wears. The model never draws and never measures.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class HelpPresentationModelTest {
 
     private static final int ACCENT = Color.rgb(0xf0, 0xb4, 0x8a);

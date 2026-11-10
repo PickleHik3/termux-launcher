@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The Status bar and Terminal cards (editor-redesign §2): their tables, the policy that maps
@@ -48,7 +49,7 @@ import java.util.List;
  * font metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class StatusTerminalCardsTest {
 

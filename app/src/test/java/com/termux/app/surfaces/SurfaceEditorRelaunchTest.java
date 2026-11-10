@@ -37,6 +37,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.lang.reflect.Proxy;
 import java.util.EnumMap;
 import java.util.Map;
+import android.app.Application;
 
 /**
  * The editor across a configuration relaunch (new wallpaper colours, the theme, the font scale):
@@ -47,7 +48,7 @@ import java.util.Map;
  * instead of taking the edited look as its new starting point.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorRelaunchTest {
 
     private static final int EDITED_KEYBOARD_OPACITY = 33;

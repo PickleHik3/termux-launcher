@@ -20,6 +20,7 @@ import org.robolectric.annotation.Config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The wall lays out one cell per page (ADR 0016): every page of the list, in order, by page id;
@@ -29,7 +30,7 @@ import java.util.List;
  * what the user sees: the page landed on, the cells in order, which page of each kind is live.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PaneWallCellsTest {
 
     private static final int WIDTH = 1080;

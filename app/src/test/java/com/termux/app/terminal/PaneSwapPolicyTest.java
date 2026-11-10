@@ -15,8 +15,11 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class PaneSwapPolicyTest {
 
     /** A 4px divider between every pair of panes, as the gap setting lays them out. */

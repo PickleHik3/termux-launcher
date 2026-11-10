@@ -12,9 +12,12 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The bundled examples: the index, and every shader through the same prelude the app builds. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ShaderExamplesTest {
 
     private static final File DIR = new File("src/main/assets/" + ShaderExamples.DIR);

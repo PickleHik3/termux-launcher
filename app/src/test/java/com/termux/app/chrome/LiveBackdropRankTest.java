@@ -17,6 +17,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Live blur's budget order: the dock and the panels, then the floats, then the widgets. A full
@@ -24,7 +25,7 @@ import org.robolectric.annotation.Config;
  * budget keeps its stored frame.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 public class LiveBackdropRankTest {
 
     @Test

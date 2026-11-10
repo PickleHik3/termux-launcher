@@ -10,6 +10,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Landscape category geometry, and the 2x2 block's footprint inside its slot.
@@ -20,7 +21,7 @@ import org.robolectric.annotation.Config;
  * icons beside them.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class AppDrawerCategoryLandscapeMetricsTest {
 
     private static final float DENSITY = 2.625f;

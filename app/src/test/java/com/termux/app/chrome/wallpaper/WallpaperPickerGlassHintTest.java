@@ -29,6 +29,7 @@ import org.robolectric.annotation.GraphicsMode;
 import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
+import android.app.Application;
 
 /**
  * The Overview's glass hint on the smallest phone it has to fit, 360 x 640 dp at 1.3x text: it
@@ -37,7 +38,7 @@ import java.time.Duration;
  * Native graphics, so text has real metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h640dp-mdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h640dp-mdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class WallpaperPickerGlassHintTest {
 

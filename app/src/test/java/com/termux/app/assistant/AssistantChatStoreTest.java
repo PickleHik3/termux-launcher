@@ -18,8 +18,11 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.io.File;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AssistantChatStoreTest {
     private File file;

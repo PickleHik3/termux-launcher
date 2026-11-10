@@ -27,13 +27,14 @@ import org.robolectric.util.ReflectionHelpers;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The header pill's Home and Workspace slide the live wall to their page inside the mini UI, as a
  * swipe would, and Customization wears the same halo as the page cards.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorPillTest {
 
     private TermuxAppSharedPreferences preferences;

@@ -32,6 +32,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The frame shows the half its half line names: sliding to the Workspace brings the live wall to
@@ -39,7 +40,7 @@ import java.util.List;
  * card's Visible switch reads the state the frame draws.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorHalvesTest {
 
     private TermuxAppSharedPreferences preferences;

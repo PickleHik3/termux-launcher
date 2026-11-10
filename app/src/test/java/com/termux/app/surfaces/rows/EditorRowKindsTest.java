@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import android.app.Application;
 
 /**
  * The editor's row kinds (editor-redesign §1, §2, §8, §9) laid out on pong's width at the default
@@ -49,7 +50,7 @@ import java.util.concurrent.TimeUnit;
  * measured with real font metrics. Renders land in {@code build/reports/editor-row-kinds}.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorRowKindsTest {
 

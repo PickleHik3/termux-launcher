@@ -24,8 +24,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AssistantEngineTest {
     private static final class FakeTransport implements ChatTransport {

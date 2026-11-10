@@ -12,12 +12,15 @@ import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The per-model memory that lets {@link LiteRtTaiRuntime} skip the failed-attempt retry once a
  * model's chat template is known to reject a system-role message.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRuntimeHistorySystemRoleTest {
     private Context context;
 

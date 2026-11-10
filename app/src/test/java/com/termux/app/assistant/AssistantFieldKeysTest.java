@@ -21,9 +21,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import juloo.keyboard2.KeyValue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The launcher keyboard's keys edit the composer's field, and Enter sends. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AssistantFieldKeysTest {
 

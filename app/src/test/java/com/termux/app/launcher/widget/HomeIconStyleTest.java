@@ -16,6 +16,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * Settings › Home › Icons and labels: the default is the Default preset, the icon size scales the
@@ -23,7 +24,7 @@ import org.robolectric.annotation.GraphicsMode;
  * scale no label is ever cut by its cell.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-xhdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-xhdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class HomeIconStyleTest {
 

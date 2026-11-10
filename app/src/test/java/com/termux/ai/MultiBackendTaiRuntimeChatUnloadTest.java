@@ -12,6 +12,8 @@ import java.lang.reflect.Field;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * {@link MultiBackendTaiRuntime#unloadChatModel}: the app sort gives back the chat model it loaded and
@@ -19,6 +21,7 @@ import static org.junit.Assert.assertTrue;
  * the sort's is left alone.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class MultiBackendTaiRuntimeChatUnloadTest {
     private static final String SORT_MODEL = "sort-model";
 

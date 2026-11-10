@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import android.app.Application;
 
 /**
  * The Icon pack controls: the tiles run Default then the installed packs in listing order, the
@@ -45,7 +46,7 @@ import java.util.concurrent.Executor;
  * 360dp and 411dp is the panel's: AppearanceEditorPanelFitBase.)
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-mdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-mdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class IconPackPageTest {
 

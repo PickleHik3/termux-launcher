@@ -24,9 +24,10 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.concurrent.Executor;
+import android.app.Application;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = 28, application = Application.class)
 public class TapCorrectionControllerTest {
 
     @Rule

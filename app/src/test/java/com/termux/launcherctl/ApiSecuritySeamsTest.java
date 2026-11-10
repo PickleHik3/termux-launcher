@@ -32,6 +32,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Regression tests for API and security seams: LAN binding, auth, CORS,
@@ -41,6 +43,7 @@ import static org.junit.Assert.assertTrue;
  * MNN native runtime or network access.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ApiSecuritySeamsTest {
     private Context context;
     private LauncherCtlApiServer server;

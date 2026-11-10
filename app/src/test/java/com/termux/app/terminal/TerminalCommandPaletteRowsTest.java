@@ -19,6 +19,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The hand-built palette rows, which the projection in {@code buildEntries} never touches. Building
@@ -26,6 +28,7 @@ import static org.junit.Assert.assertTrue;
  * merge, which is where a per-session rename row could silently lose its index.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TerminalCommandPaletteRowsTest {
 
     private LauncherToolRegistry registry;

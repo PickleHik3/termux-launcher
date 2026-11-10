@@ -18,6 +18,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The router's load lock must be the only lock that spans a native load: state reads and cancel go
@@ -25,6 +27,7 @@ import static org.junit.Assert.assertTrue;
  * status poll would wait on.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class MultiBackendTaiRuntimeLockingTest {
     private static final long PROMPT_MS = 2_000L;
 

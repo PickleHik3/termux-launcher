@@ -29,6 +29,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A Look picked on the Look slider shows: what the Home page, the Workspace page and a Display
@@ -38,7 +39,7 @@ import java.util.List;
  * and every element value; a page card's clears the element values reaching its kinds.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PresetApplyTest {
 
     private static final int HOME_PAGE = 0, TERMINAL_PAGE = 1, DISPLAY_PAGE = 3;

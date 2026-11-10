@@ -26,10 +26,11 @@ import org.robolectric.annotation.GraphicsMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /** The terminal's More menu drawn on Home's sheet, and Home's own rows still as they were. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi")
+@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class TerminalActionsSheetTest {
 

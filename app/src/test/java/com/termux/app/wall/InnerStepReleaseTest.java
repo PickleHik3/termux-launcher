@@ -19,6 +19,7 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import java.time.Duration;
+import android.app.Application;
 
 /**
  * A released window swipe costs the release frame only what the next frame draws: the leaving
@@ -26,7 +27,7 @@ import java.time.Duration;
  * does not need (the drawer, the window beyond the arriving one) runs once that settle is over.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class InnerStepReleaseTest {
 
     private static final int WIDTH = 1080;

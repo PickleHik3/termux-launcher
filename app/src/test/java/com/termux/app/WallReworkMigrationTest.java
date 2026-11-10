@@ -28,10 +28,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.app.Application;
 
 /** An install from before the wall rework lands in the new model once, and only once (ADR 0008). */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallReworkMigrationTest {
 
     private SharedPreferences store;

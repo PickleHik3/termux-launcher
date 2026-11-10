@@ -27,6 +27,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.List;
+import android.app.Application;
 
 /**
  * The Strip height row (editor-redesign §1: bar Height moves into the cards when Layout mode is
@@ -34,7 +35,7 @@ import java.util.List;
  * Strip row's height in its own steps and range.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 public class DockCardStripHeightTest {
 
     private Context mContext;

@@ -17,10 +17,11 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /** The one-time seeding of the page list from Start in, the default Home page and Use as. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallPagesMigrationTest {
 
     private static final String[] START_INS = {"home", "workspace", "display", null, "bogus"};

@@ -30,12 +30,15 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * {@link TaiManager#generateImage} end to end with the native engine stood in: validation, admission,
  * progress, the PNG handed back inline or moved to the requested path, and the discard on a dropped client.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiImageGenerationFlowTest {
     private static final byte[] PNG = "fake-png-bytes".getBytes(StandardCharsets.UTF_8);
     @Rule public TemporaryFolder temp = new TemporaryFolder();

@@ -10,13 +10,14 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Which sections a card left open (appearance-cards overhaul §3): on a first visit only the
  * first; then as left, per card, across a new store (a restart).
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P)
+@Config(sdk = android.os.Build.VERSION_CODES.P, application = Application.class)
 public class EditorSectionStoreTest {
 
     @Test

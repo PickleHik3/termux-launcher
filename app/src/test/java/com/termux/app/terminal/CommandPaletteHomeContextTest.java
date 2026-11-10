@@ -21,6 +21,8 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The palette's Home set: which actions Home leaves out, the Home section and its order, the jump
@@ -28,6 +30,7 @@ import static org.junit.Assert.assertTrue;
  * opening rule — all without an activity, through the no-op host by default.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class CommandPaletteHomeContextTest {
 
     private static final List<String> HOME_SECTION = Arrays.asList(

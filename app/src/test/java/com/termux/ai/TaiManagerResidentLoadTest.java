@@ -18,6 +18,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * An explicit load the runtime would refuse does not refuse a model that is already resident: the
@@ -26,6 +28,7 @@ import static org.junit.Assert.assertTrue;
  * and the memory budget are consulted rather than skipped by the injected-runtime shortcut.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiManagerResidentLoadTest {
     private static final String MODEL = "resident-chat";
 

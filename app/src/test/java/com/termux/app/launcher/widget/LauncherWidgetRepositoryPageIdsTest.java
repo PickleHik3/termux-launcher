@@ -20,10 +20,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
 
 /** Home's widgets and icons are keyed by page id; the index API is a view of the owner's order. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 34)
+@Config(sdk = 34, application = Application.class)
 public final class LauncherWidgetRepositoryPageIdsTest {
     private static final WidgetGridDefinition PORTRAIT = new WidgetGridDefinition(5, 4);
     private static final WidgetGridDefinition LANDSCAPE = new WidgetGridDefinition(4, 6);

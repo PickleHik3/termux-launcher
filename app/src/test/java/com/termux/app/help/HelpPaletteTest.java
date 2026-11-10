@@ -12,9 +12,12 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.util.HashSet;
 import java.util.Set;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** One colour per hint, and every hint's colour is its own. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class HelpPaletteTest {
 
     @Test public void twelveHintsGetTwelveColours() {

@@ -21,10 +21,11 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /** Below Android 10 (API 29) moving wallpapers are not offered at all: no Photo | Video | Shader row, and the picker is the Photo page alone. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class WallpaperLiveHostBelow29Test {
 

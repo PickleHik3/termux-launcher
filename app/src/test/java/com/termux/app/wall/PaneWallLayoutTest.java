@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Page positions. Every place is laid out at the host's size and only ever moved, so a page
@@ -28,7 +29,7 @@ import java.util.List;
  * exact bounds it had before the wall existed.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class PaneWallLayoutTest {
 
     private static final int WIDTH = 1080;

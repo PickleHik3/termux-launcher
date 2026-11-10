@@ -20,9 +20,12 @@ import org.robolectric.annotation.GraphicsMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The chat's views lay out and bind every row type without throwing. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AssistantChatViewTest {
 

@@ -21,6 +21,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The page label in the app's Dark theme when the editor could read no picture of the wallpaper
@@ -28,7 +29,7 @@ import org.robolectric.util.ReflectionHelpers;
  * system's description of it decides the ink, so a light wallpaper gets dark writing.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, qualifiers = "night")
+@Config(sdk = Build.VERSION_CODES.P, qualifiers = "night", application = Application.class)
 public class EditorLabelHintTest {
     private static final int DARK = 0xFF1B1B1F;
     private static final int PALE = 0xFFE3E2E6;

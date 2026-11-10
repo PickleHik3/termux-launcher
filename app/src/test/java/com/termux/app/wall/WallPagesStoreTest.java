@@ -21,10 +21,11 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /** The page list store: saving, loading, announcing, and removal firing once. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallPagesStoreTest {
 
     private static final class Recorder implements WallPagesStore.Listener {

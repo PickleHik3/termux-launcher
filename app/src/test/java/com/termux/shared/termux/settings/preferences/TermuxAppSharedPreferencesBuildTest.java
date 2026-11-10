@@ -13,12 +13,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * {@link TermuxAppSharedPreferences#build} reuses the package context it made for a caller, per
  * caller, and every handle still reads the one preferences store.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TermuxAppSharedPreferencesBuildTest {
 
     @Test

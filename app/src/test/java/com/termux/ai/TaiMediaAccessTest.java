@@ -14,12 +14,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The media policy is what stands between an OpenAI-compatible chat request and this app's UID:
  * without it a content part is a file-read and an SSRF primitive pointed at the device.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiMediaAccessTest {
 
     @Test

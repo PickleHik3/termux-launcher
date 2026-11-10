@@ -18,6 +18,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The shipped examples are documentation users uncomment, so a stale line there is a bug
@@ -25,6 +27,7 @@ import static org.junit.Assert.assertTrue;
  * and pushed through the real parser.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class LauncherExampleConfigsTest {
 
     private static final Pattern BINDING_DIRECTIVE =

@@ -12,10 +12,13 @@ import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** Speech-to-text settings: the model in use, the preferred window for downloads, idle-unload
  *  minutes, and the download that becomes the model in use once it succeeds. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiSttSettingsTest {
     private SharedPreferences preferences;
     private TaiSettings settings;

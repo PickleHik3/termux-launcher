@@ -22,6 +22,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A sideways swipe on a terminal window's text pages the wall's row exactly as the border slide
@@ -29,7 +30,7 @@ import java.util.List;
  * vertical one, and any swipe the terminal keeps, reaches the terminal untouched.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, qualifiers = "xxhdpi")
+@Config(sdk = Build.VERSION_CODES.P, qualifiers = "xxhdpi", application = Application.class)
 public class TerminalBodySwipeWallTest {
 
     /** A row of three Home pages and some windows, whose terminal gives the swipe away or not. */

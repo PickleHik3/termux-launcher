@@ -18,13 +18,14 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * The action row decides one row or a stack from the buttons' measured widths, at a 360dp phone
  * with real text metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h640dp-mdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h640dp-mdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class ActionButtonRowTest {
 

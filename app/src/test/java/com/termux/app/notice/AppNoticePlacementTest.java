@@ -16,11 +16,12 @@ import org.robolectric.annotation.LooperMode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 @RunWith(RobolectricTestRunner.class)
 // The window is as wide as the anchor the tests lay out by hand: a terminal band is only taken
 // while it fits across the anchor (AppNoticePlacement.bandWithinAnchor).
-@Config(sdk = {Build.VERSION_CODES.P}, qualifiers = "w400dp-h800dp-mdpi")
+@Config(sdk = {Build.VERSION_CODES.P}, qualifiers = "w400dp-h800dp-mdpi", application = Application.class)
 @LooperMode(LooperMode.Mode.LEGACY)
 public class AppNoticePlacementTest {
 

@@ -22,6 +22,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * The frost's anchor. A pane is transformed constantly — the plank tilts it under a finger and the
@@ -32,7 +33,7 @@ import org.robolectric.annotation.Config;
  * travelling over the wallpaper shows the wallpaper it is over.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class PaneGlassBackdropViewTest {
 
     @Test

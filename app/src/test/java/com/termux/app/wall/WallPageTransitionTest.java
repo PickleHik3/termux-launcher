@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Settings' Page transition on the wall: every page is posed by where its slide puts it, as Home
@@ -30,7 +31,7 @@ import java.util.List;
  * follows the wall's offset, sees the same offsets whatever the effect.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class WallPageTransitionTest {
 
     private static final int WIDTH = 1080;

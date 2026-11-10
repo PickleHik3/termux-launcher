@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * A kitty graphics display command captures the cursor row when it arrives, advances the cursor
@@ -21,6 +23,7 @@ import static org.junit.Assert.assertNotNull;
  * exactly the height of the image, once its own placement scrolls a second time to fit.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class KittyPlacementScrollAnchorTest {
 
     /** Captures placement runnables so the async decode can be drained deterministically. */

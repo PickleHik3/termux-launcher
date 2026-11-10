@@ -19,6 +19,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The layout catalogue and the ring arithmetic behind hot-swapping. The catalogue is generated
@@ -26,6 +28,7 @@ import static org.junit.Assert.assertTrue;
  * whose {@code layouts.xml} went stale shows up here rather than as an empty picker.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class LauncherKeyboardLayoutsTest {
 
     private Resources resources;

@@ -20,10 +20,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 /** A low-memory kill of the runtime process is reported as one; anything else keeps today's wording. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 33)
+@Config(sdk = 33, application = Application.class)
 public class TaiRuntimeExitReasonTest {
     private final Context context = ApplicationProvider.getApplicationContext();
     private final String runtimeProcess = context.getPackageName() + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX;

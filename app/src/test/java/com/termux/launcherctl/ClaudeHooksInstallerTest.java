@@ -14,10 +14,11 @@ import java.nio.file.Files;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 /** org.json is stubbed on the JVM, so these run under Robolectric for the real implementation. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P)
+@Config(sdk = android.os.Build.VERSION_CODES.P, application = Application.class)
 public class ClaudeHooksInstallerTest {
 
     private static final String CTL = "/data/data/com.termux/files/usr/bin/launcherctl";
