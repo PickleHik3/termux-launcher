@@ -206,22 +206,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
   swipe and usually one).
 
-- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
-  input now holds the Speech model row (opens a list of installed models plus Get more models),
-  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
-  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
-  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
-  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
-  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
-  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
-  picker land on the Voice input page. How: emulator `settings` route, or pong with the
-  developer's go-ahead.
 - **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
   constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
   in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
   model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
   `logcat --pid` runs.
-- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
 - **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
   shows what is beneath the float (the page, the terminal behind, another float's glass), not only
   the wallpaper; drag it over a second float and the strip shows that float through it; resize
@@ -284,11 +273,6 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   stand reach the pane below; the status and window bar frost follows keyboard up/down, a pane
   resize, a split round the camera, a wallpaper change and a scheme change (Light, Dark, Black,
   Material You).
-- **Terminal ink holds across cold starts (11-07, #228).** Emulator then pong, even-out on,
-  Clear look, light theme, a blue/cream wallpaper: force-stop and relaunch 4 times; the pane's
-  text ink, the even-out band and the dock body come out the same every time, and the chosen
-  ink reads (no SHORTFALL in the pane's ink report). Repeat once with dark, black and Material
-  You, and once at terminal Opacity 10%.
 - **Camera hole, wave 4: Settings rows, migration, live outline.** Owed on pong: Settings >
   Status bar > Camera cutout, Custom: Move sideways, Move down and Size each move or size the
   gap, and while a finger is on any of the four sliders (Margin too, also in Auto) an accent
@@ -323,22 +307,6 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   and Docked; keyboard up and down; with the system bar showing nothing moves. Settings > Status
   bar > Camera cutout: Margin shows for Auto and Custom; Move sideways, Move down and Size only
   on Custom.
-- **Voice input page, flattened (11-06, feat/voice-input-page).** Settings > On-device AI > Voice
-  input now holds the Speech model row (opens a list of installed models plus Get more models),
-  Runs on (Auto, CPU, GPU) and Unload after; Fine-tuning holds the pause, mic and silence rows.
-  Passes: the page lays out cleanly at font scale 1.0 and 1.5, light and dark, with no clipped
-  labels; Runs on shows each model's own pick when the model is switched (set Whisper Base to GPU,
-  switch to Parakeet and it reads Auto or its own pick, switch back and it reads GPU), and GPU is
-  absent where the phone or a crash record rules it out; On-device AI > Read aloud opens a page
-  with the voice, speed and sample rows; Keyboard > Voice input and the Model centre's voice
-  picker land on the Voice input page. How: emulator `settings` route, or pong with the
-  developer's go-ahead.
-- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
-  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
-  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
-  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
-  `logcat --pid` runs.
-- **Coastal Sunset scene (11-06, feat/live-coastal-sunset).** In the Live picker the scene shows its thumbnail (still photo, then gentle motion while visible); open it and Set as Home: on a 1080x2412 screen the photo covers with a centre crop, the sea ripples, the glint moves and two birds fly; compare CPU-s/min at rest against another scene. Emulator or pong with the developer's go-ahead.
 - **Peek reflection through the A–Z row (11-07, fix/peek-dock-travel).** Not seen on a device. On
   pong, Peek dock with the A–Z row: the icon reflections run continuous through the letters, with
   no darkened patch behind them, and the letters stay readable on a bright wallpaper and on a dark
