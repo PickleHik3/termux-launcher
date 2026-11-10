@@ -8443,7 +8443,8 @@ public final class SuggestionBarView extends GridLayout
         DockDropPolicy.Outcome outcome = DockDropPolicy.outcome(findPinnedAppIndex(ref) >= 0,
             slot.targetItem instanceof PinnedAppItem, folder != null,
             folder != null && folder.containsApp(ref),
-            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, slot.dropXRatio);
+            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS,
+            folder != null || DockDropPolicy.onIcon(slot.dropXRatio));
         switch (outcome) {
             case ALREADY_THERE:
                 AppNotice.show(getContext(), R.string.dock_already_has_app, false);
