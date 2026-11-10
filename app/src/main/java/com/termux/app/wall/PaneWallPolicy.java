@@ -120,13 +120,16 @@ public final class PaneWallPolicy {
     /**
      * Whether a sideways swipe on the page's own content pages the wall: a terminal window's text
      * where the terminal gives the swipe away ({@code terminalGivesAway}), and the Assistant page
-     * anywhere its view does not keep it for a sideways scroller ({@code assistantGivesAway}).
-     * Home pages page by their own plain swipe, and the display window's picture takes every touch.
+     * anywhere its view does not keep it for a sideways scroller ({@code assistantGivesAway}),
+     * and a Display page anywhere while no display runs on it ({@code displayRunning} false).
+     * Home pages page by their own plain swipe, and a running display's picture takes every touch:
+     * it pages only by its border.
      */
     public static boolean bodySwipePages(@NonNull PaneWallPage page, boolean terminalGivesAway,
-                                         boolean assistantGivesAway) {
+                                         boolean assistantGivesAway, boolean displayRunning) {
         if (page == PaneWallPage.TERMINAL) return terminalGivesAway;
         if (page == PaneWallPage.ASSISTANT) return assistantGivesAway;
+        if (page == PaneWallPage.DISPLAY) return !displayRunning;
         return false;
     }
 

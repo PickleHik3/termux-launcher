@@ -85,12 +85,22 @@ public class AssistantPlacePolicyTest {
 
     @Test
     public void aSidewaysSwipeOnTheChatPagesTheWallUnlessAScrollerKeepsIt() {
-        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.ASSISTANT, false, true));
-        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.ASSISTANT, true, false));
-        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.TERMINAL, true, false));
-        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.TERMINAL, false, true));
-        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.DISPLAY, true, true));
-        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.WIDGETS, true, true));
+        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.ASSISTANT, false, true, false));
+        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.ASSISTANT, true, false, false));
+        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.TERMINAL, true, false, false));
+        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.TERMINAL, false, true, false));
+        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.WIDGETS, true, true, false));
+    }
+
+    @Test
+    public void aDisplayPagePagesByAPlainSwipeOnlyWhileNoDisplayRuns() {
+        // Off, the page is an empty state like any other page and a sideways swipe pages.
+        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.DISPLAY, false, false, false));
+        // Running, the picture takes every touch and only the border pages; the others' answers
+        // do not leak in.
+        assertFalse(PaneWallPolicy.bodySwipePages(PaneWallPage.DISPLAY, true, true, true));
+        // The running display rules only its own page.
+        assertTrue(PaneWallPolicy.bodySwipePages(PaneWallPage.TERMINAL, true, false, true));
     }
 
     @Test

@@ -2079,23 +2079,69 @@ public class Keyboard2View extends View
     VibratorCompat.vibrate(this, _config);
   }
 
-  private final Rect _exclusion_rect = new Rect();
-  private final java.util.List<Rect> _exclusion_rects =
-      java.util.Collections.singletonList(_exclusion_rect);
-
   @Override
   protected void onLayout(boolean changed, int left, int top, int right, int bottom)
   {
     super.onLayout(changed, left, top, right, bottom);
-    if (Build.VERSION.SDK_INT < 29 || !changed)
+    if (changed)
+      publishBackExclusion();
+  }
+
+  @Override
+  public android.view.WindowInsets onApplyWindowInsets(android.view.WindowInsets insets)
+  {
+    // The back swipe's reach is a system setting; follow it without waiting for a relayout.
+    publishBackExclusion();
+    return super.onApplyWindowInsets(insets);
+  }
+
+  /**
+   * Unlike an IME window, an activity-embedded keyboard gets no automatic system-gesture
+   * exclusion, so edge-column swipes would be recognized as Back gestures and cancelled. Only the
+   * two side strips the back swipe starts in are asked for: an exclusion anywhere else does
+   * nothing for Back, and where it reaches the navigation handle it turns off the system's
+   * sideways swipe to the previous app (Quickstep disables quick switch for a touch that lands
+   * inside an app's exclusion). Upstream had an equivalent SDK-29 block over the whole view in
+   * parent-relative coordinates, which only worked because the IME view sat at (0,0); exclusion
+   * rects are in view-local coordinates.
+   */
+  private void publishBackExclusion()
+  {
+    if (Build.VERSION.SDK_INT < 29)
       return;
-    // Unlike an IME window, an activity-embedded keyboard gets no automatic
-    // system-gesture exclusion, so edge-column swipes would be recognized as
-    // Back gestures and cancelled. Upstream had an equivalent SDK-29 block; it
-    // used parent-relative coordinates, which only worked because the IME view
-    // sat at (0,0) — exclusion rects are in view-local coordinates.
-    _exclusion_rect.set(0, 0, right - left, bottom - top);
-    setSystemGestureExclusionRects(_exclusion_rects);
+    android.view.WindowInsets insets = getRootWindowInsets();
+    int width = getWidth();
+    int height = getHeight();
+    java.util.List<Rect> rects;
+    if (insets == null)
+    {
+      // Not attached yet: keep the old whole-view request until the insets arrive.
+      rects = Collections.singletonList(new Rect(0, 0, width, height));
+    }
+    else
+    {
+      android.graphics.Insets gestures = insets.getSystemGestureInsets();
+      rects = backExclusionRects(width, height, gestures.left, gestures.right);
+    }
+    setSystemGestureExclusionRects(rects);
+  }
+
+  /**
+   * The view-local strips a keyboard {@code width} x {@code height} asks the back swipe to leave
+   * it: one along each side, as wide as that side's system-gesture inset. A keyboard away from
+   * the screen edge asks for a strip of its own keys no back swipe reaches, which costs nothing.
+   */
+  static java.util.List<Rect> backExclusionRects(int width, int height, int leftInset,
+      int rightInset)
+  {
+    java.util.List<Rect> rects = new ArrayList<>(2);
+    if (width <= 0 || height <= 0)
+      return rects;
+    if (leftInset > 0)
+      rects.add(new Rect(0, 0, Math.min(width, leftInset), height));
+    if (rightInset > 0)
+      rects.add(new Rect(Math.max(0, width - rightInset), 0, width, height));
+    return rects;
   }
 
   @Override
