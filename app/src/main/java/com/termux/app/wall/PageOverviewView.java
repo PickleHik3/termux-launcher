@@ -82,7 +82,10 @@ import java.util.Map;
 @SuppressLint("ViewConstructor")
 public final class PageOverviewView extends FrameLayout {
 
-    /** The launcher's side: the pages and windows as they stand, and the changes. */
+    /**
+     * The launcher's side: what only the launcher can tell or do. The rules over the wall's pages
+     * are {@link PageOverviewPages}'.
+     */
     public interface Host {
         // Home's pages (Edit pages' operations).
         int pageCount();
@@ -90,47 +93,18 @@ public final class PageOverviewView extends FrameLayout {
         int itemsOn(int page);
         /** Floats standing on page {@code page}. */
         int floatsOn(int page);
-        int defaultPage();
-        void movePage(int from, int to);
-        void removePage(int page);
         /** An empty page after the last. */
         void addPage();
-        /**
-         * The card of {@code kind} at {@code index} (a Home page's index, or a window's row place)
-         * becomes Home: what is written is {@link StartInPolicy#choose}'s.
-         */
-        void chooseHome(@NonNull PageOverviewPolicy.Kind kind, int index);
         /** Start in as it stands ({@link StartInPolicy#effective}), which the Home marker follows. */
         @NonNull String startIn();
 
-        // The wall's order (ADR 0015): the window block is the Terminal page, anywhere among them.
-        /** How many Home pages stand before the Terminal page; all of them by default. */
-        default int homePagesBeforeTerminal() { return Integer.MAX_VALUE; }
-        /**
-         * The Home page at {@code homeIndex} moves to page index {@code wallIndex} on the wall,
-         * the Terminal page counted as one page ({@link WallPages#move}).
-         */
-        default void moveHomePageOnWall(int homeIndex, int wallIndex) { }
-        /** The Terminal page, with every window card, moves to page index {@code wallIndex}. */
-        default void moveTerminalPage(int wallIndex) { }
-        /** The Terminal page becomes home ({@link WallPages#setHome}). */
-        default void setTerminalHome() { chooseHome(PageOverviewPolicy.Kind.TERMINAL, 0); }
-
         // Display pages (ADR 0015 A3b): wall pages of their own, in the wall's order.
-        /** The wall's Display pages, in wall order; none by default. */
-        @NonNull default java.util.List<DisplayPage> displayPages() {
-            return java.util.Collections.emptyList();
-        }
         /** Whether Display page {@code id} holds something: its display is open on it. */
         default boolean displayPageHolds(int id) { return false; }
         /** Display page {@code id} leaves the wall ({@link WallPages#remove}). */
         default void removeDisplayPage(int id) { }
 
-        // The Assistant page (ADR 0022), listed with {@link #displayPages} as a {@link DisplayPage}.
-        /** Whether the wall has an Assistant page. */
-        default boolean hasAssistantPage() { return false; }
-        /** Whether the Assistant page is home. */
-        default boolean assistantIsHome() { return false; }
+        // The Assistant page (ADR 0022), listed with the Display pages.
         /** An Assistant page goes on the wall after the page the wall stands on. */
         default void addAssistantPage() { }
         /** Assistant page {@code id} leaves the wall; the chats stay. */
@@ -139,18 +113,10 @@ public final class PageOverviewView extends FrameLayout {
         // Use as Terminal only: the Home pages are set aside, and Edit pages offers them back.
         /** Whether the wall shows Home pages; false under Use as Terminal only. */
         default boolean homePagesShown() { return true; }
-        /** How many Home pages are set aside (detached) while the wall shows none. */
-        default int detachedHomePages() { return 0; }
-        /** How many Home pages stay in the page list while the wall hides them. */
-        default int hiddenHomePages() { return 0; }
         /** Use as goes back to Home screen, which brings the set-aside Home pages back. */
         default void bringBackHomePages() { }
 
         // The Terminal page as a whole (ADR 0015 section 1): removed, and added back.
-        /** Whether the wall has the Terminal page. */
-        default boolean hasTerminalPage() { return true; }
-        /** Whether the Terminal page can leave: another page stays on the wall. */
-        default boolean terminalPageRemovable() { return false; }
         /** Every terminal window open on the Terminal page, across its sessions. */
         default int terminalWindowCount() { return 0; }
         /** Every terminal window closes and the Terminal page leaves the wall, with no undo. */
@@ -159,8 +125,6 @@ public final class PageOverviewView extends FrameLayout {
         default void addTerminalPage() { }
 
         // A card's long-press menu and the Display picker (ADR 0015 section 2).
-        /** The name Home page {@code page} was given in Edit pages; null for its default. */
-        @Nullable default String homePageName(int page) { return null; }
         /**
          * Asks for a new name for the card of {@code kind} at {@code index} (a Home page's
          * index, or a Display page's id); {@code renamed} runs once it is written.
@@ -171,15 +135,6 @@ public final class PageOverviewView extends FrameLayout {
         @NonNull default java.util.List<DisplayApp> displayApps() {
             return java.util.Collections.emptyList();
         }
-        /** The app Display page {@code id} is bound to; null for the whole display. */
-        @Nullable default String displayBinding(int id) { return null; }
-        /** Display page {@code id} shows {@code app} from now on; null for the whole display. */
-        default void bindDisplayPage(int id, @Nullable String app) { }
-        /**
-         * A Display page bound to {@code app} after the page the wall stands on
-         * ({@link WallPages#add}); its id, or -1 when none was added.
-         */
-        default int addBoundDisplay(@NonNull String app) { return -1; }
 
         // The current session's row of terminal windows (ADR 0015: no display window in it).
         int rowCount();
@@ -196,11 +151,6 @@ public final class PageOverviewView extends FrameLayout {
         boolean displaySupported();
         /** Whether a display is open; only one can be. */
         boolean displayOpen();
-        /**
-         * Whether the open display stands on a temporary page (a drawer launch's): "Add display"
-         * is still offered then, and makes that page a lasting one.
-         */
-        default boolean displayTemporary() { return false; }
         /** The display window opens at row place {@code row}; a temporary page it is on stays. */
         void addDisplay(int row);
         /** The shell the window at {@code row} shows, for its card; null for the display. */
@@ -352,6 +302,7 @@ public final class PageOverviewView extends FrameLayout {
     }
 
     @NonNull private final Host host;
+    @NonNull private final PageOverviewPages overviewPages;
     @NonNull private final View root;
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final List<Card> cards = new ArrayList<>();
@@ -473,8 +424,10 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final TextView bringBack;
     @NonNull private final Touch accessibility;
 
-    public PageOverviewView(@NonNull Context context, @NonNull Host host) {
+    public PageOverviewView(@NonNull Context context, @NonNull PageOverviewPages overviewPages,
+                            @NonNull Host host) {
         super(context);
+        this.overviewPages = overviewPages;
         this.host = host;
         this.root = host.liveRoot();
         setWillNotDraw(false);
@@ -686,16 +639,16 @@ public final class PageOverviewView extends FrameLayout {
         cards.clear();
         // In the wall's order: the window block stands where the Terminal page does, Display
         // pages where they stand.
-        int before = Math.max(0, Math.min(pages, host.homePagesBeforeTerminal()));
+        int before = Math.max(0, Math.min(pages, overviewPages.homePagesBeforeTerminal()));
         int rows = Math.max(0, host.rowCount());
-        List<DisplayPage> displays = host.displayPages();
+        List<DisplayPage> displays = overviewPages.displayPages();
         int[] homesBefore = new int[displays.size()];
         boolean[] after = new boolean[displays.size()];
         for (int j = 0; j < homesBefore.length; j++) {
             homesBefore[j] = Math.max(0, Math.min(pages, displays.get(j).homesBefore));
             after[j] = displays.get(j).afterTerminal;
         }
-        List<Integer> order = PageOverviewPolicy.wallOrder(pages, host.hasTerminalPage(), before,
+        List<Integer> order = PageOverviewPolicy.wallOrder(pages, overviewPages.hasTerminalPage(), before,
             homesBefore, after);
         if (displayGoing && !host.displayOpen()) displayGoing = false;
         displayCount = 0;
@@ -746,7 +699,7 @@ public final class PageOverviewView extends FrameLayout {
         Object key = homeKeys.get(page);
         if (isPending(key)) return;
         Card card = new Card(PageOverviewPolicy.Kind.HOME_PAGE, key, page, page + 1);
-        card.label = host.homePageName(page);
+        card.label = overviewPages.homePageName(page);
         cards.add(card);
     }
 
@@ -821,22 +774,22 @@ public final class PageOverviewView extends FrameLayout {
     private void updatePills() {
         boolean homes = host.homePagesShown();
         addPage.setVisibility(PageOverviewAddPolicy.showsAddPage(homes) ? VISIBLE : GONE);
-        int back = PageOverviewAddPolicy.bringBackCount(homes, host.detachedHomePages(),
-            host.hiddenHomePages());
+        int back = PageOverviewAddPolicy.bringBackCount(homes, overviewPages.detachedHomePages(),
+            overviewPages.hiddenHomePages(host.homePagesShown()));
         bringBack.setVisibility(back > 0 ? VISIBLE : GONE);
         if (back > 0) {
             CharSequence text = getResources().getQuantityString(
                 R.plurals.page_overview_bring_back_homes, back, back);
             if (!text.toString().contentEquals(bringBack.getText())) bringBack.setText(text);
         }
-        addTerminal.setVisibility(PageOverviewAddPolicy.showsAddTerminal(host.hasTerminalPage())
+        addTerminal.setVisibility(PageOverviewAddPolicy.showsAddTerminal(overviewPages.hasTerminalPage())
             ? VISIBLE : GONE);
         addAssistant.setVisibility(PageOverviewAddPolicy.showsAddAssistant(
-            host.hasAssistantPage()) ? VISIBLE : GONE);
+            overviewPages.hasAssistantPage()) ? VISIBLE : GONE);
         boolean supported = host.displaySupported();
         addDisplay.setVisibility(supported ? VISIBLE : GONE);
         boolean canAdd = PageOverviewPolicy.canAddDisplay(host.displayOpen(),
-            host.displayTemporary()) || (supported && !pickableApps(-1).isEmpty());
+            overviewPages.displayTemporary()) || (supported && !pickableApps(-1).isEmpty());
         addDisplay.setEnabled(canAdd);
         addDisplay.setAlpha(canAdd ? 1f : 0.38f);
     }
@@ -858,7 +811,7 @@ public final class PageOverviewView extends FrameLayout {
         while (homeKeys.size() < after) homeKeys.add(new Object());
         Object key = homeKeys.get(after - 1);
         if (at < after - 1) {
-            mutate(() -> host.movePage(after - 1, at));
+            mutate(() -> overviewPages.movePage(after - 1, at));
             homeKeys.remove(after - 1);
             homeKeys.add(Math.min(at, homeKeys.size()), key);
         }
@@ -885,7 +838,7 @@ public final class PageOverviewView extends FrameLayout {
     private void onAddWindow(boolean display) {
         if (!isOpen()) return;
         if (display && !PageOverviewPolicy.canAddDisplay(host.displayOpen(),
-            host.displayTemporary())) return;
+            overviewPages.displayTemporary())) return;
         commitPending();
         // Counted in the host's row places: a stopping display's hidden card still holds one.
         Card focused = focusedCard();
@@ -949,7 +902,7 @@ public final class PageOverviewView extends FrameLayout {
     private void removeNow(@NonNull Card card) {
         if (card.isHome()) {
             int before = host.pageCount();
-            mutate(() -> host.removePage(card.index));
+            mutate(() -> overviewPages.removePage(card.index));
             if (host.pageCount() < before && card.index < homeKeys.size()) {
                 homeKeys.remove(card.index);
             }
@@ -1034,7 +987,7 @@ public final class PageOverviewView extends FrameLayout {
             int page = homeKeys.indexOf(held.key);
             if (page >= 0) {
                 int before = host.pageCount();
-                mutate(() -> host.removePage(page));
+                mutate(() -> overviewPages.removePage(page));
                 if (host.pageCount() < before) homeKeys.remove(page);
             }
         } else if (held.kind == PageOverviewPolicy.Kind.ASSISTANT) {
@@ -1069,8 +1022,8 @@ public final class PageOverviewView extends FrameLayout {
     private void onMakeHome(@NonNull Card card) {
         if (!showsHomeButton(card)) return;
         com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.VIRTUAL_KEY);
-        if (card.kind == PageOverviewPolicy.Kind.TERMINAL) host.setTerminalHome();
-        else host.chooseHome(card.kind, card.index);
+        if (card.kind == PageOverviewPolicy.Kind.TERMINAL) overviewPages.setTerminalHome();
+        else overviewPages.chooseHome(card.kind, card.index);
         accessibility.invalidateRoot();
         invalidate();
     }
@@ -1098,9 +1051,9 @@ public final class PageOverviewView extends FrameLayout {
             // The default order, a move that stays on its side, goes as it always went; so does
             // a strip with no window card, which cannot show where the Terminal page stands.
             if (displayCount > 0 || (rowCount > 0 && (crosses || blockStart != homeCount))) {
-                mutate(() -> host.moveHomePageOnWall(moving.index, wallIndex));
+                mutate(() -> overviewPages.moveHomePageOnWall(moving.index, wallIndex));
             } else {
-                mutate(() -> host.movePage(moving.index, homeTo));
+                mutate(() -> overviewPages.movePage(moving.index, homeTo));
             }
             Object key = homeKeys.remove(moving.index);
             homeKeys.add(Math.min(homeTo, homeKeys.size()), key);
@@ -1135,7 +1088,7 @@ public final class PageOverviewView extends FrameLayout {
         Context context = getContext();
         List<PageCardMenuPolicy.Action> actions = PageCardMenuPolicy.actions(card.kind,
             isDefault(card), isFirstTerminal(card), homePageCards(),
-            host.terminalPageRemovable());
+            overviewPages.terminalPageRemovable());
         if (actions.isEmpty()) return;
         List<com.termux.app.launcher.popup.AppMenuCard.Item> items = new ArrayList<>(5);
         items.add(com.termux.app.launcher.popup.AppMenuCard.Item.header(labelOf(card)));
@@ -1210,7 +1163,7 @@ public final class PageOverviewView extends FrameLayout {
      * Terminal?"), Close or Cancel; closed shells cannot come back, so no undo follows.
      */
     private void onRemoveTerminalPage() {
-        if (!isOpen() || !host.terminalPageRemovable()) return;
+        if (!isOpen() || !overviewPages.terminalPageRemovable()) return;
         commitPending();
         int open = host.terminalWindowCount();
         if (open <= 0) {
@@ -1239,7 +1192,7 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Add terminal, offered only while there is no Terminal page: it comes back empty. */
     private void onAddTerminalPage() {
-        if (!isOpen() || host.hasTerminalPage()) return;
+        if (!isOpen() || overviewPages.hasTerminalPage()) return;
         commitPending();
         mutate(host::addTerminalPage);
         reload();
@@ -1247,7 +1200,7 @@ public final class PageOverviewView extends FrameLayout {
     }
 
     private void onAddAssistantPage() {
-        if (!isOpen() || host.hasAssistantPage()) return;
+        if (!isOpen() || overviewPages.hasAssistantPage()) return;
         commitPending();
         mutate(host::addAssistantPage);
         reload();
@@ -1272,12 +1225,12 @@ public final class PageOverviewView extends FrameLayout {
         List<String> ids = new ArrayList<>(catalog.size());
         for (DisplayApp app : catalog) ids.add(app.id);
         java.util.Set<String> bound = new java.util.HashSet<>();
-        for (DisplayPage page : host.displayPages()) {
-            String binding = host.displayBinding(page.id);
+        for (DisplayPage page : overviewPages.displayPages()) {
+            String binding = overviewPages.displayBinding(page.id);
             if (binding != null) bound.add(binding);
         }
         List<String> keep = PageCardMenuPolicy.pickableApps(ids, bound,
-            bindingOf < 0 ? null : host.displayBinding(bindingOf));
+            bindingOf < 0 ? null : overviewPages.displayBinding(bindingOf));
         List<DisplayApp> out = new ArrayList<>(keep.size());
         for (String id : keep) {
             for (DisplayApp app : catalog) {
@@ -1296,7 +1249,7 @@ public final class PageOverviewView extends FrameLayout {
         if (!isOpen()) return;
         final int id = target == null ? -1 : target.index;
         boolean wholeOffered = target != null || PageOverviewPolicy.canAddDisplay(
-            host.displayOpen(), host.displayTemporary());
+            host.displayOpen(), overviewPages.displayTemporary());
         List<DisplayApp> apps = pickableApps(id);
         if (target == null && apps.isEmpty()) {
             if (wholeOffered) onAddWindow(true);
@@ -1309,7 +1262,7 @@ public final class PageOverviewView extends FrameLayout {
         LinearLayout shell = factory.newShell();
         int tint = surfaceColor & 0x00FFFFFF;
         List<com.termux.app.launcher.popup.MenuRow> rows = new ArrayList<>();
-        String current = id < 0 ? null : host.displayBinding(id);
+        String current = id < 0 ? null : overviewPages.displayBinding(id);
         if (wholeOffered) {
             Runnable whole = () -> {
                 dismissMenu();
@@ -1347,7 +1300,7 @@ public final class PageOverviewView extends FrameLayout {
     private void bindDisplay(int id, @Nullable String app) {
         if (!isOpen()) return;
         commitPending();
-        mutate(() -> host.bindDisplayPage(id, app));
+        mutate(() -> overviewPages.bindDisplayPage(id, app));
         reload();
         invalidate();
     }
@@ -1357,7 +1310,7 @@ public final class PageOverviewView extends FrameLayout {
         if (!isOpen()) return;
         commitPending();
         int[] added = {-1};
-        mutate(() -> added[0] = host.addBoundDisplay(app));
+        mutate(() -> added[0] = overviewPages.addBoundDisplay(app));
         reload();
         Object key = added[0] < 0 ? null : displayKeys.get(added[0]);
         int index = key == null ? -1 : indexOfKey(key);
@@ -1563,11 +1516,11 @@ public final class PageOverviewView extends FrameLayout {
     /** Whether {@code card} wears the Home marker: the page, or the window, Start in names. */
     private boolean isDefault(@NonNull Card card) {
         boolean defaultPage = card.isHome() && card.index
-            == com.termux.app.launcher.home.HomePageEdits.clampDefault(host.defaultPage(),
+            == com.termux.app.launcher.home.HomePageEdits.clampDefault(overviewPages.defaultPage(),
                 host.pageCount());
         // The wall's home is one page: while it is the Assistant, no other card wears the marker.
-        if (card.kind == PageOverviewPolicy.Kind.ASSISTANT) return host.assistantIsHome();
-        if (host.assistantIsHome()) return false;
+        if (card.kind == PageOverviewPolicy.Kind.ASSISTANT) return overviewPages.assistantIsHome();
+        if (overviewPages.assistantIsHome()) return false;
         return StartInPolicy.isHome(card.kind, defaultPage, isFirstTerminal(card), host.startIn());
     }
 
@@ -2348,7 +2301,7 @@ public final class PageOverviewView extends FrameLayout {
         commitPending();
         Map<Object, Float> places = new java.util.HashMap<>();
         for (Card c : cards) places.put(c.key, c.place);
-        mutate(() -> host.moveTerminalPage(to));
+        mutate(() -> overviewPages.moveTerminalPage(to));
         reload();
         for (Card c : cards) {
             Float was = places.get(c.key);
