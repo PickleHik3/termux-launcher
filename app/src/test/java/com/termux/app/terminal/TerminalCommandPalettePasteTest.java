@@ -21,9 +21,10 @@ import juloo.keyboard2.KeyValue;
 /**
  * The palette's own paste key, in {@link TerminalCommandPaletteController}'s normal (list) mode.
  *
- * <p>Building the whole palette needs a live {@code TermuxActivity} ({@link TerminalSheetPromptsTest}
- * does the same for the sheet plane), so this uses the package-private constructor that injects a
- * fake {@link ClipboardText} rather than the real {@code ClipboardManager}.
+ * <p>The palette binds the activity's real layout through a {@link FakeCommandPaletteHost}
+ * ({@link TerminalSheetPromptsTest} lays out the same activity for the sheet plane), and uses the
+ * package-private constructor that injects a fake {@link ClipboardText} rather than the real
+ * {@code ClipboardManager}.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
@@ -34,7 +35,7 @@ public class TerminalCommandPalettePasteTest {
     public void pasteAndPasteAsPlainTextInsertTheClipboardTextSanitizedToOneLine() {
         TermuxActivity activity = laidOutActivity();
         TerminalCommandPaletteController palette =
-            new TerminalCommandPaletteController(activity, () -> "one\r\ntwo");
+            new TerminalCommandPaletteController(hostOver(activity), () -> "one\r\ntwo");
         palette.show();
         assertTrue(palette.isOpen());
 
@@ -52,7 +53,7 @@ public class TerminalCommandPalettePasteTest {
     public void copyCutAndSelectAllAreSwallowedWithoutEffect() {
         TermuxActivity activity = laidOutActivity();
         TerminalCommandPaletteController palette =
-            new TerminalCommandPaletteController(activity, () -> "never read");
+            new TerminalCommandPaletteController(hostOver(activity), () -> "never read");
         palette.show();
         palette.interceptKeyValue(KeyValue.makeCharKey('g'), false, false, false);
 
@@ -69,5 +70,11 @@ public class TerminalCommandPalettePasteTest {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.setContentView(R.layout.activity_termux);
         return activity;
+    }
+
+    private static FakeCommandPaletteHost hostOver(TermuxActivity activity) {
+        FakeCommandPaletteHost host = new FakeCommandPaletteHost(activity);
+        host.viewRoot = activity.getWindow().getDecorView();
+        return host;
     }
 }
