@@ -34,6 +34,10 @@ public final class SheetsController {
         @NonNull Activity activity();
         /** Whether the activity is visible ({@code mIsVisible}). */
         boolean isActivityVisible();
+        /** Whether the dock's row (the suggestion bar) has been made. */
+        boolean hasSuggestionBarView();
+        /** Whether the preferences have been read. */
+        boolean hasPreferences();
 
         // -------------------------------------------------------------- notices
 
@@ -671,5 +675,71 @@ public final class SheetsController {
     public boolean handleTerminalSheetCodePoint(int codePoint, boolean ctrlDown) {
         return mTerminalSheet != null
             && mTerminalSheet.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
+    }
+
+    // ================================================================== the drawer's warm-up and edges
+
+    private final Runnable mAppDrawerWarmRunnable = this::scheduleAppDrawerWarmupWhenIdle;
+    /** One idle handler at a time: the drawer's warm-up is a once-per-process build. */
+    @Nullable private android.os.MessageQueue.IdleHandler mAppDrawerWarmIdleHandler;
+
+    /** What the activity posts, after the catalog's warm-up, to warm the drawer on a quiet thread. */
+    @NonNull
+    public Runnable appDrawerWarmRunnable() {
+        return mAppDrawerWarmRunnable;
+    }
+
+    /**
+     * The drawer's grid, built before the first pull instead of inside it.
+     *
+     * <p>Waits for a quiet main thread rather than taking the frame it lands on: the build is a
+     * {@code RecyclerView} layout and sixteen binds, and a launcher that is still starting, or a
+     * finger that is mid-scroll, has better uses for that frame. If the queue never goes idle the
+     * warm-up never runs and the first pull pays what it has always paid.
+     */
+    private void scheduleAppDrawerWarmupWhenIdle() {
+        if (mAppDrawerWarmIdleHandler != null || !canWarmAppDrawer()) return;
+        mAppDrawerWarmIdleHandler = () -> {
+            mAppDrawerWarmIdleHandler = null;
+            if (canWarmAppDrawer()) getAppDrawerController().warmUp();
+            return false;
+        };
+        android.os.Looper.myQueue().addIdleHandler(mAppDrawerWarmIdleHandler);
+    }
+
+    /**
+     * The same states the drawer's own gesture arbiter is asked for, plus the preference: a drawer
+     * that is switched off is never built, and one whose plane would be in the way of the surface
+     * editor, the command palette or a drawer already engaged waits for the next start instead.
+     */
+    public boolean canWarmAppDrawer() {
+        return mHost.isActivityVisible()
+            && mHost.hasSuggestionBarView()
+            && mHost.hasPreferences()
+            && !mHost.surfaceEditor().isActive()
+            && !isCommandPaletteOpen()
+            && !isAppDrawerEngaged()
+            && !isAppDrawerOpen();
+    }
+
+    /**
+     * The drawer's host bleeds under the system bars and the cutout: negative margins of the
+     * insets' own size (see the activity's insets listener).
+     */
+    public void applyAppDrawerEdgeBleed(@NonNull androidx.core.view.WindowInsetsCompat insetsCompat) {
+        View host = mHost.activity().findViewById(R.id.app_drawer_host);
+        if (host == null) return;
+        android.view.ViewGroup.LayoutParams layoutParams = host.getLayoutParams();
+        if (!(layoutParams instanceof android.view.ViewGroup.MarginLayoutParams)) return;
+        androidx.core.graphics.Insets edges =
+            insetsCompat.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+        int barTop = edges.top;
+        int barBottom = edges.bottom;
+        android.view.ViewGroup.MarginLayoutParams margins = (android.view.ViewGroup.MarginLayoutParams) layoutParams;
+        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
+        margins.topMargin = -barTop;
+        margins.bottomMargin = -barBottom;
+        host.setLayoutParams(margins);
     }
 }

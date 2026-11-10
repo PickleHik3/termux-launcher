@@ -1179,9 +1179,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshSuggestionBarFromPackageState(forceCatalogRefresh);
     };
     private final Runnable mLauncherCatalogWarmRunnable = this::runLauncherCatalogWarmup;
-    private final Runnable mAppDrawerWarmRunnable = this::scheduleAppDrawerWarmupWhenIdle;
-    /** One idle handler at a time: the drawer's warm-up is a once-per-process build. */
-    @Nullable private MessageQueue.IdleHandler mAppDrawerWarmIdleHandler;
     private final Runnable mToolbarTextInputWarmRunnable = this::scheduleToolbarTextInputWarmupWhenIdle;
     /** One idle handler at a time for the toolbar's text input page (prepareTextInputPage). */
     @Nullable private MessageQueue.IdleHandler mToolbarTextInputWarmIdleHandler;
@@ -6835,19 +6832,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * (#69).
      */
     private void applyAppDrawerEdgeBleed(@NonNull WindowInsetsCompat insetsCompat) {
-        View host = findViewById(R.id.app_drawer_host);
-        if (host == null) return;
-        ViewGroup.LayoutParams layoutParams = host.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return;
-        androidx.core.graphics.Insets edges =
-            insetsCompat.getInsets(Type.systemBars() | Type.displayCutout());
-        int barTop = edges.top;
-        int barBottom = edges.bottom;
-        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
-        margins.topMargin = -barTop;
-        margins.bottomMargin = -barBottom;
-        host.setLayoutParams(margins);
+        mSheets.applyAppDrawerEdgeBleed(insetsCompat);
     }
 
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
@@ -24281,6 +24266,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // -------------------------------------------------------------- window
         @Override public @NonNull android.app.Activity activity() { return TermuxActivity.this; }
         @Override public boolean isActivityVisible() { return mIsVisible; }
+        @Override public boolean hasSuggestionBarView() { return mSuggestionBarView != null; }
+        @Override public boolean hasPreferences() { return mPreferences != null; }
         // -------------------------------------------------------------- notices
         @Override public @NonNull TerminalDress.Source terminalDressSource() { return TermuxActivity.this.terminalDressSource(); }
         @Override public @Nullable com.termux.app.statusbar.BackgroundProcessStackView backgroundProcessStack() { return mBackgroundProcessStack; }
@@ -34984,10 +34971,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void scheduleLauncherCatalogWarmup() {
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
-        mAzGestureHandler.removeCallbacks(mAppDrawerWarmRunnable);
+        mAzGestureHandler.removeCallbacks(mSheets.appDrawerWarmRunnable());
         if (mIsVisible && isLauncherCatalogEnabled() && mSuggestionBarView != null) {
             mAzGestureHandler.postDelayed(mLauncherCatalogWarmRunnable, LAUNCHER_CATALOG_WARM_DELAY_MS);
-            mAzGestureHandler.postDelayed(mAppDrawerWarmRunnable, APP_DRAWER_WARM_DELAY_MS);
+            mAzGestureHandler.postDelayed(mSheets.appDrawerWarmRunnable(), APP_DRAWER_WARM_DELAY_MS);
         }
     }
 
@@ -34997,24 +34984,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mSuggestionBarView.reloadAllApps();
         mSuggestionBarView.reload();
-    }
-
-    /**
-     * The drawer's grid, built before the first pull instead of inside it.
-     *
-     * <p>Waits for a quiet main thread rather than taking the frame it lands on: the build is a
-     * {@code RecyclerView} layout and sixteen binds, and a launcher that is still starting, or a
-     * finger that is mid-scroll, has better uses for that frame. If the queue never goes idle the
-     * warm-up never runs and the first pull pays what it has always paid.
-     */
-    private void scheduleAppDrawerWarmupWhenIdle() {
-        if (mAppDrawerWarmIdleHandler != null || !canWarmAppDrawer()) return;
-        mAppDrawerWarmIdleHandler = () -> {
-            mAppDrawerWarmIdleHandler = null;
-            if (canWarmAppDrawer()) getAppDrawerController().warmUp();
-            return false;
-        };
-        Looper.myQueue().addIdleHandler(mAppDrawerWarmIdleHandler);
     }
 
     /**
@@ -35044,20 +35013,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Looper.myQueue().addIdleHandler(mToolbarTextInputWarmIdleHandler);
     }
 
-    /**
-     * The same states the drawer's own gesture arbiter is asked for, plus the preference: a drawer
-     * that is switched off is never built, and one whose plane would be in the way of the surface
-     * editor, the command palette or a drawer already engaged waits for the next start instead.
-     */
-    private boolean canWarmAppDrawer() {
-        return mIsVisible
-            && mSuggestionBarView != null
-            && mPreferences != null
-            && !mSurfaceEditor.isActive()
-            && !isCommandPaletteOpen()
-            && !isAppDrawerEngaged()
-            && !isAppDrawerOpen();
-    }
+    private boolean canWarmAppDrawer() { return mSheets.canWarmAppDrawer(); }
 
     private void unregisterPackageChangeReceiver() {
         if (!mPackageChangeReceiverRegistered)
