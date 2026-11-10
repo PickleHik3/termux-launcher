@@ -64,6 +64,21 @@ public class AppearanceControlsReachTest {
         return prefs;
     }
 
+    /**
+     * The same fresh install again, in the same store and through the same preferences object:
+     * every key cleared, then the start-up's shipped Look and kind seed. For a cell that walks
+     * on an editor that was closed first, so the cell starts on what {@link #fresh} gives.
+     */
+    private void backToFresh(TermuxAppSharedPreferences prefs) {
+        mStore.edit().clear().commit();
+        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
+                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
+                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
+            SurfacePresets.SHIPPED_BY_KIND);
+        SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
+        LookGridKindSeed.run(new LookGrid.PrefsStore(mStore), SurfacePresets.SHIPPED_BY_KIND);
+    }
+
     @After public void resetLookGridPageKinds() { LookGrid.install(null, null); }
 
     // ---------------------------------------------------------------------------- the matrix
@@ -74,10 +89,23 @@ public class AppearanceControlsReachTest {
         for (EditorCard card : EditorCard.values()) {
             List<EditorChips.AppliesTo> scopes = new ArrayList<>(EditorChips.appliesToOptions(card));
             if (scopes.isEmpty()) scopes.add(null);
+            // One editor per card. Each cell ends its session, puts the install back to a fresh
+            // one and opens the card again, so every cell starts as a fresh install with the
+            // card just opened, as it did on an editor of its own.
+            TermuxAppSharedPreferences prefs = fresh();
+            EditorTestHarness harness = null;
             for (EditorChips.AppliesTo scope : scopes)
                 for (Row row : ROWS) {
-                    TermuxAppSharedPreferences prefs = fresh();
-                    Set<String> moved = move(prefs, card, scope, row);
+                    if (harness == null) {
+                        harness = new EditorTestHarness(prefs, null);
+                    } else {
+                        harness.editor.endSession();
+                        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+                        assertFalse("the editor is closed before the next cell",
+                            harness.editor.isOpen());
+                        backToFresh(prefs);
+                    }
+                    Set<String> moved = move(harness, prefs, card, scope, row);
                     Set<String> expected = expected(card, scope);
                     if (!moved.equals(expected))
                         wrong.add(card + " " + scope + " " + row + ": moved " + moved
@@ -202,7 +230,12 @@ public class AppearanceControlsReachTest {
 
     private EditorCardSheet.Model open(TermuxAppSharedPreferences prefs, EditorCard card,
                                        EditorChips.AppliesTo scope) {
-        EditorTestHarness harness = new EditorTestHarness(prefs, null);
+        return open(new EditorTestHarness(prefs, null), card, scope);
+    }
+
+    /** The card opened on {@code harness}'s editor, at {@code scope}; its model. */
+    private EditorCardSheet.Model open(EditorTestHarness harness, EditorCard card,
+                                       EditorChips.AppliesTo scope) {
         PaneWallPage place = card == EditorCard.WIDGETS || card == EditorCard.HOME
             ? PaneWallPage.WIDGETS : null;
         harness.editor.present(card, place, null);
@@ -218,9 +251,9 @@ public class AppearanceControlsReachTest {
     }
 
     /** Moves {@code row} on the card and answers every element@kind whose renderer read moved. */
-    private Set<String> move(TermuxAppSharedPreferences prefs, EditorCard card,
-                             EditorChips.AppliesTo scope, Row row) {
-        EditorCardSheet.Model model = open(prefs, card, scope);
+    private Set<String> move(EditorTestHarness harness, TermuxAppSharedPreferences prefs,
+                             EditorCard card, EditorChips.AppliesTo scope, Row row) {
+        EditorCardSheet.Model model = open(harness, card, scope);
         LookGrid.Element[] elements = LookGrid.Element.values();
         int[][] before = new int[elements.length][PAGES.length];
         for (int i = 0; i < elements.length; i++)

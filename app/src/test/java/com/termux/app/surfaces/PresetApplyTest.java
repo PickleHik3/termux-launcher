@@ -64,6 +64,24 @@ public class PresetApplyTest {
         return prefs;
     }
 
+    /**
+     * The same fresh install again, in the same store and through the same preferences object, as
+     * {@link #install} makes it. For a cell that walks on an editor that was closed first.
+     */
+    private void reinstall(TermuxAppSharedPreferences prefs) {
+        SharedPreferences store = RuntimeEnvironment.getApplication().getSharedPreferences(
+            "preset-apply", Context.MODE_PRIVATE);
+        store.edit().clear().commit();
+        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
+                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
+                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
+            SurfacePresets.SHIPPED_BY_KIND);
+        store.edit().putInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, TERMINAL_PAGE).commit();
+        TermuxAppSharedPreferences.setTerminalPageId(TERMINAL_PAGE);
+        SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
+        LookGridKindSeed.run(new LookGrid.PrefsStore(store), SurfacePresets.SHIPPED_BY_KIND);
+    }
+
     @After
     public void forget() {
         LookGrid.install(null, null);
@@ -75,9 +93,22 @@ public class PresetApplyTest {
     @Test
     public void customizationLookShowsOnEveryPage() {
         List<String> wrong = new ArrayList<>();
+        // One editor; each cell ends its session, puts the install back to a fresh one and
+        // opens the card again, so every cell starts as a fresh install with the card just
+        // opened.
+        TermuxAppSharedPreferences prefs = install();
+        EditorTestHarness harness = null;
         for (int stop : looks()) {
-            TermuxAppSharedPreferences prefs = install();
-            tap(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), stop);
+            if (harness == null) {
+                harness = harnessFor(prefs, PaneWallPage.WIDGETS, HOME_PAGE);
+            } else {
+                harness.editor.endSession();
+                ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+                org.junit.Assert.assertFalse("the editor is closed before the next cell",
+                    harness.editor.isOpen());
+                reinstall(prefs);
+            }
+            tap(present(harness, EditorCard.APPEARANCE, PaneWallPage.WIDGETS), stop);
             expectEverywhere(prefs, stop, PAGES, "Customization", wrong);
         }
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
@@ -100,9 +131,22 @@ public class PresetApplyTest {
     @Test
     public void workspaceLookShowsOnTheWorkspacePages() {
         List<String> wrong = new ArrayList<>();
+        // One editor; each cell ends its session, puts the install back to a fresh one and
+        // opens the card again, so every cell starts as a fresh install with the card just
+        // opened.
+        TermuxAppSharedPreferences prefs = install();
+        EditorTestHarness harness = null;
         for (int stop : looks()) {
-            TermuxAppSharedPreferences prefs = install();
-            tap(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE), stop);
+            if (harness == null) {
+                harness = harnessFor(prefs, PaneWallPage.TERMINAL, TERMINAL_PAGE);
+            } else {
+                harness.editor.endSession();
+                ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+                org.junit.Assert.assertFalse("the editor is closed before the next cell",
+                    harness.editor.isOpen());
+                reinstall(prefs);
+            }
+            tap(present(harness, EditorCard.WORKSPACE, PaneWallPage.TERMINAL), stop);
             expectEverywhere(prefs, stop, new int[] {TERMINAL_PAGE, DISPLAY_PAGE}, "Workspace",
                 wrong);
         }
@@ -398,6 +442,12 @@ public class PresetApplyTest {
 
     private static SurfaceEditorController open(TermuxAppSharedPreferences prefs, EditorCard card,
                                                 PaneWallPage place, int pageInFront) {
+        return present(harnessFor(prefs, place, pageInFront), card, place);
+    }
+
+    /** An editor over a new activity, whose host answers {@code place} and {@code pageInFront}. */
+    private static EditorTestHarness harnessFor(TermuxAppSharedPreferences prefs,
+                                                PaneWallPage place, int pageInFront) {
         List<WallPages.Page> pages = Arrays.asList(
             new WallPages.Page(HOME_PAGE, WallPages.PageKind.HOME, "Home 1", null),
             new WallPages.Page(TERMINAL_PAGE, WallPages.PageKind.TERMINAL, "Terminal", null));
@@ -409,6 +459,12 @@ public class PresetApplyTest {
                 default: return null;
             }
         });
+        return harness;
+    }
+
+    /** {@code card} opened on {@code harness}'s editor, on {@code place}. */
+    private static SurfaceEditorController present(EditorTestHarness harness, EditorCard card,
+                                                   PaneWallPage place) {
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());

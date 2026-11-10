@@ -62,8 +62,12 @@ public class EditorCardSheetFitTest {
     @Test
     public void everyCardsLastRowClearsTheNavigationInsetAtBothDetents() {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
-            for (EditorCard card : EditorCard.values())
-                assertFits(card, scale);
+            // One fixture per font scale; each card is raised on it in turn.
+            Fixture fixture = null;
+            for (EditorCard card : EditorCard.values()) {
+                fixture = Fixture.raise(fixture, card, scale);
+                assertFits(fixture, card, scale);
+            }
         }
     }
 
@@ -95,8 +99,10 @@ public class EditorCardSheetFitTest {
     public void theLeastHalfHeightCountsAHeadingWithTheFirstControlUnderIt() {
         boolean anyControlFirst = false;
         for (float scale : new float[] {1f, 1.3f}) {
+            // One fixture per font scale; each card is raised on it in turn.
+            Fixture fixture = null;
             for (EditorCard card : EditorCard.values()) {
-                Fixture fixture = new Fixture(card, scale);
+                fixture = Fixture.raise(fixture, card, scale);
                 fixture.layOut();
                 int width = fixture.parent.getWidth();
                 int target = fixture.dp(48);
@@ -174,8 +180,10 @@ public class EditorCardSheetFitTest {
     @Test
     public void noChoiceIsCutAtAnyTextSize() {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
+            // One fixture per font scale; each card is raised on it in turn.
+            Fixture fixture = null;
             for (EditorCard card : EditorCard.values()) {
-                Fixture fixture = new Fixture(card, scale);
+                fixture = Fixture.raise(fixture, card, scale);
                 fixture.layOut();
                 for (MaterialButton button : buttons(fixture.sheet.rows())) {
                     Layout layout = button.getLayout();
@@ -191,8 +199,10 @@ public class EditorCardSheetFitTest {
     @Test
     public void sliderRowsStandOnOneLineAtDefaultTextAndNoValueIsCut() {
         for (float scale : new float[] {1f, 1.3f}) {
+            // One fixture per font scale; each card is raised on it in turn.
+            Fixture fixture = null;
             for (EditorCard card : EditorCard.values()) {
-                Fixture fixture = new Fixture(card, scale);
+                fixture = Fixture.raise(fixture, card, scale);
                 fixture.layOut();
                 for (LegendSlider slider : legends(fixture.sheet.rows())) {
                     if (!(slider.getParent() instanceof com.termux.app.surfaces.rows.SliderRow.Line)
@@ -248,6 +258,8 @@ public class EditorCardSheetFitTest {
     public void aSlidersThumbAtEitherEndStaysInsideTheMargins() {
         int checked = 0;
         boolean anyLook = false;
+        // One fixture; each card is raised on it in turn.
+        Fixture fixture = null;
         for (EditorCard card : EditorCard.values()) {
             // The Look slider stands only on a card the sheet still draws itself; the redesigned
             // cards show the Look as tiles (EditorCardBodyTest).
@@ -255,7 +267,7 @@ public class EditorCardSheetFitTest {
                 continue;
             for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true)))
                 anyLook |= spec.row == EditorRows.Row.LOOK;
-            Fixture fixture = new Fixture(card, 1f);
+            fixture = Fixture.raise(fixture, card, 1f);
             fixture.layOut();
             int width = fixture.parent.getWidth();
             for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
@@ -395,9 +407,11 @@ public class EditorCardSheetFitTest {
     public void aSheetConnectedGroupShowsEveryButtonWhole() {
         // Emulator W1a: the Status bar's Rim (None / Thin / Bright beside its title) was cut
         // flat at the bottom. Every connected button keeps its 48dp target, inside its row.
+        // One fixture; each card is raised on it in turn.
+        Fixture fixture = null;
         for (EditorCard card : new EditorCard[] {EditorCard.STATUS, EditorCard.DOCK,
                 EditorCard.TERMINAL}) {
-            Fixture fixture = new Fixture(card, 1f);
+            fixture = Fixture.raise(fixture, card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
             for (com.google.android.material.button.MaterialButtonToggleGroup group
@@ -561,10 +575,12 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
+        // One fixture; each card is raised on it in turn.
+        Fixture fixture = null;
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))
                 continue;
-            Fixture fixture = new Fixture(card, 1f);
+            fixture = Fixture.raise(fixture, card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
             for (com.google.android.material.button.MaterialButtonToggleGroup group
@@ -628,10 +644,12 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void everySliderButTheLooksIsAStripColumnAndEveryRowIsThere() {
+        // One fixture; each card is raised on it in turn.
+        Fixture fixture = null;
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))
                 continue;
-            Fixture fixture = new Fixture(card, 1f);
+            fixture = Fixture.raise(fixture, card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
             int strips = 0;
@@ -723,8 +741,7 @@ public class EditorCardSheetFitTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private static void assertFits(@NonNull EditorCard card, float scale) {
-        Fixture fixture = new Fixture(card, scale);
+    private static void assertFits(@NonNull Fixture fixture, @NonNull EditorCard card, float scale) {
         for (int detent : new int[] {EditorCardSheet.DETENT_HALF, EditorCardSheet.DETENT_FULL}) {
             fixture.sheet.setDetent(detent, false);
             fixture.layOut();
@@ -770,6 +787,10 @@ public class EditorCardSheetFitTest {
         final int navPx;
         private final int mWidth;
         private final int mHeight;
+        private final float mDensity;
+        private final float mFontScale;
+        private final int mFreshDetent;
+        private boolean mShown;
 
         Fixture(@NonNull EditorCard card, float fontScale) {
             RuntimeEnvironment.setFontScale(fontScale);
@@ -786,20 +807,50 @@ public class EditorCardSheetFitTest {
                 @Override public void onReset() {}
                 @Override public void onSheetMoved(int detent, float topPx) {}
             });
-            int full = Math.round(mHeight * 0.55f);
+            mDensity = density;
+            mFontScale = fontScale;
             sheet.attach(parent);
+            mFreshDetent = sheet.detent();
+            show(card);
+        }
+
+        /**
+         * Raises {@code card} as a new sheet shows it: the first geometry, the card, then the
+         * window's geometry for its least half height. Called again on the same fixture (the
+         * next card of a loop) it first puts the sheet back to where a new one stands: its
+         * detent, and its content at the top.
+         */
+        void show(@NonNull EditorCard card) {
+            int full = Math.round(mHeight * 0.55f);
+            if (mShown) {
+                sheet.setDetent(mFreshDetent, false);
+                sheet.scroll().scrollTo(0, 0);
+            }
+            mShown = true;
             sheet.setGeometry(full, full, navPx);
             sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)), "Reset",
                 false);
             layOut();
             EditorFramePose.Window window = new EditorFramePose.Window(mHeight,
-                Math.round(41 * density), navPx, density, fontScale, Math.round(41 * density),
-                mHeight, 0, Math.round(48 * density), Math.round(8 * density));
+                Math.round(41 * mDensity), navPx, mDensity, mFontScale, Math.round(41 * mDensity),
+                mHeight, 0, Math.round(48 * mDensity), Math.round(8 * mDensity));
             int minPx = sheet.minHalfHeightPx(mWidth);
             int fullPx = EditorFramePose.fullSheetPx(window, minPx);
             int half = EditorFramePose.halfSheetPx(window, minPx, fullPx);
             sheet.setGeometry(half, fullPx, navPx);
             layOut();
+        }
+
+        /**
+         * The fixture for {@code card} at {@code scale}: a new one for the first card of a loop
+         * ({@code previous} null), otherwise the loop's fixture with the card raised on it.
+         */
+        @NonNull
+        static Fixture raise(@Nullable Fixture previous, @NonNull EditorCard card, float scale) {
+            if (previous == null)
+                return new Fixture(card, scale);
+            previous.show(card);
+            return previous;
         }
 
         int dp(float value) {

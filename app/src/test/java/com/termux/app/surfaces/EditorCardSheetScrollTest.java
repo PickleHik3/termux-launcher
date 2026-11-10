@@ -130,7 +130,15 @@ public class EditorCardSheetScrollTest {
     public void upOnARowFromTheParentGrowsTheSheetOnEveryCard() {
         for (EditorCard card : EditorCard.values()) {
             for (int step = 0; step < 6; step++) {
-                setUp(card);
+                // One sheet per card; a step starts it back where a freshly shown card stands:
+                // at the half detent, the content at its top, laid out.
+                if (step == 0) {
+                    setUp(card);
+                } else {
+                    mSheet.setDetent(EditorCardSheet.DETENT_HALF, false);
+                    mSheet.scroll().scrollTo(0, 0);
+                    layOut();
+                }
                 float top = mHeight - (mHeight * 0.4f);
                 float y = top + 160 + step * (mHeight * 0.4f - 220) / 6f;
                 float x = 100f;
