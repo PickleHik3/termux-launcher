@@ -248,3 +248,9 @@ is a later wave).
 - Wave H is smaller than written above: ADR 0021 (2026-11-03) already deleted the live blur
   views and put panels on a snapshot or a live recording. What is left for H is `SheetsSpec` and
   the palette's colour from the Sheets cells.
+- D17 (2026-11-10) each remaining element is done in two steps. Step one moves its code out of
+  `TermuxActivity` line for line behind the element's Host, however wide that Host turns out
+  (the dock's layout and dress alone reaches about 24 activity methods), and pins it with
+  controller tests over a fake Host. Step two narrows the Host by turning the moved code
+  Spec-first (the activity hands one Input, the Spec answers, the View applies), each change
+  held by a parity test against step one's behaviour. Step one never changes what is on screen.
