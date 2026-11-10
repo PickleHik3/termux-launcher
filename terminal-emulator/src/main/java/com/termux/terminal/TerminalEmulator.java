@@ -1834,6 +1834,15 @@ public final class TerminalEmulator {
         if (screen != mScreen) {
             mScreen = screen;
             clearExtraCursors();
+            // A resize reaches only the buffer on screen at the time, so the one switched to may
+            // still have the size from before it (the keyboard came up or went down while the
+            // other screen was showing). Left alone, its rows are never mirrored again and the
+            // view reads rows it does not have. The Java core resizes on the switch too.
+            if (mScreen.mColumns != mColumns || mScreen.mScreenRows != mRows) {
+                resizeScreen();
+                if (mScreen == mMainBuffer) mMainBuffer.clearTranscript();
+                mGhosttyContent.forgetHistory();
+            }
             resetGraphemeTracking();
         }
         // The rows that scrolled off move the shared scroll count, which a scrolled-back view and a
