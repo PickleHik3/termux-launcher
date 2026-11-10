@@ -49,6 +49,11 @@ public class ScreenshotPrototypeTest {
     private static final String TABLET = "sw700dp-w900dp-h700dp-%s-xhdpi";
     private static final String DIR = "src/test/screenshots/";
 
+    @org.junit.Before
+    public void onlyWhenReportsAreRequested() {
+        com.termux.app.testing.ReportRenders.assumeRequested();
+    }
+
     private void shoot(View view, String name) {
         long start = System.nanoTime();
         RoborazziKt.captureRoboImage(view, DIR + name + ".png", new RoborazziOptions());

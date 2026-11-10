@@ -558,6 +558,7 @@ public class EditorRowKindsTest {
 
     @Test
     public void rendersOfEveryRowKindAtDefaultAndLargeText() throws java.io.IOException {
+        com.termux.app.testing.ReportRenders.assumeRequested();
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);
             LinearLayout column = new LinearLayout(f.themed);

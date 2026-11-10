@@ -52,3 +52,13 @@ On pong, ask the developer before every such run: it drives their phone.
 Delete an item once it has been seen. Batched functional checks run through the host's
 `device-checker` agent where there is one; it gets the user-facing summary and the items, never
 the diff.
+
+## Picture reports
+
+Tests whose only job is to write pictures for a person to look at are skipped in an ordinary run
+(`ReportRenders.assumeRequested()`). Run them with `-Preports.renders`, for example
+`./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.termux.app.surfaces.*' -Preports.renders`.
+They write PNGs under `app/build/reports/editor-rows` (card sheets), `editor-row-kinds` and
+`tile-grid`, and under `app/src/test/screenshots` (the Roborazzi prototype in
+`ScreenshotPrototypeTest`). A new picture-only test calls `ReportRenders.assumeRequested()` first;
+a test that also asserts something stays ungated.

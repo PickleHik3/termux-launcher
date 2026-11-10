@@ -144,6 +144,7 @@ public class TileGridLayoutTest {
     }
 
     private static void renderAll(@NonNull String theme) throws IOException {
+        com.termux.app.testing.ReportRenders.assumeRequested();
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture f = new Fixture(scale, 411);
             TileGrid grid = f.homeOptions();

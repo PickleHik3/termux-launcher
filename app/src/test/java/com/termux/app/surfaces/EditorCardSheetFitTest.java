@@ -602,6 +602,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void rendersOfTheCardsAtDefaultAndLargeText() throws java.io.IOException {
+        com.termux.app.testing.ReportRenders.assumeRequested();
         for (float scale : new float[] {1f, 1.3f}) {
             for (EditorCard card : EditorCard.values()) {
                 Fixture fixture = new Fixture(card, scale);
