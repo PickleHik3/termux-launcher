@@ -76,6 +76,12 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         this.sinks = sinks;
     }
 
+    /** X owns every ordinary chord; the Workspace's own Ctrl+Alt route stays as it is. */
+    @Override
+    public boolean yieldsToBindings() {
+        return false;
+    }
+
     @Override
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {

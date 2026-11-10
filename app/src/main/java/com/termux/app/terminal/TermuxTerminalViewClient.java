@@ -487,6 +487,15 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         return handleRegistryKeybinds(e, false);
     }
 
+    /**
+     * A chord from the in-app keyboard, offered to the user's bindings before whatever surface
+     * is typing gets it. Unlike a terminal stroke an unbound chord is never swallowed here: it
+     * goes on to the field or the shell exactly as it would have.
+     */
+    public boolean consumeInAppKeyboardChord(@NonNull KeyEvent e) {
+        return handleRegistryKeybinds(e, false);
+    }
+
     private boolean handleRegistryKeybinds(KeyEvent e) {
         return handleRegistryKeybinds(e, true);
     }
