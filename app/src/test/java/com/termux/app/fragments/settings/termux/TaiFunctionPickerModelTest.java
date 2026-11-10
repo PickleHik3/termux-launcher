@@ -116,6 +116,40 @@ public class TaiFunctionPickerModelTest {
         return out;
     }
 
+    @Test
+    public void theGpuSpeechModelCarriesItsAdviceNotTheFitLine() {
+        TaiFunctionRows.Labels advising = new TaiFunctionRows.Labels() {
+            @Override public String text(TaiFunctionRows.Msg msg, Object... args) { return LABELS.text(msg, args); }
+            @Override public String functionName(TaiFunction function) { return LABELS.functionName(function); }
+            @Override public String modelName(String modelId) { return LABELS.modelName(modelId); }
+            @Override public String modelDetail(String modelId) {
+                return TaiModelCatalog.WHISPER_BASE_GPU_ID.equals(modelId) ? "GPU ADVICE" : null;
+            }
+        };
+        Env env = env(12, 34, GpuPath.YES);
+        String gpu = TaiModelCatalog.WHISPER_BASE_GPU_ID;
+        List<TaiFunctionRows.CatalogItem> catalogue = Arrays.asList(
+            item(gpu, 200L << 20, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT),
+            item(TaiTierPolicy.WHISPER_SMALL, 300L << 20, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+
+        TaiFunctionPickerModel.Model get = TaiFunctionPickerModel.build(TaiFunction.VOICE_TYPING, models(env),
+            remote, catalogue, Collections.<String>emptySet(), advising);
+        for (TaiFunctionPickerModel.Entry entry : get.entries(Section.GET)) {
+            if (entry.value.equals(gpu)) assertEquals("GPU ADVICE", entry.detail);
+            else assertFalse("GPU ADVICE".equals(entry.detail));
+        }
+
+        install(gpu, 200L << 20, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        TaiFunctionPickerModel.Model onPhone = TaiFunctionPickerModel.build(TaiFunction.VOICE_TYPING, models(env),
+            remote, catalogue, Collections.<String>emptySet(), advising);
+        TaiFunctionPickerModel.Entry installedGpu = null;
+        for (TaiFunctionPickerModel.Entry entry : onPhone.entries(Section.ON_PHONE)) {
+            if (entry.value.equals(gpu)) installedGpu = entry;
+        }
+        assertNotNull("the installed GPU model is listed", installedGpu);
+        assertEquals("GPU ADVICE", installedGpu.detail);
+    }
+
     // ----------------------------------------------------------------------------- automatic
 
     @Test

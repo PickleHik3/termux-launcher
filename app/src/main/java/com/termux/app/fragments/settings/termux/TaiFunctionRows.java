@@ -81,6 +81,12 @@ final class TaiFunctionRows {
 
         /** The model's name as people read it; a {@code -vision} id and the file are the same name. */
         @NonNull String modelName(@NonNull String modelId);
+
+        /** A model's own detail line when the tier's fit line does not describe it (the GPU speech model); null otherwise. */
+        @Nullable
+        default String modelDetail(@NonNull String modelId) {
+            return null;
+        }
     }
 
     // ---------------------------------------------------------------------------------- header
