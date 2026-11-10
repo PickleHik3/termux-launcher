@@ -466,8 +466,13 @@ a Linux app.
 - **Dock designs**: values `glass_tray` (Tray), `lens_beads` (Beads), `wall_strip` (Strip),
   `peek_glass` (Peek). Home's design is `layout.home.dock_design` and also `dock_design` inside
   the `"home"` JSON in `shared_prefs/layouts.xml`, which wins: set both, then force-stop. In
-  that JSON `sed` wants plain `&quot;` between key and value. The Workspace's is
-  `layout.dock_design`. Beads are faint at rest: judge them from a zoomed crop. With the
+  that JSON one run needed plain `&quot;` between key and value and a later one `\&quot;` in the
+  replacement (an unescaped `&` is sed's "the match"): check the file after the edit, because a
+  corrupt prefs file is reset silently, pins and all, and brings back the "Use as your home
+  screen?" sheet (Skip at about 613,2254; Back does not dismiss it). Edit after `ad stop
+  com.termux`, writing to a temp file and `cat`-ing it back. The Workspace's is
+  `layout.dock_design`. `app_launcher_dock_style` is `docked` or `floating`, absent by default.
+  The home app is set with `adb shell cmd package set-home-activity <component>`. Beads are faint at rest: judge them from a zoomed crop. With the
   keyboard up on Home under Beads the icons stand on bare wallpaper, no bead and no slab (the
   same before and after the 11-10 dock moves).
 - **Pins**: a fresh emulator has only Terminal pinned and the `700 2165` hold recipe above does
