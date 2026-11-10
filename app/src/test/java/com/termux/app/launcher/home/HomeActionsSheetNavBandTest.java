@@ -148,11 +148,8 @@ public class HomeActionsSheetNavBandTest {
         sheet.open(HomeActionsSheetPolicy.itemsFor(true, true, false, 2, false));
         layout(sheet);
         View card = card(sheet);
-        // Laid out hidden, at or below the screen's edge: nothing covered yet.
-        assertTrue("hidden card top " + card.getTop(), card.getTop() >= HEIGHT);
-        assertTrue(covers.isEmpty());
-        // Settled up, standing on the screen's bottom edge, where the behaviour's slide leaves it.
-        card.offsetTopAndBottom(HEIGHT - card.getHeight() - card.getTop());
+        // The behaviour is armed expanded, so the card is laid out standing on the screen's bottom
+        // edge and the slide, not a settle, brings it in from below.
         assertEquals(HEIGHT, card.getBottom());
         assertTrue(card.getTop() < HEIGHT - GESTURE_BAR);
 

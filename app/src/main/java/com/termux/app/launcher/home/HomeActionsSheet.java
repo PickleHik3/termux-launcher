@@ -28,6 +28,8 @@ import com.termux.R;
 import com.termux.app.launcher.home.HomeActionsSheetPolicy.Group;
 import com.termux.app.launcher.home.HomeActionsSheetPolicy.Item;
 import com.termux.app.material.M3;
+import com.termux.app.material.ModalSheetMotion;
+import com.termux.app.material.ModalSheetSlide;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -39,9 +41,11 @@ import java.util.function.Function;
  * two rounded groups of two-column rows ({@link HomeActionsSheetPolicy} says which rows).
  *
  * <p>Like the widget picker it never takes a window of its own: it is a {@link BottomSheetBehavior}
- * card in a {@link CoordinatorLayout} the activity lays over everything, so the stock drag, settle
- * and swipe-down-to-dismiss apply, and Back reaches it through the activity's overlay registry
- * rather than through a dialog. It wears the app's Material surface, never glass, so it follows the
+ * card in a {@link CoordinatorLayout} the activity lays over everything, so the stock drag and
+ * swipe-down-to-dismiss apply, and Back reaches it through the activity's overlay registry
+ * rather than through a dialog. It opens and closes by {@link ModalSheetSlide} in
+ * {@link ModalSheetMotion}'s time and curves, the same as the widget picker; the behavior stays
+ * expanded and only the drag is its own. It wears the app's Material surface, never glass, so it follows the
  * app's light or dark theme. A tap on the dim, a swipe down or Back puts it away; a row puts it away
  * and tells the {@link Listener} which action was chosen.
  *
@@ -93,8 +97,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         default void onSheetGone() { }
     }
 
-    /** The card's top corners: the M3 extra-large corner. */
-    private static final float CARD_CORNER_DP = 28f;
     /** The widest an M3 bottom sheet stands; wider screens centre it. */
     private static final float CARD_MAX_WIDTH_DP = 640f;
 
@@ -106,7 +108,11 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private final LinearLayout pageRows;
     @NonNull private final View launcherGroup;
     @NonNull private final LinearLayout launcherRows;
-    @NonNull private final BottomSheetBehavior<LinearLayout> behavior;
+    @NonNull private BottomSheetBehavior<LinearLayout> behavior;
+    @NonNull private final BottomSheetBehavior.BottomSheetCallback behaviorCallback;
+    @NonNull private final ModalSheetSlide slide;
+    @NonNull private final ViewTreeObserver.OnPreDrawListener slideInOnFirstDraw;
+    @NonNull private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final int cardPadLeft, cardPadRight, cardPadBottom;
     /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
     private int navInsetPx;
@@ -143,7 +149,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         scrim.setAlpha(0f);
         scrim.setOnClickListener(view -> close());
 
-        float corner = dp(CARD_CORNER_DP);
+        float corner = dp(ModalSheetMotion.TOP_CORNER_DP);
         ShapeAppearanceModel topCorners = ShapeAppearanceModel.builder()
             .setTopLeftCorner(CornerFamily.ROUNDED, corner)
             .setTopRightCorner(CornerFamily.ROUNDED, corner)
@@ -167,16 +173,29 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         behavior.setFitToContents(true);
         behavior.setDraggable(true);
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-        behavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
+        behaviorCallback = new BottomSheetBehavior.BottomSheetCallback() {
             @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
                 else if (newState == BottomSheetBehavior.STATE_EXPANDED) reportCover();
             }
             @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
+                // A layout mid-slide reports the card's resting offset; the slide owns the dim.
+                if (slide.isRunning()) return;
                 scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
                 reportCover();
             }
-        });
+        };
+        behavior.addBottomSheetCallback(behaviorCallback);
+        slide = new ModalSheetSlide(card, this::onSlideFrame);
+        slideInOnFirstDraw = new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                getViewTreeObserver().removeOnPreDrawListener(this);
+                if (!open) return true;
+                slide.slideIn(null);
+                onSlideFrame();
+                return true;
+            }
+        };
         setVisibility(GONE);
     }
 
@@ -201,7 +220,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** Tells the listener how much of the band under the navigation bar the card covers. */
     private void reportCover() {
-        float cover = HomeActionsSheetPolicy.navBandCover(card.getTop(), getHeight(), navInsetPx);
+        int drawnTop = card.getTop() + Math.round(card.getTranslationY());
+        float cover = HomeActionsSheetPolicy.navBandCover(drawnTop, getHeight(), navInsetPx);
         if (cover == reportedCover) return;
         reportedCover = cover;
         listener.onNavBandCovered(cover);
@@ -231,12 +251,13 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         refill();
         boolean wasOpen = open;
         open = true;
+        if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
         bringToFront();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
-        settleExpandedAfterLayout();
+        slideInAfterLayout();
     }
 
     /**
@@ -253,12 +274,13 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         refill();
         boolean wasOpen = open;
         open = true;
+        if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
         bringToFront();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
-        settleExpandedAfterLayout();
+        slideInAfterLayout();
     }
 
     private void setTitle(@NonNull CharSequence title) {
@@ -266,10 +288,29 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         ViewCompat.setAccessibilityPaneTitle(card, title);
     }
 
+    /** Each step of the slide: the dim and the cover of the nav band follow the card. */
+    private void onSlideFrame() {
+        scrim.setAlpha(slide.scrimAlpha());
+        reportCover();
+    }
+
     /**
-     * Expanding before the card has been laid out with its rows would jump rather than slide, or,
-     * when the rows change under an open card, leave it at the old height's offset; so the settle
-     * starts on the first frame after layout.
+     * The card has the expanded offset by its first layout; on that frame, before it draws, it is
+     * put off the bottom and slides up, so it never shows in place first. A slide that is still
+     * taking the card away is taken over from where it stands.
+     */
+    private void slideInAfterLayout() {
+        if (slide.isRunning()) {
+            slide.slideIn(null);
+            return;
+        }
+        scrim.setAlpha(0f);
+        getViewTreeObserver().addOnPreDrawListener(slideInOnFirstDraw);
+    }
+
+    /**
+     * When the rows change under an open card, expanding again on the first frame after layout
+     * leaves it at the new height's offset rather than the old one's.
      */
     private void settleExpandedAfterLayout() {
         getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
@@ -307,7 +348,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     public void close() {
         if (!open) return;
         open = false;
-        behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        slide.slideOut(this::finishClosing);
     }
 
     /**
@@ -317,6 +358,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     public void closeImmediately() {
         dropAfterHidden();
         open = false;
+        slide.reset();
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         finishClosing();
     }
@@ -327,6 +369,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = false;
         scrim.setAlpha(0f);
         setVisibility(GONE);
+        slide.reset();
         if (reportedCover != 0f) {
             reportedCover = 0f;
             listener.onNavBandCovered(0f);
@@ -362,6 +405,27 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         if (afterHidden == null) return;
         afterHidden = null;
         behavior.setDraggable(true);
+    }
+
+    /** A touch that lands on the card while it slides stops the slide, so a drag starts from rest. */
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && slide.isRunning()) {
+            card.getHitRect(cardBounds);
+            cardBounds.offset(0, Math.round(card.getTranslationY()));
+            if (cardBounds.contains(Math.round(event.getX()), Math.round(event.getY()))) slide.end();
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @VisibleForTesting
+    BottomSheetBehavior<LinearLayout> behaviorForTest() {
+        return behavior;
+    }
+
+    @VisibleForTesting
+    float cardTranslationYForTest() {
+        return card.getTranslationY();
     }
 
     @Override

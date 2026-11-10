@@ -1,9 +1,8 @@
 package com.termux.app.launcher.folder;
 
-import android.content.Context;
-import android.view.Choreographer;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.PopupWindow;
 
@@ -11,10 +10,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import com.termux.app.Spring;
-
-/** Shared dock/drawer popup owner with non-focusable flags and house-spring transitions. */
-public final class LauncherFolderPopupController implements Choreographer.FrameCallback {
+/**
+ * Shared dock/drawer popup owner with non-focusable flags. The panel grows out of its anchor's
+ * icon and shrinks back into it ({@link FolderExpandMotion}); nothing dims behind it.
+ */
+public final class LauncherFolderPopupController {
     /**
      * Decides whether a touch outside the popup leaves it open. The popup is outside-touchable, so
      * Android dismisses it on the first touch anywhere else, including the in-app keyboard's keys
@@ -26,16 +26,12 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         boolean keepsOpen(float rawX, float rawY);
     }
 
-    /** Backdrop dim at full open; separates the folder from the drawer/dock behind it. */
-    private static final float DIM_AMOUNT = 0.32f;
-
-    private final Spring spring = new Spring(0f, 420f, 41f);
     @Nullable private PopupWindow popup;
     @Nullable private String folderId;
     @Nullable private Runnable onDismiss;
-    private boolean closing;
-    private boolean framePosted;
-    private long lastFrame;
+    @Nullable private FolderExpandMotion motion;
+    @Nullable private View preDrawRoot;
+    @Nullable private ViewTreeObserver.OnPreDrawListener preDraw;
     private boolean hiddenForDrag;
     @Nullable private OutsideTouchGuard outsideTouchGuard;
 
@@ -45,6 +41,15 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
     }
 
     public void show(@NonNull PopupWindow next, @NonNull String id,
+                     @NonNull Runnable positionAndShow, @Nullable Runnable dismissListener) {
+        show(next, id, null, positionAndShow, dismissListener);
+    }
+
+    /**
+     * Shows {@code next} (placed by {@code positionAndShow}) and grows it out of {@code anchor},
+     * the folder's icon; a null or detached anchor gives the small in-place settle instead.
+     */
+    public void show(@NonNull PopupWindow next, @NonNull String id, @Nullable View anchor,
                      @NonNull Runnable positionAndShow, @Nullable Runnable dismissListener) {
         dismissImmediate();
         popup = next;
@@ -57,11 +62,48 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         next.setOnDismissListener(this::finishDismiss);
         next.setTouchInterceptor((view, event) -> keepsOpenOn(event));
         positionAndShow.run();
-        closing = false;
-        spring.reset(0f);
-        spring.target = 1f;
-        apply(0f);
-        postFrame();
+        View root = next.getContentView();
+        if (root == null) return;
+        // Hidden until the window has its first frame: only then is the panel's rest rect known.
+        root.setAlpha(0f);
+        FolderExpandMotion expand = new FolderExpandMotion(root);
+        motion = expand;
+        ViewTreeObserver.OnPreDrawListener listener = () -> {
+            removePreDraw();
+            if (motion == expand && !hiddenForDrag) startOpen(expand, root, anchor);
+            return true;
+        };
+        preDrawRoot = root;
+        preDraw = listener;
+        root.getViewTreeObserver().addOnPreDrawListener(listener);
+    }
+
+    /** The panel's and the icon's screen rects, once, then the grow. */
+    private void startOpen(@NonNull FolderExpandMotion expand, @NonNull View root,
+                           @Nullable View anchor) {
+        int[] at = new int[2];
+        if (anchor != null && anchor.isAttachedToWindow() && anchor.getWidth() > 0
+            && anchor.getHeight() > 0) {
+            int[] iconAt = new int[2];
+            anchor.getLocationOnScreen(iconAt);
+            root.getLocationOnScreen(at);
+            expand.setGeometry(iconAt[0], iconAt[1], iconAt[0] + anchor.getWidth(),
+                iconAt[1] + anchor.getHeight(), at[0], at[1], at[0] + root.getWidth(),
+                at[1] + root.getHeight());
+        } else {
+            expand.setFallbackGeometry();
+        }
+        expand.open();
+    }
+
+    private void removePreDraw() {
+        View root = preDrawRoot;
+        ViewTreeObserver.OnPreDrawListener listener = preDraw;
+        preDrawRoot = null;
+        preDraw = null;
+        if (root == null || listener == null) return;
+        ViewTreeObserver observer = root.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnPreDrawListener(listener);
     }
 
     /**
@@ -80,11 +122,15 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
     @Nullable public String folderId() { return folderId; }
 
     public void dismiss() {
-        if (popup == null) return;
-        closing = true;
-        spring.reset(Math.max(0f, Math.min(1f, spring.value)));
-        spring.target = 0f;
-        postFrame();
+        PopupWindow current = popup;
+        if (current == null) return;
+        FolderExpandMotion expand = motion;
+        if (hiddenForDrag || expand == null) {
+            current.dismiss();
+            return;
+        }
+        removePreDraw();
+        expand.close(current::dismiss);
     }
 
     public void dismissDeleted(@NonNull String id) {
@@ -101,8 +147,9 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         View root = current == null ? null : current.getContentView();
         if (root == null) return;
         hiddenForDrag = true;
+        removePreDraw();
+        if (motion != null) motion.cancel();
         root.setAlpha(0f);
-        applyDimBehind(root, 0f);
         current.setTouchable(false);
         current.update();
     }
@@ -115,71 +162,14 @@ public final class LauncherFolderPopupController implements Choreographer.FrameC
         else finishDismiss();
     }
 
-    @Override public void doFrame(long frameTimeNanos) {
-        framePosted = false;
-        float dt = lastFrame == 0L ? Spring.MIN_DT
-            : (frameTimeNanos - lastFrame) / 1_000_000_000f;
-        lastFrame = frameTimeNanos;
-        boolean moving = spring.tick(false, Spring.clampDelta(dt));
-        apply(spring.value);
-        if (closing && spring.value <= 0.002f) {
-            PopupWindow current = popup;
-            if (current != null) current.dismiss();
-            return;
-        }
-        if (moving) postFrame();
-    }
-
-    private void apply(float value) {
-        if (hiddenForDrag) return;
-        PopupWindow current = popup;
-        View root = current == null ? null : current.getContentView();
-        if (root == null) return;
-        float p = Math.max(0f, Math.min(1f, value));
-        root.setAlpha(p);
-        root.setScaleX(0.94f + 0.06f * p);
-        root.setScaleY(0.94f + 0.06f * p);
-        applyDimBehind(root, p);
-    }
-
-    /**
-     * Rides the popup's own window: FLAG_DIM_BEHIND on its decor dims everything below —
-     * drawer, dock, wallpaper — without touching any activity view, and the spring drives the
-     * amount so the dim breathes in and out with the popup itself.
-     */
-    private void applyDimBehind(@NonNull View root, float p) {
-        if (!(root.getParent() instanceof View)) return;
-        View decor = (View) root.getParent();
-        if (!(decor.getLayoutParams() instanceof WindowManager.LayoutParams)) return;
-        WindowManager.LayoutParams params = (WindowManager.LayoutParams) decor.getLayoutParams();
-        float amount = DIM_AMOUNT * p;
-        if ((params.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
-            && Math.abs(params.dimAmount - amount) < 0.004f) return;
-        params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
-        params.dimAmount = amount;
-        WindowManager manager = (WindowManager)
-            decor.getContext().getSystemService(Context.WINDOW_SERVICE);
-        if (manager == null) return;
-        try {
-            manager.updateViewLayout(decor, params);
-        } catch (RuntimeException ignored) {
-            // The decor can detach mid-frame during dismiss; the dim dies with the window anyway.
-        }
-    }
-
-    private void postFrame() {
-        if (framePosted) return;
-        framePosted = true;
-        lastFrame = 0L;
-        Choreographer.getInstance().postFrameCallback(this);
-    }
-
     private void finishDismiss() {
         popup = null;
         folderId = null;
-        closing = false;
-        framePosted = false;
         hiddenForDrag = false;
+        removePreDraw();
+        FolderExpandMotion expand = motion;
+        motion = null;
+        if (expand != null) expand.cancel();
         Runnable listener = onDismiss;
         onDismiss = null;
         if (listener != null) listener.run();

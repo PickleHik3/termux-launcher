@@ -6382,12 +6382,12 @@ public final class SuggestionBarView extends GridLayout
             visibleRows * (popupIconSize + dp(8))));
 
         int overlayBase = folder.tintOverrideEnabled ? (folder.tintColor & 0x00FFFFFF) : (inheritedTintColor & 0x00FFFFFF);
-        // The shared controller owns this window's lifecycle (spring transition, dim, dismissal),
+        // The shared controller owns this window's lifecycle (grow-from-icon transition, dismissal),
         // so the module builds it detached and only lends its placement policy.
         folderPopupWindow = detachedMenuSurface.buildDetached(
             MenuSpec.of(shell, overlayBase).build());
         final PopupWindow shownPopup = folderPopupWindow;
-        sharedFolderPopup.show(shownPopup, folder.id,
+        sharedFolderPopup.show(shownPopup, folder.id, anchor,
             () -> detachedMenuSurface.placeAtAnchor(shownPopup, anchor, false), () -> {
             cancelFolderRename();
             if (folderPopupWindow != null && !folderPopupWindow.isShowing()) {

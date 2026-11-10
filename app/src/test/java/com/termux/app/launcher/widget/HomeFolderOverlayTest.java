@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The Home folder popup's layer over the Home pane: it opens on top of the pane, a press on the
- * dim closes it and stops there, a press on the panel does not, and it keeps the gesture it was
+ * The Home folder popup's layer over the Home pane: it opens on top of the pane, a press
+ * outside the panel closes it and stops there, a press on the panel does not, and it keeps the gesture it was
  * pressed in from the pane's own swipes.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -123,6 +123,18 @@ public class HomeFolderOverlayTest {
         overlay.dispatchTouchEvent(press);
         press.recycle();
         assertTrue(pane.disallowed);
+    }
+
+    @Test public void nothingDimsThePaneAndDismissRemovesTheLayerOnceAfterTheMotion() {
+        assertNull("the layer paints nothing", overlay.getBackground());
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        assertNull(overlay.getBackground());
+        overlay.dismiss();
+        overlay.dismiss();
+        assertFalse(overlay.isOpen());
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+        assertNull(overlay.getParent());
+        assertEquals(1, dismissed.get());
     }
 
     @Test public void dismissImmediateTakesItAwayOnceAndNow() {
