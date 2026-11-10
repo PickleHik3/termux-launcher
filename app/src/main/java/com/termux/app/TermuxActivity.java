@@ -737,9 +737,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * While it runs, every chrome reader of an arrangement reads the ones it holds
      * ({@link #arrangementOf(com.termux.app.wall.PageRef)}).
      */
-    private final CrossingViews mCrossingViews = new CrossingViews();
+    private final com.termux.app.place.CrossingViews mCrossingViews =
+        new com.termux.app.place.CrossingViews(this, new CrossingViewsHost());
     private final com.termux.app.place.Crossing mCrossing = new com.termux.app.place.Crossing(
         mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
+    {
+        mCrossingViews.attach(mCrossing);
+    }
     /** {@link #frameStandsDown} as a crossing's begin asks it, bound once rather than per begin. */
     private final com.termux.app.place.SeamCrossing.FrameGlass mFrameStandsDown =
         this::frameStandsDown;
@@ -26992,67 +26996,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bottomStatusBandPx());
     }
 
-    /** The dock rows' layers, which sink into the keyboard together (CrossingViews#sink). */
-    private static final int[] SEAM_ROW_LAYERS = {R.id.accessory_surface_host,
-        R.id.apps_bar_az_fx_underlay, R.id.accessory_row_stack, R.id.apps_bar_az_fx_overlay,
-        R.id.apps_bar_az_label_overlay};
-    /** The layers drawn over the A-Z row alone, which a fold that holds that row leaves be. */
-    private static final int[] SEAM_AZ_LAYERS = {R.id.apps_bar_az_fx_underlay,
-        R.id.apps_bar_az_fx_overlay, R.id.apps_bar_az_label_overlay};
-
-    private static boolean isSeamAzLayer(int id) {
-        for (int az : SEAM_AZ_LAYERS) if (az == id) return true;
-        return false;
-    }
-
     /**
-     * What a crossing moves (Crossing's adapter), and the last values it wrote, so a frame that
-     * repeats one touches no view: the accessory stack's translation, its rows' sink into the
-     * keyboard and a fold's, the travel alphas, the status bar's ride, the travel cover the pane
-     * controller holds for the window in front, and the keyboard brought up for a slide. Only
-     * views are written here; every decision is the crossing's.
+     * What only the activity gives the crossing's adapter (place.CrossingViews): the window's
+     * views, the travel's shares its own layout passes read, the pane and wall controllers, the
+     * keyboard, the dock's row and the picture of the stack.
      */
-    private final class CrossingViews implements com.termux.app.place.Crossing.Stack,
-            com.termux.app.place.Crossing.Bar, com.termux.app.place.Crossing.Cover,
-            com.termux.app.place.Crossing.Keyboard, com.termux.app.place.Crossing.Dock {
+    private final class CrossingViewsHost implements com.termux.app.place.CrossingViews.Host {
 
-        /** How far the dock rows' layers last sank into the keyboard's top edge. */
-        private float mRowSinkPx;
-        /** How much of the rows' layers that sink cut; and the sheet's sink and cut, for a fold. */
-        private float mRowCutPx;
-        private float mSheetSinkPx;
-        private float mSheetCutPx;
-        /** How far a fold sank the A-Z row's own layers while it held that row. */
-        private float mHeldSinkPx;
-        /** Whether that sink left the A-Z row's layers standing, for a fold that holds the row. */
-        private boolean mSinkHoldsAz;
-        /** The row stack re-reads a running fold's sink whenever it is laid out; added once. */
-        private boolean mFoldListening;
-        private final View.OnLayoutChangeListener mFoldLayoutListener =
-            (v, l, t, r, b, ol, ot, orr, ob) -> applyFoldSink();
-        /** The alphas the travel last wrote, 1 when it has put everything back. */
-        private float mStatusAlpha = 1f;
-        private float mSideAlpha = 1f;
+        @Nullable
+        @Override
+        public View hotView(int id) {
+            return TermuxActivity.this.hotView(id);
+        }
 
         @Override
-        public void translate(float dockPx, float keyboardPx) {
+        public void translateStack(float dockPx, float keyboardPx) {
             mDockTravelTranslationPx = dockPx;
             mKeyboardTravelSharePx = keyboardPx;
             applyAccessoryStackTranslation();
         }
 
         @Override
-        public void rideX(float px) {
+        public void rideStatusX(float px) {
             applyStatusTravelX(px);
         }
 
         @Override
-        public void cover(int px) {
+        public void coverWindowInFront(int px) {
             if (mPaneController != null) mPaneController.setTravelBottomCoverPx(px);
         }
 
         @Override
-        public void preRoll(@NonNull com.termux.app.wall.PaneWallPage target) {
+        public void preRollKeyboard(@NonNull com.termux.app.wall.PaneWallPage target) {
             if (mInAppKeyboard == null) return;
             mQuietKeyboardChange = true;
             // Held below the screen by the travel until the wall brings it up: its reveal is not
@@ -27073,233 +27048,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
-        /**
-         * The extra keys folded by the crossing's share. A fold in lays the extra keys out on this
-         * frame: the sink is re-read once the stack has laid them out, before the frame is drawn.
-         */
         @Override
-        public void fold() {
-            listenForFold();
-            applyFoldSink();
-        }
-
-        // ---- The dock's pinned row, which draws the morph (SuggestionBarView) ----
-
-        @Override
-        public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {
-            if (mSuggestionBarView != null) mSuggestionBarView.beginDockMorph(leaving, arriving);
+        public boolean extraKeysRowOnScreen() {
+            return mDockRows.isRowOnScreen(Element.EXTRA_KEYS);
         }
 
         @Override
-        public void dress(@NonNull com.termux.app.dock.DockMorph morph) {
-            if (mSuggestionBarView == null || !morph.rowMorphs()) return;
-            mSuggestionBarView.dockMorphFrame(morph.slotIconPx(), morph.appsRowUsableWidthPx(),
-                morph.appsRowEdgeInsetPx(), morph.drawerTileAlpha());
-            // The beads under the icons where this frame draws them.
-            syncDockBeadsWithMorph();
-            // And the icons' reflection: the morph moves them by drawing alone, which the
-            // reflection, a recording of the row, does not hear of otherwise.
-            onDockRowContentChanged();
+        public int terminalFlushPaddingPx() {
+            return mAppliedTerminalFlushPaddingPx;
+        }
+
+        @Nullable
+        @Override
+        public SuggestionBarView dockRow() {
+            return mSuggestionBarView;
         }
 
         @Override
-        public void endMorph(@NonNull DockLayout landed) {
-            if (mSuggestionBarView == null) return;
-            mSuggestionBarView.endDockMorph(landed);
-            // The row draws the landed rest from here, exactly as its last frame did: so do the
-            // beads, until the row is laid out in it.
-            syncDockBeadsWithMorph();
-        }
-
-        void listenForFold() {
-            if (mFoldListening) return;
-            View rowStack = hotView(R.id.accessory_row_stack);
-            if (rowStack == null) return;
-            rowStack.addOnLayoutChangeListener(mFoldLayoutListener);
-            mFoldListening = true;
-        }
-
-        /**
-         * A fold's sink from the extra keys row as the stack lays it out now: the rows go down by
-         * the part of that row the fold hides, cut at their own bottom, so the row shuts or opens
-         * into its own bottom edge. Wherever the row stands in the stack, the rows between it and
-         * the screen's edge are held where they are laid out (EdgeStackView.holdOutside,
-         * SeamCrossing.foldHolds), and only the rows on the canvas's side of it go down, to where
-         * they rest without it.
-         *
-         * <p>Where they rest is Home's own stack, which is not the window's less the extra keys
-         * (#94): the window's stack keeps the terminal's flush padding, half of it under the rows,
-         * and Home's A-Z row stands on the dock's rim and carries its chin there
-         * (SeamCrossing.foldRestGrowthPx). The rows and the sheet travel those too
-         * (SeamTravel.foldRowsSinkPx, foldSheetSinkPx), so at Home's end the stack stands exactly
-         * as Home's settle lays it out and the settle moves nothing. Only while the stack lays the
-         * window's rows out, the extra keys among them; Home's own rows are at their rest. Reads
-         * view heights and a padding, no store.
-         */
-        void applyFoldSink() {
-            float share = mCrossing.foldShare();
-            if (Float.isNaN(share)) return;
-            View rowStack = hotView(R.id.accessory_row_stack);
-            View keys = hotView(R.id.terminal_toolbar_host);
-            boolean keysInStack = rowStack != null && keys != null && keys.getParent() == rowStack
-                && mDockRows.isRowOnScreen(Element.EXTRA_KEYS);
-            if (!keysInStack) {
-                sink(0f);
-                return;
-            }
-            int keysPx = keys.getHeight();
-            View stack = hotView(R.id.accessory_stack_container);
-            int padUnderRows = stack != null ? Math.max(0, stack.getPaddingBottom()) : 0;
-            int flush = Math.max(0, mAppliedTerminalFlushPaddingPx);
-            com.termux.app.place.SeamCrossing seam = mCrossing.seam();
-            int growth = seam.foldRestGrowthPx();
-            float cut = com.termux.app.place.SeamTravel.foldSinkPx(keysPx, share);
-            float rows = com.termux.app.place.SeamTravel.foldRowsSinkPx(keysPx, share,
-                padUnderRows, growth);
-            float sheet = com.termux.app.place.SeamTravel.foldSheetSinkPx(keysPx, share, flush,
-                growth);
-            float held = com.termux.app.place.SeamTravel.foldHeldSinkPx(padUnderRows, share);
-            // With rows held outside the extra keys, the keys row cuts itself (holdOutside) and
-            // the stack is cut only where the held rows end; with none, the stack's cut is the
-            // keys'.
-            boolean holdsAz = seam.foldHolds(com.termux.app.place.Element.AZ);
-            boolean holdsRows = holdsAz || seam.foldHolds(com.termux.app.place.Element.APPS);
-            applyLayerSink(rows, holdsRows ? rows - held : cut, sheet, sheet - held, held,
-                holdsAz);
-            if (rowStack instanceof com.termux.app.place.EdgeStackView) {
-                ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(keys, rows - held, cut);
-            }
-        }
-
-        /**
-         * The dock's rows drawn {@code sinkPx} lower than they are laid out, each layer cut at its
-         * own laid-out bottom, which is the keyboard's top: the rows go into the keyboard's edge
-         * rather than across it, while the keyboard stays where its own travel puts it. Over the
-         * seam only, with a keyboard in the stack; 0 puts every layer back.
-         */
-        @Override
-        public void sink(float sinkPx) {
-            applyLayerSink(sinkPx, sinkPx, sinkPx, sinkPx, 0f, false);
-            // Every sink but a fold's moves the rows together: a fold's hold, if one ran, lets go.
-            View rowStack = hotView(R.id.accessory_row_stack);
-            if (rowStack instanceof com.termux.app.place.EdgeStackView) {
-                ((com.termux.app.place.EdgeStackView) rowStack).holdOutside(null, 0f);
-            }
-        }
-
-        /**
-         * The dock's layers drawn lower than they are laid out, each cut at its own laid-out
-         * bottom less a hidden part: the rows' layers by {@code rowsPx}, cut by {@code rowsCutPx};
-         * the dock's sheet by {@code sheetPx}, cut by {@code sheetCutPx}; and, for a fold that
-         * holds the A-Z row, that row's own layers by {@code heldPx}, uncut. A sink into the
-         * keyboard moves them all alike; a fold's differ (applyFoldSink).
-         */
-        private void applyLayerSink(float rowsPx, float rowsCutPx, float sheetPx,
-                                    float sheetCutPx, float heldPx, boolean holdsAz) {
-            if (rowsPx == mRowSinkPx && rowsCutPx == mRowCutPx
-                && sheetPx == mSheetSinkPx && sheetCutPx == mSheetCutPx
-                && heldPx == mHeldSinkPx && holdsAz == mSinkHoldsAz) return;
-            mRowSinkPx = rowsPx;
-            mRowCutPx = rowsCutPx;
-            mSheetSinkPx = sheetPx;
-            mSheetCutPx = sheetCutPx;
-            mHeldSinkPx = heldPx;
-            mSinkHoldsAz = holdsAz;
-            for (int id : SEAM_ROW_LAYERS) {
-                View layer = hotView(id);
-                if (layer == null) continue;
-                boolean sheet = id == R.id.accessory_surface_host;
-                boolean held = holdsAz && isSeamAzLayer(id);
-                float layerSink = held ? heldPx : sheet ? sheetPx : rowsPx;
-                int hidden = held ? 0 : Math.round(sheet ? sheetCutPx : rowsCutPx);
-                if (layer.getTranslationY() != layerSink) layer.setTranslationY(layerSink);
-                if (hidden <= 0) {
-                    if (layer.getClipBounds() != null) layer.setClipBounds(null);
-                    continue;
-                }
-                // Generous above and to the sides, as the stack's own clip is: only the bottom is
-                // cut.
-                int width = Math.max(1, layer.getWidth());
-                mTmpTravelClip.set(-width, -Math.max(layer.getHeight(),
-                    getResources().getDisplayMetrics().heightPixels), 2 * width,
-                    Math.max(0, layer.getHeight() - hidden));
-                layer.setClipBounds(mTmpTravelClip);
-            }
-            // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
-            View backdrop = hotView(R.id.accessory_blur_backdrop);
-            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-        }
-
-        /**
-         * Fades the status bar's content toward a minimal place's strip, and the bars minimal mode
-         * takes off the sides and the top with the dock. Alpha only, on views whose alpha nothing
-         * else writes; 1 puts them back.
-         */
-        @Override
-        public void alpha(float statusAlpha, float sideAlpha) {
-            // Most frames of most slides move between two places that look alike here; those cost
-            // nothing past this comparison.
-            if (statusAlpha == mStatusAlpha && sideAlpha == mSideAlpha) return;
-            mStatusAlpha = statusAlpha;
-            mSideAlpha = sideAlpha;
-            setTravelAlpha(R.id.terminal_status_row, statusAlpha);
-            setTravelAlpha(R.id.terminal_status_lens, statusAlpha);
-            setTravelAlpha(R.id.place_apps_bar_host, sideAlpha);
-            setTravelAlpha(R.id.place_extra_keys_host, sideAlpha);
-            setTravelAlpha(R.id.place_az_bar_host, sideAlpha);
-            setTravelAlpha(R.id.place_off_dock_plank_host, sideAlpha);
-        }
-
-        // ---- The committed half's stack, pictured for a whole-stack dip (StackPicture) ----
-
-        @Override
-        public boolean picture() {
-            View stack = hotView(R.id.accessory_stack_container);
-            com.termux.app.place.StackPicture picture = stackPicture(stack);
-            return picture != null && stack != null && picture.capture(stack);
+        public void syncDockBeadsWithMorph() {
+            TermuxActivity.this.syncDockBeadsWithMorph();
         }
 
         @Override
-        public void pictureAt(float reveal) {
-            if (mStackPicture != null) mStackPicture.reveal(reveal);
+        public void onDockRowContentChanged() {
+            TermuxActivity.this.onDockRowContentChanged();
+        }
+
+        @Nullable
+        @Override
+        public com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
+            return TermuxActivity.this.stackPicture(stack);
         }
 
         @Override
-        public void pictureSlide(float widths) {
-            if (mStackPicture == null) return;
-            int width = mPaneWallController != null && mPaneWallController.wall().getWidth() > 0
-                ? mPaneWallController.wall().getWidth() : mStackPicture.getWidth();
-            mStackPicture.slide(widths * width);
+        public int wallWidthPx() {
+            return mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
         }
 
         @Override
-        public void slide(float widths) {
-            View stack = hotView(R.id.accessory_stack_container);
-            if (stack == null) return;
-            int width = mPaneWallController != null && mPaneWallController.wall().getWidth() > 0
-                ? mPaneWallController.wall().getWidth() : stack.getWidth();
-            float x = widths * width;
-            if (stack.getTranslationX() == x) return;
-            stack.setTranslationX(x);
-            // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
-            View backdrop = hotView(R.id.accessory_blur_backdrop);
-            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-        }
-
-        @Override
-        public void dropPicture() {
-            if (mStackPicture == null) return;
-            // Back at its rest the picture is the stack, under it: it goes once a keyboard
-            // brought back up has drawn. Sunk, it shows nothing and goes now.
-            if (mStackPicture.atRest()) mStackPicture.releaseAfter(PICTURE_HANDOVER_MS);
-            else mStackPicture.release();
-        }
-
-        // ---- The terminal's page laid out at its landing size ahead of the settle ----
-
-        @Override
-        public void preSize(int px) {
-            applyTerminalPreSize(px);
+        public void applyTerminalPreSize(int px) {
+            TermuxActivity.this.applyTerminalPreSize(px);
         }
     }
 
@@ -27309,11 +27097,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * crossing brings in is drawn over the picture of the one it takes away.
      */
     @Nullable private com.termux.app.place.StackPicture mStackPicture;
-    /**
-     * How long the picture of a stack put back at its rest stays under it: past the keyboard's
-     * reveal gate's own backstop (160 ms), so a keyboard brought back up has drawn by then.
-     */
-    private static final long PICTURE_HANDOVER_MS = 200L;
 
     @Nullable
     private com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
@@ -27365,13 +27148,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 borderView.setLayoutParams(params);
             }
         }
-    }
-
-    private void setTravelAlpha(int viewId, float alpha) {
-        View view = hotView(viewId);
-        if (view == null) return;
-        float clamped = Math.max(0f, Math.min(1f, alpha));
-        if (view.getAlpha() != clamped) view.setAlpha(clamped);
     }
 
     /**
