@@ -3,7 +3,6 @@ package com.termux.ai;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -419,7 +418,8 @@ public final class TaiPlatformCaps {
     private static TaiPlatformCaps withVerdict(@NonNull TaiPlatformCaps raw, @Nullable Context context) {
         String key = TaiGpuVerdict.keyFor(raw);
         VerdictRead read = sVerdict;
-        long now = SystemClock.elapsedRealtime();
+        // Monotonic, and plain JVM tests can call it (the Android clock is a stub there).
+        long now = System.nanoTime() / 1_000_000L;
         if (context != null && (read == null || !key.equals(read.key) || now - read.atElapsedMs > VERDICT_TTL_MS)) {
             read = new VerdictRead(TaiGpuVerdict.current(context, raw), key, now);
             sVerdict = read;
