@@ -638,8 +638,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new TerminalFrameMetricsMonitor();
     private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
         new com.termux.app.statusbar.StatusCardHost();
-    private final com.termux.app.chrome.ChromeShapeOutlineProvider mStatusBarSurfaceOutline =
-        new com.termux.app.chrome.ChromeShapeOutlineProvider();
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
     /** The saved state an activity recreation brings the wall's row position back from. */
     @Nullable private Bundle mPendingWallState;
@@ -1679,7 +1677,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int statusLookPage() {
-            return TermuxActivity.this.statusLookPage();
+            return mStatusBar.statusLookPage();
         }
 
         @Override public int orientation() {
@@ -1747,7 +1745,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public float statusBarRimCornerRadiusPx() {
-            return resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true,
+            return mStatusBar.resolveStatusBarCapsuleCornerRadiusPx(mStatusBar.targetStatusBarHeightPx(true,
                 mStatusBar.isStatusBarCompact()));
         }
 
@@ -1823,7 +1821,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int effectiveStatusBarBlurRadiusDp() {
-            return getEffectiveStatusBarBlurRadius();
+            return mStatusBar.getEffectiveStatusBarBlurRadius();
         }
 
         @NonNull @Override public ChromeSpec buildChromeSpec() {
@@ -6235,11 +6233,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return stackLookPage();
     }
 
-    /** The half whose look the status bar wears now. */
-    private int statusLookPage() {
-        return lookPageId(com.termux.app.place.SeamDress.Surface.STATUS);
-    }
-
     /** The page whose half the stack wears: the committed one, except across the seam. */
     @NonNull
     private com.termux.app.wall.PaneWallPage stackDressPage() {
@@ -6380,19 +6373,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the status bar wears anything different on Home than on the Workspace: the shape
-     * (Style, Corners, Margin) or the look values (ADR 0013).
-     */
-    private boolean statusDressDiffersAcrossHalves() {
-        if (mPreferences == null) return false;
-        return !dressOf(com.termux.app.wall.PaneWallPage.WIDGETS).shape().equals(
-                dressOf(com.termux.app.wall.PaneWallPage.TERMINAL).shape())
-            || !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.PAGE_WALL)
-                .statusEquals(com.termux.app.place.HalfLook.read(mPreferences,
-                    terminalLookPageId()));
-    }
-
-    /**
      * Whether a settle from {@code from} onto {@code to} crosses between halves of the wall whose
      * look values differ (ADR 0013), which the chrome must be dressed again for.
      */
@@ -6465,7 +6445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (measured > 0) return measured;
         }
         if (element == Element.STATUS)
-            return targetStatusBarHeightPx(
+            return mStatusBar.targetStatusBarHeightPx(
                 isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS),
                 mStatusBar.isStatusBarCompact());
         // Not laid out yet: a side column's band is the shared frame width, the same the host
@@ -6575,311 +6555,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.place.SeamDress.Surface.STACK;
     }
 
-    /** Full screen and the screen's corner radii as {@link #applyStatusBarStyle} last read them. */
-    private boolean mStatusStyleFullScreen;
-    @Nullable private float[] mStatusStyleCornerRadii;
-
-    /**
-     * Apply the selected status-bar style to the top window-bar host. Default is the edge-to-edge
-     * glass pane (no margins, square corners, glass extended behind the system status bar). Rounded
-     * capsule floats the pane: horizontal margins, a gap below the status bar, and a rounded-outline
-     * clip so the blur + glass read as the same capsule geometry as the Rounded dock.
-     */
-    private void applyStatusBarStyle(@NonNull View host) {
-        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
-        boolean collapsed = mStatusBar.isStatusBarCompact();
-        ViewGroup.LayoutParams lp = host.getLayoutParams();
-        if (lp instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
-            int sideMargin = resolveStatusBarHorizontalInsetPx();
-            // Extend Rounded away from its own edge without moving the edge it faces the terminal
-            // with, or the terminal content beside it.
-            int outerMargin = statusBarColumnOuterMarginPx();
-            int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
-            com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry rows =
-                com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge,
-                    capsule, collapsed, collapsed, getResources().getDisplayMetrics().density);
-            boolean vertical = isStatusBarVertical();
-            // A column keeps only its own air from the band beside it. The camera hole it used to
-            // start past is the padded content root's now, so the bar is a plain band and the two
-            // can never be reckoned from different origins again.
-            int columnLeadIn = vertical ? outerMargin : 0;
-            int leftMargin = vertical
-                ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
-            int rightMargin = vertical
-                ? (mStatusBarEdge == PlaceLayout.Edge.RIGHT ? columnLeadIn : 0) : sideMargin;
-            // And it runs the canvas band, not the display: a side stack flanks the terminal
-            // between the top and bottom stacks, so a column reaches exactly as far as the canvas
-            // beside it and cancels nothing. It used to be a sibling of the padded content root and
-            // pulled itself out to both ends of the screen with negative margins for that.
-            // In Full screen a Floating bar's edge is the screen's own: it floats as far from it
-            // as from the sides, and its corners clear the screen's rounded ones.
-            mStatusStyleFullScreen = mProperties != null && mProperties.isUsingFullScreen();
-            mStatusStyleCornerRadii = mDisplayCornerRadiiPx;
-            boolean floatsOnScreenEdge = capsule && mStatusStyleFullScreen;
-            float barRadius = resolveStatusBarCapsuleCornerRadiusPx(targetThickness);
-            int topMargin = vertical ? 0
-                : (mStatusBarEdge == PlaceLayout.Edge.TOP
-                    ? com.termux.app.chrome.FullScreenCornerPolicy.floatingEdgeGapPx(
-                        floatsOnScreenEdge, outerMargin, sideMargin, barRadius,
-                        Math.max(mDisplayCornerRadiiPx[0], mDisplayCornerRadiiPx[1]))
-                    : 0);
-            int bottomMargin = vertical ? 0
-                : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
-            boolean sizeStale = !mStatusBar.isStatusBarFoldInteractive()
-                && (vertical ? mlp.width != targetThickness : mlp.height != targetThickness);
-            if (mlp.leftMargin != leftMargin || mlp.rightMargin != rightMargin
-                || mlp.topMargin != topMargin || mlp.bottomMargin != bottomMargin || sizeStale) {
-                mlp.leftMargin = leftMargin;
-                mlp.rightMargin = rightMargin;
-                mlp.topMargin = topMargin;
-                mlp.bottomMargin = bottomMargin;
-                if (!mStatusBar.isStatusBarFoldInteractive()) {
-                    if (vertical) mlp.width = targetThickness;
-                    else mlp.height = targetThickness;
-                }
-                host.setLayoutParams(mlp);
-                // Laid out at the Margin the crossing eased it to: it draws unscaled from the
-                // same pass, so the bar keeps the width it landed at.
-                if (!mCrossing.seam().sliding()) resetStatusMarginEase(host);
-            }
-            View topWidgets = findViewById(R.id.terminal_top_widget_area);
-            if (topWidgets != null && topWidgets.getLayoutParams() != null) {
-                int targetWidgetHeight = rows.slot;
-                ViewGroup.LayoutParams widgetParams = topWidgets.getLayoutParams();
-                if (widgetParams.height != targetWidgetHeight) {
-                    widgetParams.height = targetWidgetHeight;
-                    topWidgets.setLayoutParams(widgetParams);
-                }
-                if (!mStatusBar.isStatusBarFoldInteractive()) {
-                    topWidgets.setAlpha(1f);
-                    topWidgets.setTranslationY(0f);
-                    // A column carries the stacked clock instead of the row's widget slot.
-                    topWidgets.setVisibility(collapsed || vertical ? View.GONE : View.VISIBLE);
-                }
-            }
-            View stackedClock = findViewById(R.id.terminal_status_column_clock);
-            if (stackedClock != null && !mStatusBar.isStatusBarFoldInteractive()) {
-                stackedClock.setAlpha(1f);
-                stackedClock.setVisibility(vertical && !collapsed && isStatusClockShown()
-                    ? View.VISIBLE : View.GONE);
-                // The column's glass starts where the canvas does, so its clock starts at the top
-                // of the column itself — the system status bar is already above all of it.
-                if (stackedClock.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-                    ViewGroup.MarginLayoutParams clockParams =
-                        (ViewGroup.MarginLayoutParams) stackedClock.getLayoutParams();
-                    int clockTop = 0;
-                    if (clockParams.topMargin != clockTop) {
-                        clockParams.topMargin = clockTop;
-                        stackedClock.setLayoutParams(clockParams);
-                    }
-                }
-            }
-
-            // While a spring or animator drives the pane, applyFrame's
-            // applyInteractiveStatusRowGeometry() is the sole writer of status-row geometry —
-            // the same ownership rule the host-height and top-slot writes above already follow.
-            // A live collapse/expand animator owns the row's position, as does the finger folding
-            // the bar; a refresh mid-animation must not re-anchor it to its rest rule and park it
-            // where the gesture is not.
-            boolean interactiveGeometryOwnsRow = mStatusBar.isStatusBarFoldInteractive();
-
-            // Keep the bottom chip corners inside the capsule's 26dp outline. At the former 4dp
-            // inset, the rounded host clip intersected the session and weather chip backgrounds.
-            View statusRow = findViewById(R.id.terminal_status_row);
-            if (statusRow != null && !interactiveGeometryOwnsRow && vertical
-                && statusRow.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-                applyStatusColumnRowGeometry((FrameLayout.LayoutParams) statusRow.getLayoutParams(),
-                    statusRow, collapsed);
-            } else if (statusRow != null && !interactiveGeometryOwnsRow
-                && statusRow.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams rowParams =
-                    (ViewGroup.MarginLayoutParams) statusRow.getLayoutParams();
-                // A column's foot clearance goes back to nothing here: 10dp of it inside the
-                // row's 24dp would squash the chips the way the strip's own padding once did.
-                if (statusRow.getPaddingBottom() != 0 || statusRow.getPaddingTop() != 0) {
-                    statusRow.setPaddingRelative(0, 0, 0, 0);
-                }
-                // Keep only enough inset for the capsule clip and move the side content inward
-                // below where the curve becomes tight.
-                int targetEdgeMargin = rows.foot;
-                int targetRowHeight = rows.rowHeight;
-                // The row keeps the screen edge its bar stands on: a bottom bar's row stays at
-                // the foot of the panel and the clock's band grows upward above it, which is the
-                // reading order a top bar has always had. Mirroring it is what used to lift a
-                // bottom bar's row clear off the screen's edge the moment the bar opened.
-                int targetGravity = collapsed ? Gravity.CENTER_VERTICAL : Gravity.BOTTOM;
-                int targetTopMargin = 0;
-                int targetBottomMargin = targetEdgeMargin;
-                boolean rowChanged = rowParams.bottomMargin != targetBottomMargin
-                    || rowParams.topMargin != targetTopMargin
-                    || rowParams.height != targetRowHeight
-                    || rowParams.width != ViewGroup.LayoutParams.MATCH_PARENT;
-                if (rowParams instanceof FrameLayout.LayoutParams) {
-                    FrameLayout.LayoutParams frameParams = (FrameLayout.LayoutParams) rowParams;
-                    rowChanged |= frameParams.gravity != targetGravity;
-                    frameParams.gravity = targetGravity;
-                }
-                if (rowChanged) {
-                    rowParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    rowParams.topMargin = targetTopMargin;
-                    rowParams.bottomMargin = targetBottomMargin;
-                    rowParams.height = targetRowHeight;
-                    statusRow.setLayoutParams(rowParams);
-                }
-            }
-
-            View sessions = findViewById(R.id.terminal_sessions_indicator);
-            if (sessions != null
-                && sessions.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams sessionParams =
-                    (ViewGroup.MarginLayoutParams) sessions.getLayoutParams();
-                int targetStartMargin = statusBarContentEdgeInsetPx(capsule);
-                int targetSessionHeight = Math.round(dpToPx(collapsed
-                    ? capsule ? 18 : 20 : 20));
-                int targetSessionWidth = sessions instanceof
-                    com.termux.app.statusbar.SessionsIndicatorView
-                    && ((com.termux.app.statusbar.SessionsIndicatorView) sessions).isShowingSessionNumber()
-                    ? targetSessionHeight : ViewGroup.LayoutParams.WRAP_CONTENT;
-                boolean sessionLayoutChanged =
-                    sessionParams.getMarginStart() != (vertical ? 0 : targetStartMargin)
-                    || sessionParams.topMargin != (vertical ? targetStartMargin : 0)
-                    || sessionParams.height != targetSessionHeight
-                    || sessionParams.width != targetSessionWidth;
-                // The chip's height is row geometry too; the interactive writer owns it as well.
-                if (sessionLayoutChanged && !interactiveGeometryOwnsRow) {
-                    // The gap before the badge is the bar's leading end: the row's start, the
-                    // column's top. Kept on the start in a column it pushes the badge sideways.
-                    sessionParams.setMarginStart(vertical ? 0 : targetStartMargin);
-                    sessionParams.topMargin = vertical ? targetStartMargin : 0;
-                    sessionParams.height = targetSessionHeight;
-                    sessionParams.width = targetSessionWidth;
-                    if (sessionParams instanceof android.widget.LinearLayout.LayoutParams) {
-                        ((android.widget.LinearLayout.LayoutParams) sessionParams).gravity =
-                            vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL;
-                    }
-                    sessions.setLayoutParams(sessionParams);
-                }
-                if (sessions instanceof com.termux.app.statusbar.SessionsIndicatorView) {
-                    ((com.termux.app.statusbar.SessionsIndicatorView) sessions).setSurfaceStyle(
-                        capsule, resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
-                }
-            }
-
-            com.termux.app.terminal.TerminalWindowBar windows =
-                findViewById(R.id.terminal_window_bar);
-            if (windows != null) {
-                windows.setSurfaceStyle(capsule,
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
-            }
-            com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
-                findViewById(R.id.terminal_status_window_column);
-            if (windowColumn != null) {
-                windowColumn.setChipRadiusPx(
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
-            }
-
-            View statusWidgets = findViewById(R.id.terminal_status_widgets);
-            if (statusWidgets != null) {
-                int targetEndPadding = statusBarContentEdgeInsetPx(capsule);
-                int end = vertical ? 0 : targetEndPadding;
-                int bottom = vertical ? targetEndPadding : 0;
-                if (statusWidgets.getPaddingEnd() != end
-                    || statusWidgets.getPaddingBottom() != bottom) {
-                    statusWidgets.setPaddingRelative(statusWidgets.getPaddingStart(),
-                        statusWidgets.getPaddingTop(), end, bottom);
-                }
-            }
-            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-                ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setCollapsed(collapsed);
-            }
-        }
-        applyStatusBarOutline(host);
-    }
-
-    /**
-     * The row inside a bar standing in a column: under the stacked clock while the bar is open, and
-     * as long as the column leaves it. The system status bar is not in this sum any more — the
-     * column stands in the canvas band, which already starts below it.
-     */
-    private void applyStatusColumnRowGeometry(@NonNull FrameLayout.LayoutParams params,
-                                              @NonNull View statusRow, boolean collapsed) {
-        int top = Math.round(dpToPx(8)) + statusColumnClockHeightPx(collapsed);
-        int length = Math.max(Math.round(dpToPx(48)), statusColumnContentLengthPx() - top);
-        // The bar's foot is the lens's: the place below peeks half past it. The stats stop short
-        // of that icon, the way the row's content stops short of the one past its end.
-        int foot = Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP));
-        if (statusRow.getPaddingBottom() != foot || statusRow.getPaddingTop() != 0) {
-            statusRow.setPaddingRelative(0, 0, 0, foot);
-        }
-        boolean changed = params.gravity != (Gravity.TOP | Gravity.START)
-            || params.topMargin != top || params.bottomMargin != 0
-            || params.height != length
-            || params.width != ViewGroup.LayoutParams.MATCH_PARENT;
-        if (!changed) return;
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.topMargin = top;
-        params.bottomMargin = 0;
-        params.width = ViewGroup.LayoutParams.MATCH_PARENT;
-        params.height = length;
-        statusRow.setLayoutParams(params);
-    }
-
-    /**
-     * How tall the stacked clock stands, measured rather than assumed: it is the one piece of the
-     * column whose height is type, and type is what a raised font scale grows.
-     */
-    private int statusColumnClockHeightPx(boolean collapsed) {
-        if (collapsed || !isStatusClockShown()) return 0;
-        View clock = findViewById(R.id.terminal_status_column_clock);
-        if (clock == null) return 0;
-        int width = targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), false);
-        clock.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        return clock.getMeasuredHeight() + Math.round(dpToPx(6));
-    }
-
-    /** The margin a floating column keeps from the edge it stands on; docked hugs it. */
-    private int statusBarColumnOuterMarginPx() {
-        return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS) ? Math.round(dpToPx(2)) : 0;
-    }
-
-    /**
-     * How far down its column the bar's content reaches: the whole of it. The bar used to give the
-     * lower half of a column back to a rail or an extra-keys column holding the same side; they
-     * stand beside it on the edge stack now, so nothing shares its length with it.
-     *
-     * <p>Measured down the canvas band the column stands in, which is the whole of the bar: a side
-     * stack flanks the terminal alone, so no part of the column runs under a system bar or behind
-     * the dock any more.
-     */
-    private int statusColumnContentLengthPx() {
-        View band = findViewById(R.id.terminal_canvas_band);
-        if (band != null && band.getHeight() > 0) return band.getHeight();
-        // Before the band's first layout, the container it sits in is the nearest honest answer.
-        View container = findViewById(R.id.terminal_root_container);
-        return container == null ? 0 : Math.max(0, container.getHeight());
-    }
-
-    /**
-     * One outline clips every status-pane layer, including live blur and wallpaper frost. The
-     * model says what it is: under Docked the status bar's slice of the joined frame (square) or
-     * of the top edge card (square at the screen, its bottom corners rounded at Corners); under
-     * Floating its own card at Corners.
-     */
-    private void applyStatusBarOutline(@NonNull View host) {
-        boolean changed = mStatusBarSurfaceOutline.setClip(
-            chromeClipOf(com.termux.app.place.ChromeShape.PieceId.STATUS));
-        if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
-            host.setOutlineProvider(mStatusBarSurfaceOutline);
-        // The host draws no background, so nothing else rebuilds its outline when the layout pass
-        // after a Style change resizes it: follow the size, or the card's width outlives the Style.
-        mStatusBarSurfaceOutline.follow(host);
-        host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
-        if (changed || host.getOutlineProvider() == mStatusBarSurfaceOutline)
-            host.invalidateOutline();
-    }
-
     /**
      * Symmetric outer screen inset for one editable surface. The floating capsule sits at the
      * configured dp (10dp by default · design redline · Outer margin 10); the edge-to-edge default
@@ -6900,92 +6575,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET
             : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
             isInAppKeyboardCapsule());
-    }
-
-    private int resolveStatusBarHorizontalInsetPx() {
-        return resolveSurfaceHorizontalInsetPx(mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET
-            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp(com.termux.app.place.SeamDress.Surface.STATUS)),
-            isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS));
-    }
-
-    /**
-     * Internal row inset only; the floating capsule's outer screen margin remains unchanged.
-     *
-     * <p>The bottom row — sessions chip on the left, status widgets on the right — is bottom-gravity
-     * and therefore sits in the surface's bottom corners. Whatever radius rounds those corners eats
-     * into the row, so the inset that keeps the content clear of the clip has to follow the radius
-     * rather than be a fixed number. Half the radius is the arc's worst-case encroachment over the
-     * row's height, which is what both styles grow by.</p>
-     *
-     * <p>They start from different places because their radii do. Docked is square by default, so
-     * its 3dp baseline is the whole story at rest and every bit of radius the user dials in is new
-     * encroachment. Floating is a card whose corners are already rounded at rest — 26dp, the auto
-     * radius — and its 8dp baseline was measured against exactly that, so only radius beyond the
-     * default is encroachment the baseline does not already answer. That keeps a stock Floating
-     * surface looking precisely as it did while a raised radius stops clipping the chips.</p>
-     */
-    private int statusBarContentEdgeInsetPx(boolean capsule) {
-        boolean collapsed = mStatusBar.isStatusBarCompact();
-        float radiusPx = capsule
-            ? resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true, collapsed))
-            : statusPieceCornerRadiusPx();
-        float baselineRadiusPx = capsule
-            ? dpToPx(TermuxPreferenceConstants.TERMUX_APP.STATUS_AUTO_CORNER_RADIUS_MAX_DP)
-            : 0f;
-        return DockLayoutPolicy.statusBarContentEdgeInsetPx(capsule, radiusPx, baselineRadiusPx,
-            getResources().getDisplayMetrics().density);
-    }
-
-    /** The largest corner the model gives the status bar under Docked: Corners at its bottom, or none. */
-    private float statusPieceCornerRadiusPx() {
-        com.termux.app.place.ChromeShape.Piece piece =
-            chromeShape(com.termux.app.place.SeamDress.Surface.STATUS).piece(com.termux.app.place.ChromeShape.PieceId.STATUS);
-        if (piece == null) return 0f;
-        return Math.max(Math.max(piece.corners.topLeft, piece.corners.topRight),
-            Math.max(piece.corners.bottomRight, piece.corners.bottomLeft));
-    }
-
-    /**
-     * The shape the status row's two chips wear: the sessions indicator and the window pills.
-     *
-     * <p>They are content inside the status surface rather than surfaces of their own, so they are
-     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
-     * — square while Docked, the capsule's radius while Floating — which is what they always did.
-     * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
-     * of its own height.
-     */
-    private float resolveStatusIndicatorCornerRadiusPx(int surfaceHeightPx, boolean capsule) {
-        int configured = mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS
-            : mPreferences.getStatusIndicatorCornerRadius();
-        if (configured < 0)
-            return capsule ? resolveStatusBarCapsuleCornerRadiusPx(surfaceHeightPx) : 0f;
-        // No clamp of our own: both chips draw rounded rects, which already stop at half of the
-        // shorter side, and the two chips are not the same height — clamping here would cap the
-        // taller one at the shorter one's pill.
-        return dpToPx(configured);
-    }
-
-    /** A Floating card's radius for a surface this tall: Corners, never past half the surface. */
-    private float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) {
-        return Math.min(layoutCornersPx(com.termux.app.place.SeamDress.Surface.STATUS), Math.max(0, surfaceHeightPx) / 2f);
-    }
-
-    /**
-     * How thick the bar is across its own axis: the height of a row along the top or the bottom,
-     * the width of a column down a side.
-     */
-    private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
-        // Minimal mode needs no case of its own: the minimal layout puts the bar away, or keeps it,
-        // like any layout does (applyStatusBarEdge), and a bar it keeps is a bar with a band.
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
-            collapsed, getResources().getDisplayMetrics().density);
-    }
-
-    /** The bar stands in a column rather than a row, so its content runs down the screen. */
-    private boolean isStatusBarVertical() {
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.isVertical(mStatusBarEdge);
     }
 
     /**
@@ -7154,12 +6743,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         }
         return Math.max(0, mPreferences.getExtraKeysBlurRadius(stackLookPage()));
-    }
-
-    /** @see #getEffectiveExtraKeysBlurRadius() */
-    private int getEffectiveStatusBarBlurRadius() {
-        if (mPreferences == null || !wallpaperSampleable()) return 0;
-        return Math.max(0, mPreferences.getStatusBarBlurRadius(statusLookPage()));
     }
 
     /**
@@ -10297,7 +9880,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.CameraHoleGeometry.Split.NONE;
         int[] box = mCameraBox;
         if (box != null && host.getVisibility() == View.VISIBLE && host.getWidth() > 0
-            && host.getHeight() > 0 && !isStatusBarVertical() && mChrome != null
+            && host.getHeight() > 0 && !mStatusBar.isStatusBarVertical() && mChrome != null
             && isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)
             && !frameStandsDown()) {
             int[] origin = mBarSplitOrigin;
@@ -10305,7 +9888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int left = origin[0];
             int top = origin[1];
             int right = left + host.getWidth();
-            float radius = resolveStatusBarCapsuleCornerRadiusPx(host.getHeight());
+            float radius = mStatusBar.resolveStatusBarCapsuleCornerRadiusPx(host.getHeight());
             split = com.termux.app.chrome.CameraHoleGeometry.split(box, left, top, right,
                 top + host.getHeight(), com.termux.app.chrome.CameraHoleGeometry.minSidePx(radius,
                     getResources().getDisplayMetrics().density));
@@ -10383,7 +9966,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return;
                 }
                 outline.setRoundRect(0, 0, width, height,
-                    resolveStatusBarCapsuleCornerRadiusPx(height));
+                    mStatusBar.resolveStatusBarCapsuleCornerRadiusPx(height));
             }
         };
 
@@ -10506,10 +10089,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Floating bar's gap from the screen's edge follows Full screen and the screen's
         // corners (applyStatusBarStyle); restyle once when either changed under it.
         boolean fullScreen = mProperties != null && mProperties.isUsingFullScreen();
-        if (fullScreen != mStatusStyleFullScreen
-            || !java.util.Arrays.equals(radii, mStatusStyleCornerRadii)) {
+        if (fullScreen != mStatusBar.statusStyleFullScreen()
+            || !java.util.Arrays.equals(radii, mStatusBar.statusStyleCornerRadii())) {
             View barHost = findViewById(R.id.terminal_window_bar_host);
-            if (barHost != null) applyStatusBarStyle(barHost);
+            if (barHost != null) mStatusBar.applyStatusBarStyle(barHost);
         }
         // The window bar reads the same answer for where it stands, but only in Full screen: with
         // the system bar showing it never reaches the camera's band, and stays as it always was.
@@ -10637,8 +10220,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyStatusInsetStripOverDockSheet(statusGlass, statusSurface);
             return;
         }
-        float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity(statusLookPage()) / 100f : 1f;
-        int glassInset = resolveStatusBarHorizontalInsetPx();
+        float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity(mStatusBar.statusLookPage()) / 100f : 1f;
+        int glassInset = mStatusBar.resolveStatusBarHorizontalInsetPx();
         ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
         if (glassParams instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams glassMargins = (ViewGroup.MarginLayoutParams) glassParams;
@@ -16918,7 +16501,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         PlaceLayout.Edge.TOP, capsule, compact, density),
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(
                         PlaceLayout.Edge.LEFT, capsule, compact, density)
-                    + statusBarColumnOuterMarginPx())
+                    + mStatusBar.statusBarColumnOuterMarginPx())
             .apps(appsRowPx, appsColumnPx)
             .az(azRowPx, lettersOffDock ? azBarHostBandPx() : 0)
             .extraKeys(extraKeysColumnKeysWidthPx(),
@@ -17224,7 +16807,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!edgeChanged && mStatusBarEdgeApplied) {
             // The edge has not moved, but a column is measured against the screen's height, which
             // a turn changes; the style pass is what re-derives that.
-            if (isStatusBarVertical()) applyStatusBarStyle(host);
+            if (mStatusBar.isStatusBarVertical()) mStatusBar.applyStatusBarStyle(host);
             return;
         }
         if (edgeChanged) {
@@ -17241,7 +16824,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Which stack the host now stands in is the arrangement walk's answer; this only gives it
         // the band that edge asks for and turns its contents to face the right way.
         com.termux.app.statusbar.StatusBarEdgeArrangement.band(host, edge,
-            targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), mStatusBar.isStatusBarCompact()));
+            mStatusBar.targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), mStatusBar.isStatusBarCompact()));
         com.termux.app.statusbar.StatusBarEdgeArrangement.apply((ViewGroup) host, edge);
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
@@ -17275,8 +16858,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null) return 0;
         ViewGroup.LayoutParams params = host.getLayoutParams();
         int thicknessPx = params != null && params.height > 0
-            ? params.height : targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), mStatusBar.isStatusBarCompact());
-        return thicknessPx + statusBarColumnOuterMarginPx();
+            ? params.height : mStatusBar.targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), mStatusBar.isStatusBarCompact());
+        return thicknessPx + mStatusBar.statusBarColumnOuterMarginPx();
     }
 
     /**
@@ -17327,7 +16910,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // a row along the bottom is a band of this very stack, counted into what is measured
         // against the ceiling rather than taken off the ceiling itself. Only a top row is content
         // the stack has to leave room for.
-        View windowBarHost = isStatusBarVertical()
+        View windowBarHost = mStatusBar.isStatusBarVertical()
             || mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? null
             : findViewById(R.id.terminal_window_bar_host);
         int windowBarPx = windowBarHost != null && windowBarHost.getVisibility() == View.VISIBLE
@@ -18361,7 +17944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
         row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
         // The Status bar card's Clock toggle hides the strip's clock with the bar's.
-        row.setClockAllowed(isStatusClockShown());
+        row.setClockAllowed(mStatusBar.isStatusClockShown());
     }
 
     /**
@@ -24806,7 +24389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
         float share = seam.barMarginShare();
-        if (Float.isNaN(share) || isStatusBarVertical()) return;
+        if (Float.isNaN(share) || mStatusBar.isStatusBarVertical()) return;
         com.termux.app.place.SeamCrossing crossing = mCrossing.seam();
         boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         float here = resolveSurfaceHorizontalInsetPx(
@@ -24846,8 +24429,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host.getScaleX() != 1f) host.setScaleX(1f);
         float centre = host.getWidth() / 2f;
         for (int id : BAR_GLASS_LAYERS) easeBarGlassLayer(hotView(id), centre, grow, host.getWidth());
-        if (host.getOutlineProvider() == mStatusBarSurfaceOutline
-            && mStatusBarSurfaceOutline.setHorizontalGrow(Math.round(grow)))
+        if (host.getOutlineProvider() == mStatusBar.statusBarSurfaceOutline()
+            && mStatusBar.statusBarSurfaceOutline().setHorizontalGrow(Math.round(grow)))
             host.invalidateOutline();
         com.termux.app.statusbar.StatusRowLayout row = hotView(R.id.terminal_status_row);
         if (row != null) row.setEdgeGrow(grow);
@@ -24886,8 +24469,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View layer = findViewById(id);
             if (layer != null && layer.getScaleX() != 1f) layer.setScaleX(1f);
         }
-        if (mStatusBarSurfaceOutline.setHorizontalGrow(0)
-            && host.getOutlineProvider() == mStatusBarSurfaceOutline)
+        if (mStatusBar.statusBarSurfaceOutline().setHorizontalGrow(0)
+            && host.getOutlineProvider() == mStatusBar.statusBarSurfaceOutline())
             host.invalidateOutline();
         com.termux.app.statusbar.StatusRowLayout row = findViewById(R.id.terminal_status_row);
         if (row != null) row.setEdgeGrow(0f);
@@ -25259,7 +24842,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class StatusBarControllerHost
             implements com.termux.app.statusbar.StatusBarController.Host {
         @Override public void applyPlaceStripInset(float expansion) { TermuxActivity.this.applyPlaceStripInset(expansion); }
-        @Override public void applyStatusColumnRowGeometry(@NonNull FrameLayout.LayoutParams params, @NonNull View statusRow, boolean collapsed) { TermuxActivity.this.applyStatusColumnRowGeometry(params, statusRow, collapsed); }
         @Override public int bottomStatusBandPx() { return TermuxActivity.this.bottomStatusBandPx(); }
         @Override public @Nullable com.termux.app.chrome.LiveChromeShape.Clip chromeClipOf( @NonNull com.termux.app.place.ChromeShape.PieceId... ids) { return TermuxActivity.this.chromeClipOf(ids); }
         @Override public PlaceOrientation currentPlaceOrientation() { return TermuxActivity.this.currentPlaceOrientation(); }
@@ -25271,18 +24853,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isCommandPaletteOpen() { return TermuxActivity.this.isCommandPaletteOpen(); }
         @Override public boolean isReducedMotionEnabled() { return TermuxActivity.this.isReducedMotionEnabled(); }
         @Override public boolean isRoundedStyle(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.isRoundedStyle(surface); }
-        @Override public boolean isStatusBarVertical() { return TermuxActivity.this.isStatusBarVertical(); }
-        @Override public boolean isStatusClockShown() { return TermuxActivity.this.isStatusClockShown(); }
         @Override public @Nullable PlaceLayoutStore placeLayoutStore() { return TermuxActivity.this.placeLayoutStore(); }
         @Override public void refreshTerminalWindowBar() { TermuxActivity.this.refreshTerminalWindowBar(); }
-        @Override public float resolveStatusBarCapsuleCornerRadiusPx(int surfaceHeightPx) { return TermuxActivity.this.resolveStatusBarCapsuleCornerRadiusPx(surfaceHeightPx); }
-        @Override public int targetStatusBarHeightPx(boolean capsule, boolean collapsed) { return TermuxActivity.this.targetStatusBarHeightPx(capsule, collapsed); }
         @Override public GeometryScheduler geometry() { return mGeometry; }
         @Override public @Nullable com.termux.app.wall.PaneWallController paneWallController() { return mPaneWallController; }
         @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
         @Override public @NonNull PlaceLayout.Edge statusBarEdge() { return mStatusBarEdge; }
-        @Override public com.termux.app.chrome.ChromeShapeOutlineProvider statusBarSurfaceOutline() { return mStatusBarSurfaceOutline; }
         @Override public SurfaceEditorController surfaceEditor() { return mSurfaceEditor; }
+        @Override public int chromeMarginDp() { return TermuxActivity.this.chromeMarginDp(); }
+        @Override public int chromeMarginDp(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.chromeMarginDp(surface); }
+        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape() { return TermuxActivity.this.chromeShape(); }
+        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape( @NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.chromeShape(surface); }
+        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) { return TermuxActivity.this.chromeShape(stored); }
+        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape( @NonNull com.termux.app.place.SeamDress.Surface surface, @NonNull PlaceLayout stored) { return TermuxActivity.this.chromeShape(surface, stored); }
+        @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.this.dressOf(page); }
+        @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.dressOf(page); }
+        @Override public float layoutCornersPx() { return TermuxActivity.this.layoutCornersPx(); }
+        @Override public float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.layoutCornersPx(surface); }
+        @Override public int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.lookPageId(surface); }
+        @Override public void resetStatusMarginEase() { TermuxActivity.this.resetStatusMarginEase(); }
+        @Override public void resetStatusMarginEase(@Nullable View view) { TermuxActivity.this.resetStatusMarginEase(view); }
+        @Override public int resolveSurfaceHorizontalInsetPx(int configuredDp, boolean capsule) { return TermuxActivity.this.resolveSurfaceHorizontalInsetPx(configuredDp, capsule); }
+        @Override public int terminalLookPageId() { return TermuxActivity.this.terminalLookPageId(); }
+        @Override public boolean wallpaperSampleable() { return TermuxActivity.this.wallpaperSampleable(); }
+        @Override public com.termux.app.place.Crossing crossing() { return mCrossing; }
+        @Override public @NonNull float[] displayCornerRadiiPx() { return mDisplayCornerRadiiPx; }
+        @Override public TermuxAppSharedProperties properties() { return mProperties; }
+        @Override public com.termux.app.statusbar.StatusBarController statusBar() { return mStatusBar; }
         // @@HOSTIMPL@@
     }
 
@@ -25910,7 +25507,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.wall.PaneWallPage left = mLastWallPage;
             // The half whose look the status bar wore through the slide: the Workspace's while
             // the wall slid across the seam (SeamDress), its own half's otherwise.
-            int statusHalfTravelled = statusLookPage();
+            int statusHalfTravelled = mStatusBar.statusLookPage();
             mChromeTravelMoved = false;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
@@ -26003,8 +25600,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // bar back out of the Workspace's look it slid in. Its glass and the strip behind the
             // system status bar are glazed again here, together, in Home's, or the strip alone
             // takes Home's at the next insets pass and parts from the pane below it.
-            if (page == left && statusLookPage() != statusHalfTravelled
-                && statusDressDiffersAcrossHalves())
+            if (page == left && mStatusBar.statusLookPage() != statusHalfTravelled
+                && mStatusBar.statusDressDiffersAcrossHalves())
                 refreshTerminalWindowBar();
             // A slide that came back past the swap without a frame there to undo it (the drawer
             // or reduced motion took the last frames) leaves the stack dressed for the half it did
@@ -27232,7 +26829,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rather than trusting a role colour authored against an opaque card.
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
-            bar.setVisibility(windowsShown && !isStatusBarVertical() ? View.VISIBLE : View.GONE);
+            bar.setVisibility(windowsShown && !mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
             // The plus opens a terminal window right after the window in front, whichever it is;
             // without split panes there are no windows to open, on either half.
             bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
@@ -27244,7 +26841,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (windowColumn != null) {
             windowColumn.setChromeInk(mChrome.ink());
             windowColumn.setPlaceAccent(placeAccent);
-            windowColumn.setVisibility(windowsShown && isStatusBarVertical()
+            windowColumn.setVisibility(windowsShown && mStatusBar.isStatusBarVertical()
                 ? View.VISIBLE : View.GONE);
         }
         bindPlaceBadge(sessions);
@@ -27253,7 +26850,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The row may have said what colour each place is before this view existed.
             lens.setPlaceAccents(mPlaceAccents);
             // The icons are chips of the same kit as the badge beside them: same corner.
-            lens.setChipRadiusPx(resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
+            lens.setChipRadiusPx(mStatusBar.resolveStatusIndicatorCornerRadiusPx(Math.round(dpToPx(20)),
                 isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS)));
             // Nothing to keep clear of: a column stands in the canvas band, which already starts
             // below the system status bar and ends above the navigation bar.
@@ -27376,7 +26973,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (cluster.getTag(R.id.terminal_status_stats_cluster) == null) {
             cluster.setTag(R.id.terminal_status_stats_cluster, Boolean.TRUE);
             cluster.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                if (!isStatusBarVertical() && com.termux.app.statusbar.StatusStatsClusterPolicy
+                if (!mStatusBar.isStatusBarVertical() && com.termux.app.statusbar.StatusStatsClusterPolicy
                         .centeredReversed(currentWallPage())) {
                     fitWeatherToRow(true);
                     centerStatsClusterOnRow((ViewGroup) v);
@@ -27390,7 +26987,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (endWidgets != null) {
                 endWidgets.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                     if (l == ol && r == or) return;
-                    if (isStatusBarVertical() || !com.termux.app.statusbar.StatusStatsClusterPolicy
+                    if (mStatusBar.isStatusBarVertical() || !com.termux.app.statusbar.StatusStatsClusterPolicy
                             .centeredReversed(currentWallPage())) return;
                     fitWeatherToRow(true);
                     centerStatsClusterOnRow(cluster);
@@ -27398,7 +26995,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         // A column's cluster centres itself by weight; there is no leftover width to correct for.
-        if (!reversed || isStatusBarVertical()) cluster.setTranslationX(0f);
+        if (!reversed || mStatusBar.isStatusBarVertical()) cluster.setTranslationX(0f);
         else cluster.post(() -> centerStatsClusterOnRow(cluster));
         int count = cluster.getChildCount();
         boolean currentlyReversed = count > 0
@@ -27422,7 +27019,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // start on a row, the column's top on a column.
         // Each is put back to nothing on the other axis: a column's top padding carried over into
         // a row once, and pushed the row's chips down out of their 24dp.
-        boolean vertical = isStatusBarVertical();
+        boolean vertical = mStatusBar.isStatusBarVertical();
         // A column keeps a foot under its chips. A row keeps nothing at its end: the window bar
         // owns the gap before the readings there (StatusRowLayout), and a strip padding on top of
         // it was dead space between the chips and the CPU figure. Neither is carried across: a
@@ -31561,7 +31158,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences == null ? null : mPreferences.getTopPaneClockAlignment());
             // The Status bar card's Clock toggle; the collapsed bar hides the whole slot anyway.
             ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockShown(
-                isStatusClockShown());
+                mStatusBar.isStatusClockShown());
         }
         com.termux.app.statusbar.StatusBarStackedClockView stackedClock =
             findViewById(R.id.terminal_status_column_clock);
@@ -31622,7 +31219,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dressBarSideCard(host);
         }
         applyWindowBarDeckSlab();
-        applyStatusBarStyle(host);
+        mStatusBar.applyStatusBarStyle(host);
         applyTerminalWindowBarBackdropInsets();
     }
 
@@ -31630,7 +31227,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Drawable buildStatusInsetStripSurface(@NonNull View host) {
         float opacity = mPreferences != null
-            ? mPreferences.getStatusBarOpacity(statusLookPage()) / 100f : 1f;
+            ? mPreferences.getStatusBarOpacity(mStatusBar.statusLookPage()) / 100f : 1f;
         return mChrome.glass().statusBarExtensionSurface(opacity, 0f,
             terminalWindowGlassStatusFraction(host),
             STATUS_INSET_STRIP_CONTINUES_PANE_VEIL
@@ -31644,7 +31241,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean joinsDock = mStatusBarEdge == PlaceLayout.Edge.BOTTOM;
         boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
         float opacity = mPreferences == null ? 1f
-            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookPage()) : mPreferences.getStatusBarOpacity(statusLookPage()))
+            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookPage()) : mPreferences.getStatusBarOpacity(mStatusBar.statusLookPage()))
                 / 100f;
         boolean capsuleStatusBar = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         // The capsule floats below the status bar as its own slab, so its glass spans the full
@@ -31662,7 +31259,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? mChrome.glass().dockSurface(opacity, 0f, 1f, false,
                     mChrome.glass().statusTintStrength())
                 : mChrome.glass().statusBarSurface(opacity,
-                    capsuleStatusBar || isStatusBarVertical() || !stripContinues
+                    capsuleStatusBar || mStatusBar.isStatusBarVertical() || !stripContinues
                         ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
                     com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
                     // While the bar's frost draws the gathered light along the same outline,
@@ -32690,7 +32287,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The long forms go with the centred cluster, which no page wears since #90.
                 boolean widgetsPage = com.termux.app.statusbar.StatusStatsClusterPolicy
                     .centeredReversed(currentWallPage());
-                boolean bare = isStatusBarVertical() && !widgetsPage;
+                boolean bare = mStatusBar.isStatusBarVertical() && !widgetsPage;
                 String temp = bare
                     ? com.termux.app.statusbar.WeatherController.formatTempBare(
                         weather.currentC, fahrenheit)
@@ -32712,7 +32309,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             } else {
                 mWeatherForms = null;
-                widget.setValue(isStatusBarVertical()
+                widget.setValue(mStatusBar.isStatusBarVertical()
                     && !com.termux.app.statusbar.StatusStatsClusterPolicy
                         .centeredReversed(currentWallPage()) ? "--" : "--°");
             }
@@ -33451,11 +33048,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (v.getCurrentSession() != null) v.onScreenUpdated();
         rebuildDrawerSessions();
         return previousFocused != session;
-    }
-
-    /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
-    private boolean isStatusClockShown() {
-        return mPreferences == null || mPreferences.isStatusClockShown();
     }
 
     /** Whether custom window/pane splitting is active (disabled by compatibility mode). */
