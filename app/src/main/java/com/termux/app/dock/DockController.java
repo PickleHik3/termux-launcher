@@ -116,6 +116,8 @@ public final class DockController {
         int calculateSuggestionBarMaxButtons(@NonNull DisplayMetrics metrics);
         /** The Home grid's margin, dp, the dock's side insets follow. */
         int homeMarginDp();
+        /** Whether the pinned-apps row is the band next to the canvas, as the last walk found. */
+        boolean appsRowNextToCanvas();
 
         // -------------------------------------------------------------- layout store and pages
 
@@ -250,8 +252,6 @@ public final class DockController {
         void syncWallStripFeed();
         /** {@code viewId}'s bottom margin set; whether it moved. */
         boolean updateViewBottomMargin(int viewId, int marginBottom);
-        /** The dock rows' side insets for {@code layout}; whether they moved. */
-        boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout);
         /** The Search field, and the Wall strip's row, laid out as {@code layout} has them. */
         boolean syncPromptLineField(@NonNull DockLayout layout);
         boolean syncWallStripRow(@NonNull DockLayout layout);

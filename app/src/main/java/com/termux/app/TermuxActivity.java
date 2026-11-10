@@ -17783,19 +17783,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    private boolean updateViewHorizontalMargins(int viewId, int marginHorizontal) {
-        View view = findViewById(viewId);
-        if (view == null) return false;
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
-        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (marginParams.leftMargin == marginHorizontal && marginParams.rightMargin == marginHorizontal) return false;
-        marginParams.leftMargin = marginHorizontal;
-        marginParams.rightMargin = marginHorizontal;
-        view.setLayoutParams(marginParams);
-        return true;
-    }
-
     private boolean updateViewPadding(int viewId, int left, int top, int right, int bottom) {
         return updateViewPadding(findViewById(viewId), left, top, right, bottom);
     }
@@ -17808,58 +17795,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         view.setPadding(left, top, right, bottom);
         return true;
-    }
-
-    /**
-     * @param layout the dock being applied — not one computed afresh off the stored arrangement,
-     *               which the row's air now depends on through its place in the stack
-     */
-    private boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-        int surfaceInset = layout.horizontalInsetPx;
-        int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
-        int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
-        // The band the ticks stand in is that side's air rather than a band added to it: the
-        // pager keeps whatever is left of the air there, which is nothing while the strip fills
-        // it. Which side that is follows the row's place in the bottom stack.
-        boolean ticksLeadDockRow =
-            PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM, mAppsRowNextToCanvas);
-        int appsTopPadding = ticksLeadDockRow
-            ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
-        int appsBottomPadding = ticksLeadDockRow
-            ? layout.appsBottomPaddingPx : layout.appsRowPaddingBesideTicksPx();
-        // The apps row's inset, trimmed from the content inset so its space-between icons line up
-        // with the A–Z row's letters, and narrowed under Lens beads so the end beads stand clear
-        // of the screen's edges (DockLayoutPolicy.appsRowSideInsetPx); the Search field's capsule
-        // under the beads is as wide as this.
-        int appsContentInset = layout.appsRowSideInsetPx();
-        // What a bead covers in those narrower slots is in the slot's icon itself
-        // (DockLayout#slotIconPx), which applyDockLayout hands the row.
-
-        // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
-        // is set, so it reads as the bar's top edge rather than as a floating panel.
-        boolean moved = updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        moved |= updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
-
-        // Keep the extra-keys ViewPager from leaking its adjacent (text-input) page. In capsule mode
-        // the pager is inset from the dock edges, so the off-screen page's edge (the "❮" button)
-        // peeked into the visible page. clipChildren alone doesn't clip a ViewPager's off-screen
-        // pages, so hard-clip the pager to its own rectangular bounds via clipToOutline.
-        View toolbarPager = findViewById(R.id.terminal_toolbar_view_pager);
-        if (toolbarPager instanceof ViewGroup) {
-            ((ViewGroup) toolbarPager).setClipChildren(true);
-            ((ViewGroup) toolbarPager).setClipToPadding(true);
-        }
-        if (toolbarPager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            toolbarPager.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-            toolbarPager.setClipToOutline(true);
-        }
-        return moved;
     }
 
     /**
@@ -25739,8 +25674,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean updateViewBottomMargin(int viewId, int marginBottom) {
             return TermuxActivity.this.updateViewBottomMargin(viewId, marginBottom);
         }
-        @Override public boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-            return TermuxActivity.this.applyDockRowHorizontalInsets(layout);
+        @Override public boolean appsRowNextToCanvas() {
+            return mAppsRowNextToCanvas;
         }
         @Override public boolean syncPromptLineField(@NonNull DockLayout layout) {
             return TermuxActivity.this.syncPromptLineField(layout);

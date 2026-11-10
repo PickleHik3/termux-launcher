@@ -372,6 +372,39 @@ public class DockControllerTest {
         assertFalse(mDock.dockBandEaseRunning());
     }
 
+    /** A view standing in for {@code id} with zero margins, for the row insets to write. */
+    private View marginedView(int id) {
+        View view = new View(RuntimeEnvironment.getApplication());
+        view.setLayoutParams(new android.view.ViewGroup.MarginLayoutParams(10, 10));
+        mHost.views.put(id, view);
+        return view;
+    }
+
+    private static int sideMargin(View view) {
+        android.view.ViewGroup.MarginLayoutParams params =
+            (android.view.ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        assertEquals("both sides alike", params.leftMargin, params.rightMargin);
+        return params.leftMargin;
+    }
+
+    @Test
+    public void theCapsuleInsetsItsRowsByTheirOwnInsetsAndTheFindStripByTheSurfaces() {
+        View find = marginedView(R.id.terminal_find_bar_host);
+        View az = marginedView(R.id.apps_bar_az_row);
+        View keys = marginedView(R.id.terminal_toolbar_view_pager);
+        DockLayout capsule = TestDockLayouts.capsule(2.625f, 26);
+        mDock.applyDockLayout(capsule);
+        assertEquals("the find strip spans the dock's own width", 26, sideMargin(find));
+        assertEquals(capsule.capsuleContentInsetPx, sideMargin(az));
+        assertEquals(capsule.capsuleExtraKeysInsetPx, sideMargin(keys));
+        assertTrue("the keys' pager is clipped to its bounds", keys.getClipToOutline());
+
+        DockLayout docked = TestDockLayouts.defaultStyle(2.625f, 0);
+        mDock.applyDockLayout(docked);
+        assertEquals("Docked, every row is the surface's inset", 0, sideMargin(az));
+        assertEquals(0, sideMargin(keys));
+    }
+
     // ------------------------------------------------------------------ Surface
 
     @Test
@@ -603,6 +636,7 @@ public class DockControllerTest {
             return 5;
         }
         @Override public int homeMarginDp() { return 16; }
+        @Override public boolean appsRowNextToCanvas() { return true; }
         @Nullable @Override public TermuxAppSharedPreferences preferences() { return prefsStore; }
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() { return store; }
         @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageRef page) {
@@ -694,9 +728,6 @@ public class DockControllerTest {
         }
         @Override public void syncWallStripFeed() { }
         @Override public boolean updateViewBottomMargin(int viewId, int marginBottom) { return false; }
-        @Override public boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-            return false;
-        }
         @Override public boolean syncPromptLineField(@NonNull DockLayout layout) { return false; }
         @Override public boolean syncWallStripRow(@NonNull DockLayout layout) { return false; }
         @Override public boolean dressPeekCard(@NonNull View surface) {
