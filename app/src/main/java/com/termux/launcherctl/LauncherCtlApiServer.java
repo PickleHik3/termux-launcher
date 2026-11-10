@@ -338,10 +338,13 @@ public class LauncherCtlApiServer {
     }
 
     private void startAcceptLoop(Context context) {
+        // The loop owns the socket it was started for: the field is guarded by this object's lock,
+        // which the loop does not hold, and a restart puts a new socket there that is not this loop's.
+        final ServerSocket socket = serverSocket;
         acceptLoop = controlExecutor.submit(() -> {
-            while (running && serverSocket != null && !serverSocket.isClosed()) {
+            while (running && !socket.isClosed()) {
                 try {
-                    Socket client = serverSocket.accept();
+                    Socket client = socket.accept();
                     try {
                         clientExecutor.submit(() -> handleClient(client, context));
                     } catch (RejectedExecutionException rejected) {
