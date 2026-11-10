@@ -295,8 +295,8 @@ public class WidgetPanePagingTest {
         @Override public void cancel() { }
     }
 
-    @Test public void aVerticalSwipeOnAWidgetIsTheWidgets() {
-        Fixture fixture = new Fixture();
+    /** One widget of 2x2 cells on page 0, rendered; returns its cell. */
+    private static View widgetCell(Fixture fixture) {
         assertTrue(fixture.repository.putRecord(record(3, new WidgetCellRect(0, 0, 2, 2), 0)));
         fixture.controller.onWidgetRepositoryChanged(
             LauncherWidgetHostController.AddResult.IGNORED);
@@ -305,15 +305,97 @@ public class WidgetPanePagingTest {
         View cell = fixture.pane.grid().cellForId(3);
         assertNotNull(cell);
         assertTrue(cell.getWidth() > 0 && cell.getHeight() > 0);
+        return cell;
+    }
+
+    /** A point inside the cell, as a fraction of its size, in the pane's coordinates. */
+    private static int[] insideCell(Fixture fixture, View cell, float fx, float fy) {
         int[] cellOnScreen = new int[2];
         cell.getLocationOnScreen(cellOnScreen);
         int[] paneOnScreen = new int[2];
         fixture.pane.getLocationOnScreen(paneOnScreen);
-        int x = cellOnScreen[0] - paneOnScreen[0] + cell.getWidth() / 2;
-        int bottom = cellOnScreen[1] - paneOnScreen[1] + cell.getHeight() - 2;
-        fixture.swipe(x, bottom, x, bottom - 200);
-        assertTrue("a swipe that starts on a widget is not the palette gesture",
-            fixture.paletteSwipes.isEmpty());
+        return new int[] {
+            Math.round(cellOnScreen[0] - paneOnScreen[0] + cell.getWidth() * fx),
+            Math.round(cellOnScreen[1] - paneOnScreen[1] + cell.getHeight() * fy)};
+    }
+
+    private static MotionEvent press(Fixture fixture, int[] paneXy) {
+        int[] origin = new int[2];
+        fixture.pane.getLocationOnScreen(origin);
+        return MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN,
+            paneXy[0] + origin[0], paneXy[1] + origin[1], 0);
+    }
+
+    @Test public void aVerticalSwipeOnAWidgetThatDoesNotScrollIsTheHomeGesture() {
+        Fixture fixture = new Fixture();
+        View cell = widgetCell(fixture);
+        int[] from = insideCell(fixture, cell, 0.5f, 0.9f);
+        fixture.swipe(from[0], from[1], from[0], from[1] - 200);
+        assertEquals("an up swipe from a widget is the palette gesture",
+            Collections.singletonList(true), fixture.paletteSwipes);
+        int[] top = insideCell(fixture, cell, 0.5f, 0.1f);
+        fixture.swipe(top[0], top[1], top[0], top[1] + 200);
+        assertEquals("a down swipe from a widget too", Arrays.asList(true, false),
+            fixture.paletteSwipes);
+    }
+
+    @Test public void aDownSwipeFromAWidgetPullsTheShadeUnderTheFinger() {
+        Fixture fixture = new Fixture();
+        fixture.pullDownTakes = true;
+        View cell = widgetCell(fixture);
+        int[] top = insideCell(fixture, cell, 0.5f, 0.1f);
+        fixture.swipe(top[0], top[1], top[0], top[1] + 200);
+        assertEquals("begin", fixture.pullDown.get(0));
+        assertEquals("end 1", fixture.pullDown.get(fixture.pullDown.size() - 1));
+        assertTrue(fixture.paletteSwipes.isEmpty());
+    }
+
+    @Test public void aVerticalSwipeOnAWidgetHoldingAListIsTheWidgets() {
+        Fixture fixture = new Fixture();
+        View cell = widgetCell(fixture);
+        // Empty, so too short to scroll: still a collection, still the widget's.
+        ((WidgetCellView) cell).setContent(new android.widget.ListView(fixture.activity));
+        fixture.layout();
+        int[] from = insideCell(fixture, cell, 0.5f, 0.9f);
+        fixture.swipe(from[0], from[1], from[0], from[1] - 200);
+        fixture.swipe(from[0], from[1] - 200, from[0], from[1]);
+        assertTrue("a list under the finger keeps its swipes", fixture.paletteSwipes.isEmpty());
+    }
+
+    @Test public void aScrollableViewUnderThePointOwnsTheSwipeAndOneBesideItDoesNot() {
+        Fixture fixture = new Fixture();
+        View cell = widgetCell(fixture);
+        android.widget.LinearLayout column = new android.widget.LinearLayout(fixture.activity);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+        column.addView(new View(fixture.activity),
+            new android.widget.LinearLayout.LayoutParams(-1, 0, 1f));
+        column.addView(new android.widget.ScrollView(fixture.activity),
+            new android.widget.LinearLayout.LayoutParams(-1, 0, 1f));
+        ((WidgetCellView) cell).setContent(column);
+        fixture.layout();
+        assertFalse(WidgetPaneView.ownsVerticalSwipe(cell,
+            press(fixture, insideCell(fixture, cell, 0.5f, 0.2f))));
+        assertTrue(WidgetPaneView.ownsVerticalSwipe(cell,
+            press(fixture, insideCell(fixture, cell, 0.5f, 0.8f))));
+    }
+
+    @Test public void aTapOnAWidgetIsNotClaimedAndTwoTapsAreNoDoubleTap() {
+        Fixture fixture = new Fixture();
+        fixture.pane.setExtraGestures(true, false);
+        View cell = widgetCell(fixture);
+        int[] at = insideCell(fixture, cell, 0.5f, 0.5f);
+        fixture.tap(at[0], at[1], 1000L);
+        fixture.tap(at[0], at[1], 1150L);
+        assertEquals("a double tap on a widget is the widget's", 0, fixture.doubleTaps);
+        assertTrue(fixture.paletteSwipes.isEmpty());
+        assertTrue(fixture.pullDown.isEmpty());
+        assertEquals("nothing warms the drawer on a widget press", 0, fixture.drawerWarmUps);
+        // The same two taps on free space still are one.
+        int x = fixture.pane.getWidth() * 3 / 4;
+        int y = fixture.pane.getHeight() * 3 / 4;
+        fixture.tap(x, y, 5000L);
+        fixture.tap(x, y, 5150L);
+        assertEquals("a double tap on free space still fires", 1, fixture.doubleTaps);
     }
 
     private static LauncherWidgetRecord record(int id, WidgetCellRect cell, int page) {
@@ -332,6 +414,8 @@ public class WidgetPanePagingTest {
         /** What the live pull down was told: begin, move, end <way>, cancel. */
         final List<String> pullDown = new ArrayList<>();
         boolean pullDownTakes;
+        int doubleTaps;
+        int drawerWarmUps;
 
         Fixture() {
             activity.setTheme(com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -358,6 +442,8 @@ public class WidgetPanePagingTest {
                     pullDown.add("end " + releaseWay);
                 }
                 @Override public void onHomePullDownCancel() { pullDown.add("cancel"); }
+                @Override public void onHomeDoubleTap() { doubleTaps++; }
+                @Override public void onHomeDrawerPressed() { drawerWarmUps++; }
             });
             layout();
         }
@@ -379,6 +465,14 @@ public class WidgetPanePagingTest {
             }
             dispatch(down, down + 176L, MotionEvent.ACTION_UP, x1, y1, origin);
             layout();
+        }
+
+        /** A press and lift in place, 50 ms long, starting at {@code down} (uptime ms). */
+        void tap(float x, float y, long down) {
+            int[] origin = new int[2];
+            pane.getLocationOnScreen(origin);
+            dispatch(down, down, MotionEvent.ACTION_DOWN, x, y, origin);
+            dispatch(down, down + 50L, MotionEvent.ACTION_UP, x, y, origin);
         }
 
         private void dispatch(long down, long time, int action, float x, float y, int[] origin) {

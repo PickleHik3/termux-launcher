@@ -54,8 +54,8 @@ public final class WidgetPaneView extends FrameLayout
         default void onWidgetAddPage() { }
         /**
          * A vertical swipe on the page's free area let go, up ({@code up}) or down: the palette
-         * gesture ({@link HomeSwipePolicy}). Never sent for a swipe on a widget, a Home float or
-         * the picker.
+         * gesture ({@link HomeSwipePolicy}). Also sent for a swipe that starts on a widget that
+         * does not scroll vertically; never for one that does, a Home float or the picker.
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
         /**
@@ -1014,10 +1014,14 @@ public final class WidgetPaneView extends FrameLayout
                 // One page still tracks when the seam is open: its forward swipe is the wall's.
                 pagingTracking = (runPageCount() > 1 || seamOpen() || seamOpenBackward())
                     && free;
-                // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
-                // on a float is its terminal's scroll.
-                verticalCandidate = free && !onFloat && !onWidget(event);
-                freePress = verticalCandidate;
+                // A sideways swipe on a widget pages; a vertical one is Home's too (drawer, shade)
+                // unless the widget under the finger scrolls vertically, and a vertical one on a
+                // float is its terminal's scroll. Only a press on free space is a tap or a warm-up.
+                WidgetCellView pressedCell = free && !onFloat ? widgetUnder(event) : null;
+                boolean onFreeSpace = free && !onFloat && pressedCell == null;
+                verticalCandidate = onFreeSpace
+                    || (pressedCell != null && !ownsVerticalSwipe(pressedCell, event));
+                freePress = onFreeSpace;
                 twoFingerTracking = false;
                 twoFingerDragging = false;
                 pinchTracking = false;
@@ -1029,7 +1033,7 @@ public final class WidgetPaneView extends FrameLayout
                 if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
-                if (verticalCandidate
+                if (freePress
                     && swipeUpAction == com.termux.app.launcher.home.HomeGestures.Action.DRAWER
                     && listener != null) {
                     listener.onFreeAreaDrawerPressed();
@@ -1344,13 +1348,36 @@ public final class WidgetPaneView extends FrameLayout
         }
     }
 
-    /** Whether a press lands on a widget on the page in view. */
-    private boolean onWidget(@NonNull MotionEvent event) {
-        if (grid.getVisibility() != VISIBLE) return false;
+    /** The widget a press lands on, on the page in view; null on free space. */
+    @Nullable private WidgetCellView widgetUnder(@NonNull MotionEvent event) {
+        if (grid.getVisibility() != VISIBLE) return null;
         for (int i = grid.getChildCount() - 1; i >= 0; i--) {
             View child = grid.getChildAt(i);
             if (child instanceof WidgetCellView && child.getVisibility() == VISIBLE
-                && insideView(child, event)) return true;
+                && insideView(child, event)) return (WidgetCellView) child;
+        }
+        return null;
+    }
+
+    /**
+     * Whether a vertical swipe starting at the event's point is the widget's own: a view there
+     * scrolls up or down now, or is a collection, scroller, text field or nested scroller that
+     * may (a list too short to scroll today still keeps its swipes). Screen coordinates.
+     */
+    static boolean ownsVerticalSwipe(@NonNull View view, @NonNull MotionEvent event) {
+        if (view.getVisibility() != VISIBLE || !insideView(view, event)) return false;
+        if (view instanceof android.widget.AdapterView
+            || view instanceof android.widget.ScrollView
+            || view instanceof androidx.recyclerview.widget.RecyclerView
+            || view instanceof android.widget.EditText
+            || view instanceof android.webkit.WebView
+            || ViewCompat.isNestedScrollingEnabled(view)
+            || view.canScrollVertically(1) || view.canScrollVertically(-1)) return true;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                if (ownsVerticalSwipe(group.getChildAt(i), event)) return true;
+            }
         }
         return false;
     }
